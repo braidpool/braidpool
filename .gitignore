@@ -1,0 +1,9 @@
+.dep/
+figures/epoch.pdf
+figures/isolated-miners.pdf
+figures/shares-dag.pdf
+figures/work-share.pdf
+proposal.aux
+proposal.fls
+proposal.log
+proposal.pdf

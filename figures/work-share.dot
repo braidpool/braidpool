@@ -1,0 +1,51 @@
+digraph G {
+    layout=dot
+
+    "w1" [
+         label = "<f0> WORK1 | bitcoin block"
+         shape=record
+         ]
+
+    "s1" [
+          label = "<f0> SHARE1 | timestamp | difficulty | nonce"
+          shape=record
+          ]
+
+    "s2" [
+          label = "<f0> SHARE2 | timestamp | difficulty | nonce"
+          shape=record
+          ]
+
+    "s3" [
+          label = "<f0> SHARE3 | timestamp | difficulty | nonce"
+          shape=record
+          ]
+
+    "w1" -> "s1"
+    "w1" -> "s2"
+    "w1" -> "s3"
+
+    // "w2" [
+    //      label = "<f0> WORK2 | bitcoin block 2"
+    //      shape=record
+    //      ]
+
+    // "s21" [
+    //       label = "<f0> SHARE1 | timestamp | difficulty"
+    //       shape=record
+    //       ]
+
+    // "s22" [
+    //       label = "<f0> SHARE2 | timestamp | difficulty"
+    //       shape=record
+    //       ]
+
+    // "s23" [
+    //       label = "<f0> SHARE3 | timestamp | difficulty"
+    //       shape=record
+    //       ]
+
+    // "w2":f0 -> "s21":f0
+    // "w2":f0 -> "s22":f0
+    // "w2":f0 -> "s23":f0
+}
