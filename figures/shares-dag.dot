@@ -41,7 +41,7 @@ digraph G {
         b4 -> b5
         b4 -> a6
         color=grey
-        label=<Shares for a<sub>b5</sub>>
+        label=<Shares for b<sub>5</sub>>
     }
 
     c1 -> c2 -> c3

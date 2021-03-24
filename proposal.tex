@@ -18,14 +18,16 @@
   decline impacts bitcoin's ability to remain decentralised. The
   primary problems with p2pool include large variance in earnings for
   miners, large number of dead on arrival blocks and the need for
-  consuming valuable block space to reward miners.  BraidCoin and the
-  use of channel payments are two proposals that have been put forward
-  as possible means to alleviate these problems faced by p2pool. In
-  this document, we present a unified solution that uses a directed
-  acyclic graph to track miners shares and uses payments channels to
-  reward miners. The shares calculation can be carried out by any of
-  the p2p nodes, but the rewards are paid out by hubs. We show that
-  our approach is incentives compatible and can reduce variance in
+  consuming block space for making payouts to miners.  Braidpool and
+  the use of channel payments are two proposals that have been put
+  forward as possible means to alleviate these problems faced by
+  p2pool. In this document, we present a unified solution that uses a
+  directed acyclic graph to track miners shares and uses payments
+  channels to reward miners. The shares calculation can be carried out
+  by all nodes on the p2p, and the rewards are paid out by the pool
+  operator. Using the payment channels construction neither the pool
+  operator nor the miners can cheat each other. We show that our
+  approach is incentives compatible and can reduce variance in
   earnings for miners. The approach presented here to use a DAG for
   tracking shares is a modified version of the proposal first put
   forward as BraidCoin.
@@ -33,31 +35,11 @@
    
 \section{Motivation}
 
-%% According to bitcoin wiki, 
-
-
-%% \begin{quote}
-%% P2Pool creates a new block chain in which the difficulty is adjusted
-%% so a new block is found every 30 seconds. The blocks that get into the
-%% P2Pool block chain (called the ``share chain'') are the same blocks
-%% that would get into the Bitcoin block chain, only they have a lower
-%% difficulty target. Whenever a peer announces a new share found (new
-%% block in the P2Pool block chain), it is received by the other peers,
-%% and the other peers verify that this block contains payouts for all
-%% the previous miners who found a share (and announced it) that made it
-%% into the P2Pool share chain. This continues until some peer finds a
-%% block that has a difficulty that meets the Bitcoin network's
-%% difficulty target. This peer announces this block to the Bitcoin
-%% network and miners who have submitted shares for this block are paid
-%% in the generation transaction, proportionally to how many shares they
-%% have found in the last while.
-%% \end{quote}
-
 P2Pool~\cite{p2pool:wiki} helped decentralise bitcoin by enabling
 miners to select which transactions they mined and thus avoid any
-potential censorship by pool operators. However, the construction of
-P2Pool faced a number of problems that slowly lead to miners
-abandonding the pool.
+potential censorship by pool operators. However, the construction used
+by P2Pool faced a number of problems that lead to miners abandonding
+the pool.
 
 \begin{enumerate}
   \item Large variance in earnings for miners.
@@ -66,32 +48,34 @@ abandonding the pool.
 \end{enumerate}
 
 The first two problems are a direct consequence of the shares block
-rate limited to 30 seconds. With one block possible every thirty
-seconds, any increase in hashrate on P2Pool results in miners shares
-competing to be the next block in the chain. There is a clear tension
-in play here, increasing the block rate frequency doesn't scale the
-throughput of the pool in terms of number of shares found, as most of
-them are orphaned and the miners not being rewarded for those
-orphans. Ethereum's inclusive protocols~\cite{inclusive-protocols}
-help alleviate the problem for the Ethereum blockchain, where small
-pools can work with a reduced variance in their
-rewards as show in the analysis by McElrath~\cite{mcelrath:variance}.
+rate limited to 30 seconds. With only one block possible every thirty
+seconds, any increase of hashrate on P2Pool resulted in shares
+competing to be the next block in the p2pool chain.
+
+There is a clear tension in play here, increasing the block rate
+frequency doesn't scale the throughput of the pool in terms of number
+of shares found, as most of them are orphaned and the miners not being
+rewarded for those orphans. Ethereum's inclusive
+protocols~\cite{inclusive-protocols} help alleviate the problem for
+the Ethereum blockchain, where small pools can work with a reduced
+variance in their rewards as shown in the analysis by
+McElrath~\cite{mcelrath:variance}.
 
 
 \section{Current Proposals}
 
 TerraHash Coin~\cite{mcelrath:variance}, Jute~\cite{jute} and
-\cite{spectre} are some of the early attempts to use a DAG for faster
-block times. However, these works focus on changing the consensus
-layer of bitcoin itself, by allowing miners to produce shares that
-have conflicting transactions and then applying rules to find a set of
-transactions acceptable at various cuts of the DAG.\
+\cite{spectre} are some of the attempts to use a DAG for faster block
+times. However, these works focus on changing the consensus layer of
+bitcoin itself. The ideas in these proposals allowed miners to produce
+shares that have conflicting transactions and then apply rules to find
+a set of transactions acceptable at various cuts of the DAG.\
 
-We think it will be very hard to get such a proposal accepted by the
-bitcoin community. Instead we focus on ``braiding the shares
-chain''. That is we propose applying the principles of using a DAG to
-enable faster block times to a shares chain, similar to P2Pool's share
-chain.
+Instead we propose to build a DAG of miner shares to enable faster
+block times and using this DAG for calculating distribution of payouts
+between miners. We then propose using payment channels as defined by
+Belcher~\cite{channels-for-rewards} to avoid using block space for
+making payouts to miners.
 
 \subsection{Hash Rate Futures}
 
