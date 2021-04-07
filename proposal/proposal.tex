@@ -5,6 +5,10 @@
 \usepackage{url}
 \usepackage{graphicx}
 \graphicspath{ {./figures/} }
+\usepackage{amsfonts}% to get the \mathbb alphabet
+\usepackage{booktabs}
+\usepackage{multirow}
+
 
 \title{Decentralised Mining Pool for Bitcoin (Draft 0.1)}
 \author{Kulpreet Singh}
@@ -301,51 +305,328 @@ that will be be formalised in future work.
 
 \subsection{Payment Channels}
 
-The Hubs and payments channels proposal is based on the proposal
-described by Belcher~\cite{channels-for-rewards} with a change that
-there is a single hub and it is protected from DDoS by using
-techniques to enable responder anonymity in p2p
-networks~\cite{responder-anonymity:file-sharing}. With this change the
-hub acts just like any other miner on the network to be completely
-undifferentiated from other miners, thus protecting itself from DDoS,
-by requiring an attacker to attack the whole network.
+We propose using Payment Channels for paying miners based on the work
+by Belcher~\cite{channels-for-rewards}. The construction of the
+payments channels we present is similar to Belcher's construction, but
+there are a few changes and we highlight before describing the
+details.
 
-The only difference
-is that Hubs calculate and distribute the rewards according to the
-incentives compatible rewards scheme described above. We also adopt
-the proposal that rewards are paid out after a 100 blocks of a block
-being mined.
+\begin{itemize}
+\item We use the DAG based scheme to distribute rewards among miners,
+  so we avoid the problem of estimating block rewards before miners
+  have created their shares.
+\item We use a single hub, and prevent DDoS attacks using responder
+  anonymity~\cite{responder-anonymity:file-sharing} techniques
+  developed for P2P networks.
+\end{itemize}
 
-We would like to extend the proposal to include funding of hubs by
-more than one party in a trustless manner, so that parties with small
-BTC parties can engage in the peer to peer mining economy. This will
-encourage faster adoption of our p2p mining network and make the
-network stronger against DDoS attacks with multiple hub operators
-available online.
+% TODO
+% Question: How do we know the Hub is not creating coinbases with
+% different preimages with each miner?
+
+% Answer: Miners receive the pubkey for all other miners with the
+% \textsc{work} announcement. Using this and the structure of the
+% coinbase transactions, miners validate that the coinbase matches the
+% hub's preimage, and the miner's pubkey.
+
+\subsubsection{Coinbase}
+
+We use Belcher~\cite{channels-for-rewards} construction where each
+miner builds a coinbase transaction that can be spent in one of the
+following three ways:
+
+\begin{enumerate}
+\item Co-operatively by Hub and Miner, or
+\item The Hub with a hash lock for pre-image \verb|X|, or
+\item The Miner that found the bitcoin block, but after waiting
+  for six months.
+\end{enumerate}
+
+The scriptPubKey for the above conditions in the coinbase can be
+written as:
+
+\begin{table}
+  \centering
+  \begin{tabular}{ l }
+    \bfseries Coinbase \\
+    \midrule
+    \verb|2 H M 2 CHECKMULTISIG| \\
+    \verb|OR| \\
+    \verb|hash(X) + Hub P2WPKH| \\
+    \verb|OR| \\
+    \verb|M and CHECKSEQUENCEVERIFY 6 months| \\ 
+    \midrule
+  \end{tabular}
+  \caption{Coinbase transaction with hub and miner public keys.}\label{table:coinbase}
+\end{table}
+
+These conditions mean that the hub can not spend the coinbase without
+revealing the pre-image $X$. This pre-image is included in the
+construction of payment channels, as we will see in the next
+section. This use of pre-image in both the coinbase and the payment
+channel definition guarantees that miners get paid for their
+accumulated payouts if the Hub defects.
+
+\subsubsection{One-way Channels}
+
+One-Way payment channels between hub and all miners allow miners to
+receive payouts without consuming any blockspace in the bitcoin block
+they mined. The use of payment channels is what makes braidpool scale
+up without losing blockspace. Braidpool thus avoids losing the fees
+that can be earned from thie blockspace.
+
+Just like in the early versions of proposal by Belcher we use one-way
+payment channels. One-Way payment channels solve the problem of
+aggregating a miner's payouts requiring a single blockchain
+transaction for spending multiple payouts earned from their PoW
+shares.
+
+We use one-way instead of 2-way payment channels as an initial
+implementation for Braidpool. If required we can switch to 2-way
+channels~\cite{poon2016bitcoin} allowing miners to spend their mining
+payouts over the lightning network. However, for now, we deliberately
+stay away from the complexity of making the hub a lightning node. If
+there is interest from miners to use the lightning network, we can
+build that out in future.
+
+Each miner has a one-way payment channel with the hub using a two of
+two multisig with a time lock of six months. For each payout a miner
+receives over the payment channel, the hub will charge an agreed upon
+fees between the miner and the hub. Belcher's proposal recommends a
+$0.1\%$ fees for the hub.
+
+\subsubsection{Transactions}
+
+The hub creates a funding channel locking an amount $R$ of
+bitcoin. The miner then creates a refund transaction, spending the
+funding transaction and sending the $R$ bitcoin back to the Hub. The
+refund transaction has a locktime of six months allowing the miner to
+accumulate their payout over the six month period. The protocol can be
+extended to allow each miner to agree upon a locktime with the
+hub. The trade-off will be between the fees charged by the hub and the
+length of the locktime.
+
+The funding transaction includes an input from the hub and an output
+that can be spent in one of the two conditions shown in
+Table~\ref{fund-tx}. \verb|H| and \verb|M| are the public keys for Hub
+and Miner, they are called the co-operative keys by Belcher. While
+\verb|H'| and \verb|M'| are alternative public keys for Hub and Miner,
+and are called the uncooperative keys in the Belcher proposal.
 
 
-%% \subsection{Implementation Plan}
+\begin{table}
+  \centering
+  \begin{tabular}{ ll }
+    \multicolumn{2}{c}{\bfseries Fund Transaction} \\
+    \midrule
+    \bfseries Input & \bfseries Output \\
+    \midrule
+    Hub's UTXO & \verb|2 H  M  2 CHECKMULTISIG| \\
+    (Signed by the hub) & \verb|OR| \\
+                    & \verb|2 H' M' 2 CHECKMULTISIG + Hash(X)| \\
+    & (R coins) \\
+    \midrule
+  \end{tabular}
+  \caption{Fund transaction for payment channel between hub and miner.}\label{fund-tx}
+\end{table}
 
-%% The key components to build include:
 
-%% 1. P2P shares network.
-%%    1. Peers exchange both WORK blocks and SHARE
-%%    blocks. The network is permissionless, i.e. anyone can join and
-%%    start sharing their WORK and SHARE blocks.
-%% 2. Rewards Computation.
-%%    1. An algorithm to compute rewards.
-%% 3. Hub.
-%%    1. Create channels with p2p miners.
-%%    2. Compute reward and distribute them.
-%%    3. Connect to other hubs using a p2p or a rqelay network.
-   
+The hub doesn't broadcast the funding transaction instead it waits for
+the miner to create refund transaction. This is the same as any other
+timelocked one-way channel construction, i.e.\ the Miner creates a
+refund transaction with a timelock, signs it and sends it to the
+hub. The refund transaction is show in Table~\ref{refund-tx}.
+
+\begin{table}
+  \centering
+  \begin{tabular}{ ll }
+    \multicolumn{2}{c}{\bfseries Refund Transaction. Locktime 6 months} \\
+    \midrule
+    \bfseries Input & \bfseries Output \\
+    \midrule
+    Fund Tx & \verb|P2WPKH Hub's address| \\
+    (Signed by miner) & (R coins) \\
+    \midrule
+  \end{tabular}
+  \caption{Refund transaction signed by miner and held by
+    hub.}\label{refund-tx}
+\end{table}
+
+With the refund transaction, if the Miner stops responding, the Hub
+can get a refund in six months time. However, the hub can be attacked
+by sending requests to open new channels and locking up the hub's
+liquidity. Hub respond's to a miner's channel open request only after
+the miner has contributed enough shares. The threshold number of
+shares required before opening the channel is a configuration
+parameter for the hub. The miner will still receive the payouts for
+the shares generated, it is only that the channel opening is delayed.
+
+On receiving the refund transaction, the hub broadcasts the funding
+transaction. Once the funding transaction is confirmed, the hub can
+start sending payouts to the miner. These payouts are determined in
+proportion to the shares found by the miner and included in the DAG as
+described in Section~\ref{sec:rewards}.
+
+The payment transactions are updates to the channel where each update
+increases the earnings of the miner. The payment transactions are
+signed by the hub using the non-cooperating key, \verb|H'|. The
+Table~\ref{payment-tx} shows the structure of the payment
+transactions.
+
+\begin{center}
+  \begin{tabular}{ ll }
+    \multicolumn{2}{c}{\bfseries Payment Transaction} \\
+    \midrule
+    \bfseries Input & \bfseries Output \\
+    \midrule
+    Fund Tx & \verb|2 H  M  2 CHECKMULTISIG| \\
+    (Signed by the hub using H') & \verb|OR| \\
+                    & \verb|2 H' M' 2 CHECKMULTISIG + Hash(X)| \\
+                    & (Hub: $R - earnings$; Miner: $earnings$) \\
+    \midrule
+  \end{tabular}
+\end{center}
+
+The hub updates the payment channel for each miner with payouts as
+determined by the incentives compatible rewards algorithm shown in
+Section~\ref{sec:rewards}. In the next section we present how the
+payouts are distributed, we then show how the hub and the miners are
+disincentivized to cheat.
+
+\subsection{Distributed Payout Algorithm}
+
+Once a miner mines a share that also meets the currenty bitcoin
+difficulty, the miner immediately broadcasts the block to the bitcoin
+network. The coinbase of this block as shown in
+Table~\ref{table:coinbase} can now be spent by
+
+\begin{description}
+\item[Co-operative Branch:] The miner and the hub by both signing the
+  first branch co-operatively.
+\item[Hub Branch:] The hub alone, by publishing the pre-image \verb|X|.
+\item[Miner Branch:] the miner alone, after waiting for six months.
+\end{description}
+
+The proposal by Belcher specifies a payout algorithm that requires the
+hub updates the state of all channels, i.e.\ make payment to all
+miners. Once it has done so, the miner signs the first branch of the
+coinbase transction and hands the coinbase to the hub. The hub can now
+redeem the entire payout.
+
+However, there is a small issue here about how the miner signing the
+coinbase can know if the hub has updated the states of all payment
+channels. One obvious solution might seem like the miner collects
+acknowledgements from all other miners that they have receieved the
+channel update. We still have to deal with the situation where the ACK
+from some miners never arrives? Or worse still, if a miner purposely
+doesn't send an ACK to stall the pool.
+
+We propose that instead of requiring ACKs from all miners, we extend
+the P2P protocol such that all miners store channel updates for all
+miners and send them out again if required. This approach is similar
+to the use of \emph{inv} and \emph{getdata} messages in bitcoin. We
+elaborate further on this in Section~\ref{sec:p2p-protocol}, but for
+the purposes of discussion we assume there is a mechanism that allows
+a miner to be sure that the hub has updated the states of all payment
+channels.
+
+% All miners also send heartbeat messages to hide hub as the source of
+% traffic when a block is found. These are all end to end encrypted.
+
+% These messages aren't part of the critical communication channel that
+% broadcasts \textsc{work} and \textsc{share}, and is a much lower
+% frequency communication.
+
+% What if hub and successful miner collude to not pay anyone?
+
+\subsection{Defecting Does Not Pay}\label{ref:defecting}
+
+Using the above construction of the payment channel and the
+distributed payout algorithm, we now show that defecting by the hub or
+the miner doesn't pay.
+
+\subsubsection{Hub Defects}\label{ref:hub-defects}
+
+If the hub defects and pays itself from the coinbase it uses the
+\verb|hash(X) + Hub P2WPKH| branch of the coinbase. In doing so, the
+hub has to reveal the pre-image \verb|X|. With the pre-image
+available, all miners can use the
+\verb|2 H' M' CHECKMULTISIG + Hash(X)| branch of their payment channel
+transactions and close their channels.
+
+The hub could defect on the very first block mined and the miners
+would lose all their earnings. But that will end the pool before it
+could be useful.
+
+The hub could defect after a few blocks have been mined. In such a
+case the miners will receive their fair share of earnings for all
+previous blocks, but it would again be the end of life for the pool.
+
+Remember the hub charges fees to fund the payment channels between the
+itself and the miners. When the pool ends, the hub loses a profit
+making opportunity. We argue that the incentive to defect reduces as
+the size of the pool grows.
+
+\subsubsection{Miner Defects}\label{ref:miner-defects}
+
+A miner that found the block could chose to not sign the co-operative
+branch of the coinbase. In such a case, the hub will wait for a
+timeout period much shorter than the locktime on the miner
+branch. This will close all channels and require that all these
+channels be opened again.
+
+Such an attack by the miner will hurt miners on the network who have
+not yet earned enough payouts to amortize the cost of closing the
+channel. However, the miner also loses any payouts since the last
+block was found by the pool. A malicious miner could provide a large
+portion of the pool's hash rate and then refuse to sign the
+co-operative branches, this way it will make the pool defunct, but it
+will be an expensive attack. Probably only one the state can afford,
+and the only response to such an attack would be for the miners and
+the hub to go underground.
+
+\subsubsection{Hub and Miner Collude}\label{ref:collusion}
+
+The hub and the miner could collude where they co-operate to spend the
+coinbase to themselves without requiring that the hub pays all other
+miners as per the reward schedule. The motivation for the miner is
+clear that it earns a big payout, however, such an action by the hub
+will end the pool and a stream of future profits for the hub.
+
+%% \subsubsection{Miner Sybil Attack}\label{ref:sybil-attack}
+
+\subsubsection{DDoS on the Hub}\label{ref:ddos-attack}
+
+The hub could be attacked using a distributed denial of service attack
+making it unable to requests to open new channels to distributed
+payouts to miners. Belcher in his proposal suggested the use of
+multiple hubs as a defence against such attack.
+
+With multiple hubs available on the p2p network, miners will open
+channels to all hubs and receive payouts from all the hubs. The
+coinbase is split between hubs in a way that if any hub defects, the
+other hubs can still the coinbase and split the block reward between
+them --- paying the miners appropriately.
+
+Creating a larger coinbase for multiple hubs scales if we can use
+Taproot~\cite{bip340,bip341, bip342} once it is activated. The
+solution uses staggered timeouts for hubs to spend the coinbase in
+case of defecting or hubs under DDoS attacks. We believe this option
+is worth exploring and developing once Taproot is enabled and the pool
+could benefit from multiple hubs. This will be even more useful as
+with the multiple hubs construction, each hub requires a linearly less
+amount of liquidity to fund channels to miners.
+
+Meanwhile we propose a different soluion that hides a single hub in
+the p2p network, thereby requiring an attacker to attack the entire
+p2p network to attack the hub. The solution builds on the work on
+responder anonymity~\cite{responder-anonymity:file-sharing,
+  liu2010rumor, responder-anonymity:p2p} in p2p networks. We describe
+our approach in the next section.
+
+\subsection{P2P Protocol}\label{sec:p2p-protocol}
 
 \section{Future Work}
-
-\subsection{Proofs}
-
-We want to use the model presented by Boneh et.al.\ to provide proofs
-for how the rewards distribution is incentives compatible.
 
 \subsection{Simulations}
 Before we work on implementing they system, our next step is to
@@ -362,6 +643,16 @@ work. With a simulation we want to find out the bounds of these.
 We want to specify the p2p protocol messages and the rules more
 precisely. We also plan to implement the specifications and we expect
 the two tasks to proceed hand in hand.
+
+\subsection{Proofs}
+
+We want to use the model presented by Boneh et.al.\ to provide proofs
+for how the rewards distribution is incentives compatible.
+
+\subsection{Multiple Hubs}
+
+We would like to build further on the multiple hubs construction
+described by Belcher once Taproot is activated on bitcoin.
 
 \bibliography{proposal} 
 \bibliographystyle{acm}
