@@ -303,7 +303,7 @@ that will be be formalised in future work.
 %%   - Rewards distribution
 %%   - Incentives Compatible
 
-\subsection{Payment Channels}
+\subsection{Payment Channels}\label{ref:channels}
 
 We propose using Payment Channels for paying miners based on the work
 by Belcher~\cite{channels-for-rewards}. The construction of the
@@ -315,10 +315,9 @@ details.
 \item We use the DAG based scheme to distribute rewards among miners,
   so we avoid the problem of estimating block rewards before miners
   have created their shares.
-\item We use a single hub, and prevent DDoS attacks using responder
-  anonymity~\cite{responder-anonymity:file-sharing, liu2010rumor,
-  responder-anonymity:p2p, gap-gnunet} techniques
-  developed for P2P networks.
+\item We use a single hub, and prevent DDoS attacks by keeping the hub
+  hidden using I2P~\cite{i2p, i2p-censorship-resistance} for
+  communication between the hub and miners.
 \end{itemize}
 
 % TODO
@@ -526,10 +525,10 @@ We propose that instead of requiring ACKs from all miners, we extend
 the P2P protocol such that all miners store channel updates for all
 miners and send them out again if required. This approach is similar
 to the use of \emph{inv} and \emph{getdata} messages in bitcoin. We
-elaborate further on this in Section~\ref{sec:p2p-protocol}, but for
-the purposes of discussion we assume there is a mechanism that allows
-a miner to be sure that the hub has updated the states of all payment
-channels.
+elaborate further on this in
+Section~\ref{sec:hub-miner-communication}, but for the purposes of
+discussion we assume there is a mechanism that allows a miner to be
+sure that the hub has updated the states of all payment channels.
 
 % All miners also send heartbeat messages to hide hub as the source of
 % traffic when a block is found. These are all end to end encrypted.
@@ -601,15 +600,16 @@ will end the pool and a stream of future profits for the hub.
 The hub could be attacked using a distributed denial of service attack
 making it unable to process requests to open new channels and to
 distributed payouts to miners. Belcher in his proposal suggested the
-use of multiple hubs as a defence against such attack. The proposal
+use of multiple hubs as a defence against such an attack. The proposal
 also points out that multiple hubs will reduce the liquidity required
 to open channels with miners.
 
-According to the Belcher proposal, with multiple hubs available on the
-p2p network, miners will open channels to all hubs and receive payouts
-from all the hubs. The coinbase is split between hubs in a way that if
-any hub defects, the other hubs can still spend the coinbase and split
-the block reward between them --- paying the miners appropriately.
+According to Belcher's proposal, multiple hubs available on the p2p
+network will enable miners to open channels to all hubs and receive
+payouts from all the hubs. The coinbase is split between hubs in a way
+that if any hub defects, the other hubs can still spend the coinbase
+and split the block reward between them. In this way all miners
+receive appropriate payouts.
 
 Creating a larger coinbase for multiple hubs scales if we can use
 Taproot~\cite{bip340,bip341, bip342} once it is activated. The
@@ -620,107 +620,59 @@ from multiple hubs. This will be even more useful as with the multiple
 hubs construction, 
 
 We propose a different solution that requires a single hub. The
-advantage is a simpler channel construction and the ability to release
-the pool without waiting for Taproot activation. The single hub
-handling payouts is made indistinguishable from other miners by using
-well known responder anonymity~\cite{responder-anonymity:file-sharing,
-  liu2010rumor, responder-anonymity:p2p, gap-gnunet} protocols for use
-in p2p networks.
+advantage is a simpler channel construction and allow us to build the
+mining pool without waiting for Taproot activation. The single hub
+approach requires that all miners open I2P tunnels to gateways and
+publish the gateway's address in the shares they broadcast on the p2p
+network. The hub then can communicate with miners by opening new
+tunnels and remaining anonymous.
 
-\subsection{P2P Network Protocol}\label{sec:p2p-protocol}
+\subsection{Hub Miner
+  Communication}\label{sec:hub-miner-communication}
 
-The p2p protocol has to enable two types of communications where:
+The hub and the miner need to exchange messages at the time of channel
+creation as well updating the channel state when the hub makes a
+payout to the miners. The channel management messages are exchanged
+infrequently as compared to the \textsc{share}s broadcast messages and
+don't have the same timeliness requirements as the shares
+broadcasts. We propose adoption a solution that doesn't compromise on
+the hub's anonymity and makes a trade-off with increased latency of
+the channel management messages.
 
-\begin{description}
-\item[Shares broadcasts:] Miners broadcast their shares to all other
-  miners in the network.
-\item[Channel management:] Channel creation and channel state update
-  messages exchanged between the miners and the hub.
-\end{description}
+We use I2P's tunnels to allow the hub to operate anonymously and
+without being easily singled out for a DDoS attack. There are two
+types of control messages the channel creation messages when the miner
+first joins the pool and the payout messages whenever a block is
+found. I2P works by setting up separate inbound and outbound
+tunnels. According to the I2P documentation~\cite{i2p-tech-intro}:
 
-Even though the two message types seem to be broadcast and unicast
-communication, we propose using broadcast for both the communications.
+\begin{quote}
+  A tunnel is a directed path through an explicitly selected list of
+  routers. Layered encryption is used, so each of the routers can only
+  decrypt a single layer. The decrypted information contains the IP of
+  the next router, along with the encrypted information to be
+  forwarded. Each tunnel has a starting point (the first router, also
+  known as ``gateway'') and an end point. Messages can be sent only in
+  one way. To send messages back, another tunnel is required.
+\end{quote}
 
-In the first case, an epidemic or gossip based
-broadcast~\cite{epidemic-algorithms} algorithm like the one use in
-bitcoin and p2pool will meet our goals of making sure all miners
-receive all the updates to the DAG of \textsc{SHARE}s. There are a
-number of implementation of a gossip based protocols and we don't get
-into the details here.
+With the tunnels setup, miners include their I2P destination address
+in their share headers. The hub participates in the shares broadcast
+p2p network and identifies a new miner and has access to the
+destination address. Once the miner has mined for a certain time
+period, the hub contacts the miner and provides its own destination
+address in the message~\cite{i2p-streaming-library}. Finally, to
+prevent the tunnel endpoint and gateway from seeing the messages being
+exchanged, the hub and the miner use I2P's layered encryption, called
+garlic routing~\cite{i2p-garlic-routing}. With the destination
+addresses of both the new miner and the hub known to each other the
+two can proceed to anonymously setup a payment channel as described
+in Section~\ref{ref:channels}.
 
-The second case where the miners and the hub have to exchange messages
-seems to call for a one to one communication. However, we need to
-enable this communication without anyone able to find out which node
-is the hub. The hub has to be indistinguishable from other
-participants to prevent a DDoS attack on the hub. Our solution is to
-use gossip based broadcast of all communication between the hub and
-the miner using techniques to hide the source and destination of a
-message in a p2p network~\cite{responder-anonymity:file-sharing,
-  liu2010rumor, responder-anonymity:p2p, gap-gnunet,
-  rumor-riding, p5}. Our solution makes a trade off between latency of
-Channel management messages and the hub's anonymity.
-
-We use two different p2p networks for Shares broadcasts and for
-Channel management messages. The shares broadcasts network prioritises
-lower latency over anonymity, meanwhile the Channel management network
-sacrifices latency for hub's anonymity. Since the Channel management
-messages are far less frequent than Shares broadcast messages we
-think separating the networks and making the latency-anonymity
-trade-off is justified.
-
-In this paper, we provide an overview of the approach we will take for
-the Channel management p2p network and the details will follow in a
-separate document. We next provide the high level approach we take for
-the channel management p2p network:
-
-\begin{description}
-\item[Epidemic Broadcast] --- All nodes forward all received with
-  probability $P_{fwd}$, a system parameter.
-\item[Noise] --- All nodes periodically initiate a broadcast, the way
-  a hub will do, so that no external observer can use traffic analysis
-  to identify the hub.
-\item[Message Encryption] --- all messages are encrypted by the sender
-  using the hub's public key. Hub encrypts the messages in response
-  using the miner's public key included in the received message and
-  the miner's \textsc{share}s. The hub's public key is discovered out
-  of band.
-\item[Pad Messages] --- All encrypted messages are padded to be the
-  same size.
-\item[Anti-Entropy] --- Occasionally all nodes send a message to
-  nodes they are connected to compare the list of channel update
-  messages they have seen. If any messages are missing the initiating
-  node uses \emph{pull} based mechanism to request missing messages.
-\item[Use I2P] --- The channel management p2p network is built on top
-  of the I2P~\cite{i2p-censorship-resistance} sublayer to further
-  prevent any association between the miner's IP addresses and the
-  source of Channel management messages. Recall that the
-  \textsc{share}s are broadcast on a separate faster p2p network using
-  a different epidemic broadcast protocol.
-\end{description}
-
-The above high level approach will generate a lot of traffic on the
-channel management network and also results in high latency of message
-delivery. The seminal analysis presented in~\cite{epidemic-algorithms}
-points to around five messages forwarded by each node if all nodes
-forward a received message with 20\% probability. Say we want all
-nodes to initiate one channel update message (dummy or genuine) every
-block interval, then we get 5000 message transmissions by each node
-every ten minutes given a 1000 node network.
-
-There are proposed optimisations to the above described approach in
-literature~\cite{responder-anonymity:file-sharing, liu2010rumor,
-  responder-anonymity:p2p, gap-gnunet, rumor-riding, p5}, however the
-focus of these optimisations is to enable anonymous transfer of large
-files. To reduce the bandwidth requirements they reduce the level of
-anonymity provided to the receiver of the requests. However, in our
-case we are not transferring large files, and we don't want to
-compromise of the level of anonymity afforded to the hub.
-
-As a final note, in our initial implementation we will keep the hub
-publicly available on a well known IP address, so that all miners can
-directly communicate with the hub. As the pool grows, we plan to
-switch to the above described p2p network for channel management and
-hiding the hub in plain sight.
+To send payouts as channel state updates, the hub again uses the I2P
+destination address of each miner and sends a one way message, with no
+reply destination included in the message. This allows the hub to
+remain anonymous and makes it relatively hard to DDoS the hub.
 
 \section{Future Work}
 
