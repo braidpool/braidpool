@@ -299,6 +299,8 @@ that will be be formalised in future work.
     amount.
 \end{description}
 
+TODO: Comparison to existing rewards schedules used by popular pool.
+
 %% - Rewards computation
 %%   - Rewards distribution
 %%   - Incentives Compatible
@@ -661,13 +663,26 @@ in their share headers. The hub participates in the shares broadcast
 p2p network and identifies a new miner and has access to the
 destination address. Once the miner has mined for a certain time
 period, the hub contacts the miner and provides its own destination
-address in the message~\cite{i2p-streaming-library}. Finally, to
-prevent the tunnel endpoint and gateway from seeing the messages being
-exchanged, the hub and the miner use I2P's layered encryption, called
-garlic routing~\cite{i2p-garlic-routing}. With the destination
+address in the
+message~\cite{i2p-streaming-library}. Figure~\ref{fig:new-miner-communication}
+shows how the ``Miner A'' announces its I2P destination address,
+enabling the hub to contact the miner for exchanging channel creation
+messages.
+
+To prevent the tunnel endpoint and gateway from seeing the messages
+being exchanged, the hub and the miner use I2P's layered encryption,
+called garlic routing~\cite{i2p-garlic-routing}. With the destination
 addresses of both the new miner and the hub known to each other the
-two can proceed to anonymously setup a payment channel as described
-in Section~\ref{ref:channels}.
+two can proceed to anonymously setup a payment channel as described in
+Section~\ref{ref:channels}.
+
+\begin{figure}
+  \begin{center}
+    \includegraphics[width=0.8\textwidth]{new-miner-communication.eps}
+    \caption{Discovery of miner I2P destination addresses enables
+      communication for creating channels.}\label{fig:new-miner-communication}
+  \end{center}
+\end{figure}
 
 To send payouts as channel state updates, the hub again uses the I2P
 destination address of each miner and sends a one way message, with no
