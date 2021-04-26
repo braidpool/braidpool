@@ -23,57 +23,55 @@
   negatively impacting bitcoin's ability to remain decentralised. The
   primary problems with p2pool were twofold. First, the variance in
   earnings for miners didn't reduce with the increase in hashrate
-  participating in p2pool. Secondly, making payouts to miners required
-  a linearly increasing blockspace with the increase in the number of
+  participating in p2pool. Secondly, payouts to miners required a
+  linearly increasing blockspace with the increase in the number of
   miners on p2pool. Building a DAG of miner's shares and the use of
   payment channels are two proposals trying to alleviate these
   problems faced by p2pool. In this document, we present a unified
   solution that uses a directed acyclic graph to track miners shares
   and uses payments channels to reward miners. The shares calculation
-  can be carried out by any node on the p2p, and the rewards are paid
-  out by a pool operator. Using the payment channels construction
-  neither the pool operator nor the miners can cheat each other. We
-  show that our approach is incentives compatible and reduces variance
-  in earnings for miners. We also propose a solution for trading the
-  miner's proof of work for BTC in an open market.
+  can be carried out by any node on the p2p network, and the rewards
+  are paid out by a hub. Using the payment channels construction
+  neither the hub nor the miners can cheat. We show that our approach
+  is incentives compatible and reduces variance in earnings for
+  miners. We also show how the hub increases its anonymity and avoids
+  a DDoS attack on itself by using I2P to communicate with the miners.
 \end{abstract}
    
 \section{Motivation}
 
-P2Pool~\cite{p2pool:wiki} helped decentralise bitcoin by enabling
+P2Pool~\cite{p2pool:wiki} helped in decentralising bitcoin by allowing
 miners to select which transactions they mined and thus avoid any
-potential censorship by pool operators. However, the construction used
-by P2Pool faced a number of problems that lead to miners abandoning
-the pool.
+potential transaction censorship by pool operators. However, the
+construction used by P2Pool faced a number of problems that eventually
+lead to miners abandoning the pool.
 
 \begin{enumerate}
-  \item Large variance in earnings for miners.
-  \item Large number of dead on arrival blocks.
-  \item Large block space requirement.
+\item Large variance in earnings for miners.
+\item Large number of dead on arrival blocks.
+\item Large block space requirement.
 \end{enumerate}
 
 The first two problems are a direct consequence of the shares block
 rate limited to 30 seconds. With only one block possible every thirty
 seconds, any increase of hashrate on P2Pool resulted in shares
-competing to be the next block in the p2pool chain.
-
-There is a clear tension in play here, increasing the block rate
-frequency doesn't scale the throughput of the pool in terms of number
-of shares found, as most of them are orphaned and the miners not being
-rewarded for those orphans. Ethereum's inclusive
-protocols~\cite{inclusive-protocols} help alleviate the problem for
-the Ethereum blockchain, where small pools can work with a reduced
-variance in their rewards as shown in the analysis by
-McElrath~\cite{mcelrath:variance}.
+competing to be the next block in the p2pool chain. However, if the
+pool wanted to increase the block rate frequency, it didn't increase
+the throughput of the pool in terms of number of shares found, as most
+of them are orphaned and the miners not being rewarded for those
+orphans. Ethereum's inclusive protocols~\cite{inclusive-protocols}
+help alleviate the problem for the Ethereum blockchain, where small
+pools can work with a reduced variance in their rewards as shown in
+the analysis by McElrath~\cite{mcelrath:variance}.
 
 Knowing the challenges faced by P2Pool, we list the goals of a new
 decentralised mining pool as:
 
 \begin{enumerate}
-  \item Lower variance for miners to enable the long tail of independent miners.
-  \item Independent miners that build their own blocks.
-  \item Payouts for miners with constant size block space requirement.
-  \item Provide building blocks for a hash rate futures market.
+\item Reduced variance for miners with increasing pool hash rate.
+\item Independent miners that build their own blocks.
+\item Payouts for miners with constant size block space requirement.
+\item Provide building blocks for a hash rate futures market.
 \end{enumerate}
 
 \section{Current Proposals}
@@ -90,32 +88,27 @@ Instead we propose to build a DAG of miner shares to enable faster
 block times and using this DAG for calculating distribution of payouts
 between miners. We then propose using payment channels as defined by
 Belcher~\cite{channels-for-rewards} to avoid using block space for
-making payouts to miners.
-
-Apart from the work for increasing block rates using DAGs,
-Belcher~\cite{channels-for-rewards} proposes a different idea to help
-decentralise mining deals with the problem of a paying miners from a
-decentralised mining pool. P2Pool uses the coinbase transaction of a
-block to pay out miners. Belcher shows how a scheme can be constructed
-using payment channels between federated hubs to pay miners after a
-block has been successfully mined. The payouts can be paid after a
-long enough period, similar to the 100 blocks requirements for
-spending from coinbase transactions. Miners can register with hubs
-where bitcoin has been locked in to open payment channels to
-miners. The construction presented by Belcher shows how both miners
-and hubs can't cheat and how the funders of the hub can earn a reward
-for funding the payment channels.
+making payouts to miners. Belcher's construction uses payment channels
+between federated hubs to pay miners after a block has been
+successfully mined. The payouts are made after a long enough period,
+similar to the 100 blocks requirements for spending from coinbase
+transactions. Miners register with hubs where bitcoin has been locked
+in to open payment channels to miners. The construction shows how both
+miners and hubs can't cheat and how the funders of the hub can earn a
+reward for funding the payment channels.
 
 The ideas of the Hash Rate Futures and Payment Channels for Rewards
 Payouts together present a potential path for rebooting P2Pool. In the
-rest of the document we present a slightly modified version of
-TerraHash Coin and show how the various components can work together.
+rest of the paper we present a modified version of TerraHash Coin and
+show how the various components work together.
 
 \section{Decentralised Bitcoin Mining}
 
 In this section we present a modified version of TerraHash Coin and
-show how it can use payments channels with hubs to deliver a
-decentralised mining pool for bitcoin.
+show how to build a DAG of miner's shares and use that to determine
+the payout distribution between miners. We then show that the payout
+distribution rewards miners for all the shares they find and
+broadcast to the p2p network.
 
 \subsection{A DAG of Shares}
 
@@ -132,33 +125,37 @@ braid blockchain and is called TerraHash Coin. This coin can then be
 swapped for Bitcoin. The proposal doesn't yet define how this native
 coin will be swapped by bitcoin. Some of the suggestions under
 discussion include using atomic swaps, burning the TerraHash Coin, or
-using financial instruments like futures of the bitcoin's hash
-rate to swap TerraHash Coins for BTC.\@
+using financial instruments like futures of the bitcoin's hash rate to
+swap TerraHash Coins for BTC.\@
 
-We propose taking a slightly different approach, where the blocks of a
-DAG represent shares of the mining pool, use payment channels between
-miners and a hub for distributing payouts in proportion to the work done
-by the miners.
+We propose taking a modified approach, where the blocks of a DAG
+represent shares of the mining pool. The DAG is maintained by each
+participant in the p2p network as a replicated database. Shares
+broadcast by miners include a hash pointer to all previous shares
+received from other miners, this ensures the DAG is eventually
+consistent on all p2p participants.
 
-Each miner builds their own block, selecting transactions as they
-want, we call this block the \textsc{work}. The description of
-\textsc{work} is then disseminated to the p2p network of miners using
-the compact block specifications~\cite{compact-blocks}.
+\subsubsection{Building Blocks}\label{sec:building-blocks}
+
+Each miner builds their own block, selecting transactions according to
+their own criteria. We call this block the \textsc{work}. The
+description of \textsc{work} is then disseminated to the p2p network
+of miners using the compact block
+specifications~\cite{compact-blocks}.
 
 The miner then starts mining on \textsc{work} and generates
-\textsc{share}. Each \textsc{share} is mined at a difficulty level
+\textsc{share}s. Each \textsc{share} is mined at a difficulty level
 chosen by the miner. This difficulty can be dynamically chosen by the
-miner after each \textsc{share}, depending on what the miner observes
-on the p2p network. This dynamic adjustment allows miners to adjust
-the rate at which they produce \textsc{share}s. [TODO: Build a model to
-recommend an emission rate of these shares.]
+miner after each \textsc{share}, depending on miner's observation of
+the p2p network's hashrate. This dynamic adjustment allows miners to
+adjust the rate at which they produce \textsc{share}s.
 
 Figure~\ref{fig:work-share} shows the relationship between
 \textsc{work} and its \textsc{share}s. Each \textsc{work} created by a
-miner has multiple \textsc{share}s and they are both broadcast on the
-p2p network.
+miner can result in multiple \textsc{share}s and both the
+\textsc{work} and \textsc{share}s are broadcast to the p2p network.
 
-\begin{figure}[h]
+\begin{figure}
   \begin{center}
     \includegraphics[width=1.0\textwidth]{work-share}
     \caption{Each \textsc{work} generated and shared by a miner is then
@@ -174,7 +171,7 @@ bitcoin blocks that have been mined such that they meet bitcoin's
 difficulty at the time the block was mined, and all the blocks between
 $l$ and $r$ are in the same $epoch$.
 
-\begin{figure}[h]
+\begin{figure}
   \includegraphics[width=1.0\textwidth]{epoch}
   \caption{A epoch is defined as all the \textsc{share}s mined between two
     bitcoin blocks. Here all the \textsc{share}s between $l$ and $r$ are in
@@ -182,16 +179,14 @@ $l$ and $r$ are in the same $epoch$.
 \end{figure}
 
 When a miner starts working on a \textsc{share} it includes a
-reference to the highest known \textsc{share} from all other miners
-that the miner has received valid shares from. Note, the miner also
-has access to \textsc{work} blocks from all participating miners. If a
+reference to the most recent \textsc{share} from all other miners that
+the miner has received valid shares from. Note, the miner also has
+access to \textsc{work} blocks from all participating miners. If a
 miner doesn't have the \textsc{work} block from another miner, then it
-rejects any \textsc{share}s received from the other miner. This
-requires that miners is to the detriment of the other miners as we
-show in Section~\ref{sec:rewards}.
+rejects any \textsc{share}s received from the other miner.
 
 In the next section we then describe how all peers compute their fair
-share of profits using the DAG of shares. We show how our reward
+share of profits using the DAG of shares. We then show how our reward
 computation algorithm is incentives
 compatible~\cite{incentives-compatible}.
 
@@ -216,15 +211,15 @@ compatible~\cite{incentives-compatible}.
   
 \subsection{Incentives Compatible Rewards}\label{sec:rewards}
 
-Each participating node, which includes the miners and the hub, is
-able to the see the DAG of \textsc{share}s as broadcast on the
-network. Each \textsc{share} includes a reference to the blocks the
-miner was aware of when the \textsc{share} was found. The reason for
-doing so is simple. If a miner $a$ doesn't include the \textsc{share}s
-of miner $b$, then $b$ has a clear signal to stop including the
-\textsc{share}s of $a$, and as we will see a miner wants that their
-\textsc{share}s are referenced by other miners as only then they will
-be rewarded for their work.
+Each participating node, which includes the miners and the hub,
+maintains a replica of the the \textsc{share}s DAG.\@ Each
+\textsc{share} includes a reference to the blocks the miner was aware
+of when the \textsc{share} was found. The reason for doing so is
+simple. If a miner $a$ doesn't include the \textsc{share}s of miner
+$b$, then $b$ has a clear signal to stop including the \textsc{share}s
+of $a$, and as we will see a miner wants that their \textsc{share}s
+are referenced by other miners as only then they will be rewarded for
+their work.
 
 The incentive in lay terms is that all miners should honestly include
 the \textsc{share}s discovered by other miners, as otherwise they will
@@ -234,9 +229,10 @@ degenerative case of ``isolated miners'' and argue that miners have no
 incentives to act in this manner. Figure~\ref{fig:isolated-miners}
 shows a DAG where all three miners $a$, $b$ and $c$ are working
 independently. In such a situation when the miner $a$ discovers a
-share and the reward is not shared with any other miner.
+share $a_3$ which is a valid bitcoin block but the reward is not
+shared with any other miner.
 
-\begin{figure}[h]
+\begin{figure}
   \begin{center}
     \includegraphics[width=0.5\textwidth]{isolated-miners}
     \caption{$a$ discovers a share and the reward is not shared with any
@@ -249,13 +245,13 @@ state the rules to calculate how the block reward should be divided
 between miners.
 
 \begin{enumerate}
-  \item Traverse the DAG in reverse order from the \textsc{share} that
-    found the latest bitcoin block to the previous bitcoin block found
-    and collect a set of shares.
-  \item From the above set of shares remove all shares that don't have
-    a reverse path to the previous bitcoin block.
-  \item Distribute the reward between miners weighted by the sum of
-    the difficultly of all \textsc{share}s found by miners.
+\item Traverse the DAG in reverse order from the \textsc{share} that
+  found a bitcoin block to the previous bitcoin block found and
+  collect a set of shares.
+\item From the above set of shares remove all shares that don't have
+  a reverse path to the previous bitcoin block.
+\item Distribute the reward between miners weighted by the sum of
+  the difficultly of all \textsc{share}s found by miners.
 \end{enumerate}
 
 As an example consider the p2p network of miners $a$, $b$ and $c$ with
@@ -266,11 +262,11 @@ not receive any reward as they are not reachable from the bitcoin
 block, $a_5$, even if they are reachable from $l$.
 
 For the second bitcoin block $b_5$ only the miners $a$ and $b$ receive
-rewards in proportion to the difficulties of their shares $\{b_4, b_5,
-a_6\}$. $c$ doesn't receive any reward for $c4$ as it is doesn't
-include a reference to the last found bitcoin block $a_5$.
+rewards in proportion to the difficulties of their shares
+$\{b_4, b_5, a_6\}$. $c$ doesn't receive any reward for $c_4$ as it is
+doesn't include a reference to the last found bitcoin block $a_5$.
 
-\begin{figure}[h]
+\begin{figure}
   \begin{center}
     \includegraphics[width=1.0\textwidth]{shares-dag}
     \caption{Two epochs in a DAG of shares mined by three mines ---
@@ -279,31 +275,47 @@ include a reference to the last found bitcoin block $a_5$.
   \end{center}
 \end{figure}
 
-With the above rules, it should be easy to prove that the rule reward
-is an incentives compatible reward function as defined by
-[ref:incentives compatibility], and we present an outline of proofs
-that will be be formalised in future work.
+Given the above rules, we show how they together provide an incentives
+compatible reward function as defined
+by~\cite{incentives-compatible}. We present an outline of proofs that
+will be be formalised in future work.
 
-\begin{description}
-  \item [Incentive Compatibility] Given the rules above, if a miner
-    finds a bitcoin block the miner wants to get maximum reward
-    possible based on all the shares it has found and therefore is
-    incentivized to announce their \textsc{share} as soon as they find
-    it.
-  \item [Proportional Payments] Since rewards are calculated at the
-    end of an epoch, that is when all the valid shares found by all
-    miners have been discovered, all miners are guaranteed payments
-    for the shares that have reached the miner who found the block.
-  \item [Budget Balanced] Again, since rewards are paid at the end of
-    the epoch, a hub pays out rewards without losing or retaining any
-    amount.
-\end{description}
+\subsubsection{Incentive Compatibility}\label{sec:incentive-compatability}
 
-TODO: Comparison to existing rewards schedules used by popular pool.
+A reward function is incentive compatible when every miner's best
+response strategy reports full solutions
+immediately~\cite{incentives-compatible}. Where a ``full solution'' is
+a share that meets the bitcoin network's difficulty requirement.
 
-%% - Rewards computation
-%%   - Rewards distribution
-%%   - Incentives Compatible
+Given the rules in Section~\ref{sec:rewards}, if a miner finds a
+bitcoin block the miner wants to get maximum reward possible based on
+all the shares it has found and therefore is incentivized to announce
+their \textsc{share} as soon as they find it. The longer a miner
+doesn't announce the bitcoin block to the bitcoin network, the higher
+the probability that some other miner on the pool will find a
+different bitcoin block. [TODO: I think we need to motivate with this
+extra reward for the miner who finds the block, Belcher mentions it
+too. This can be added to the rules/algorithm in the previous
+section.]
+
+\subsubsection{Proportional Payments}\label{sec:proportional-payments}
+
+As per~\cite{incentives-compatible}, we require that miners are paid
+in proportion to the amount of work they have performed.
+
+Since rewards are calculated at the end of an epoch and a miner is
+incentivized to include hash pointers to the most recent shares seen
+from all miners, it directly follows that all miners are guaranteed
+payments for their shares that have reached the miner who found the
+block. It is also clear here that miners are incentivized to propagate
+their shares to the network as fast as they can.
+
+\subsubsection{Budget Balanced}\label{sec:budget-balanced}
+
+Again, as per~\cite{incentives-compatible} we would like the pool
+operator to never incur a deficit. From the rules, since rewards are
+paid at the end of the epoch, a hub pays out rewards without losing or
+retaining any amount.
 
 \subsection{Payment Channels}\label{ref:channels}
 
@@ -684,6 +696,14 @@ Section~\ref{ref:channels}.
   \end{center}
 \end{figure}
 
+\begin{figure}
+  \begin{center}
+    \includegraphics[width=0.8\textwidth]{payout-communication.eps}
+    \caption{Hub sends one way updates to miners without revealing its
+      destination address.}\label{fig:new-miner-communication}
+  \end{center}
+\end{figure}
+
 To send payouts as channel state updates, the hub again uses the I2P
 destination address of each miner and sends a one way message, with no
 reply destination included in the message. This allows the hub to
@@ -725,6 +745,10 @@ compatible.
 
 We would like to build further on the multiple hubs construction
 described by Belcher once Taproot is activated on bitcoin.
+
+\section{Acknowledgements}
+
+--
 
 \bibliography{proposal} 
 \bibliographystyle{acm}
