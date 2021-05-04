@@ -587,17 +587,26 @@ A miner that found the block could chose to not sign the co-operative
 branch of the coinbase. In such a case, the hub will wait for a
 timeout period much shorter than the locktime on the miner
 branch. This will close all channels and require that all these
-channels be opened again.
+channels be opened again. Such an attack by the miner will hurt miners
+on the network who have not yet earned enough payouts to amortise the
+cost of closing the channel.
 
-Such an attack by the miner will hurt miners on the network who have
-not yet earned enough payouts to amortise the cost of closing the
-channel. However, the miner also loses any payouts since the last
-block was found by the pool. A malicious miner could provide a large
-portion of the pool's hash rate and then refuse to sign the
-co-operative branches, this way it will make the pool defunct, but it
-will be an expensive attack. Probably only one the state can afford,
-and the only response to such an attack would be for the miners and
-the hub to go underground.
+Say a miner starts participating in the pool, and after $N$ blocks
+becomes the successful miner of a bitcoin block, but refuses to sign
+the co-operative branch of the coinbase allowing the hub to claim the
+coinbase reward. In such a case all miners have to close their
+channels and claim the rewards they have earned. Miners who recently
+joined the pool stand to lose the most because of the forced closure
+of channels.
+
+However, the miner also loses any payouts since the last block was
+found by the pool. A malicious miner could provide a large portion of
+the pool's hash rate and then refuse to sign the co-operative
+branch. This will disrupt the functioning of the pool and a state
+actor will be willing to take on this attack, and the only defence
+here is for some instances of the pool to use I2P for the p2p layer as
+well as the hub to miner communication. We explain our use of I2P in
+Section~\ref{sec:hub-miner-communication}.
 
 \subsubsection{Hub and Miner Collude}\label{ref:collusion}
 
