@@ -20,52 +20,51 @@
 
 \begin{abstract}
   Bitcoin p2pool's usage has steadily declined over the years,
-  negatively impacting bitcoin's ability decentralisation. The primary
+  negatively impacting bitcoin's decentralisation. The primary
   problems with p2pool are twofold. First, the variance in earnings
-  for miners increases with increasing hashrate participating in the
+  for miners increases with total hashrate participating in the
   pool. Secondly, payouts to miners require a linearly increasing
-  blockspace with the increase in the number of miners on
-  p2pool. Building a direted acyclic graph (DAG) of miner's shares and
-  the use of payment channels are two proposals trying to alleviate
-  these problems faced by p2pool. In this paper, we present a unified
-  solution that uses a DAG to track miners shares and uses payments
-  channels to reward miners. The shares calculation is verified by all
-  participants of the pool, and the rewards are paid out by a
-  hub. Using the payment channels construction, neither the hub nor
-  the miners can cheat. We show that our approach is incentives
-  compatible and reduces variance in earnings for miners. We also show
-  how the hub maintains its anonymity and resists a DDoS attack by
-  using I2P to communicate with the miners.
+  blockspace with the number of miners on p2pool. Building a directed
+  acyclic graph (DAG) of miner's shares and the use of payment
+  channels are two proposals trying to alleviate these problems faced
+  by p2pool. In this paper, we present a unified solution that uses a
+  DAG to track miners shares and uses payments channels to reward
+  miners. The shares calculation is verified by all participants of
+  the pool, and the rewards are paid out by an anonymous hub
+  communicating over I2P. Using the payment channels construction,
+  neither the hub nor the miners can cheat. We show that our approach
+  is incentives compatible and describe how the hub maintains its
+  anonymity to resist DDoS attacks.
 \end{abstract}
    
 \section{Motivation}
 
-P2Pool~\cite{p2pool:wiki} bitcoin's decentralisation by allowing
+P2Pool~\cite{p2pool:wiki} helps bitcoin's decentralisation by allowing
 miners to select which transactions they mine. This avoids any
 potential transaction censorship by pool operators. However, the
-construction used by P2Pool faces a number of problems that eventually
-lead to miners abandoning the pool. The most often cited problmes are:
+construction used by P2Pool faces a number of problems that resulted
+in miners abandoning the pool. The most often cited problems are:
 
 \begin{enumerate}
 \item Large variance in earnings for miners.
-\item Large number of dead on arrival shares and stale blocks.
-\item Large block space requirement.
+\item Large number of stale blocks.
+\item Large block space requirement for payouts.
 \end{enumerate}
 
 The first two problems are a direct consequence of the shares block
-rate limited to 30 seconds for the bitcoin p2pool. With only one block
-possible every thirty seconds, any increase of hashrate on P2Pool
-results in shares competing to be the next block in the p2pool
-chain. However, if the pool wants to increase the block rate
-frequency, it doesn't result in an increase in the throughput of the
-pool in terms of number of shares found. This is because a faster
-block rate lead to an increase the number of orphans. With miners not
-being rewarded for orphans, it leads to increase in the variance of
-the miner rewards. Ethereum's inclusive
-protocols~\cite{inclusive-protocols} helps alleviate the problem for
-the Ethereum blockchain, where small pools can work with a reduced
-variance in their rewards as shown in the analysis by
-McElrath~\cite{mcelrath:variance}.
+rate limited to 30 seconds for the bitcoin p2pool. Intuitively, with
+only one block possible every thirty seconds, increase in the hashrate
+on P2Pool results in shares competing to be the next block in the
+p2pool chain. Where only one winning share will be rewarded for its
+PoW, and the others have to rue their bad luck. An increase in the
+share rate results in even more stale blocks. With miners not rewarded
+for stale blocks, it leads to increase in the variance of the miner
+rewards. This is shown in the analysis by
+McElrath~\cite{mcelrath:variance}. Ethereum's inclusive
+protocols~\cite{inclusive-protocols} help alleviate the problem for
+the Ethereum blockchain where smaller pools can continue to get
+rewarded for their PoW without an increase in variance with increasing
+in global hash rate.
 
 Knowing the challenges faced by P2Pool, we list the goals of a new
 decentralised mining pool as:
@@ -75,7 +74,7 @@ decentralised mining pool as:
 \item Payouts for miners with constant size block space requirement.
 \item Independent miners can build their own blocks.
 \item Provide building blocks for a hash rate futures
-  market.~\footnote{We don't elaborat on this goal in this paper, but
+  market.~\footnote{We don't elaborate on this goal in this paper, but
     readers can look up the gist on TerraHash coins
     https://gist.github.com/kulpreet/19927c7188a4224ce2de43efb3c69370}
 \end{enumerate}
@@ -85,22 +84,19 @@ decentralised mining pool as:
 TerraHash Coin~\cite{mcelrath:variance}, Jute~\cite{jute}
 and~\cite{spectre} are some of the attempts to use a DAG for faster
 block times. However, they focus on changing the consensus layer of
-bitcoin. The ideas in these proposals allow for miners to produce
-shares that have conflicting transactions and then apply rules to find
-a set of transactions acceptable at various cuts of the DAG.\@
+bitcoin. These proposals allow for miners to produce shares that have
+conflicting transactions and then apply rules to find a set of
+transactions acceptable at various cuts of the DAG.\@
 
-Instead we propose to build a DAG of miner shares to enable faster
-share times and use this DAG to calculate distribution of payouts
-between miners. We then propose using payment channels as defined by
-Belcher~\cite{channels-for-rewards} to avoid using block space for
-making payouts to miners. Belcher's construction uses payment channels
-between federated hubs to pay miners after a block has been
-successfully mined. The payouts are made after a long enough period,
-similar to the 100 blocks requirements for spending from coinbase
-transactions. Miners register with hubs where bitcoin has been locked
-in to open payment channels to miners. The construction shows how both
-miners and hubs can't cheat and how the funders of the hub can earn a
-reward for funding the payment channels.
+Belcher~\cite{channels-for-rewards} proposes using payment channels as
+to avoid using block space for making payouts to miners. The
+construction uses payment channels between federated hubs to pay
+miners after a block has been successfully mined. The payouts are made
+after a long enough period, similar to the 100 blocks requirements for
+spending from coinbase transactions. Miners register with hubs where
+bitcoin has been locked in to open payment channels to miners. The
+construction shows how both miners and hubs can not cheat and how the
+funders of the hub can earn a reward for funding the payment channels.
 
 The two ideas of using a DAG and payment channels for rewards
 payouts together present a potential path for rebooting P2Pool. In the
@@ -109,9 +105,9 @@ show how the various components work together.
 
 \section{Decentralised Bitcoin Mining}
 
-In this section we present a modified version of TerraHash Coin and
-show how to build a DAG of miner's shares and use that to determine
-the payout distribution between miners. We then show that the payout
+In this section we present a modified version of TerraHash Coin. We
+propose building a DAG of miner's shares and use that to determine the
+payout distribution between miners. We then show that the payout
 distribution rewards miners for the shares they find and broadcast to
 the p2p network in a timely manner.
 
@@ -121,9 +117,9 @@ The braiding the blockchain proposal~\cite{mcelrath:variance} shows
 how smaller more frequent blocks can form a directed acyclic graph
 (DAG) of blocks, with each block pointing to one or more one previous
 blocks. Blocks in TerraHash Coin can have transactions repeated in
-different blocks. The proposal describes how repeated and potentially
-some double spend transactions can be resolved to decide on the state
-of the ledger at any cut of the DAG.\@
+different blocks. The proposal describes how repeated and double spend
+transactions can be resolved to reach a decision on the state of the
+ledger at any cut of the DAG.\@
 
 The rewards that miners earn in the proposal is a coin native to the
 braid blockchain and is called TerraHash Coin. This coin can then be
@@ -131,14 +127,23 @@ swapped for Bitcoin. The proposal doesn't yet define how this native
 coin will be swapped by bitcoin. Some of the suggestions under
 discussion include using atomic swaps, burning the TerraHash Coin, or
 using financial instruments like futures of the bitcoin's hash rate to
-swap TerraHash Coins for BTC.\@
+swap TerraHash Coins for BTC. The problems with the atomic swap
+approach is the need for $O(n)$ block space as we need two
+transactions to execute a swap. Burning THCoins for BTC requires a
+trusted third party to execute this. Finally, trading THCoins for BTC
+futures has the problem of introducing centralisation on the futures
+market operator. There is some discussion around using DEXes for
+executing futures contracts, but that is still in very nascent stage
+of development and we don't go down that route here.
 
 We propose taking a modified approach, where the blocks of a DAG
-represent shares of the mining pool. The DAG is maintained by each
-participant of the p2p network as a replicated database. Shares
-broadcast by miners include a hash pointer to all previous shares
-received from other miners, this ensures the DAG is eventually
-consistent on all p2p participants.
+represent shares of the mining pool. Miners broadcast their shares to
+the network using a gossip protocol and all the miners maintain the
+DAG as a replicated database. This DAG can be pruned to the bitcoin
+block height that miners have received payouts for. Shares broadcast
+by miners include a hash pointer to all previous shares received from
+other miners, this ensures the DAG is eventually consistent on all p2p
+participants.
 
 \subsubsection{Building Blocks}\label{sec:building-blocks}
 
@@ -158,7 +163,11 @@ adjust the rate at which they produce \textsc{share}s.
 Figure~\ref{fig:work-share} shows the relationship between
 \textsc{work} and its \textsc{share}s. Each \textsc{work} created by a
 miner can result in multiple \textsc{share}s and both the
-\textsc{work} and \textsc{share}s are broadcast to the p2p network.
+\textsc{work} and \textsc{share}s are broadcast to the p2p
+network. When a miner receives a \textsc{work} from other miners it
+validates this \textsc{work} using a local bitcoin node. When a
+\textsc{share} is received by a miner they are validated against the
+most received \textsc{work} from the miner.
 
 \begin{figure}
   \begin{center}
@@ -219,27 +228,23 @@ compatible as per~\cite{incentives-compatible}.
 Each participating node, which includes the miners and the hub,
 maintains a local replica of the the \textsc{share}s DAG.\@ Each
 \textsc{share} includes a reference to the shares the miner was aware
-of when the \textsc{share} was found. The reason for doing so is
-simple. If a miner $a$ doesn't include the \textsc{share}s of miner
-$b$, it signals a failure of communication between the two miners. We
-introduce a rule that miner $a$ in such a situation should stop
-including references to $b$'s \textsc{share}s.
-
-then $b$ has a clear signal to stop including the \textsc{share}s
-of $a$, and as we will see a miner wants that their \textsc{share}s
-are referenced by other miners as only then they will be rewarded for
-their work.
+of when the \textsc{share} was found. If a miner $a$ doesn't include
+the \textsc{share}s of miner $b$, it signals a failure of
+communication between the two miners. We introduce a rule that miner
+$a$ in such a situation stops including references to $b$'s
+\textsc{share}s.
 
 The incentive in lay terms is that all miners should honestly include
 the \textsc{share}s discovered by other miners, as otherwise they will
 most likely be excluded by other miners and they will lose the
-opportunity to be rewarded for their work. We call this the
+opportunity to be rewarded for their work. We identify this
 degenerative case of ``isolated miners'' and argue that miners have no
 incentives to act in this manner. Figure~\ref{fig:isolated-miners}
 shows a DAG where all three miners $a$, $b$ and $c$ are working
 independently. In such a situation when the miner $a$ discovers a
-share $a_3$ which is a valid bitcoin block but the reward is not
-shared with any other miner.
+share $a_3$ that is a valid bitcoin block and the reward is not shared
+with any other miner as $a_3$ does not include any references to
+shares from other miners.
 
 \begin{figure}
   \begin{center}
@@ -253,20 +258,19 @@ With the above understanding of why miners will co-operate, we now
 state the rules to calculate how the block reward should be divided
 between miners.
 
-[TODO: Convert to algorithm?]
 \begin{enumerate}
 \item Traverse the DAG in reverse order from the \textsc{share} that
   found a bitcoin block to the previous bitcoin block found and
-  collect a set of shares.
+  collect this set of shares.
 \item From the above set of shares remove all shares that don't have
   a reverse path to the previous bitcoin block.
 \item Distribute the reward between miners weighted by the sum of
   the difficultly of all \textsc{share}s found by miners.
 \end{enumerate}
 
-As an example consider the p2p network of miners $a$, $b$ and $c$ with
-the DAG of shares as shown in Figure~\ref{fig:shares-dag}. In the DAG
-the set of shares that receive reward proportional to their
+As an example, consider the p2p network of miners $a$, $b$ and $c$
+with the DAG of shares as shown in Figure~\ref{fig:shares-dag}. In the
+DAG, the set of shares that receive reward proportional to their
 difficulty are $\{a_1..a_5, b_1..b_3\}$. The shares $\{c_1..c_3\}$ do
 not receive any reward as they are not reachable from the bitcoin
 block, $a_5$, even if they are reachable from $l$.
@@ -286,9 +290,8 @@ doesn't include a reference to the last found bitcoin block $a_5$.
 \end{figure}
 
 Given the above rules, we show how they together provide an incentives
-compatible reward function as defined
-by~\cite{incentives-compatible}. We present an outline of proofs that
-will be be formalised in future work.
+compatible reward function~\cite{incentives-compatible}. We present an
+outline of proofs that will be be formalised in future work.
 
 \subsubsection{Incentive Compatibility}\label{sec:incentive-compatability}
 
@@ -337,11 +340,13 @@ there are a few changes and we highlight them before describing the
 details.
 
 \begin{itemize}
-\item We use the DAG based scheme to distribute rewards among miners,
-  so we avoid the problem of estimating block rewards before miners
-  have created their shares.
-\item We use a single hub, and prevent DDoS attacks by keeping the hub
-  hidden using I2P~\cite{i2p, i2p-censorship-resistance} for
+\item In the Belcher proposal, the pool had to predict how much work
+  miners will be able to contribute for the next block. Instead our
+  DAG based scheme results in an incentives compatible distribution of
+  rewards among miners.
+\item Belcher proposes uses multiple hubs to percent DDoS attacks on
+  hubs, we instead use a single hub, and prevent DDoS attacks by keeping the
+  hub hidden using I2P~\cite{i2p, i2p-censorship-resistance} for
   communication between the hub and miners.
 \end{itemize}
 
@@ -372,9 +377,6 @@ following three ways:
   six months.
 \end{enumerate}
 
-The scriptPubKey for the above conditions in the coinbase is shown in
-Table~\ref{table:coinbase}.
-
 \begin{table}
   \centering
   \begin{tabular}{ lr }
@@ -390,11 +392,12 @@ Table~\ref{table:coinbase}.
   \caption{Coinbase transaction with hub and miner public keys.}\label{table:coinbase}
 \end{table}
 
-These conditions mean that the hub can not spend the coinbase without
-revealing the pre-image $X$. This pre-image is included in the
-construction of payment channels, as we will see in the next
-section. This use of pre-image in both the coinbase and the payment
-channel definition guarantees that miners get paid for their
+The scriptPubKey for the above conditions in the coinbase is shown in
+Table~\ref{table:coinbase}. These conditions mean that the hub can not
+spend the coinbase without revealing the pre-image $X$. This pre-image
+is included in the construction of payment channels, as we will see in
+the next section. This use of pre-image in both the coinbase and the
+payment channel definition guarantees that miners get paid for their
 accumulated payouts if the Hub defects and spends through the $cb_2$
 branch. We discuss how the miner and the hub don't gain by defecting
 in Section~\ref{ref:defecting}.
@@ -402,10 +405,10 @@ in Section~\ref{ref:defecting}.
 \subsubsection{One-way Channels}
 
 One-Way payment channels between hub and all miners allow miners to
-receive payouts without consuming any blockspace in the bitcoin block
-they mine. The use of payment channels is what makes braidpool scale
-up without losing blockspace. Braidpool thus avoids losing the fees
-that can be earned from the blockspace.
+receive payouts while consuming a constant size blockspace in the
+bitcoin block they mine. The use of payment channels is what makes
+braidpool scale up without losing blockspace. Braidpool thus avoids
+losing the fees that can be earned from the blockspace.
 
 Just like in the early versions of proposal by Belcher we use one-way
 payment channels. One-Way payment channels solve the problem of
@@ -419,7 +422,7 @@ bidirectional channels~\cite{poon2016bitcoin} allowing miners to spend
 their mining payouts over the lightning network. However, for now, we
 deliberately stay away from the complexity of making the hub a
 lightning node. If there is interest from miners to use the lightning
-network, we can build that out in future.
+network, we can build in the future.
 
 Each miner has a one-way payment channel with the hub using a two of
 two multisig with a time lock of six months. For each payout a miner
@@ -431,18 +434,18 @@ $0.1\%$ fees for the hub.
 
 The hub creates a funding channel locking an amount $R$ of
 bitcoin. The miner then creates a refund transaction, spending the
-funding transaction and sending the $R$ bitcoin back to the Hub. The
+funding transaction and sending the $R$ bitcoin back to the hub. The
 refund transaction has a locktime of six months allowing the miner to
 accumulate their payout over the six month period. The protocol can be
-extended to allow each miner to agree upon a locktime with the
-hub. The trade-off will be between the fees charged by the hub and the
-length of the locktime.
+extended to allow each miner to agree upon a locktime with the hub. In
+this case, the trade-off will be between the fees charged by the hub
+and the length of the locktime.
 
 The funding transaction includes an input from the hub and an output
 that can be spent in one of the two conditions shown in
-Table~\ref{fund-tx}. \verb|H| and \verb|M| are the public keys for Hub
-and Miner, they are called the co-operative keys by Belcher. While
-\verb|H'| and \verb|M'| are alternative public keys for Hub and Miner,
+Table~\ref{fund-tx}. \verb|H| and \verb|M| are the public keys for hub
+and miner, they are called the co-operative keys by Belcher. While
+\verb|H'| and \verb|M'| are alternative public keys for hub and miner,
 and are called the uncooperative keys in the Belcher proposal.
 
 
@@ -465,7 +468,7 @@ and are called the uncooperative keys in the Belcher proposal.
 
 The hub doesn't broadcast the funding transaction, instead it waits
 for the miner to create refund transaction. This is the same as any
-other timelocked one-way channel construction, i.e.\ the Miner creates
+other timelocked one-way channel construction, i.e.\ the miner creates
 a refund transaction with a timelock, signs it and sends it to the
 hub. The refund transaction is shown in Table~\ref{refund-tx}.
 
@@ -484,14 +487,16 @@ hub. The refund transaction is shown in Table~\ref{refund-tx}.
     hub.}\label{refund-tx}
 \end{table}
 
-With the refund transaction, if the Miner stops responding, the Hub
+With the refund transaction, if the miner stops responding, the hub
 can get a refund in six months time. However, the hub can be attacked
 by sending requests to open new channels and locking up the hub's
-liquidity. Hub responds to a miner's channel open request only after
-the miner has contributed enough shares. The threshold number of
-shares required before opening the channel is a configuration
-parameter for the hub. The miner will still receive the payouts for
-the shares generated, it is only that the channel opening is delayed.
+liquidity. The hub responds to a miner's channel open request only
+after the miner has contributed enough shares. This could be a
+parameter of the pool instantiation, anywhere between one to 100
+bitcoin blocks. The threshold number of shares required before opening
+the channel is a configuration parameter for the hub. The miner will
+still receive the payouts for the shares generated, it is only that
+the channel opening is delayed.
 
 On receiving the refund transaction, the hub broadcasts the funding
 transaction. Once the funding transaction is confirmed, the hub can
@@ -501,7 +506,7 @@ described in Section~\ref{sec:rewards}.
 
 The payment transactions are updates to the channel where each update
 increases the earnings of the miner. The payment transactions are
-signed by the hub using the non-cooperating key, \verb|H'|. The
+signed by the hub using the non-cooperating key, \verb|H'|.
 Table~\ref{payment-transaction} shows the structure of the payment
 transactions.
 
@@ -526,7 +531,7 @@ The hub updates the payment channel for each miner with payouts as
 determined by the incentives compatible rewards algorithm shown in
 Section~\ref{sec:rewards}. In the next section we present how the
 payouts are distributed, we then show how the hub and the miners are
-disincentivized to cheat.
+dis-incentivized to cheat.
 
 \subsection{Anonymous Payouts}
 
@@ -545,33 +550,12 @@ Table~\ref{table:coinbase} can now be spent by
 The proposal by Belcher specifies a payout algorithm that requires the
 hub updates the state of all channels, i.e.\ make payment to all
 miners. Once it has done so, the miner signs the first branch of the
-coinbase transaction and hands the coinbase to the hub. The hub can now
-redeem the entire payout.
-
-However, there is a small issue here about how the miner signing the
-coinbase can know if the hub has updated the states of all payment
-channels. One obvious solution might seem like the miner collects
-acknowledgements from all other miners that they have received the
-channel update. We still have to deal with the situation where the ACK
-from some miners never arrives? Or worse still, if a miner purposely
-doesn't send an ACK to stall the pool.
-
-We propose that instead of requiring ACKs from all miners, we extend
-the P2P protocol such that all miners store channel updates for all
-miners and send them out again if required. This approach is similar
-to the use of \emph{inv} and \emph{getdata} messages in bitcoin. We
-elaborate further on this in
-Section~\ref{sec:hub-miner-communication}, where we describe how the
-hub sends all payment updates to all miners through I2P gateways.
-
-% All miners also send heartbeat messages to hide hub as the source of
-% traffic when a block is found. These are all end to end encrypted.
-
-% These messages aren't part of the critical communication channel that
-% broadcasts \textsc{work} and \textsc{share}, and is a much lower
-% frequency communication.
-
-% What if hub and successful miner collude to not pay anyone?
+coinbase transaction and hands the coinbase to the hub. The hub can
+now redeem the entire payout. We use the same approach, requiring the
+miner to receive all channel updates from the hub before signing the
+co-operative branch. The miner first verifies that that the channel
+updates are properly signed by the hub, and there is one update for
+all miners in proportion to the rewards distribution algorithm.
 
 \subsection{Defecting Does Not Pay}\label{ref:defecting}
 
@@ -600,9 +584,12 @@ itself and the miners. When the pool ends, the hub loses a profit
 making opportunity. We argue that the incentive to defect reduces as
 the size of the pool grows.
 
-If the hub is co-opted, all it can do is deny miners a single block
-worth of payouts. Miners will immediately close their channels,
-collect their payouts and re-organise with a different hub.
+It is worth noting that if the hub is co-opted, all it can do is deny
+miners a payouts for the number of blocks the pool delays the payments
+by. We introduced the idea of this ranging from one to 100
+blocks. Further, if the hub is co-opted, all miners will immediately
+close their channels, collect their payouts and re-organise with a
+different hub.
 
 \subsubsection{Miner Defects}\label{ref:miner-defects}
 
@@ -615,8 +602,8 @@ miners on the network who have not yet earned enough payouts to
 amortise the cost of closing the channel.
 
 Say a miner starts participating in the pool, and after $N$ blocks
-becomes the successful miner of a bitcoin block, but refuses to sign
-the co-operative branch of the coinbase allowing the hub to claim the
+successfully mines a bitcoin block, but refuses to sign the
+co-operative branch of the coinbase allowing the hub to claim the
 coinbase reward. In such a case all miners have to close their
 channels and claim the rewards they have earned. Miners who recently
 joined the pool stand to lose the most because of the forced closure
@@ -626,10 +613,10 @@ However, the miner also loses any payouts for all the shares it mined
 since the last block was found by the pool. A malicious miner could
 contribute a large portion of the pool's hash rate and then refuse to
 sign the co-operative branch. This will disrupt the functioning of the
-pool and the censor could be willing to execute such an attack. Again,
-the only defence here is that the miners re-organise and start a
-different instance of the pool hiding their activity behind I2P
-tunnels. We elaborate on our use of I2P in
+pool and the censor could be willing to execute such an attack. The
+only defence here is that the miners re-organise and start a different
+instance of the pool hiding their activity behind I2P tunnels. We
+elaborate on our use of I2P in
 Section~\ref{sec:hub-miner-communication}.
 
 \subsubsection{Hub and Miner Collude}\label{ref:collusion}
@@ -685,7 +672,7 @@ creation as well updating the channel state when the hub makes a
 payout to the miners. The channel management messages are exchanged
 infrequently as compared to the \textsc{share}s broadcast messages and
 don't have the same timeliness requirements as the shares
-broadcasts. We propose adoption a solution that doesn't compromise on
+broadcasts. We propose adopting a solution that doesn't compromise on
 the hub's anonymity and makes a trade-off with increased latency of
 the channel management messages.
 
@@ -728,7 +715,7 @@ the miner:
 \end{enumerate*}
 
 Miners will run an I2P node next to their mining controller and setup
-an incoming tunner. Once the tunnel is ready, miners include their I2P
+an incoming tunnel. Once the tunnel is ready, miners include their I2P
 destination address in their share headers. The hub can then send
 messages to the miner through the I2P tunnel. By hiding their real
 I.P. address miners can increase their anonymity, and in turn help the
@@ -753,7 +740,9 @@ Section~\ref{ref:channels}.
 To send payouts as channel state updates, the hub again uses the I2P
 destination address of each miner and sends a one way message, with no
 reply destination included in the message. This allows the hub to
-remain anonymous and makes it relatively hard to DDoS the hub.
+remain anonymous and makes it relatively hard to DDoS the hub. The hub
+sends all miners updates to all payment channels. This allows the miner
+who discovered a block to verify that the hub has paid everyone.
 
 \section{Future Work}
 
