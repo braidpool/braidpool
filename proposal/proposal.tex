@@ -23,18 +23,18 @@
   negatively impacting bitcoin's decentralisation. The primary
   problems with p2pool are twofold. First, the variance in earnings
   for miners increases with total hashrate participating in the
-  pool. Secondly, payouts to miners require a linearly increasing
-  blockspace with the number of miners on p2pool. Building a directed
-  acyclic graph (DAG) of miner's shares and the use of payment
-  channels are two proposals trying to alleviate these problems faced
-  by p2pool. In this paper, we present a unified solution that uses a
-  DAG to track miners shares and uses payments channels to reward
-  miners. The shares calculation is verified by all participants of
-  the pool, and the rewards are paid out by an anonymous hub
-  communicating over I2P. Using the payment channels construction,
-  neither the hub nor the miners can cheat. We show that our approach
-  is incentives compatible and describe how the hub maintains its
-  anonymity to resist DDoS attacks.
+  pool. Second, payouts to miners require a linearly increasing
+  blockspace with the number of miners participaating in the
+  pool. Building a directed acyclic graph (DAG) of miner's shares and
+  the use of payment channels are two proposals trying to alleviate
+  these problems. In this paper, we present a unified solution that
+  uses a DAG to track miners shares and uses payments channels to
+  reward miners. The shares calculation is verified by all
+  participants of the pool, and the rewards are paid out by an
+  anonymous hub communicating with the miners using I2P. Using the
+  payment channels construction, neither the hub nor the miners can
+  cheat. We show that our approach is incentives compatible and
+  describe how the hub maintains its anonymity to resist DDoS attacks.
 \end{abstract}
    
 \section{Motivation}
@@ -59,12 +59,11 @@ p2pool chain. Where only one winning share will be rewarded for its
 PoW, and the others have to rue their bad luck. An increase in the
 share rate results in even more stale blocks. With miners not rewarded
 for stale blocks, it leads to increase in the variance of the miner
-rewards. This is shown in the analysis by
-McElrath~\cite{mcelrath:variance}. Ethereum's inclusive
+rewards~\cite{mcelrath:variance}. Ethereum's inclusive
 protocols~\cite{inclusive-protocols} help alleviate the problem for
 the Ethereum blockchain where smaller pools can continue to get
-rewarded for their PoW without an increase in variance with increasing
-in global hash rate.
+rewarded for their PoW, without an increase in variance with
+increasing in global hash rate.
 
 Knowing the challenges faced by P2Pool, we list the goals of a new
 decentralised mining pool as:
@@ -113,28 +112,27 @@ the p2p network in a timely manner.
 
 \subsection{A DAG of Shares}
 
-The braiding the blockchain proposal~\cite{mcelrath:variance} shows
-how smaller more frequent blocks can form a directed acyclic graph
-(DAG) of blocks, with each block pointing to one or more one previous
-blocks. Blocks in TerraHash Coin can have transactions repeated in
-different blocks. The proposal describes how repeated and double spend
-transactions can be resolved to reach a decision on the state of the
-ledger at any cut of the DAG.\@
+Braiding the blockchain proposal~\cite{mcelrath:variance} shows how
+smaller more frequent blocks can form a directed acyclic graph (DAG)
+of blocks, with each block pointing to one or more one previous
+blocks. Blocks in the braid, called beads, can have transactions
+repeated in different blocks. The proposal describes how duplicate and
+double spend transactions can be resolved to reach a decision on the
+state of the ledger at any cut of the DAG.\@
 
-The rewards that miners earn in the proposal is a coin native to the
-braid blockchain and is called TerraHash Coin. This coin can then be
-swapped for Bitcoin. The proposal doesn't yet define how this native
-coin will be swapped by bitcoin. Some of the suggestions under
-discussion include using atomic swaps, burning the TerraHash Coin, or
-using financial instruments like futures of the bitcoin's hash rate to
-swap TerraHash Coins for BTC. The problems with the atomic swap
-approach is the need for $O(n)$ block space as we need two
-transactions to execute a swap. Burning THCoins for BTC requires a
+In the proposal, miners a coin native to the braid blockchain, called
+TerraHash Coin. This coin can then be swapped for Bitcoin. The
+proposal doesn't yet define how this native coin will be swapped for
+bitcoin. Some of the suggestions under discussion include using atomic
+swaps, burning the TerraHash Coin, or using financial instruments like
+futures of the bitcoin's hash rate to swap TerraHash Coins for BTC.\
+The problems with the atomic swap approach is the need for $O(n)$
+block space in number of miners, as we need two transactions to
+execute a swap with each miner. Burning THCoins for BTC requires a
 trusted third party to execute this. Finally, trading THCoins for BTC
 futures has the problem of introducing centralisation on the futures
 market operator. There is some discussion around using DEXes for
-executing futures contracts, but that is still in very nascent stage
-of development and we don't go down that route here.
+executing futures contracts, but and we don't go down that route here.
 
 We propose taking a modified approach, where the blocks of a DAG
 represent shares of the mining pool. Miners broadcast their shares to
@@ -248,7 +246,7 @@ shares from other miners.
 
 \begin{figure}
   \begin{center}
-    \includegraphics[width=0.5\textwidth]{isolated-miners}
+    \includegraphics[width=0.65\textwidth]{isolated-miners}
     \caption{$a$ discovers a share and the reward is not shared with any
       other miner.}\label{fig:isolated-miners}
   \end{center}    
