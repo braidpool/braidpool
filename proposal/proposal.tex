@@ -243,17 +243,16 @@ communication between the two miners. We introduce a rule that miner
 $a$ in such a situation stops including references to $b$'s
 \textsc{share}s.
 
-The incentive in lay terms is that all miners should honestly include
-the \textsc{share}s discovered by other miners, as otherwise they will
-most likely be excluded by other miners and they will lose the
-opportunity to be rewarded for their work. We identify this
-degenerative case of ``isolated miners'' and argue that miners have no
-incentives to act in this manner. Figure~\ref{fig:isolated-miners}
-shows a DAG where all three miners $a$, $b$ and $c$ are working
-independently. In such a situation when the miner $a$ discovers a
-share $a_3$ that is a valid bitcoin block and the reward is not shared
-with any other miner as $a_3$ does not include any references to
-shares from other miners.
+The incentive in lay terms is that all miners should include the
+\textsc{share}s discovered by other miners, as otherwise they will be
+excluded by other miners and they will lose the opportunity to be
+rewarded for their work. We identify this degenerative case of
+``isolated miners'' and argue that miners have no incentives to act in
+this manner. Figure~\ref{fig:isolated-miners} shows a DAG where all
+three miners $a$, $b$ and $c$ are working independently. In such a
+situation when the miner $a$ discovers a share $a_3$ that is a valid
+bitcoin block and the reward is not shared with any other miner as
+$a_3$ does not include any references to shares from other miners.
 
 \begin{figure}
   \begin{center}
