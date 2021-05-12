@@ -24,17 +24,21 @@
   problems with p2pool are twofold. First, the variance in earnings
   for miners increases with total hashrate participating in the
   pool. Second, payouts to miners require a linearly increasing
-  blockspace with the number of miners participaating in the
-  pool. Building a directed acyclic graph (DAG) of miner's shares and
-  the use of payment channels are two proposals trying to alleviate
-  these problems. In this paper, we present a unified solution that
-  uses a DAG to track miners shares and uses payments channels to
-  reward miners. The shares calculation is verified by all
-  participants of the pool, and the rewards are paid out by an
-  anonymous hub communicating with the miners using I2P. Using the
-  payment channels construction, neither the hub nor the miners can
-  cheat. We show that our approach is incentives compatible and
-  describe how the hub maintains its anonymity to resist DDoS attacks.
+  blockspace with the number of miners participating in the
+  pool. There are two different proposals under discussion that
+  address these problems,
+  \begin{enumerate*}[label=(\roman*)]
+  \item building a directed acyclic graph (DAG) of miner's shares such
+    that miners are rewarded for all their proof of work, and
+  \item  using payment channels to distribute payouts to miners
+  \end{enumerate*}. In this paper, we present a solution that builds
+  on these two proposals. Shares calculation is verified by all
+  participants of the pool using the DAG of shares, and mining rewards
+  are paid out by an anonymous hub communicating with the miners using
+  I2P. Using the payment channels construction, neither the hub nor
+  the miners can cheat. We show that our approach is incentives
+  compatible and describe how the hub maintains its anonymity to
+  resist DDoS attacks.
 \end{abstract}
    
 \section{Motivation}
@@ -42,8 +46,9 @@
 P2Pool~\cite{p2pool:wiki} helps bitcoin's decentralisation by allowing
 miners to select which transactions they mine. This avoids any
 potential transaction censorship by pool operators. However, the
-construction used by P2Pool faces a number of problems that resulted
-in miners abandoning the pool. The most often cited problems are:
+construction used by P2Pool faces a number of problems that has
+resulted in miners abandoning the pool. The most often cited problems
+are:
 
 \begin{enumerate}
 \item Large variance in earnings for miners.
@@ -52,26 +57,30 @@ in miners abandoning the pool. The most often cited problems are:
 \end{enumerate}
 
 The first two problems are a direct consequence of the shares block
-rate limited to 30 seconds for the bitcoin p2pool. Intuitively, with
-only one block possible every thirty seconds, increase in the hashrate
-on P2Pool results in shares competing to be the next block in the
-p2pool chain. Where only one winning share will be rewarded for its
-PoW, and the others have to rue their bad luck. An increase in the
-share rate results in even more stale blocks. With miners not rewarded
-for stale blocks, it leads to increase in the variance of the miner
-rewards~\cite{mcelrath:variance}. Ethereum's inclusive
-protocols~\cite{inclusive-protocols} help alleviate the problem for
-the Ethereum blockchain where smaller pools can continue to get
-rewarded for their PoW, without an increase in variance with
-increasing in global hash rate.
+rate limited to 30 seconds for the bitcoin p2pool. Intuitively, as the
+hash rate participating in the pool goes up, the difficulty for 30
+seconds block rate goes up and smaller miners find it harder to find
+shares within a 30 second period.  Ethereum's inclusive
+protocols~\cite{inclusive-protocols} have some good ideas to resolve
+this problem where smaller pools can continue to get rewarded for
+their PoW, without an increase in variance with increase in global
+hash rate.
+
+The payouts in P2Pool are included in the coinbase of the block being
+mined. As the number of participants in P2Pool increase the size of
+the coinbase transaction increases taking up valuable blockspace that
+the miners could have earned fees from instead. This puts a cap of
+sorts on the number of participants in P2Pool.
 
 Knowing the challenges faced by P2Pool, we list the goals of a new
 decentralised mining pool as:
 
 \begin{enumerate}
-\item Reduced variance for miners with increasing pool hash rate.
-\item Payouts for miners with constant size block space requirement.
-\item Independent miners can build their own blocks.
+\item Reduce variance for miners with increasing pool hash rate.
+\item Make payouts to miners with constant size block space
+  requirement.
+\item Allow miners to select transactions they want to mine, with no
+  ability for their payouts to be blocked.
 \item Provide building blocks for a hash rate futures
   market.~\footnote{We don't elaborate on this goal in this paper, but
     readers can look up the gist on TerraHash coins
@@ -85,17 +94,40 @@ and~\cite{spectre} are some of the attempts to use a DAG for faster
 block times. However, they focus on changing the consensus layer of
 bitcoin. These proposals allow for miners to produce shares that have
 conflicting transactions and then apply rules to find a set of
-transactions acceptable at various cuts of the DAG.\@
+transactions acceptable at various cuts of the DAG.
 
-Belcher~\cite{channels-for-rewards} proposes using payment channels as
-to avoid using block space for making payouts to miners. The
-construction uses payment channels between federated hubs to pay
-miners after a block has been successfully mined. The payouts are made
-after a long enough period, similar to the 100 blocks requirements for
-spending from coinbase transactions. Miners register with hubs where
-bitcoin has been locked in to open payment channels to miners. The
+\ Braiding the blockchain proposal~\cite{mcelrath:variance} shows how
+smaller more frequent blocks can form a directed acyclic graph (DAG)
+of blocks, with each block pointing to one or more one previous
+blocks. Blocks in the braid, called beads, can have transactions
+repeated in different blocks. The proposal describes how duplicate and
+double spend transactions can be resolved to reach a decision on the
+state of the ledger at any cut of the DAG.\@
+
+In the proposal, miners earn a coin native to the braid blockchain,
+called TerraHash Coin. This coin can then be swapped for bitcoin. The
+proposal doesn't yet define how this native coin will be swapped for
+bitcoin. Some of the suggestions under discussion include using atomic
+swaps, burning the TerraHash Coin, or using financial instruments like
+futures of the bitcoin's hash rate to swap TerraHash Coins for BTC.\
+The problems with the atomic swap approach is the need for $O(n)$
+block space in number of miners, as we need two transactions to
+execute a swap with each miner payout. Burning THCoins for BTC
+requires a trusted third party to execute the burn. Finally, trading
+THCoins for BTC futures has the problem of introducing centralisation
+on the futures market operator. There is some discussion around using
+DEXes for executing futures contracts, but and we don't go down that
+route here.
+
+Belcher~\cite{channels-for-rewards} proposes using payment channels to
+avoid using block space for making payouts to miners. The construction
+uses payment channels between federated hubs to pay miners after a
+block has been successfully mined. The payouts are made after a long
+enough period, similar to the 100 blocks requirements for spending
+from coinbase transactions. Miners register with hubs where bitcoin
+has been locked in to open payment channels to miners. The
 construction shows how both miners and hubs can not cheat and how the
-funders of the hub can earn a reward for funding the payment channels.
+funders of the hub earns rewards for funding the payment channels.
 
 The two ideas of using a DAG and payment channels for rewards
 payouts together present a potential path for rebooting P2Pool. In the
@@ -106,66 +138,11 @@ show how the various components work together.
 
 In this section we present a modified version of TerraHash Coin. We
 propose building a DAG of miner's shares and use that to determine the
-payout distribution between miners. We then show that the payout
-distribution rewards miners for the shares they find and broadcast to
-the p2p network in a timely manner.
+payout distribution between miners. We then show that miners are
+rewarded for shares that they broadcast to the p2p network in a timely
+manner.
 
 \subsection{A DAG of Shares}
-
-Braiding the blockchain proposal~\cite{mcelrath:variance} shows how
-smaller more frequent blocks can form a directed acyclic graph (DAG)
-of blocks, with each block pointing to one or more one previous
-blocks. Blocks in the braid, called beads, can have transactions
-repeated in different blocks. The proposal describes how duplicate and
-double spend transactions can be resolved to reach a decision on the
-state of the ledger at any cut of the DAG.\@
-
-In the proposal, miners a coin native to the braid blockchain, called
-TerraHash Coin. This coin can then be swapped for Bitcoin. The
-proposal doesn't yet define how this native coin will be swapped for
-bitcoin. Some of the suggestions under discussion include using atomic
-swaps, burning the TerraHash Coin, or using financial instruments like
-futures of the bitcoin's hash rate to swap TerraHash Coins for BTC.\
-The problems with the atomic swap approach is the need for $O(n)$
-block space in number of miners, as we need two transactions to
-execute a swap with each miner. Burning THCoins for BTC requires a
-trusted third party to execute this. Finally, trading THCoins for BTC
-futures has the problem of introducing centralisation on the futures
-market operator. There is some discussion around using DEXes for
-executing futures contracts, but and we don't go down that route here.
-
-We propose taking a modified approach, where the blocks of a DAG
-represent shares of the mining pool. Miners broadcast their shares to
-the network using a gossip protocol and all the miners maintain the
-DAG as a replicated database. This DAG can be pruned to the bitcoin
-block height that miners have received payouts for. Shares broadcast
-by miners include a hash pointer to all previous shares received from
-other miners, this ensures the DAG is eventually consistent on all p2p
-participants.
-
-\subsubsection{Building Blocks}\label{sec:building-blocks}
-
-Each miner builds their own block, selecting transactions according to
-their own criteria. We call this block the \textsc{work}. The
-description of \textsc{work} is then disseminated to the p2p network
-of miners using the compact block
-specifications~\cite{compact-blocks}.
-
-The miner then starts mining on \textsc{work} and generates
-\textsc{share}s. Each \textsc{share} is mined at a difficulty level
-chosen by the miner. This difficulty can be dynamically chosen by the
-miner after each \textsc{share}, depending on miner's observation of
-the p2p network's hashrate. This dynamic adjustment allows miners to
-adjust the rate at which they produce \textsc{share}s.
-
-Figure~\ref{fig:work-share} shows the relationship between
-\textsc{work} and its \textsc{share}s. Each \textsc{work} created by a
-miner can result in multiple \textsc{share}s and both the
-\textsc{work} and \textsc{share}s are broadcast to the p2p
-network. When a miner receives a \textsc{work} from other miners it
-validates this \textsc{work} using a local bitcoin node. When a
-\textsc{share} is received by a miner they are validated against the
-most received \textsc{work} from the miner.
 
 \begin{figure}
   \begin{center}
@@ -175,13 +152,33 @@ most received \textsc{work} from the miner.
     \end{center}
 \end{figure}
 
-The nodes in the DAG are \textsc{share}s mined at varied difficulty
-levels. Each \textsc{share} that matches or exceeds the current
-bitcoin difficulty starts a new $epoch$ for the p2p mining
-pool. Figure~\ref{fig:epoch} shows $l$ and $r$ as the two valid
-bitcoin blocks that have been mined such that they meet bitcoin's
-difficulty at the time, and all the blocks between $l$ and $r$ are in
-the same $epoch$.
+Each miner builds their own block, selecting transactions according to
+their own criteria. We call this block the \textsc{work}. The
+description of \textsc{work} is then disseminated to the p2p network
+of miners using the compact block
+specifications~\cite{compact-blocks}. The miner then starts mining on
+\textsc{work} and generates
+\textsc{share}s. Figure~\ref{fig:work-share} shows the relationship
+between \textsc{work} and its \textsc{share}s. Each \textsc{work}
+created by a miner can result in multiple \textsc{share}s and both the
+\textsc{work} and \textsc{share}s are broadcast to the p2p
+network. When a miner receives a \textsc{work} from other miners it
+validates this \textsc{work} using a local bitcoin node. When a
+\textsc{share} is received by a miner they are validated against the
+most received \textsc{work} from the miner.
+
+Miners broadcast their \textsc{share}s to the network using a gossip
+protocol and all the miners maintain the DAG as a replicated
+database. Each node on the DAG is a \textsc{share} generated by a
+miner and all miners track the most recently received \textsc{share}
+from all other miners. Miners include a hash pointer to the most
+recent known \textsc{share}s from all miners in its own
+\textsc{share}. This leads to all edges in the DAG pointing from a
+\textsc{share} to all the \textsc{share}s known by the miner when
+starting to mine a \textsc{work}. This construction of the DAG ensures
+that the DAG is eventually consistent on all p2p participants. The DAG
+also includes valid bitcoin blocks, since one of the shares eventually
+satisfies the then bitcoin difficulty requirement.
 
 \begin{figure}
   \includegraphics[width=1.0\textwidth]{epoch}
@@ -190,12 +187,26 @@ the same $epoch$.
     the same $epoch$.}\label{fig:epoch}
 \end{figure}
 
-When a miner starts working on a \textsc{share} it includes a
-reference to the most recent \textsc{share} from all other miners that
-the miner has received valid shares from. Note, the miner also has
-access to \textsc{work} blocks from all participating miners. If a
-miner doesn't have the \textsc{work} block from another miner, then it
-rejects any \textsc{share}s received from the other miner.
+Each \textsc{share} that matches or exceeds the current bitcoin
+difficulty starts a new $epoch$ for the p2p mining
+pool. Figure~\ref{fig:epoch} shows a DAG with three miners
+particpating in the pool, $a$, $b$ and $a$. The nodes in the DAG are
+the shares generated by the three miners. Nodes $l$ and $r$ are two
+valid bitcoin blocks that have been mined such that they meet
+bitcoin's difficulty at the time, and all the blocks between $l$ and
+$r$ are in the same $epoch$.
+
+\subsubsection{Miner Defined Difficulty}\label{sec:share-difficulty}
+
+The nodes in the DAG are \textsc{share}s mined at difficulty level
+selected by the miner. This difficulty can be dynamically changed by
+the miner after each \textsc{share}, depending on miner's observation
+of the p2p network's hashrate. This dynamic adjustment allows miners
+to adjust the rate at which they produce \textsc{share}s. This is
+important as smaller miners can produce low difficulty shares to match
+the share rate of the larger miners in the pool. Even if smaller
+miners earn a smaller reward, they will earn these rewards with low
+variance.
 
 In the next section we then describe how all peers compute their fair
 share of profits using the DAG of shares. We then show how our reward
