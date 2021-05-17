@@ -21,3 +21,35 @@
 #include <iostream>
 
 #include "channel.hpp"
+
+using namespace bc;
+using namespace bc::wallet;
+using namespace bc::chain;
+
+transaction
+one_way_channel::fund_transaction(const hash_digest& input_tx_hash,
+        const uint32_t input_index, const ec_public& hub, const ec_public& miner,
+    const ec_public& hub_noncoop, const ec_public& miner_noncoop, const hash_digest& secret)
+{
+    // TODO: Implement
+    return transaction{};
+}
+
+transaction
+one_way_channel::refund_transaction(const transaction& fund_transaction,
+    const payment_address hub_address)
+{
+    // TODO: Implement
+    return transaction{};
+}
+
+
+transaction
+one_way_channel::channel_update_transaction(const transaction& fund_transaction,
+    const ec_public& hub, const ec_public& miner, const ec_public& hub_noncoop,
+    const ec_public& miner_noncoop, const hash_digest& secret)
+{
+    // TODO: Implement
+    return transaction{};
+}
+

@@ -22,26 +22,39 @@
 
 #include <string.h>
 
-#include <bitcoin/bitcoin.hpp>
+#include <bitcoin/system.hpp>
 
-using namespace bc::system;
-using namespace bc::system::wallet;
-using namespace bc::system::chain;
+using namespace bc;
+using namespace bc::wallet;
+using namespace bc::chain;
 
+// Creates transactions for one way channel management.
+// Transactions types are fund, refund, channel updates and channel close.
 class one_way_channel
 {
 public:
-    one_way_channel(const ec_private& ours, const ec_public& theirs);
+    // Create a funding transaction given the input points, hub's and
+    // miner's co-operative and not co-operative public keys, as well
+    // as the hash of the preimage
+    transaction fund_transaction(const hash_digest& input_tx_hash,
+        const uint32_t input_index, const ec_public& hub, const ec_public& miner,
+        const ec_public& hub_noncoop, const ec_public& miner_noncoop, const hash_digest& secret);
 
-    transaction& fund_transaction(const hash_digest& input_tx_hash,
-        const unint32_t input_index);
+    // Create a refund transaction given the funding transaction and
+    // the hub's address
+    transaction refund_transaction(const transaction& fund_transaction,
+        const payment_address hub_address);
 
-    transaction& refund_transaction(const hash_digest& tx_hash,
-        const unint32_t index);
+    // Create a payment update to the channel. Arguments are the same
+    // as the funding transaction, apart from spending from UTXO, this
+    // spends from fund transaction
+    transaction channel_update_transaction(const transaction& fund_transaction,
+        const ec_public& hub, const ec_public& miner,
+        const ec_public& hub_noncoop, const ec_public& miner_noncoop, const hash_digest& secret);
 
-    transaction& channel_update_transaction(const hash_digest& tx_hash,
-        const unint32_t index);
-}
-
+private:
+    ec_private ours_;
+    ec_public theirs_;
+};
 
 #endif
