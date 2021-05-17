@@ -12,11 +12,16 @@ configure_file(one_way_channel_config.h.in one_way_channel_config.h)
 
 pkg_check_modules(LIBBITCOIN-SYSTEM libbitcoin-system)
 
+add_subdirectory(channel)
+
 # message(STATUS ${LIBBITCOIN-SYSTEM_LINK_LIBRARIES})
+list(APPEND EXTRA_LIBS channel)
+list(APPEND EXTRA_INCLUDES "${PROJECT_SOURCE_DIR}/channel/include")
+
 list(APPEND EXTRA_LIBS ${LIBBITCOIN-SYSTEM_LINK_LIBRARIES})
 list(APPEND EXTRA_INCLUDES ${LIBBITCOIN-SYSTEM_INCLUDE_DIRS})
-list(APPEND EXTRA_INCLUDES ${PROJECT_SOURCE_DIR}/channel/include/)
 # message(STATUS ${EXTRA_LIBS})
+
 
 # add the executable
 add_executable(one_way_channel one_way_channel.cpp)

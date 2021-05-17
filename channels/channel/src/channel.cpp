@@ -18,20 +18,56 @@
  */
 
 #include <string.h>
-#include <iostream>
 
 #include "channel.hpp"
 
 using namespace bc;
-using namespace bc::wallet;
 using namespace bc::chain;
+using namespace bc::machine;
+using namespace bc::wallet;
+
+script
+one_way_channel::make_cooperative_output(const ec_public& key_1, const ec_public& key_2)
+{
+    point_list keys{key_1.point(), key_2.point()};
+    auto result_script = script();
+    result_script.from_operations(script::to_pay_multisig_pattern(2u, keys));
+    return result_script;
+}
+
+script
+one_way_channel::make_non_cooperative_output(const ec_public& key_1, const ec_public& key_2, const hash_digest& secret)
+{
+    point_list keys{key_1.point(), key_2.point()};
+    auto ops = script::to_pay_multisig_pattern(2u, keys);
+
+    // this will make ops grow more than reserved in to_pay_multisig_pattern
+    ops.emplace_back(to_chunk(secret));
+    ops.emplace_back(opcode::equalverify);
+
+    auto result_script = script();
+    result_script.from_operations(ops);
+    return result_script;
+}
 
 transaction
 one_way_channel::fund_transaction(const hash_digest& input_tx_hash,
         const uint32_t input_index, const ec_public& hub, const ec_public& miner,
-    const ec_public& hub_noncoop, const ec_public& miner_noncoop, const hash_digest& secret)
+    const ec_public& hub_noncoop, const ec_public& miner_noncoop, const hash_digest& secret, uint64_t value)
 {
-    // TODO: Implement
+    // input from input_tx_hash and input_index
+    auto prev_out = output_point{input_tx_hash, input_index};
+
+    // output 1: 2 of 2 multisig for hub and miner for value coins
+    auto script_cooperative = this->make_cooperative_output(hub.point(), miner.point());
+    auto output_1 = output{value, script_cooperative};
+
+    // output 2: 2 of 2 multisig for hub' and miner' for value coins
+    // auto script_non_cooperative = this->make_2of2_multisig(hub_noncoop.point(), miner_noncoop.point());
+    // auto output_2 = output{value, script_non_cooperative};
+
+    // sign prev_out
+    // sign for H' of the output 2
     return transaction{};
 }
 

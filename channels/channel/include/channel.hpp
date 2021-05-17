@@ -38,7 +38,8 @@ public:
     // as the hash of the preimage
     transaction fund_transaction(const hash_digest& input_tx_hash,
         const uint32_t input_index, const ec_public& hub, const ec_public& miner,
-        const ec_public& hub_noncoop, const ec_public& miner_noncoop, const hash_digest& secret);
+        const ec_public& hub_noncoop, const ec_public& miner_noncoop,
+        const hash_digest& secret, uint64_t value);
 
     // Create a refund transaction given the funding transaction and
     // the hub's address
@@ -53,6 +54,11 @@ public:
         const ec_public& hub_noncoop, const ec_public& miner_noncoop, const hash_digest& secret);
 
 private:
+
+    script make_cooperative_output(const ec_public& key_1, const ec_public& key_2);
+    script make_non_cooperative_output(const ec_public& key_1, const ec_public& key_2,
+        const hash_digest& secret);
+
     ec_private ours_;
     ec_public theirs_;
 };
