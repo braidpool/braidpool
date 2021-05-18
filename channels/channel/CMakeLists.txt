@@ -11,6 +11,7 @@ enable_testing()
 find_package(Boost COMPONENTS system filesystem unit_test_framework REQUIRED)
 
 add_executable(channel_test
+  ${PROJECT_SOURCE_DIR}/channel/tests/main.cpp
   ${PROJECT_SOURCE_DIR}/channel/tests/channel_test.cpp
   )
 
