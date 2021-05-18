@@ -17,7 +17,7 @@
  * along with d11dpool.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <string.h>
+#include <string>
 
 #include "channel.hpp"
 
@@ -26,49 +26,66 @@ using namespace bc::chain;
 using namespace bc::machine;
 using namespace bc::wallet;
 
-script
-one_way_channel::make_cooperative_output(const ec_public& key_1, const ec_public& key_2)
+void
+one_way_channel::push_2of2_multisig(operation::list& ops, const ec_public& key_1, const ec_public& key_2)
 {
-    point_list keys{key_1.point(), key_2.point()};
-    auto result_script = script();
-    result_script.from_operations(script::to_pay_multisig_pattern(2u, keys));
-    return result_script;
+    ops.emplace_back(opcode::push_positive_2);
+    ops.emplace_back(to_chunk(key_1.point()));
+    ops.emplace_back(to_chunk(key_2.point()));
+    ops.emplace_back(opcode::push_positive_2);
 }
 
-script
-one_way_channel::make_non_cooperative_output(const ec_public& key_1, const ec_public& key_2, const hash_digest& secret)
+operation::list
+one_way_channel::make_fund_output(const ec_public& hub, const ec_public& miner,
+    const ec_public& hub_noncoop, const ec_public& miner_noncoop,
+    const hash_digest& secret)
 {
-    point_list keys{key_1.point(), key_2.point()};
-    auto ops = script::to_pay_multisig_pattern(2u, keys);
+   operation::list ops;
+    // length of [if 2 H M 2 else 2 H' M' 2 secret equalverify endif] = 13
+    ops.reserve(13);
 
-    // this will make ops grow more than reserved in to_pay_multisig_pattern
+    ops.emplace_back(opcode::if_);
+
+    // 2 of 2 H M
+    this->push_2of2_multisig(ops, hub, miner);
+
+    ops.emplace_back(opcode::else_);
+
+    // 2 of 2 H' M'
+    this->push_2of2_multisig(ops, hub_noncoop, miner_noncoop);
+
+    // secret equalverify
     ops.emplace_back(to_chunk(secret));
     ops.emplace_back(opcode::equalverify);
 
-    auto result_script = script();
-    result_script.from_operations(ops);
-    return result_script;
+    ops.emplace_back(opcode::endif);
+    return ops;
 }
 
 transaction
 one_way_channel::fund_transaction(const hash_digest& input_tx_hash,
-        const uint32_t input_index, const ec_public& hub, const ec_public& miner,
-    const ec_public& hub_noncoop, const ec_public& miner_noncoop, const hash_digest& secret, uint64_t value)
+    const uint32_t input_index, const std::string& script_sig, const ec_public& hub,
+    const ec_public& miner,  const ec_public& hub_noncoop, const ec_public& miner_noncoop,
+    const hash_digest& secret, uint64_t value)
 {
-    // input from input_tx_hash and input_index
+    // input from input_tx_hash, input_index and script_sig
     auto prev_out = output_point{input_tx_hash, input_index};
+    data_chunk script_sig_bytes;
+    decode_base16(script_sig_bytes, script_sig);
+    script input_script;
+    input_script.from_data(to_chunk(script_sig_bytes), false);
+    input tx_input{prev_out, input_script, 0xffffffff};
 
-    // output 1: 2 of 2 multisig for hub and miner for value coins
-    auto script_cooperative = this->make_cooperative_output(hub.point(), miner.point());
-    auto output_1 = output{value, script_cooperative};
+    // outputs with 2of2 multisig and hashlock
+    const auto ops = this->make_fund_output(hub, miner, hub_noncoop, miner_noncoop, secret);
+    const script output_script{ops};
+    const output tx_output{value, ops};
 
-    // output 2: 2 of 2 multisig for hub' and miner' for value coins
-    // auto script_non_cooperative = this->make_2of2_multisig(hub_noncoop.point(), miner_noncoop.point());
-    // auto output_2 = output{value, script_non_cooperative};
+    auto tx = transaction();
+    tx.inputs().push_back(tx_input);
+    tx.outputs().push_back(tx_output);
 
-    // sign prev_out
-    // sign for H' of the output 2
-    return transaction{};
+    return tx;
 }
 
 transaction

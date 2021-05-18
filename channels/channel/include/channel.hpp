@@ -25,8 +25,9 @@
 #include <bitcoin/system.hpp>
 
 using namespace bc;
-using namespace bc::wallet;
 using namespace bc::chain;
+using namespace bc::machine;
+using namespace bc::wallet;
 
 // Creates transactions for one way channel management.
 // Transactions types are fund, refund, channel updates and channel close.
@@ -36,8 +37,10 @@ public:
     // Create a funding transaction given the input points, hub's and
     // miner's co-operative and not co-operative public keys, as well
     // as the hash of the preimage
+    // output: if 1 (2 of 2 H and M) else (2 of 2 H' and M' and secret equalverify)
     transaction fund_transaction(const hash_digest& input_tx_hash,
-        const uint32_t input_index, const ec_public& hub, const ec_public& miner,
+        const uint32_t input_index, const std::string& script_sig,
+        const ec_public& hub, const ec_public& miner,
         const ec_public& hub_noncoop, const ec_public& miner_noncoop,
         const hash_digest& secret, uint64_t value);
 
@@ -51,13 +54,17 @@ public:
     // spends from fund transaction
     transaction channel_update_transaction(const transaction& fund_transaction,
         const ec_public& hub, const ec_public& miner,
-        const ec_public& hub_noncoop, const ec_public& miner_noncoop, const hash_digest& secret);
+        const ec_public& hub_noncoop, const ec_public& miner_noncoop,
+        const hash_digest& secret);
 
 private:
 
-    script make_cooperative_output(const ec_public& key_1, const ec_public& key_2);
-    script make_non_cooperative_output(const ec_public& key_1, const ec_public& key_2,
-        const hash_digest& secret);
+    void push_2of2_multisig(operation::list& ops, const ec_public& key_1,
+        const ec_public& key_2);
+
+    operation::list make_fund_output(const ec_public& hub,
+        const ec_public& miner, const ec_public& hub_noncoop,
+        const ec_public& miner_noncoop, const hash_digest& secret);
 
     ec_private ours_;
     ec_public theirs_;
