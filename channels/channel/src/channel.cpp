@@ -17,18 +17,17 @@
  * along with d11dpool.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <string>
-
 #include "channel.hpp"
+
+#include <string>
 
 using namespace bc;
 using namespace bc::chain;
 using namespace bc::machine;
 using namespace bc::wallet;
 
-void one_way_channel::push_2of2_multisig(operation::list& ops,
-    const ec_public& key_1,
-    const ec_public& key_2)
+void one_way_channel::push_2of2_multisig(
+    operation::list& ops, const ec_public& key_1, const ec_public& key_2)
 {
     ops.emplace_back(opcode::push_positive_2);
     ops.emplace_back(to_chunk(key_1.point()));
@@ -36,12 +35,9 @@ void one_way_channel::push_2of2_multisig(operation::list& ops,
     ops.emplace_back(opcode::push_positive_2);
 }
 
-operation::list
-one_way_channel::make_fund_output(const ec_public& hub,
-    const ec_public& miner,
-    const ec_public& hub_noncoop,
-    const ec_public& miner_noncoop,
-    const hash_digest& secret)
+operation::list one_way_channel::make_fund_output(const ec_public& hub,
+    const ec_public& miner, const ec_public& hub_noncoop,
+    const ec_public& miner_noncoop, const hash_digest& secret)
 {
     operation::list ops;
     // length of [if 2 H M 2 else 2 H' M' 2 secret equalverify endif] = 13
@@ -65,16 +61,10 @@ one_way_channel::make_fund_output(const ec_public& hub,
     return ops;
 }
 
-transaction
-one_way_channel::fund_transaction(const hash_digest& input_tx_hash,
-    const uint32_t input_index,
-    const std::string& script_sig,
-    const ec_public& hub,
-    const ec_public& miner,
-    const ec_public& hub_noncoop,
-    const ec_public& miner_noncoop,
-    const hash_digest& secret,
-    uint64_t value)
+transaction one_way_channel::fund_transaction(const hash_digest& input_tx_hash,
+    const uint32_t input_index, const std::string& script_sig,
+    const ec_public& hub, const ec_public& miner, const ec_public& hub_noncoop,
+    const ec_public& miner_noncoop, const hash_digest& secret, uint64_t value)
 {
     // input from input_tx_hash, input_index and script_sig
     auto prev_out = output_point { input_tx_hash, input_index };
@@ -85,7 +75,8 @@ one_way_channel::fund_transaction(const hash_digest& input_tx_hash,
     input tx_input { prev_out, input_script, 0xffffffff };
 
     // outputs with 2of2 multisig and hashlock
-    const auto ops = this->make_fund_output(hub, miner, hub_noncoop, miner_noncoop, secret);
+    const auto ops = this->make_fund_output(
+        hub, miner, hub_noncoop, miner_noncoop, secret);
     const script output_script { ops };
     const output tx_output { value, ops };
 
@@ -96,21 +87,17 @@ one_way_channel::fund_transaction(const hash_digest& input_tx_hash,
     return tx;
 }
 
-transaction
-one_way_channel::refund_transaction(const transaction& fund_transaction,
-    const payment_address hub_address)
+transaction one_way_channel::refund_transaction(
+    const transaction& fund_transaction, const payment_address hub_address)
 {
     // TODO: Implement
     return transaction {};
 }
 
-transaction
-one_way_channel::channel_update_transaction(const transaction& fund_transaction,
-    const ec_public& hub,
-    const ec_public& miner,
-    const ec_public& hub_noncoop,
-    const ec_public& miner_noncoop,
-    const hash_digest& secret)
+transaction one_way_channel::channel_update_transaction(
+    const transaction& fund_transaction, const ec_public& hub,
+    const ec_public& miner, const ec_public& hub_noncoop,
+    const ec_public& miner_noncoop, const hash_digest& secret)
 {
     // TODO: Implement
     return transaction {};

@@ -21,7 +21,8 @@
 
 BOOST_AUTO_TEST_SUITE(channel_funding_transction_tests)
 
-BOOST_AUTO_TEST_CASE(channel_fund_transction__valid_inputs__returns_valid_transaction)
+BOOST_AUTO_TEST_CASE(
+    channel_fund_transction__valid_inputs__returns_valid_transaction)
 {
     namespace tt = boost::test_tools;
     int a = 1;

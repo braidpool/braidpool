@@ -36,7 +36,8 @@ public:
     // Create a funding transaction given the input points, hub's and
     // miner's co-operative and not co-operative public keys, as well
     // as the hash of the preimage
-    // output: if 1 (2 of 2 H and M) else (2 of 2 H' and M' and secret equalverify)
+    // output: if 1 (2 of 2 H and M) else (2 of 2 H' and M' and secret
+    // equalverify)
     transaction fund_transaction(const hash_digest& input_tx_hash,
         const uint32_t input_index, const std::string& script_sig,
         const ec_public& hub, const ec_public& miner,
@@ -45,8 +46,8 @@ public:
 
     // Create a refund transaction given the funding transaction and
     // the hub's address
-    transaction refund_transaction(const transaction& fund_transaction,
-        const payment_address hub_address);
+    transaction refund_transaction(
+        const transaction& fund_transaction, const payment_address hub_address);
 
     // Create a payment update to the channel. Arguments are the same
     // as the funding transaction, apart from spending from UTXO, this
@@ -57,8 +58,8 @@ public:
         const hash_digest& secret);
 
 private:
-    void push_2of2_multisig(operation::list& ops, const ec_public& key_1,
-        const ec_public& key_2);
+    void push_2of2_multisig(
+        operation::list& ops, const ec_public& key_1, const ec_public& key_2);
 
     operation::list make_fund_output(const ec_public& hub,
         const ec_public& miner, const ec_public& hub_noncoop,
