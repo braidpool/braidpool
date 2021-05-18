@@ -12,6 +12,8 @@ configure_file(one_way_channel_config.h.in one_way_channel_config.h)
 
 pkg_check_modules(LIBBITCOIN-SYSTEM libbitcoin-system)
 
+enable_testing()
+
 add_subdirectory(channel)
 
 # message(STATUS ${LIBBITCOIN-SYSTEM_LINK_LIBRARIES})
