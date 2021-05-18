@@ -31,8 +31,7 @@ using namespace bc::wallet;
 
 // Creates transactions for one way channel management.
 // Transactions types are fund, refund, channel updates and channel close.
-class one_way_channel
-{
+class one_way_channel {
 public:
     // Create a funding transaction given the input points, hub's and
     // miner's co-operative and not co-operative public keys, as well
@@ -58,7 +57,6 @@ public:
         const hash_digest& secret);
 
 private:
-
     void push_2of2_multisig(operation::list& ops, const ec_public& key_1,
         const ec_public& key_2);
 
