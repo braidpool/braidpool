@@ -84,6 +84,7 @@ install:
 
 script:
 
+    - mkdir channels/build
     - cd channels/build
     - PKG_CONFIG_PATH=$TRAVIS_BUILD_DIR/my-prefix/lib/pkgconfig/ cmake ../
     - cmake --build .
