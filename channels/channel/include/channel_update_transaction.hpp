@@ -17,8 +17,8 @@
  * along with d11dpool.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef FUNDING_TRANSACTION_HPP
-#define FUNDING_TRANSACTION_HPP
+#ifndef CHANNEL_UPDATE_TRANSACTION_HPP
+#define CHANNEL_UPDATE_TRANSACTION_HPP
 
 #include <string.h>
 
@@ -31,29 +31,19 @@ using namespace bc::chain;
 using namespace bc::machine;
 using namespace bc::wallet;
 
-// Funding transaction for one way channel management.
-class funding_transaction {
+// Channel update transaction for one way channel management.
+class channel_update_transaction {
 public:
-    // Create a funding transaction given the input points, hub's and
-    // miner's co-operative and not co-operative public keys, as well
-    // as the hash of the preimage
-    // output: if 1 (2 of 2 H and M) else (2 of 2 H' and M' and secret
-    // equalverify)
-    funding_transaction(const hash_digest& input_tx_hash,
-        const uint32_t input_index, const std::string& script_sig,
+    // Create a payment update to the channel. Arguments are the same
+    // as the funding transaction, apart from spending from UTXO, this
+    // spends from fund transaction
+    channel_update_transaction(const transaction& fund_transaction,
         const ec_public& hub, const ec_public& miner,
         const ec_public& hub_noncoop, const ec_public& miner_noncoop,
-        const hash_digest& secret, uint64_t value);
+        const hash_digest& secret);
 
 private:
     transaction transaction_;
-
-    void push_2of2_multisig(
-        operation::list& ops, const ec_public& key_1, const ec_public& key_2);
-
-    operation::list make_fund_output(const ec_public& hub,
-        const ec_public& miner, const ec_public& hub_noncoop,
-        const ec_public& miner_noncoop, const hash_digest& secret);
 };
 }
 

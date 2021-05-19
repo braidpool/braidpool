@@ -63,11 +63,11 @@ operation::list funding_transaction::make_fund_output(const ec_public& hub,
     return ops;
 }
 
-transaction funding_transaction::fund_transaction(
-    const hash_digest& input_tx_hash, const uint32_t input_index,
-    const std::string& script_sig, const ec_public& hub, const ec_public& miner,
-    const ec_public& hub_noncoop, const ec_public& miner_noncoop,
-    const hash_digest& secret, uint64_t value)
+funding_transaction::funding_transaction(const hash_digest& input_tx_hash,
+    const uint32_t input_index, const std::string& script_sig,
+    const ec_public& hub, const ec_public& miner, const ec_public& hub_noncoop,
+    const ec_public& miner_noncoop, const hash_digest& secret, uint64_t value)
+    : transaction_()
 {
     // input from input_tx_hash, input_index and script_sig
     auto prev_out = output_point { input_tx_hash, input_index };
@@ -83,26 +83,7 @@ transaction funding_transaction::fund_transaction(
     const script output_script { ops };
     const output tx_output { value, ops };
 
-    auto tx = transaction();
-    tx.inputs().push_back(tx_input);
-    tx.outputs().push_back(tx_output);
-
-    return tx;
-}
-
-transaction funding_transaction::refund_transaction(
-    const transaction& fund_transaction, const payment_address hub_address)
-{
-    // TODO: Implement
-    return transaction {};
-}
-
-transaction funding_transaction::channel_update_transaction(
-    const transaction& fund_transaction, const ec_public& hub,
-    const ec_public& miner, const ec_public& hub_noncoop,
-    const ec_public& miner_noncoop, const hash_digest& secret)
-{
-    // TODO: Implement
-    return transaction {};
+    transaction_.inputs().push_back(tx_input);
+    transaction_.outputs().push_back(tx_output);
 }
 }

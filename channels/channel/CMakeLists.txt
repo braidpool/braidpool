@@ -4,6 +4,8 @@ include_directories(${PROJECT_SOURCE_DIR}/channel/include/ ${LIBBITCOIN-SYSTEM_I
 
 add_library(channel
   src/funding_transaction.cpp
+  src/refund_transaction.cpp
+  src/channel_update_transaction.cpp
   )
 
 ## Testing
