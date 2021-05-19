@@ -20,9 +20,7 @@
 #ifndef REFUND_TRANSACTION_HPP
 #define REFUND_TRANSACTION_HPP
 
-#include <string.h>
-
-#include <bitcoin/system.hpp>
+#include "channel_transaction.hpp"
 
 namespace one_way_channel {
 
@@ -32,15 +30,12 @@ using namespace bc::machine;
 using namespace bc::wallet;
 
 // Refund transaction for one way channel management.
-class refund_transaction {
+class refund_transaction : channel_transaction {
 public:
     // Create a refund transaction given the funding transaction and
     // the hub's address
     refund_transaction(
         const transaction& fund_transaction, const payment_address hub_address);
-
-private:
-    transaction transaction_;
 };
 }
 

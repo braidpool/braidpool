@@ -20,9 +20,7 @@
 #ifndef CHANNEL_UPDATE_TRANSACTION_HPP
 #define CHANNEL_UPDATE_TRANSACTION_HPP
 
-#include <string.h>
-
-#include <bitcoin/system.hpp>
+#include "channel_transaction.hpp"
 
 namespace one_way_channel {
 
@@ -32,7 +30,7 @@ using namespace bc::machine;
 using namespace bc::wallet;
 
 // Channel update transaction for one way channel management.
-class channel_update_transaction {
+class channel_update_transaction : channel_transaction {
 public:
     // Create a payment update to the channel. Arguments are the same
     // as the funding transaction, apart from spending from UTXO, this
@@ -41,9 +39,6 @@ public:
         const ec_public& hub, const ec_public& miner,
         const ec_public& hub_noncoop, const ec_public& miner_noncoop,
         const hash_digest& secret);
-
-private:
-    transaction transaction_;
 };
 }
 

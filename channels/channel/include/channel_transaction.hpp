@@ -17,9 +17,12 @@
  * along with d11dpool.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "channel_update_transaction.hpp"
+#ifndef CHANNEL_TRANSACTION_HPP
+#define CHANNEL_TRANSACTION_HPP
 
-#include <string>
+#include <string.h>
+
+#include <bitcoin/system.hpp>
 
 namespace one_way_channel {
 
@@ -28,12 +31,18 @@ using namespace bc::chain;
 using namespace bc::machine;
 using namespace bc::wallet;
 
-channel_update_transaction::channel_update_transaction(
-    const transaction& fund_transaction, const ec_public& hub,
-    const ec_public& miner, const ec_public& hub_noncoop,
-    const ec_public& miner_noncoop, const hash_digest& secret)
-    : channel_transaction()
-{
-    // TODO: Implement
+// Abstract super class for all transaction classes
+class channel_transaction {
+public:
+    channel_transaction()
+        : transaction_()
+    {
+    }
+    virtual data_chunk to_data() const = 0;
+
+protected:
+    transaction transaction_;
+};
 }
-}
+
+#endif

@@ -67,7 +67,7 @@ funding_transaction::funding_transaction(const hash_digest& input_tx_hash,
     const uint32_t input_index, const std::string& script_sig,
     const ec_public& hub, const ec_public& miner, const ec_public& hub_noncoop,
     const ec_public& miner_noncoop, const hash_digest& secret, uint64_t value)
-    : transaction_()
+    : channel_transaction()
 {
     // input from input_tx_hash, input_index and script_sig
     auto prev_out = output_point { input_tx_hash, input_index };
@@ -83,7 +83,7 @@ funding_transaction::funding_transaction(const hash_digest& input_tx_hash,
     const script output_script { ops };
     const output tx_output { value, ops };
 
-    transaction_.inputs().push_back(tx_input);
-    transaction_.outputs().push_back(tx_output);
+    this->transaction_.inputs().push_back(tx_input);
+    this->transaction_.outputs().push_back(tx_output);
 }
 }

@@ -30,7 +30,7 @@ using namespace bc::wallet;
 
 refund_transaction::refund_transaction(
     const transaction& fund_transaction, const payment_address hub_address)
-    : transaction_()
+    : channel_transaction()
 {
     // TODO: Implement
 }

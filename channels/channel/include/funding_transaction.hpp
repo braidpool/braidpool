@@ -20,9 +20,8 @@
 #ifndef FUNDING_TRANSACTION_HPP
 #define FUNDING_TRANSACTION_HPP
 
+#include "channel_transaction.hpp"
 #include <string.h>
-
-#include <bitcoin/system.hpp>
 
 namespace one_way_channel {
 
@@ -32,7 +31,7 @@ using namespace bc::machine;
 using namespace bc::wallet;
 
 // Funding transaction for one way channel management.
-class funding_transaction {
+class funding_transaction : channel_transaction {
 public:
     // Create a funding transaction given the input points, hub's and
     // miner's co-operative and not co-operative public keys, as well
@@ -46,8 +45,6 @@ public:
         const hash_digest& secret, uint64_t value);
 
 private:
-    transaction transaction_;
-
     void push_2of2_multisig(
         operation::list& ops, const ec_public& key_1, const ec_public& key_2);
 
