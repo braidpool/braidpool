@@ -17,16 +17,18 @@
  * along with d11dpool.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "channel.hpp"
+#include "funding_transaction.hpp"
 
 #include <string>
+
+namespace one_way_channel {
 
 using namespace bc;
 using namespace bc::chain;
 using namespace bc::machine;
 using namespace bc::wallet;
 
-void one_way_channel::push_2of2_multisig(
+void funding_transaction::push_2of2_multisig(
     operation::list& ops, const ec_public& key_1, const ec_public& key_2)
 {
     ops.emplace_back(opcode::push_positive_2);
@@ -35,7 +37,7 @@ void one_way_channel::push_2of2_multisig(
     ops.emplace_back(opcode::push_positive_2);
 }
 
-operation::list one_way_channel::make_fund_output(const ec_public& hub,
+operation::list funding_transaction::make_fund_output(const ec_public& hub,
     const ec_public& miner, const ec_public& hub_noncoop,
     const ec_public& miner_noncoop, const hash_digest& secret)
 {
@@ -61,10 +63,11 @@ operation::list one_way_channel::make_fund_output(const ec_public& hub,
     return ops;
 }
 
-transaction one_way_channel::fund_transaction(const hash_digest& input_tx_hash,
-    const uint32_t input_index, const std::string& script_sig,
-    const ec_public& hub, const ec_public& miner, const ec_public& hub_noncoop,
-    const ec_public& miner_noncoop, const hash_digest& secret, uint64_t value)
+transaction funding_transaction::fund_transaction(
+    const hash_digest& input_tx_hash, const uint32_t input_index,
+    const std::string& script_sig, const ec_public& hub, const ec_public& miner,
+    const ec_public& hub_noncoop, const ec_public& miner_noncoop,
+    const hash_digest& secret, uint64_t value)
 {
     // input from input_tx_hash, input_index and script_sig
     auto prev_out = output_point { input_tx_hash, input_index };
@@ -87,18 +90,19 @@ transaction one_way_channel::fund_transaction(const hash_digest& input_tx_hash,
     return tx;
 }
 
-transaction one_way_channel::refund_transaction(
+transaction funding_transaction::refund_transaction(
     const transaction& fund_transaction, const payment_address hub_address)
 {
     // TODO: Implement
     return transaction {};
 }
 
-transaction one_way_channel::channel_update_transaction(
+transaction funding_transaction::channel_update_transaction(
     const transaction& fund_transaction, const ec_public& hub,
     const ec_public& miner, const ec_public& hub_noncoop,
     const ec_public& miner_noncoop, const hash_digest& secret)
 {
     // TODO: Implement
     return transaction {};
+}
 }

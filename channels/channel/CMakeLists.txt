@@ -2,7 +2,9 @@ pkg_check_modules(LIBBITCOIN-SYSTEM libbitcoin-system)
 
 include_directories(${PROJECT_SOURCE_DIR}/channel/include/ ${LIBBITCOIN-SYSTEM_INCLUDE_DIRS})
 
-add_library(channel src/channel.cpp)
+add_library(channel
+  src/funding_transaction.cpp
+  )
 
 ## Testing
 
@@ -12,7 +14,7 @@ find_package(Boost COMPONENTS system filesystem unit_test_framework REQUIRED)
 
 add_executable(channel_test
   ${PROJECT_SOURCE_DIR}/channel/tests/main.cpp
-  ${PROJECT_SOURCE_DIR}/channel/tests/channel_test.cpp
+  ${PROJECT_SOURCE_DIR}/channel/tests/funding_transaction_test.cpp
   )
 
 target_link_libraries(channel_test

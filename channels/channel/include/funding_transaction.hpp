@@ -17,12 +17,14 @@
  * along with d11dpool.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef ONE_WAY_CHANNEL_HPP
-#define ONE_WAY_CHANNEL_HPP
+#ifndef FUNDING_TRANSACTION_HPP
+#define FUNDING_TRANSACTION_HPP
 
 #include <string.h>
 
 #include <bitcoin/system.hpp>
+
+namespace one_way_channel {
 
 using namespace bc;
 using namespace bc::chain;
@@ -31,7 +33,7 @@ using namespace bc::wallet;
 
 // Creates transactions for one way channel management.
 // Transactions types are fund, refund, channel updates and channel close.
-class one_way_channel {
+class funding_transaction {
 public:
     // Create a funding transaction given the input points, hub's and
     // miner's co-operative and not co-operative public keys, as well
@@ -64,9 +66,7 @@ private:
     operation::list make_fund_output(const ec_public& hub,
         const ec_public& miner, const ec_public& hub_noncoop,
         const ec_public& miner_noncoop, const hash_digest& secret);
-
-    ec_private ours_;
-    ec_public theirs_;
 };
+}
 
 #endif
