@@ -66,6 +66,7 @@ install:
     - if [[ $LINUX && $GCC   && $DYNAMIC ]]; then export CC=gcc-4.8; export CXX=g++-4.8; fi
     - if [[ $LINUX && $GCC   && $STATIC  ]]; then export CC=gcc; export CXX=g++; fi
     # Download and build libbitcoin-database and all dependencies.
+    - echo `pwd`
     - git clone https://github.com/libbitcoin/libbitcoin-system.git
     - cd libbitcoin-system
     # - if [[ $OSX   && $CLANG && $DYNAMIC ]]; then CC=$CC CXX=$CXX ./install.sh --enable-isystem --disable-static; fi
