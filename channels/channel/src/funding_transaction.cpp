@@ -28,15 +28,6 @@ using namespace bc::chain;
 using namespace bc::machine;
 using namespace bc::wallet;
 
-void funding_transaction::push_2of2_multisig(
-    operation::list& ops, const ec_public& key_1, const ec_public& key_2)
-{
-    ops.emplace_back(opcode::push_positive_2);
-    ops.emplace_back(to_chunk(key_1.point()));
-    ops.emplace_back(to_chunk(key_2.point()));
-    ops.emplace_back(opcode::push_positive_2);
-}
-
 operation::list funding_transaction::make_fund_output(const ec_public& hub,
     const ec_public& miner, const ec_public& hub_noncoop,
     const ec_public& miner_noncoop, const hash_digest& secret)

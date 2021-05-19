@@ -45,9 +45,6 @@ public:
         const hash_digest& secret, uint64_t value);
 
 private:
-    void push_2of2_multisig(
-        operation::list& ops, const ec_public& key_1, const ec_public& key_2);
-
     operation::list make_fund_output(const ec_public& hub,
         const ec_public& miner, const ec_public& hub_noncoop,
         const ec_public& miner_noncoop, const hash_digest& secret);
