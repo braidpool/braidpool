@@ -68,7 +68,6 @@ install:
     # Download and build libbitcoin-database and all dependencies.
     - git clone https://github.com/libbitcoin/libbitcoin-system.git
     - cd libbitcoin-system
-    - export TRAVIS=false
     - if [[ $OSX   && $CLANG && $DYNAMIC ]]; then CC=$CC CXX=$CXX ./install.sh --enable-isystem --disable-static; fi
     - if [[ $OSX   && $CLANG && $STATIC  ]]; then CC=$CC CXX=$CXX ./install.sh --enable-isystem --disable-shared --build-boost --prefix=$TRAVIS_BUILD_DIR/my-prefix; fi
     - if [[ $LINUX && $CLANG && $DYNAMIC ]]; then CC=$CC CXX=$CXX ./install.sh --enable-isystem --build-boost --disable-ndebug --disable-static --prefix=$TRAVIS_BUILD_DIR/my-prefix CFLAGS='-Os' CXXFLAGS='-Os'; fi
@@ -78,7 +77,7 @@ install:
     - echo `pwd`
     - cd $TRAVIS_BUILD_DIR
     - echo `pwd`
-    - export TRAVIS=true
+    - ls
 
     # Download and install packages.
 
