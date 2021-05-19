@@ -30,7 +30,7 @@ using namespace bc::machine;
 using namespace bc::wallet;
 
 // Channel update transaction for one way channel management.
-class channel_update_transaction : channel_transaction {
+class channel_update_transaction : public channel_transaction {
 public:
     // Create a payment update to the channel. Arguments are the same
     // as the funding transaction, apart from spending from UTXO, this

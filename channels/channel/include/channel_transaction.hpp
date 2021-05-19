@@ -34,17 +34,20 @@ using namespace bc::wallet;
 // Abstract super class for all transaction classes
 class channel_transaction {
 public:
-    channel_transaction()
-        : transaction_()
-    {
-    }
-    virtual data_chunk to_data() const = 0;
+    channel_transaction();
+
+    // data_chunk to_data() const { return transaction_.to_data(false, false);
+    // };
+
+    // virtual void add_endorsement(ec_private& key) = 0;
+
+    transaction get_transaction() const;
 
 protected:
+    transaction transaction_;
+
     void push_2of2_multisig(
         operation::list& ops, const ec_public& key_1, const ec_public& key_2);
-
-    transaction transaction_;
 };
 }
 

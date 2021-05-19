@@ -30,7 +30,7 @@ using namespace bc::machine;
 using namespace bc::wallet;
 
 // Refund transaction for one way channel management.
-class refund_transaction : channel_transaction {
+class refund_transaction : public channel_transaction {
 public:
     // Create a refund transaction given the funding transaction and
     // the hub's address

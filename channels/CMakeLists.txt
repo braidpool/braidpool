@@ -16,13 +16,11 @@ enable_testing()
 
 add_subdirectory(channel)
 
-# message(STATUS ${LIBBITCOIN-SYSTEM_LINK_LIBRARIES})
 list(APPEND EXTRA_LIBS channel)
 list(APPEND EXTRA_INCLUDES "${PROJECT_SOURCE_DIR}/channel/include")
 
 list(APPEND EXTRA_LIBS ${LIBBITCOIN-SYSTEM_LINK_LIBRARIES})
 list(APPEND EXTRA_INCLUDES ${LIBBITCOIN-SYSTEM_INCLUDE_DIRS})
-# message(STATUS ${EXTRA_LIBS})
 
 
 # add the executable

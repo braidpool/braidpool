@@ -28,6 +28,16 @@ using namespace bc::chain;
 using namespace bc::machine;
 using namespace bc::wallet;
 
+channel_transaction::channel_transaction()
+    : transaction_()
+{
+}
+
+transaction channel_transaction::get_transaction() const
+{
+    return transaction_;
+}
+
 void channel_transaction::push_2of2_multisig(
     operation::list& ops, const ec_public& key_1, const ec_public& key_2)
 {

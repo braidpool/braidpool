@@ -31,7 +31,7 @@ using namespace bc::machine;
 using namespace bc::wallet;
 
 // Funding transaction for one way channel management.
-class funding_transaction : channel_transaction {
+class funding_transaction : public channel_transaction {
 public:
     // Create a funding transaction given the input points, hub's and
     // miner's co-operative and not co-operative public keys, as well
