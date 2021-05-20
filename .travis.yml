@@ -7,7 +7,6 @@ language:
 addons:
     apt:
         sources:
-            - boost-latest
             - ubuntu-toolchain-r-test
         packages:
             - cmake
