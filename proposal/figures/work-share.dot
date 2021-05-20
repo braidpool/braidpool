@@ -7,17 +7,17 @@ digraph G {
          ]
 
     "s1" [
-          label = "<f0> SHARE1 | timestamp | difficulty | nonce"
+          label = "<f0> SHARE1"
           shape=record
           ]
 
     "s2" [
-          label = "<f0> SHARE2 | timestamp | difficulty | nonce"
+          label = "<f0> SHARE2"
           shape=record
           ]
 
     "s3" [
-          label = "<f0> SHARE3 | timestamp | difficulty | nonce"
+          label = "<f0> SHARE3"
           shape=record
           ]
 
