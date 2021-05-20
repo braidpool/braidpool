@@ -21,25 +21,31 @@ jobs:
       uses: actions/cache@v2
       with:
         path: ${{github.workspace}}/libbitcoin-system/
-        key: ${{ runner.os }}-libbitcoin-system
+        key: ${{ runner.os }}-libbitcoin-system-and-boost
+
+    - name: Build secp256k1
+      run: |
+        git clone --depth 1 --branch version7 --single-branch https://github.com/libbitcoin/secp256k1
+        cd secp256k1
+        ./autogen.sh
+        ./configure --disable-tests --enable-module-recovery --prefix ${{github.workspace}}/libbitcoin-system/
+        make
+        make install
+        cd ${{github.workspace}}
 
     - name: Build libbitcoin-system
       run: |
         git clone https://github.com/libbitcoin/libbitcoin-system.git
         cd libbitcoin-system
         CC=$CC CXX=$CXX ./install.sh --enable-isystem --disable-static --build-boost --prefix=${{github.workspace}}/libbitcoin-system CFLAGS='-Os -s' CXXFLAGS='-Os -s'
-      
-    - name: Configure CMake
-      # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
-      # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-      run: cmake -DBOOST_ROOT=${{github.workspace}}/libbitcoin-system/ -S ${{github.workspace}}/channels -B ${{github.workspace}}/channels/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
-
-    - name: Build
-      # Build your program with the given configuration
-      run: cmake --build ${{github.workspace}}/channels/build --config ${{env.BUILD_TYPE}}
-      
+            
   test:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - run: ctest --test-dir ${{github.workspace}}/channels/build -C ${{env.BUILD_TYPE}}
+      - name: Configure CMake
+        run: cmake -DBOOST_ROOT=${{github.workspace}}/libbitcoin-system/ -S ${{github.workspace}}/channels -B ${{github.workspace}}/channels/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+      - name: Build CMake
+        run: cmake --build ${{github.workspace}}/channels/build --config ${{env.BUILD_TYPE}}
+      - name: Run tests
+        run: ctest --test-dir ${{github.workspace}}/channels/build -C ${{env.BUILD_TYPE}}
