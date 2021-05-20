@@ -1,9 +1,9 @@
 
-# Proposal for Braidpool
+# Proposal
 
 Read the [complete proposal](proposal/proposal.pdf).
 
-Braidpool provides:
+The pool provides:
 
 1. Lower variance for independent miners, even when large miners join
    the pool.
