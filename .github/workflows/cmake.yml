@@ -20,15 +20,15 @@ jobs:
     - name: Cache libbitcoin-system
       uses: actions/cache@v2
       with:
-        path: ${{github.workspace}}/libbitcoin-system/
-        key: ${{ runner.os }}-libbitcoin-system-and-boost
+        path: ${{github.workspace}}/build-bc/
+        key: ${{ runner.os }}-build-bc-and-boost
 
     - name: Build secp256k1
       run: |
         git clone --depth 1 --branch version7 --single-branch https://github.com/libbitcoin/secp256k1
         cd secp256k1
         ./autogen.sh
-        ./configure --disable-tests --enable-module-recovery --prefix ${{github.workspace}}/libbitcoin-system/
+        ./configure --disable-tests --enable-module-recovery --prefix ${{github.workspace}}/build-bc/
         make
         make install
         cd ${{github.workspace}}
@@ -37,14 +37,14 @@ jobs:
       run: |
         git clone https://github.com/libbitcoin/libbitcoin-system.git
         cd libbitcoin-system
-        CC=$CC CXX=$CXX ./install.sh --enable-isystem --disable-static --build-boost --prefix=${{github.workspace}}/libbitcoin-system CFLAGS='-Os -s' CXXFLAGS='-Os -s'
+        CC=$CC CXX=$CXX ./install.sh --enable-isystem --disable-static --build-boost --prefix=${{github.workspace}}/build-bc/ CFLAGS='-Os -s' CXXFLAGS='-Os -s'
             
   test:
     needs: build
     runs-on: ubuntu-latest
     steps:
       - name: Configure CMake
-        run: cmake -DBOOST_ROOT=${{github.workspace}}/libbitcoin-system/ -S ${{github.workspace}}/channels -B ${{github.workspace}}/channels/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+        run: PKG_CONFIG_PATH=${{github.workspace}}/build-bc/lib/pkgconfig/ cmake -DBOOST_ROOT=${{github.workspace}}/build-bc/ -S ${{github.workspace}}/channels -B ${{github.workspace}}/channels/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
       - name: Build CMake
         run: cmake --build ${{github.workspace}}/channels/build --config ${{env.BUILD_TYPE}}
       - name: Run tests
