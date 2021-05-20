@@ -36,9 +36,9 @@ install:
     - if [[ $LINUX && $GCC   && $DYNAMIC ]]; then export CC=gcc-4.8; export CXX=g++-4.8; fi
     - if [[ $LINUX && $GCC   && $STATIC  ]]; then export CC=gcc; export CXX=g++; fi
     # Download and build libbitcoin-database and all dependencies.
-    - git clone https://github.com/libbitcoin/libbitcoin-system.git
-    - cd libbitcoin-system
-    - CC=$CC CXX=$CXX ./install.sh --enable-isystem --disable-static --build-boost --prefix=$TRAVIS_BUILD_DIR/my-prefix CFLAGS='-Os -s' CXXFLAGS='-Os -s'
+    # - git clone https://github.com/libbitcoin/libbitcoin-system.git
+    # - cd libbitcoin-system
+    # - CC=$CC CXX=$CXX ./install.sh --enable-isystem --disable-static --build-boost --prefix=$TRAVIS_BUILD_DIR/my-prefix CFLAGS='-Os -s' CXXFLAGS='-Os -s'
 
 script:
 
