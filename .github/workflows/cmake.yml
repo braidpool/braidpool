@@ -29,7 +29,7 @@ jobs:
       id: libbitcoin-cache
       with:
         path: $HOME/build-bc/
-        key: ${{ runner.os }}-build-bc-and-boost-${{steps.checkout-libbitcoin.outputs.commit_id}}
+        key: ${{ runner.os }}-build-bc-${{steps.checkout-libbitcoin.outputs.commit_id}}
 
     - name: Build secp256k1
       if: steps.libbitcoin-cache.outputs.cache-hit != 'true'
@@ -47,13 +47,6 @@ jobs:
       run: |
         cd libbitcoin-system
         CC=$CC CXX=$CXX ./install.sh --enable-isystem --disable-static --build-boost --prefix=$HOME/build-bc/ CFLAGS='-Os -s' CXXFLAGS='-Os -s'
-
-    - name: Check restored cache
-      if: steps.libbitcoin-cache.outputs.cache-hit == 'true'
-      run: |
-        echo "100"
-        ls $HOME
-        ls $HOME/build-bc
             
   # test:
   #   runs-on: ubuntu-latest
@@ -61,20 +54,21 @@ jobs:
   #   steps:
   #   - uses: actions/checkout@v2
       
-  #   - name: Fetch libbitcoin system commit id
-  #     id: libbitcoin-commit-id
-  #     run: |
-  #       git clone --depth 1 --branch version3 https://github.com/libbitcoin/libbitcoin-system.git
-  #       cd libbitcoin-system
-  #       echo "::set-output name=commit_id::`git log -n 1 --pretty=format:"%H"`"
+    # - name: Fetch libbitcoin system commit id
+    #   id: libbitcoin-commit-id
+    #   run: |
+    #     git clone --depth 1 --branch version3 https://github.com/libbitcoin/libbitcoin-system.git
+    #     cd libbitcoin-system
+    #     echo "::set-output name=commit_id::`git log -n 1 --pretty=format:"%H"`"
 
-  #   - name: Restore libbitcoin cache
-  #     uses: actions/cache@v2
-  #     id: restore-libbitcoin-cache
-  #     with:
-  #       path: $HOME/build-bc/
-  #       key: ${{ runner.os }}-test
-  #       restore-keys: ${{ runner.os }}-build-bc-and-boost-${{steps.libbitcoin-commit-id.outputs.commit_id}}
+    # - name: Restore libbitcoin cache
+    #   uses: actions/cache@v2
+    #   id: restore-libbitcoin-cache
+    #   with:
+    #     path: $HOME/build-bc/
+    #     key: ${{ runner.os }}-test
+    #     restore-keys: |
+    #       ${{ runner.os }}-build-bc
 
     - name: cd and ls
       run: |
