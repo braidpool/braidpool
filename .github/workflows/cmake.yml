@@ -58,7 +58,7 @@ jobs:
         ls channels/channel
         mkdir channels/build
         ls channels/build
-        ls home/runner/work/d11dpool/d11dpool/build-bc/lib
+        ls /home/runner/work/d11dpool/d11dpool/build-bc/lib
 
     - name: Configure CMake
       run: PKG_CONFIG_PATH=${{github.workspace}}/build-bc/lib/pkgconfig/ cmake -DBOOST_ROOT=${{github.workspace}}/build-bc/ -S ${{github.workspace}}/channels -B ${{github.workspace}}/channels/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
