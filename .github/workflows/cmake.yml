@@ -37,7 +37,7 @@ jobs:
       run: |
         git clone https://github.com/libbitcoin/libbitcoin-system.git
         cd libbitcoin-system
-        CC=$CC CXX=$CXX ./install.sh --enable-isystem --disable-static --prefix=${{github.workspace}}/build-bc/ CFLAGS='-Os -s' CXXFLAGS='-Os -s'
+        CC=$CC CXX=$CXX ./install.sh --enable-isystem --disable-static --build-boost --prefix=${{github.workspace}}/build-bc/ CFLAGS='-Os -s' CXXFLAGS='-Os -s'
             
   test:
     needs: build
