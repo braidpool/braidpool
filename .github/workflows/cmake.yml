@@ -23,9 +23,6 @@ jobs:
         path: ${{github.workspace}}/build-bc/
         key: ${{ runner.os }}-build-bc-and-boost
 
-    - name: boost
-      run: sudo apt-get update && sudo apt-get install -yq libboost1.73-dev
-
     - name: Build secp256k1
       run: |
         git clone --depth 1 --branch version7 --single-branch https://github.com/libbitcoin/secp256k1
