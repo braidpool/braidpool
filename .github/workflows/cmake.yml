@@ -24,15 +24,15 @@ jobs:
         cd libbitcoin-system
         echo "::set-output name=commit_id::`git log -n 1 --pretty=format:"%H"`"
 
-    # - name: Cache libbitcoin-system
-    #   uses: actions/cache@v2
-    #   id: libbitcoin-cache
-    #   with:
-    #     path: $HOME/build-bc
-    #     key: ${{ runner.os }}-build-bc-${{steps.checkout-libbitcoin.outputs.commit_id}}
+    - name: Cache libbitcoin-system
+      uses: actions/cache@v2
+      id: libbitcoin-cache
+      with:
+        path: $HOME/build-bc
+        key: ${{ runner.os }}-build-bc-${{steps.checkout-libbitcoin.outputs.commit_id}}
 
     - name: Build secp256k1
-      # if: steps.libbitcoin-cache.outputs.cache-hit != 'true'
+      if: steps.libbitcoin-cache.outputs.cache-hit != 'true'
       run: |
         git clone --depth 1 --branch version7 --single-branch https://github.com/libbitcoin/secp256k1
         cd secp256k1
@@ -43,7 +43,7 @@ jobs:
         cd ${{github.workspace}}
 
     - name: Build libbitcoin-system
-      # if: steps.libbitcoin-cache.outputs.cache-hit != 'true'
+      if: steps.libbitcoin-cache.outputs.cache-hit != 'true'
       run: |
         cd libbitcoin-system
         CC=$CC CXX=$CXX ./install.sh --enable-isystem --disable-static --build-boost --prefix=$HOME/build-bc CFLAGS='-Os -s' CXXFLAGS='-Os -s'
@@ -61,30 +61,27 @@ jobs:
   #       cd libbitcoin-system
   #       echo "::set-output name=commit_id::`git log -n 1 --pretty=format:"%H"`"
 
-  #   - name: Restore libbitcoin cache
-  #     uses: actions/cache@v2
-  #     id: restore-libbitcoin-cache
-  #     with:
-  #       path: $HOME/build-bc
-  #       key: ${{ runner.os }}-build-bc-${{steps.checkout-libbitcoin.outputs.commit_id}}
+    # - name: Restore libbitcoin cache
+    #   uses: actions/cache@v2
+    #   id: restore-libbitcoin-cache
+    #   with:
+    #     path: $HOME/build-bc
+    #     key: ${{ runner.os }}-build-bc-${{steps.checkout-libbitcoin.outputs.commit_id}}
 
-    - name: cd and ls
-      run: |
-        ls $HOME/
-        ls $HOME/work/d11dpool
-        ls $HOME/build-bc
+    # - name: cd and ls
+    #   run: |
+    #     ls $HOME/
+    #     ls $HOME/work/d11dpool
+    #     ls $HOME/build-bc
 
     - name: Configure CMake
-      if: steps.libbitcoin-cache.outputs.cache-hit != 'true'
       run: PKG_CONFIG_PATH=$HOME/build-bc/lib/pkgconfig/ cmake -DBOOST_ROOT=$HOME/build-bc -S ${{github.workspace}}/channels -B ${{github.workspace}}/channels/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
       env:
         CC: gcc-10
         CXX: g++-10
         
     - name: Build CMake
-      if: steps.libbitcoin-cache.outputs.cache-hit != 'true'
       run: cmake --build ${{github.workspace}}/channels/build --config ${{env.BUILD_TYPE}}
         
     - name: Run tests
-      if: steps.libbitcoin-cache.outputs.cache-hit != 'true'
       run: ctest --test-dir ${{github.workspace}}/channels/build -C ${{env.BUILD_TYPE}}
