@@ -23,8 +23,6 @@ jobs:
         git clone --depth 1 --branch version3 https://github.com/libbitcoin/libbitcoin-system.git
         cd libbitcoin-system
         echo "::set-output name=commit_id::`git log -n 1 --pretty=format:"%H"`"
-        echo $HOME
-        mkdir $HOME/build-bc
 
     - name: Cache libbitcoin-system
       uses: actions/cache@v2
@@ -49,6 +47,13 @@ jobs:
       run: |
         cd libbitcoin-system
         CC=$CC CXX=$CXX ./install.sh --enable-isystem --disable-static --build-boost --prefix=$HOME/build-bc/ CFLAGS='-Os -s' CXXFLAGS='-Os -s'
+
+    - name: Check restored cache
+      if: steps.libbitcoin-cache.outputs.cache-hit == 'true'
+      run: |
+        echo "100"
+        ls $HOME
+        ls $HOME/build-bc
             
   # test:
   #   runs-on: ubuntu-latest
@@ -73,7 +78,6 @@ jobs:
 
     - name: cd and ls
       run: |
-        echo $HOME
         ls $HOME/
         ls $HOME/work/d11dpool
         ls $HOME/build-bc
