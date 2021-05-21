@@ -27,7 +27,7 @@ jobs:
     - run: echo "${{steps.libbitcoin-cache.outputs.cache-hit}}"    
     - run: echo steps.libbitcoin-cache.outputs.cache-hit != true
     - name: Build secp256k1
-      if: steps.libbitcoin-cache.outputs.cache-hit != true
+      if: steps.libbitcoin-cache.outputs.cache-hit != 'true'
       run: |
         git clone --depth 1 --branch version7 --single-branch https://github.com/libbitcoin/secp256k1
         cd secp256k1
@@ -38,7 +38,7 @@ jobs:
         cd ${{github.workspace}}
 
     - name: Build libbitcoin-system
-      if: steps.libbitcoin-cache.outputs.cache-hit != true
+      if: steps.libbitcoin-cache.outputs.cache-hit != 'true'
       run: |
         git clone https://github.com/libbitcoin/libbitcoin-system.git
         cd libbitcoin-system
