@@ -24,6 +24,7 @@ jobs:
         cd libbitcoin-system
         echo "::set-output name=commit_id::`git log -n 1 --pretty=format:"%H"`"
         echo $HOME
+        mkdir $HOME/build-bc
 
     - name: Cache libbitcoin-system
       uses: actions/cache@v2
