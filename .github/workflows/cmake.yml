@@ -15,25 +15,22 @@ jobs:
     runs-on: ubuntu-latest
   
     steps:
-    - name: Install GCC
-      run: |
-        sudo apt-get update
-        sudo apt-get install build-essential gcc-10 g++-10
-
     - uses: actions/checkout@v2
+
+    - name: Checkout libbitcoin system
+      id: checkout-libbitcoin
+      run: |
+        git clone --depth 1 --branch version3 https://github.com/libbitcoin/libbitcoin-system.git
+        cd libbitcoin-system
+        echo "::set-output name=commit_id::`git log -n 1 --pretty=format:"%H"`"
 
     - name: Cache libbitcoin-system
       uses: actions/cache@v2
       id: libbitcoin-cache
       with:
         path: ${{github.workspace}}/build-bc/
-        key: ${{ runner.os }}-build-bc-and-boost
+        key: ${{ runner.os }}-build-bc-and-boost-${{steps.checkout-libbitcoin.outputs.commit_id}}
 
-    - run: cc --version
-    - run: gcc --version
-
-    - run: echo "${{steps.libbitcoin-cache.outputs.cache-hit}}"    
-    - run: echo steps.libbitcoin-cache.outputs.cache-hit != true
     - name: Build secp256k1
       if: steps.libbitcoin-cache.outputs.cache-hit != 'true'
       run: |
@@ -48,7 +45,6 @@ jobs:
     - name: Build libbitcoin-system
       if: steps.libbitcoin-cache.outputs.cache-hit != 'true'
       run: |
-        git clone https://github.com/libbitcoin/libbitcoin-system.git
         cd libbitcoin-system
         CC=$CC CXX=$CXX ./install.sh --enable-isystem --disable-static --build-boost --prefix=${{github.workspace}}/build-bc/ CFLAGS='-Os -s' CXXFLAGS='-Os -s'
             
