@@ -19,10 +19,10 @@ The pool provides:
 The [project on github](https://github.com/wholooks/d11dpool/projects/1)
 tracks the main components to build. Here's a list to keep us focused:
 
-- [] (WIP) Channel management scripts using libbitcoin.
-- [] A DAG of shares to track contributions for miners.
-- [] P2P gossip based broadcast of block and shares.
-- [] Hub to miner communication using I2P.
-- [] Validate received blocks and shares. We'll need to find a way to
+- [ ] (WIP) Channel management scripts using libbitcoin.
+- [ ] A DAG of shares to track contributions for miners.
+- [ ] P2P gossip based broadcast of block and shares.
+- [ ] Hub to miner communication using I2P.
+- [ ] Validate received blocks and shares. We'll need to find a way to
   talk to bitcoin node here for this.
-- [] Single script installer (limited to Linux variants).
+- [ ] Single script installer (limited to Linux variants).
