@@ -72,7 +72,7 @@ jobs:
     - name: cd and ls
       run: |
         ls $HOME/
-        ls $HOME/work
+        ls $HOME/work/d11dpool
         ls $HOME/build-bc
 
     - name: Configure CMake
