@@ -13,8 +13,11 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-
+  
     steps:
+    - name: Install GCC
+      run: sudo apt-get install build-essential gcc
+
     - uses: actions/checkout@v2
 
     - name: Cache libbitcoin-system
