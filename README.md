@@ -1,4 +1,9 @@
 
+# Development work
+
+https://github.com/wholooks/d11dpool/actions/workflows/cmake.yml/badge.svg
+
+
 # Proposal
 
 Read the [complete proposal](proposal/proposal.pdf).
