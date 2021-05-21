@@ -1,7 +1,7 @@
 
 # Development work
 
-https://github.com/wholooks/d11dpool/actions/workflows/cmake.yml/badge.svg
+![Build status](https://github.com/wholooks/d11dpool/actions/workflows/cmake.yml/badge.svg)
 
 
 # Proposal
