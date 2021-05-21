@@ -28,7 +28,7 @@ jobs:
       uses: actions/cache@v2
       id: libbitcoin-cache
       with:
-        path: ${{github.workspace}}/build-bc/
+        path: $HOME/build-bc/
         key: ${{ runner.os }}-build-bc-and-boost-${{steps.checkout-libbitcoin.outputs.commit_id}}
 
     - name: Build secp256k1
@@ -37,7 +37,7 @@ jobs:
         git clone --depth 1 --branch version7 --single-branch https://github.com/libbitcoin/secp256k1
         cd secp256k1
         ./autogen.sh
-        ./configure --disable-tests --enable-module-recovery --prefix ${{github.workspace}}/build-bc/
+        ./configure --disable-tests --enable-module-recovery --prefix $HOME/build-bc/
         make
         make install
         cd ${{github.workspace}}
@@ -46,8 +46,14 @@ jobs:
       if: steps.libbitcoin-cache.outputs.cache-hit != 'true'
       run: |
         cd libbitcoin-system
-        CC=$CC CXX=$CXX ./install.sh --enable-isystem --disable-static --build-boost --prefix=${{github.workspace}}/build-bc/ CFLAGS='-Os -s' CXXFLAGS='-Os -s'
+        CC=$CC CXX=$CXX ./install.sh --enable-isystem --disable-static --build-boost --prefix=$HOME/build-bc/ CFLAGS='-Os -s' CXXFLAGS='-Os -s'
             
+  test:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+    - uses: actions/checkout@v2
+      
     - name: cd and ls
       run: |
         pwd
@@ -58,10 +64,10 @@ jobs:
         ls channels/channel
         mkdir channels/build
         ls channels/build
-        ls /home/runner/work/d11dpool/d11dpool/build-bc/lib
+        ls $HOME/build-bc/lib
 
     - name: Configure CMake
-      run: PKG_CONFIG_PATH=${{github.workspace}}/build-bc/lib/pkgconfig/ cmake -DBOOST_ROOT=${{github.workspace}}/build-bc/ -S ${{github.workspace}}/channels -B ${{github.workspace}}/channels/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+      run: PKG_CONFIG_PATH=$HOME/build-bc/lib/pkgconfig/ cmake -DBOOST_ROOT=$HOME/build-bc/ -S ${{github.workspace}}/channels -B ${{github.workspace}}/channels/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
       env:
         CC: gcc-10
         CXX: g++-10
