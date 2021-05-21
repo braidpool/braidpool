@@ -27,6 +27,9 @@ jobs:
         path: ${{github.workspace}}/build-bc/
         key: ${{ runner.os }}-build-bc-and-boost
 
+    - run: cc --version
+    - run: gcc --version
+
     - run: echo "${{steps.libbitcoin-cache.outputs.cache-hit}}"    
     - run: echo steps.libbitcoin-cache.outputs.cache-hit != true
     - name: Build secp256k1
