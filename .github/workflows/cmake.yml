@@ -23,6 +23,9 @@ jobs:
         path: ${{github.workspace}}/build-bc/
         key: ${{ runner.os }}-build-bc-and-boost
 
+    - name: boost
+      run: sudo apt-get update && sudo apt-get install -yq libboost1.73-dev
+
     - name: Build secp256k1
       run: |
         git clone --depth 1 --branch version7 --single-branch https://github.com/libbitcoin/secp256k1
@@ -37,15 +40,27 @@ jobs:
       run: |
         git clone https://github.com/libbitcoin/libbitcoin-system.git
         cd libbitcoin-system
-        CC=$CC CXX=$CXX ./install.sh --enable-isystem --disable-static --build-boost --prefix=${{github.workspace}}/build-bc/ CFLAGS='-Os -s' CXXFLAGS='-Os -s'
+        CC=$CC CXX=$CXX ./install.sh --enable-isystem --disable-static --prefix=${{github.workspace}}/build-bc/ CFLAGS='-Os -s' CXXFLAGS='-Os -s'
             
   test:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - name: cd and ls
+        run: |
+          cd ${{github.workspace}}
+          ls ${{ github.workspace }}
+          ls
+          ls channels
+          ls channels/channel
+          mkdir channels/build
+          ls channels/build
+
       - name: Configure CMake
         run: PKG_CONFIG_PATH=${{github.workspace}}/build-bc/lib/pkgconfig/ cmake -DBOOST_ROOT=${{github.workspace}}/build-bc/ -S ${{github.workspace}}/channels -B ${{github.workspace}}/channels/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+        
       - name: Build CMake
         run: cmake --build ${{github.workspace}}/channels/build --config ${{env.BUILD_TYPE}}
+        
       - name: Run tests
         run: ctest --test-dir ${{github.workspace}}/channels/build -C ${{env.BUILD_TYPE}}
