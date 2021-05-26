@@ -26,3 +26,5 @@ tracks the main components to build. Here's a list to keep us focused:
 - [ ] Validate received blocks and shares. We'll need to find a way to
   talk to bitcoin node here for this.
 - [ ] Single script installer (limited to Linux variants).
+
+Donations: bc1q6xms5xsq6kvk9h57mvsdxdjnnrl0vsc942xlxe
