@@ -23,6 +23,7 @@
 #include <string.h>
 
 #include <bitcoin/system.hpp>
+#include <bitcoin/system/machine/rule_fork.hpp>
 
 namespace one_way_channel {
 
@@ -30,6 +31,13 @@ using namespace bc;
 using namespace bc::chain;
 using namespace bc::machine;
 using namespace bc::wallet;
+
+// Use the same fork rules that are enabled by default in libbitcoin-node
+constexpr uint32_t active_forks = rule_fork::bip16_rule | rule_fork::bip30_rule
+    | rule_fork::bip34_rule | rule_fork::bip66_rule | rule_fork::bip65_rule
+    | rule_fork::bip90_rule | rule_fork::bip68_rule | rule_fork::bip112_rule
+    | rule_fork::bip113_rule | rule_fork::bip141_rule | rule_fork::bip143_rule
+    | rule_fork::bip147_rule;
 
 // Abstract super class for all transaction classes
 class channel_transaction {

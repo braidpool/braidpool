@@ -35,6 +35,11 @@ using namespace one_way_channel;
 #define TX1_HASH                                                               \
     "bf7c3f5a69a78edd81f3eff7e93a37fb2d7da394d48db4d85e7e5353b9b8e270"
 
+#define SCRIPT_2_OF_2_MULTISIG                                                 \
+    "2 [03dcfd9e580de35d8c2060d76dbf9e5561fe20febd2e64380e860a4d59f15ac864] "  \
+    "[02440e0304bf8d32b2012994393c6a477acf238dd6adb4c3cef5bfa72f30c9861c] 2 "  \
+    "checkmultisig"
+
 BOOST_AUTO_TEST_SUITE(funding_transction_tests)
 
 BOOST_AUTO_TEST_CASE(fund_transction__valid_inputs__returns_valid_transaction)
@@ -53,11 +58,38 @@ BOOST_AUTO_TEST_CASE(fund_transction__valid_inputs__returns_valid_transaction)
 
     hash_digest tx1_hash_digest = hash_literal(TX1_HASH);
 
-    funding_transaction instance(tx1_hash_digest, 0, "dummyscriptsig", hub,
-        miner, hub_noncoop, miner_noncoop, secret, 1000);
+    funding_transaction instance(tx1_hash_digest, 0, SCRIPT_2_OF_2_MULTISIG,
+        hub, miner, hub_noncoop, miner_noncoop, secret, 1000);
 
     BOOST_CHECK(instance.get_transaction().inputs().size() == 1);
+    auto input = instance.get_transaction().inputs().front();
+    output_point prev_out { tx1_hash_digest, 0 };
+    BOOST_CHECK(input.previous_output() == prev_out);
+    const auto& input_ops = input.script().operations();
+    BOOST_REQUIRE_EQUAL(input_ops.size(), 5u);
+    BOOST_CHECK(input.sequence() == 0xffffffff);
+
     BOOST_CHECK(instance.get_transaction().outputs().size() == 1);
+    const auto tx_output = instance.get_transaction().outputs().front();
+    BOOST_CHECK(tx_output.value() == 1000);
+    const auto tx_output_script = tx_output.script();
+    const auto output_ops = tx_output_script.operations();
+    BOOST_CHECK_EQUAL(output_ops.size(), 13u);
+    BOOST_CHECK(output_ops[0] == opcode::if_);
+    BOOST_CHECK(output_ops[1] == opcode::push_positive_2);
+    BOOST_CHECK(output_ops[2] == to_chunk(wallet::ec_public { hub }.point()));
+    BOOST_CHECK(output_ops[3] == to_chunk(wallet::ec_public { miner }.point()));
+    BOOST_CHECK(output_ops[4] == opcode::push_positive_2);
+    BOOST_CHECK(output_ops[5] == opcode::else_);
+    BOOST_CHECK(output_ops[6] == opcode::push_positive_2);
+    BOOST_CHECK(
+        output_ops[7] == to_chunk(wallet::ec_public { hub_noncoop }.point()));
+    BOOST_CHECK(
+        output_ops[8] == to_chunk(wallet::ec_public { miner_noncoop }.point()));
+    BOOST_CHECK(output_ops[9] == opcode::push_positive_2);
+    BOOST_CHECK(output_ops[10] == to_chunk(secret));
+    BOOST_CHECK(output_ops[11] == opcode::equalverify);
+    BOOST_CHECK(output_ops[12] == opcode::endif);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

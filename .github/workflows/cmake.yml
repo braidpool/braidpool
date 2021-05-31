@@ -28,7 +28,7 @@ jobs:
       uses: actions/cache@v2
       id: libbitcoin-cache
       with:
-        path: $HOME/build-bc
+        path: ~/build-bc
         key: ${{ runner.os }}-libbitcoin-build-cache-${{steps.checkout-libbitcoin.outputs.commit_id}}
 
     - name: Build secp256k1

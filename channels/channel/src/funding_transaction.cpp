@@ -61,11 +61,9 @@ funding_transaction::funding_transaction(const hash_digest& input_tx_hash,
     : channel_transaction()
 {
     // input from input_tx_hash, input_index and script_sig
-    auto prev_out = output_point { input_tx_hash, input_index };
-    data_chunk script_sig_bytes;
-    decode_base16(script_sig_bytes, script_sig);
+    output_point prev_out { input_tx_hash, input_index };
     script input_script;
-    input_script.from_data(to_chunk(script_sig_bytes), false);
+    input_script.from_string(script_sig);
     input tx_input { prev_out, input_script, 0xffffffff };
 
     // outputs with 2of2 multisig and hashlock
