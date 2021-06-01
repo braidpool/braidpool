@@ -31,6 +31,6 @@ digraph G {
     subgraph node_c {
         c1 -> c2 -> c3
     }
-    b2 -> c3
-    c1 -> b2
+    // b2 -> c3
+    // c1 -> b2
 }

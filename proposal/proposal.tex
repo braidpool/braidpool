@@ -23,10 +23,10 @@
   negatively impacting bitcoin's decentralisation. The primary
   problems with p2pool are twofold. First, the variance in earnings
   for miners increases with total hashrate participating in the
-  pool. Second, payouts to miners require a linearly increasing
-  blockspace with the number of miners participating in the
-  pool. There are two different proposals under discussion that
-  address these problems,
+  pool. Second, payouts to miners require a linearly increasing block
+  space with the number of miners participating in the pool. There are
+  two different proposals under discussion that address these
+  problems,
   \begin{enumerate*}[label=(\roman*)]
   \item building a directed acyclic graph (DAG) of miner's shares such
     that miners are rewarded for all their proof of work, and
@@ -69,9 +69,9 @@ reduces enabling smaller miners to remain economically viable.
 
 Payouts in P2Pool are included in the coinbase of the block being
 mined. As the number of participants in P2Pool increase the size of
-the coinbase transaction increases taking up valuable blockspace that
-the miners could have earned fees from instead. This imposes an
-upper bound on the number of participants in P2Pool.
+the coinbase transaction increases taking up valuable block space that
+the miners could have earned fees from instead. This imposes an upper
+bound on the number of participants in P2Pool.
 
 Knowing the challenges faced by P2Pool, we list the goals of a new
 decentralised mining pool as:
@@ -82,15 +82,11 @@ decentralised mining pool as:
   requirement.
 \item Allow miners to select transactions they want to mine, with no
   potential for a censor to deny payouts.
-\item Provide building blocks for a hash rate futures
-  market.~\footnote{We don't elaborate on this goal in this paper, but
-    readers can look up the gist on TerraHash coins
-    https://gist.github.com/kulpreet/19927c7188a4224ce2de43efb3c69370}
 \end{enumerate}
 
 \section{Current Proposals}
 
-TerraHash Coin~\cite{mcelrath:variance}, Jute~\cite{jute} and
+TeraHash Coin~\cite{mcelrath:variance}, Jute~\cite{jute} and
 Spectre~\cite{spectre} use a DAG for faster block times and focus on
 changing the consensus layer of bitcoin. These proposals allow for
 miners to produce shares that include conflicting transactions and
@@ -107,20 +103,21 @@ spend transactions can be resolved to reach a decision on the state of
 the ledger at any cut of the DAG.\@
 
 In the proposal, miners earn a coin native to the braid blockchain,
-called TerraHash Coin. This coin can then be swapped for BTC. The
+called TeraHash Coin. This coin can then be swapped for BTC. The
 proposal doesn't yet define how this native coin will be swapped for
 bitcoin. Some of the suggestions under discussion include using atomic
-swaps, burning the TerraHash Coin, or using financial instruments like
-futures of the bitcoin's hash rate to swap TerraHash Coins for BTC.\
+swaps, burning the TeraHash Coin, or using financial instruments like
+futures of the bitcoin's hash rate to swap TeraHash Coins for BTC.\
 The problems with the atomic swap approach is the need for $O(n)$
 block space in number of miners, as we need two transactions to
-execute a swap with each miner payout. Burning THCoins for BTC
+execute a swap with each miner payout. Burning TeraHash Coins for BTC
 requires a trusted third party to execute the burn. Finally, trading
-THCoins for BTC futures has the problem of introducing centralisation
-on the futures market operator. There is some discussion around using
-DEXes for executing futures contracts, but these are initial ideas and
-we will evaluated them in the future for incorporating them into our
-proposal once they have been developed further.
+TeraHash Coins for BTC futures has the problem of introducing
+centralisation on the futures market operator. There is some
+discussion around using DEXes for executing futures contracts, but
+these are initial ideas and we will evaluated them in the future for
+incorporating them into our proposal once they have been developed
+further.
 
 Belcher~\cite{channels-for-rewards} proposes using payment channels to
 avoid using block space for making payouts to miners. The construction
@@ -134,12 +131,12 @@ earns rewards for funding the payment channels.
 
 The two ideas of using a DAG and payment channels for rewards
 payouts together present a potential path for rebooting P2Pool. In the
-rest of the paper we present a modified version of TerraHash Coin and
+rest of the paper we present a modified version of TeraHash Coin and
 show how the various components work together.
 
 \section{Decentralised Bitcoin Mining}
 
-In this section we present a modified version of TerraHash Coin. We
+In this section we present a modified version of TeraHash Coin. We
 propose building a DAG of miner's shares and use that to determine the
 payout distribution between miners. We then show that miners are
 rewarded for shares that they broadcast to the p2p network in a timely
@@ -323,11 +320,23 @@ maintains a local replica of the the \textsc{share}s DAG.\@ Each
 \textsc{share} includes a reference to the shares the miner was aware
 of when the \textsc{share} was found. If a miner $a$ doesn't include
 the \textsc{share}s of miner $b$, it signals a failure of
-communication between the two miners. We introduce a rule that miner
-$a$ in such a situation stops including references to $b$'s
-\textsc{share}s.
+communication between the two miners and we require that miner $a$ in
+such a situation should stop including references to $b$'s
+\textsc{share}s. With this rule in places, miners are no longer
+incentivized to find optimal strategies for broadcasting their shares
+to the rest of the miners. They have a simple strategy to follow,
+which is to make sure their shares reach all other miners as soon as
+possible.
 
-The incentive in lay terms is that all miners should include the
+\begin{figure}
+  \begin{center}
+    \includegraphics[width=0.65\textwidth]{isolated-miners}
+    \caption{$a$ discovers a share and the reward is not shared with any
+      other miner.}\label{fig:isolated-miners}
+  \end{center}    
+\end{figure}
+
+With the above rule in place all miners should include the
 \textsc{share}s discovered by other miners, as otherwise they will be
 excluded by other miners and they will lose the opportunity to be
 rewarded for their work. We identify a degenerative case as ``isolated
@@ -337,14 +346,6 @@ miners $a$, $b$ and $c$ are working independently. In such a situation
 when the miner $a$ discovers a share $a_3$ that is a valid bitcoin
 block the reward is not shared with any other miner as $a_3$ does not
 include any references to shares from other miners.
-
-\begin{figure}
-  \begin{center}
-    \includegraphics[width=0.65\textwidth]{isolated-miners}
-    \caption{$a$ discovers a share and the reward is not shared with any
-      other miner.}\label{fig:isolated-miners}
-  \end{center}    
-\end{figure}
 
 With the above understanding of why miners will co-operate, we now
 state the rules to calculate how the block reward should be divided
@@ -356,8 +357,8 @@ between miners.
   collect this set of shares.
 \item From the above set of shares remove all shares that don't have
   a reverse path to the previous bitcoin block.
-\item Distribute the reward between miners weighted by the sum of
-  the difficultly of all \textsc{share}s found by miners.
+\item Distribute the reward between miners weighted by the sum of the
+  difficulty of all \textsc{share}s found by miners.
 \end{enumerate}
 
 As an example, consider the p2p network of miners $a$, $b$ and $c$
@@ -375,7 +376,7 @@ mining~\cite{majority-is-not-enough}.
 For the second bitcoin block $b_5$ only the miners $a$ and $b$ receive
 rewards in proportion to the difficulties of their shares
 $\{b_4, b_5, a_6\}$. $c$ doesn't receive any reward for $c_4$ as it
-again is not part of the $epoch$ terminating in $c_5$.
+again is not part of the $epoch$ terminating in $b_5$.
 
 \begin{figure}
   \begin{center}
@@ -565,10 +566,10 @@ in Section~\ref{ref:defecting}.
 \subsubsection{One-way Channels}
 
 One-Way payment channels between hub and all miners allow miners to
-receive payouts while consuming a constant size blockspace in the
+receive payouts while consuming a constant size block space in the
 bitcoin block they mine. The use of payment channels is what makes the
-pool scale without losing blockspace. The miners therefore avoid
-losing the fees that can be earned from the blockspace.
+pool scale without losing block space. The miners therefore avoid
+losing the fees that can be earned from the block space.
 
 Just like in the early versions of proposal by Belcher we use one-way
 payment channels. One-Way payment channels solve the problem of
@@ -918,9 +919,16 @@ proofs for how the rewards distribution is incentives compatible. We
 would like to build further on the multiple hubs construction
 described by Belcher once Taproot is activated on bitcoin.
 
+\section{Conclusion}
+
+We presented an architecture for a new decentralised mining pool for
+Bitcoin. The architecture enables miners to build their own blocks and
+earn frequent payouts as the mining pool grows. We showed that the
+pool can grow up to 10,000 miners and that miners can save close to
+90\% in mining pool fees by participating in the decentralised pool.
+
 \section{Acknowledgements}
 
-Please to review! Many wow! ;)
 
 \bibliography{proposal} 
 \bibliographystyle{acm}
