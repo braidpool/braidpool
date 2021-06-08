@@ -10,7 +10,7 @@
 \usepackage{multirow}
 
 
-\title{Decentralised Mining Pool for Bitcoin (Draft 0.1)}
+\title{Decentralised Mining Pool for Bitcoin (Draft 0.2)}
 \author{}
 \date{}
 
@@ -35,10 +35,11 @@
   on these two proposals. A DAG of shares is maintained as a
   replicated database by all miners and the DAG is then used to
   compute rewards for miners. These mining rewards are paid out by an
-  anonymous hub communicating with the miners using I2P. Using the
-  payment channels construction, neither the hub nor the miners can
-  cheat. We show that our approach is incentives compatible and
-  describe how the hub maintains its anonymity to resist DDoS attacks.
+  anonymous hub communicating with the miners using Tor's hidden
+  services. Using the payment channels construction, neither the hub
+  nor the miners can cheat. We show that our approach is incentives
+  compatible and describe how the hub maintains its anonymity to
+  resist DDoS attacks.
 \end{abstract}
    
 \section{Motivation}
@@ -88,24 +89,23 @@ decentralised mining pool as:
 
 TeraHash Coin~\cite{mcelrath:variance}, Jute~\cite{jute} and
 Spectre~\cite{spectre} use a DAG for faster block times and focus on
-changing the consensus layer of bitcoin. These proposals allow for
-miners to produce shares that include conflicting transactions and
-then apply rules to find a set of transactions acceptable at various
-cuts of the DAG, such that the bitcoin consensus rules are not
-violated.
+changing the consensus layer of bitcoin. These proposals allow miners
+to produce shares that include conflicting transactions and then apply
+rules to find a set of transactions acceptable at various cuts of the
+DAG, such that the bitcoin consensus rules are not violated.
 
 Braiding the blockchain proposal~\cite{mcelrath:variance} shows how,
 smaller more frequent blocks can form a DAG of blocks, called a braid,
 with each block pointing to one or more one previous blocks. Blocks in
 the braid are called beads and can have transactions repeated in
-different blocks. The proposal describes how duplicate and double
-spend transactions can be resolved to reach a decision on the state of
-the ledger at any cut of the DAG.\@
+different beads. The proposal describes how duplicate and double spend
+transactions can be resolved to reach a decision on the state of the
+ledger at any cut of the DAG.\@
 
 In the proposal, miners earn a coin native to the braid blockchain,
 called TeraHash Coin. This coin can then be swapped for BTC. The
 proposal doesn't yet define how this native coin will be swapped for
-bitcoin. Some of the suggestions under discussion include using atomic
+BTC. Some of the suggestions under discussion include using atomic
 swaps, burning the TeraHash Coin, or using financial instruments like
 futures of the bitcoin's hash rate to swap TeraHash Coins for BTC.\
 The problems with the atomic swap approach is the need for $O(n)$
@@ -115,7 +115,7 @@ requires a trusted third party to execute the burn. Finally, trading
 TeraHash Coins for BTC futures has the problem of introducing
 centralisation on the futures market operator. There is some
 discussion around using DEXes for executing futures contracts, but
-these are initial ideas and we will evaluated them in the future for
+these are initial ideas and we will evaluate them in the future for
 incorporating them into our proposal once they have been developed
 further.
 
@@ -166,20 +166,15 @@ compact block specifications~\cite{compact-blocks}.
 
 \begin{table}
   \centering
-  \begin{tabular}{ |l|p{0.4\linewidth}|r| }
-    \hline
-    \multicolumn{3}{|c|}{\textsc{work}} \\
+  \begin{tabular}{ lp{0.4\linewidth}r }
+    \multicolumn{3}{c}{\textsc{work}} \\
     \hline
     Field & Description & Size in bytes \\
     \hline
     Version & Bitcoin block's version field & 4\\
-    \hline
     Previous block & Hash of the previous bitcoin block & 32 \\
-    \hline
     Coinbase & Coinbase for payment channel setup, see Section~\ref{ref:channels} & 38 \\
-    \hline
     Transactions & Transaction ids included in the block & variable \\
-    \hline
     \textsc{Work} hash & Hash of the above fields & 32 \\
     \hline
   \end{tabular}
@@ -200,29 +195,21 @@ validates this \textsc{work} using a local bitcoin node. When a
 
 \begin{table}
   \centering
-  \begin{tabular}{ |l|p{0.4\linewidth}|r| }
-    \hline
-    \multicolumn{3}{|c|}{\textsc{Share}} \\
+  \begin{tabular}{ lp{0.4\linewidth}r }
+    \multicolumn{3}{c}{\textsc{Share}} \\
     \hline
     Field & Description & Size in bytes \\
     \hline
     \textsc{Work} hash & Hash used to identify the \textsc{work} for this share & 32 \\
-    \hline
     Nonce and extra nonce & Nonces used & $4+8$ \\
-    \hline
     Merkle root & New merkle root to include extra nonce & 32 \\
-    \hline
     Timestamp & UNIX timestamp used & 4 \\
-    \hline
     Difficulty & Claimed difficulty miner is using, if different from last share. & 4 \\
-    \hline
     Public keys & Two pubkeys used by the hub to for channel management & 66 \\
-    \hline
     $list<$ \textsc{share} hashes $>$ & List of share hashes referenced by this \textsc{share} & $N \times 32$ \\
+    Tor Service & PubKey for onion service address, see Section~\ref{sec:hub-miner-communication}. & 32 \\
     \hline
-    I2P destination & The I2P destination for hub-miner communication, see Section~\ref{sec:hub-miner-communication}. & 387 \\
-    \hline
-    Total size & \multicolumn{2}{|r|}{$505 + N \times 32$} \\
+    Total size & \multicolumn{2}{r}{$138 + N \times 32$} \\
     \hline
   \end{tabular}
   \caption{The structure of \textsc{share}s broadcast by miners. Size
@@ -235,8 +222,10 @@ Table~\ref{table:share} shows the structure of \textsc{share}s
 broadcast by the miner. Each \textsc{share} includes the hash of the
 \textsc{work} the miner is working on, along with the current target
 difficulty used by the miner, the public keys that the hub uses to
-setup payment channels, and finally an I2P destination address of the
-miner.
+setup payment channels, and finally the pubic key for the Tor hidden
+service run by the miner. The Tor hidden service is used for
+facilitating anonymous communication between the hub and the miners as
+described later in Section~\ref{sec:hub-miner-communication}.
 
 Miners broadcast their \textsc{share}s to the network using a gossip
 protocol and all the miners maintain the DAG of \textsc{share}s as a
@@ -245,15 +234,19 @@ generated by a miner and all miners track the most recently received
 \textsc{share} from all other miners. Miners include a hash pointer to
 the most recent known \textsc{share}s from all miners in its own
 \textsc{share}. This leads to all edges in the DAG pointing from a
-\textsc{share} to all the \textsc{share}s known by the miner when
-starting to mine a \textsc{work}. This construction of the DAG ensures
-that the DAG is eventually consistent on all p2p participants. The DAG
-also includes valid bitcoin blocks, since one of the shares eventually
-satisfies the then bitcoin difficulty requirement. The downside is the
-that the size of \textsc{share} will increase linearly with the size
-of the network and will lead to an upper bound on the size of the
-pool. With $N = 10,000$, the size of the share is $320kB$, which is
-small enough for fast propagation across a $10,000$ node peer to peer
+\textsc{share} to all the \textsc{share}s known by the miner when it
+started mining the \textsc{work}. This construction of the DAG ensures
+that the DAG is eventually consistent on all p2p participants. Since
+one of the shares eventually satisfies the then bitcoin difficulty
+requirement the DAG also includes valid bitcoin blocks.
+
+The DAG builds a ``found before'' relationship between shares which
+enables the reward calculation presented in
+Section~\ref{sec:rewards}. Using the DAG results in the size of
+\textsc{share} increasing linearly with the size of the network and
+will lead to an upper bound on the size of the pool. With
+$N = 10,000$, the size of the share is $320kB$, which is small enough
+for fast propagation across a $10,000$ node peer to peer
 network~\cite{information-propagation}. However, scaling by another
 order of magnitude will require optimisations to the \textsc{share}
 structure.
@@ -424,10 +417,10 @@ block. Therefore the pool satisfies this requirement.
 \subsubsection{Budget Balanced}\label{sec:budget-balanced}
 
 Budget balanced~\cite{incentives-compatible} property requires that
-pool operator to never incur a deficit. Again from the rules above,
-since rewards are paid at the end of the epoch, a hub pays out rewards
-without losing or retaining any amount. The hub therefore does not
-make an unaccounted for profit or loss.
+the pool operator should never incur a deficit. Again from the rules
+above, since rewards are paid at the end of the epoch, a hub pays out
+rewards without losing or retaining any amount. The hub therefore does
+not make an unaccounted for profit or loss.
 
 \subsection{Lost Work or Stale Shares}\label{ref:stales}
 
@@ -444,9 +437,9 @@ consecutive epochs. In Figure~\ref{fig:shares-propagation} the share
 $c_3$ is a stale share as it is not included in the $epoch$s
 terminating in either $a_5$ or $b_5$. We don't reward miners for these
 stale shares as that allows miners to indulge in selfish
-mining~\cite{majority-is-not-enough}. In this section we show some
-very rough estimates on the work lost by the miners for not being
-reward for these stale shares.
+mining~\cite{majority-is-not-enough}. In this section we present rough
+estimates on the work lost by the miners for not being reward for
+these stale shares.
 
 The details of the p2p network to transmit shares is not yet
 specified, and we don't have simulations results to observe the impact
@@ -462,11 +455,11 @@ fails to reach the miner who finds the next block.
 
 We work with estimates from observations about block transmission on
 the bitcoin p2p network~\cite{information-propagation} but keep in
-mind caveats that the observations there include the time to verify
-the block and that \textsc{work} size at $320kB$ for a p2p network
-with $N = 10,000$ is much smaller than a bitcoin block.
+mind that those observations included the time to verify the block and
+that \textsc{share} size at $320kB$ for a p2p network with
+$N = 10,000$ is much smaller than a bitcoin block.
 
-Given the caveats We proceed to use the same propagation delays from
+Given the caveats we proceed to use the same propagation delays from
 the study to capture upper bounds of the work lost and assume a $10$
 second delay for a \textsc{share} to reach all other nodes on the p2p
 network. We also assume that $10,000$ miners pool reaches $2\%$ of the
@@ -478,8 +471,8 @@ every $500$ minutes.
 From the above, we get $t_{s} = 10$s and $t_{b} = 500$ minutes and get
 the lost work of around $0.03\%$. Adding the $0.1\%$ fees the miners
 pay to the hub, the miners end up paying $0.13\%$ in costs as compared
-to $2\%$ on mining pools, which is still a saving of around $93\%$ in
-fees for the miner when using a decentralised pool.
+to paying $2-4\%$ to the mining pools, which is still a saving of around
+$93\%$ in fees for the miner when using a decentralised pool.
 
 
 % From early studies on information dissemination using gossip protocol
@@ -506,8 +499,8 @@ the details.
   rewards among miners.
 \item Belcher proposes uses multiple hubs to prevent DDoS attacks on
   hubs, we instead use a single hub, and prevent DDoS attacks by
-  keeping the hub hidden using I2P~\cite{i2p,
-    i2p-censorship-resistance} for communication between the hub and
+  keeping the hub hidden using Tor's v3 hidden
+  services~\cite{tor-design} for communication between the hub and
   miners.
 \end{itemize}
 
@@ -573,7 +566,7 @@ losing the fees that can be earned from the block space.
 
 Just like in the early versions of proposal by Belcher we use one-way
 payment channels. One-Way payment channels solve the problem of
-aggregating a miner's payouts requiring a single blockchain
+aggregating a miner's payouts and require only a single blockchain
 transaction for spending multiple payouts earned from their PoW
 shares.
 
@@ -593,14 +586,14 @@ $0.1\%$ fees for the hub.
 
 \subsubsection{Payment Channel Transactions}
 
-The hub creates a funding channel locking an amount $R$ of
-bitcoin. The miner then creates a refund transaction, spending the
-funding transaction and sending the $R$ bitcoin back to the hub. The
-refund transaction has a locktime of six months allowing the miner to
-accumulate their payout over the six month period. The protocol can be
-extended to allow each miner to agree upon a locktime with the hub. In
-this case, the trade-off will be between the fees charged by the hub
-and the length of the locktime.
+The hub creates a funding channel for each miner and locks $R$ bitcoin
+in the channel. The miner then creates a refund transaction, spending
+the funding transaction and sending the $R$ bitcoin back to the
+hub. The refund transaction has a locktime of six months allowing the
+miner to accumulate their payout over the six month period. The
+protocol can be extended to allow each miner to agree upon a locktime
+with the hub. In this case, the trade-off will be between the fees
+charged by the hub and the length of the locktime.
 
 The funding transaction includes an input from the hub and an output
 that can be spent in one of the two conditions shown in
@@ -729,7 +722,7 @@ If the hub defects and pays itself from the coinbase it uses the
 $cb_2$ branch of the coinbase. In doing so, the hub has to reveal the
 pre-image \verb|X|. With the pre-image available, all miners will use
 the $p_2$ branch of their payment channel transactions and close their
-channels and receive all payouts earned up to that block.
+channels receiving all the payouts earned up to that block.
 
 It is possible that the hub defects on the very first block mined and
 the miners lose their earnings for that single block. But that will
@@ -779,8 +772,8 @@ contribute a large portion of the pool's hash rate and then refuse to
 sign the co-operative branch. This will disrupt the functioning of the
 pool and a well funded censor could be willing to execute such an
 attack. The only defence here is that the miners re-organise and start
-a different instance of the pool hiding their activity behind I2P
-tunnels. We elaborate on our use of I2P in
+a different instance of the pool hiding their activity using Tor's
+hidden services. We elaborate on our use of Tor's hidden services in
 Section~\ref{sec:hub-miner-communication}.
 
 \subsubsection{Hub and Miner Collude}\label{ref:collusion}
@@ -819,10 +812,11 @@ in a large wait for the payouts to be distributed.
 We propose a different solution that requires a single hub. The
 advantage is a simpler channel construction and allow us to build the
 mining pool without waiting for Taproot activation. The single hub
-approach requires that all miners open I2P tunnels to gateways and
-publish the gateway's address in the shares they broadcast on the p2p
-network. The hub can communicate with miners by opening new tunnels
-and remaining anonymous. We present this approach in the next section.
+approach required that all miners run a Tor v3 hidden service and
+publish the public key used to generate the service's address. The
+public key is published in each share the miner publishes. The hub can
+now contact the miners anonymously as a client and therefore avoids
+DoS attacks on the hub or on the miners hidden services.
 
 \subsection{Anonymous Hub Miner
   Communication}\label{sec:hub-miner-communication}
@@ -834,63 +828,25 @@ infrequently as compared to the \textsc{share}s broadcast messages and
 don't have the same timeliness requirements as the shares
 broadcasts. We propose adopting a solution that doesn't compromise on
 the hub's anonymity and makes a trade-off with increased latency of
-the channel management messages. We use I2P's tunnels to avoid
-compromising the anonymity by setting up separate inbound and outbound
-tunnels, as required by I2P.
+the channel management messages. We use Tor's hidden services to avoid
+compromising the hub's anonymity.
 
-\begin{figure}
-  \begin{center}
-    \includegraphics[width=0.75\textwidth]{new-miner-communication.eps}
-    \caption{Discovery of miner I2P destination addresses enables
-      communication for creating channels.}\label{fig:new-miner-communication}
-  \end{center}
-\end{figure}
-
-\begin{figure}
-  \begin{center}
-    \includegraphics[width=0.8\textwidth]{payout-communication.eps}
-    \caption{Hub sends one way updates to miners without revealing its
-      destination address.}\label{fig:new-miner-communication}
-  \end{center}
-\end{figure}
-
-There are two types of control messages exchanged between the hub and
-the miner: 
-\begin{enumerate*}
-\item the channel creation messages when the miner first joins the
-  pool and
-\item the payout messages whenever a block is found.
-\end{enumerate*}
-
-Miners will run an I2P node next to their mining controller and setup
-an incoming tunnel. Once the tunnel is ready, miners include their I2P
-destination address in their share headers. The hub can then send
-messages to the miner through the I2P tunnel.
-
-The hub participates in the shares broadcast p2p network and
-identifies a new miner along with the new miner's destination
+Miners will run a Tor hidden service next to their mining
+controller. Once the service is ready, miners include their service's
+public key in their share headers. The hub can then communicate
+anonymously with the miners to create payment channels and to update
+the payment channels. The hub also publishes a well known public key
+on a publicly accessible location like a github repository or an IRC
+channel. The hub then participates in the shares broadcast p2p network
+and identifies a new miner along with the new miner's hidden service
 address. Once the miner has mined for a certain time period, the hub
-contacts the miner and provides its own destination address in the
-message~\cite{i2p-streaming-library}. Figure~\ref{fig:new-miner-communication}
-shows how the ``Miner A'' announces its I2P destination address,
-enabling the hub to contact the miner for exchanging channel creation
-messages. The hub in turn uses different destination addresses when
-contacting each miner, further strengthening its anonymity and
-resistance to DDoS attacks.
+contacts the miner to set up the payment channels. The hub signs all
+their messages using their well known public key.
 
-To prevent the tunnel endpoint and gateway from seeing the messages
-being exchanged, the hub and the miner use I2P's layered encryption,
-called garlic routing~\cite{i2p-garlic-routing}. With the destination
-addresses of both the new miner and the hub known to each other the
-two can proceed to anonymously setup a payment channel as described in
-Section~\ref{ref:channels}.
-
-To send payouts as channel state updates, the hub again uses the I2P
-destination address of each miner and sends a one way message, with no
-reply destination included in the message. This allows the hub to
-remain anonymous and makes it relatively hard to DDoS the hub. The hub
-sends all miners the updates to all payment channels. This allows the
-miner who discovered a block to verify that the hub has paid everyone.
+To send payouts as channel state updates, the hub sends the updates to
+all miners using their hidden service address. The hub sends all
+miners the updates to all payment channels, allowing the miner who
+discovered a block to verify that the hub has paid everyone.
 
 \section{Future Work}
 
@@ -901,16 +857,16 @@ proofs of rewards schemes and possible extensions to using multiple
 hubs.
 
 Before we work on implementing the system, our next step is to
-simulate p2p mining network using ns-3~\cite{ns3} and make informed
-decisions about how large a network a single hub can support. The
-observations we want to make are how large a p2p network can be
-sustained without an increase in work lost by miners. Each instance of
-the pool uses a single hub and the p2p network of miners can grow as
-long as miners are communicate \textsc{work} and \textsc{share}s with
-each other within bounded latencies. We want to find the bounds of
-these limits using a simulation.
+simulate p2p mining network and make informed decisions about how
+large a network a single hub can support. The observations we want to
+make are how large a p2p network can be sustained without an increase
+in work lost by miners. Each instance of the pool uses a single hub
+and the p2p network of miners can grow as long as miners can
+communicate \textsc{work} and \textsc{share}s with each other within
+bounded latencies. We want to find the bounds of these limits using a
+simulation.
 
-We also want to specify the p2p protocols and the message formats for
+We will also specify the p2p protocols and the message formats for
 both the \textsc{share}s propagation and channel management
 networks. By publishing the specifications separate from the source
 code, we aim to receive more feedback from the community. We want to
