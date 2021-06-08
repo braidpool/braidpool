@@ -1,20 +1,20 @@
 /**
- * Copyright (c) 2021 d11dpool developers (see AUTHORS)
+ * Copyright (c) 2021 braidpool developers (see AUTHORS)
  *
- * This file is part of d11dpool.
+ * This file is part of braidpool.
  *
- * d11dpool is free software: you can redistribute it and/or modify
+ * braidpool is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
- * d11dpool is distributed in the hope that it will be useful,
+ * braidpool is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with d11dpool.  If not, see <https://www.gnu.org/licenses/>.
+ * along with braidpool.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 #ifndef FUNDING_TRANSACTION_HPP

@@ -1,5 +1,5 @@
 
-![Build status](https://github.com/wholooks/d11dpool/actions/workflows/cmake.yml/badge.svg)
+![Build status](https://github.com/wholooks/braidpool/actions/workflows/cmake.yml/badge.svg)
 
 # Proposal
 
@@ -16,7 +16,7 @@ The pool provides:
 
 # Progress
 
-The [project on github](https://github.com/wholooks/d11dpool/projects/1)
+The [project on github](https://github.com/wholooks/braidpool/projects/1)
 tracks the main components to build. Here's a list to keep us focused:
 
 - [ ] (WIP) Channel management scripts using libbitcoin.
