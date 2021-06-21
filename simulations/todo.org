@@ -1,0 +1,50 @@
+
+* What do want to observe?
+
+  - Percentage of shares that miners aren't rewarded for.
+  - Mean propagation time of shares.
+
+* How do we want to get to that observation?
+
+  - We'll need to simulate the p2p network with gossip broadcast
+    - Building shares
+      - Include only the 'root' nodes from the dag
+    - Counter based forwarding
+    - Anti-antropy to fetch shares missing from dag
+    - Build a dag of shares
+    - On finding a block (random event)
+      - calculate the reward and track which shares miners didn't get
+        rewarded for.
+
+* Variables
+
+  1. Random topolgy and latencies for each run. Not a variable.
+  2. Vary the
+     1. Share period
+     2. The block finding interval
+     3. Size of the network
+
+* Components to build [0/4]
+
+  1. [ ] Share construction
+     1. [ ] Include the roots of the trees in the DAG forest.
+  2. [ ] Broadcast
+     1. [ ] Handle receive message
+        1. [ ] Should we forward it?
+        2. [ ] If so, forward it.
+        3. [ ] Insert in DAG
+           1. [ ] Enqueue requests for any missing shares
+     2. [ ] Send request for missing shares
+     3. [ ] Generate shares at frequence of ``share period''
+     4. [ ] Send shares
+  3. [ ] Block discovery by a node
+     1. [ ] Reward attribution
+        1. [ ] Track which shares by each peer will be rewarded when
+           the block is discovered.
+  4. [ ] Trace/log system
+     1. [ ] Send timestamp
+     2. [ ] Receive timestamp at all nodes
+     3. [ ] Block discovery
+        1. [ ] Timestamp of block discovery
+        2. [ ] Last share received from each peer
+        3. [ ] 
