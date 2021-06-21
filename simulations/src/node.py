@@ -76,12 +76,10 @@ class Node:
                                                        in self.in_pipes])
 
             for _, msg in received_messages.items():
-                print(f'r e: {self.env.now} n: {self.name} {msg}.')
+                print(f'r e: {self.env.now} n: {self.name} {msg}')
                 yield self.env.timeout(self.message_processing_time(msg))
 
     def start(self):
         print(f'{self.name} starting...')
         self.env.process(self.receive())
-        print(f'{self.name} started receive...')
         self.env.process(self.send())
-        print(f'{self.name} started send...')

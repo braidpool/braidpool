@@ -10,3 +10,4 @@ proposal/proposal.bbl
 proposal/proposal.blg
 channels/build
 venv
+**/__pycache__
