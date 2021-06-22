@@ -1,8 +1,10 @@
 appdirs==1.4.4
 attrs==21.2.0
+decorator==4.4.2
 distlib==0.3.2
 filelock==3.0.12
 iniconfig==1.1.1
+networkx==2.5.1
 packaging==20.9
 pluggy==0.13.1
 py==1.10.0
