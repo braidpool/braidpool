@@ -11,3 +11,4 @@ proposal/proposal.blg
 channels/build
 venv
 **/__pycache__
+**/.pytest_cache

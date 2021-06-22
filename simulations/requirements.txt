@@ -1,4 +1,7 @@
+appdirs==1.4.4
 attrs==21.2.0
+distlib==0.3.2
+filelock==3.0.12
 iniconfig==1.1.1
 packaging==20.9
 pluggy==0.13.1
@@ -6,4 +9,6 @@ py==1.10.0
 pyparsing==2.4.7
 pytest==6.2.4
 simpy==4.0.1
+six==1.16.0
 toml==0.10.2
+virtualenv==20.4.7
