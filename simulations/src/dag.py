@@ -3,18 +3,24 @@ from collections import defaultdict
 
 class DAG:
     def __init__(self):
-        self.adj_matrix = defaultdict(list)
+        self.adj_list = defaultdict(list)
 
     def targets(self, source):
-        return self.adj_matrix[source]
+        return self.adj_list[source]
+
+    def add_edges(self, source, targets):
+        self.adj_list[source].extend(targets)
 
     def add_edge(self, source, target):
-        return self.adj_matrix[source].append(target)
+        return self.adj_list[source].append(target)
 
     def heads(self):
         '''
         Return shares that don't have any out edges.
         Non optimised implementation for now.
         '''
-        return [source for source, adj_matrix in self.adj_matrix.items()
-                if len(adj_matrix) == 0]
+        return [source for source, adj_list in self.adj_list.items()
+                if len(adj_list) == 0]
+
+    def has(self, hash):
+        return hash in self.adj_list
