@@ -28,6 +28,9 @@ def run():
 
     print('\nP2P broadcast communication\n')
     env.run(until=SIM_TIME)
+    print(node_a.dag)
+    print(node_b.dag)
+    print(node_c.dag)
 
 
 if __name__ == '__main__':
