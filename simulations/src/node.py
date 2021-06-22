@@ -94,7 +94,7 @@ class Node:
         return msg.should_forward() and not self.dag.has(msg.share.hash)
 
     def add_to_dag(self, msg):
-        self.dag.add_edges(msg.share.hash, msg.share.heads)
+        self.dag.add_edges(sources=msg.share.heads, target=msg.share.hash)
 
     def handle_receive(self, msg):
         while True:

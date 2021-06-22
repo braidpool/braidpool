@@ -14,4 +14,5 @@ class Share:
                       encode()).hexdigest()
 
     def __repr__(self):
-        return f't: {self.timestamp} s: {self.source} h: {self.heads} {self.hash}'
+        short_heads = [head[0:5] for head in self.heads]
+        return f't: {self.timestamp} s: {self.source} h: {short_heads} {self.hash[0:5]}'
