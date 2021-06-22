@@ -3,15 +3,12 @@ import random
 import simpy
 
 from node import Node
-
-RANDOM_SEED = 42
-SIM_TIME = 10_000
-
+from config import config
 
 def run():
     # Setup and start the simulation
     print('Process communication')
-    random.seed(RANDOM_SEED)
+    random.seed(config['simulation']['random_seed'])
     env = simpy.Environment()
 
     node_a = Node(name='a', env=env)
@@ -27,10 +24,15 @@ def run():
     node_c.start()
 
     print('\nP2P broadcast communication\n')
-    env.run(until=SIM_TIME)
-    print(node_a.dag)
-    print(node_b.dag)
-    print(node_c.dag)
+    env.run(until=config['simulation']['run_time'])
+    print('At node_a')
+    print(node_a.dag.edges())
+
+    print('At node_b')
+    print(node_b.dag.edges())
+
+    print('At node_c')
+    print(node_c.dag.edges())
 
 
 if __name__ == '__main__':

@@ -16,17 +16,18 @@ import random
 
 import simpy
 
+from config import config
 from broadcast_pipe import BroadcastPipe
 from dag import DAG
 from message import Message
 from share import Share
 
-SHARE_PERIOD = 1000
 MESSAGE_PROCESSING_TIME = 10
 
 
 class Node:
     def __init__(self, *, env, name):
+        self.seq_no = 0
         self.env = env
         self.name = name
         self.out_pipe = BroadcastPipe(env)
@@ -57,7 +58,8 @@ class Node:
         """Process to generate shares at random intervals."""
         while True:
             # wait for next share
-            yield self.env.timeout(random.randint(0, SHARE_PERIOD - 1))
+            yield self.env.timeout(
+                random.randint(0, int(config['shares']['period']) - 1))
 
             # messages are time stamped to later check if the consumer was
             # late getting them.  Note, using event.triggered to do this may
@@ -66,7 +68,9 @@ class Node:
             # in the pipe first and then message_consumer gets from pipe,
             # the event.triggered will be True in the other order it will be
             # False
-            share = Share(source=self.name, heads=self.heads(), env=self.env)
+            share = Share(source=self.name, heads=self.heads(), env=self.env,
+                          seq_no=self.seq_no)
+            self.seq_no += 1
             msg = Message(share=share)
             self.add_to_dag(msg)
             self.send(msg)
