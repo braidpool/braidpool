@@ -24,16 +24,15 @@
      2. The block finding interval
      3. Size of the network
 
-* Components to build [0/4]
+* Components to build [1/4]
 
-  1. [ ] Share construction
-     1. [ ] Include the roots of the trees in the DAG forest.
+  1. [X] Share construction
+     1. [X] Include the roots of the trees in the DAG forest.
   2. [-] Broadcast
-     1. [ ] Handle receive message
-        1. [ ] Should we forward it?
-        2. [ ] If so, forward it.
-        3. [ ] Insert in DAG
-           1. [ ] Enqueue requests for any missing shares
+     1. [X] Handle receive message
+        1. [X] Should we forward it?
+        2. [X] If so, forward it.
+        3. [X] Insert in DAG
      2. [ ] Send request for missing shares
      3. [X] Generate shares at frequency of ``share period''
      4. [X] Send shares
@@ -47,4 +46,3 @@
      3. [ ] Block discovery
         1. [ ] Timestamp of block discovery
         2. [ ] Last share received from each peer
-        3. [ ] 
