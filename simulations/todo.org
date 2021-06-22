@@ -36,6 +36,7 @@
      2. [ ] Send request for missing shares
      3. [X] Generate shares at frequency of ``share period''
      4. [X] Send shares
+     5. [X] Add test to verify BroadcastPipes are FIFO
   3. [ ] Block discovery by a node
      1. [ ] Reward attribution
         1. [ ] Track which shares by each peer will be rewarded when
