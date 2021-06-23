@@ -1,7 +1,5 @@
+from config import config
 import simpy
-
-DEFAULT_LATENCY = 100
-
 
 class BroadcastPipe(object):
     """A Broadcast pipe that allows one process to send messages to many.
@@ -12,11 +10,11 @@ class BroadcastPipe(object):
     """
 
     def __init__(self, env, capacity=simpy.core.Infinity,
-                 latency=DEFAULT_LATENCY):
+                 latency=None):
         self.env = env
         self.capacity = capacity
         self.pipes = []
-        self.latency = latency
+        self.latency = latency if latency else int(config['p2p']['latency'])
 
     def _add_latency(self, pipe, value):
         yield self.env.timeout(self.latency)

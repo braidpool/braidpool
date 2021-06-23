@@ -1,3 +1,4 @@
+import networkx as nx
 import random
 
 import simpy
@@ -25,14 +26,15 @@ def run():
 
     print('\nP2P broadcast communication\n')
     env.run(until=config['simulation']['run_time'])
-    print('At node_a')
-    print(node_a.dag.edges())
 
-    print('At node_b')
-    print(node_b.dag.edges())
-
-    print('At node_c')
-    print(node_c.dag.edges())
+    for node in [node_a, node_b, node_c]:
+        print(f'At {node.name}')
+        print(list(nx.lexicographical_topological_sort(node.dag)))
+        print(node.dag.edges())
+        if config.getboolean('simulation', 'save_dot'):
+            g = nx.nx_agraph.to_agraph(node.dag)
+            g.layout()
+            g.draw(f'/tmp/node_{node.name}.png', prog='dot')
 
 
 if __name__ == '__main__':

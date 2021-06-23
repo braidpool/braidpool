@@ -1,3 +1,4 @@
+from config import config
 from hashlib import sha256
 
 
@@ -7,7 +8,10 @@ class Share:
         self.seq_no = seq_no
         self.source = source
         self.heads = heads
-        self.hash = self.get_simple_hash()
+        if config.getboolean('shares', 'simple_hash'):
+            self.hash = self.get_simple_hash()
+        else:
+            self.hash = self.get_hash()
 
     def get_hash(self):
         joined_heads = "".join(self.heads)
