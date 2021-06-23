@@ -54,12 +54,22 @@ class Node:
     def add_in_pipe(self, pipe):
         self.in_pipes.append(pipe)
 
+    def get_next_share_time(self):
+        period = int(config['shares']['period'])
+        if config.getboolean('shares', 'randomise'):
+            return random.randint(0, period - 1)
+        else:
+            return period
+
     def generate_shares(self):
         """Process to generate shares at random intervals."""
         while True:
             # wait for next share
-            yield self.env.timeout(
-                random.randint(0, int(config['shares']['period']) - 1))
+            limit = int(config['shares']['limit'])
+            if limit != -1 and self.seq_no >= limit:
+                yield self.env.timeout(int(config['simulation']['run_time']))
+            else:
+                yield self.env.timeout(self.get_next_share_time())
 
             # messages are time stamped to later check if the consumer was
             # late getting them.  Note, using event.triggered to do this may
