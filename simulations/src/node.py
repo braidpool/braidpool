@@ -13,7 +13,7 @@
 Based on: https://simpy.readthedocs.io/en/latest/examples/process_communication.html
 """
 import random
-
+import logging
 import simpy
 
 from config import config
@@ -30,9 +30,8 @@ class Node:
         self.seq_no = 0
         self.env = env
         self.name = name
-        self.out_pipe = BroadcastPipe(env)
-        dummy_in_pipe = simpy.Store(self.env)
-        self.in_pipes = [dummy_in_pipe]
+        self.out_pipe = BroadcastPipe(env=env, sender=self.name)
+        self.in_pipe = simpy.Store(self.env)
         self.neighbours = []
         self.dag = DAG()
 
@@ -48,11 +47,7 @@ class Node:
 
     def add_neighbour(self, neighbour):
         self.neighbours.append(neighbour)
-        pipe_output_conn = self.out_pipe.get_output_conn()
-        neighbour.add_in_pipe(pipe_output_conn)
-
-    def add_in_pipe(self, pipe):
-        self.in_pipes.append(pipe)
+        self.out_pipe.add_receiver(neighbour.in_pipe)
 
     def get_next_share_time(self):
         period = int(config['shares']['period'])
@@ -87,18 +82,15 @@ class Node:
 
     def send(self, msg, forward=False):
         _type = 's' if not forward else 'f'
-        print(f'{_type} e: {self.env.now} n: {self.name} {msg}')
+        logging.info(f'{_type} e: {self.env.now} n: {self.name} {msg}')
         self.out_pipe.put(msg)
 
     def receive(self):
         """A process which consumes messages."""
         while True:
-            received_messages = yield self.env.any_of([pipe.get() for pipe
-                                                       in self.in_pipes])
-
-            for _, msg in received_messages.items():
-                print(f'r e: {self.env.now} n: {self.name} {msg}')
-                self.env.process(self.handle_receive(msg))
+            msg = yield self.in_pipe.get()
+            logging.info(f'r e: {self.env.now} n: {self.name} {msg}')
+            self.env.process(self.handle_receive(msg))
 
     def forward(self, msg):
         msg.decrement_count()
@@ -122,6 +114,6 @@ class Node:
             # detect any missing shares and send request for receiving missing shares
 
     def start(self):
-        print(f'{self.name} starting...')
+        logging.info(f'{self.name} starting...')
         self.env.process(self.receive())
         self.env.process(self.generate_shares())
