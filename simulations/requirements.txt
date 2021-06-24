@@ -8,6 +8,7 @@ networkx==2.5.1
 packaging==20.9
 pluggy==0.13.1
 py==1.10.0
+pygraphviz==1.7
 pyparsing==2.4.7
 pytest==6.2.4
 simpy==4.0.1
