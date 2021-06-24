@@ -14,7 +14,7 @@ class TestBroadcastPipe():
 
     def test_broadcast_pipe_is_fifo(self):
         env = simpy.Environment()
-        pipe = BroadcastPipe(env)
+        pipe = BroadcastPipe(env=env, sender='test')
         pipe.put(1)
         pipe.put(2)
         pipe.put(3)
