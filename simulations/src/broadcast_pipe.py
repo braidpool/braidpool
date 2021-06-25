@@ -1,5 +1,6 @@
-from config import config
 import logging
+
+from config import config
 
 
 class BroadcastPipe(object):
