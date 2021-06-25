@@ -12,12 +12,13 @@
 
 Based on: https://simpy.readthedocs.io/en/latest/examples/process_communication.html
 """
-import random
 import logging
+import random
+
 import simpy
 
-from config import config
 from broadcast_pipe import BroadcastPipe
+from config import config
 from dag import DAG
 from message import Message
 from share import Share

@@ -1,5 +1,6 @@
-from config import config
 from hashlib import sha256
+
+from config import config
 
 
 class Share:

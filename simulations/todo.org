@@ -29,10 +29,11 @@
   1. [X] Share construction
      1. [X] Include the roots of the trees in the DAG forest.
   2. [-] Broadcast
-     1. [X] Handle receive message
+     1. [-] Handle receive message
         1. [X] Should we forward it?
         2. [X] If so, forward it.
-        3. [X] Insert in DAG
+        3. [ ] If dependencies received, insert in DAG
+        4. [ ] Else send request for missing depdendency
      2. [ ] Send request for missing shares
      3. [X] Generate shares at frequency of ``share period''
      4. [X] Send shares

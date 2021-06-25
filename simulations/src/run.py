@@ -1,11 +1,11 @@
-import networkx as nx
+import logging
 import random
 
+import networkx as nx
 import simpy
-import logging
 
-from node import Node
 from config import config
+from node import Node
 
 
 def run():
