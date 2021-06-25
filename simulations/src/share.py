@@ -4,7 +4,7 @@ from config import config
 
 
 class Share:
-    def __init__(self, *, source, heads, seq_no, env):
+    def __init__(self, *, source, heads, seq_no, is_block, env):
         self.timestamp = env.now
         self.seq_no = seq_no
         self.source = source
@@ -13,6 +13,7 @@ class Share:
             self.hash = self.get_simple_hash()
         else:
             self.hash = self.get_hash()
+        self.is_block = is_block
 
     def get_hash(self):
         joined_heads = "".join(self.heads)
@@ -24,4 +25,6 @@ class Share:
 
     def __repr__(self):
         short_heads = [head[0:5] for head in self.heads]
-        return f't: {self.timestamp} s: {self.source} hd: {short_heads} h: {self.hash[0:5]}'
+        is_block = 1 if self.is_block else 0
+        return (f't: {self.timestamp} s: {self.source} hd: {short_heads} '
+                f'b: {is_block} h: {self.hash[0:5]}')
