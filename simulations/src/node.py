@@ -60,6 +60,7 @@ class Node:
 
     def generate_shares(self):
         """Process to generate shares at random intervals."""
+        block_probability = float(config['shares']['block_probability'])
         while True:
             # wait for next share
             limit = int(config['shares']['limit'])
@@ -68,15 +69,9 @@ class Node:
             else:
                 yield self.env.timeout(self.get_next_share_time())
 
-            # messages are time stamped to later check if the consumer was
-            # late getting them.  Note, using event.triggered to do this may
-            # result in failure due to FIFO nature of simulation yields.
-            # (i.e. if at the same env.now, message_generator puts a message
-            # in the pipe first and then message_consumer gets from pipe,
-            # the event.triggered will be True in the other order it will be
-            # False
             share = Share(source=self.name, heads=self.heads(), env=self.env,
-                          seq_no=self.seq_no)
+                          seq_no=self.seq_no,
+                          is_block=random.random() < block_probability)
             self.seq_no += 1
             msg = ShareMessage(share=share)
             self.add_to_dag(msg.share.hash, msg.share.heads)
