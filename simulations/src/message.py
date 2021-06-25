@@ -25,15 +25,15 @@ class ShareMessage(Message):
         return self.counter > 0
 
     def __repr__(self):
-        return f'share: {self.share} c: {self.counter}'
+        return f'{self.share} c: {self.counter}'
 
 
 class NackMessage(Message):
-    def __init__(self, *, nack_hash):
+    def __init__(self, *, hash):
         super().__init__()
         # nacks should not be forwarded
         self.counter = -1
-        self.nack_hash = nack_hash
+        self.hash = hash
 
     def decrement_count(self):
         pass
@@ -42,4 +42,4 @@ class NackMessage(Message):
         return False
 
     def __repr__(self):
-        return f'nack: {self.nack_hash}'
+        return f'{self.hash}'
