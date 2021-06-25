@@ -20,5 +20,8 @@ class DAG(nx.DiGraph):
     def has(self, hash):
         return hash in self
 
+    def has_path(self, a, b):
+        return nx.has_path(self, a, b)
+
     def to_string(self):
         return list(nx.topological_sort(self))

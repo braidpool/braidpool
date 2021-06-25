@@ -10,3 +10,5 @@ class TestDAG():
         assert dag.has('b')
         assert dag.has('c')
         assert not dag.has('d')
+        assert dag.has_path('b', 'a')
+        assert not dag.has_path('a', 'b')

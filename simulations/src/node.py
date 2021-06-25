@@ -106,13 +106,9 @@ class Node:
     def handle_receive(self, msg):
         while True:
             yield self.env.timeout(self.message_processing_time(msg))
-            # If receieved first time insert into dag
             if self.should_forward(msg):
                 self.forward(msg)
-            # add to dag after should_forward check has been carried out
             self.add_to_dag(msg)
-            # check counter and if required send again
-            # detect any missing shares and send request for receiving missing shares
 
     def start(self):
         logging.info(f'{self.name} starting...')
