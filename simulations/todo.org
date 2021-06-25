@@ -32,9 +32,12 @@
      1. [-] Handle receive message
         1. [X] Should we forward it?
         2. [X] If so, forward it.
-        3. [ ] If dependencies received, insert in DAG
-        4. [ ] Else send request for missing depdendency
-     2. [ ] Send request for missing shares
+        3. [X] For received dependencies, insert received in DAG
+        4. [ ] Else [WONTDO]
+           1. [ ] send request for missing depdendency
+              1. [ ] send request for missing share using exponential back-off
+           2. [ ] add others to dag
+     2. [ ] [WONTDO] Send request for missing shares
      3. [X] Generate shares at frequency of ``share period''
      4. [X] Send shares
      5. [X] Add test to verify BroadcastPipes are FIFO
