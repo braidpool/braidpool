@@ -20,7 +20,7 @@ import simpy
 from broadcast_pipe import BroadcastPipe
 from config import config
 from dag import DAG
-from message import Message
+from message import ShareMessage
 from share import Share
 
 MESSAGE_PROCESSING_TIME = 10
@@ -34,6 +34,7 @@ class Node:
         self.out_pipe = BroadcastPipe(env=env, sender=self.name)
         self.in_pipe = simpy.Store(self.env)
         self.neighbours = []
+        self.nacks = set()
         self.dag = DAG()
 
     def heads(self):
@@ -77,8 +78,8 @@ class Node:
             share = Share(source=self.name, heads=self.heads(), env=self.env,
                           seq_no=self.seq_no)
             self.seq_no += 1
-            msg = Message(share=share)
-            self.add_to_dag(msg)
+            msg = ShareMessage(share=share)
+            self.add_to_dag(msg.share.hash, msg.share.heads)
             self.send(msg)
 
     def send(self, msg, forward=False):
@@ -100,15 +101,30 @@ class Node:
     def should_forward(self, msg):
         return msg.should_forward() and not self.dag.has(msg.share.hash)
 
-    def add_to_dag(self, msg):
-        self.dag.add_edges(sources=msg.share.heads, target=msg.share.hash)
+    def split_add_and_nack_hashes(self, msg):
+        add_from_hashes, nack_hashes = [], []
+        for head in msg.share.heads:
+            if head in self.dag:
+                add_from_hashes.append(head)
+            else:
+                nack_hashes.append(head)
+        return add_from_hashes, nack_hashes
+
+    def add_to_dag(self, hash, heads):
+        self.dag.add_edges(sources=heads, target=hash)
 
     def handle_receive(self, msg):
         while True:
             yield self.env.timeout(self.message_processing_time(msg))
             if self.should_forward(msg):
                 self.forward(msg)
-            self.add_to_dag(msg)
+
+            add_from_hashes, nack_hashes = self.split_add_and_nack_hashes(msg)
+            self.add_to_dag(msg.share.hash, add_from_hashes)
+            self.queue_nacks(nack_hashes)
+
+    def queue_nacks(self, nack_hashes):
+        self.nacks.update(nack_hashes)
 
     def start(self):
         logging.info(f'{self.name} starting...')
