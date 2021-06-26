@@ -34,7 +34,6 @@ class Node:
         self.out_pipe = BroadcastPipe(env=env, sender=self.name)
         self.in_pipe = simpy.Store(self.env)
         self.neighbours = []
-        self.nacks = set()
         self.dag = DAG()
 
     def heads(self):
@@ -96,15 +95,6 @@ class Node:
     def should_forward(self, msg):
         return msg.should_forward() and not self.dag.has(msg.share.hash)
 
-    def split_add_and_nack_hashes(self, msg):
-        add_from_hashes, nack_hashes = [], []
-        for head in msg.share.heads:
-            if head in self.dag:
-                add_from_hashes.append(head)
-            else:
-                nack_hashes.append(head)
-        return add_from_hashes, nack_hashes
-
     def add_to_dag(self, hash, heads):
         self.dag.add_edges(sources=heads, target=hash)
 
@@ -113,13 +103,7 @@ class Node:
             yield self.env.timeout(self.message_processing_time(msg))
             if self.should_forward(msg):
                 self.forward(msg)
-
-            add_from_hashes, nack_hashes = self.split_add_and_nack_hashes(msg)
-            self.add_to_dag(msg.share.hash, add_from_hashes)
-            self.queue_nacks(nack_hashes)
-
-    def queue_nacks(self, nack_hashes):
-        self.nacks.update(nack_hashes)
+            self.add_to_dag(msg.share.hash, msg.share.heads)
 
     def start(self):
         logging.info(f'{self.name} starting...')
