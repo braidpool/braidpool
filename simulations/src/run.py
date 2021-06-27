@@ -10,7 +10,8 @@ from node import Node
 
 def run():
     # Setup and start the simulation
-    logging.basicConfig(format='%(levelname)s:%(message)s', level=config['logging']['level'])
+    logging.basicConfig(format='%(levelname)s:%(message)s',
+                        level=config['logging']['level'])
 
     logging.info('Process communication')
     random.seed(config['simulation']['random_seed'])
