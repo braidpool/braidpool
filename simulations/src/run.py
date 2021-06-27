@@ -34,13 +34,14 @@ def run():
     env.run(until=config['simulation']['run_time'])
 
     for node in [node_a, node_b, node_c]:
-        logging.debug(f'At {node.name}')
+        logging.info(f'At {node.name}')
         logging.debug(list(nx.lexicographical_topological_sort(node.dag)))
         logging.debug(node.dag.edges())
         if config.getboolean('simulation', 'save_dot'):
             g = nx.nx_agraph.to_agraph(node.dag)
             g.layout()
             g.draw(f'/tmp/node_{node.name}.png', prog='dot')
+        logging.info(node.shares_not_rewarded)
 
 
 if __name__ == '__main__':

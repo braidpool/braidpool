@@ -35,6 +35,8 @@ class Node:
         self.in_pipe = simpy.Store(self.env)
         self.neighbours = []
         self.dag = DAG()
+        self.shares_sent = []
+        self.shares_not_rewarded = {}
 
     def heads(self):
         return self.dag.heads()
@@ -75,6 +77,8 @@ class Node:
             msg = ShareMessage(share=share)
             self.add_to_dag(msg.share.hash, msg.share.heads)
             self.send(msg)
+            self.shares_sent.append(msg.share.hash)
+            self.handle_block_found(msg)
 
     def send(self, msg, forward=False):
         _type = 's' if not forward else 'f'
@@ -92,18 +96,33 @@ class Node:
         msg.decrement_count()
         self.send(msg, forward=True)
 
-    def should_forward(self, msg):
-        return msg.should_forward() and not self.dag.has(msg.share.hash)
-
     def add_to_dag(self, hash, heads):
         self.dag.add_edges(sources=heads, target=hash)
 
     def handle_receive(self, msg):
         while True:
             yield self.env.timeout(self.message_processing_time(msg))
-            if self.should_forward(msg):
-                self.forward(msg)
-            self.add_to_dag(msg.share.hash, msg.share.heads)
+            msg_in_dag = self.dag.has(msg.share.hash)
+            if not msg_in_dag:
+                if msg.should_forward():
+                    self.forward(msg)
+                self.add_to_dag(msg.share.hash, msg.share.heads)
+                self.handle_received_block_found(msg)
+
+    def handle_received_block_found(self, msg):
+        if not msg.share.is_block:
+            return
+        if msg.share.source == self.name:
+            return
+        self.handle_block_found(msg)
+
+    def handle_block_found(self, msg):
+        # find delta between latest share this node already sent and
+        # the last one referenced in the receieved share.
+        not_rewarded = self.dag.find_not_reachable(self.shares_sent,
+                                                   msg.share.hash)
+        if not_rewarded:
+            self.shares_not_rewarded[msg.share.hash] = not_rewarded
 
     def start(self):
         logging.info(f'{self.name} starting...')
