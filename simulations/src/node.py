@@ -10,7 +10,8 @@
 - There is a different delay from a Node to all its
   neighbours. (Defined by Topology)
 
-Based on: https://simpy.readthedocs.io/en/latest/examples/process_communication.html
+Based on:
+https://simpy.readthedocs.io/en/latest/examples/process_communication.html
 """
 import logging
 import random
