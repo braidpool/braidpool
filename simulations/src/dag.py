@@ -23,5 +23,19 @@ class DAG(nx.DiGraph):
     def has_path(self, a, b):
         return nx.has_path(self, a, b)
 
+    def find_not_reachable(self, share_hashes, block_hash):
+        '''
+        Find the nodes in the graph that are in share_hashes but not
+        reachable from block_hash
+        TODO: Optimise this.
+        '''
+        collected = []
+        for share_hash in reversed(share_hashes):
+            if not self.has_path(share_hash, block_hash):
+                collected.append(share_hash)
+            else:
+                break
+        return list(reversed(collected))
+
     def to_string(self):
         return list(nx.topological_sort(self))
