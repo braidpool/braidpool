@@ -62,6 +62,9 @@ jobs:
 
   test_simulations:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: simulations
     strategy:
       matrix:
         python-version: [3.9]
