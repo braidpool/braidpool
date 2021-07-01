@@ -53,7 +53,7 @@ configured by the miner.
 Since small miners are able to find shares at their chosen
 difficultly, they can claim rewards for all their PoW shares.
 
-## Rewards Calculation - No More Orphans and DoA Shares
+## Rewards Calculation
 
 With miners choosing their own difficulty, the rewards calculation
 algorithm in Braidpool takes into account the difficulty used by the
