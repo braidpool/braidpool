@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "Can P2Pool Do What Braidpool Does?"
+title: "Can Braidpool Reuse P2Pool Components?"
 image: assets/BC_Logo_.png
 ---
 
@@ -8,7 +8,7 @@ Just like [P2Pool](http://p2pool.in/), Braidpool uses peer to peer
 communication between miners to track PoW shares. The question then
 is, can we extend P2Pool to achieve the goals of Braidpool? In this
 post we present how Braidpool is different from P2Pool and why
-Braidpool is a new implementation from scratch.
+Braidpool is not building on the P2Pool codebase.
 
 There are a few components that come together to provide the goals of
 Braidpool. Before we go into those components, a quick reminder of the
@@ -16,7 +16,8 @@ goals of Braidpool:
 
 1. Reward miners for all their PoW shares.
 2. Scale to tens of thousands of miners.
-3. Provide infrastructure for building financial tools to help miners manage risk.
+3. Provide infrastructure for building financial tools to help miners
+   manage risk.
 
 To achieve these goals, braidpool needs the following components to
 work together:
@@ -29,6 +30,9 @@ work together:
    participating miners.
 4. An anonymous hub that can't deny rewards payouts to miners.
 
+We believe all of these components are fundamentally different
+P2Pool's implementation.
+
 ## Peer to Peer Network and Finding Shares
 
 Just like P2Pool, miners participating in Braidpool broadcast their PoW
@@ -36,7 +40,7 @@ shares to other miners over a p2p network.
 
 In P2Pool the network difficulty is adjusted so that the pool finds
 one share every 30 seconds. This results in smaller miners struggling
-to find a share and makes P2Pool economically nonviable for them.
+to find enough share and makes P2Pool economically nonviable for them.
 
 In Braidpool, this is not the case. Each miner participating in
 Braidpool can choose the difficulty they mine at so that they generate
@@ -61,7 +65,7 @@ calculation algorithm are described in detail in the
 [proposal](https://github.com/pool2win/braidpool/blob/main/proposal/proposal.pdf)
 under review.
 
-This is contrast to how in P2Pool each miner has to generate shares
+This is in contrast to how in P2Pool each miner has to generate shares
 using the same difficulty. As the network grows, the difficulty
 increases and smaller miners are forced out of the network. This
 dynamic that limits the growth of P2Pool is absent in Braidpool. As
@@ -71,24 +75,25 @@ the pool can find blocks more frequently.
 
 ## Miner Payouts with Payment Channels
 
-In P2Pool, all miners that found a share for a bitcoin block are
-rewarded in the coinbase of the next bitcoin block the pool finds. The
-rewards are paid out through the coinbase of the next block. The
-problem is that as more miners find shares, the size of the coinbase
-transaction keeps growing. The increasing size of the coinbase reduces
-the profitability of P2Pool from finding a block. Also miners now have
-to aggregate their UTXOs for each reward and thus further increases
-the costs for the miners.
+In P2Pool, all miners that find a share for are rewarded in the
+coinbase of the next bitcoin block the pool finds. The rewards are
+paid out through the coinbase of the next block. The problem is that
+as more miners find shares, the size of the coinbase transaction keeps
+growing. The increasing size of the coinbase reduces the profitability
+of P2Pool as the same blockspace could be used by other fee paying
+transactions. Added to that, miners now have to aggregate their UTXOs
+for each reward which further increases the costs for the miners.
 
 Chris Belcher first proposed the idea of using Payment Channels in a
 [BitcoinTalk post](https://bitcointalk.org/index.php?topic=2135429.0)
 to make payments to miners for their PoW shares, and Braidpool uses
-Payment Channels to distribute payouts to miners.
+the constructs descirbed by Chris to use payment channels for
+distributing payouts to miners.
 
 This means that Braidpool's coinbase transaction are of a constant
-size and do not need more blockspace as more miners join the pool. It
-also amortises the costs for miners to spend their rewards earned for
-PoW shares from multiple blocks.
+size and do not need more blockspace as more miners join the pool. The
+use of payment channels also amortises the costs for miners to spend
+their rewards earned for PoW shares from multiple blocks.
 
 ## A Hub For Miner Payouts
 
@@ -99,13 +104,13 @@ can cheat. The proposal and the bitcointalk post by Belcher describe
 the channel construction in detail and show how neither the miners,
 nor the hub can cheat or without payouts.
 
-Since the hub can be attacked, the hub use Tor v3's hidden
-services. Being a Tor hidden service, the hub's location is hard to
-detect and the hub can resist DDoS attacks.
+Since the hub can be attacked, it uses Tor v3's hidden services to
+protect its anonymity. Being a Tor hidden service, the hub's location
+is hard to detect and the hub can resist DDoS attacks.
 
 ## Conclusion
 
-Braidpool uses completely different mechanisms to manage shares,
-calculate miner rewards and distributing the payouts. The changes are
-across the entire 'stack' and this motivates the need to rethink and
-implementation from the ground up.
+As we see, Braidpool uses completely different mechanisms to manage
+shares, calculate miner rewards and distributing the payouts. The
+changes are across the entire 'stack' and this motivates the need to
+rethink an implementation from the ground up.
