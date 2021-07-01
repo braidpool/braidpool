@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "Can P2Pool do what Braidpool does?"
+title: "Can P2Pool Do What Braidpool Does?"
 image: assets/BC_Logo_.png
 ---
 
