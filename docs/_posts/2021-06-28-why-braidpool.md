@@ -5,10 +5,10 @@ image: assets/BC_Logo_.png
 ---
 
 Current mining pools can be forced into censoring transactions and
-their opaque accounting stifles the ability to build tools for
-building financial tools to help miners manage risk. This post
-discusses the limitations of centralised mining pools and provides
-motivation for building Braidpool.
+their opaque accounting doesn't lend itself to building financial
+tools that can help miners manage their business risks. This post
+briefly discusses the limitations of centralised mining pools and
+provides motivation for building Braidpool.
 
 ## Censorship Resistance
 
