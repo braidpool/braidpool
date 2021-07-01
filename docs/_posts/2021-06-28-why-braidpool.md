@@ -1,7 +1,7 @@
 ---
 layout: post
 title: "Why Braidpool?"
-date: 2021-06-28
+image: assets/epoch.png
 ---
 
 Current mining pools can be forced into censoring transactions and

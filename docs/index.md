@@ -1,6 +1,7 @@
 ---
 layout: home
-title: "Braidpool"
+title: ""
+image: assets/epoch.png
 ---
 
 Braidpool is a peer to peer bitcoin mining pool that aims to:

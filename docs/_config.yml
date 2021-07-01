@@ -7,7 +7,10 @@ minima:
     twitter: pool2win
     github: pool2win
 show_excerpts: true
-site:
-  title: Braidpool Dev Blog
-  tagline: Braidpool development
-  description: Braidpool development, progress and other plans
+title: Braidpool Development Blog
+tagline: Dev progress
+description: Braidpool development, progress and other plans
+logo: assets/epoch.png
+twitter:
+  card: summary
+  username: pool2win
