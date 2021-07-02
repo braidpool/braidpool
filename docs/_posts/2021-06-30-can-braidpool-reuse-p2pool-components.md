@@ -30,8 +30,8 @@ work together:
    participating miners.
 4. An anonymous hub that can't deny rewards payouts to miners.
 
-We believe all of these components are fundamentally different
-P2Pool's implementation.
+We believe all of these components are fundamentally different from
+P2Pool's implementation. The rest of the blog post elaborates on this.
 
 ## Peer to Peer Network and Finding Shares
 
@@ -46,9 +46,9 @@ In Braidpool, this is not the case. Each miner participating in
 Braidpool can choose the difficulty they mine at so that they generate
 a share at an interval of their choosing. Small miners will mine at
 low difficulty to generate a share every 10 seconds, while large
-miners will mine at a much larger difficulty to find a share every 5,
-10, or 20 seconds. Both the difficulty and the share period can be
-configured by the miner.
+miners will mine at a much larger difficulty to find a share every 10
+seconds. Both the difficulty and the share period can be configured by
+the miner.
 
 Since small miners are able to find shares at their chosen
 difficultly, they can claim rewards for all their PoW shares.

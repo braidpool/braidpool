@@ -5,10 +5,10 @@ image: assets/BC_Logo_.png
 ---
 
 Current mining pools can be forced into censoring transactions and
-their opaque accounting doesn't lend itself to building financial
-tools that can help miners manage their business risks. This post
-briefly discusses the limitations of centralised mining pools and
-provides motivation for building Braidpool.
+their opaque accounting limits their use for building financial tools
+that can help miners manage their business risks. This post briefly
+discusses the limitations of centralised mining pools and provides
+motivation to build Braidpool.
 
 ## Censorship Resistance
 
@@ -17,20 +17,19 @@ censor has a straight forward path to censor transactions.
 
 When a censor wants to censor some transactions, it reaches out to
 centralised pool operators and forces them to exclude censored
-transactions in their blocks.
+transactions from their blocks.
 
 One way to resist this censorship is for the transaction author to
-keep increasing the fees on the transaction until some miner somewhere
-picks up the transaction at the risk of being targeted by the
-censor. See [Censorship Resistance
+keep increasing the fees on the transaction until some miner picks up
+the transaction at the risk of being targeted by the censor. See
+[Censorship Resistance
 Property](https://github.com/libbitcoin/libbitcoin-system/wiki/Censorship-Resistance-Property).
 
 [Stratum v2](https://braiins.com/stratum-v2) allows miners to build
-their own blocks, which removes the ability for a censor to contact a
-centralised pool operator to censor transactions from their
-blocks. However, the censor can still force the pool operators to
-refuse making payouts to miners for blocks that include a censored
-transaction.
+their own blocks and therefore a censor can not directly ask a
+centralised pool operator to censor transactions. However, the censor
+can still force the pool operators to refuse payouts to miners for
+blocks that include a censored transaction.
 
 Braidpool is designed to resist such censorship attacks. Read the full
 [proposal](https://github.com/pool2win/braidpool/blob/main/proposal/proposal.pdf)
@@ -48,12 +47,14 @@ problem of trusting the pool operators to honestly report their
 hashrate at all times.
 
 With Braidpool the hashrate is published on a global peer to peer
-network and market makers can create futures contracts that can pay
-miners in exchange of proof of work published on Braidpool.
+network. The published record is the same verified record that
+Braidpool uses to compute rewards for miners. Market makers can use
+the same record to create futures contracts that pay miners in
+exchange of verified proof of work.
 
 Braidpool is also developing solutions for miners to deliver hashrate
-to market makers such that the hashrate can only be sent to one market
-maker. This is simply not possible on current centralised pools.
+to market makers such that the hashrate can only be traded once. Such
+tools are simply not possible to build on current centralised pools.
 
 ## Hashrate contracts
 
