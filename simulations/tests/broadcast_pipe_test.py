@@ -1,15 +1,17 @@
+import unittest
+
 import simpy
 
 from broadcast_pipe import BroadcastPipe
 
 
-class TestBroadcastPipe():
+class TestBroadcastPipe(unittest.TestCase):
 
     def receive_from_fifo_pipe(self, env, pipe):
         last_received = 0
         while True:
             msg = yield env.process(pipe.get())
-            assert msg == last_received + 1
+            self.assertEqual(msg, last_received + 1)
             last_received += 1
 
     def test_broadcast_pipe_is_fifo(self):
