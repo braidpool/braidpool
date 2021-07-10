@@ -5,7 +5,7 @@ import networkx as nx
 import simpy
 
 from config import config
-from node import Node
+from topology import Topology
 
 
 def run():
@@ -17,24 +17,14 @@ def run():
     random.seed(config['simulation']['random_seed'])
     env = simpy.Environment()
 
-    node_a = Node(name='a', env=env)
-    node_b = Node(name='b', env=env)
-    node_c = Node(name='c', env=env)
-
-    node_a.add_neighbour(node_b)
-    node_b.add_neighbour(node_a)
-
-    node_b.add_neighbour(node_c)
-    node_c.add_neighbour(node_b)
-
-    node_a.start()
-    node_b.start()
-    node_c.start()
+    network = Topology(env=env, num_nodes=3, num_neighbours=2)
+    for node in network.nodes:
+        node.start()
 
     logging.info('\nP2P broadcast communication\n')
     env.run(until=config['simulation']['run_time'])
 
-    for node in [node_a, node_b, node_c]:
+    for node in network.nodes:
         logging.info(f'At {node.name}')
         logging.debug(list(nx.lexicographical_topological_sort(node.dag)))
         logging.debug(node.dag.edges())
