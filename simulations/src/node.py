@@ -53,6 +53,10 @@ class Node:
         self.neighbours.append(neighbour)
         self.out_pipe.add_receiver(neighbour.in_pipe)
 
+    def add_neighbours(self, neighbours: list):
+        for neighbour in neighbours:
+            self.add_neighbour(neighbour)
+
     def get_next_share_time(self):
         period = int(config['shares']['period'])
         if config.getboolean('shares', 'randomise'):
