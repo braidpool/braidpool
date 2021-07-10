@@ -29,7 +29,10 @@ class Topology():
     def _setup_neighbours(self):
         for node in self.nodes:
             random_sample = random.sample(self.nodes, self.num_neighbours + 1)
-            random_sample.remove(node)
+            try:
+                random_sample.remove(node)
+            except ValueError:
+                pass
             node.add_neighbours(random_sample)
 
     def neighbours_of(self, node):

@@ -18,3 +18,9 @@ class TestTopology(unittest.TestCase):
                               ['0', '2'])
         self.assertCountEqual([n.name for n in result.nodes[2].neighbours],
                               ['0', '1'])
+
+    def test_large_node_topology(self):
+        env = simpy.Environment()
+        result = Topology(env=env, num_nodes=1000, num_neighbours=8)
+        self.assertEqual(result.num_nodes, 1000)
+        self.assertEqual(result.num_neighbours, 8)
