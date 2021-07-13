@@ -1,3 +1,4 @@
+import argparse
 import logging
 import random
 
@@ -8,7 +9,7 @@ from config import config
 from topology import Topology
 
 
-def run():
+def run(*, num_nodes, num_neighbours):
     # Setup and start the simulation
     logging.basicConfig(format='%(levelname)s:%(message)s',
                         level=config['logging']['level'])
@@ -18,13 +19,13 @@ def run():
     env = simpy.Environment()
 
     network = Topology(env=env, num_nodes=5, num_neighbours=4)
-    for node in network.nodes:
+    for node in network.nodes.values():
         node.start()
 
     logging.info('\nP2P broadcast communication\n')
     env.run(until=config['simulation']['run_time'])
 
-    for node in network.nodes:
+    for node in network.nodes.values():
         logging.info(f'At {node.name}')
         logging.debug(list(nx.lexicographical_topological_sort(node.dag)))
         logging.debug(node.dag.edges())
@@ -36,4 +37,8 @@ def run():
 
 
 if __name__ == '__main__':
-    run()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--num_nodes', '-n', type=int, help='Number of nodes')
+    parser.add_argument('--num_neighbours', '-d', type=int, help='Number of neighbors per node')
+    args = parser.parse_args()
+    run(num_nodes=args.num_nodes, num_neighbours=args.num_neighbours)
