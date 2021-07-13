@@ -17,7 +17,7 @@ def run():
     random.seed(config['simulation']['random_seed'])
     env = simpy.Environment()
 
-    network = Topology(env=env, num_nodes=3, num_neighbours=2)
+    network = Topology(env=env, num_nodes=5, num_neighbours=4)
     for node in network.nodes:
         node.start()
 

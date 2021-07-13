@@ -34,7 +34,7 @@ class Node:
         self.name = name
         self.out_pipe = BroadcastPipe(env=env, sender=self.name)
         self.in_pipe = simpy.Store(self.env)
-        self.neighbours = []
+        self.neighbours = set()
         self.dag = DAG()
         self.shares_sent = []
         self.shares_not_rewarded = {}
@@ -49,35 +49,41 @@ class Node:
         """
         return MESSAGE_PROCESSING_TIME
 
-    def add_neighbour(self, neighbour):
-        self.neighbours.append(neighbour)
+    def add_neighbour(self, neighbour, reversed=True):
+        self.neighbours.add(neighbour)
         self.out_pipe.add_receiver(neighbour.in_pipe)
+        if reversed and self not in neighbour.neighbours:
+            neighbour.add_neighbour(self)
 
-    def add_neighbours(self, neighbours: list):
+    def add_neighbours(self, neighbours: list, reversed=True):
         for neighbour in neighbours:
-            self.add_neighbour(neighbour)
+            self.add_neighbour(neighbour, reversed)
 
     def get_next_share_time(self):
-        period = int(config['shares']['period'])
-        if config.getboolean('shares', 'randomise'):
+        period = int(config["shares"]["period"])
+        if config.getboolean("shares", "randomise"):
             return random.randint(0, period - 1)
         else:
             return period
 
     def generate_shares(self):
         """Process to generate shares at random intervals."""
-        block_probability = float(config['shares']['block_probability'])
+        block_probability = float(config["shares"]["block_probability"])
         while True:
             # wait for next share
-            limit = int(config['shares']['limit'])
+            limit = int(config["shares"]["limit"])
             if limit != -1 and self.seq_no >= limit:
-                yield self.env.timeout(int(config['simulation']['run_time']))
+                yield self.env.timeout(int(config["simulation"]["run_time"]))
             else:
                 yield self.env.timeout(self.get_next_share_time())
 
-            share = Share(source=self.name, heads=self.heads(), env=self.env,
-                          seq_no=self.seq_no,
-                          is_block=random.random() < block_probability)
+            share = Share(
+                source=self.name,
+                heads=self.heads(),
+                env=self.env,
+                seq_no=self.seq_no,
+                is_block=random.random() < block_probability,
+            )
             self.seq_no += 1
             msg = ShareMessage(share=share)
             self.add_to_dag(msg.share.hash, msg.share.heads)
@@ -86,15 +92,15 @@ class Node:
             self.handle_block_found(msg)
 
     def send(self, msg, forward=False):
-        _type = 's' if not forward else 'f'
-        logging.info(f'{_type} e: {self.env.now} n: {self.name} {msg}')
+        _type = "s" if not forward else "f"
+        logging.info(f"{_type} e: {self.env.now} n: {self.name} {msg}")
         self.out_pipe.put(msg)
 
     def receive(self):
         """A process which consumes messages."""
         while True:
             msg = yield self.in_pipe.get()
-            logging.info(f'r e: {self.env.now} n: {self.name} {msg}')
+            logging.info(f"r e: {self.env.now} n: {self.name} {msg}")
             self.env.process(self.handle_receive(msg))
 
     def forward(self, msg):
@@ -124,12 +130,11 @@ class Node:
     def handle_block_found(self, msg):
         # find delta between latest share this node already sent and
         # the last one referenced in the receieved share.
-        not_rewarded = self.dag.find_not_reachable(self.shares_sent,
-                                                   msg.share.hash)
+        not_rewarded = self.dag.find_not_reachable(self.shares_sent, msg.share.hash)
         if not_rewarded:
             self.shares_not_rewarded[msg.share.hash] = not_rewarded
 
     def start(self):
-        logging.info(f'{self.name} starting...')
+        logging.info(f"{self.name} starting...")
         self.env.process(self.receive())
         self.env.process(self.generate_shares())
