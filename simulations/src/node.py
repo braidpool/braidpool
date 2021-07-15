@@ -14,7 +14,6 @@ Based on:
 https://simpy.readthedocs.io/en/latest/examples/process_communication.html
 """
 import logging
-import random
 
 import simpy
 
@@ -23,6 +22,7 @@ from config import config
 from dag import DAG
 from message import ShareMessage
 from share import Share
+from simulation import get_random
 
 MESSAGE_PROCESSING_TIME = 10
 
@@ -38,6 +38,7 @@ class Node:
         self.dag = DAG()
         self.shares_sent = []
         self.shares_not_rewarded = {}
+        self.num_blocks = 0
 
     def heads(self):
         return self.dag.heads()
@@ -62,7 +63,7 @@ class Node:
     def get_next_share_time(self):
         period = int(config["shares"]["period"])
         if config.getboolean("shares", "randomise"):
-            return random.randint(0, period - 1)
+            return get_random(period=period)
         else:
             return period
 
@@ -82,9 +83,11 @@ class Node:
                 heads=self.heads(),
                 env=self.env,
                 seq_no=self.seq_no,
-                is_block=random.random() < block_probability,
+                is_block=get_random(period=1) < block_probability,
             )
             self.seq_no += 1
+            if share.is_block:
+                self.num_blocks += 1
             msg = ShareMessage(share=share)
             self.add_to_dag(msg.share.hash, msg.share.heads)
             self.send(msg)
@@ -93,14 +96,14 @@ class Node:
 
     def send(self, msg, forward=False):
         _type = "s" if not forward else "f"
-        logging.info(f"{_type} e: {self.env.now} n: {self.name} {msg}")
+        logging.debug(f"{_type} e: {self.env.now} n: {self.name} {msg}")
         self.out_pipe.put(msg)
 
     def receive(self):
         """A process which consumes messages."""
         while True:
             msg = yield self.in_pipe.get()
-            logging.info(f"r e: {self.env.now} n: {self.name} {msg}")
+            logging.debug(f"r e: {self.env.now} n: {self.name} {msg}")
             self.env.process(self.handle_receive(msg))
 
     def forward(self, msg):
