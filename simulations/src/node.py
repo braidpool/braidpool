@@ -105,14 +105,13 @@ class Node:
         self.dag.add_edges(sources=heads, target=hash)
 
     def handle_receive(self, msg):
-        while True:
-            yield self.env.timeout(self.message_processing_time(msg))
-            msg_in_dag = self.dag.has(msg.share.hash)
-            if not msg_in_dag:
-                if msg.should_forward():
-                    self.forward(msg)
-                self.add_to_dag(msg.share.hash, msg.share.heads)
-                self.handle_received_block_found(msg)
+        yield self.env.timeout(int(config["simulation"]["message_processing_time"]))
+        msg_in_dag = self.dag.has(msg.share.hash)
+        if not msg_in_dag:
+            if msg.should_forward():
+                self.forward(msg)
+            self.add_to_dag(msg.share.hash, msg.share.heads)
+            self.handle_received_block_found(msg)
 
     def handle_received_block_found(self, msg):
         if not msg.share.is_block:
