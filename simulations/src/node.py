@@ -24,8 +24,6 @@ from message import ShareMessage
 from share import Share
 from simulation import get_random
 
-MESSAGE_PROCESSING_TIME = 10
-
 
 class Node:
     def __init__(self, *, env, name):
@@ -42,13 +40,6 @@ class Node:
 
     def heads(self):
         return self.dag.heads()
-
-    def message_processing_time(self, msg):
-        """
-        Return time taken to process a receieved message
-        For now return constant time.
-        """
-        return MESSAGE_PROCESSING_TIME
 
     def add_neighbour(self, neighbour, reversed=True):
         self.neighbours.add(neighbour)
@@ -96,14 +87,14 @@ class Node:
 
     def send(self, msg, forward=False):
         _type = "s" if not forward else "f"
-        logging.debug(f"{_type} e: {self.env.now} n: {self.name} {msg}")
+        logging.info(f"{int(self.env.now)} {_type} n: {self.name} {msg}")
         self.out_pipe.put(msg)
 
     def receive(self):
         """A process which consumes messages."""
         while True:
             msg = yield self.in_pipe.get()
-            logging.debug(f"r e: {self.env.now} n: {self.name} {msg}")
+            logging.info(f"{int(self.env.now)} r n: {self.name} {msg}")
             self.env.process(self.handle_receive(msg))
 
     def forward(self, msg):

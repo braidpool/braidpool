@@ -10,9 +10,12 @@ from topology import Topology
 
 
 def run(*, num_nodes, num_neighbours):
-    # Setup and start the simulation
+    run_time = int(config["simulation"]["run_time"])
+
     logging.basicConfig(
-        format="%(levelname)s:%(message)s", level=config["logging"]["level"]
+        format="%(message)s",
+        level=config["logging"]["level"],
+        filename=f"logs/{num_nodes}_{num_neighbours}_{run_time}.log",
     )
 
     logging.info("Process communication")
@@ -24,7 +27,7 @@ def run(*, num_nodes, num_neighbours):
         node.start()
 
     logging.info("\nP2P broadcast communication\n")
-    env.run(until=config["simulation"]["run_time"])
+    env.run(until=run_time)
 
     for node in network.nodes.values():
         logging.debug(list(nx.lexicographical_topological_sort(node.dag)))
@@ -33,12 +36,17 @@ def run(*, num_nodes, num_neighbours):
             g = nx.nx_agraph.to_agraph(node.dag)
             g.layout()
             g.draw(f"/tmp/node_{node.name}.png", prog="dot")
-        logging.info(
-            f"node: {node.name} sent: {len(node.shares_sent)} ({node.num_blocks}), "
-            f"not rewarded: {len(node.shares_not_rewarded)}"
-        )
         if node.shares_sent:
-            logging.info(f" %age not rewarded {len(node.shares_not_rewarded)/len(node.shares_sent) * 100}")
+            logging.info(
+                f"node: {node.name} sent: {len(node.shares_sent)} ({node.num_blocks}), "
+                f"not rewarded: {len(node.shares_not_rewarded)}"
+                f" %age not rewarded {len(node.shares_not_rewarded)/len(node.shares_sent) * 100}"
+            )
+        else:
+            logging.info(
+                f"node: {node.name} sent: {len(node.shares_sent)} ({node.num_blocks}), "
+                f"not rewarded: {len(node.shares_not_rewarded)}"
+            )
         logging.info(node.shares_not_rewarded)
 
 

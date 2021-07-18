@@ -12,3 +12,4 @@ channels/build
 venv
 **/__pycache__
 **/.pytest_cache
+simulations/logs/*

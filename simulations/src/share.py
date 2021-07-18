@@ -21,10 +21,10 @@ class Share:
                       encode()).hexdigest()
 
     def get_simple_hash(self):
-        return f'{self.source} {self.seq_no}'
+        return f'{self.source}-{self.seq_no}'
 
     def __repr__(self):
         short_heads = [head[0:5] for head in self.heads]
         is_block = 1 if self.is_block else 0
-        return (f't: {self.timestamp} s: {self.source} hd: {short_heads} '
+        return (f't: {int(self.timestamp)} s: {self.source} hd: {short_heads} '
                 f'b: {is_block} h: {self.hash[0:5]}')
