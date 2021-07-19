@@ -16,6 +16,7 @@ def run(*, num_nodes, num_neighbours):
         format="%(message)s",
         level=config["logging"]["level"],
         filename=f"logs/{num_nodes}_{num_neighbours}_{run_time}.log",
+        filemode='w'
     )
 
     logging.info("Process communication")
