@@ -1,3 +1,5 @@
+import copy
+
 from config import config
 
 
@@ -10,6 +12,9 @@ class Message:
 
     def __repr__(self):
         pass
+
+    def copy(self):
+        return copy.copy(self)
 
 
 class ShareMessage(Message):

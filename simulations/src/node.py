@@ -95,7 +95,7 @@ class Node:
         while True:
             msg = yield self.in_pipe.get()
             logging.info(f"{int(self.env.now)} r n: {self.name} {msg}")
-            self.env.process(self.handle_receive(msg))
+            self.env.process(self.handle_receive(msg.copy()))
 
     def forward(self, msg):
         msg.decrement_count()
