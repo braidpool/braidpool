@@ -42,16 +42,28 @@ class ReceiveLatency:
                             self.latencies[mid][receiver] = int(received_at) - self.sent_at[mid]
 
     def get_average_latencies(self):
-        return {m: mean(list(latencies.values())) for m, latencies in self.latencies.items()}
+        return {mid: mean(list(latencies.values())) for mid, latencies in self.latencies.items()}
 
     def get_average_latency(self):
         return mean(list(self.get_average_latencies().values()))
+
+    def get_dissemenation(self):
+        return {mid: len(latencies.keys()) for mid, latencies in self.latencies.items()}
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--log_file", "-f", type=str, help="Log file")
+    parser.add_argument("--print_latencies", "-l", action='store_true')
+    parser.add_argument("--print_average_latency", "-a", action='store_true')
+    parser.add_argument("--print_receive_count", "-r", action='store_true')
     args = parser.parse_args()
     processor = ReceiveLatency()
     processor.run(args.log_file)
-    print(processor.get_average_latency())
+    if args.print_latencies:
+        print(processor.get_average_latencies())
+    if args.print_average_latency:
+        print(processor.get_average_latency())
+    if args.print_receive_count:
+        for mid, receiver_count in processor.get_dissemenation().items():
+            print(mid, receiver_count)
