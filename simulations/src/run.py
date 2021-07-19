@@ -6,7 +6,22 @@ import networkx as nx
 import simpy
 
 from config import config
+from node import Node
 from topology import Topology
+
+
+def setup_small_test_toplogy(env):
+    node_1, node_2, node_3, node_4 = Node(name=1, env=env), Node(name=2, env=env), Node(name=3, env=env), Node(name=4, env=env)
+    node_1.add_neighbour(node_2)
+    node_2.add_neighbour(node_3)
+    node_2.add_neighbour(node_4)
+
+    node_1.start()
+    node_2.start()
+    node_3.start()
+    node_4.start()
+
+    return [node_1, node_2, node_3, node_4]
 
 
 def run(*, num_nodes, num_neighbours):
@@ -26,11 +41,14 @@ def run(*, num_nodes, num_neighbours):
     network = Topology(env=env, num_nodes=num_nodes, num_neighbours=num_neighbours)
     for node in network.nodes.values():
         node.start()
+    nodes = network.nodes.values()
+
+    # nodes = setup_small_test_toplogy(env)
 
     logging.info("\nP2P broadcast communication\n")
     env.run(until=run_time)
 
-    for node in network.nodes.values():
+    for node in nodes:
         logging.debug(list(nx.lexicographical_topological_sort(node.dag)))
         logging.debug(node.dag.edges())
         if config.getboolean("simulation", "save_dot"):
