@@ -85,9 +85,15 @@ class Node:
             self.shares_sent.append(msg.share.hash)
             self.handle_block_found(msg)
 
-    def send(self, msg, forward=False):
+    def _log_send(self, msg, forward):
         _type = "s" if not forward else "f"
-        logging.info(f"{int(self.env.now)} {_type} n: {self.name} {msg}")
+        if _type == "s":
+            logging.info(f"{int(self.env.now)} {_type} n: {self.name} {msg}")
+        else:
+            logging.debug(f"{int(self.env.now)} {_type} n: {self.name} {msg}")
+
+    def send(self, msg, forward=False):
+        self._log_send(msg, forward)
         self.out_pipe.put(msg)
 
     def receive(self):
