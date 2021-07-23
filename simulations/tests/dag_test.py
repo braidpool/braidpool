@@ -44,3 +44,13 @@ class TestDAG(unittest.TestCase):
         # list
         self.assertCountEqual(dag.find_not_reachable(['d', 'e', 'b', 'c'], 'a'),
                               [])
+
+    def test_prune_dag_should_remove_nodes_preceding_given_node(self):
+        dag = DAG()
+        dag.add_edges(sources=['b', 'c'], target='a')
+        dag.add_edges(sources=['a'], target='d')
+        dag.add_edges(sources=['d'], target='e')
+        self.assertCountEqual(['c', 'b', 'a', 'd', 'e'], dag.to_string())
+
+        dag.prune_upto('d')
+        self.assertCountEqual(['d', 'e'], dag.to_string())
