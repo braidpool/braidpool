@@ -39,3 +39,10 @@ class DAG(nx.DiGraph):
 
     def to_string(self):
         return list(nx.topological_sort(self))
+
+    def prune_upto(self, upto):
+        '''Deletes all nodes from graph that precede upto. Does not remove upto'''
+        for node in nx.topological_sort(self):
+            if node == upto:
+                return
+            self.remove_node(node)

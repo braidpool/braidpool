@@ -11,7 +11,12 @@ from topology import Topology
 
 
 def setup_small_test_toplogy(env):
-    node_1, node_2, node_3, node_4 = Node(name=1, env=env), Node(name=2, env=env), Node(name=3, env=env), Node(name=4, env=env)
+    node_1, node_2, node_3, node_4 = (
+        Node(name=1, env=env),
+        Node(name=2, env=env),
+        Node(name=3, env=env),
+        Node(name=4, env=env),
+    )
     node_1.add_neighbour(node_2)
     node_2.add_neighbour(node_3)
     node_2.add_neighbour(node_4)
@@ -31,7 +36,7 @@ def run(*, num_nodes, num_neighbours):
         format="%(message)s",
         level=config["logging"]["level"],
         filename=f"logs/{num_nodes}_{num_neighbours}_{run_time}.log",
-        filemode='w'
+        filemode="w",
     )
 
     logging.info("Process communication")
@@ -49,23 +54,17 @@ def run(*, num_nodes, num_neighbours):
     env.run(until=run_time)
 
     for node in nodes:
-        logging.debug(list(nx.lexicographical_topological_sort(node.dag)))
-        logging.debug(node.dag.edges())
+        # logging.debug(list(nx.lexicographical_topological_sort(node.dag)))
+        # logging.debug(node.dag.edges())
         if config.getboolean("simulation", "save_dot"):
             g = nx.nx_agraph.to_agraph(node.dag)
             g.layout()
             g.draw(f"/tmp/node_{node.name}.png", prog="dot")
-        if node.shares_sent:
-            logging.info(
-                f"node: {node.name} sent: {len(node.shares_sent)} ({node.num_blocks}), "
-                f"not rewarded: {len(node.shares_not_rewarded)}"
-                f" %age not rewarded {len(node.shares_not_rewarded)/len(node.shares_sent) * 100}"
-            )
-        else:
-            logging.info(
-                f"node: {node.name} sent: {len(node.shares_sent)} ({node.num_blocks}), "
-                f"not rewarded: {len(node.shares_not_rewarded)}"
-            )
+        logging.info(
+            f"node: {node.name} sent: {node.num_shares_sent} ({node.num_blocks}), "
+            f"not rewarded: {len(node.shares_not_rewarded)}"
+            f" %age not rewarded {(len(node.shares_not_rewarded)/node.num_shares_sent) * 100}"
+        )
         logging.info(node.shares_not_rewarded)
 
 

@@ -13,6 +13,7 @@
 Based on:
 https://simpy.readthedocs.io/en/latest/examples/process_communication.html
 """
+import gc
 import logging
 
 import simpy
@@ -34,7 +35,11 @@ class Node:
         self.in_pipe = simpy.Store(self.env)
         self.neighbours = set()
         self.dag = DAG()
+        # required to help prune dag for large simulations
+        self.blocks_received = []
         self.shares_sent = []
+        # Track num_shares_sent separately as shares_sent is pruned when block is received
+        self.num_shares_sent = 0
         self.shares_not_rewarded = {}
         self.num_blocks = 0
 
@@ -83,6 +88,7 @@ class Node:
             self.add_to_dag(msg.share.hash, msg.share.heads)
             self.send(msg)
             self.shares_sent.append(msg.share.hash)
+            self.num_shares_sent += 1
             self.handle_block_found(msg)
 
     def _log_send(self, msg, forward):
@@ -132,6 +138,19 @@ class Node:
         not_rewarded = self.dag.find_not_reachable(self.shares_sent, msg.share.hash)
         if not_rewarded:
             self.shares_not_rewarded[msg.share.hash] = not_rewarded
+        self.blocks_received.append(msg.share.hash)
+        self._prune_dag()
+
+    def _prune_dag(self):
+        """Prune dag and blocks_received up to last two blocks received"""
+        if len(self.blocks_received) <= 2:
+            return
+        prune_upto = self.blocks_received[-2:][0]
+        self.dag.prune_upto(prune_upto)
+        del self.blocks_received[:-2]
+        self.shares_sent.clear()
+        # Finally collect garbage of all the string we don't need
+        gc.collect()
 
     def start(self):
         logging.info(f"{self.name} starting...")
