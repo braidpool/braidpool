@@ -13,7 +13,6 @@
 Based on:
 https://simpy.readthedocs.io/en/latest/examples/process_communication.html
 """
-import gc
 import logging
 
 import simpy
@@ -27,6 +26,8 @@ from simulation import get_random
 
 
 class Node:
+    prune_depth = 2
+
     def __init__(self, *, env, name):
         self.seq_no = 0
         self.env = env
@@ -139,18 +140,22 @@ class Node:
         if not_rewarded:
             self.shares_not_rewarded[msg.share.hash] = not_rewarded
         self.blocks_received.append(msg.share.hash)
-        self._prune_dag()
+        self._prune()
 
-    def _prune_dag(self):
-        """Prune dag and blocks_received up to last two blocks received"""
-        if len(self.blocks_received) <= 2:
+    def _prune(self):
+        """Prune dag,  blocks_received and shares_sent up to last two blocks received"""
+        if len(self.blocks_received) <= self.prune_depth:
             return
-        prune_upto = self.blocks_received[-2:][0]
-        self.dag.prune_upto(prune_upto)
-        del self.blocks_received[:-2]
-        self.shares_sent.clear()
-        # Finally collect garbage of all the string we don't need
-        gc.collect()
+        prune_upto = self.blocks_received[-self.prune_depth :][0]
+        pruned_hashes = self.dag.prune_upto(prune_upto)
+        del self.blocks_received[: -self.prune_depth]
+        self._prune_shares_sent(pruned_hashes)
+
+    def _prune_shares_sent(self, pruned_hashes):
+        # Possible improvement - the implementation here goes over shares_sent twice.
+        for hash in pruned_hashes:
+            if hash in self.shares_sent:
+                self.shares_sent.remove(hash)
 
     def start(self):
         logging.info(f"{self.name} starting...")
