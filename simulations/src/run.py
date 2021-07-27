@@ -60,11 +60,17 @@ def run(*, num_nodes, num_neighbours):
             g = nx.nx_agraph.to_agraph(node.dag)
             g.layout()
             g.draw(f"/tmp/node_{node.name}.png", prog="dot")
-        logging.info(
-            f"node: {node.name} sent: {node.num_shares_sent} ({node.num_blocks}), "
-            f"not rewarded: {len(node.shares_not_rewarded)}"
-            f" %age not rewarded {(len(node.shares_not_rewarded)/node.num_shares_sent) * 100}"
-        )
+        if node.num_shares_sent:
+            logging.info(
+                f"node: {node.name} sent: {node.num_shares_sent} ({node.num_blocks}), "
+                f"not rewarded: {len(node.shares_not_rewarded)}"
+                f" %age not rewarded {(len(node.shares_not_rewarded)/node.num_shares_sent) * 100}"
+            )
+        else:
+            logging.info(
+                f"node: {node.name} sent: {node.num_shares_sent} ({node.num_blocks}), "
+                f"not rewarded: {len(node.shares_not_rewarded)}"
+            )
         logging.info(node.shares_not_rewarded)
 
 

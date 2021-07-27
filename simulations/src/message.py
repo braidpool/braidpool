@@ -18,10 +18,12 @@ class Message:
 
 
 class ShareMessage(Message):
+    forward_count = int(config["p2p"]["forward_count"])
+
     def __init__(self, *, share):
         super().__init__()
         self.share = share
-        self.counter = int(config['p2p']['forward_count'])
+        self.counter = self.forward_count
 
     def decrement_count(self):
         self.counter -= 1
@@ -30,7 +32,12 @@ class ShareMessage(Message):
         return self.counter > 0
 
     def __repr__(self):
-        return f'{self.share} c: {self.counter}'
+        return f"{self.share} c: {self.counter}"
+
+    def copy(self):
+        copied = ShareMessage(share=self.share)
+        copied.counter = self.counter
+        return copied
 
 
 class NackMessage(Message):
@@ -47,4 +54,4 @@ class NackMessage(Message):
         return False
 
     def __repr__(self):
-        return f'{self.hash}'
+        return f"{self.hash}"

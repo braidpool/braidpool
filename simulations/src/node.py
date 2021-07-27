@@ -27,6 +27,13 @@ from simulation import get_random
 
 class Node:
     prune_depth = 2
+    # Set configs as otherwise configparses takes too long to 'get' them again
+    message_processing_time = int(config["simulation"]["message_processing_time"])
+    share_period = int(config["shares"]["period"])
+    randomise_share_period = config.getboolean("shares", "randomise")
+    block_probability = float(config["shares"]["block_probability"])
+    shares_limit = int(config["shares"]["limit"])
+    run_time = int(config["simulation"]["run_time"])
 
     def __init__(self, *, env, name):
         self.seq_no = 0
@@ -58,20 +65,20 @@ class Node:
             self.add_neighbour(neighbour, reversed)
 
     def get_next_share_time(self):
-        period = int(config["shares"]["period"])
-        if config.getboolean("shares", "randomise"):
+        period = self.share_period
+        if self.randomise_share_period:
             return get_random(period=period)
         else:
             return period
 
     def generate_shares(self):
         """Process to generate shares at random intervals."""
-        block_probability = float(config["shares"]["block_probability"])
+        block_probability = self.block_probability
         while True:
             # wait for next share
-            limit = int(config["shares"]["limit"])
+            limit = self.shares_limit
             if limit != -1 and self.seq_no >= limit:
-                yield self.env.timeout(int(config["simulation"]["run_time"]))
+                yield self.env.timeout(self.run_time)
             else:
                 yield self.env.timeout(self.get_next_share_time())
 
@@ -118,7 +125,7 @@ class Node:
         self.dag.add_edges(sources=heads, target=hash)
 
     def handle_receive(self, msg):
-        yield self.env.timeout(int(config["simulation"]["message_processing_time"]))
+        yield self.env.timeout(self.message_processing_time)
         msg_in_dag = self.dag.has(msg.share.hash)
         if not msg_in_dag:
             if msg.should_forward():
