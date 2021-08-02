@@ -287,7 +287,11 @@ the rules used to determine the rewards distribution between the
 miners.
 
 We use a modified version of PPLNS (Pay Per Last N Shares) to
-calculate the reward distribution between miners.
+calculate the reward distribution between miners. Variations of PPLNS
+have been shown to be most resistent to pool hopping and we want small
+miners to benefit from large miners and not be at the mercy of large
+miners using pool hopping to hurt the small
+miners~\cite{rosenfeld2011analysis}.
 
 \begin{enumerate}
 \item Traverse the DAG in reverse order from the \textsc{share} that
