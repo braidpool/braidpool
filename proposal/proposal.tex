@@ -10,7 +10,7 @@
 \usepackage{multirow}
 
 
-\title{Decentralised Mining Pool for Bitcoin (Draft 0.2)}
+\title{Decentralised Mining Pool for Bitcoin (Draft 0.3)}
 \author{}
 \date{}
 
@@ -37,9 +37,8 @@
   compute rewards for miners. These mining rewards are paid out by an
   anonymous hub communicating with the miners using Tor's hidden
   services. Using the payment channels construction, neither the hub
-  nor the miners can cheat. We show that our approach is incentives
-  compatible and describe how the hub maintains its anonymity to
-  resist DDoS attacks.
+  nor the miners can cheat. Finally we describe how the hub maintains
+  its anonymity to resist DDoS attacks.
 \end{abstract}
    
 \section{Motivation}
@@ -97,14 +96,14 @@ DAG, such that the bitcoin consensus rules are not violated.
 Braiding the blockchain proposal~\cite{mcelrath:variance} shows how,
 smaller more frequent blocks can form a DAG of blocks, called a braid,
 with each block pointing to one or more one previous blocks. Blocks in
-the braid are called beads and can have transactions repeated in
+the braid are called beads and transactions can be repeated in
 different beads. The proposal describes how duplicate and double spend
 transactions can be resolved to reach a decision on the state of the
 ledger at any cut of the DAG.\@
 
 In the proposal, miners earn a coin native to the braid blockchain,
 called TeraHash Coin. This coin can then be swapped for BTC. The
-proposal doesn't yet define how this native coin will be swapped for
+proposal doesn't yet define how TeraHash Coin will be swapped for
 BTC. Some of the suggestions under discussion include using atomic
 swaps, burning the TeraHash Coin, or using financial instruments like
 futures of the bitcoin's hash rate to swap TeraHash Coins for BTC.\
@@ -130,19 +129,13 @@ both miners and the hub can not cheat and how the funders of the hub
 earns rewards for funding the payment channels.
 
 The two ideas of using a DAG and payment channels for rewards
-payouts together present a potential path for rebooting P2Pool. In the
-rest of the paper we present a modified version of TeraHash Coin and
-show how the various components work together.
+payouts together present a potential path for rebooting P2Pool.
 
 \section{Decentralised Bitcoin Mining}
 
-In this section we present a modified version of TeraHash Coin. We
-propose building a DAG of miner's shares and use that to determine the
-payout distribution between miners. We then show that miners are
-rewarded for shares that they broadcast to the p2p network in a timely
-manner.
-
-\subsection{A DAG of Shares}
+In this section we describe how a DAG of miner's shares is maintained
+by each miner and how the same is used to determine the payout
+distribution between miners.
 
 \begin{figure}
   \begin{center}
@@ -152,17 +145,22 @@ manner.
     \end{center}
 \end{figure}
 
-Each miner builds their own block, selecting transactions according to
-their own criteria. We call this block the \textsc{work} and it is
+\subsection{Work and Share}
+
+Each miner can build their own block, selecting transactions according
+to their own criteria. We call this block the \textsc{work} and it is
 derived from the results of the \verb|getblocktemplate| bitcoin API
-call. The \textsc{work} definition leaves out the merkle root,
-timestamp and the difficulty. Instead it includes the coinbase
-transaction so that other pool participants can verify that the
-\textsc{work} definition includes the correct payout
-scripts. Table~\ref{table:work} shows the \textsc{work} built by
-miners and then broadcast to the entire p2p network. The transactions
-field is compressed using the same techniques as specified in the
-compact block specifications~\cite{compact-blocks}.
+call. Miners who don't want to run a bitcoin will select another
+miner's block and use it as their \textsc{work}.
+
+The \textsc{work} definition leaves out the merkle root and the
+timestamp. Instead it includes the coinbase transaction so that other
+pool participants can verify that the \textsc{work} definition
+includes the correct payout scripts. Table~\ref{table:work} shows the
+\textsc{work} built by miners and then broadcast to the entire p2p
+network. The transactions field is compressed using the same
+techniques as specified in the compact block
+specifications~\cite{compact-blocks}.
 
 \begin{table}
   \centering
@@ -173,14 +171,15 @@ compact block specifications~\cite{compact-blocks}.
     \hline
     Version & Bitcoin block's version field & 4\\
     Previous block & Hash of the previous bitcoin block & 32 \\
+    Difficulty & Current bitcoin difficulty & 4 \\
     Coinbase & Coinbase for payment channel setup, see Section~\ref{ref:channels} & 38 \\
     Transactions & Transaction ids included in the block & variable \\
     \textsc{Work} hash & Hash of the above fields & 32 \\
     \hline
   \end{tabular}
   \caption{The structure of \textsc{work} broadcast by
-    miners. Timestamp, difficult and nonce are left for the
-    \textsc{share} to specify }\label{table:work}
+    miners. Timestamp and nonce are left for the \textsc{share} to
+    specify }\label{table:work}
 \end{table}
 
 The miner then starts mining on \textsc{work} and generates
@@ -191,7 +190,10 @@ created by a miner can result in multiple \textsc{share}s and both the
 network. When a miner receives a \textsc{work} from other miners it
 validates this \textsc{work} using a local bitcoin node. When a
 \textsc{share} is received by a miner it is validated against the
-\textsc{work} referenced by the \textsc{share}.
+\textsc{work} referenced by the
+\textsc{share}. Table~\ref{table:share} shows the structure of
+\textsc{share}s broadcast by the miner.
+
 
 \begin{table}
   \centering
@@ -204,73 +206,51 @@ validates this \textsc{work} using a local bitcoin node. When a
     Nonce and extra nonce & Nonces used & $4+8$ \\
     Merkle root & New merkle root to include extra nonce & 32 \\
     Timestamp & UNIX timestamp used & 4 \\
-    Difficulty & Claimed difficulty miner is using, if different from last share. & 4 \\
     Public keys & Two pubkeys used by the hub to for channel management & 66 \\
     $list<$ \textsc{share} hashes $>$ & List of share hashes referenced by this \textsc{share} & $N \times 32$ \\
     Tor Service & PubKey for onion service address, see Section~\ref{sec:hub-miner-communication}. & 32 \\
     \hline
-    Total size & \multicolumn{2}{r}{$138 + N \times 32$} \\
+    Total size & \multicolumn{2}{r}{$134 + N \times 32$} \\
     \hline
   \end{tabular}
   \caption{The structure of \textsc{share}s broadcast by miners. Size
-    of the \textsc{share} is dependent on the size of the
-    network.}\label{table:share}
+    of the \textsc{share} is dependent on the size of the network. $N$
+    above it the number of shares refererenced by a share  }\label{table:share}
 \end{table}
 
+Each \textsc{share} includes the hash of the \textsc{work} the miner
+is working on, along with the public keys that the hub uses to setup
+payment channels, and finally the pubic key for the Tor hidden service
+run by the miner. The Tor hidden service is used for facilitating
+anonymous communication between the hub and the miners as described
+later in Section~\ref{sec:hub-miner-communication}.
 
-Table~\ref{table:share} shows the structure of \textsc{share}s
-broadcast by the miner. Each \textsc{share} includes the hash of the
-\textsc{work} the miner is working on, along with the current target
-difficulty used by the miner, the public keys that the hub uses to
-setup payment channels, and finally the pubic key for the Tor hidden
-service run by the miner. The Tor hidden service is used for
-facilitating anonymous communication between the hub and the miners as
-described later in Section~\ref{sec:hub-miner-communication}.
+\subsection{DAG of shares}
 
 Miners broadcast their \textsc{share}s to the network using a gossip
 protocol and all the miners maintain the DAG of \textsc{share}s as a
 replicated database. Each node on the DAG is a \textsc{share}
 generated by a miner and all miners track the most recently received
-\textsc{share} from all other miners. Miners include a hash pointer to
-the most recent known \textsc{share}s from all miners in its own
-\textsc{share}. This leads to all edges in the DAG pointing from a
-\textsc{share} to all the \textsc{share}s known by the miner when it
-started mining the \textsc{work}. This construction of the DAG ensures
-that the DAG is eventually consistent on all p2p participants. Since
-one of the shares eventually satisfies the then bitcoin difficulty
-requirement the DAG also includes valid bitcoin blocks.
-
-The DAG builds a ``found before'' relationship between shares which
-enables the reward calculation presented in
-Section~\ref{sec:rewards}. Using the DAG results in the size of
-\textsc{share} increasing linearly with the size of the network and
-will lead to an upper bound on the size of the pool. With
-$N = 10,000$, the size of the share is $320kB$, which is small enough
-for fast propagation across a $10,000$ node peer to peer
-network~\cite{information-propagation}. However, scaling by another
-order of magnitude will require optimisations to the \textsc{share}
-structure.
+\textsc{share} from all other miners. Miners include hash pointers to
+the root nodes of the DAG, ensuring that the DAG is eventually
+consistent on all miner nodes. The DAG therefore builds a ``found
+before'' relationship between shares which enables the reward
+calculation presented in Section~\ref{sec:rewards}.
 
 \begin{figure}
-  \includegraphics[width=1.0\textwidth]{epoch}
-  \caption{A epoch is defined as all the \textsc{share}s mined between two
-    bitcoin blocks. Here all the \textsc{share}s between $l$ and $r$ are in
-    the same $epoch$.}\label{fig:epoch}
+  \begin{center}
+    \includegraphics[width=0.75\textwidth]{dag}
+    \caption{\textsc{share}s mined between two bitcoin blocks}\label{fig:dag}
+  \end{center}
 \end{figure}
 
-Each \textsc{share} that matches or exceeds the current bitcoin
-difficulty starts a new $epoch$ for the p2p mining
-pool. Figure~\ref{fig:epoch} shows a DAG with three miners
-participating in the pool, $a$, $b$ and $c$. The nodes in the DAG are
-the shares generated by the three miners. Nodes $l$ and $r$ are two
-valid bitcoin blocks that have been mined such that they meet
-bitcoin's difficulty at the time, and all the blocks between $l$ and
-$r$ are in the same $epoch$. All shares in an epoch have a path from
-$l$ to itself and a path from itself to $r$. Any shares that don't
-have a path from $l$ and to $r$ are not considered to be part of the
-$epoch$.
+Figure~\ref{fig:dag} shows a DAG with three miners participating
+in the pool, $a$, $b$ and $c$. The nodes in the DAG are the shares
+generated by the three miners. Nodes $l$ and $r$ are two valid bitcoin
+blocks that have been mined such that they meet bitcoin's difficulty
+at the time.
 
-\subsubsection{Miner Defined Difficulty}\label{sec:share-difficulty}
+\subsection{Miner Defined Difficulty}\label{sec:share-difficulty}
 
 The nodes in the DAG are \textsc{share}s mined at difficulty level
 selected by the miner. This difficulty can be dynamically changed by
@@ -282,44 +262,70 @@ difficulty shares to match the share rate of the larger miners in the
 pool. Even if smaller miners earn a smaller reward, they will earn
 these rewards for all their work.
 
-In the next section we then describe how all peers compute their fair
-share of profits using the DAG of shares. We then show how our reward
-computation algorithm is incentives
-compatible~\cite{incentives-compatible}.
+Since miners can mine shares at their chosen difficulty we require
+that the miners include the difficulty in the extra nonce they
+use. This doesn't require miners to regenerate the blockhash each time
+they change the difficulty. Out initial suggestion is that miners use
+10 bits from the extra nonce field to include the multiplier they are
+using between the block difficulty and the share difficulty. If the
+block difficulty is $D$, and the share difficulty is $d$, then miners
+use the first 10 bits from the extra nonce to encode the ratio $D/d$.
 
-%% - block datastructure
-%%   - coinbase reward goes to Hub's address
-%%   - ignore this for now, we'll show how the reward is distributed in a
-%%     trustless manner to all miners.
-%% - DAG of shares
-%%   - Epochs: start from and end with bitcoin block
-%%   - Epoch ends when a valid bitcoin block with current bitcoin
-%%     difficulty is found
-%%   - Immediately send mined bitcoin block to bitcoin network
-%%   - Hub will distribute the reward in around 100 blocks time
-%% - Use compact blocks to inform others about the block we are mining
-%%   - Other miners can decide to include your block as a previous block
-%%     or not, whenever we find a solution and announce it.
-%%   - We need to model the network traffic and latency
-%% - Keep mining the same block, until end of epoch
-%%   - For each block mined, share the solution with p2p network
-%%   - Only if the mined block meets the current bitcoin difficulty
+In the next section we describe how all peers compute their fair share
+of profits using the DAG of shares.
   
-  
-\subsection{Incentives Compatible Rewards}\label{sec:rewards}
+\section{Reward Calculation}\label{sec:rewards}
 
 Each participating node, which includes the miners and the hub,
 maintains a local replica of the the \textsc{share}s DAG.\@ Each
 \textsc{share} includes a reference to the shares the miner was aware
-of when the \textsc{share} was found. If a miner $a$ doesn't include
-the \textsc{share}s of miner $b$, it signals a failure of
-communication between the two miners and we require that miner $a$ in
-such a situation should stop including references to $b$'s
-\textsc{share}s. With this rule in places, miners are no longer
-incentivized to find optimal strategies for broadcasting their shares
-to the rest of the miners. They have a simple strategy to follow,
-which is to make sure their shares reach all other miners as soon as
-possible.
+of when the \textsc{share} was found. Each share also encodes the
+difficulty it was mined at as part of the nonce as described in
+Section~\ref{sec:share-difficulty}. With these in mind, we describe
+the rules used to determine the rewards distribution between the
+miners.
+
+We use a modified version of PPLNS, pay per last N shares, to
+calculate the reward distribution between miners.
+
+\begin{enumerate}
+\item Traverse the DAG in reverse order from the \textsc{share} that
+  found a bitcoin block and track the aggregate difficulty included in
+  the \textsc{share}s.
+\item Once the aggregate reaches a system defined value, stop the DAG
+  traversal.
+\item Distribute the reward between miners weighted by the sum of the
+  difficulty of all \textsc{share}s found by each miner.
+\end{enumerate}
+
+As an example, consider the p2p network of miners $a$, $b$ and $c$
+with the DAG of shares as shown in
+Figure~\ref{fig:reward-calculation}. In the DAG, two new blocks have
+been found, $a_5$ and $b_5$. For the round ending with $a_5$, the last
+``N'' shares are $\{a_1..a_5, b_1..b_3\}$. The shares $c_1..c_3$ are
+not included in this first round as they are not reachable from
+$a_5$. However those are get included in the shares for the next round
+ending in $b_5$ as it happened to require their inclusion to reach the
+total difficulty for the round. The round ending in $b_5$ therefore
+
+\begin{figure}
+  \begin{center}
+    \includegraphics[width=1.0\textwidth]{reward-calculation}
+    \caption{Reward calculation for two periods. Shares are mined by
+      three mines --- $a$, $b$ and $c$. The shares in grey meet the
+      bitcoin difficulty at the time they were
+      mined.}\label{fig:reward-calculation}
+  \end{center}
+\end{figure}
+
+If a miner $a$ doesn't include the \textsc{share}s of miner $b$, it
+signals a failure of communication between the two miners and we
+require that miner $a$ in such a situation should stop including
+references to $b$'s \textsc{share}s. With this rule in places, miners
+are no longer incentivized to find optimal strategies for broadcasting
+their shares to the rest of the miners. They have a simple strategy to
+follow, which is to make sure their shares reach all other miners as
+soon as possible.
 
 \begin{figure}
   \begin{center}
@@ -340,140 +346,95 @@ when the miner $a$ discovers a share $a_3$ that is a valid bitcoin
 block the reward is not shared with any other miner as $a_3$ does not
 include any references to shares from other miners.
 
-With the above understanding of why miners will co-operate, we now
-state the rules to calculate how the block reward should be divided
-between miners.
+% \subsubsection{Incentive Compatibility}\label{sec:incentive-compatability}
 
-\begin{enumerate}
-\item Traverse the DAG in reverse order from the \textsc{share} that
-  found a bitcoin block to the previous bitcoin block found and
-  collect this set of shares.
-\item From the above set of shares remove all shares that don't have
-  a reverse path to the previous bitcoin block.
-\item Distribute the reward between miners weighted by the sum of the
-  difficulty of all \textsc{share}s found by miners.
-\end{enumerate}
+% A reward function is defined as incentive compatible if every miner's
+% best response strategy reports full solutions
+% immediately~\cite{incentives-compatible}. Where a ``full solution'' is
+% a share that meets the bitcoin network's difficulty requirement.
 
-As an example, consider the p2p network of miners $a$, $b$ and $c$
-with the DAG of shares as shown in Figure~\ref{fig:shares-dag}. In the
-DAG, the set of shares that receive reward proportional to their
-difficulty are $\{a_1..a_5, b_1..b_3\}$. The shares $\{c_1..c_3\}$ do
-not receive any reward as they are not reachable from the bitcoin
-block, $a_5$, even if they are reachable from $l$. In other words,
-since the shares $\{c_1..c_3\}$ are not part of the $epoch$
-terminating in $a_5$ the miner $c$ is not rewarded for those
-shares. We exclude the shares $c_1..c_4$ from the set of shares to be
-rewarded to avoid miners indulging in selfish
-mining~\cite{majority-is-not-enough}.
+% Given the rules in Section~\ref{sec:rewards}, if a miner finds a
+% bitcoin block the miner wants to get maximum reward possible based on
+% all the shares it has found and therefore is incentivized to announce
+% their \textsc{share} as soon as it finds the block. The longer a miner
+% waits to announce the bitcoin block to the bitcoin network, the higher
+% the probability that some other miner on the pool will find a
+% different bitcoin block that doesn't reward their latest shares that
+% haven't reached the other miner. Further still, the rewards
+% calculation can be adjusted to give an extra reward to the miner that
+% finds the block. This is similar to what p2pool does and Belcher also
+% mentions in his proposal.
 
-For the second bitcoin block $b_5$ only the miners $a$ and $b$ receive
-rewards in proportion to the difficulties of their shares
-$\{b_4, b_5, a_6\}$. $c$ doesn't receive any reward for $c_4$ as it
-again is not part of the $epoch$ terminating in $b_5$.
+% \subsubsection{Proportional Payments}\label{sec:proportional-payments}
 
-\begin{figure}
-  \begin{center}
-    \includegraphics[width=1.0\textwidth]{shares-dag}
-    \caption{Two epochs in a DAG of shares mined by three mines ---
-      $a$, $b$ and $c$. The shares in grey meet the bitcoin difficulty
-      at the time they were mined.}\label{fig:shares-dag}
-  \end{center}
-\end{figure}
+% Proportional payments~\cite{incentives-compatible} property requires
+% that the pool pays miners in proportion to the amount of work they
+% have performed. According to our rewards calculation rules, payouts
+% are calculated at the end of an epoch and each miner is incentivized
+% to include hash pointers to the most recent shares seen from all
+% miners. It directly follows that all miners are guaranteed payments
+% for their shares that have reached the miner who found the
+% block. Therefore the pool satisfies this requirement.
 
-Given the above rules, we show how they together provide an incentives
-compatible reward function~\cite{incentives-compatible}. We present an
-outline of proofs that will be be formalised in future work.
+% \subsubsection{Budget Balanced}\label{sec:budget-balanced}
 
-\subsubsection{Incentive Compatibility}\label{sec:incentive-compatability}
+% Budget balanced~\cite{incentives-compatible} property requires that
+% the pool operator should never incur a deficit. Again from the rules
+% above, since rewards are paid at the end of the epoch, a hub pays out
+% rewards without losing or retaining any amount. The hub therefore does
+% not make an unaccounted for profit or loss.
 
-A reward function is defined as incentive compatible if every miner's
-best response strategy reports full solutions
-immediately~\cite{incentives-compatible}. Where a ``full solution'' is
-a share that meets the bitcoin network's difficulty requirement.
+% \subsection{Lost Work or Stale Shares}\label{ref:stales}
 
-Given the rules in Section~\ref{sec:rewards}, if a miner finds a
-bitcoin block the miner wants to get maximum reward possible based on
-all the shares it has found and therefore is incentivized to announce
-their \textsc{share} as soon as it finds the block. The longer a miner
-waits to announce the bitcoin block to the bitcoin network, the higher
-the probability that some other miner on the pool will find a
-different bitcoin block that doesn't reward their latest shares that
-haven't reached the other miner. Further still, the rewards
-calculation can be adjusted to give an extra reward to the miner that
-finds the block. This is similar to what p2pool does and Belcher also
-mentions in his proposal.
+% \begin{figure}
+%   \begin{center}
+%     \includegraphics[width=1\textwidth]{shares-propagation.pdf}
+%     \caption{Share $c_3$ is a stale share that $c$ earns no reward
+%       for.}\label{fig:shares-propagation}
+%   \end{center}
+% \end{figure}
 
-\subsubsection{Proportional Payments}\label{sec:proportional-payments}
+% We define a share to be stale share if it is not included in two
+% consecutive epochs. In Figure~\ref{fig:shares-propagation} the share
+% $c_3$ is a stale share as it is not included in the $epoch$s
+% terminating in either $a_5$ or $b_5$. We don't reward miners for these
+% stale shares as that allows miners to indulge in selfish
+% mining~\cite{majority-is-not-enough}. In this section we present rough
+% estimates on the work lost by the miners for not being reward for
+% these stale shares.
 
-Proportional payments~\cite{incentives-compatible} property requires
-that the pool pays miners in proportion to the amount of work they
-have performed. According to our rewards calculation rules, payouts
-are calculated at the end of an epoch and each miner is incentivized
-to include hash pointers to the most recent shares seen from all
-miners. It directly follows that all miners are guaranteed payments
-for their shares that have reached the miner who found the
-block. Therefore the pool satisfies this requirement.
+% The details of the p2p network to transmit shares is not yet
+% specified, and we don't have simulations results to observe the impact
+% of the the pool size both in terms of number of miners and the total
+% hash rate of the pool. For now, we present a high level analysis of
+% the work lost from stale shares.
 
-\subsubsection{Budget Balanced}\label{sec:budget-balanced}
+% Say $t_{s}$ is the time in seconds to transmit a share to all other
+% participants in the network.  Let $t_{b}$ be the time it takes for the
+% pool to find a block. It follows that, in the worst case, each miner
+% will waste $t_{s}/t_{b}$ amount of work for the time when its work
+% fails to reach the miner who finds the next block.
 
-Budget balanced~\cite{incentives-compatible} property requires that
-the pool operator should never incur a deficit. Again from the rules
-above, since rewards are paid at the end of the epoch, a hub pays out
-rewards without losing or retaining any amount. The hub therefore does
-not make an unaccounted for profit or loss.
+% We work with estimates from observations about block transmission on
+% the bitcoin p2p network~\cite{information-propagation} but keep in
+% mind that those observations included the time to verify the block and
+% that \textsc{share} size at $320kB$ for a p2p network with
+% $N = 10,000$ is much smaller than a bitcoin block.
 
-\subsection{Lost Work or Stale Shares}\label{ref:stales}
+% Given the caveats we proceed to use the same propagation delays from
+% the study to capture upper bounds of the work lost and assume a $10$
+% second delay for a \textsc{share} to reach all other nodes on the p2p
+% network. We also assume that $10,000$ miners pool reaches $2\%$ of the
+% global hashrate. This is similar to $12,000$ miners achieving $2\%$
+% hashrate by Slushpool~\cite{slushpool}. With this assumption we can
+% say that the pool finds a block every $50$ blocks, or approximately
+% every $500$ minutes.
 
-\begin{figure}
-  \begin{center}
-    \includegraphics[width=1\textwidth]{shares-propagation.pdf}
-    \caption{Share $c_3$ is a stale share that $c$ earns no reward
-      for.}\label{fig:shares-propagation}
-  \end{center}
-\end{figure}
-
-We define a share to be stale share if it is not included in two
-consecutive epochs. In Figure~\ref{fig:shares-propagation} the share
-$c_3$ is a stale share as it is not included in the $epoch$s
-terminating in either $a_5$ or $b_5$. We don't reward miners for these
-stale shares as that allows miners to indulge in selfish
-mining~\cite{majority-is-not-enough}. In this section we present rough
-estimates on the work lost by the miners for not being reward for
-these stale shares.
-
-The details of the p2p network to transmit shares is not yet
-specified, and we don't have simulations results to observe the impact
-of the the pool size both in terms of number of miners and the total
-hash rate of the pool. For now, we present a high level analysis of
-the work lost from stale shares.
-
-Say $t_{s}$ is the time in seconds to transmit a share to all other
-participants in the network.  Let $t_{b}$ be the time it takes for the
-pool to find a block. It follows that, in the worst case, each miner
-will waste $t_{s}/t_{b}$ amount of work for the time when its work
-fails to reach the miner who finds the next block.
-
-We work with estimates from observations about block transmission on
-the bitcoin p2p network~\cite{information-propagation} but keep in
-mind that those observations included the time to verify the block and
-that \textsc{share} size at $320kB$ for a p2p network with
-$N = 10,000$ is much smaller than a bitcoin block.
-
-Given the caveats we proceed to use the same propagation delays from
-the study to capture upper bounds of the work lost and assume a $10$
-second delay for a \textsc{share} to reach all other nodes on the p2p
-network. We also assume that $10,000$ miners pool reaches $2\%$ of the
-global hashrate. This is similar to $12,000$ miners achieving $2\%$
-hashrate by Slushpool~\cite{slushpool}. With this assumption we can
-say that the pool finds a block every $50$ blocks, or approximately
-every $500$ minutes.
-
-From the above, we get $t_{s} = 10$s and $t_{b} = 500$ minutes and get
-the lost work of around $0.03\%$. Adding the $0.1\%$ fees the miners
-pay to the hub, the miners end up paying $0.13\%$ in costs as compared
-to paying $2-4\%$ to the mining pools, which is still a saving of around
-$93\%$ in fees for the miner when using a decentralised pool.
-
+% From the above, we get $t_{s} = 10$s and $t_{b} = 500$ minutes and get
+% the lost work of around $0.03\%$. Adding the $0.1\%$ fees the miners
+% pay to the hub, the miners end up paying $0.13\%$ in costs as compared
+% to paying $2-4\%$ to the mining pools, which is still a saving of around
+% $93\%$ in fees for the miner when using a decentralised pool.
 
 % From early studies on information dissemination using gossip protocol
 % it is known that with $5$ retransmissions of a payload, we can reach
@@ -484,7 +445,7 @@ $93\%$ in fees for the miner when using a decentralised pool.
 % a share will be distributed to $99.9999\%$ of nodes within a $2s$
 % interval.
 
-\subsection{Payment Channels}\label{ref:channels}
+\section{Payment Channels}\label{ref:channels}
 
 We propose using Payment Channels for paying miners based on the
 proposal by Belcher~\cite{channels-for-rewards}. The construction of
@@ -518,7 +479,7 @@ appropriate reward after each block is found.
 % coinbase transactions, miners validate that the coinbase matches the
 % hub's preimage, and the miner's pubkey.
 
-\subsubsection{Coinbase}
+\subsection{Coinbase}
 
 We use Belcher~\cite{channels-for-rewards} construction where each
 miner builds a coinbase transaction that can be spent in one of the
@@ -556,7 +517,7 @@ accumulated payouts if the Hub defects and spends through the $cb_2$
 branch. We discuss how the miner and the hub don't gain by defecting
 in Section~\ref{ref:defecting}.
 
-\subsubsection{One-way Channels}
+\subsection{One-way Channels}
 
 One-Way payment channels between hub and all miners allow miners to
 receive payouts while consuming a constant size block space in the
@@ -584,7 +545,7 @@ receives over the payment channel, the hub will charge an agreed upon
 fees between the miner and the hub. Belcher's proposal recommends a
 $0.1\%$ fees for the hub.
 
-\subsubsection{Payment Channel Transactions}
+\subsection{Payment Channel Transactions}
 
 The hub creates a funding channel for each miner and locks $R$ bitcoin
 in the channel. The miner then creates a refund transaction, spending
@@ -716,7 +677,7 @@ Using the above construction of the payment channel and the
 distributed payout algorithm, we now show that defecting by the hub or
 the miner doesn't pay.
 
-\subsubsection{Hub Defects}\label{ref:hub-defects}
+\subsubsection{Hub Defection}\label{ref:hub-defects}
 
 If the hub defects and pays itself from the coinbase it uses the
 $cb_2$ branch of the coinbase. In doing so, the hub has to reveal the
