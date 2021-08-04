@@ -19,26 +19,16 @@
 \maketitle
 
 \begin{abstract}
-  Bitcoin p2pool's usage has steadily declined over the years,
-  negatively impacting bitcoin's decentralisation. The primary
-  problems with p2pool are twofold. First, the variance in earnings
-  for miners increases with total hashrate participating in the
-  pool. Second, payouts to miners require a linearly increasing block
-  space with the number of miners participating in the pool. There are
-  two different proposals under discussion that address these
-  problems,
-  \begin{enumerate*}[label=(\roman*)]
-  \item building a directed acyclic graph (DAG) of miner's shares such
-    that miners are rewarded for all their proof of work, and
-  \item  using payment channels to distribute payouts to miners
-  \end{enumerate*}. In this paper, we present a solution that builds
-  on these two proposals. A DAG of shares is maintained as a
-  replicated database by all miners and the DAG is then used to
-  compute rewards for miners. These mining rewards are paid out by an
-  anonymous hub communicating with the miners using Tor's hidden
-  services. Using the payment channels construction, neither the hub
-  nor the miners can cheat. Finally we describe how the hub maintains
-  its anonymity to resist DDoS attacks.
+  Bitcoin P2Pool's usage has steadily declined over the years,
+  negatively impacting bitcoin's decentralisation. The variance in
+  earnings for miners increases with total hashrate participating in
+  the pool, and payouts require a linearly increasing block space with
+  the number of miners participating in the pool. We present a
+  solution that uses a DAG of shares replicated at all miners. The DAG
+  is then used to compute rewards for miners. Rewards are paid out
+  using one-way payment channels by an anonymous hub communicating
+  with the miners using Tor's hidden services. Using the payment
+  channels construction, neither the hub nor the miners can cheat.
 \end{abstract}
    
 \section{Motivation}
@@ -101,22 +91,22 @@ different beads. The proposal describes how duplicate and double spend
 transactions can be resolved to reach a decision on the state of the
 ledger at any cut of the DAG.\@
 
-In the proposal, miners earn a coin native to the braid blockchain,
-called TeraHash Coin. This coin can then be swapped for BTC. The
-proposal doesn't yet define how TeraHash Coin will be swapped for
-BTC. Some of the suggestions under discussion include using atomic
-swaps, burning the TeraHash Coin, or using financial instruments like
-futures of the bitcoin's hash rate to swap TeraHash Coins for BTC.\
-The problems with the atomic swap approach is the need for $O(n)$
-block space in number of miners, as we need two transactions to
-execute a swap with each miner payout. Burning TeraHash Coins for BTC
-requires a trusted third party to execute the burn. Finally, trading
-TeraHash Coins for BTC futures has the problem of introducing
-centralisation on the futures market operator. There is some
-discussion around using DEXes for executing futures contracts, but
-these are initial ideas and we will evaluate them in the future for
-incorporating them into our proposal once they have been developed
-further.
+% In the proposal, miners earn a coin native to the braid blockchain,
+% called TeraHash Coin. This coin can then be swapped for BTC. The
+% proposal doesn't yet define how TeraHash Coin will be swapped for
+% BTC. Some of the suggestions under discussion include using atomic
+% swaps, burning the TeraHash Coin, or using financial instruments like
+% futures of the bitcoin's hash rate to swap TeraHash Coins for BTC.\
+% The problems with the atomic swap approach is the need for $O(n)$
+% block space in number of miners, as we need two transactions to
+% execute a swap with each miner payout. Burning TeraHash Coins for BTC
+% requires a trusted third party to execute the burn. Finally, trading
+% TeraHash Coins for BTC futures has the problem of introducing
+% centralisation on the futures market operator. There is some
+% discussion around using DEXes for executing futures contracts, but
+% these are initial ideas and we will evaluate them in the future for
+% incorporating them into our proposal once they have been developed
+% further.
 
 Belcher~\cite{channels-for-rewards} proposes using payment channels to
 avoid using block space for making payouts to miners. The construction
@@ -150,10 +140,7 @@ distribution between miners.
 Each miner can build their own block, selecting transactions according
 to their own criteria. We call this block the \textsc{work} and it is
 derived from the results of the \verb|getblocktemplate| bitcoin API
-call. Miners who don't want to run a bitcoin node can select a
-\textsc{work} block broadcast by another miner and use it as their
-\textsc{work}. This latter approach is not recommended, but allows
-miners to get set up quickly and join the network.
+call.
 
 The \textsc{work} definition leaves out the merkle root and the
 timestamp. Instead it includes the coinbase transaction so that other
@@ -234,9 +221,9 @@ replicated database. Each node on the DAG is a \textsc{share}
 generated by a miner and all miners track the most recently received
 \textsc{share} from all other miners. Miners include hash pointers to
 the root nodes of the DAG, ensuring that the DAG is eventually
-consistent on all miner nodes. The DAG therefore builds a ``found
-before'' relationship between shares which enables faster generation
-of shares without requiring a single chain of shares.
+consistent on all miner nodes. The DAG provides a ``found before''
+relationship between shares which enables faster generation of shares
+without requiring a single chain of shares.
 
 \begin{figure}
   \begin{center}
@@ -265,12 +252,11 @@ these rewards for all their work.
 
 Since miners can mine shares at their chosen difficulty we require
 that the miners include the difficulty in the extra nonce they
-use. This doesn't require miners to regenerate the blockhash each time
-they change the difficulty. Out initial suggestion is that miners use
-10 bits from the extra nonce field to include the multiplier they are
-using between the block difficulty and the share difficulty. If the
-block difficulty is $D$, and the share difficulty is $d$, then miners
-use the first 10 bits from the extra nonce to encode the ratio $D/d$.
+use. Our initial suggestion is that miners use 10 bits from the extra
+nonce field to include the multiplier they are using between the block
+difficulty and the share difficulty. If the block difficulty is $D$,
+and the share difficulty is $d$, then miners use the first 10 bits
+from the extra nonce to encode the ratio $D/d$.
 
 In the next section we describe how all peers compute their fair share
 of profits using the DAG of shares.
@@ -288,10 +274,8 @@ miners.
 
 We use a modified version of PPLNS (Pay Per Last N Shares) to
 calculate the reward distribution between miners. Variations of PPLNS
-have been shown to be most resistent to pool hopping and we want small
-miners to benefit from large miners and not be at the mercy of large
-miners using pool hopping to hurt the small
-miners~\cite{rosenfeld2011analysis}.
+have been shown to be most resistent to pool
+hopping~\cite{rosenfeld2011analysis}.
 
 \begin{enumerate}
 \item Traverse the DAG in reverse order from the \textsc{share} that
@@ -309,10 +293,10 @@ Figure~\ref{fig:reward-calculation}. In the DAG, two new blocks have
 been found, $a_5$ and $b_5$. For the round ending with $a_5$, the last
 ``N'' shares are $\{a_1..a_5, b_1..b_3\}$. The shares $c_1..c_3$ are
 not included in this first round as they are not reachable from
-$a_5$. However those are included in the shares for the next round
-ending in $b_5$, as it happened to require their inclusion to reach
-the total difficulty for the round. The round ending in $b_5$
-therefore rewards the shares $\{c_1..c_4, b_4, b_5, a_6\}$.
+$a_5$. However they are included in the shares for the next round
+ending in $b_5$, because their inclusion was needed to reach the total
+difficulty for the round. The round ending in $b_5$ therefore rewards
+the shares $\{c_1..c_4, b_4, b_5, a_6\}$.
 
 \begin{figure}
   \begin{center}
@@ -324,14 +308,14 @@ therefore rewards the shares $\{c_1..c_4, b_4, b_5, a_6\}$.
   \end{center}
 \end{figure}
 
-If a miner $a$ doesn't include the \textsc{share}s of miner $b$, it
-signals a failure of communication between the two miners and we
-require that miner $a$ in such a situation should stop including
-references to $b$'s \textsc{share}s. With this rule in place, miners
-are no longer incentivized to find optimal strategies for broadcasting
-their shares to the rest of the miners. They have a simple strategy to
-follow, which is to make sure their shares reach all other miners as
-soon as possible.
+% If a miner $a$ doesn't include the \textsc{share}s of miner $b$, it
+% signals a failure of communication between the two miners and we
+% require that miner $a$ in such a situation should stop including
+% references to $b$'s \textsc{share}s. With this rule in place, miners
+% are no longer incentivized to find optimal strategies for broadcasting
+% their shares to the rest of the miners. They have a simple strategy to
+% follow, which is to make sure their shares reach all other miners as
+% soon as possible.
 
 % \begin{figure}
 %   \begin{center}
@@ -464,7 +448,7 @@ the details.
   miners will be able to contribute for the next block. Instead our
   DAG based scheme results in an incentives compatible distribution of
   rewards among miners.
-\item Belcher proposes uses multiple hubs to prevent DDoS attacks on
+\item Belcher proposes using multiple hubs to prevent DDoS attacks on
   hubs, we instead use a single hub, and prevent DDoS attacks by
   keeping the hub hidden using Tor's v3 hidden
   services~\cite{tor-design} for communication between the hub and
@@ -531,11 +515,11 @@ bitcoin block they mine. The use of payment channels is what makes the
 pool scale without losing block space. The miners therefore avoid
 losing the fees that can be earned from the block space.
 
-Just like in the early versions of proposal by Belcher we use one-way
-payment channels. One-Way payment channels solve the problem of
-aggregating a miner's payouts and require only a single blockchain
-transaction for spending multiple payouts earned from their PoW
-shares.
+% Just like in the early versions of proposal by Belcher we use one-way
+% payment channels. One-Way payment channels solve the problem of
+% aggregating a miner's payouts and require only a single blockchain
+% transaction for spending multiple payouts earned from their PoW
+% shares.
 
 We use one-way instead of bidirectional payment channels as an initial
 implementation. If required we can switch to bidirectional
@@ -739,9 +723,7 @@ contribute a large portion of the pool's hash rate and then refuse to
 sign the co-operative branch. This will disrupt the functioning of the
 pool and a well funded censor could be willing to execute such an
 attack. The only defence here is that the miners re-organise and start
-a different instance of the pool hiding their activity using Tor's
-hidden services. We elaborate on our use of Tor's hidden services in
-Section~\ref{sec:hub-miner-communication}.
+a different instance of the pool.
 
 \subsubsection{Hub and Miner Collude}\label{ref:collusion}
 
@@ -757,7 +739,7 @@ end the pool and the stream of future profits for the hub.
 
 The hub can be attacked using a distributed denial of service attack
 rendering it unable to process requests to open new channels and to
-distributed payouts to miners. Belcher in his proposal suggested the
+distribute payouts to miners. Belcher in his proposal suggested the
 use of multiple hubs as a defence against such an attack. The proposal
 also points out that using multiple hubs will also reduce the
 liquidity required to open channels with miners.
@@ -819,40 +801,45 @@ Section~\ref{sec:channel-update}.
 
 \section{Future Work}
 
-Our proposal presents an approach to enable decentralised mining for
-bitcoin. Apart from the work of describing the various components in
-detail, we also want to provide results from simulations, formalised
-proofs of rewards schemes and possible extensions to using multiple
-hubs.
+We have not covered the goal of providing tools for building hashrate
+futures markets in this paper. The initial ideas for the same are
+captured in a
+gist\footnote{https://gist.github.com/kulpreet/19927c7188a4224ce2de43efb3c69370}. Further,
+Taproot provides other possibilities for enabling trading of shares
+published on a p2p network of miners.
 
-Before we work on implementing the system, our next step is to
-simulate p2p mining network and make informed decisions about how
-large a network a single hub can support. The observations we want to
-make are how large a p2p network can be sustained without an increase
-in work lost by miners. Each instance of the pool uses a single hub
-and the p2p network of miners can grow as long as miners can
-communicate \textsc{work} and \textsc{share}s with each other within
-bounded latencies. We want to find the bounds of these limits using a
-simulation.
+% Our proposal presents an approach to enable decentralised mining for
+% bitcoin. Apart from the work of describing the various components in
+% detail, we also want to provide results from simulations, formalised
+% proofs of rewards schemes and possible extensions to using multiple
+% hubs.
 
-We will also specify the p2p protocols and the message formats for
-both the \textsc{share}s propagation and channel management
-networks. By publishing the specifications separate from the source
-code, we aim to receive more feedback from the community. We want to
-use the model presented in~\cite{incentives-compatible} to provide
-proofs for how the rewards distribution is incentives compatible. We
-would like to build further on the multiple hubs construction
-described by Belcher once Taproot is activated on bitcoin.
+% Before we work on implementing the system, our next step is to
+% simulate p2p mining network and make informed decisions about how
+% large a network a single hub can support. The observations we want to
+% make are how large a p2p network can be sustained without an increase
+% in work lost by miners. Each instance of the pool uses a single hub
+% and the p2p network of miners can grow as long as miners can
+% communicate \textsc{work} and \textsc{share}s with each other within
+% bounded latencies. We want to find the bounds of these limits using a
+% simulation.
+
+% We will also specify the p2p protocols and the message formats for
+% both the \textsc{share}s propagation and channel management
+% networks. By publishing the specifications separate from the source
+% code, we aim to receive more feedback from the community. We want to
+% use the model presented in~\cite{incentives-compatible} to provide
+% proofs for how the rewards distribution is incentives compatible. We
+% would like to build further on the multiple hubs construction
+% described by Belcher once Taproot is activated on bitcoin.
 
 \section{Conclusion}
 
-We presented an architecture for a new decentralised mining pool for
-Bitcoin. The architecture enables miners to build their own blocks and
-earn frequent payouts as the mining pool grows. We showed that the
-pool can grow up to 10,000 miners and that miners can save close to
-90\% in mining pool fees by participating in the decentralised pool.
+We propose a new decentralised mining pool for Bitcoin that enables
+miners to build their own blocks and doesn't increase the variance nor
+the blockspace required for payouts as the mining pool grows.
 
-\section{Acknowledgements}
+% \section{Acknowledgements}
 
 
 \bibliography{proposal} 
