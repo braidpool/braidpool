@@ -194,7 +194,7 @@ validates this \textsc{work} using a local bitcoin node. When a
     Nonce and extra nonce & Nonces used & $4+8$ \\
     Merkle root & New merkle root to include extra nonce & 32 \\
     Timestamp & UNIX timestamp used & 4 \\
-    Public keys & Two pubkeys used by the hub to for channel management & 66 \\
+    Public keys & Two pubkeys used by the hub for channel management & 66 \\
     $list<$ \textsc{share} hashes $>$ & List of share hashes referenced by this \textsc{share} & $N \times 32$ \\
     Tor Service & PubKey for onion service address, see Section~\ref{sec:hub-miner-communication}. & 32 \\
     \hline
@@ -250,17 +250,11 @@ difficulty shares to match the share rate of the larger miners in the
 pool. Even if smaller miners earn a smaller reward, they will earn
 these rewards for all their work.
 
-Since miners can mine shares at their chosen difficulty we require
-that the miners include the difficulty in the extra nonce they
-use. Our initial suggestion is that miners use 10 bits from the extra
-nonce field to include the multiplier they are using between the block
-difficulty and the share difficulty. If the block difficulty is $D$,
-and the share difficulty is $d$, then miners use the first 10 bits
-from the extra nonce to encode the ratio $D/d$.
+The miner defined difficulty for shares is set in the input of the
+coinbase transaction where miners currently also set the
+\verb|extraNonce|. This ensures that other miners on the network can
+verify the share was mined with the claimed difficulty.
 
-In the next section we describe how all peers compute their fair share
-of profits using the DAG of shares.
-  
 \section{Reward Calculation}\label{sec:rewards}
 
 All participating nodes, including the miners and the hub, maintain a
