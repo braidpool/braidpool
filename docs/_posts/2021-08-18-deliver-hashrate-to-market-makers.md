@@ -92,7 +92,7 @@ Once a Share Seal in a Share Header has been spent in a bitcoin
 transaction, the shares are "sold" and no other bitcoin transaction
 can spend these again.
 
-![sold-shares](assets/sold-shares.png)
+![sold-shares](/braidpool/assets/sold-shares.png)
 
 The figure above shows how we can determine that shares have been sold
 or not. The shares 1, 2 and 3 are sold as their Share Seal has been
@@ -152,7 +152,7 @@ The figure below shows how a miner includes 'UTXO 1' as a Share Seal
 in Shares 1 to 8, and therefore is selling those shares as part of the
 bitcoin transaction.
 
-![delivery-with-seal](assets/delivery-with-seal.png)
+![delivery-with-seal](/braidpool/assets/delivery-with-seal.png)
 
 The Miner also proves the ownership of shares as the miner that used
 UTXO\_1 as a Share Seal is able to spend UTXO\_1.
@@ -194,7 +194,7 @@ extra details in Step 3, where the Miner must spend the Share Seal and
 must include the Buyer's Seal in the op_return of the output sent to
 the Buyer.
 
-![payjoin-spending-seal](assets/payjoin-spending-seal.png)
+![payjoin-spending-seal](/braidpool/assets/payjoin-spending-seal.png)
 
 The figure above shows a PayJoin transaction delivering Miner's share
 with three different Share Seals.
