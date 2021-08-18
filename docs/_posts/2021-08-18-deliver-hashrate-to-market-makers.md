@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "Deliver Hashrate to Market Markets"
+title: "Delivering Hashrate to Market Markets"
 image: assets/BC_Logo_.png
 ---
 

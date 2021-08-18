@@ -3,7 +3,11 @@
 
 # Proposal
 
-Read the [complete proposal](proposal/proposal.pdf).
+Read the [proposal](proposal/proposal.pdf) for braidpool.
+
+For details on how delivering shares to market makers for enabling
+hashrate futures, read the blog post: [Deliver Hashrate to Market
+Markets](https://pool2win.github.io/braidpool/2021/08/18/deliver-hashrate-to-market-makers.html).
 
 The pool provides:
 
