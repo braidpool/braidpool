@@ -3,7 +3,9 @@
 
 # Proposal
 
-Read the [proposal](proposal/proposal.pdf) for braidpool.
+Read the
+[proposal](https://github.com/pool2win/braidpool/raw/main/proposal/proposal.pdf)
+for braidpool.
 
 For details on how delivering shares to market makers for enabling
 hashrate futures, read the blog post: [Deliver Hashrate to Market
