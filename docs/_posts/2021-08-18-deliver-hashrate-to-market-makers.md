@@ -6,7 +6,7 @@ image: assets/BC_Logo_.png
 
 Providing futures contracts for hashrate has proven to be a challenge
 in the current mining ecosystem. Hashrate [tokens by
-Blockstream](qhttps://www.coindesk.com/blockstream-security-token-bitcoin-hashrate-payable-bitcoin),
+Blockstream](https://www.coindesk.com/blockstream-security-token-bitcoin-hashrate-payable-bitcoin),
 [poolin](https://mars.poolin.fi/) and
 [binance](https://www.binance.com/en/support/announcement/ccc3db0c88734132b07ce4c2e02cf973)
 are some of the early attempts to provide financial contracts for
