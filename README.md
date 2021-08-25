@@ -33,4 +33,4 @@ tracks the main components to build. Here's a list to keep us focused:
   talk to bitcoin node here for this.
 - [ ] Single script installer (limited to Linux variants).
 
-Donations: bc1q6xms5xsq6kvk9h57mvsdxdjnnrl0vsc942xlxe
+Donations: bitcoin:bc1q6xms5xsq6kvk9h57mvsdxdjnnrl0vsc942xlxe
