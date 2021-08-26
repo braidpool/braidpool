@@ -34,16 +34,6 @@ digraph G {
         label=<Shares for round ending with a<sub>5</sub>>
     }
 
-    subgraph cluster_2 {
-        c1 -> c2 -> c3 -> c4
-        a5 -> b4
-        a5 -> a6
-        a6 -> b5
-        b4 -> b5
-        b4 -> a6
-        color=grey
-        label=<Shares for round ending in b<sub>5</sub>>
-    }
 
     c4 -> b5
     c4 -> a6
@@ -52,4 +42,16 @@ digraph G {
     b2 -> c1
     b3 -> a4
     b3 -> c3
+
+    subgraph cluster_2 {
+        color=grey
+        label=<Shares for round ending in b<sub>5</sub>>
+        labelloc="b"
+        c1 -> c2 -> c3 -> c4
+        a5 -> b4
+        a5 -> a6
+        a6 -> b5
+        b4 -> b5
+        b4 -> a6
+    }
 }
