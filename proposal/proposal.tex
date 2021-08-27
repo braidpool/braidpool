@@ -40,9 +40,9 @@ used by P2Pool faces a number of problems that has resulted in miners
 abandoning the pool. The most often cited problems are:
 
 \begin{enumerate}
-\item large variance in earnings for miners,
-\item large number of stale blocks, and
-\item large block space requirement for payouts.
+\item Large variance in earnings for miners.
+\item Large number of stale blocks.
+\item Large block space requirement for payouts.
 \end{enumerate}
 
 The first two problems are a direct consequence of the shares block
@@ -151,12 +151,11 @@ specifications~\cite{compact-blocks}.
     \hline
   \end{tabular}
   \caption{The structure of \textsc{work} broadcast by
-    miners. Timestamp and nonce are left out and are included in
-    \textsc{share}s instead.}\label{table:work}
+    miners.}\label{table:work}
 \end{table}
 
-Miners then generate their \textsc{share}s for this \textsc{work} and
-both are broadcast to the p2p network. When a miner receives a
+Miners next generate their \textsc{share}s for this \textsc{work} and
+both are broadcast to the P2P network. When a miner receives a
 \textsc{work} from other miners it validates this \textsc{work} using
 a local bitcoin node. When a \textsc{share} is received by a miner it
 is validated against the \textsc{work} referenced by the
@@ -189,9 +188,9 @@ is validated against the \textsc{work} referenced by the
 
 Each \textsc{share} includes the public keys that the hub can use to
 setup payment channels, and also the pubic key for the Tor hidden
-service run by the miner. The Tor hidden service is used for
-facilitating anonymous communication between the hub and the miners as
-described later in Section~\ref{sec:hub-miner-communication}.
+service run by the miner. The Tor hidden service is used for anonymous
+communication between the hub and the miners as described later in
+Section~\ref{sec:hub-miner-communication}.
 
 \subsection{DAG of shares}
 
@@ -228,7 +227,7 @@ pool.
 Miners include the difficulty in the extra nonce they use. Our initial
 suggestion is that miners use 10 bits from the extra nonce field to
 include the multiplier they are using between the block difficulty and
-the share difficulty. 
+the share difficulty.
 
 \section{Reward Calculation}\label{sec:rewards}
 
@@ -417,9 +416,8 @@ the details.
 
 The rest of the construction is similar to the early versions
 presented by Belcher --- there is a one-way channel between the hub
-and each of the miners. The hub updates the state of each channel with
-appropriate reward system defined aggregate difficulty has been
-reached.
+and each of the miners and the hub updates the state of each channel
+with appropriate reward.
 
 % TODO
 % Question: How do we know the Hub is not creating coinbases with
