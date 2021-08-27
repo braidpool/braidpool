@@ -24,9 +24,6 @@ add_executable(channel_test
   ${PROJECT_SOURCE_DIR}/channel/tests/funding_transaction_test.cpp
   )
 
-message(STATUS ${secp256k1_LIBDIR})
-message(STATUS ${secp256k1_LIBRARIES})
-
 target_link_directories(channel_test PUBLIC
   ${secp256k1_LIBDIR}
   )

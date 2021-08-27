@@ -1,3 +1,7 @@
+**/__pycache__
+**/.pytest_cache
+channels/build
+pool/build
 proposal/.dep/
 proposal/figures/epoch.pdf
 proposal/figures/isolated-miners.pdf
@@ -8,8 +12,5 @@ proposal/proposal.fls
 proposal/proposal.log
 proposal/proposal.bbl
 proposal/proposal.blg
-channels/build
-venv
-**/__pycache__
-**/.pytest_cache
 simulations/logs/*
+venv
