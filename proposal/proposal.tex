@@ -11,7 +11,7 @@
 
 
 \title{Braidpool: Decentralised Mining Pool for Bitcoin}
-\author{}
+\author{@pool2win}
 \date{}
 
 \begin{document}
@@ -22,7 +22,7 @@
   Bitcoin P2Pool's usage has steadily declined over the years,
   negatively impacting bitcoin's decentralisation. The variance in
   earnings for miners increases with total hashrate participating in
-  the pool, and payouts require a linearly increasing block space with
+  P2Pool, and payouts require a linearly increasing block space with
   the number of miners participating in the pool. We present a
   solution that uses a DAG of shares replicated at all miners. The DAG
   is then used to compute rewards for miners. Rewards are paid out
@@ -47,7 +47,7 @@ abandoning the pool. The most often cited problems are:
 
 The first two problems are a direct consequence of the shares block
 rate limited to 30 seconds on the bitcoin p2pool. Intuitively, as the
-hash rate participation in the pool goes up, the difficulty for 30
+hashrate participation in the pool goes up, the difficulty for 30
 seconds block rate goes up and smaller miners find it harder to find
 shares within a 30 second period. This results in an increase in the
 variance for shares found by miners and thus for the rewards earned by
@@ -67,8 +67,8 @@ Knowing the challenges faced by P2Pool, we list the goals of a new
 decentralised mining pool as:
 
 \begin{enumerate}
-\item Reduce variance for miners with increasing pool hash rate.
-\item Make payouts to miners with constant size block space
+\item Reduce variance for miners with increasing pool hashrate.
+\item Make payouts to miners with a constant size block space
   requirement.
 \item Allow miners to select transactions they want to mine, with no
   potential for a censor to deny payouts.
@@ -78,7 +78,7 @@ decentralised mining pool as:
 
 TeraHash Coin~\cite{mcelrath:variance}, Jute~\cite{jute} and
 Spectre~\cite{spectre} use a DAG for faster block times and focus on
-changing the consensus layer of bitcoin. These proposals allow miners
+changing the consensus layer of bitcoin.\ These proposals allow miners
 to produce shares that include conflicting transactions and then apply
 rules to find a set of transactions acceptable at various cuts of the
 DAG, such that the bitcoin consensus rules are not violated.
@@ -95,28 +95,29 @@ ledger at any cut of the DAG.\@
 % called TeraHash Coin. This coin can then be swapped for BTC. The
 % proposal doesn't yet define how TeraHash Coin will be swapped for
 % BTC. Some of the suggestions under discussion include using atomic
-% swaps, burning the TeraHash Coin, or using financial instruments like
-% futures of the bitcoin's hash rate to swap TeraHash Coins for BTC.\
-% The problems with the atomic swap approach is the need for $O(n)$
-% block space in number of miners, as we need two transactions to
-% execute a swap with each miner payout. Burning TeraHash Coins for BTC
-% requires a trusted third party to execute the burn. Finally, trading
-% TeraHash Coins for BTC futures has the problem of introducing
-% centralisation on the futures market operator. There is some
-% discussion around using DEXes for executing futures contracts, but
-% these are initial ideas and we will evaluate them in the future for
-% incorporating them into our proposal once they have been developed
-% further.
+% swaps, burning the TeraHash Coin, or using financial instruments
+% like futures of the bitcoin's hashrate to swap TeraHash Coins for
+% BTC.\ The problems with the atomic swap approach is the need for
+% $O(n)$ block space in number of miners, as we need two transactions
+% to execute a swap with each miner payout. Burning TeraHash Coins for
+% BTC requires a trusted third party to execute the burn. Finally,
+% trading TeraHash Coins for BTC futures has the problem of
+% introducing centralisation on the futures market operator. There is
+% some discussion around using DEXes for executing futures contracts,
+% but these are initial ideas and we will evaluate them in the future
+% for incorporating them into our proposal once they have been
+% developed further.
 
 Belcher~\cite{channels-for-rewards} proposes using payment channels to
-avoid using block space for making payouts to miners. The construction
-uses payment channels between federated hubs to pay miners after a
-block has been successfully mined. The payouts are made after a long
-period, similar to the 100 blocks requirements for spending from
-coinbase transactions. The hub locks in BTC for each miner by opening
-payment channels for each of the miners. The construction shows how
-both miners and the hub can not cheat and how the funders of the hub
-earns rewards for funding the payment channels.
+avoid using linearly increasing block space with the number of miners
+being paid. The construction uses payment channels between federated
+hubs to pay miners after a block has been successfully mined. The
+payouts are made after a long period, similar to the 100 blocks
+requirements for spending from coinbase transactions. The hubs lock in
+BTC for each miner by opening payment channels for each of the
+miners. The construction shows how both miners and the hubs can not
+cheat and how the funders of the hub earns rewards for funding the
+payment channels.
 
 The two ideas of using a DAG and payment channels for rewards
 payouts together present a potential path for rebooting P2Pool.
@@ -131,8 +132,8 @@ distribution between miners.
 
 Each miner builds a block \textsc{work} with a structure shown in
 Table~\ref{table:work}. It includes the coinbase transaction to allow
-other pool participants to verify the payout scripts. The transactions
-field is compressed using compact block
+other pool participants to verify the payout scripts.\ The
+transactions field is compressed using compact block
 specifications~\cite{compact-blocks}.
 
 \begin{table}
@@ -183,7 +184,7 @@ is validated against the \textsc{work} referenced by the
   \end{tabular}
   \caption{The structure of \textsc{share}s broadcast by miners. Size
     of the \textsc{share} is dependent on the number of shares
-    refererenced by a share ($N$).}\label{table:share}
+    referenced by a share ($N$).}\label{table:share}
 \end{table}
 
 Each \textsc{share} includes the public keys that the hub can use to
@@ -232,9 +233,12 @@ the share difficulty.
 \section{Reward Calculation}\label{sec:rewards}
 
 We use a modified version of PPLNS (Pay Per Last N Shares) to
-calculate the reward distribution between miners. Variations of PPLNS
-have been shown to be most resistent to pool
-hopping~\cite{rosenfeld2011analysis}.
+calculate the reward distribution between miners as variations of
+PPLNS have been shown to be most resistant to pool
+hopping~\cite{rosenfeld2011analysis}. Our scheme is similar to SPLNS
+(Score Per Last N Shares) used by Laurentia
+Pool\footnote{\url{https://pool.laurentiapool.org/}}. The algorithm we
+use is as follows:
 
 \begin{enumerate}
 \item Traverse the DAG in reverse order from the \textsc{share} that
@@ -353,10 +357,10 @@ the shares $\{c_1..c_4, b_4, b_5, a_6\}$.
 % these stale shares.
 
 % The details of the p2p network to transmit shares is not yet
-% specified, and we don't have simulations results to observe the impact
-% of the the pool size both in terms of number of miners and the total
-% hash rate of the pool. For now, we present a high level analysis of
-% the work lost from stale shares.
+% specified, and we don't have simulations results to observe the
+% impact of the the pool size both in terms of number of miners and
+% the total hashrate of the pool. For now, we present a high level
+% analysis of the work lost from stale shares.
 
 % Say $t_{s}$ is the time in seconds to transmit a share to all other
 % participants in the network.  Let $t_{b}$ be the time it takes for the
@@ -634,7 +638,7 @@ closing the channel.
 
 An attacking miner loses payouts for all the shares it mined since the
 last block was found by the pool. A malicious miner could contribute a
-large portion of the pool's hash rate and then refuse to sign the
+large portion of the pool's hashrate and then refuse to sign the
 co-operative branch. This will disrupt the functioning of the pool and
 a well funded censor could be willing to execute such an attack. The
 only defence here is that the miners re-organise and start a different
@@ -665,14 +669,13 @@ timeouts for hubs to spend the coinbase in case one or more hubs
 defect or coming under DDoS attacks. The staggered timeouts will
 result in a large wait for the payouts to be distributed.
 
-We propose a different solution that requires a single hub. The
-advantage is a simpler channel construction and allow us to build the
-mining pool without waiting for Taproot activation. The single hub
-approach required that all miners run a Tor v3 hidden service and
-publish the public key used to generate the service's address. The
-public key is included in shares miners publish. The hub can now
-contact the miners anonymously as a client and therefore avoids DoS
-attacks on the hub or on the miners hidden services.
+We propose a different solution that requires a single hub as it
+requires a simpler channel construction. The single hub approach
+requires that all miners run a Tor v3 hidden service and publish the
+public key used to generate the service's address. The public key is
+included in shares miners publish. The hub can now contact the miners
+anonymously as a client and therefore avoids DoS attacks on the hub or
+on the miners hidden services.
 
 \subsection{Anonymous Hub Miner
   Communication}\label{sec:hub-miner-communication}
