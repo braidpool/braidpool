@@ -25,12 +25,17 @@ The pool provides:
 The [project on github](https://github.com/wholooks/braidpool/projects/1)
 tracks the main components to build. Here's a list to keep us focused:
 
-- [ ] (WIP) Channel management scripts using libbitcoin.
+- [ ] Channel management scripts using libbitcoin.
 - [ ] A DAG of shares to track contributions for miners.
 - [ ] P2P gossip based broadcast of block and shares.
 - [ ] Hub to miner communication using Tor's hidden services.
 - [ ] Validate received blocks and shares. We'll need to find a way to
   talk to bitcoin node here for this.
 - [ ] Single script installer (limited to Linux variants).
+
+
+Matrix chat: [https://matrix.to/#/#braidpool:matrix.org](https://matrix.to/#/#braidpool:matrix.org)
+
+Development blog: [https://pool2win.github.io/braidpool/](https://pool2win.github.io/braidpool/)
 
 Donations: bitcoin:bc1q6xms5xsq6kvk9h57mvsdxdjnnrl0vsc942xlxe
