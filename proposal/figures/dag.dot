@@ -14,6 +14,7 @@ digraph G {
 
     l [style=filled]
     r [style=filled]
+    sentinel [style=dashed, label=<S>, color=lightgrey]
 
     l -> a1
     l -> b1
@@ -25,5 +26,6 @@ digraph G {
     b2 -> a3
     c1 -> c2 -> c3 -> r
     c3 -> a3
+    r -> sentinel
 
 }

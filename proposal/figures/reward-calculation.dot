@@ -6,8 +6,11 @@ digraph G {
     a2 [label=<a<sub>2</sub>>, color=red]
     a3 [label=<a<sub>3</sub>>, color=red]
     a4 [label=<a<sub>4</sub>>, color=red]
-    a5 [style=filled, label=<a<sub>5</sub>>, color=lightgrey]
+    a5 [label=<a<sub>5</sub>>, color=red]
+    sentinel [style=dashed, label=<S>, color=lightgrey]
+    sentinel2 [style=dashed, label=<S'>, color=lightgrey]
     a6 [label=<a<sub>6</sub>>, color=red]
+    a7 [label=<a<sub>7</sub>>, color=red]
 
     b1 [label=<b<sub>1</sub>>, color=green]
     b2 [label=<b<sub>2</sub>>, color=green]
@@ -16,9 +19,8 @@ digraph G {
     b5 [style=filled, label=<b<sub>5</sub>>, color=lightgrey]
 
     c1 [label=<c<sub>1</sub>>, color=blue]
-    c2 [label=<c<sub>2</sub>>, color=blue]
+    c2 [style=filled, label=<c<sub>2</sub>>, color=lightgrey]
     c3 [label=<c<sub>3</sub>>, color=blue]
-    c4 [label=<c<sub>4</sub>>, color=blue]
 
     l [style=filled]
 
@@ -27,31 +29,26 @@ digraph G {
     l -> c1
 
     subgraph cluster_1 {
-        a1 -> a2 -> a3 -> a4 -> a5
+        a1 -> a2 -> a3 -> a4 -> a5 -> sentinel
         a3 -> b3
         b1 -> b2 -> b3 -> a5
+        c1 -> c2 -> sentinel
         color=grey
         label=<Shares for round ending with a<sub>5</sub>>
     }
 
-
-    c4 -> b5
-    c4 -> a6
-    a3 -> c3
     b2 -> a3
-    b2 -> c1
     b3 -> a4
-    b3 -> c3
+    sentinel -> b4
 
     subgraph cluster_2 {
         color=grey
         label=<Shares for round ending in b<sub>5</sub>>
         labelloc="b"
-        c1 -> c2 -> c3 -> c4
-        a5 -> b4
-        a5 -> a6
+        b3 -> b4 -> b5 -> sentinel2
+        c2 -> c3
+        a5 -> a6 -> a7
+        c3 -> b5
         a6 -> b5
-        b4 -> b5
-        b4 -> a6
     }
 }
