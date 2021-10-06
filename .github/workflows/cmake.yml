@@ -25,7 +25,7 @@ jobs:
     - name: Checkout libbitcoin system
       id: checkout-libbitcoin
       run: |
-        git clone --depth 1 https://github.com/libbitcoin/libbitcoin-system.git
+        git clone --depth 1 --branch build-with-gcc-c++20 https://github.com/pool2win/libbitcoin-system.git
         cd libbitcoin-system
         echo "::set-output name=commit_id::`git log -n 1 --pretty=format:"%H"`"
 
