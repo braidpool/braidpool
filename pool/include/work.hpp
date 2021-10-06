@@ -25,10 +25,7 @@
 
 namespace bp {
 
-using namespace bc;
-using namespace bc::chain;
-using namespace bc::machine;
-using namespace bc::wallet;
+using namespace libbitcoin::system;
 
 // Class to encapsulate the work that miners use to generate shares.
 // The conversion of getblocktemplate to block is not covered by this

@@ -24,10 +24,7 @@
 
 namespace bp {
 
-using namespace bc;
-using namespace bc::chain;
-using namespace bc::machine;
-using namespace bc::wallet;
+using namespace libbitcoin::system;
 
 // Encapsulate a share for a given work
 class share {

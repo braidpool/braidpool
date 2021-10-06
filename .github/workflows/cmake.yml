@@ -20,7 +20,7 @@ jobs:
     - name: Checkout libbitcoin system
       id: checkout-libbitcoin
       run: |
-        git clone --depth 1 --branch version3 https://github.com/libbitcoin/libbitcoin-system.git
+        git clone --depth 1 https://github.com/libbitcoin/libbitcoin-system.git
         cd libbitcoin-system
         echo "::set-output name=commit_id::`git log -n 1 --pretty=format:"%H"`"
 
@@ -51,8 +51,8 @@ jobs:
     - name: Configure CMake
       run: PKG_CONFIG_PATH=$HOME/build-bc/lib/pkgconfig/ cmake -DBOOST_ROOT=$HOME/build-bc -S ${{github.workspace}}/channels -B ${{github.workspace}}/channels/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
       env:
-        CC: gcc-10
-        CXX: g++-10
+        CC: gcc-11.1
+        CXX: g++-11.1
         
     - name: Build CMake
       run: cmake --build ${{github.workspace}}/channels/build --config ${{env.BUILD_TYPE}}
