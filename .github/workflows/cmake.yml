@@ -36,6 +36,16 @@ jobs:
         path: ~/build-bc
         key: ${{ runner.os }}-libbitcoin-build-cache-${{steps.checkout-libbitcoin.outputs.commit_id}}
 
+    - name: Build boost 1.76
+      id: install-boost-1.76
+      run: |
+        cd /tmp
+        wget https://github.com/bfgroup/b2/archive/refs/tags/4.7.0.tar.gz
+        tar zxvf 4.7.0.tar.gz
+        cd /tmp/b2-4.7.0/
+        ./bootstrap.sh
+        /b2 install --prefix=$HOME/build-bc
+
     - name: Build secp256k1
       if: steps.libbitcoin-cache.outputs.cache-hit != 'true'
       run: |
@@ -51,7 +61,7 @@ jobs:
       if: steps.libbitcoin-cache.outputs.cache-hit != 'true'
       run: |
         cd libbitcoin-system
-        CC=$CC CXX=$CXX ./install.sh --enable-isystem --disable-static --build-boost --prefix=$HOME/build-bc CFLAGS='-Os -s' CXXFLAGS='-Os -s'
+        CC=$CC CXX=$CXX ./install.sh --enable-isystem --disable-static --prefix=$HOME/build-bc CFLAGS='-Os -s' CXXFLAGS='-Os -s'
             
     - name: Configure CMake
       run: PKG_CONFIG_PATH=$HOME/build-bc/lib/pkgconfig/ cmake -DBOOST_ROOT=$HOME/build-bc -S ${{github.workspace}}/channels -B ${{github.workspace}}/channels/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
