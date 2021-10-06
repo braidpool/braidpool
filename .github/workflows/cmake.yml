@@ -44,7 +44,7 @@ jobs:
         tar zxvf 4.7.0.tar.gz
         cd /tmp/b2-4.7.0/
         ./bootstrap.sh
-        /b2 install --prefix=$HOME/build-bc
+        ./b2 install --prefix=$HOME/build-bc
 
     - name: Build secp256k1
       if: steps.libbitcoin-cache.outputs.cache-hit != 'true'
