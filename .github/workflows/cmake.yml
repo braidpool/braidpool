@@ -51,8 +51,8 @@ jobs:
     - name: Configure CMake
       run: PKG_CONFIG_PATH=$HOME/build-bc/lib/pkgconfig/ cmake -DBOOST_ROOT=$HOME/build-bc -S ${{github.workspace}}/channels -B ${{github.workspace}}/channels/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
       env:
-        CC: gcc-11.1
-        CXX: g++-11.1
+        CC: gcc-10
+        CXX: g++-10
         
     - name: Build CMake
       run: cmake --build ${{github.workspace}}/channels/build --config ${{env.BUILD_TYPE}}
