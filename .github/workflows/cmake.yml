@@ -37,7 +37,7 @@ jobs:
         key: ${{ runner.os }}-libbitcoin-build-cache-${{steps.checkout-libbitcoin.outputs.commit_id}}
 
     - name: Build boost 1.76
-      id: install-boost-1.76
+      id: install-boost-1_76
       run: |
         cd /tmp
         wget https://github.com/bfgroup/b2/archive/refs/tags/4.7.0.tar.gz
