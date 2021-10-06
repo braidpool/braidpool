@@ -27,10 +27,10 @@
 
 namespace one_way_channel {
 
-using namespace bc;
-using namespace bc::chain;
-using namespace bc::machine;
-using namespace bc::wallet;
+using namespace libbitcoin::system;
+using namespace libbitcoin::system::chain;
+using namespace libbitcoin::system::machine;
+using namespace libbitcoin::system::wallet;
 
 // Use the same fork rules that are enabled by default in libbitcoin-node
 constexpr uint32_t active_forks = rule_fork::bip16_rule | rule_fork::bip30_rule

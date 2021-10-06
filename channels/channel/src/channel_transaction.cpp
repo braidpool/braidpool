@@ -23,10 +23,10 @@
 
 namespace one_way_channel {
 
-using namespace bc;
-using namespace bc::chain;
-using namespace bc::machine;
-using namespace bc::wallet;
+using namespace libbitcoin::system;
+using namespace libbitcoin::system::chain;
+using namespace libbitcoin::system::machine;
+using namespace libbitcoin::system::wallet;
 
 channel_transaction::channel_transaction()
     : transaction_()

@@ -23,10 +23,10 @@
 
 namespace one_way_channel {
 
-using namespace bc;
-using namespace bc::chain;
-using namespace bc::machine;
-using namespace bc::wallet;
+using namespace libbitcoin::system;
+using namespace libbitcoin::system::chain;
+using namespace libbitcoin::system::machine;
+using namespace libbitcoin::system::wallet;
 
 operation::list funding_transaction::make_fund_output(const ec_public& hub,
     const ec_public& miner, const ec_public& hub_noncoop,

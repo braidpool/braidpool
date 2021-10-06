@@ -5,7 +5,7 @@ project(pool VERSION 1.0)
 
 find_package(PkgConfig REQUIRED)
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 configure_file(pool_config.h.in pool_config.h)
@@ -14,7 +14,7 @@ pkg_check_modules(LIBBITCOIN-SYSTEM libbitcoin-system)
 
 enable_testing()
 
-find_package(Boost COMPONENTS system filesystem unit_test_framework REQUIRED)
+find_package(Boost 1.76 REQUIRED COMPONENTS system filesystem unit_test_framework REQUIRED)
 
 list(APPEND EXTRA_INCLUDES "${PROJECT_SOURCE_DIR}/include")
 
