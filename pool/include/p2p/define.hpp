@@ -17,29 +17,25 @@
  * along with braidpool.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#define pool_VERSION_MAJOR @pool_VERSION_MAJOR @
-#define pool_VERSION_MINOR @pool_VERSION_MINOR @
+#ifndef P2P_DEFINE_HPP
+#define P2P_DEFINE_HPP
 
-#include <iostream>
-#include <p2p/node.hpp>
+#include <atomic>
+#include <boost/asio.hpp>
 
-using namespace bp::p2p;
+namespace bp {
+namespace p2p {
 
-int main(int argc, char* argv[])
-{
-    std::cout << "Starting braid pool..." << std::endl;
-    try {
-        if (argc != 5) {
-            std::cerr << "Usage: bp";
-            std::cerr << " <listen_address> <listen_port>";
-            std::cerr << " <peer_address> <peer_port>\n";
-            return 1;
-        }
-    } catch (std::exception& e) {
-        std::cerr << "Exception: " << e.what() << "\n";
-    }
-
-    // TODO(kp): Improve arg parsing and remove passing char ptrs
-    node node_(argv[1], argv[2]);
-    node_.start(argv[3], argv[4]);
+    using error_code = boost::system::error_code;
+    using io_service = boost::asio::io_service;
+    using io_context = boost::asio::io_context;
+    using tcp = boost::asio::ip::tcp;
+    using tcp_acceptor = tcp::acceptor;
+    using endpoint = tcp::endpoint;
+    using socket = tcp::socket;
+    using socket_ptr = std::shared_ptr<socket>;
+    using ipv4 = boost::asio::ip::address_v4;
 }
+}
+
+#endif
