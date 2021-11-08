@@ -45,26 +45,20 @@ namespace p2p {
     // peer. One in response to incoming connection other via this call.
     awaitable<void> node::connect_to_peers(char* host, char* port)
     {
-        LOG_DEBUG << "in connect to peers...";
         auto peer_endpoint = *tcp::resolver(io_context_).resolve(host, port);
         auto client_socket = tcp::socket(io_context_);
         co_await client_socket.async_connect(peer_endpoint, use_awaitable);
-        LOG_DEBUG << "Connect returned...";
         co_spawn(
             io_context_, start_connection(std::move(client_socket)), detached);
-        LOG_DEBUG << "connection spawned...";
     }
 
     awaitable<void> node::listen(tcp::acceptor& acceptor)
     {
-        LOG_DEBUG << "starting listen...";
         for (;;) {
             auto client = co_await acceptor.async_accept(use_awaitable);
             auto client_executor = client.get_executor();
-            LOG_DEBUG << "Accept connection...";
             co_spawn(
                 client_executor, start_connection(std::move(client)), detached);
-            LOG_DEBUG << "end of loop";
         }
     }
 

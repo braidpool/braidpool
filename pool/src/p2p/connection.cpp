@@ -38,9 +38,8 @@ namespace p2p {
     awaitable<void> connection::send_to_peer(std::string message)
     {
         try {
-            LOG_DEBUG << "Sending..." << message;
+            LOG_DEBUG << "Sending: " << message;
             co_await async_write(socket_, buffer(message), use_awaitable);
-            LOG_DEBUG << "Sending done...";
         } catch (const std::exception& e) {
             LOG_ERROR << e.what();
             socket_.close();
@@ -54,7 +53,7 @@ namespace p2p {
                 auto num_bytes_read = co_await boost::asio::async_read_until(
                     socket_, boost::asio::dynamic_buffer(read_msg, 1024),
                     "\r\n", use_awaitable);
-                LOG_INFO << "Received " << read_msg;
+                LOG_INFO << "Received: " << read_msg;
 
                 if (read_msg == "ping\r\n") {
                     co_await send_to_peer("pong\r\n");
