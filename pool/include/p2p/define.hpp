@@ -17,8 +17,8 @@
  * along with braidpool.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef P2P_DEFINE_HPP
-#define P2P_DEFINE_HPP
+#ifndef BP_P2P_DEFINE_HPP
+#define BP_P2P_DEFINE_HPP
 
 #include <atomic>
 #include <boost/asio.hpp>

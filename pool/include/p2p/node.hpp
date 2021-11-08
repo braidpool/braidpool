@@ -17,8 +17,8 @@
  * along with braidpool.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef NODE_HPP
-#define NODE_HPP
+#ifndef BP_NODE_HPP
+#define BP_NODE_HPP
 
 #include <boost/core/noncopyable.hpp>
 #include <boost/thread.hpp>

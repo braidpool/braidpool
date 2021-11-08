@@ -14,7 +14,7 @@ pkg_check_modules(LIBBITCOIN-SYSTEM libbitcoin-system)
 
 enable_testing()
 
-find_package(Boost 1.76 REQUIRED COMPONENTS system filesystem unit_test_framework REQUIRED)
+find_package(Boost 1.76 REQUIRED COMPONENTS system filesystem unit_test_framework log_setup REQUIRED)
 
 list(APPEND EXTRA_INCLUDES "${PROJECT_SOURCE_DIR}/include")
 
@@ -30,10 +30,14 @@ add_executable(bp
   src/p2p/node.cpp
   src/p2p/connection.cpp)
 
-target_link_libraries(bp PUBLIC ${EXTRA_LIBS})
+target_link_libraries(bp PUBLIC
+  ${Boost_LOG_SETUP_LIBRARY}
+  ${EXTRA_LIBS}
+  )
 
 target_include_directories(bp PUBLIC
   "${PROJECT_BINARY_DIR}"
+  ${Boost_LOG_SETUP_LIBRARY}
   ${EXTRA_INCLUDES}
   )
 
@@ -53,12 +57,14 @@ add_executable(pool_test
 
 target_link_libraries(pool_test PUBLIC
   ${Boost_UNIT_TEST_FRAMEWORK_LIBRARY}
+  ${Boost_LOG_SETUP_LIBRARY}
   ${EXTRA_LIBS}
   )
 
 target_include_directories(pool_test PUBLIC
   "${PROJECT_BINARY_DIR}"
   ${Boost_UNIT_TEST_FRAMEWORK_LIBRARY}
+  ${Boost_LOG_SETUP_LIBRARY}
   ${EXTRA_INCLUDES}
   )
 

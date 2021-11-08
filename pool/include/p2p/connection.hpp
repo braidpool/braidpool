@@ -17,8 +17,8 @@
  * along with braidpool.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef CONNECTION_HPP
-#define CONNECTION_HPP
+#ifndef BP_CONNECTION_HPP
+#define BP_CONNECTION_HPP
 
 #include <boost/core/noncopyable.hpp>
 #include <p2p/define.hpp>

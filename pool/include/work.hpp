@@ -17,8 +17,8 @@
  * along with braidpool.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef WORK_HPP
-#define WORK_HPP
+#ifndef BP_WORK_HPP
+#define BP_WORK_HPP
 
 #include <bitcoin/system.hpp>
 #include <cstdint>

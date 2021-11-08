@@ -20,6 +20,8 @@
 #define pool_VERSION_MAJOR @pool_VERSION_MAJOR @
 #define pool_VERSION_MINOR @pool_VERSION_MINOR @
 
+#include "system.hpp"
+#include <boost/log/trivial.hpp>
 #include <iostream>
 #include <p2p/node.hpp>
 
@@ -27,16 +29,16 @@ using namespace bp::p2p;
 
 int main(int argc, char* argv[])
 {
-    std::cout << "Starting braid pool..." << std::endl;
+    LOG_INFO << "Starting braid pool...";
     try {
         if (argc != 5) {
-            std::cerr << "Usage: bp";
-            std::cerr << " <listen_address> <listen_port>";
-            std::cerr << " <peer_address> <peer_port>\n";
+            std::cout << "Usage: bp";
+            std::cout << " <listen_address> <listen_port>";
+            std::cout << " <peer_address> <peer_port>\n";
             return 1;
         }
     } catch (std::exception& e) {
-        std::cerr << "Exception: " << e.what() << "\n";
+        LOG_ERROR << e.what();
     }
 
     // TODO(kp): Improve arg parsing and remove passing char ptrs

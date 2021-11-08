@@ -17,27 +17,20 @@
  * along with braidpool.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef BP_P2P_PROTOCOL_HPP
-#define BP_P2P_PROTOCOL_HPP
+#ifndef BP_LOG_HPP
+#define BP_LOG_HPP
 
-#include <boost/core/noncopyable.hpp>
-#include <p2p/define.hpp>
+#include <boost/log/trivial.hpp>
 
 namespace bp {
-namespace p2p {
 
-    class protocol : private boost::noncopyable {
-    public:
-        protocol(socket_ptr sock)
-            : sock_(sock)
-        {
-        }
+#define LOG_TRACE BOOST_LOG_TRIVIAL(trace)
+#define LOG_DEBUG BOOST_LOG_TRIVIAL(debug)
+#define LOG_INFO BOOST_LOG_TRIVIAL(info)
+#define LOG_WARN BOOST_LOG_TRIVIAL(warning)
+#define LOG_ERROR BOOST_LOG_TRIVIAL(error)
+#define LOG_FATAL BOOST_LOG_TRIVIAL(fatal)
 
-    private:
-        socket_ptr sock_;
-    };
-
-}
 }
 
 #endif

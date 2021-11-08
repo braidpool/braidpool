@@ -18,6 +18,7 @@
  */
 
 #include "p2p/connection.hpp"
+#include "system.hpp"
 #include <boost/thread.hpp>
 #include <iostream>
 #include <p2p/define.hpp>
@@ -32,19 +33,16 @@ namespace p2p {
     connection::connection(tcp::socket sock)
         : socket_(std::move(sock))
     {
-        std::cerr << "In connection constructor" << std::endl;
     }
 
     awaitable<void> connection::send_to_peer(std::string message)
     {
-        std::cerr << "In connection#send_to_peer" << std::endl;
         try {
-            std::cerr << "Sending....tid: " << boost::this_thread::get_id()
-                      << " " << message;
+            LOG_DEBUG << "Sending..." << message;
             co_await async_write(socket_, buffer(message), use_awaitable);
-            std::cerr << "Sending done..." << std::endl;
+            LOG_DEBUG << "Sending done...";
         } catch (const std::exception& e) {
-            std::cerr << e.what() << std::endl;
+            LOG_ERROR << e.what();
             socket_.close();
         }
     }
@@ -52,13 +50,11 @@ namespace p2p {
     awaitable<void> connection::receive_from_peer()
     {
         try {
-            std::cerr << "In connection#receive_from_peer" << std::endl;
             for (std::string read_msg;;) {
                 auto num_bytes_read = co_await boost::asio::async_read_until(
                     socket_, boost::asio::dynamic_buffer(read_msg, 1024),
                     "\r\n", use_awaitable);
-                std::cerr << "Received...tid: " << boost::this_thread::get_id()
-                          << " " << read_msg;
+                LOG_INFO << "Received " << read_msg;
 
                 if (read_msg == "ping\r\n") {
                     co_await send_to_peer("pong\r\n");
@@ -67,7 +63,7 @@ namespace p2p {
                 read_msg.erase(0, num_bytes_read);
             }
         } catch (const std::exception& e) {
-            std::cerr << e.what() << std::endl;
+            LOG_ERROR << e.what();
             socket_.close();
         }
     }
