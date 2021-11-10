@@ -17,31 +17,20 @@
  * along with braidpool.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#define pool_VERSION_MAJOR @pool_VERSION_MAJOR @
-#define pool_VERSION_MINOR @pool_VERSION_MINOR @
+#ifndef BP_LOG_HPP
+#define BP_LOG_HPP
 
-#include "system.hpp"
 #include <boost/log/trivial.hpp>
-#include <iostream>
-#include <p2p/node.hpp>
 
-using namespace bp::p2p;
+namespace bp {
 
-int main(int argc, char* argv[])
-{
-    LOG_INFO << "Starting braid pool...";
-    try {
-        if (argc != 5) {
-            std::cout << "Usage: bp";
-            std::cout << " <listen_address> <listen_port>";
-            std::cout << " <peer_address> <peer_port>\n";
-            return 1;
-        }
-    } catch (std::exception& e) {
-        LOG_ERROR << e.what();
-    }
+#define LOG_TRACE BOOST_LOG_TRIVIAL(trace)
+#define LOG_DEBUG BOOST_LOG_TRIVIAL(debug)
+#define LOG_INFO BOOST_LOG_TRIVIAL(info)
+#define LOG_WARN BOOST_LOG_TRIVIAL(warning)
+#define LOG_ERROR BOOST_LOG_TRIVIAL(error)
+#define LOG_FATAL BOOST_LOG_TRIVIAL(fatal)
 
-    // TODO(kp): Improve arg parsing and remove passing char ptrs
-    node node_(argv[1], argv[2]);
-    node_.start(argv[3], argv[4]);
 }
+
+#endif

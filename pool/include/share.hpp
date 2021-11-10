@@ -17,8 +17,8 @@
  * along with braidpool.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef SHARE_HPP
-#define SHARE_HPP
+#ifndef BP_SHARE_HPP
+#define BP_SHARE_HPP
 
 #include <bitcoin/system.hpp>
 

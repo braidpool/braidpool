@@ -17,31 +17,27 @@
  * along with braidpool.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#define pool_VERSION_MAJOR @pool_VERSION_MAJOR @
-#define pool_VERSION_MINOR @pool_VERSION_MINOR @
+#ifndef BP_P2P_PROTOCOL_HPP
+#define BP_P2P_PROTOCOL_HPP
 
-#include "system.hpp"
-#include <boost/log/trivial.hpp>
-#include <iostream>
-#include <p2p/node.hpp>
+#include <boost/core/noncopyable.hpp>
+#include <p2p/define.hpp>
 
-using namespace bp::p2p;
+namespace bp {
+namespace p2p {
 
-int main(int argc, char* argv[])
-{
-    LOG_INFO << "Starting braid pool...";
-    try {
-        if (argc != 5) {
-            std::cout << "Usage: bp";
-            std::cout << " <listen_address> <listen_port>";
-            std::cout << " <peer_address> <peer_port>\n";
-            return 1;
+    class protocol : private boost::noncopyable {
+    public:
+        protocol(socket_ptr sock)
+            : sock_(sock)
+        {
         }
-    } catch (std::exception& e) {
-        LOG_ERROR << e.what();
-    }
 
-    // TODO(kp): Improve arg parsing and remove passing char ptrs
-    node node_(argv[1], argv[2]);
-    node_.start(argv[3], argv[4]);
+    private:
+        socket_ptr sock_;
+    };
+
 }
+}
+
+#endif
