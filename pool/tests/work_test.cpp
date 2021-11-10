@@ -19,6 +19,7 @@
 
 #include "work.hpp"
 #include <boost/test/unit_test.hpp>
+#include <msgpack.hpp>
 
 using namespace bp;
 
@@ -26,10 +27,33 @@ BOOST_AUTO_TEST_SUITE(pool_tests)
 
 BOOST_AUTO_TEST_CASE(work_test__constructor__returns_work)
 {
-    const hash_digest previous_block = hash_literal(
+    hash_digest previous_block = hash_literal(
         "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f");
-    bp::work instance(10, previous_block, 1000000000, "some_coinbase", {});
+    bp::work instance(
+        10, std::move(previous_block), 1000000000, "some_coinbase", {});
     BOOST_CHECK(instance.version() == 10);
+}
+
+BOOST_AUTO_TEST_CASE(work_test__serialization__should_deserialize)
+{
+    hash_digest previous_block = hash_literal(
+        "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f");
+    bp::work instance(
+        10, std::move(previous_block), 1000000000, "some_coinbase", {});
+
+    msgpack::sbuffer sbuf;
+    msgpack::pack(sbuf, instance);
+
+    msgpack::object_handle oh = msgpack::unpack(sbuf.data(), sbuf.size());
+    msgpack::object obj = oh.get();
+
+    bp::work deserialized_work;
+    obj.convert(deserialized_work);
+
+    BOOST_CHECK(deserialized_work.version() == 10);
+    BOOST_CHECK(deserialized_work.previous_block_hash() == previous_block);
+    BOOST_CHECK(deserialized_work.difficulty() == 1000000000);
+    BOOST_CHECK(deserialized_work.coinbase() == "some_coinbase");
 }
 
 BOOST_AUTO_TEST_SUITE_END()

@@ -21,6 +21,8 @@ list(APPEND EXTRA_INCLUDES "${PROJECT_SOURCE_DIR}/include")
 list(APPEND EXTRA_LIBS ${LIBBITCOIN-SYSTEM_LINK_LIBRARIES})
 list(APPEND EXTRA_INCLUDES ${LIBBITCOIN-SYSTEM_INCLUDE_DIRS})
 
+find_package(msgpack REQUIRED)
+add_definitions(-DMSGPACK_USE_BOOST)
 
 # add the executable
 add_executable(bp
@@ -32,12 +34,14 @@ add_executable(bp
 
 target_link_libraries(bp PUBLIC
   ${Boost_LOG_SETUP_LIBRARY}
+  msgpackc-cxx
   ${EXTRA_LIBS}
   )
 
 target_include_directories(bp PUBLIC
   "${PROJECT_BINARY_DIR}"
   ${Boost_LOG_SETUP_LIBRARY}
+  msgpackc-cxx
   ${EXTRA_INCLUDES}
   )
 
@@ -58,6 +62,7 @@ add_executable(pool_test
 target_link_libraries(pool_test PUBLIC
   ${Boost_UNIT_TEST_FRAMEWORK_LIBRARY}
   ${Boost_LOG_SETUP_LIBRARY}
+  msgpackc-cxx
   ${EXTRA_LIBS}
   )
 
@@ -65,6 +70,7 @@ target_include_directories(pool_test PUBLIC
   "${PROJECT_BINARY_DIR}"
   ${Boost_UNIT_TEST_FRAMEWORK_LIBRARY}
   ${Boost_LOG_SETUP_LIBRARY}
+  msgpackc-cxx
   ${EXTRA_INCLUDES}
   )
 
