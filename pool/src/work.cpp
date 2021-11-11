@@ -18,28 +18,22 @@
  */
 
 #include "work.hpp"
+#include <memory>
 
 namespace bp {
 
-work::work(const uint32_t version, const hash_digest& previous_block_hash,
-    const uint64_t difficulty, const std::string& coinbase,
-    chain::transaction::list&& transactions)
+using namespace libbitcoin::system;
+
+work::work() { }
+
+work::work(uint32_t version, hash_digest&& previous_block_hash,
+    uint64_t difficulty, std::string&& coinbase, hash_list&& transactions)
     : version_(version)
-    , previous_block_hash_(previous_block_hash)
+    , previous_block_hash_(std::move(previous_block_hash))
     , difficulty_(difficulty)
-    , coinbase_(coinbase)
+    , coinbase_(std::move(coinbase))
     , transactions_(std::move(transactions))
 {
 }
 
-uint32_t work::version() const { return this->version_; }
-
-uint64_t work::difficulty() const { return this->difficulty_; }
-
-const hash_digest& work::previous_block_hash() const
-{
-    return this->previous_block_hash_;
-}
-
-const std::string& work::coinbase() const { return this->coinbase_; }
 }

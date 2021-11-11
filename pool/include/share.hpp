@@ -21,6 +21,7 @@
 #define BP_SHARE_HPP
 
 #include <bitcoin/system.hpp>
+#include <msgpack.hpp>
 
 namespace bp {
 
@@ -29,23 +30,39 @@ using namespace libbitcoin::system;
 // Encapsulate a share for a given work
 class share {
 public:
-    share(const hash_digest& work_hash, const uint32_t nonce,
-        const uint64_t extra_nonce, const hash_digest& merkle_root,
-        uint64_t timestamp, const data_chunk& hub_pubkey,
-        const data_chunk& miner_pubkey, const data_chunk& tor_service_pubkey,
-        hash_list shares);
+    // msgpack requires default constructor
+    share();
+    share(hash_digest&& work_hash, uint32_t nonce, uint64_t extra_nonce,
+        hash_digest&& merkle_root, uint64_t timestamp, data_chunk&& hub_pubkey,
+        data_chunk&& miner_pubkey, data_chunk&& tor_service_pubkey,
+        hash_list&& shares);
 
-    const hash_digest& work_hash() const;
+    const hash_digest& work_hash() const { return work_hash_; }
+
+    uint32_t nonce() const { return nonce_; }
+
+    uint64_t extra_nonce() const { return extra_nonce_; }
+
+    const hash_digest& merkle_root() const { return merkle_root_; }
+
+    uint64_t timestamp() const { return timestamp_; }
+    const data_chunk& hub_pubkey() const { return hub_pubkey_; }
+    const data_chunk& miner_pubkey() const { return miner_pubkey_; }
+    const data_chunk& tor_service_pubkey() const { return tor_service_pubkey_; }
+    const hash_list& shares() const { return shares_; }
+
+    MSGPACK_DEFINE(work_hash_, nonce_, extra_nonce_, merkle_root_, timestamp_,
+        hub_pubkey_, miner_pubkey_, tor_service_pubkey_, shares_);
 
 private:
-    const hash_digest& work_hash_;
+    hash_digest work_hash_;
     uint32_t nonce_;
     uint64_t extra_nonce_;
-    const hash_digest& merkle_root_;
-    const uint64_t timestamp_;
-    const data_chunk& hub_pubkey_;
-    const data_chunk& miner_pubkey_;
-    const data_chunk& tor_service_pubkey_;
+    hash_digest merkle_root_;
+    uint64_t timestamp_;
+    data_chunk hub_pubkey_;
+    data_chunk miner_pubkey_;
+    data_chunk tor_service_pubkey_;
     hash_list shares_;
 };
 }
