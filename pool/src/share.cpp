@@ -21,23 +21,21 @@
 
 namespace bp {
 
-share::share(const hash_digest& work_hash, const uint32_t nonce,
-    const uint64_t extra_nonce, const hash_digest& merkle_root,
-    uint64_t timestamp, const data_chunk& hub_pubkey,
-    const data_chunk& miner_pubkey, const data_chunk& tor_service_pubkey,
-    hash_list shares)
-    : work_hash_(work_hash)
+share::share() { }
+
+share::share(hash_digest&& work_hash, uint32_t nonce, uint64_t extra_nonce,
+    hash_digest&& merkle_root, uint64_t timestamp, data_chunk&& hub_pubkey,
+    data_chunk&& miner_pubkey, data_chunk&& tor_service_pubkey,
+    hash_list&& shares)
+    : work_hash_(std::move(work_hash))
     , nonce_(nonce)
     , extra_nonce_(extra_nonce)
-    , merkle_root_(merkle_root)
+    , merkle_root_(std::move(merkle_root))
     , timestamp_(timestamp)
-    , hub_pubkey_(hub_pubkey)
-    , miner_pubkey_(miner_pubkey)
-    , tor_service_pubkey_(tor_service_pubkey)
-    , shares_(shares)
+    , hub_pubkey_(std::move(hub_pubkey))
+    , miner_pubkey_(std::move(miner_pubkey))
+    , tor_service_pubkey_(std::move(tor_service_pubkey))
+    , shares_(std::move(shares))
 {
 }
-
-const hash_digest& share::work_hash() const { return this->work_hash_; }
-
 }

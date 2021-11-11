@@ -38,11 +38,18 @@ public:
     work(uint32_t version, hash_digest&& previous_block_hash,
         uint64_t difficulty, std::string&& coinbase, hash_list&& transactions);
 
-    uint32_t version() const;
-    hash_digest previous_block_hash() const;
-    uint64_t difficulty() const;
-    std::string coinbase() const;
-    hash_list transactions() const;
+    uint32_t version() const { return version_; }
+
+    uint64_t difficulty() const { return difficulty_; }
+
+    const hash_digest& previous_block_hash() const
+    {
+        return previous_block_hash_;
+    }
+
+    const std::string& coinbase() const { return coinbase_; }
+
+    const hash_list& transactions() const { return transactions_; }
 
     MSGPACK_DEFINE(version_, previous_block_hash_, difficulty_, coinbase_);
 

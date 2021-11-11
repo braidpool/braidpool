@@ -36,14 +36,4 @@ work::work(uint32_t version, hash_digest&& previous_block_hash,
 {
 }
 
-uint32_t work::version() const { return version_; }
-
-uint64_t work::difficulty() const { return difficulty_; }
-
-hash_digest work::previous_block_hash() const { return previous_block_hash_; }
-
-std::string work::coinbase() const { return coinbase_; }
-
-hash_list work::transactions() const { return transactions_; }
-
 }
