@@ -36,6 +36,8 @@ tracks the main components to build. Here's a list to keep us focused:
 
 Matrix chat: [https://matrix.to/#/#braidpool:matrix.org](https://matrix.to/#/#braidpool:matrix.org)
 
+Mailing list: [https://sourceforge.net/p/braidpool/mailman/](https://sourceforge.net/p/braidpool/mailman/)
+
 Development blog: [https://pool2win.github.io/braidpool/](https://pool2win.github.io/braidpool/)
 
 Donations: bitcoin:bc1q6xms5xsq6kvk9h57mvsdxdjnnrl0vsc942xlxe
