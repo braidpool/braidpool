@@ -31,6 +31,6 @@ namespace bp {
 #define LOG_ERROR BOOST_LOG_TRIVIAL(error)
 #define LOG_FATAL BOOST_LOG_TRIVIAL(fatal)
 
-}
+}  // namespace bp
 
 #endif

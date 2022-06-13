@@ -29,33 +29,33 @@
 
 namespace bp {
 namespace p2p {
-    class node : private boost::noncopyable {
-    public:
-        node(char* listen_address, char* listen_port);
-        awaitable<void> connect_to_peers(char* host, char* port);
-        awaitable<void> listen(tcp::acceptor& acceptor);
-        void start(char* peer_host, char* peer_port);
-        void stop();
-        // void add_connection(connection& connection_);
-        // void remove_connection(connection& connection_);
+class node : private boost::noncopyable {
+ public:
+  node(char* listen_address, char* listen_port);
+  awaitable<void> connect_to_peers(char* host, char* port);
+  awaitable<void> listen(tcp::acceptor& acceptor);
+  void start(char* peer_host, char* peer_port);
+  void stop();
+  // void add_connection(connection& connection_);
+  // void remove_connection(connection& connection_);
 
-    private:
-        awaitable<void> start_connection(tcp::socket client);
+ private:
+  awaitable<void> start_connection(tcp::socket client);
 
-        io_context io_context_;
-        std::unique_ptr<tcp::acceptor> acceptor_;
+  io_context io_context_;
+  std::unique_ptr<tcp::acceptor> acceptor_;
 
-        // // protects add/remove connections
-        // boost::mutex connections_mutex_;
+  // // protects add/remove connections
+  // boost::mutex connections_mutex_;
 
-        // // protected by connections_mutex_
-        // std::set<connection&> connections_;
+  // // protected by connections_mutex_
+  // std::set<connection&> connections_;
 
-        // thread group to run io_context
-        boost::thread_group threads_;
-    };
+  // thread group to run io_context
+  boost::thread_group threads_;
+};
 
-}
-}
+}  // namespace p2p
+}  // namespace bp
 
 #endif

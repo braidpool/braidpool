@@ -32,34 +32,33 @@ using namespace libbitcoin::system;
 // The conversion of getblocktemplate to block is not covered by this
 // class.
 class work {
-public:
-    // msgpack requires default constructor
-    work();
-    work(uint32_t version, hash_digest&& previous_block_hash,
-        uint64_t difficulty, std::string&& coinbase, hash_list&& transactions);
+ public:
+  // msgpack requires default constructor
+  work();
+  work(uint32_t version, hash_digest&& previous_block_hash, uint64_t difficulty,
+       std::string&& coinbase, hash_list&& transactions);
 
-    uint32_t version() const { return version_; }
+  uint32_t version() const { return version_; }
 
-    uint64_t difficulty() const { return difficulty_; }
+  uint64_t difficulty() const { return difficulty_; }
 
-    const hash_digest& previous_block_hash() const
-    {
-        return previous_block_hash_;
-    }
+  const hash_digest& previous_block_hash() const {
+    return previous_block_hash_;
+  }
 
-    const std::string& coinbase() const { return coinbase_; }
+  const std::string& coinbase() const { return coinbase_; }
 
-    const hash_list& transactions() const { return transactions_; }
+  const hash_list& transactions() const { return transactions_; }
 
-    MSGPACK_DEFINE(version_, previous_block_hash_, difficulty_, coinbase_);
+  MSGPACK_DEFINE(version_, previous_block_hash_, difficulty_, coinbase_);
 
-private:
-    uint32_t version_;
-    hash_digest previous_block_hash_;
-    uint64_t difficulty_;
-    std::string coinbase_;
-    hash_list transactions_;
+ private:
+  uint32_t version_;
+  hash_digest previous_block_hash_;
+  uint64_t difficulty_;
+  std::string coinbase_;
+  hash_list transactions_;
 };
-}
+}  // namespace bp
 
 #endif

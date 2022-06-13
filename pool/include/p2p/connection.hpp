@@ -27,16 +27,16 @@ using boost::asio::awaitable;
 
 namespace bp {
 namespace p2p {
-    class connection : private boost::noncopyable {
-    public:
-        connection(tcp::socket sock);
-        awaitable<void> send_to_peer(std::string message);
-        awaitable<void> receive_from_peer();
+class connection : private boost::noncopyable {
+ public:
+  connection(tcp::socket sock);
+  awaitable<void> send_to_peer(std::string message);
+  awaitable<void> receive_from_peer();
 
-    private:
-        tcp::socket socket_;
-    };
-}
-}
+ private:
+  tcp::socket socket_;
+};
+}  // namespace p2p
+}  // namespace bp
 
 #endif

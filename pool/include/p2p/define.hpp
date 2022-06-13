@@ -26,16 +26,16 @@
 namespace bp {
 namespace p2p {
 
-    using error_code = boost::system::error_code;
-    using io_service = boost::asio::io_service;
-    using io_context = boost::asio::io_context;
-    using tcp = boost::asio::ip::tcp;
-    using tcp_acceptor = tcp::acceptor;
-    using endpoint = tcp::endpoint;
-    using socket = tcp::socket;
-    using socket_ptr = std::shared_ptr<socket>;
-    using ipv4 = boost::asio::ip::address_v4;
-}
-}
+using error_code = boost::system::error_code;
+using io_service = boost::asio::io_service;
+using io_context = boost::asio::io_context;
+using tcp = boost::asio::ip::tcp;
+using tcp_acceptor = tcp::acceptor;
+using endpoint = tcp::endpoint;
+using socket = tcp::socket;
+using socket_ptr = std::shared_ptr<socket>;
+using ipv4 = boost::asio::ip::address_v4;
+}  // namespace p2p
+}  // namespace bp
 
 #endif

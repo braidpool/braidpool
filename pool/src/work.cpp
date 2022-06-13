@@ -18,22 +18,22 @@
  */
 
 #include "work.hpp"
+
 #include <memory>
 
 namespace bp {
 
 using namespace libbitcoin::system;
 
-work::work() { }
+work::work() {}
 
 work::work(uint32_t version, hash_digest&& previous_block_hash,
-    uint64_t difficulty, std::string&& coinbase, hash_list&& transactions)
-    : version_(version)
-    , previous_block_hash_(std::move(previous_block_hash))
-    , difficulty_(difficulty)
-    , coinbase_(std::move(coinbase))
-    , transactions_(std::move(transactions))
-{
-}
+           uint64_t difficulty, std::string&& coinbase,
+           hash_list&& transactions)
+    : version_(version),
+      previous_block_hash_(std::move(previous_block_hash)),
+      difficulty_(difficulty),
+      coinbase_(std::move(coinbase)),
+      transactions_(std::move(transactions)) {}
 
-}
+}  // namespace bp

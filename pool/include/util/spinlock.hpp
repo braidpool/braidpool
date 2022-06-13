@@ -26,44 +26,38 @@
 namespace bp {
 
 class spinlock {
-public:
-    spinlock()
-        : state_(unlocked)
-    {
-    }
+ public:
+  spinlock() : state_(unlocked) {}
 
-    void lock()
-    {
-        while (state_.exchange(locked, boost::memory_order_acquire) == locked) {
-            /* busy-wait */
-        }
+  void lock() {
+    while (state_.exchange(locked, boost::memory_order_acquire) == locked) {
+      /* busy-wait */
     }
-    void unlock() { state_.store(unlocked, boost::memory_order_release); }
+  }
+  void unlock() { state_.store(unlocked, boost::memory_order_release); }
 
-private:
-    typedef enum { locked, unlocked } lockstate;
-    boost::atomic<lockstate> state_;
+ private:
+  typedef enum { locked, unlocked } lockstate;
+  boost::atomic<lockstate> state_;
 };
 
 class scopedspinlock {
-public:
-    scopedspinlock(std::shared_ptr<spinlock> lock)
-        : spinlock_(lock)
-    {
-        spinlock_->lock();
-    }
+ public:
+  scopedspinlock(std::shared_ptr<spinlock> lock) : spinlock_(lock) {
+    spinlock_->lock();
+  }
 
-    ~scopedspinlock() { spinlock_->unlock(); }
+  ~scopedspinlock() { spinlock_->unlock(); }
 
-    scopedspinlock(const scopedspinlock&) = delete;
-    scopedspinlock& operator=(const scopedspinlock&) = delete;
-    scopedspinlock(scopedspinlock&&) = delete;
-    scopedspinlock& operator=(scopedspinlock&&) = delete;
+  scopedspinlock(const scopedspinlock&) = delete;
+  scopedspinlock& operator=(const scopedspinlock&) = delete;
+  scopedspinlock(scopedspinlock&&) = delete;
+  scopedspinlock& operator=(scopedspinlock&&) = delete;
 
-private:
-    std::shared_ptr<spinlock> spinlock_;
+ private:
+  std::shared_ptr<spinlock> spinlock_;
 };
 
-}
+}  // namespace bp
 
 #endif
