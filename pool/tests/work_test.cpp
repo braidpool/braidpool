@@ -26,7 +26,7 @@
 using namespace bp;
 
 TEST(WORK_TEST, CONSTRUCTOR__RETURNS_WORK) {
-  hash_digest previous_block = hash_literal(
+  hash_digest previous_block = base16_hash(
       "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f");
   bp::work instance(10, std::move(previous_block), 1000000000, "some_coinbase",
                     {});
@@ -34,7 +34,7 @@ TEST(WORK_TEST, CONSTRUCTOR__RETURNS_WORK) {
 }
 
 TEST(WORK_TEST, SERIALIZATION__SHOULD_DESERIALIZE) {
-  hash_digest previous_block = hash_literal(
+  hash_digest previous_block = base16_hash(
       "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f");
   bp::work instance(10, std::move(previous_block), 1000000000, "some_coinbase",
                     {});

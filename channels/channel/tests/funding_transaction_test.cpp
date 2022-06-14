@@ -51,10 +51,10 @@ TEST(FUND_TRANSCTION, VALID_INPUTS__RETURNS_VALID_TRANSACTION)
         "02100a1a9ca2c18932d6577c58f225580184d0e08226d41959874ac963e3c1b2ff");
     decode_base16(miner_noncoop,
         "0275983913e60093b767e85597ca9397fb2f418e57f998d6afbbc536116085b1cc");
-    hash_digest secret = hash_literal(
+    hash_digest secret = base16_hash(
         "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b");
 
-    hash_digest tx1_hash_digest = hash_literal(TX1_HASH);
+    hash_digest tx1_hash_digest = base16_hash(TX1_HASH);
 
     funding_transaction instance(tx1_hash_digest, 0, SCRIPT_2_OF_2_MULTISIG,
         hub, miner, hub_noncoop, miner_noncoop, secret, 1000);
