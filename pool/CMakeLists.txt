@@ -1,16 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
 
-# -- Start clang and lsp support comment --
-
-# The following flags in this file is generally bad practice, but I
-# need all this to make clangd work as the lsp for my dev env.  We use
-# clang++ from now on and lsp uses clangd.
-set(CMAKE_CXX_COMPILER "clang++")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++20 -stdlib=libc++")
-set(CMAKE_EXE_LINKER_FLAGS "-lc++abi")
-
-# -- End clang and lsp support comment --
-
 # set the project name
 project(pool VERSION 1.0)
 
@@ -35,7 +24,7 @@ pkg_check_modules(LIBBITCOIN-SYSTEM libbitcoin-system)
 
 enable_testing()
 
-find_package(Boost 1.76 REQUIRED COMPONENTS system filesystem log_setup REQUIRED)
+find_package(Boost 1.76 REQUIRED COMPONENTS system filesystem thread log log_setup)
 
 list(APPEND EXTRA_INCLUDES "${PROJECT_SOURCE_DIR}/include")
 
@@ -54,14 +43,15 @@ add_executable(bp
   src/p2p/connection.cpp)
 
 target_link_libraries(bp PUBLIC
-  ${Boost_LOG_SETUP_LIBRARY}
+  ${Boost_LIBRARIES}
+  Boost::log Boost::log_setup
   msgpackc-cxx
   ${EXTRA_LIBS}
   )
 
 target_include_directories(bp PUBLIC
   "${PROJECT_BINARY_DIR}"
-  ${Boost_LOG_SETUP_LIBRARY}
+  ${Boost_LIBRARIES}
   msgpackc-cxx
   ${EXTRA_INCLUDES}
   )
@@ -80,7 +70,8 @@ add_executable(pool_test
   )
 
 target_link_libraries(pool_test PUBLIC
-  ${Boost_LOG_SETUP_LIBRARY}
+  ${Boost_LIBRARIES}
+  Boost::log Boost::log_setup
   gtest_main
   msgpackc-cxx
   ${EXTRA_LIBS}
@@ -88,7 +79,6 @@ target_link_libraries(pool_test PUBLIC
 
 target_include_directories(pool_test PUBLIC
   "${PROJECT_BINARY_DIR}"
-  ${Boost_LOG_SETUP_LIBRARY}
   msgpackc-cxx
   ${EXTRA_INCLUDES}
   )
