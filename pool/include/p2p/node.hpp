@@ -27,11 +27,14 @@
 #include <p2p/define.hpp>
 #include <set>
 
+#include "runner.hpp"
+
 namespace bp {
 namespace p2p {
 class node : private boost::noncopyable {
  public:
-  node(const std::string& listen_address, const std::string& listen_port);
+  node(io_context& ctx, const std::string& listen_address,
+       const std::string& listen_port);
   ~node();
   awaitable<void> connect_to_peers(const std::string& host,
                                    const std::string& port);
@@ -41,22 +44,18 @@ class node : private boost::noncopyable {
   // void add_connection(connection& connection_);
   // void remove_connection(connection& connection_);
 
-  const io_context& get_io_context() const { return this->io_context_; }
-
  private:
   awaitable<void> start_connection(tcp::socket client);
 
-  io_context io_context_;
   std::unique_ptr<tcp::acceptor> acceptor_;
+
+  io_context& ctx_;
 
   // // protects add/remove connections
   // boost::mutex connections_mutex_;
 
   // // protected by connections_mutex_
   // std::set<connection&> connections_;
-
-  // thread group to run io_context
-  boost::thread_group threads_;
 };
 
 }  // namespace p2p

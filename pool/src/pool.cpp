@@ -25,8 +25,10 @@
 #include <iostream>
 #include <p2p/node.hpp>
 
+#include "runner.hpp"
 #include "system.hpp"
 
+using namespace bp;
 using namespace bp::p2p;
 
 int main(int argc, char* argv[]) {
@@ -42,12 +44,14 @@ int main(int argc, char* argv[]) {
     LOG_ERROR << e.what();
   }
 
+  runner node_runner;
   // TODO(kp): Improve arg parsing
   std::string listen_address{argv[1]};
   std::string listen_port{argv[2]};
   std::string peer_address{argv[3]};
   std::string peer_port{argv[4]};
-  node node_(listen_address, listen_port);
+  node node_(node_runner.get_io_context(), listen_address, listen_port);
   LOG_INFO << "Node created...";
   node_.start(peer_address, peer_port);
+  node_runner.start();
 }

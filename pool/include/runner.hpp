@@ -17,23 +17,29 @@
  * along with braidpool.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "p2p/node.hpp"
+#ifndef BP_RUNNER_HPP
+#define BP_RUNNER_HPP
 
-#include <gtest/gtest.h>
+#include <boost/asio.hpp>
+#include <boost/core/noncopyable.hpp>
+#include <boost/thread.hpp>
 
-#include <boost/asio/co_spawn.hpp>
-#include <boost/asio/detached.hpp>
+namespace bp {
 
-#include "p2p/define.hpp"
-#include "runner.hpp"
+using io_context = boost::asio::io_context;
 
-using namespace bp;
-using namespace bp::p2p;
+class runner : private boost::noncopyable {
+ public:
+  void start();
+  void stop();
+  io_context& get_io_context() { return io_context_; };
 
-TEST(NODE_TEST, CONSTRUCTOR__RETURNS_NODE) {
-  runner node_runner;
-  node instance{node_runner.get_io_context(), "localhost", "22140"};
+ private:
+  io_context io_context_;
+  // thread group to run io_context
+  boost::thread_group threads_;
+};
 
-  // co_spawn(ctx, instance.connect_to_peers("localhost", "22141"),
-  //          boost::asio::detached);
-}
+}  // namespace bp
+
+#endif

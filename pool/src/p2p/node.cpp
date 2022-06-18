@@ -19,6 +19,7 @@
 
 #include "p2p/node.hpp"
 
+#include <boost/asio/io_context.hpp>
 #include <boost/thread.hpp>
 #include <iostream>
 #include <p2p/define.hpp>
@@ -35,11 +36,12 @@ using boost::asio::use_awaitable;
 namespace bp {
 namespace p2p {
 
-node::node(const std::string& listen_address, const std::string& listen_port) {
-  auto listen_endpoint =
-      *tcp::resolver(io_context_)
-           .resolve(listen_address, listen_port, tcp::resolver::passive);
-  acceptor_ = std::make_unique<tcp::acceptor>(io_context_, listen_endpoint);
+node::node(io_context& ctx, const std::string& listen_address,
+           const std::string& listen_port)
+    : ctx_(ctx) {
+  auto listen_endpoint = *tcp::resolver(ctx_).resolve(
+      listen_address, listen_port, tcp::resolver::passive);
+  acceptor_ = std::make_unique<tcp::acceptor>(ctx_, listen_endpoint);
 }
 
 node::~node() {
@@ -52,12 +54,12 @@ node::~node() {
 // peer. One in response to incoming connection other via this call.
 awaitable<void> node::connect_to_peers(const std::string& host,
                                        const std::string& port) {
-  auto peer_endpoint = *tcp::resolver(io_context_).resolve(host, port);
-  auto client_socket = tcp::socket(io_context_);
+  auto peer_endpoint = *tcp::resolver(ctx_).resolve(host, port);
+  auto client_socket = tcp::socket(ctx_);
   std::cerr << "Calling connect..." << std::endl;
   co_await client_socket.async_connect(peer_endpoint, use_awaitable);
   std::cerr << "Connect returned..." << std::endl;
-  co_spawn(io_context_, start_connection(std::move(client_socket)), detached);
+  co_spawn(ctx_, start_connection(std::move(client_socket)), detached);
 }
 
 awaitable<void> node::listen(tcp::acceptor& acceptor) {
@@ -87,17 +89,8 @@ awaitable<void> node::start_connection(tcp::socket client) {
 
 void node::start(const std::string& peer_host, const std::string& peer_port) {
   std::cerr << "In start..." << std::endl;
-  co_spawn(io_context_, listen(*acceptor_), detached);
-
-  // brute force stop context for now.
-  boost::asio::signal_set signals(io_context_, SIGINT, SIGTERM);
-  signals.async_wait([&](auto, auto) { io_context_.stop(); });
-
-  co_spawn(io_context_, connect_to_peers(peer_host, peer_port), detached);
-
-  for (unsigned i = 0; i < boost::thread::hardware_concurrency(); ++i)
-    threads_.create_thread(boost::bind(&io_context::run, &io_context_));
-  threads_.join_all();
+  co_spawn(ctx_, listen(*acceptor_), detached);
+  co_spawn(ctx_, connect_to_peers(peer_host, peer_port), detached);
 }
 
 void node::stop() {}

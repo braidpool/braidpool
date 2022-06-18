@@ -17,23 +17,20 @@
  * along with braidpool.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "p2p/node.hpp"
-
-#include <gtest/gtest.h>
-
-#include <boost/asio/co_spawn.hpp>
-#include <boost/asio/detached.hpp>
-
-#include "p2p/define.hpp"
 #include "runner.hpp"
 
-using namespace bp;
-using namespace bp::p2p;
+namespace bp {
 
-TEST(NODE_TEST, CONSTRUCTOR__RETURNS_NODE) {
-  runner node_runner;
-  node instance{node_runner.get_io_context(), "localhost", "22140"};
+void runner::start() {
+  // brute force stop context for now.
+  boost::asio::signal_set signals(io_context_, SIGINT, SIGTERM);
+  signals.async_wait([&](auto, auto) { io_context_.stop(); });
 
-  // co_spawn(ctx, instance.connect_to_peers("localhost", "22141"),
-  //          boost::asio::detached);
+  for (unsigned i = 0; i < boost::thread::hardware_concurrency(); ++i)
+    threads_.create_thread(boost::bind(&io_context::run, &io_context_));
+  threads_.join_all();
 }
+
+void runner::stop() {}
+
+}  // namespace bp

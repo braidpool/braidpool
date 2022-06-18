@@ -35,6 +35,7 @@ find_package(msgpack REQUIRED)
 add_definitions(-DMSGPACK_USE_BOOST)
 
 add_executable(bp
+  src/runner.cpp
   src/pool.cpp
   src/share.cpp
   src/work.cpp
@@ -60,6 +61,7 @@ install(TARGETS bp DESTINATION bin)
 
 # Add tests
 add_executable(pool_test
+  src/runner.cpp
   src/share.cpp
   src/work.cpp
   src/p2p/node.cpp
