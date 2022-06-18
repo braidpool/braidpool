@@ -17,6 +17,7 @@
  * along with braidpool.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "util/log.hpp"
 #define pool_VERSION_MAJOR @pool_VERSION_MAJOR @
 #define pool_VERSION_MINOR @pool_VERSION_MINOR @
 
@@ -41,7 +42,12 @@ int main(int argc, char* argv[]) {
     LOG_ERROR << e.what();
   }
 
-  // TODO(kp): Improve arg parsing and remove passing char ptrs
-  node node_(argv[1], argv[2]);
-  node_.start(argv[3], argv[4]);
+  // TODO(kp): Improve arg parsing
+  std::string listen_address{argv[1]};
+  std::string listen_port{argv[2]};
+  std::string peer_address{argv[3]};
+  std::string peer_port{argv[4]};
+  node node_(listen_address, listen_port);
+  LOG_INFO << "Node created...";
+  node_.start(peer_address, peer_port);
 }

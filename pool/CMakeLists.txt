@@ -34,7 +34,6 @@ list(APPEND EXTRA_INCLUDES ${LIBBITCOIN-SYSTEM_INCLUDE_DIRS})
 find_package(msgpack REQUIRED)
 add_definitions(-DMSGPACK_USE_BOOST)
 
-# add the executable
 add_executable(bp
   src/pool.cpp
   src/share.cpp
@@ -67,6 +66,7 @@ add_executable(pool_test
   src/p2p/connection.cpp
   ${PROJECT_SOURCE_DIR}/tests/share_test.cpp
   ${PROJECT_SOURCE_DIR}/tests/work_test.cpp
+  ${PROJECT_SOURCE_DIR}/tests/p2p/node_test.cpp
   )
 
 target_link_libraries(pool_test PUBLIC

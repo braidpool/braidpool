@@ -24,6 +24,7 @@
 #include <p2p/define.hpp>
 
 #include "system.hpp"
+#include "util/log.hpp"
 
 using boost::asio::awaitable;
 using boost::asio::co_spawn;
@@ -34,33 +35,46 @@ using boost::asio::use_awaitable;
 namespace bp {
 namespace p2p {
 
-node::node(char* listen_address, char* listen_port) {
+node::node(const std::string& listen_address, const std::string& listen_port) {
   auto listen_endpoint =
       *tcp::resolver(io_context_)
            .resolve(listen_address, listen_port, tcp::resolver::passive);
   acceptor_ = std::make_unique<tcp::acceptor>(io_context_, listen_endpoint);
 }
 
+node::~node() {
+  std::cerr << "Stopping node..." << std::endl;
+  this->stop();
+  std::cerr << "Node stopped." << std::endl;
+}
+
 // TODO: guard against duplicate connection creation to the same
 // peer. One in response to incoming connection other via this call.
-awaitable<void> node::connect_to_peers(char* host, char* port) {
+awaitable<void> node::connect_to_peers(const std::string& host,
+                                       const std::string& port) {
   auto peer_endpoint = *tcp::resolver(io_context_).resolve(host, port);
   auto client_socket = tcp::socket(io_context_);
+  std::cerr << "Calling connect..." << std::endl;
   co_await client_socket.async_connect(peer_endpoint, use_awaitable);
+  std::cerr << "Connect returned..." << std::endl;
   co_spawn(io_context_, start_connection(std::move(client_socket)), detached);
 }
 
 awaitable<void> node::listen(tcp::acceptor& acceptor) {
+  std::cerr << "Listening..." << std::endl;
   for (;;) {
     auto client = co_await acceptor.async_accept(use_awaitable);
+    std::cerr << "Accept returned..." << std::endl;
     auto client_executor = client.get_executor();
     co_spawn(client_executor, start_connection(std::move(client)), detached);
   }
 }
 
 awaitable<void> node::start_connection(tcp::socket client) {
+  std::cerr << "Start connection..." << std::endl;
   auto client_connection = std::make_shared<connection>(std::move(client));
   auto ex = client.get_executor();
+  std::cerr << "calling receive..." << std::endl;
   co_spawn(ex, client_connection->receive_from_peer(), detached);
   boost::asio::steady_timer timer_{ex};
   boost::system::error_code ec;
@@ -71,7 +85,8 @@ awaitable<void> node::start_connection(tcp::socket client) {
   }
 }
 
-void node::start(char* peer_host, char* peer_port) {
+void node::start(const std::string& peer_host, const std::string& peer_port) {
+  std::cerr << "In start..." << std::endl;
   co_spawn(io_context_, listen(*acceptor_), detached);
 
   // brute force stop context for now.

@@ -35,10 +35,10 @@ connection::connection(tcp::socket sock) : socket_(std::move(sock)) {}
 
 awaitable<void> connection::send_to_peer(std::string message) {
   try {
-    LOG_DEBUG << "Sending: " << message;
+    std::cerr << "Sending: " << message << std::endl;
     co_await async_write(socket_, buffer(message), use_awaitable);
   } catch (const std::exception& e) {
-    LOG_ERROR << e.what();
+    std::cerr << e.what() << std::endl;
     socket_.close();
   }
 }
@@ -49,7 +49,7 @@ awaitable<void> connection::receive_from_peer() {
       auto num_bytes_read = co_await boost::asio::async_read_until(
           socket_, boost::asio::dynamic_buffer(read_msg, 1024), "\r\n",
           use_awaitable);
-      LOG_INFO << "Received: " << read_msg;
+      std::cerr << "Received: " << read_msg << std::endl;
 
       if (read_msg == "ping\r\n") {
         co_await send_to_peer("pong\r\n");
@@ -58,7 +58,7 @@ awaitable<void> connection::receive_from_peer() {
       read_msg.erase(0, num_bytes_read);
     }
   } catch (const std::exception& e) {
-    LOG_ERROR << e.what();
+    std::cerr << e.what() << std::endl;
     socket_.close();
   }
 }
