@@ -40,7 +40,7 @@ class node : private boost::noncopyable {
   // void remove_connection(connection& connection_);
 
  private:
-  awaitable<void> start_connection(tcp::socket client);
+  awaitable<void> start_connection(tcp::socket&& client);
   awaitable<void> connect_to_peers(const std::string& host,
                                    const std::string& port);
   awaitable<void> listen(tcp::acceptor& acceptor);

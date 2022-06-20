@@ -72,7 +72,7 @@ awaitable<void> node::listen(tcp::acceptor& acceptor) {
   }
 }
 
-awaitable<void> node::start_connection(tcp::socket client) {
+awaitable<void> node::start_connection(tcp::socket&& client) {
   std::cerr << "Start connection..." << std::endl;
   auto client_connection = std::make_shared<connection>(std::move(client));
   auto ex = client.get_executor();
