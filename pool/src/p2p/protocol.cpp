@@ -17,28 +17,35 @@
  * along with braidpool.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef BP_P2P_PROTOCOL_HPP
-#define BP_P2P_PROTOCOL_HPP
+#include "p2p/protocol.hpp"
 
 #include <boost/asio/awaitable.hpp>
-#include <boost/core/noncopyable.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/thread.hpp>
+#include <iostream>
 #include <p2p/define.hpp>
 
 #include "p2p/connection.hpp"
+#include "system.hpp"
+
+using boost::asio::awaitable;
+using boost::asio::use_awaitable;
 
 namespace bp {
 namespace p2p {
 
-class protocol : private boost::noncopyable {
- public:
-  protocol(connection::connection_ptr connection_);
-  boost::asio::awaitable<void> start_handshake();
+protocol::protocol(connection::connection_ptr connection)
+    : connection_(connection) {}
 
- private:
-  connection::connection_ptr connection_;
-};
+awaitable<void> protocol::start_handshake() {
+  boost::asio::steady_timer timer_{connection_->get_socket().get_executor()};
+  boost::system::error_code ec;
+  for (;;) {
+    co_await connection_->send_to_peer("ping\r\n");
+    timer_.expires_after(std::chrono::seconds(5));
+    co_await timer_.async_wait(redirect_error(use_awaitable, ec));
+  }
+}
 
 }  // namespace p2p
 }  // namespace bp
-
-#endif

@@ -19,6 +19,7 @@
 
 #include "p2p/node.hpp"
 
+#include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/thread.hpp>
 #include <boost/thread/pthread/mutex.hpp>
@@ -27,6 +28,7 @@
 #include <p2p/define.hpp>
 
 #include "p2p/connection.hpp"
+#include "p2p/protocol.hpp"
 #include "system.hpp"
 #include "util/log.hpp"
 
@@ -59,19 +61,13 @@ awaitable<void> node::connect_to_peers(const std::string& host,
                                        const std::string& port) {
   auto peer_endpoint = *tcp::resolver(ctx_).resolve(host, port);
   auto client_socket = tcp::socket(ctx_);
-  std::cerr << "Calling connect..." << std::endl;
   co_await client_socket.async_connect(peer_endpoint, use_awaitable);
-  std::cerr << "Connect returned..." << std::endl;
   auto client_connection =
       std::make_shared<connection>(std::move(client_socket));
   add_connection(client_connection);
-  boost::asio::steady_timer timer_{client_socket.get_executor()};
-  boost::system::error_code ec;
-  for (;;) {
-    co_await client_connection->send_to_peer("ping\r\n");
-    timer_.expires_after(std::chrono::seconds(5));
-    co_await timer_.async_wait(redirect_error(use_awaitable, ec));
-  }
+  protocol run_protocol{client_connection};
+  co_spawn(client_socket.get_executor(), run_protocol.start_handshake(),
+           detached);
 }
 
 awaitable<void> node::listen(tcp::acceptor& acceptor) {

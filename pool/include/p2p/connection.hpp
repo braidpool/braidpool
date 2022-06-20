@@ -36,6 +36,7 @@ class connection : private boost::noncopyable {
   ~connection();
   void start_receive_from_peer();
   awaitable<void> send_to_peer(std::string message);
+  socket& get_socket() { return socket_; }
 
  private:
   awaitable<void> receive_from_peer();

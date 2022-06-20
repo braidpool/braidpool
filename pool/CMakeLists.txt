@@ -40,7 +40,8 @@ add_executable(bp
   src/share.cpp
   src/work.cpp
   src/p2p/node.cpp
-  src/p2p/connection.cpp)
+  src/p2p/connection.cpp
+  src/p2p/protocol.cpp)
 
 target_link_libraries(bp PUBLIC
   ${Boost_LIBRARIES}
@@ -66,6 +67,7 @@ add_executable(pool_test
   src/work.cpp
   src/p2p/node.cpp
   src/p2p/connection.cpp
+  src/p2p/protocol.cpp
   ${PROJECT_SOURCE_DIR}/test/share_test.cpp
   ${PROJECT_SOURCE_DIR}/test/work_test.cpp
   ${PROJECT_SOURCE_DIR}/test/p2p/node_test.cpp
