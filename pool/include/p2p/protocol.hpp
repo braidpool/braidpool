@@ -28,10 +28,9 @@ namespace p2p {
 
 class protocol : private boost::noncopyable {
  public:
-  protocol(socket_ptr sock) : sock_(sock) {}
+  protocol() {}
 
  private:
-  socket_ptr sock_;
 };
 
 }  // namespace p2p

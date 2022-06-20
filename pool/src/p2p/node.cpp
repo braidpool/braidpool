@@ -21,9 +21,12 @@
 
 #include <boost/asio/io_context.hpp>
 #include <boost/thread.hpp>
+#include <boost/thread/pthread/mutex.hpp>
 #include <iostream>
+#include <memory>
 #include <p2p/define.hpp>
 
+#include "p2p/connection.hpp"
 #include "system.hpp"
 #include "util/log.hpp"
 
@@ -59,26 +62,10 @@ awaitable<void> node::connect_to_peers(const std::string& host,
   std::cerr << "Calling connect..." << std::endl;
   co_await client_socket.async_connect(peer_endpoint, use_awaitable);
   std::cerr << "Connect returned..." << std::endl;
-  co_spawn(ctx_, start_connection(std::move(client_socket)), detached);
-}
-
-awaitable<void> node::listen(tcp::acceptor& acceptor) {
-  std::cerr << "Listening..." << std::endl;
-  for (;;) {
-    auto client = co_await acceptor.async_accept(use_awaitable);
-    std::cerr << "Accept returned..." << std::endl;
-    auto client_executor = client.get_executor();
-    co_spawn(client_executor, start_connection(std::move(client)), detached);
-  }
-}
-
-awaitable<void> node::start_connection(tcp::socket&& client) {
-  std::cerr << "Start connection..." << std::endl;
-  auto client_connection = std::make_shared<connection>(std::move(client));
-  auto ex = client.get_executor();
-  std::cerr << "calling receive..." << std::endl;
-  co_spawn(ex, client_connection->receive_from_peer(), detached);
-  boost::asio::steady_timer timer_{ex};
+  auto client_connection =
+      std::make_shared<connection>(std::move(client_socket));
+  add_connection(client_connection);
+  boost::asio::steady_timer timer_{client_socket.get_executor()};
   boost::system::error_code ec;
   for (;;) {
     co_await client_connection->send_to_peer("ping\r\n");
@@ -87,28 +74,36 @@ awaitable<void> node::start_connection(tcp::socket&& client) {
   }
 }
 
+awaitable<void> node::listen(tcp::acceptor& acceptor) {
+  std::cerr << "Listening..." << std::endl;
+  for (;;) {
+    auto client = co_await acceptor.async_accept(use_awaitable);
+    std::cerr << "Accept returned..." << std::endl;
+    auto client_executor = client.get_executor();
+    auto client_connection = std::make_shared<connection>(std::move(client));
+    add_connection(client_connection);
+  }
+}
+
 void node::start(const std::string& peer_host, const std::string& peer_port) {
   std::cerr << "In start..." << std::endl;
   co_spawn(ctx_, listen(*acceptor_), detached);
-  co_spawn(ctx_, connect_to_peers(peer_host, peer_port), detached);
+  if (peer_host != "") {
+    co_spawn(ctx_, connect_to_peers(peer_host, peer_port), detached);
+  }
 }
 
 void node::stop() {}
 
-// void node::add_connection(connection& con)
-// {
-//     connections_mutex_.lock();
-//     connections_.insert(con);
-//     connections_mutex_.unlock();
-// }
+void node::add_connection(connection::connection_ptr con) {
+  boost::mutex::scoped_lock lock(connections_mutex_);
+  connections_.insert(con);
+}
 
-// void node::remove_connection(connection& con)
-// {
-//     connections_mutex_.lock();
-//     connections_.erase(con);
-
-//     connections_mutex_.unlock();
-// }
+void node::remove_connection(connection::connection_ptr con) {
+  boost::mutex::scoped_lock lock(connections_mutex_);
+  connections_.erase(con);
+}
 
 }  // namespace p2p
 }  // namespace bp

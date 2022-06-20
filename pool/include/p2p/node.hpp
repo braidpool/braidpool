@@ -21,6 +21,7 @@
 #define BP_NODE_HPP
 
 #include <boost/core/noncopyable.hpp>
+#include <memory>
 #include <p2p/connection.hpp>
 #include <p2p/define.hpp>
 #include <set>
@@ -36,24 +37,24 @@ class node : private boost::noncopyable {
   ~node();
   void start(const std::string& peer_host, const std::string& peer_port);
   void stop();
-  // void add_connection(connection& connection_);
-  // void remove_connection(connection& connection_);
 
  private:
-  awaitable<void> start_connection(tcp::socket&& client);
   awaitable<void> connect_to_peers(const std::string& host,
                                    const std::string& port);
   awaitable<void> listen(tcp::acceptor& acceptor);
+
+  void add_connection(connection::connection_ptr connection_);
+  void remove_connection(connection::connection_ptr connection_);
 
   std::unique_ptr<tcp::acceptor> acceptor_;
 
   io_context& ctx_;
 
-  // // protects add/remove connections
-  // boost::mutex connections_mutex_;
+  // protects add/remove connections
+  boost::mutex connections_mutex_;
 
-  // // protected by connections_mutex_
-  // std::set<connection&> connections_;
+  // protected by connections_mutex_
+  std::set<connection::connection_ptr> connections_;
 };
 
 }  // namespace p2p

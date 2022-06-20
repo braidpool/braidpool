@@ -20,7 +20,9 @@
 #ifndef BP_CONNECTION_HPP
 #define BP_CONNECTION_HPP
 
+#include <boost/asio/awaitable.hpp>
 #include <boost/core/noncopyable.hpp>
+#include <memory>
 #include <p2p/define.hpp>
 
 using boost::asio::awaitable;
@@ -29,8 +31,13 @@ namespace bp {
 namespace p2p {
 class connection : private boost::noncopyable {
  public:
-  connection(tcp::socket sock);
+  typedef std::shared_ptr<connection> connection_ptr;
+  connection(tcp::socket&& sock);
+  ~connection();
+  void start_receive_from_peer();
   awaitable<void> send_to_peer(std::string message);
+
+ private:
   awaitable<void> receive_from_peer();
 
  private:

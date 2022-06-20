@@ -19,6 +19,8 @@
 
 #include "p2p/connection.hpp"
 
+#include <boost/asio/awaitable.hpp>
+#include <boost/asio/detached.hpp>
 #include <boost/thread.hpp>
 #include <iostream>
 #include <p2p/define.hpp>
@@ -26,21 +28,37 @@
 #include "system.hpp"
 
 using boost::asio::buffer;
+using boost::asio::detached;
 using boost::asio::use_awaitable;
 
 namespace bp {
 namespace p2p {
 
-connection::connection(tcp::socket sock) : socket_(std::move(sock)) {}
+connection::connection(tcp::socket&& sock) : socket_(std::move(sock)) {
+  start_receive_from_peer();
+}
+
+connection::~connection() {
+  std::cerr << "Connection destroyed..." << std::endl;
+  if (socket_.is_open()) {
+    socket_.close();
+  }
+}
 
 awaitable<void> connection::send_to_peer(std::string message) {
   try {
     std::cerr << "Sending: " << message << std::endl;
     co_await async_write(socket_, buffer(message), use_awaitable);
   } catch (const std::exception& e) {
+    std::cerr << "failing to send to peer" << std::endl;
     std::cerr << e.what() << std::endl;
     socket_.close();
   }
+}
+
+void connection::start_receive_from_peer() {
+  std::cerr << "calling receive..." << std::endl;
+  co_spawn(socket_.get_executor(), receive_from_peer(), detached);
 }
 
 awaitable<void> connection::receive_from_peer() {
@@ -58,6 +76,7 @@ awaitable<void> connection::receive_from_peer() {
       read_msg.erase(0, num_bytes_read);
     }
   } catch (const std::exception& e) {
+    std::cerr << "failing to receive from peer" << std::endl;
     std::cerr << e.what() << std::endl;
     socket_.close();
   }

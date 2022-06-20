@@ -33,7 +33,6 @@ using tcp = boost::asio::ip::tcp;
 using tcp_acceptor = tcp::acceptor;
 using endpoint = tcp::endpoint;
 using socket = tcp::socket;
-using socket_ptr = std::shared_ptr<socket>;
 using ipv4 = boost::asio::ip::address_v4;
 }  // namespace p2p
 }  // namespace bp
