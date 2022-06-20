@@ -32,8 +32,12 @@ using namespace bp::p2p;
 
 TEST(NODE_TEST, CONSTRUCTOR__RETURNS_NODE) {
   runner node_runner;
-  node instance{node_runner.get_io_context(), "localhost", "22140"};
+  node instance1{node_runner.get_io_context(), "localhost", "22140"};
+  node instance2{node_runner.get_io_context(), "localhost", "22141"};
 
+  instance1.start("localhost", "22141");
+  instance2.start("localhost", "22140");
+  node_runner.start();
   // co_spawn(ctx, instance.connect_to_peers("localhost", "22141"),
   //          boost::asio::detached);
 }
