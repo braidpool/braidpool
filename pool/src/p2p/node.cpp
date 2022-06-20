@@ -85,12 +85,9 @@ awaitable<void> node::listen(tcp::acceptor& acceptor) {
   }
 }
 
-void node::start(const std::string& peer_host, const std::string& peer_port) {
+void node::start() {
   std::cerr << "In start..." << std::endl;
   co_spawn(ctx_, listen(*acceptor_), detached);
-  if (peer_host != "") {
-    co_spawn(ctx_, connect_to_peers(peer_host, peer_port), detached);
-  }
 }
 
 void node::stop() {}

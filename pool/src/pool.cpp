@@ -17,6 +17,8 @@
  * along with braidpool.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <boost/asio/detached.hpp>
+
 #include "util/log.hpp"
 #define pool_VERSION_MAJOR @pool_VERSION_MAJOR @
 #define pool_VERSION_MINOR @pool_VERSION_MINOR @
@@ -34,7 +36,7 @@ using namespace bp::p2p;
 int main(int argc, char* argv[]) {
   LOG_INFO << "Starting braid pool...";
   try {
-    if (argc != 5) {
+    if (argc != 3 && argc != 5) {
       std::cout << "Usage: bp";
       std::cout << " <listen_address> <listen_port>";
       std::cout << " <peer_address> <peer_port>\n";
@@ -48,10 +50,15 @@ int main(int argc, char* argv[]) {
   // TODO(kp): Improve arg parsing
   std::string listen_address{argv[1]};
   std::string listen_port{argv[2]};
-  std::string peer_address{argv[3]};
-  std::string peer_port{argv[4]};
   node node_(node_runner.get_io_context(), listen_address, listen_port);
   LOG_INFO << "Node created...";
-  node_.start(peer_address, peer_port);
+  node_.start();
+  if (argc == 5) {
+    std::string peer_address{argv[3]};
+    std::string peer_port{argv[4]};
+    co_spawn(node_runner.get_io_context(),
+             node_.connect_to_peers(peer_address, peer_port),
+             boost::asio::detached);
+  }
   node_runner.start();
 }

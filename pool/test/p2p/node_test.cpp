@@ -35,8 +35,7 @@ TEST(NODE_TEST, CONSTRUCTOR__RETURNS_NODE) {
   node instance1{node_runner.get_io_context(), "localhost", "22140"};
   node instance2{node_runner.get_io_context(), "localhost", "22141"};
 
-  instance1.start("localhost", "22141");
-  instance2.start("localhost", "22140");
+  instance1.start();
   node_runner.start();
   // co_spawn(ctx, instance.connect_to_peers("localhost", "22141"),
   //          boost::asio::detached);

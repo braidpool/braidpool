@@ -35,12 +35,12 @@ class node : private boost::noncopyable {
   node(io_context& ctx, const std::string& listen_address,
        const std::string& listen_port);
   ~node();
-  void start(const std::string& peer_host, const std::string& peer_port);
+  void start();
   void stop();
-
- private:
   awaitable<void> connect_to_peers(const std::string& host,
                                    const std::string& port);
+
+ private:
   awaitable<void> listen(tcp::acceptor& acceptor);
 
   void add_connection(connection::connection_ptr connection_);
