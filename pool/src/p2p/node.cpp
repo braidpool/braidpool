@@ -50,9 +50,9 @@ node::node(io_context& ctx, const std::string& listen_address,
 }
 
 node::~node() {
-  std::cerr << "Stopping node..." << std::endl;
+  LOG_INFO << "Stopping node..." ;
   this->stop();
-  std::cerr << "Node stopped." << std::endl;
+  LOG_INFO << "Node stopped." ;
 }
 
 // TODO: guard against duplicate connection creation to the same
@@ -71,10 +71,10 @@ awaitable<void> node::connect_to_peers(const std::string& host,
 }
 
 awaitable<void> node::listen(tcp::acceptor& acceptor) {
-  std::cerr << "Listening..." << std::endl;
+  LOG_DEBUG << "Listening..." ;
   for (;;) {
     auto client = co_await acceptor.async_accept(use_awaitable);
-    std::cerr << "Accept returned..." << std::endl;
+    LOG_DEBUG << "Accept returned..." ;
     auto client_executor = client.get_executor();
     auto client_connection = std::make_shared<connection>(std::move(client));
     add_connection(client_connection);
@@ -82,7 +82,7 @@ awaitable<void> node::listen(tcp::acceptor& acceptor) {
 }
 
 void node::start() {
-  std::cerr << "In start..." << std::endl;
+  LOG_DEBUG << "In start..." ;
   co_spawn(ctx_, listen(*acceptor_), detached);
 }
 

@@ -39,7 +39,7 @@ connection::connection(tcp::socket&& sock) : socket_(std::move(sock)) {
 }
 
 connection::~connection() {
-  std::cerr << "Connection destroyed..." << std::endl;
+  LOG_DEBUG << "Connection destroyed..." ;
   if (socket_.is_open()) {
     socket_.close();
   }
@@ -47,17 +47,17 @@ connection::~connection() {
 
 awaitable<void> connection::send_to_peer(std::string message) {
   try {
-    std::cerr << "Sending: " << message << std::endl;
+    LOG_INFO << "Sending: " << message ;
     co_await async_write(socket_, buffer(message), use_awaitable);
   } catch (const std::exception& e) {
-    std::cerr << "failing to send to peer" << std::endl;
-    std::cerr << e.what() << std::endl;
+    LOG_DEBUG << "failing to send to peer" ;
+    LOG_DEBUG << e.what() ;
     socket_.close();
   }
 }
 
 void connection::start_receive_from_peer() {
-  std::cerr << "calling receive..." << std::endl;
+  LOG_DEBUG << "calling receive..." ;
   co_spawn(socket_.get_executor(), receive_from_peer(), detached);
 }
 
@@ -67,7 +67,7 @@ awaitable<void> connection::receive_from_peer() {
       auto num_bytes_read = co_await boost::asio::async_read_until(
           socket_, boost::asio::dynamic_buffer(read_msg, 1024), "\r\n",
           use_awaitable);
-      std::cerr << "Received: " << read_msg << std::endl;
+      LOG_INFO << "Received: " << read_msg ;
 
       if (read_msg == "ping\r\n") {
         co_await send_to_peer("pong\r\n");
@@ -76,8 +76,8 @@ awaitable<void> connection::receive_from_peer() {
       read_msg.erase(0, num_bytes_read);
     }
   } catch (const std::exception& e) {
-    std::cerr << "failing to receive from peer" << std::endl;
-    std::cerr << e.what() << std::endl;
+    LOG_DEBUG << "failing to receive from peer" ;
+    LOG_DEBUG << e.what() ;
     socket_.close();
   }
 }
