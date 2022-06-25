@@ -68,9 +68,9 @@ add_executable(pool_test
   src/p2p/node.cpp
   src/p2p/connection.cpp
   src/p2p/protocol.cpp
-  ${PROJECT_SOURCE_DIR}/test/share_test.cpp
-  ${PROJECT_SOURCE_DIR}/test/work_test.cpp
-  ${PROJECT_SOURCE_DIR}/test/p2p/node_test.cpp
+  ${PROJECT_SOURCE_DIR}/test/share.cpp
+  ${PROJECT_SOURCE_DIR}/test/work.cpp
+  ${PROJECT_SOURCE_DIR}/test/p2p/node.cpp
   )
 
 target_link_libraries(pool_test PUBLIC
