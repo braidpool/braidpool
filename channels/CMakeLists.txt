@@ -8,6 +8,16 @@ find_package(PkgConfig REQUIRED)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
+# Generate compile_commands.json for flycheck/lsp support
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+include(FetchContent)
+FetchContent_Declare(
+  googletest
+  URL https://github.com/google/googletest/archive/609281088cfefc76f9d0ce82e1ff6c30cc3591e5.zip
+  )
+FetchContent_MakeAvailable(googletest)
+
 configure_file(one_way_channel_config.h.in one_way_channel_config.h)
 
 pkg_check_modules(LIBBITCOIN-SYSTEM libbitcoin-system)
