@@ -19,24 +19,36 @@
 
 #include "p2p/node.hpp"
 
+#include <gmock/gmock-function-mocker.h>
+#include <gmock/gmock-spec-builders.h>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <sys/socket.h>
 
+#include <boost/asio/awaitable.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
+#include <boost/asio/this_coro.hpp>
 
+#include "p2p/connection.hpp"
+#include "p2p/connections_manager.hpp"
 #include "p2p/define.hpp"
+#include "p2p/node.hpp"
 #include "runner.hpp"
+#include "util/log.hpp"
 
-using namespace bp;
-using namespace bp::p2p;
+namespace bp {
+namespace p2p {
+
+using test_node = node<connection>;
 
 TEST(NODE_TEST, CONSTRUCTOR__RETURNS_NODE) {
+  test_node::connections_mgr mgr{};
   runner node_runner;
-  node instance1{node_runner.get_io_context(), "localhost", "22140"};
-  node instance2{node_runner.get_io_context(), "localhost", "22141"};
+  test_node instance{node_runner.get_io_context(), "localhost", "22142", mgr};
 
-  instance1.start();
-  node_runner.start();
-  // co_spawn(ctx, instance.connect_to_peers("localhost", "22141"),
-  //          boost::asio::detached);
+  instance.start();
 }
+
+}  // namespace p2p
+}  // namespace bp

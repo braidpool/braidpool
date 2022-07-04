@@ -21,28 +21,42 @@
 #define BP_CONNECTION_HPP
 
 #include <boost/asio/awaitable.hpp>
+#include <boost/asio/executor.hpp>
+#include <boost/asio/io_context.hpp>
 #include <boost/core/noncopyable.hpp>
+#include <boost/enable_shared_from_this.hpp>
 #include <memory>
 #include <p2p/define.hpp>
+
+#include "p2p/connections_manager.hpp"
+#include "p2p/protocol.hpp"
 
 using boost::asio::awaitable;
 
 namespace bp {
 namespace p2p {
-class connection : private boost::noncopyable {
+
+class connection : private boost::noncopyable,
+                   public boost::enable_shared_from_this<connection> {
  public:
-  typedef std::shared_ptr<connection> connection_ptr;
-  connection(tcp::socket&& sock);
-  ~connection();
-  void start_receive_from_peer();
+  using ptr = std::shared_ptr<connection>;
+  using connections_mgr = connections_manager<ptr>;
+
+  connection(tcp::socket&& sock, connections_mgr& manager);
+  virtual ~connection();
+  virtual void start();
   awaitable<void> send_to_peer(std::string message);
+
+  void shutdown();
+
   socket& get_socket() { return socket_; }
+
+ protected:
+  tcp::socket socket_;
+  connections_mgr& mgr_;
 
  private:
   awaitable<void> receive_from_peer();
-
- private:
-  tcp::socket socket_;
 };
 }  // namespace p2p
 }  // namespace bp

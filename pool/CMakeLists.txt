@@ -39,9 +39,7 @@ add_executable(bp
   src/pool.cpp
   src/share.cpp
   src/work.cpp
-  src/p2p/node.cpp
-  src/p2p/connection.cpp
-  src/p2p/protocol.cpp)
+  src/p2p/connection.cpp)
 
 target_link_libraries(bp PUBLIC
   ${Boost_LIBRARIES}
@@ -65,9 +63,7 @@ add_executable(pool_test
   src/runner.cpp
   src/share.cpp
   src/work.cpp
-  src/p2p/node.cpp
   src/p2p/connection.cpp
-  src/p2p/protocol.cpp
   ${PROJECT_SOURCE_DIR}/test/share.cpp
   ${PROJECT_SOURCE_DIR}/test/work.cpp
   ${PROJECT_SOURCE_DIR}/test/p2p/node.cpp
@@ -76,9 +72,10 @@ add_executable(pool_test
 target_link_libraries(pool_test PUBLIC
   ${Boost_LIBRARIES}
   Boost::log Boost::log_setup
-  gtest_main
   msgpackc-cxx
   ${EXTRA_LIBS}
+  gtest_main
+  gmock_main
   )
 
 target_include_directories(pool_test PUBLIC

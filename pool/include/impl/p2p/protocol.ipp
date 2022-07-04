@@ -17,31 +17,41 @@
  * along with braidpool.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef BP_P2P_PROTOCOL_HPP
-#define BP_P2P_PROTOCOL_HPP
+#ifndef BP_P2P_PROTOCOL_IPP
+#define BP_P2P_PROTOCOL_IPP
 
 #include <boost/asio/awaitable.hpp>
-#include <boost/core/noncopyable.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/thread.hpp>
+#include <iostream>
 #include <p2p/define.hpp>
 
-#include "p2p/connection.hpp"
+#include "p2p/protocol.hpp"
+#include "system.hpp"
+#include "util/log.hpp"
+
+using boost::asio::awaitable;
+using boost::asio::use_awaitable;
 
 namespace bp {
 namespace p2p {
 
 template <typename connection_ptr>
-class protocol : private boost::noncopyable {
- public:
-  protocol(connection_ptr connection_);
-  boost::asio::awaitable<void> start_handshake();
+protocol<connection_ptr>::protocol(connection_ptr connection)
+    : connection_(connection) {}
 
- private:
-  connection_ptr connection_;
-};
+template <typename connection_ptr>
+awaitable<void> protocol<connection_ptr>::start_handshake() {
+  boost::asio::steady_timer timer_{connection_->get_socket().get_executor()};
+  boost::system::error_code ec;
+  for (;;) {
+    co_await connection_->send_to_peer("ping\r\n");
+    timer_.expires_after(std::chrono::seconds(5));
+    co_await timer_.async_wait(redirect_error(use_awaitable, ec));
+  }
+}
 
 }  // namespace p2p
 }  // namespace bp
-
-#include "impl/p2p/protocol.ipp"
 
 #endif

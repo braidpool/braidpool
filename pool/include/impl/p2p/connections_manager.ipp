@@ -17,31 +17,28 @@
  * along with braidpool.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef BP_P2P_PROTOCOL_HPP
-#define BP_P2P_PROTOCOL_HPP
+#ifndef BP_CONNECTIONS_MANAGER_IPP
+#define BP_CONNECTIONS_MANAGER_IPP
 
-#include <boost/asio/awaitable.hpp>
-#include <boost/core/noncopyable.hpp>
-#include <p2p/define.hpp>
+#include <algorithm>
 
-#include "p2p/connection.hpp"
-
-namespace bp {
-namespace p2p {
+#include "p2p/connections_manager.hpp"
+#include "system.hpp"
 
 template <typename connection_ptr>
-class protocol : private boost::noncopyable {
- public:
-  protocol(connection_ptr connection_);
-  boost::asio::awaitable<void> start_handshake();
+void bp::p2p::connections_manager<connection_ptr>::add_connection(
+    connection_ptr con) {
+  boost::mutex::scoped_lock lock(connections_mutex_);
+  connections_.insert(con);
+}
 
- private:
-  connection_ptr connection_;
-};
-
-}  // namespace p2p
-}  // namespace bp
-
-#include "impl/p2p/protocol.ipp"
+template <typename connection_ptr>
+void bp::p2p::connections_manager<connection_ptr>::remove_connection(
+    connection_ptr con) {
+  boost::mutex::scoped_lock lock(connections_mutex_);
+  LOG_DEBUG << "Scoped lock taken...";
+  connections_.erase(con);
+  LOG_DEBUG << "erased......";
+}
 
 #endif

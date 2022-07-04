@@ -22,18 +22,24 @@
 
 #include <boost/core/noncopyable.hpp>
 #include <memory>
-#include <p2p/connection.hpp>
 #include <p2p/define.hpp>
-#include <set>
 
+#include "p2p/connection.hpp"
+#include "p2p/connections_manager.hpp"
+#include "p2p/protocol.hpp"
 #include "runner.hpp"
 
 namespace bp {
 namespace p2p {
+template <typename connection_t>
 class node : private boost::noncopyable {
  public:
+  using connection_ptr = std::shared_ptr<connection_t>;
+  using connections_mgr = connections_manager<connection_ptr>;
+  using shares_protocol = protocol<connection_ptr>;
+
   node(io_context& ctx, const std::string& listen_address,
-       const std::string& listen_port);
+       const std::string& listen_port, connections_mgr& manager);
   ~node();
   void start();
   void stop();
@@ -43,21 +49,16 @@ class node : private boost::noncopyable {
  private:
   awaitable<void> listen(tcp::acceptor& acceptor);
 
-  void add_connection(connection::connection_ptr connection_);
-  void remove_connection(connection::connection_ptr connection_);
-
   std::unique_ptr<tcp::acceptor> acceptor_;
 
   io_context& ctx_;
 
-  // protects add/remove connections
-  boost::mutex connections_mutex_;
-
-  // protected by connections_mutex_
-  std::set<connection::connection_ptr> connections_;
+  connections_mgr& connections_mgr_;
 };
 
 }  // namespace p2p
 }  // namespace bp
+
+#include "impl/p2p/node.ipp"
 
 #endif

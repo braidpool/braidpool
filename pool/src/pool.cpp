@@ -19,6 +19,7 @@
 
 #include <boost/asio/detached.hpp>
 
+#include "p2p/connection.hpp"
 #include "util/log.hpp"
 #define pool_VERSION_MAJOR @pool_VERSION_MAJOR @
 #define pool_VERSION_MINOR @pool_VERSION_MINOR @
@@ -27,11 +28,14 @@
 #include <iostream>
 #include <p2p/node.hpp>
 
+#include "p2p/connection.hpp"
 #include "runner.hpp"
 #include "system.hpp"
 
 using namespace bp;
 using namespace bp::p2p;
+
+using node_t = node<connection>;
 
 int main(int argc, char* argv[]) {
   LOG_INFO << "Starting braid pool...";
@@ -50,7 +54,9 @@ int main(int argc, char* argv[]) {
   // TODO(kp): Improve arg parsing
   std::string listen_address{argv[1]};
   std::string listen_port{argv[2]};
-  node node_(node_runner.get_io_context(), listen_address, listen_port);
+  node_t::connections_mgr mgr{};
+  node_t node_(node_runner.get_io_context(), listen_address, listen_port, mgr);
+
   LOG_INFO << "Node created...";
   node_.start();
   if (argc == 5) {
