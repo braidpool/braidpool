@@ -37,8 +37,7 @@ using boost::asio::use_awaitable;
 namespace bp {
 namespace p2p {
 
-connection::connection(tcp::socket&& sock, connections_mgr& manager)
-    : socket_(std::move(sock)), mgr_(manager) {
+connection::connection(tcp::socket&& sock) : socket_(std::move(sock)) {
   LOG_DEBUG << "Connection created...";
 }
 
@@ -93,8 +92,6 @@ void connection::shutdown() {
     LOG_DEBUG << "Closing socket...";
     socket_.close();
     LOG_DEBUG << "Socket closed...";
-    // mgr_.remove_connection(boost::shared_from_this());
-    LOG_DEBUG << "Removed connection...";
   }
 }
 

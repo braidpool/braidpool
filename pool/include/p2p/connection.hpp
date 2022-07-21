@@ -36,24 +36,31 @@ using boost::asio::awaitable;
 namespace bp {
 namespace p2p {
 
+class connection_iface {
+ public:
+  // connection_iface(tcp::socket&& sock);
+  virtual ~connection_iface(){};
+  virtual void start() = 0;
+  virtual awaitable<void> send_to_peer(std::string message) = 0;
+  virtual void shutdown() = 0;
+  virtual socket& get_socket() = 0;
+};
+
 class connection : private boost::noncopyable,
+                   public connection_iface,
                    public boost::enable_shared_from_this<connection> {
  public:
-  using ptr = std::shared_ptr<connection>;
-  using connections_mgr = connections_manager<ptr>;
-
-  connection(tcp::socket&& sock, connections_mgr& manager);
+  connection(tcp::socket&& sock);
   virtual ~connection();
-  virtual void start();
-  awaitable<void> send_to_peer(std::string message);
+  virtual void start() override;
+  awaitable<void> send_to_peer(std::string message) override;
 
-  void shutdown();
+  void shutdown() override;
 
-  socket& get_socket() { return socket_; }
+  socket& get_socket() override { return socket_; }
 
  protected:
   tcp::socket socket_;
-  connections_mgr& mgr_;
 
  private:
   awaitable<void> receive_from_peer();

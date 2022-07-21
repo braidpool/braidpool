@@ -54,8 +54,7 @@ int main(int argc, char* argv[]) {
   // TODO(kp): Improve arg parsing
   std::string listen_address{argv[1]};
   std::string listen_port{argv[2]};
-  node_t::connections_mgr mgr{};
-  node_t node_(node_runner.get_io_context(), listen_address, listen_port, mgr);
+  node_t node_(node_runner.get_io_context(), listen_address, listen_port);
 
   LOG_INFO << "Node created...";
   node_.start();

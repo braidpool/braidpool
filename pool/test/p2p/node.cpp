@@ -40,14 +40,31 @@
 namespace bp {
 namespace p2p {
 
-using test_node = node<connection>;
+class mock_connection : public connection,
+                        boost::enable_shared_from_this<mock_connection> {
+ public:
+  mock_connection(tcp::socket&& sock) : connection(std::move(sock)) {}
+  void start() override {
+    LOG_DEBUG << "In mock start";
+    //  shutdown();
+  }
+};
+
+using test_node = node<mock_connection>;
 
 TEST(NODE_TEST, CONSTRUCTOR__RETURNS_NODE) {
-  test_node::connections_mgr mgr{};
   runner node_runner;
-  test_node instance{node_runner.get_io_context(), "localhost", "22142", mgr};
+  test_node instance1{node_runner.get_io_context(), "localhost", "22141"};
+  test_node instance2{node_runner.get_io_context(), "localhost", "22142"};
 
-  instance.start();
+  instance1.start();
+  instance2.start();
+
+  co_spawn(node_runner.get_io_context(),
+           instance1.connect_to_peers("localhost", "22142"),
+           boost::asio::detached);
+
+  //  node_runner.start();
 }
 
 }  // namespace p2p

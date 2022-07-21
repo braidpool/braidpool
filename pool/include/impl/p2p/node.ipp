@@ -42,9 +42,8 @@ namespace p2p {
 
 template <typename connection_t>
 node<connection_t>::node(io_context& ctx, const std::string& listen_address,
-                         const std::string& listen_port,
-                         connections_mgr& manager)
-    : ctx_(ctx), connections_mgr_(manager) {
+                         const std::string& listen_port)
+    : ctx_(ctx) {
   auto listen_endpoint = *tcp::resolver(ctx_).resolve(
       listen_address, listen_port, tcp::resolver::passive);
   acceptor_ = std::make_unique<tcp::acceptor>(ctx_, listen_endpoint);
@@ -65,8 +64,8 @@ awaitable<void> node<connection_t>::connect_to_peers(const std::string& host,
   auto peer_endpoint = *tcp::resolver(ctx_).resolve(host, port);
   auto client_socket = tcp::socket(ctx_);
   co_await client_socket.async_connect(peer_endpoint, use_awaitable);
-  auto client_connection = std::make_shared<connection_t>(
-      std::move(client_socket), connections_mgr_);
+  auto client_connection =
+      std::make_shared<connection_t>(std::move(client_socket));
   connections_mgr_.add_connection(client_connection);
   client_connection->start();
   co_spawn(client_connection->get_socket().get_executor(),
@@ -82,8 +81,7 @@ awaitable<void> node<connection_t>::listen(tcp::acceptor& acceptor) {
     auto client = co_await acceptor.async_accept(use_awaitable);
     LOG_DEBUG << "Accept returned...";
     auto client_executor = client.get_executor();
-    auto client_connection =
-        std::make_shared<connection_t>(std::move(client), connections_mgr_);
+    auto client_connection = std::make_shared<connection_t>(std::move(client));
     connections_mgr_.add_connection(client_connection);
     client_connection->start();
     LOG_DEBUG << "After accept and start...";

@@ -31,6 +31,6 @@ void runner::start() {
   threads_.join_all();
 }
 
-void runner::stop() {}
+void runner::stop() { io_context_.stop(); }
 
 }  // namespace bp

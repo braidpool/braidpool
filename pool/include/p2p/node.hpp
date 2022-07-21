@@ -39,7 +39,7 @@ class node : private boost::noncopyable {
   using shares_protocol = protocol<connection_ptr>;
 
   node(io_context& ctx, const std::string& listen_address,
-       const std::string& listen_port, connections_mgr& manager);
+       const std::string& listen_port);
   ~node();
   void start();
   void stop();
@@ -52,8 +52,7 @@ class node : private boost::noncopyable {
   std::unique_ptr<tcp::acceptor> acceptor_;
 
   io_context& ctx_;
-
-  connections_mgr& connections_mgr_;
+  connections_mgr connections_mgr_;
 };
 
 }  // namespace p2p
