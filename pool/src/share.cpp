@@ -26,7 +26,7 @@ share::share() {}
 share::share(hash_digest&& work_hash, uint32_t nonce, uint64_t extra_nonce,
              hash_digest&& merkle_root, uint64_t timestamp,
              data_chunk&& hub_pubkey, data_chunk&& miner_pubkey,
-             data_chunk&& tor_service_pubkey, hash_list&& shares)
+             data_chunk&& tor_service_pubkey, hashes&& shares)
     : work_hash_(std::move(work_hash)),
       nonce_(nonce),
       extra_nonce_(extra_nonce),

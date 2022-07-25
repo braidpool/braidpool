@@ -35,7 +35,7 @@ class share {
   share(hash_digest&& work_hash, uint32_t nonce, uint64_t extra_nonce,
         hash_digest&& merkle_root, uint64_t timestamp, data_chunk&& hub_pubkey,
         data_chunk&& miner_pubkey, data_chunk&& tor_service_pubkey,
-        hash_list&& shares);
+        hashes&& shares);
 
   const hash_digest& work_hash() const { return work_hash_; }
 
@@ -49,7 +49,7 @@ class share {
   const data_chunk& hub_pubkey() const { return hub_pubkey_; }
   const data_chunk& miner_pubkey() const { return miner_pubkey_; }
   const data_chunk& tor_service_pubkey() const { return tor_service_pubkey_; }
-  const hash_list& shares() const { return shares_; }
+  const hashes& shares() const { return shares_; }
 
   MSGPACK_DEFINE(work_hash_, nonce_, extra_nonce_, merkle_root_, timestamp_,
                  hub_pubkey_, miner_pubkey_, tor_service_pubkey_, shares_);
@@ -63,7 +63,7 @@ class share {
   data_chunk hub_pubkey_;
   data_chunk miner_pubkey_;
   data_chunk tor_service_pubkey_;
-  hash_list shares_;
+  hashes shares_;
 };
 }  // namespace bp
 

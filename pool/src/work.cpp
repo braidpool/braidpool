@@ -29,7 +29,7 @@ work::work() {}
 
 work::work(uint32_t version, hash_digest&& previous_block_hash,
            uint64_t difficulty, std::string&& coinbase,
-           hash_list&& transactions)
+           hashes&& transactions)
     : version_(version),
       previous_block_hash_(std::move(previous_block_hash)),
       difficulty_(difficulty),

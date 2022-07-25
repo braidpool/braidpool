@@ -41,7 +41,7 @@ TEST(SHARE_TEST, SERIALIZATION__SHOULD_DESERIALIZE) {
       "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26e");
   hash_digest share1 = base16_hash(
       "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26d");
-  hash_list shares{share1};
+  hashes shares{share1};
   bp::share instance(std::move(work_hash), 100, 200, std::move(merkle_root), 1,
                      data_chunk{21u}, data_chunk{22u}, data_chunk{23u},
                      std::move(shares));
