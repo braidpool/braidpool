@@ -39,11 +39,11 @@ transaction channel_transaction::get_transaction() const
 }
 
 void channel_transaction::push_2of2_multisig(
-    operation::list& ops, const ec_public& key_1, const ec_public& key_2)
+    operations& ops, const ec_public& key_1, const ec_public& key_2)
 {
     ops.emplace_back(opcode::push_positive_2);
-    ops.emplace_back(to_chunk(key_1.point()));
-    ops.emplace_back(to_chunk(key_2.point()));
+    ops.emplace_back(operation(to_chunk(key_1.point()), true));
+    ops.emplace_back(operation(to_chunk(key_2.point()), true));
     ops.emplace_back(opcode::push_positive_2);
 }
 }

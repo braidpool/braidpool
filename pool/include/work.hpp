@@ -24,6 +24,8 @@
 #include <cstdint>
 #include <msgpack.hpp>
 
+#include "bitcoin/system/hash/functions.hpp"
+
 namespace bp {
 
 using namespace libbitcoin::system;
@@ -36,7 +38,7 @@ class work {
   // msgpack requires default constructor
   work();
   work(uint32_t version, hash_digest&& previous_block_hash, uint64_t difficulty,
-       std::string&& coinbase, hash_list&& transactions);
+       std::string&& coinbase, hashes&& transactions);
 
   uint32_t version() const { return version_; }
 
@@ -48,7 +50,7 @@ class work {
 
   const std::string& coinbase() const { return coinbase_; }
 
-  const hash_list& transactions() const { return transactions_; }
+  const hashes& transactions() const { return transactions_; }
 
   MSGPACK_DEFINE(version_, previous_block_hash_, difficulty_, coinbase_);
 
@@ -57,7 +59,7 @@ class work {
   hash_digest previous_block_hash_;
   uint64_t difficulty_;
   std::string coinbase_;
-  hash_list transactions_;
+  hashes transactions_;
 };
 }  // namespace bp
 
