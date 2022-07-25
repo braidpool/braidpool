@@ -55,7 +55,7 @@ protected:
     transaction transaction_;
 
     void push_2of2_multisig(
-        operation::list& ops, const ec_public& key_1, const ec_public& key_2);
+        operations& ops, const ec_public& key_1, const ec_public& key_2);
 };
 }
 

@@ -45,9 +45,9 @@ public:
         const hash_digest& secret, uint64_t value);
 
 private:
-    operation::list make_fund_output(const ec_public& hub,
-        const ec_public& miner, const ec_public& hub_noncoop,
-        const ec_public& miner_noncoop, const hash_digest& secret);
+    operations make_fund_output(const ec_public& hub, const ec_public& miner,
+        const ec_public& hub_noncoop, const ec_public& miner_noncoop,
+        const hash_digest& secret);
 };
 }
 
