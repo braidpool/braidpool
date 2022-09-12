@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="297mm"
+   height="210mm"
+   viewBox="0 0 297 210"
+   version="1.1"
+   id="svg793"
+   inkscape:version="1.2.1 (9c6d41e410, 2022-07-14)"
+   sodipodi:docname="hub-miner-interaction-1.svg"
+   inkscape:export-filename="hub-miner-interaction-1.png"
+   inkscape:export-xdpi="96"
+   inkscape:export-ydpi="96"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview795"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="1"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     showgrid="false"
+     inkscape:zoom="0.66190376"
+     inkscape:cx="339.92857"
+     inkscape:cy="453.99349"
+     inkscape:window-width="1690"
+     inkscape:window-height="930"
+     inkscape:window-x="605"
+     inkscape:window-y="218"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="layer1" />
+  <defs
+     id="defs790">
+    <marker
+       style="overflow:visible"
+       id="Arrow1"
+       refX="0"
+       refY="0"
+       orient="auto-start-reverse"
+       inkscape:stockid="Arrow1"
+       markerWidth="4.0606604"
+       markerHeight="6.7071066"
+       viewBox="0 0 4.0606602 6.7071068"
+       inkscape:isstock="true"
+       inkscape:collect="always"
+       preserveAspectRatio="xMidYMid">
+      <path
+         style="fill:none;stroke:context-stroke;stroke-width:1;stroke-linecap:butt"
+         d="M 3,-3 0,0 3,3"
+         id="path5057"
+         transform="rotate(180,0.125,0)"
+         sodipodi:nodetypes="ccc" />
+    </marker>
+  </defs>
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <g
+       id="g1425"
+       transform="translate(2.092803,2.6353588)">
+      <rect
+         style="fill:none;stroke:#000000;stroke-width:0.165;stroke-opacity:0.960481"
+         id="rect817"
+         width="56.425385"
+         height="27.269821"
+         x="26.650606"
+         y="88.729729" />
+      <rect
+         style="fill:none;stroke:#000000;stroke-width:0.165;stroke-opacity:0.960481"
+         id="rect826"
+         width="56.425385"
+         height="27.269821"
+         x="209.7384"
+         y="40.253193" />
+      <rect
+         style="fill:none;stroke:#000000;stroke-width:0.165;stroke-opacity:0.960481"
+         id="rect828"
+         width="56.425385"
+         height="27.269821"
+         x="209.7384"
+         y="88.49144" />
+      <rect
+         style="fill:none;stroke:#000000;stroke-width:0.165;stroke-opacity:0.960481"
+         id="rect830"
+         width="56.425385"
+         height="27.269821"
+         x="209.7384"
+         y="137.20627" />
+      <path
+         style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:0.865;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:none;stroke-opacity:1"
+         d="M 83.075991,94.894706 209.7384,61.358037"
+         id="path241"
+         inkscape:connector-type="polyline"
+         inkscape:connector-curvature="0"
+         inkscape:connection-start="#rect817"
+         inkscape:connection-end="#rect826" />
+      <path
+         style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:0.865;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:none;stroke-opacity:1;marker-end:url(#Arrow1)"
+         d="M 83.075991,102.32792 209.7384,102.16307"
+         id="path243"
+         inkscape:connector-type="polyline"
+         inkscape:connector-curvature="0"
+         inkscape:connection-start="#rect817"
+         inkscape:connection-end="#rect828" />
+      <path
+         style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:0.865;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:none;stroke-opacity:1;marker-end:url(#Arrow1)"
+         d="M 83.075991,109.83457 209.7384,143.37125"
+         id="path245"
+         inkscape:connector-type="polyline"
+         inkscape:connector-curvature="0"
+         inkscape:connection-start="#rect817"
+         inkscape:connection-end="#rect830" />
+      <text
+         xml:space="preserve"
+         style="font-style:normal;font-weight:normal;font-size:10.5833px;line-height:1.25;font-family:sans-serif;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.264583"
+         x="44.195335"
+         y="106.33337"
+         id="text312"><tspan
+           sodipodi:role="line"
+           id="tspan310"
+           style="stroke-width:0.264583"
+           x="44.195335"
+           y="106.33337">Hub</tspan></text>
+      <text
+         xml:space="preserve"
+         style="font-style:normal;font-weight:normal;font-size:10.5833px;line-height:1.25;font-family:sans-serif;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.264583"
+         x="219.57849"
+         y="57.735134"
+         id="text316"><tspan
+           sodipodi:role="line"
+           id="tspan314"
+           style="stroke-width:0.264583"
+           x="219.57849"
+           y="57.735134">Miner 1</tspan></text>
+      <text
+         xml:space="preserve"
+         style="font-style:normal;font-weight:normal;font-size:10.5833px;line-height:1.25;font-family:sans-serif;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.264583"
+         x="218.70537"
+         y="105.97338"
+         id="text370"><tspan
+           sodipodi:role="line"
+           id="tspan368"
+           style="stroke-width:0.264583"
+           x="218.70537"
+           y="105.97338">Miner 2</tspan></text>
+      <text
+         xml:space="preserve"
+         style="font-style:normal;font-weight:normal;font-size:10.5833px;line-height:1.25;font-family:sans-serif;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.264583"
+         x="218.73183"
+         y="154.6882"
+         id="text374"><tspan
+           sodipodi:role="line"
+           id="tspan372"
+           style="stroke-width:0.264583"
+           x="218.73183"
+           y="154.6882">Miner 3</tspan></text>
+      <path
+         style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:0.865;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:none;stroke-opacity:1;marker-end:url(#Arrow1)"
+         d="M 83.075991,94.894706 209.7384,61.358037"
+         id="path395"
+         inkscape:connector-type="polyline"
+         inkscape:connector-curvature="0"
+         inkscape:connection-start="#rect817"
+         inkscape:connection-end="#rect826" />
+    </g>
+  </g>
+</svg>
