@@ -1,6 +1,7 @@
 **/__pycache__
 **/.pytest_cache
 channels/build
+*\.cache
 pool/build
 proposal/.dep/
 proposal/figures/epoch.pdf
