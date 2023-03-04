@@ -2,7 +2,6 @@ plugins:
   - jekyll-remote-theme
 remote_theme: jekyll/minima
 minima:
-  skin: dark
   social_links:
     twitter: pool2win
     github: pool2win
