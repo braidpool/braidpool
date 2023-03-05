@@ -5,6 +5,8 @@ minima:
   social_links:
     - { platform: github,  user_url: "https://github.com/pool2win" }
     - { platform: twitter, user_url: "https://twitter.com/pool2win" }
+header_pages:
+  - specification.md
 show_excerpts: true
 title: Braidpool Development Blog
 tagline: Dev progress
