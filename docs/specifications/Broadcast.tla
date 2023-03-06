@@ -19,27 +19,34 @@ VARIABLES
 Message == [op: {"send"}, from: Proc, seqNo: Nat] 
             \cup [op: {"recv"}, from: Proc, seqNo: Nat]
 
+------------------------------------------------------------------------------
 (*
 Initially, no messages have been sent, receieved or acknowledged.
 *)
+
 INIT == 
         /\ sent = <<>>    
         /\ recv = [m \in Message |-> {}]   
         /\ acks = [m \in Message |-> {}] 
 
 (*
-Type invariant. 
+Type invariants
 
-sent is a sequence of messages
-recv is a function from Message to procs that have receieved the message
-acks is a function from Message to procs that have implicity acked it
+    sent is a sequence of messages
+    
+    recv is a function from Message to procs that have receieved the message
+    
+    acks is a function from Message to procs that have implicity acked it
 *)
+
 TypeInvariant == 
         /\ sent \in Seq(Message)
         /\ recv \in [Message -> Proc]
         /\ acks \in [Message -> Proc]
+------------------------------------------------------------------------------
 
+NEXT == {}
 =============================================================================
 \* Modification History
-\* Last modified Mon Mar 06 09:07:56 CET 2023 by kulpreet
+\* Last modified Mon Mar 06 09:39:52 CET 2023 by kulpreet
 \* Created Sun Mar 05 15:04:04 CET 2023 by kulpreet
