@@ -31,9 +31,8 @@ Init ==
         /\ recv_by = [m \in Message |-> {}]
 
 TypeInvariant ==
-        /\ sent_by \in [Message -> Proc]
-        /\ recv_by \in [Message -> Proc]
-        
+        /\ sent_by \in [Message -> SUBSET Proc]
+        /\ recv_by \in [Message -> SUBSET Proc]
 ------------------------------------------------------------------------------
 
 (*
@@ -82,5 +81,5 @@ Spec == /\ Init
 THEOREM Spec => []TypeInvariant
 =============================================================================
 \* Modification History
-\* Last modified Thu Mar 09 18:07:19 CET 2023 by kulpreet
+\* Last modified Thu Mar 09 22:47:00 CET 2023 by kulpreet
 \* Created Sun Mar 05 15:04:04 CET 2023 by kulpreet
