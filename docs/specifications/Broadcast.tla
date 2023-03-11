@@ -23,6 +23,8 @@ CONSTANT
 VARIABLES
             sent_by,   \* Set of messages sent by processes to their neighbours
             recv_by    \* Set of messages received by processes
+
+vars == << sent_by, recv_by >>
 ------------------------------------------------------------------------------
 Message == [from: Proc, data: Data]
 
@@ -76,10 +78,14 @@ Next == \exists p \in Proc, q \in Proc, m \in Message:
             \/ Forward(m, p, q)
 -----------------------------------------------------------------------------
 Spec == /\ Init
-        /\ [][Next]_<<sent_by, recv_by>>
+        /\ [][Next]_vars
+
+Liveness == \A p \in Proc: \A m \in Message: WF_vars(RecvAt(m, p))
+
+FairSpec == Spec /\ Liveness
 -----------------------------------------------------------------------------
 THEOREM Spec => []TypeInvariant
 =============================================================================
 \* Modification History
-\* Last modified Thu Mar 09 22:47:00 CET 2023 by kulpreet
+\* Last modified Sat Mar 11 15:51:20 CET 2023 by kulpreet
 \* Created Sun Mar 05 15:04:04 CET 2023 by kulpreet
