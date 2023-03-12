@@ -62,8 +62,10 @@ RecvAt(m, q) ==
         
 (***************************************************************************)
 (* Forward(m, p, q) - forward message m from p to q                        *)
+(*                                                                         *)
 (* Enabling condition - m has been sent by some process, q has received    *) 
 (* the message, q is not the sender                                        *)
+(*                                                                         *)
 (* Effect - p forwards the message m to its nbrs                           *)
 (***************************************************************************)
 
@@ -94,5 +96,5 @@ FairSpec == Spec /\ Liveness
 THEOREM Spec => []TypeInvariant
 =============================================================================
 \* Modification History
-\* Last modified Sun Mar 12 07:24:26 CET 2023 by kulpreet
+\* Last modified Sun Mar 12 07:33:11 CET 2023 by kulpreet
 \* Created Sun Mar 05 15:04:04 CET 2023 by kulpreet
