@@ -6,4 +6,4 @@ image: assets/BC_Logo_.png
 
 List of specifications:
 
-1. [Broadcast]({% link specifications/Broadcast.md %})
+1. [P2P Broadcast]({% link specifications/P2PBroadcast.md %})
