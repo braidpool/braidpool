@@ -61,14 +61,14 @@ SendTo(m, p) ==
 (* forwards                                                                *)
 (***************************************************************************)
 
-RecvAt(m, q) ==
-            /\ <<m.from, q>> \in Nbrs               \* receive only at neighbours
-            /\ Len(channels[<<m.from, q>>]) > 0
-            /\ m = Head(channels[<<m.from, q>>])
-            /\ \exists p \in Proc: p \in sent_by[m] \* Some process has sent the message
+RecvAt(m, p, q) ==
+            /\ <<p, q>> \in Nbrs               \* receive only at neighbours
+            /\ Len(channels[<<p, q>>]) > 0     \* receive if there is a message
+            /\ m = Head(channels[<<p, q>>])    \* receive the message at head
+            /\ \exists r \in Proc: r \in sent_by[m] \* Some process has sent the message
             /\ q \notin recv_by[m]                  \* Not already received by q
             /\ recv_by' = [recv_by EXCEPT ![m] = @ \union {q}]
-            /\ channels' = [channels EXCEPT ![<<m.from, q>>] = Tail(@)]
+            /\ channels' = [channels EXCEPT ![<<p, q>>] = Tail(@)]
             /\ UNCHANGED <<sent_by>>
 
 (*
@@ -93,13 +93,14 @@ Forward(m, p, q) ==
             /\ p # q                                \* Don't forward to self
             /\ <<p, q>> \in Nbrs                    \* Forward only to neighbour
             /\ p \in recv_by[m]                     \* p has received m
-            /\ sent_by' = [sent_by EXCEPT ![m] = @ \union {q}]
+            /\ p \notin sent_by[m]                  \* Don't forward again
+            /\ sent_by' = [sent_by EXCEPT ![m] = @ \union {p}]
             /\ channels' = [channels EXCEPT ![<<p, q>>] = Append(@, m)]
             /\ UNCHANGED <<recv_by>>
 
 Next == \exists p \in Proc, q \in Proc, m \in Message:
             \/ SendTo(m, p)
-            \/ RecvAt(m, p)
+            \/ RecvAt(m, p, q)
 \*            \/ Lose(m, p, q)
             \/ Forward(m, p, q)
 -----------------------------------------------------------------------------
@@ -108,19 +109,19 @@ Spec == /\ Init
 
 
 SendLeadsToRecv == \A m \in Message: \A p \in Proc: \A  q \in Proc:
-            (p \in sent_by[m] /\ p # q) ~> (q \in recv_by[m])
+            (p \in sent_by[m] /\ p = m.from) ~> (q \in recv_by[m] /\ q # m.from)
 
 
 (***************************************************************************)
 (* Liveness specifies that if a message is enabled to be received at p, it *)
 (* is eventually received at p.                                            *)
 (***************************************************************************)
-Liveness == \A p \in Proc: \A m \in Message: SF_vars(RecvAt(m, p))
+Liveness == \A p \in Proc: \A q \in Proc: \A m \in Message: SF_vars(RecvAt(m, p, q))
 
 FairSpec == Spec /\ Liveness
 -----------------------------------------------------------------------------
 THEOREM Spec => []TypeInvariant
 =============================================================================
 \* Modification History
-\* Last modified Tue Mar 28 11:34:28 CEST 2023 by kulpreet
+\* Last modified Wed Mar 29 12:03:02 CEST 2023 by kulpreet
 \* Created Sun Mar 05 15:04:04 CET 2023 by kulpreet
