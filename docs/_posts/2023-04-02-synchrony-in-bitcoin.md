@@ -38,7 +38,7 @@ blocks are accepted as valid only if their timestamp is within a
 certain offset from participating nodes. This offset is set to 2 hours
 in bitcoin.
 
-## If bitcoin requires synchronised clocks, is it not using a synchronous system model?
+## If bitcoin requires synchronised clocks, does it use a synchronous communication model?
 
 The answer is no. Even if bitcoin requires clocks synchronised to
 within two hours, the protocols used do not depend on bounds on
