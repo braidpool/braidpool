@@ -63,7 +63,7 @@ SendTo(m, p) ==
 
 RecvAt(m, p, q) ==
             /\ <<p, q>> \in Nbrs               \* receive only at neighbours
-            /\ Len(channels[<<p, q>>]) > 0     \* receive if there is a message
+            /\ channels[<<p, q>>] # <<>>     \* receive if there is a message
             /\ m = Head(channels[<<p, q>>])    \* receive the message at head
             /\ \exists r \in Proc: r \in sent_by[m] \* Some process has sent the message
             /\ q \notin recv_at[m]                  \* Not already received by q
@@ -73,7 +73,7 @@ RecvAt(m, p, q) ==
 
 (*
 Lose(m, p, q) ==
-            /\ Len(channels[<<m.from, q>>]) > 0
+            /\ <<m.from, q>>] # <<>>
             /\ m = Head(channels[<<m.from, q>>])
             /\ channels' = [channels EXCEPT ![<<m.from, q>>] = Tail(@)]
             /\ UNCHANGED <<sent_by, recv_at>>
@@ -109,8 +109,8 @@ Spec == /\ Init
         /\ [][Next]_vars
 
 
-SendLeadsToRecv == \A m \in Message: \A p \in sent_by: \A  q \in recv_at:
-            (p \in sent_by[m] /\ p = m.from) ~> (q \in recv_at[m] \/ q # m.from)
+SendLeadsToRecv == \A m \in Message: \A p \in Proc: \A  q \in Proc:
+            (p \in sent_by[m]) ~> (q \in recv_at[m] \/ q # m.from)
 
 
 (***************************************************************************)
@@ -124,5 +124,5 @@ FairSpec == Spec /\ Liveness
 THEOREM Spec => []TypeInvariant
 =============================================================================
 \* Modification History
-\* Last modified Wed Apr 05 06:29:25 CEST 2023 by kulpreet
+\* Last modified Wed Apr 05 09:42:13 CEST 2023 by kulpreet
 \* Created Sun Mar 05 15:04:04 CET 2023 by kulpreet
