@@ -29,7 +29,13 @@ Recv(m) ==  /\ sent # <<>>
 Next == \exists m \in Message: Send \/ Recv(m)
 ------------------------------------------------------------------------------
 Spec == Init /\ [][Next]_vars
+------------------------------------------------------------------------------
+(***************************************************************************)
+(* FairSpec is Spec with the addition requirement that it keeps taking     *)
+(* steps.                                                                  *)
+(***************************************************************************)
+FairSpec == Spec /\ WF_vars(Next)
 =============================================================================
 \* Modification History
-\* Last modified Wed Apr 05 10:38:10 CEST 2023 by kulpreet
+\* Last modified Wed Apr 05 10:50:15 CEST 2023 by kulpreet
 \* Created Wed Apr 05 09:47:12 CEST 2023 by kulpreet
