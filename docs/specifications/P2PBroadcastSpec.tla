@@ -1,4 +1,11 @@
 -------------------------- MODULE P2PBroadcastSpec --------------------------
+(***************************************************************************)
+(* Spec for a reliable broadcast.                                          *)
+(* This captures the                                                       *)
+(* requirement that if any processor sends a message then eventually all   *)
+(* other processes receive the message.                                    *)
+(***************************************************************************)
+
 EXTENDS Naturals, Sequences
 
 CONSTANT
@@ -37,5 +44,5 @@ Spec == Init /\ [][Next]_vars
 FairSpec == Spec /\ WF_vars(Next)
 =============================================================================
 \* Modification History
-\* Last modified Wed Apr 05 10:50:15 CEST 2023 by kulpreet
+\* Last modified Wed Apr 05 12:19:39 CEST 2023 by kulpreet
 \* Created Wed Apr 05 09:47:12 CEST 2023 by kulpreet
