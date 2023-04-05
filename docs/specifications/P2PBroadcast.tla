@@ -24,21 +24,21 @@ VARIABLES
             channels,   \* All channels between nodes, can be indexed as
                         \* channels[from][to] and channels[to][from] and has a
                         \* queue of messages
-            sent_by,    \* Set of messages sent by processes to their neighbours
-            recv_by     \* Set of messages received by processes
+            sent_by,    \* Function from message to all Proc that have sent it
+            recv_at     \* Function from message to all Proc that have received it
 
-vars == <<sent_by, recv_by, channels>>
+vars == <<sent_by, recv_at, channels>>
 ------------------------------------------------------------------------------
 Message == [from: Proc, data: Data]
 
 Init == 
         /\ sent_by = [m \in Message |-> {}]
-        /\ recv_by = [m \in Message |-> {}]
+        /\ recv_at = [m \in Message |-> {}]
         /\ channels = [<<p, q>> \in Nbrs |-> <<>>]    \* Messages delivered in order
 
 TypeInvariant ==
         /\ sent_by \in [Message -> SUBSET Proc]
-        /\ recv_by \in [Message -> SUBSET Proc]
+        /\ recv_at \in [Message -> SUBSET Proc]
         /\ channels \in [Nbrs -> Seq(Message)]
 
 ------------------------------------------------------------------------------
@@ -54,7 +54,7 @@ SendTo(m, p) ==
             /\ <<m.from, p>> \in Nbrs   \* Send only to neighbours
             /\ sent_by' = [sent_by EXCEPT ![m] = @ \union {m.from}]
             /\ channels' = [channels EXCEPT ![<<m.from, p>>] = Append(@, m)]
-            /\ UNCHANGED <<recv_by>>
+            /\ UNCHANGED <<recv_at>>
 
 (***************************************************************************)
 (* RecvAt(m, q) - receive message m at q.  This can be received from       *)
@@ -66,8 +66,8 @@ RecvAt(m, p, q) ==
             /\ Len(channels[<<p, q>>]) > 0     \* receive if there is a message
             /\ m = Head(channels[<<p, q>>])    \* receive the message at head
             /\ \exists r \in Proc: r \in sent_by[m] \* Some process has sent the message
-            /\ q \notin recv_by[m]                  \* Not already received by q
-            /\ recv_by' = [recv_by EXCEPT ![m] = @ \union {q}]
+            /\ q \notin recv_at[m]                  \* Not already received by q
+            /\ recv_at' = [recv_at EXCEPT ![m] = @ \union {q}]
             /\ channels' = [channels EXCEPT ![<<p, q>>] = Tail(@)]
             /\ UNCHANGED <<sent_by>>
 
@@ -76,7 +76,7 @@ Lose(m, p, q) ==
             /\ Len(channels[<<m.from, q>>]) > 0
             /\ m = Head(channels[<<m.from, q>>])
             /\ channels' = [channels EXCEPT ![<<m.from, q>>] = Tail(@)]
-            /\ UNCHANGED <<sent_by, recv_by>>
+            /\ UNCHANGED <<sent_by, recv_at>>
 *)
 
 (***************************************************************************)
@@ -91,12 +91,13 @@ Lose(m, p, q) ==
 Forward(m, p, q) ==
             /\ \exists r \in Proc: r \in sent_by[m] \* Some process has sent the message
             /\ p # q                                \* Don't forward to self
+            /\ m.from # p                           \* Sender doesnt forward
             /\ <<p, q>> \in Nbrs                    \* Forward only to neighbour
-            /\ p \in recv_by[m]                     \* p has received m
+            /\ p \in recv_at[m]                     \* p has received m
             /\ p \notin sent_by[m]                  \* Don't forward again
             /\ sent_by' = [sent_by EXCEPT ![m] = @ \union {p}]
             /\ channels' = [channels EXCEPT ![<<p, q>>] = Append(@, m)]
-            /\ UNCHANGED <<recv_by>>
+            /\ UNCHANGED <<recv_at>>
 
 Next == \exists p \in Proc, q \in Proc, m \in Message:
             \/ SendTo(m, p)
@@ -108,8 +109,8 @@ Spec == /\ Init
         /\ [][Next]_vars
 
 
-SendLeadsToRecv == \A m \in Message: \A p \in Proc: \A  q \in Proc:
-            (p \in sent_by[m] /\ p = m.from) ~> (q \in recv_by[m] /\ q # m.from)
+SendLeadsToRecv == \A m \in Message: \A p \in sent_by: \A  q \in recv_at:
+            (p \in sent_by[m] /\ p = m.from) ~> (q \in recv_at[m] \/ q # m.from)
 
 
 (***************************************************************************)
@@ -123,5 +124,5 @@ FairSpec == Spec /\ Liveness
 THEOREM Spec => []TypeInvariant
 =============================================================================
 \* Modification History
-\* Last modified Wed Mar 29 12:03:02 CEST 2023 by kulpreet
+\* Last modified Wed Apr 05 06:29:25 CEST 2023 by kulpreet
 \* Created Sun Mar 05 15:04:04 CET 2023 by kulpreet
