@@ -6,34 +6,45 @@
 (* other processes receive the message.                                    *)
 (***************************************************************************)
 
-EXTENDS Naturals, Sequences
+EXTENDS Naturals, Sequences, FiniteSets
 
 CONSTANT
             Proc,   \* Set of processes
             Data
 VARIABLES
-            sent,      \* All messages sent
-            received   \* All messges received
+            sent,      \* All messages sent by all processors
+            received_by   \* All messges received. Function from message to receiving processors
 ------------------------------------------------------------------------------
-vars == <<sent, received>>
+vars == <<sent, received_by>>
 
+(***************************************************************************)
+(* Message is a record including the sending proc and a data.              *)
+(***************************************************************************)
 Message == [from: Proc, data: Data]
 
-Init == /\ sent = <<>>
-        /\ received = [m \in Message |-> {}]
+Init == /\ sent = {}
+        /\ received_by = [m \in Message |-> {}]
 
-TypeOK ==   /\ sent \in Seq(Message)
-            /\ received \in [Message -> SUBSET Proc]
+TypeOK ==   /\ sent \in SUBSET Message
+            /\ received_by \in [Message -> SUBSET Proc]
 ------------------------------------------------------------------------------
-Send == /\ \exists m \in Message: sent' = Append(sent, m) \* Always enabled
-        /\ UNCHANGED <<received>>
 
-Recv(m) ==  /\ sent # <<>>
-            /\ m = Head(sent)
-            /\ sent' = Tail(sent)
-            /\ \exists p \in Proc: received' = [received EXCEPT ![m] = @ \cup {p}]
+(***************************************************************************)
+(* Send message m.                                                         *)
+(***************************************************************************)
+Send(m) ==  /\ m \notin sent            \* Message is sent only once by the original sender
+            /\ sent' = sent \cup {m}    
+            /\ UNCHANGED <<received_by>>
 
-Next == \exists m \in Message: Send \/ Recv(m)
+(***************************************************************************)
+(* Receive a message m at proc p                                           *)
+(***************************************************************************)
+Recv(m, p) ==   /\ m \in sent                   \* receive only if m was sent first
+                /\ p \notin received_by[m]      \* receieve only once
+                /\ received_by' = [received_by EXCEPT ![m] = @ \cup {p}]
+                /\ UNCHANGED <<sent>>
+
+Next == \exists m \in Message, p \in Proc: Send(m) \/ Recv(m, p)
 ------------------------------------------------------------------------------
 Spec == Init /\ [][Next]_vars
 ------------------------------------------------------------------------------
@@ -44,5 +55,5 @@ Spec == Init /\ [][Next]_vars
 FairSpec == Spec /\ WF_vars(Next)
 =============================================================================
 \* Modification History
-\* Last modified Wed Apr 05 12:19:39 CEST 2023 by kulpreet
+\* Last modified Fri Apr 07 08:46:38 CEST 2023 by kulpreet
 \* Created Wed Apr 05 09:47:12 CEST 2023 by kulpreet
