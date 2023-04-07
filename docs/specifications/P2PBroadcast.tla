@@ -25,21 +25,24 @@ VARIABLES
                         \* channels[from][to] and channels[to][from] and has a
                         \* queue of messages
             sent_by,    \* Function from message to all Proc that have sent it
-            recv_at     \* Function from message to all Proc that have received it
+            sent,       \* Same as P2PBroadcastSpec
+            received_by \* Same as P2PBroadcastSpec
 
-vars == <<sent_by, recv_at, channels>>
+vars == <<sent_by, received_by, channels, sent>>
 ------------------------------------------------------------------------------
 Message == [from: Proc, data: Data]
 
 Init == 
         /\ sent_by = [m \in Message |-> {}]
-        /\ recv_at = [m \in Message |-> {}]
+        /\ received_by = [m \in Message |-> {}]
         /\ channels = [<<p, q>> \in Nbrs |-> <<>>]    \* Messages delivered in order
+        /\ sent = {}
 
 TypeInvariant ==
         /\ sent_by \in [Message -> SUBSET Proc]
-        /\ recv_at \in [Message -> SUBSET Proc]
+        /\ received_by \in [Message -> SUBSET Proc]
         /\ channels \in [Nbrs -> Seq(Message)]
+        /\ sent \in SUBSET Message
 
 ------------------------------------------------------------------------------
 
@@ -50,11 +53,12 @@ TypeInvariant ==
 (* well.                                                                   *)
 (***************************************************************************)
 SendTo(m, p) ==
-            /\ m.from \notin sent_by[m] \* Don't send again - we can add decay here
+            /\ m.from \notin sent_by[m] \* Don't send again
             /\ <<m.from, p>> \in Nbrs   \* Send only to neighbours
             /\ sent_by' = [sent_by EXCEPT ![m] = @ \union {m.from}]
+            /\ sent' = sent \cup {m} 
             /\ channels' = [channels EXCEPT ![<<m.from, p>>] = Append(@, m)]
-            /\ UNCHANGED <<recv_at>>
+            /\ UNCHANGED <<received_by>>
 
 (***************************************************************************)
 (* RecvAt(m, q) - receive message m at q.  This can be received from       *)
@@ -66,17 +70,17 @@ RecvAt(m, p, q) ==
             /\ channels[<<p, q>>] # <<>>     \* receive if there is a message
             /\ m = Head(channels[<<p, q>>])    \* receive the message at head
             /\ \exists r \in Proc: r \in sent_by[m] \* Some process has sent the message
-            /\ q \notin recv_at[m]                  \* Not already received by q
-            /\ recv_at' = [recv_at EXCEPT ![m] = @ \union {q}]
+            /\ q \notin received_by[m]                  \* Not already received by q
+            /\ received_by' = [received_by EXCEPT ![m] = @ \union {q}]
             /\ channels' = [channels EXCEPT ![<<p, q>>] = Tail(@)]
-            /\ UNCHANGED <<sent_by>>
+            /\ UNCHANGED <<sent_by, sent>>
 
 (*
 Lose(m, p, q) ==
             /\ <<m.from, q>>] # <<>>
             /\ m = Head(channels[<<m.from, q>>])
             /\ channels' = [channels EXCEPT ![<<m.from, q>>] = Tail(@)]
-            /\ UNCHANGED <<sent_by, recv_at>>
+            /\ UNCHANGED <<sent_by, received_by>>
 *)
 
 (***************************************************************************)
@@ -93,11 +97,11 @@ Forward(m, p, q) ==
             /\ p # q                                \* Don't forward to self
             /\ m.from # p                           \* Sender doesnt forward
             /\ <<p, q>> \in Nbrs                    \* Forward only to neighbour
-            /\ p \in recv_at[m]                     \* p has received m
+            /\ p \in received_by[m]                     \* p has received m
             /\ p \notin sent_by[m]                  \* Don't forward again
             /\ sent_by' = [sent_by EXCEPT ![m] = @ \union {p}]
             /\ channels' = [channels EXCEPT ![<<p, q>>] = Append(@, m)]
-            /\ UNCHANGED <<recv_at>>
+            /\ UNCHANGED <<received_by, sent>>
 
 Next == \exists p \in Proc, q \in Proc, m \in Message:
             \/ SendTo(m, p)
@@ -108,10 +112,10 @@ Next == \exists p \in Proc, q \in Proc, m \in Message:
 Spec == /\ Init
         /\ [][Next]_vars
 
-
+(*
 SendLeadsToRecv == \A m \in Message: \A p \in Proc: \A  q \in Proc:
-            (p \in sent_by[m]) ~> (q \in recv_at[m] \/ q # m.from)
-
+            (p \in sent_by[m]) ~> (q \in received_by[m] \/ q # m.from)
+*)
 
 (***************************************************************************)
 (* Liveness specifies that if a message is enabled to be received at p, it *)
@@ -122,7 +126,10 @@ Liveness == \A p \in Proc: \A q \in Proc: \A m \in Message: SF_vars(RecvAt(m, p,
 FairSpec == Spec /\ Liveness
 -----------------------------------------------------------------------------
 THEOREM Spec => []TypeInvariant
+
+PBS == INSTANCE P2PBroadcastSpec
+THEOREM Spec => PBS!Spec
 =============================================================================
 \* Modification History
-\* Last modified Wed Apr 05 09:42:13 CEST 2023 by kulpreet
+\* Last modified Fri Apr 07 09:28:40 CEST 2023 by kulpreet
 \* Created Sun Mar 05 15:04:04 CET 2023 by kulpreet
