@@ -15,7 +15,7 @@ VARIABLES
 vars == <<sent, received_by>>
 
 (***************************************************************************)
-(* Message is a record including the sending proc and a data.              *)
+(* Message is a record including the sending proc and a data               *)
 (***************************************************************************)
 Message == [from: Proc, data: Data]
 
@@ -27,7 +27,7 @@ TypeOK ==   /\ sent \in SUBSET Message
 ------------------------------------------------------------------------------
 
 (***************************************************************************)
-(* Send message m.                                                         *)
+(* Send message m                                                         *)
 (***************************************************************************)
 Send(m) ==  /\ m \notin sent            \* Message is sent only once by the original sender
             /\ sent' = sent \cup {m}    
@@ -37,7 +37,7 @@ Send(m) ==  /\ m \notin sent            \* Message is sent only once by the orig
 (* Receive a message m at proc p                                           *)
 (***************************************************************************)
 Recv(m, p) ==   /\ m \in sent                   \* receive only if m was sent first
-                /\ p \notin received_by[m]      \* receieve only once
+                /\ p \notin received_by[m]      \* receive only once
                 /\ received_by' = [received_by EXCEPT ![m] = @ \cup {p}]
                 /\ UNCHANGED <<sent>>
 
@@ -52,5 +52,5 @@ Spec == Init /\ [][Next]_vars
 FairSpec == Spec /\ WF_vars(Next)
 =============================================================================
 \* Modification History
-\* Last modified Fri Apr 07 08:50:50 CEST 2023 by kulpreet
+\* Last modified Fri Apr 07 14:21:20 CEST 2023 by kulpreet
 \* Created Wed Apr 05 09:47:12 CEST 2023 by kulpreet
