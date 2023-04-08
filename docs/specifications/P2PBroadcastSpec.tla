@@ -50,7 +50,16 @@ Spec == Init /\ [][Next]_vars
 (* steps.                                                                  *)
 (***************************************************************************)
 FairSpec == Spec /\ WF_vars(Next)
+
+(***************************************************************************)
+(* Liveness is a temporal property that captures the property that if a    *)
+(* message is sent, it is eventually received.                             *)
+(*                                                                         *)
+(* The WF Conjuction rule is used here ref: Specifying Systems p 105       *)
+(***************************************************************************)
+
+Liveness == \exists m \in Message, p \in Proc: WF_vars(Send(m) \/ Recv(m, p))
 =============================================================================
 \* Modification History
-\* Last modified Fri Apr 07 14:21:20 CEST 2023 by kulpreet
+\* Last modified Sat Apr 08 21:02:35 CEST 2023 by kulpreet
 \* Created Wed Apr 05 09:47:12 CEST 2023 by kulpreet
