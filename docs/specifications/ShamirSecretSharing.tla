@@ -65,10 +65,15 @@ ReceiveShare(p) ==
         /\ UNCHANGED <<shares, shares_sent, reconstructed>>
                 
 (***************************************************************************)
-(* Reconstruct secret at Player p. It should have been received            *)
+(* Reconstruct secret with Players p and q.                                *)
+(* The payers should have receieved share.                                 *)
 (***************************************************************************)
-Reconstruct(p) ==
+Reconstruct(p, q) ==
+        /\ p # q
         /\ shares_received[p] # NoValue
+        /\ shares_received[q] # NoValue
+        \* We don't specify how the secret is reconstructed, just that it is
+        \* reconstructed using shares of all two player combinations
         /\ reconstructed' = [reconstructed EXCEPT ![p] = TRUE]
         /\ UNCHANGED <<shares, shares_sent, shares_received>>
 
@@ -79,7 +84,8 @@ Reconstruct(p) ==
 (***************************************************************************)
 Next == 
         \/ \exists p \in Players: 
-            SendShare(p) \/ ReceiveShare(p) \/ Reconstruct(p)
+            SendShare(p) \/ ReceiveShare(p)
+        \/ \exists p \in Players, q \in Players: Reconstruct(p, q)
 
 Spec == 
         /\ Init
@@ -88,7 +94,7 @@ Spec ==
 (***************************************************************************)
 (* Liveness states that eventually all players reconstruct the secret.     *)
 (***************************************************************************)
-Liveness == \A p \in Players: WF_vars(Reconstruct(p))
+Liveness == \A p \in Players, q \in Players: WF_vars(Reconstruct(p, q))
 
 (***************************************************************************)
 (* For a fair specification, we assure the spec takes next steps and       *)
@@ -97,5 +103,5 @@ Liveness == \A p \in Players: WF_vars(Reconstruct(p))
 FairSpec == Spec /\ Liveness         
 =============================================================================
 \* Modification History
-\* Last modified Tue Jun 13 21:26:31 CEST 2023 by kulpreet
+\* Last modified Tue Jun 13 21:51:11 CEST 2023 by kulpreet
 \* Created Fri Jun 09 17:03:07 CEST 2023 by kulpreet
