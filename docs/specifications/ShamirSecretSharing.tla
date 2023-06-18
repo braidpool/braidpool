@@ -1,6 +1,6 @@
 ------------------------ MODULE ShamirSecretSharing ------------------------
 (***************************************************************************)
-(* Sepcification for simple Shamir Secret Sharing. This is not a veriable  *)
+(* Specification for simple Shamir Secret Sharing. This is not a verifiable *)
 (* secret sharing scheme.                                                  *)
 (*                                                                         *)
 (* We specify that dealer first sends shares to all players, and once all  *)
