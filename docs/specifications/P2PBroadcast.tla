@@ -10,7 +10,8 @@
 (* Does this open this broadcast to a DDoS attack? Yes, and our argument   *)
 (* remains that p2p network can resist DDoS attacks by other means.        *)
 (*                                                                         *)
-(* First pass - We assume no processes failures or messages lost.          *)
+(* We include a liveness propery that if a process sends a message         *)
+(* then all processes received the message                                 *)
 (***************************************************************************)
 
 EXTENDS Naturals, Sequences
@@ -53,12 +54,12 @@ TypeInvariant ==
 (* well.                                                                   *)
 (***************************************************************************)
 SendTo(m, p) ==
-            /\ m.from \notin sent_by[m] \* Don't send again
-            /\ <<m.from, p>> \in Nbrs   \* Send only to neighbours
-            /\ sent_by' = [sent_by EXCEPT ![m] = @ \union {m.from}]
-            /\ sent' = sent \cup {m} 
-            /\ channels' = [channels EXCEPT ![<<m.from, p>>] = Append(@, m)]
-            /\ UNCHANGED <<received_by>>
+        /\ m.from \notin sent_by[m]                     \* Don't send again
+        /\ <<m.from, p>> \in Nbrs                       \* Send only to neighbours
+        /\ sent_by' = [sent_by EXCEPT ![m] = @ \union {m.from}]
+        /\ sent' = sent \cup {m}
+        /\ channels' = [channels EXCEPT ![<<m.from, p>>] = Append(@, m)]
+        /\ UNCHANGED <<received_by>>
 
 (***************************************************************************)
 (* RecvAt(m, q) - receive message m at q.  This can be received from       *)
@@ -66,22 +67,24 @@ SendTo(m, p) ==
 (***************************************************************************)
 
 RecvAt(m, p, q) ==
-            /\ <<p, q>> \in Nbrs               \* receive only at neighbours
-            /\ channels[<<p, q>>] # <<>>     \* receive if there is a message
-            /\ m = Head(channels[<<p, q>>])    \* receive the message at head
-            /\ \exists r \in Proc: r \in sent_by[m] \* Some process has sent the message
+            /\ <<p, q>> \in Nbrs                        \* receive only at neighbours
+            /\ channels[<<p, q>>] # <<>>                \* receive if there is a message
+            /\ m = Head(channels[<<p, q>>])             \* receive the message at head
+            /\ \exists r \in Proc: r \in sent_by[m]     \* Some process has sent the message
             /\ q \notin received_by[m]                  \* Not already received by q
             /\ received_by' = [received_by EXCEPT ![m] = @ \union {q}]
             /\ channels' = [channels EXCEPT ![<<p, q>>] = Tail(@)]
             /\ UNCHANGED <<sent_by, sent>>
 
-(*
+(***************************************************************************)
+(* Lose message m on channel between processes p and q.                    *)
+(***************************************************************************)
 Lose(m, p, q) ==
-            /\ <<m.from, q>>] # <<>>
-            /\ m = Head(channels[<<m.from, q>>])
-            /\ channels' = [channels EXCEPT ![<<m.from, q>>] = Tail(@)]
-            /\ UNCHANGED <<sent_by, received_by>>
-*)
+            /\ <<p, q>> \in Nbrs
+            /\ channels[<<p, q>>] # <<>>
+            /\ m = Head(channels[<<p, q>>])
+            /\ channels' = [channels EXCEPT ![<<p, q>>] = Tail(@)]
+            /\ UNCHANGED <<sent, sent_by, received_by>>
 
 (***************************************************************************)
 (* Forward(m, p, q) - forward message m from p to q                        *)
@@ -95,7 +98,7 @@ Lose(m, p, q) ==
 Forward(m, p, q) ==
             /\ \exists r \in Proc: r \in sent_by[m] \* Some process has sent the message
             /\ p # q                                \* Don't forward to self
-            /\ m.from # p                           \* Sender doesnt forward
+            /\ m.from # p                           \* Sender does not forward
             /\ <<p, q>> \in Nbrs                    \* Forward only to neighbour
             /\ p \in received_by[m]                     \* p has received m
             /\ p \notin sent_by[m]                  \* Don't forward again
@@ -103,33 +106,50 @@ Forward(m, p, q) ==
             /\ channels' = [channels EXCEPT ![<<p, q>>] = Append(@, m)]
             /\ UNCHANGED <<received_by, sent>>
 
+(***************************************************************************)
+(* Track message received at so we can build a liveness property that      *)
+(* sends lead to receive.                                                  *)
+(***************************************************************************)
+ReceivedAt(m, p) ==
+        /\ m.from # p                               \* Receive at non-sender
+        /\ p \in received_by[m]                     \* Message has been received by m
+        /\ UNCHANGED vars
+
 Next == \exists p \in Proc, q \in Proc, m \in Message:
             \/ SendTo(m, p)
             \/ RecvAt(m, p, q)
-\*            \/ Lose(m, p, q)
+            \/ Lose(m, p, q)
             \/ Forward(m, p, q)
 -----------------------------------------------------------------------------
 Spec == /\ Init
         /\ [][Next]_vars
 
-(*
-SendLeadsToRecv == \A m \in Message: \A p \in Proc: \A  q \in Proc:
-            (p \in sent_by[m]) ~> (q \in received_by[m] \/ q # m.from)
-*)
+
+(***************************************************************************)
+(* Sends leads to recv is a liveness property saying if a message is sent by *)
+(* any process, then all processes eventually receive the message.         *)
+(***************************************************************************)
+SendLeadsToRecv == \A m \in Message: \A p, q \in Proc:
+                WF_vars(ReceivedAt(m, q))
 
 (***************************************************************************)
 (* Liveness specifies that if a message is enabled to be received at p, it *)
 (* is eventually received at p.                                            *)
 (***************************************************************************)
-Liveness == \A p \in Proc: \A q \in Proc: \A m \in Message: SF_vars(RecvAt(m, p, q))
+Liveness == \A p, q \in Proc: \A m \in Message: WF_vars(RecvAt(m, p, q))
 
-FairSpec == Spec /\ Liveness
+FairSpec == Spec
+            /\ Liveness
+            /\ SendLeadsToRecv
 -----------------------------------------------------------------------------
 THEOREM Spec => []TypeInvariant
 
+(*
+This specification implements the P2PBroadcastSpec
+*)
 PBS == INSTANCE P2PBroadcastSpec
 THEOREM Spec => PBS!Spec
 =============================================================================
 \* Modification History
-\* Last modified Fri Apr 07 09:28:40 CEST 2023 by kulpreet
+\* Last modified Wed Jun 21 15:59:29 CEST 2023 by kulpreet
 \* Created Sun Mar 05 15:04:04 CET 2023 by kulpreet
