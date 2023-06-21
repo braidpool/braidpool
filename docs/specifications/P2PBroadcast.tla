@@ -112,7 +112,7 @@ Forward(m, p, q) ==
 (***************************************************************************)
 ReceivedAt(m, p) ==
         /\ m.from # p                               \* Receive at non-sender
-        /\ p \in received_by[m]                     \* Message has been received by m
+        /\ m \in sent                               \* m has been sent by some Proc
         /\ UNCHANGED vars
 
 Next == \exists p \in Proc, q \in Proc, m \in Message:
@@ -120,17 +120,20 @@ Next == \exists p \in Proc, q \in Proc, m \in Message:
             \/ RecvAt(m, p, q)
             \/ Lose(m, p, q)
             \/ Forward(m, p, q)
+            \/ ReceivedAt(m, p)
 -----------------------------------------------------------------------------
 Spec == /\ Init
         /\ [][Next]_vars
 
 
 (***************************************************************************)
-(* Sends leads to recv is a liveness property saying if a message is sent by *)
-(* any process, then all processes eventually receive the message.         *)
+(* Sends leads to recv is a liveness property saying if a message is sent  *)
+(* by any process, then all processes eventually receive the message.      *)
+(*                                                                         *)
+(* ReceivedAt is enabled as soon as a message is sent, and Weak Fairness   *)
+(* guarantees it is received by all non-failing processes.                 *)
 (***************************************************************************)
-SendLeadsToRecv == \A m \in Message: \A p, q \in Proc:
-                WF_vars(ReceivedAt(m, q))
+SendLeadsToRecv == \A m \in Message: \A p \in Proc: WF_vars(ReceivedAt(m, p))
 
 (***************************************************************************)
 (* Liveness specifies that if a message is enabled to be received at p, it *)
@@ -151,5 +154,5 @@ PBS == INSTANCE P2PBroadcastSpec
 THEOREM Spec => PBS!Spec
 =============================================================================
 \* Modification History
-\* Last modified Wed Jun 21 15:59:29 CEST 2023 by kulpreet
+\* Last modified Wed Jun 21 16:07:10 CEST 2023 by kulpreet
 \* Created Sun Mar 05 15:04:04 CET 2023 by kulpreet
