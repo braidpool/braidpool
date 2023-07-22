@@ -9,17 +9,22 @@
 EXTENDS
         Sequences,
         Integers,
-        DAG
+        DAG,
+        FiniteSets
 
 CONSTANT
         Miner,                   \* Set of miners
         ShareSeqNo,              \* Share seq numbers each miner generates
-        BlockReward              \* Block reward in a difficulty period
+        BlockReward,             \* Block reward in a difficulty period
+        MaxPathLen               \* Max path length to check for message stability.
+                                 \* This helps constrain the search space in the DAG.
 
 VARIABLES
         \* TODO: Replace these `last_.* variables with operators on DAG
         last_sent,               \* Function mapping miner to last sent share seq_no
         share_dag,              \* A DAG with valid shares for now implemented as a set
+        stable,                 \* Set of shares that are stable in the DAG, i.e. received
+                                \* by all other miners
         unpaid_coinbases,       \* coinbases for braidpool blocks that
                                 \* haven't been paid yet
         uhpo,                   \* Function mapping miner to unpaid balance
@@ -40,11 +45,6 @@ Share == [miner: Miner, seq_no: ShareSeqNo]
 Acks  == <<Share>>
 
 (***************************************************************************)
-(* ShareDAG is used to track paths between shares                          *)
-(***************************************************************************)
-ShareDAG == [node: Share, edge: Share \times Share]
-
-(***************************************************************************)
 (* PublicKey is defined as sequence of miner identifier for now.           *)
 (* The miners in a key sequence are the miners contributing to the key     *)
 (* generated using DKG.                                                    *)
@@ -55,13 +55,14 @@ PublicKey == Seq(Miner)
 (* Coinbase is a payment to a DKG public key with an value.                *)
 (***************************************************************************)
 Coinbase == [key: PublicKey, value: BlockReward]
-
+                        
 -----------------------------------------------------------------------------
 NoVal == 0
 
 Init ==
         /\ last_sent = [m \in Miner |-> NoVal]
         /\ share_dag = [node |-> {}, edge |-> {}]
+        /\ stable = {}
         /\ unpaid_coinbases = {}
         /\ uhpo = [m \in Miner |-> NoVal]
         /\ pool_key = <<>>
@@ -70,11 +71,12 @@ TypeInvariant ==
         /\ last_sent \in [Miner -> Int \cup {NoVal}]
         /\ share_dag.node \in SUBSET Share
         /\ share_dag.edge \in SUBSET (Share \times Share)
+        /\ stable \in SUBSET Share
         /\ unpaid_coinbases \in SUBSET Coinbase
         /\ uhpo \in [Miner -> Int \cup {NoVal}]
         /\ pool_key \in Seq(Miner)
 
-vars == <<last_sent, share_dag, unpaid_coinbases, uhpo, pool_key>>
+vars == <<last_sent, share_dag, stable, unpaid_coinbases, uhpo, pool_key>>
 -----------------------------------------------------------------------------
 
 (***************************************************************************)
@@ -95,9 +97,24 @@ SendShare == \exists m \in Miner, sno \in ShareSeqNo:
                                     \times
                                     {[miner |-> mo, seq_no |-> last_sent[mo]]:
                                           mo \in {mm \in Miner: last_sent[mm] # NoVal}}]
-            /\ UNCHANGED <<unpaid_coinbases, uhpo, pool_key>>
+            /\ UNCHANGED <<stable, unpaid_coinbases, uhpo, pool_key>>
 
-\* StabiliseShare
+(*
+Stabilise a share if there is a path from the share to any share from all other miners.
+How do we know all other miners? This comes from a separate protocol where a miner is 
+dropped from the set of all other miners. Miners are dropped from the list if they have
+not sent shares since the last bitcoin block was found. For now, we assume the list of
+to the group of miners is known. 
+*)
+StabiliseShare == \exists s \in share_dag.node:
+                    /\ s \notin stable
+                    /\ \A m \in Miner \ {s.miner}:
+                        \exists p \in Paths(MaxPathLen, share_dag): /\ p[1].miner = m
+                                                                    /\ p[2].miner = s.miner
+                    /\ stable' = stable \cup {s}
+                    /\ UNCHANGED <<last_sent, share_dag, unpaid_coinbases, uhpo, pool_key>>
+
+DAGConstraint == Cardinality(share_dag.node) <= Cardinality(Miner) * Cardinality(ShareSeqNo)
 
 \* RecvBitcoinBlock
 
@@ -108,6 +125,7 @@ SendShare == \exists m \in Miner, sno \in ShareSeqNo:
 -----------------------------------------------------------------------------
 Next ==
         \/ SendShare
+        \/ StabiliseShare
 
 Spec ==
         /\ Init
