@@ -2,11 +2,14 @@
 (***************************************************************************)
 (* Block generation specifies when and how braidpool miners generate       *)
 (* blocks.                                                                 *)
+(* Block generation captures how coinbase and UHPO transactions are        *)
+(* or updated.                                                             *)
 (* The protocol to build current pool key and threshold signatures is      *)
 (* assumed                                                                 *)
 (***************************************************************************)
 
 EXTENDS
+        TLC,
         Sequences,
         Integers,
         DAG,
@@ -15,9 +18,7 @@ EXTENDS
 CONSTANT
         Miner,                   \* Set of miners
         ShareSeqNo,              \* Share seq numbers each miner generates
-        BlockReward,             \* Block reward in a difficulty period
-        MaxPathLen               \* Max path length to check for message stability.
-                                 \* This helps constrain the search space in the DAG.
+        BlockReward              \* Block reward in a difficulty period
 
 VARIABLES
         \* TODO: Replace these `last_.* variables with operators on DAG
@@ -28,7 +29,8 @@ VARIABLES
         unpaid_coinbases,       \* coinbases for braidpool blocks that
                                 \* haven't been paid yet
         uhpo,                   \* Function mapping miner to unpaid balance
-        pool_key                \* Current public key for TS
+        pool_key,               \* Current public key for TS
+        chain                   \* chain of bitcoin blocks
 
 -----------------------------------------------------------------------------
 
@@ -39,22 +41,19 @@ VARIABLES
 Share == [miner: Miner, seq_no: ShareSeqNo]
 
 (***************************************************************************)
-(* Acks are the implicit acknowledgements sent with each share.  These are *)
-(* the sequence number of shares receieved from each miner.                *)
+(* PublicKey is defined as the set of miner identifiers for now.           *)
+(* As miners join/leave the network, the public key immediately changes    *)
+(* The protocol to rotate the threshold signature public key is not speced *)
+(* here.                                                                   *)
 (***************************************************************************)
-Acks  == <<Share>>
-
-(***************************************************************************)
-(* PublicKey is defined as sequence of miner identifier for now.           *)
-(* The miners in a key sequence are the miners contributing to the key     *)
-(* generated using DKG.                                                    *)
-(***************************************************************************)
-PublicKey == Seq(Miner)
+\* PublicKey == Miner
 
 (***************************************************************************)
 (* Coinbase is a payment to a DKG public key with an value.                *)
 (***************************************************************************)
-Coinbase == [key: PublicKey, value: BlockReward]
+CoinbaseOutput == [scriptPubKey: Miner, value: BlockReward]
+
+CoinbaseTx == [inputs: <<>>, outputs: <<CoinbaseOutput>>]
                         
 -----------------------------------------------------------------------------
 NoVal == 0
@@ -65,18 +64,20 @@ Init ==
         /\ stable = {}
         /\ unpaid_coinbases = {}
         /\ uhpo = [m \in Miner |-> NoVal]
-        /\ pool_key = <<>>
+        /\ pool_key = {}
+        /\ chain = <<>>
 
 TypeInvariant ==
         /\ last_sent \in [Miner -> Int \cup {NoVal}]
         /\ share_dag.node \in SUBSET Share
         /\ share_dag.edge \in SUBSET (Share \times Share)
         /\ stable \in SUBSET Share
-        /\ unpaid_coinbases \in SUBSET Coinbase
+        /\ unpaid_coinbases \in SUBSET CoinbaseOutput
         /\ uhpo \in [Miner -> Int \cup {NoVal}]
-        /\ pool_key \in Seq(Miner)
+        /\ pool_key \in SUBSET Miner
+        /\ chain \in Seq(Share)
 
-vars == <<last_sent, share_dag, stable, unpaid_coinbases, uhpo, pool_key>>
+vars == <<last_sent, share_dag, stable, unpaid_coinbases, uhpo, pool_key, chain>>
 -----------------------------------------------------------------------------
 
 (***************************************************************************)
@@ -84,7 +85,7 @@ vars == <<last_sent, share_dag, stable, unpaid_coinbases, uhpo, pool_key>>
 (* ShareSeqNo.                                                             *)
 (* The share is assumed to be successfully broadcast to all miners.        *)
 (***************************************************************************)
-SendShare == \exists m \in Miner, sno \in ShareSeqNo:
+SendShare(m, sno) ==
             /\ sno = last_sent[m] + 1
             /\ last_sent' = [last_sent EXCEPT ![m] = @ + 1]
             /\ share_dag' = [share_dag EXCEPT
@@ -97,37 +98,69 @@ SendShare == \exists m \in Miner, sno \in ShareSeqNo:
                                     \times
                                     {[miner |-> mo, seq_no |-> last_sent[mo]]:
                                           mo \in {mm \in Miner: last_sent[mm] # NoVal}}]
-            /\ UNCHANGED <<stable, unpaid_coinbases, uhpo, pool_key>>
+            /\ UNCHANGED <<stable, unpaid_coinbases, uhpo, pool_key, chain>>
 
-(*
-Stabilise a share if there is a path from the share to any share from all other miners.
-How do we know all other miners? This comes from a separate protocol where a miner is 
-dropped from the set of all other miners. Miners are dropped from the list if they have
-not sent shares since the last bitcoin block was found. For now, we assume the list of
-to the group of miners is known. 
-*)
-StabiliseShare == \exists s \in share_dag.node:
+(***************************************************************************)
+(* Stabilise a share if there is a path from the share to any share from   *)
+(* all other miners.                                                       *)
+(*                                                                         *)
+(* How do we know all other miners? This comes from a separate protocol    *)
+(* where a miner is  dropped from the set of all other miners.             *)
+(*                                                                         *)
+(* Miners are dropped from the list if they have not sent shares since the *)
+(* last bitcoin block was found. For now, we assume the list of to the     *)
+(* group of miners is known.                                               *)
+(***************************************************************************)
+StabiliseShare(s) ==
                     /\ s \notin stable
                     /\ \A m \in Miner \ {s.miner}:
-                        \exists p \in Paths(MaxPathLen, share_dag): /\ p[1].miner = m
-                                                                    /\ p[2].miner = s.miner
+                        \exists p \in SimplePath(share_dag),
+                                      i \in 1..Cardinality(share_dag.node),
+                                      j \in 1..Cardinality(share_dag.node):
+                                        /\ Len(p) > 1 
+                                        /\ i < j
+                                        /\ j =< Len(p)
+                                        /\ p[i].miner = s.miner
+                                        /\ p[j].miner = m
                     /\ stable' = stable \cup {s}
-                    /\ UNCHANGED <<last_sent, share_dag, unpaid_coinbases, uhpo, pool_key>>
+                    /\ UNCHANGED <<last_sent, share_dag, unpaid_coinbases, uhpo, pool_key, chain>>
 
-DAGConstraint == Cardinality(share_dag.node) <= Cardinality(Miner) * Cardinality(ShareSeqNo)
+(*
+On receiving a bitcoin block miners create a new new bitcoin block 
+they are mining on.
 
-\* RecvBitcoinBlock
+Miners have to create a new coinbase transaction. However, the UHPO 
+transaction remains the same.
+*)
+\* ReceiveBitcoinBlock == 
 
-\* FindBitcoinBlock
+(*
+A miner on braidpool finds a new bitcoin block
+1. Include the miner in the pool_key
+2. Update UHPO payout miners and amount
 
-\* UpdatePoolKey
+Some miners can send shares with the old block
+*)
+FoundBitcoinBlock(share) == 
+            /\ \A i \in 1..Len(chain): chain[i] # share
+            /\ chain' = Append(chain, share)
+            /\ pool_key' = pool_key \cup {share.miner}
+            /\ UNCHANGED <<stable, last_sent, share_dag, unpaid_coinbases, uhpo>>
+            
 
 -----------------------------------------------------------------------------
 Next ==
-        \/ SendShare
-        \/ StabiliseShare
+        \/ \exists s \in Share: 
+                \/ SendShare(s.miner, s.seq_no)
+                \/ StabiliseShare(s)
+                \/ FoundBitcoinBlock(s) \* Any share can be a bitcoin block. We do not model difficulty or track valid bitcoin flag.
+
+Liveness == \A s \in share_dag.node: WF_vars(StabiliseShare(s) \/ FoundBitcoinBlock(s))
 
 Spec ==
         /\ Init
         /\ [][Next]_vars
+        
+FairSpec == Spec
+            /\ Liveness
 =============================================================================
