@@ -133,15 +133,15 @@ they are mining on.
 Miners have to create a new coinbase transaction. However, the UHPO 
 transaction remains the same.
 *)
-\* ReceiveBitcoinBlock ==
+\* ReceiveBitcoinBlock == TODO
 
-(*
-A miner on braidpool finds a new bitcoin block
-1. Include the miner in the pool_key
-2. Update UHPO payout miners and amount
-
-Some miners can send shares with the old block
-*)
+(***************************************************************************)
+(* A miner on braidpool finds a new bitcoin block                          *)
+(* 1. Include the miner in the pool_key                                    *)
+(* 2. Update UHPO payout miners and amount                                 *)
+(*                                                                         *)
+(* Some miners can send shares with the old block                          *)
+(***************************************************************************)
 FoundBitcoinBlock(share) == 
             /\ last_sent[share.miner] = share.seq_no
             /\ \A i \in 1..Len(chain): chain[i] # share
