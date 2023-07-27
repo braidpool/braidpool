@@ -23,6 +23,13 @@ SeqOf(set, n) ==
   (***************************************************************************)
   UNION {[1..m -> set] : m \in 0..n}
 
+ToSet(s) ==
+  (*************************************************************************)
+  (* The image of the given sequence s. Cardinality(ToSet(s)) <= Len(s)    *)
+  (* see https://en.wikipedia.org/wiki/Image_(mathematics)                 *)
+  (*************************************************************************)
+  { s[i] : i \in DOMAIN s }
+
 Contains(s, e) ==
   (**************************************************************************)
   (* TRUE iff the element e \in ToSet(s).                                   *)
@@ -35,6 +42,13 @@ SimplePath(G) ==
              /\ p # << >>
              /\ Cardinality({ p[i] : i \in DOMAIN p }) = Len(p)
              /\ \A i \in 1..(Len(p)-1) : <<p[i], p[i+1]>> \in G.edge}
+
+NodesInSimplePath(G, from, to) ==
+    \* All nodes in a simple path betwee `from` and `to`
+            UNION{ToSet(s): s \in
+                    {p \in SimplePath(G):
+                         (/\ p[1] = from)
+                          /\ (p[Len(p)] = to)}}
 
 AreConnected(m, n, G) == \* True if there is a path from m to n in G
     \exists p \in Path(G) : (p[1] = m) /\ (p[Len(p)] = n)  

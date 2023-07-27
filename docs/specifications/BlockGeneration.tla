@@ -18,7 +18,8 @@ EXTENDS
 CONSTANT
         Miner,                   \* Set of miners
         ShareSeqNo,              \* Share seq numbers each miner generates
-        BlockReward              \* Block reward in a difficulty period
+        BlockReward,             \* Block reward in a difficulty period
+        GenesisShare
 
 VARIABLES
         \* TODO: Replace these `last_.* variables with operators on DAG
@@ -59,13 +60,13 @@ CoinbaseTx == [inputs: <<>>, outputs: <<CoinbaseOutput>>]
 NoVal == 0
 
 Init ==
-        /\ last_sent = [m \in Miner |-> NoVal]
-        /\ share_dag = [node |-> {}, edge |-> {}]
+        /\ last_sent = [m \in Miner |-> IF m = GenesisShare.miner THEN 1 ELSE NoVal]
+        /\ share_dag = [node |-> {GenesisShare}, edge |-> {}]
         /\ stable = {}
         /\ unpaid_coinbases = {}
-        /\ uhpo = [m \in Miner |-> NoVal]
-        /\ pool_key = {}
-        /\ chain = <<>>
+        /\ uhpo = [m \in Miner |-> {}]
+        /\ pool_key = {GenesisShare.miner}
+        /\ chain = <<GenesisShare>>
 
 TypeInvariant ==
         /\ last_sent \in [Miner -> Int \cup {NoVal}]
@@ -73,7 +74,7 @@ TypeInvariant ==
         /\ share_dag.edge \in SUBSET (Share \times Share)
         /\ stable \in SUBSET Share
         /\ unpaid_coinbases \in SUBSET CoinbaseOutput
-        /\ uhpo \in [Miner -> Int \cup {NoVal}]
+        /\ uhpo \in [Miner -> SUBSET Share]
         /\ pool_key \in SUBSET Miner
         /\ chain \in Seq(Share)
 
@@ -132,7 +133,7 @@ they are mining on.
 Miners have to create a new coinbase transaction. However, the UHPO 
 transaction remains the same.
 *)
-\* ReceiveBitcoinBlock == 
+\* ReceiveBitcoinBlock ==
 
 (*
 A miner on braidpool finds a new bitcoin block
@@ -142,18 +143,23 @@ A miner on braidpool finds a new bitcoin block
 Some miners can send shares with the old block
 *)
 FoundBitcoinBlock(share) == 
+            /\ last_sent[share.miner] = share.seq_no
             /\ \A i \in 1..Len(chain): chain[i] # share
             /\ chain' = Append(chain, share)
             /\ pool_key' = pool_key \cup {share.miner}
-            /\ UNCHANGED <<stable, last_sent, share_dag, unpaid_coinbases, uhpo>>
-            
+            /\ \A ss \in NodesInSimplePath(share_dag,
+                                   chain[Len(chain)],
+                                   chain[1]):
+                       uhpo' = [uhpo EXCEPT ![ss.miner] = @ \union {ss}]
+            /\ UNCHANGED <<stable, last_sent, share_dag, unpaid_coinbases>>
 
 -----------------------------------------------------------------------------
 Next ==
         \/ \exists s \in Share: 
                 \/ SendShare(s.miner, s.seq_no)
                 \/ StabiliseShare(s)
-                \/ FoundBitcoinBlock(s) \* Any share can be a bitcoin block. We do not model difficulty or track valid bitcoin flag.
+                \/ FoundBitcoinBlock(s) \* Any share can be a bitcoin block.
+                                        \* We do not model difficulty or track valid bitcoin flag.
 
 Liveness == \A s \in share_dag.node: WF_vars(StabiliseShare(s) \/ FoundBitcoinBlock(s))
 
