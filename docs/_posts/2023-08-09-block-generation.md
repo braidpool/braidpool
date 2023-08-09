@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "Threshold signatures, pool key generation and block generation"
+title: "Generating pool key and blocks to mine"
 image: assets/BC_Logo_.png
 ---
 

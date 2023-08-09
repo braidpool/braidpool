@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "P2P Connection Lower Bounds"
+title: "P2P connection lower bounds"
 image: assets/BC_Logo_.png
 ---
 
