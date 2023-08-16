@@ -20,7 +20,7 @@ FetchContent_MakeAvailable(googletest)
 
 configure_file(pool_config.h.in pool_config.h)
 
-pkg_check_modules(LIBBITCOIN-SYSTEM libbitcoin-system)
+pkg_check_modules(DEPS REQUIRED libbitcoin-system libsecp256k1=0.1.0.20)
 
 enable_testing()
 
