@@ -31,7 +31,7 @@ list(APPEND EXTRA_INCLUDES "${PROJECT_SOURCE_DIR}/include")
 list(APPEND EXTRA_LIBS ${LIBBITCOIN-SYSTEM_LINK_LIBRARIES})
 list(APPEND EXTRA_INCLUDES ${LIBBITCOIN-SYSTEM_INCLUDE_DIRS})
 
-find_package(msgpack REQUIRED)
+find_package(msgpackc-cxx REQUIRED)
 add_definitions(-DMSGPACK_USE_BOOST)
 
 add_executable(bp
