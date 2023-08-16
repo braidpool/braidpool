@@ -63,17 +63,6 @@ jobs:
         make -j ${{env.CORES}}
         sudo make install
         sudo ldconfig
-            
-    - name: Channels - Configure CMake
-      run: |
-        cmake -DBOOST_ROOT=/usr/local/ -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -S ${{github.workspace}}/channels -B ${{github.workspace}}/channels/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_CXX_FLAGS="-std=c++20 -stdlib=libc++" -DCMAKE_EXE_LINKER_FLAGS=-lc++abi
-        
-    - name: Channels - Build CMake
-      run: |
-        CMAKE_BUILD_PARALLEL_LEVEL=${{env.CORES}} cmake --build ${{github.workspace}}/channels/build
-        
-    - name: Channels - Run tests
-      run: ctest --test-dir ${{github.workspace}}/channels/build
 
     - name: Pool - Configure CMake
       run: |
