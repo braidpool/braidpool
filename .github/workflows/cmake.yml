@@ -14,6 +14,9 @@ env:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    env:
+      CC: clang
+      CXX: clang++
   
     steps:
     - uses: actions/checkout@v2
@@ -31,7 +34,7 @@ jobs:
         wget http://downloads.sourceforge.net/project/boost/boost/1.79.0/boost_1_79_0.tar.gz
         tar -zxf boost_1_79_0.tar.gz
         cd boost_1_79_0
-        ./bootstrap.sh --with-toolset=clang
+        ./bootstrap.sh --with-icu=yes --with-toolset=clang
         sudo ./b2 cxxflags="-std=c++11 -stdlib=libc++ -w" linkflags="-stdlib=libc++ -nodefaultlibs -lc++ -lc++abi -lm -lc -lgcc_s -lpthread" --layout=system -j ${{env.CORES}} toolset=clang install
 
     - name: Install msgpack
@@ -51,9 +54,6 @@ jobs:
         make
         sudo make install
         cd ${{github.workspace}}
-      env:
-        CC: clang
-        CXX: clang++
 
     - name: Build libbitcoin-system
       run: |
