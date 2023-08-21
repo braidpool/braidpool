@@ -9,7 +9,7 @@ for braidpool.
 
 For details on how delivering shares to market makers for enabling
 hashrate futures, read the blog post: [Deliver Hashrate to Market
-Markets](https://pool2win.github.io/braidpool/2021/08/18/deliver-hashrate-to-market-makers.html).
+Markets](https://blog.opdup.com/2021/08/18/deliver-hashrate-to-market-makers.html).
 
 The pool provides:
 
@@ -38,6 +38,6 @@ Matrix chat: [https://matrix.to/#/#braidpool:matrix.org](https://matrix.to/#/#br
 
 Mailing list: [https://sourceforge.net/p/braidpool/mailman/braidpool-discuss/](https://sourceforge.net/p/braidpool/mailman/braidpool-discuss/)
 
-Development blog: [https://pool2win.github.io/braidpool/](https://pool2win.github.io/braidpool/)
+Development blog: [https://blog.opdup.com/](https://blog.opdup.com/)
 
 Donations: bitcoin:bc1q6xms5xsq6kvk9h57mvsdxdjnnrl0vsc942xlxe
