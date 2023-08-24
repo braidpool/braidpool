@@ -19,3 +19,5 @@ gem "jekyll-seo-tag"
 gem "webrick"
 
 gem "minima"
+
+gem 'jekyll-titles-from-headings'

@@ -1,6 +1,7 @@
 plugins:
   - jekyll-remote-theme
-remote_theme: jekyll/minima
+  - jekyll-titles-from-headings
+theme: minima
 minima:
   social_links:
     - { platform: github,  user_url: "https://github.com/pool2win" }
