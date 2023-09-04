@@ -1,7 +1,5 @@
 use std::env;
 use std::error::Error;
-// use std::sync::Arc;
-// use tokio::io::AsyncWriteExt;
 use tokio::net::{TcpListener, TcpStream};
 
 mod connection;
@@ -17,8 +15,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if seed_addr != addr {
         let stream = TcpStream::connect(seed_addr).await?;
         // let peer_connection = connection::build_connection(stream);
-        let (reader, mut writer) = stream.into_split();
-        let _ = connection::start_from_connect(reader, &mut writer).await;
+        let (reader, writer) = stream.into_split();
+        let _ = connection::start_from_connect(reader, writer).await;
     }
 
     let listener = TcpListener::bind(&addr).await?;
@@ -27,9 +25,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let (stream, _peer_addr) = listener.accept().await.expect("Error accepting");
 
         tracing::debug!("accepted connection");
-        // let peer_connection = connection::build_connection(stream);
-        let (reader, mut writer) = stream.into_split();
-        let _ = connection::start_from_accept(reader, &mut writer).await;
+        let (reader, writer) = stream.into_split();
+        let _ = connection::start_from_accept(reader, writer).await;
     }
 }
 
