@@ -13,20 +13,28 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Connect to seed node, if found, else continue
     if seed_addr != addr {
-        let stream = TcpStream::connect(seed_addr).await?;
+        let stream = TcpStream::connect(seed_addr)
+            .await
+            .expect("Error connecting");
         // let peer_connection = connection::build_connection(stream);
         let (reader, writer) = stream.into_split();
-        let _ = connection::start_from_connect(reader, writer).await;
+        connection::start_from_connect(reader, writer)
+            .await
+            .expect("Error starting from connect");
     }
 
     let listener = TcpListener::bind(&addr).await?;
     loop {
         // Asynchronously wait for an inbound TcpStream.
-        let (stream, _peer_addr) = listener.accept().await.expect("Error accepting");
-
-        tracing::debug!("accepted connection");
-        let (reader, writer) = stream.into_split();
-        let _ = connection::start_from_accept(reader, writer).await;
+        println!("Starting accept");
+        match listener.accept().await {
+            Ok((stream, _)) => {
+                println!("\n\naccepted connection");
+                let (reader, writer) = stream.into_split();
+                let _ = connection::start_from_accept(reader, writer).await;
+            }
+            Err(e) => println!("couldn't get client: {:?}", e),
+        }
     }
 }
 
