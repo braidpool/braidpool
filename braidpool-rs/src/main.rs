@@ -4,6 +4,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio_util::codec::{FramedRead, FramedWrite, LinesCodec};
 
 mod connection;
+mod protocol;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {

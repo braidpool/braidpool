@@ -3,8 +3,6 @@ use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::sync::mpsc;
 use tokio_util::codec::{FramedRead, FramedWrite, LinesCodec};
 
-//mod protocol;
-
 const CHANNEL_CAPACITY: usize = 32;
 
 pub async fn start_from_connect(
@@ -15,7 +13,7 @@ pub async fn start_from_connect(
     let (channel_sender, channel_receiver) = mpsc::channel(CHANNEL_CAPACITY);
     start_read_loop(reader, channel_sender).await?;
     println!("read loop started in connect..");
-    let _ = start_connect_protocols(writer, channel_receiver).await;
+    start_connect_protocols(writer, channel_receiver).await?;
     Ok(())
 }
 
@@ -39,10 +37,22 @@ pub async fn start_read_loop(
     tokio::spawn(async move {
         println!("Start read loop....");
         loop {
-            let item = reader.next().await.unwrap();
-            let b: String = item.unwrap();
-            println!("received {:?}", b);
-            let _ = channel_sender.send(b).await;
+            match reader.next().await {
+                Some(item) => match item {
+                    Ok(message) => {
+                        println!("received {:?}", message);
+                        let _ = channel_sender.send(message).await;
+                    }
+                    Err(_) => {
+                        println!("Peer closed connection");
+                        return;
+                    }
+                },
+                None => {
+                    println!("Peer closed connection");
+                    return;
+                }
+            }
         }
     });
     Ok(())
