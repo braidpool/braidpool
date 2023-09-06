@@ -1,6 +1,7 @@
 use std::env;
 use std::error::Error;
 use tokio::net::{TcpListener, TcpStream};
+use tokio_util::codec::{FramedRead, FramedWrite, LinesCodec};
 
 mod connection;
 
@@ -16,9 +17,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let stream = TcpStream::connect(seed_addr)
             .await
             .expect("Error connecting");
-        // let peer_connection = connection::build_connection(stream);
-        let (reader, writer) = stream.into_split();
-        connection::start_from_connect(reader, writer)
+        let (r, w) = stream.into_split();
+        let framed_reader = FramedRead::new(r, LinesCodec::new());
+        let framed_writer = FramedWrite::new(w, LinesCodec::new());
+        connection::start_from_connect(framed_reader, framed_writer)
             .await
             .expect("Error starting from connect");
     }
@@ -30,8 +32,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         match listener.accept().await {
             Ok((stream, _)) => {
                 println!("\n\naccepted connection");
-                let (reader, writer) = stream.into_split();
-                let _ = connection::start_from_accept(reader, writer).await;
+                let (r, w) = stream.into_split();
+                let framed_reader = FramedRead::new(r, LinesCodec::new());
+                let framed_writer = FramedWrite::new(w, LinesCodec::new());
+                let _ = connection::start_from_accept(framed_reader, framed_writer).await;
             }
             Err(e) => println!("couldn't get client: {:?}", e),
         }
