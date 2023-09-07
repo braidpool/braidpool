@@ -1,7 +1,7 @@
 use std::env;
 use std::error::Error;
 use tokio::net::{TcpListener, TcpStream};
-use tokio_util::codec::{FramedRead, FramedWrite, LinesCodec};
+use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 
 mod connection;
 mod protocol;
@@ -19,8 +19,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .await
             .expect("Error connecting");
         let (r, w) = stream.into_split();
-        let framed_reader = FramedRead::new(r, LinesCodec::new());
-        let framed_writer = FramedWrite::new(w, LinesCodec::new());
+        let framed_reader = FramedRead::new(r, LengthDelimitedCodec::new());
+        let framed_writer = FramedWrite::new(w, LengthDelimitedCodec::new());
         let mut conn = connection::Connection::new(framed_reader, framed_writer);
         tokio::spawn(async move {
             match conn.start_from_connect().await {
@@ -41,8 +41,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             Ok((stream, _)) => {
                 println!("\n\naccepted connection");
                 let (r, w) = stream.into_split();
-                let framed_reader = FramedRead::new(r, LinesCodec::new());
-                let framed_writer = FramedWrite::new(w, LinesCodec::new());
+                let framed_reader = FramedRead::new(r, LengthDelimitedCodec::new());
+                let framed_writer = FramedWrite::new(w, LengthDelimitedCodec::new());
                 let mut conn = connection::Connection::new(framed_reader, framed_writer);
 
                 tokio::spawn(async move {
