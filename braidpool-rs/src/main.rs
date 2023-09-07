@@ -21,9 +21,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let (r, w) = stream.into_split();
         let framed_reader = FramedRead::new(r, LinesCodec::new());
         let framed_writer = FramedWrite::new(w, LinesCodec::new());
-        connection::start_from_connect(framed_reader, framed_writer)
-            .await
-            .expect("Error starting from connect");
+        let mut conn = connection::Connection::new(framed_reader, framed_writer);
+        tokio::spawn(async move {
+            match conn.start_from_connect().await {
+                Err(_) => {
+                    println!("peer closed connection");
+                    return;
+                }
+                Ok(_) => {}
+            }
+        });
     }
 
     let listener = TcpListener::bind(&addr).await?;
@@ -36,7 +43,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 let (r, w) = stream.into_split();
                 let framed_reader = FramedRead::new(r, LinesCodec::new());
                 let framed_writer = FramedWrite::new(w, LinesCodec::new());
-                let _ = connection::start_from_accept(framed_reader, framed_writer).await;
+                let mut conn = connection::Connection::new(framed_reader, framed_writer);
+
+                tokio::spawn(async move {
+                    match conn.start_from_accept().await {
+                        Err(e) => {
+                            println!("Connection shutdown: {:?}", e);
+                            return;
+                        }
+                        Ok(_) => {}
+                    }
+                });
             }
             Err(e) => println!("couldn't get client: {:?}", e),
         }

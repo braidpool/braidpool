@@ -5,87 +5,65 @@ use tokio_util::codec::{FramedRead, FramedWrite, LinesCodec};
 
 const CHANNEL_CAPACITY: usize = 32;
 
-pub async fn start_from_connect(
+pub struct Connection {
     reader: FramedRead<OwnedReadHalf, LinesCodec>,
     writer: FramedWrite<OwnedWriteHalf, LinesCodec>,
-) -> Result<(), Box<dyn Error>> {
-    println!("Starting from connect");
-    let (channel_sender, channel_receiver) = mpsc::channel(CHANNEL_CAPACITY);
-    start_read_loop(reader, channel_sender).await?;
-    println!("read loop started in connect..");
-    start_connect_protocols(writer, channel_receiver).await?;
-    Ok(())
+    //channel_receiver: mpsc::Receiver<String>,
+    //channel_sender: mpsc::Sender<String>,
 }
 
-pub async fn start_from_accept(
-    reader: FramedRead<OwnedReadHalf, LinesCodec>,
-    writer: FramedWrite<OwnedWriteHalf, LinesCodec>,
-) -> Result<(), Box<dyn Error>> {
-    println!("Starting from accept");
-    let (channel_sender, channel_receiver) = mpsc::channel(CHANNEL_CAPACITY);
-    let _ = start_read_loop(reader, channel_sender).await;
-    println!("read loop started in accept..");
-    let _ = start_accept_protocols(writer, channel_receiver).await;
-    Ok(())
-}
+impl Connection {
+    pub fn new(
+        reader: FramedRead<OwnedReadHalf, LinesCodec>,
+        writer: FramedWrite<OwnedWriteHalf, LinesCodec>,
+    ) -> Connection {
+        //let (channel_sender, channel_receiver) = mpsc::channel(CHANNEL_CAPACITY);
+        Connection {
+            reader,
+            writer,
+            // channel_receiver,
+            // channel_sender,
+        }
+    }
 
-pub async fn start_read_loop(
-    mut reader: FramedRead<OwnedReadHalf, LinesCodec>,
-    channel_sender: mpsc::Sender<String>,
-) -> Result<(), Box<dyn Error>> {
-    use futures::StreamExt;
-    tokio::spawn(async move {
+    pub async fn start_from_connect(&mut self) -> Result<(), Box<dyn Error>> {
+        use futures::SinkExt;
+        println!("Starting from connect");
+        self.writer.send("ping").await?;
+        self.start_read_loop().await?;
+        Ok(())
+    }
+
+    pub async fn start_from_accept(&mut self) -> Result<(), Box<dyn Error>> {
+        println!("Starting from accept");
+        self.start_read_loop().await?;
+        Ok(())
+    }
+
+    pub async fn start_read_loop(&mut self) -> Result<(), Box<dyn Error>> {
+        use futures::SinkExt;
+        use futures::StreamExt;
         println!("Start read loop....");
         loop {
-            match reader.next().await {
-                Some(item) => match item {
-                    Ok(message) => {
-                        println!("received {:?}", message);
-                        let _ = channel_sender.send(message).await;
-                    }
-                    Err(_) => {
-                        println!("Peer closed connection");
-                        return;
-                    }
-                },
+            match self.reader.next().await {
                 None => {
-                    println!("Peer closed connection");
-                    return;
+                    return Err("peer closed connection".into());
+                }
+                Some(item) => {
+                    println!("Started {:?}", item);
+                    match item {
+                        Err(_) => {
+                            return Err("peer closed connection".into());
+                        }
+                        Ok(message) => {
+                            println!("Started {:?}", message);
+                            if message == "ping" {
+                                self.writer.send("pong").await?;
+                            }
+                        }
+                    }
                 }
             }
         }
-    });
-    Ok(())
-}
-
-async fn start_accept_protocols(
-    mut writer: FramedWrite<OwnedWriteHalf, LinesCodec>,
-    mut channel_receiver: mpsc::Receiver<String>,
-) -> Result<(), Box<dyn Error>> {
-    use futures::SinkExt;
-    println!("Starting accept protocols......");
-    tokio::spawn(async move {
-        println!("Starting channel receiver...");
-        while let Some(message) = channel_receiver.recv().await {
-            println!("GOT = {:?}", message);
-            let _ = writer.send(message).await;
-        }
-    });
-    Ok(())
-}
-
-async fn start_connect_protocols(
-    mut writer: FramedWrite<OwnedWriteHalf, LinesCodec>,
-    mut channel_receiver: mpsc::Receiver<String>,
-) -> Result<(), Box<dyn Error>> {
-    use futures::SinkExt;
-    writer.send("ping\n").await?;
-    println!("Ping sent...");
-    tokio::spawn(async move {
-        while let Some(message) = channel_receiver.recv().await {
-            println!("GOT = {:?}", message);
-            let _ = writer.send(message).await;
-        }
-    });
-    Ok(())
+    }
 }
