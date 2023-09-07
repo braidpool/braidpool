@@ -1,3 +1,4 @@
+use std::error::Error;
 pub trait Protocol {
     fn start(&mut self) -> Option<&str>;
     fn received(&mut self, message: &str) -> Option<&str>;
@@ -15,5 +16,12 @@ impl Protocol for Ping {
             "ping" => Some("pong"),
             _ => None,
         }
+    }
+}
+
+pub fn get_protocol(message: &str) -> Result<Box<dyn Protocol>, Box<dyn Error>> {
+    match message {
+        "ping" => return Ok(Box::new(Ping {})),
+        _ => Err("Unsupported protocol")?,
     }
 }
