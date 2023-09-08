@@ -1,27 +1,49 @@
-use std::error::Error;
+extern crate flexbuffers;
+extern crate serde;
+// #[macro_use]
+// extern crate serde_derive;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub enum Message {
+    Ping { message: String },
+}
+
 pub trait Protocol {
-    fn start(&mut self) -> Option<&str>;
-    fn received(&mut self, message: &str) -> Option<&str>;
+    fn start(&mut self) -> Option<Message>;
+    fn received(&mut self, message: &Message) -> Option<Message>;
 }
 
-pub struct Ping {}
-
-impl Protocol for Ping {
-    fn start(&mut self) -> Option<&str> {
-        Some("ping")
+impl Protocol for Message {
+    fn start(&mut self) -> Option<Message> {
+        Some(Message::Ping {
+            message: String::from("ping"),
+        })
     }
 
-    fn received(&mut self, message: &str) -> Option<&str> {
-        match message {
-            "ping" => Some("pong"),
-            _ => None,
-        }
+    fn received(&mut self, _message: &Message) -> Option<Message> {
+        Some(Message::Ping {
+            message: String::from("pong"),
+        })
     }
 }
 
-pub fn get_protocol(message: &str) -> Result<Box<dyn Protocol>, Box<dyn Error>> {
-    match message {
-        "ping" => return Ok(Box::new(Ping {})),
-        _ => Err("Unsupported protocol")?,
+#[cfg(test)]
+mod tests {
+    use super::Message;
+    use crate::protocol::serde::Serialize;
+    use bytes::Bytes;
+
+    #[test]
+    fn it_serialized_ping_message() {
+        let ping_message = Message::Ping {
+            message: String::from("ping"),
+        };
+        let mut s = flexbuffers::FlexbufferSerializer::new();
+        ping_message.serialize(&mut s).unwrap();
+        let b = Bytes::from(s.take_buffer());
+
+        let m: Message = flexbuffers::from_slice(&b).unwrap();
+        assert_eq!(m, ping_message)
     }
 }

@@ -1,10 +1,10 @@
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use std::error::Error;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 //use tokio::sync::mpsc;
 use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 
-const CHANNEL_CAPACITY: usize = 32;
+// const CHANNEL_CAPACITY: usize = 32;
 
 pub struct Connection {
     reader: FramedRead<OwnedReadHalf, LengthDelimitedCodec>,
@@ -55,15 +55,16 @@ impl Connection {
                     }
                     Ok(message) => {
                         println!("Received {:?}", message);
-                        let _ = self.send_response(&message).await;
+                        let _ = self.send_response(&message.freeze()).await;
                     }
                 },
             }
         }
     }
 
-    async fn send_response(&mut self, message: &BytesMut) -> Result<(), Box<dyn Error>> {
+    async fn send_response(&mut self, message: &Bytes) -> Result<(), Box<dyn Error>> {
         use futures::SinkExt;
+
         if &message[..] == b"ping" {
             match self.writer.send(Bytes::from("pong")).await {
                 Err(_) => {
