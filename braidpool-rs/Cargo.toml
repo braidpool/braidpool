@@ -13,3 +13,6 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3.1", default-features = false, features = ["fmt", "ansi", "env-filter", "tracing-log"] }
 futures = { version = "0.3.28", features = ["thread-pool"]}
 bytes = "1.4.0"
+flexbuffers = { version = "2.0.0", features = ["deserialize_human_readable", "serialize_human_readable"] }
+serde = { version = "1.0.188", features = ["derive"] }
+serde_derive = "1.0.188"
