@@ -19,6 +19,22 @@ The goals of the pool are:
    miners on the pool.
 4. Provide building blocks for enabling a futures market of hash rates.
 
+# Running the node
+
+For the moment, the node runs a simple p2p broadcast. To run it you need to do
+the usual cargo things
+
+```
+cd node
+cargo build
+
+# run the first seed node on port 8989
+cargo run localhost:8989 localhost:8989 
+
+# run other nodes pointing to the seeding node and specify their own port as 9899
+cargo run localhost:8989 localhost:9899
+```
+
 # Progress
 
 The [project on github](https://github.com/wholooks/braidpool/projects/1)
