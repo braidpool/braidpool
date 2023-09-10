@@ -6,7 +6,7 @@ use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 
 // const CHANNEL_CAPACITY: usize = 32;
 
-use crate::protocol::{self, Protocol};
+use crate::protocol::{self, Message};
 
 pub struct Connection {
     reader: FramedRead<OwnedReadHalf, LengthDelimitedCodec>,
@@ -72,9 +72,10 @@ impl Connection {
     async fn message_received(&mut self, message: &Bytes) -> Result<(), Box<dyn Error>> {
         use futures::SinkExt;
 
-        let message = protocol::Message::from_bytes(message).unwrap();
+        let message: Message = protocol::Message::from_bytes(message).unwrap();
         if let Some(response) = message.response_for_received() {
-            match self.writer.send(response).await {
+            let to_send = response.as_bytes().unwrap();
+            match self.writer.send(to_send).await {
                 Err(_) => {
                     return Err("peer closed connection".into());
                 }
