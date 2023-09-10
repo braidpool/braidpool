@@ -58,12 +58,11 @@ impl Connection {
                     Err(_) => {
                         return Err("peer closed connection".into());
                     }
-                    Ok(message) => match self.message_received(&message.freeze()).await {
-                        Err(_) => {
+                    Ok(message) => {
+                        if self.message_received(&message.freeze()).await.is_err() {
                             return Err("peer closed connection".into());
                         }
-                        Ok(_) => {}
-                    },
+                    }
                 },
             }
         }

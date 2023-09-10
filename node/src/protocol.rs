@@ -29,8 +29,8 @@ impl Message {
 
     pub fn response_for_received(&self) -> Option<Message> {
         match self {
-            Message::Ping(m) => return m.response_for_received(),
-        };
+            Message::Ping(m) => m.response_for_received(),
+        }
     }
 }
 

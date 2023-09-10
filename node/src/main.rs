@@ -23,12 +23,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let framed_writer = FramedWrite::new(w, LengthDelimitedCodec::new());
         let mut conn = connection::Connection::new(framed_reader, framed_writer);
         tokio::spawn(async move {
-            match conn.start_from_connect().await {
-                Err(_) => {
-                    println!("peer closed connection");
-                }
-                Ok(_) => {}
-            }
+            conn.start_from_connect().await.unwrap();
         });
     }
 
@@ -45,12 +40,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 let mut conn = connection::Connection::new(framed_reader, framed_writer);
 
                 tokio::spawn(async move {
-                    match conn.start_from_accept().await {
-                        Err(e) => {
-                            println!("Connection shutdown: {:?}", e);
-                            return;
-                        }
-                        Ok(_) => {}
+                    if conn.start_from_accept().await.is_err() {
+                        println!("Peer closed connection")
                     }
                 });
             }
