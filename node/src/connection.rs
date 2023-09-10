@@ -6,6 +6,8 @@ use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 
 // const CHANNEL_CAPACITY: usize = 32;
 
+use crate::protocol::{self, Protocol};
+
 pub struct Connection {
     reader: FramedRead<OwnedReadHalf, LengthDelimitedCodec>,
     writer: FramedWrite<OwnedWriteHalf, LengthDelimitedCodec>,
@@ -30,7 +32,10 @@ impl Connection {
     pub async fn start_from_connect(&mut self) -> Result<(), Box<dyn Error>> {
         use futures::SinkExt;
         println!("Starting from connect");
-        self.writer.send(Bytes::from("ping")).await?;
+        let message = protocol::Message::Ping(protocol::PingMessage {
+            message: String::from("ping"),
+        });
+        self.writer.send(message.as_bytes().unwrap()).await?;
         self.start_read_loop().await?;
         Ok(())
     }
@@ -53,20 +58,23 @@ impl Connection {
                     Err(_) => {
                         return Err("peer closed connection".into());
                     }
-                    Ok(message) => {
-                        println!("Received {:?}", message);
-                        let _ = self.send_response(&message.freeze()).await;
-                    }
+                    Ok(message) => match self.message_received(&message.freeze()).await {
+                        Err(_) => {
+                            return Err("peer closed connection".into());
+                        }
+                        Ok(_) => {}
+                    },
                 },
             }
         }
     }
 
-    async fn send_response(&mut self, message: &Bytes) -> Result<(), Box<dyn Error>> {
+    async fn message_received(&mut self, message: &Bytes) -> Result<(), Box<dyn Error>> {
         use futures::SinkExt;
 
-        if &message[..] == b"ping" {
-            match self.writer.send(Bytes::from("pong")).await {
+        let message = protocol::deserialize_message(message).unwrap();
+        if let Some(response) = message.response_for_received() {
+            match self.writer.send(response).await {
                 Err(_) => {
                     return Err("peer closed connection".into());
                 }
