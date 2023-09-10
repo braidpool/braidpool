@@ -72,7 +72,7 @@ impl Connection {
     async fn message_received(&mut self, message: &Bytes) -> Result<(), Box<dyn Error>> {
         use futures::SinkExt;
 
-        let message = protocol::deserialize_message(message).unwrap();
+        let message = protocol::Message::from_bytes(message).unwrap();
         if let Some(response) = message.response_for_received() {
             match self.writer.send(response).await {
                 Err(_) => {

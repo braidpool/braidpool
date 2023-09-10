@@ -27,10 +27,10 @@ impl Message {
         self.serialize(&mut s).unwrap();
         Some(Bytes::from(s.take_buffer()))
     }
-}
 
-pub fn deserialize_message(b: &[u8]) -> Result<Message, Box<dyn Error>> {
-    Ok(flexbuffers::from_slice(b)?)
+    pub fn from_bytes(b: &[u8]) -> Result<Self, Box<dyn Error>> {
+        Ok(flexbuffers::from_slice(b)?)
+    }
 }
 
 impl Protocol for Message {
