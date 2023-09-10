@@ -6,7 +6,7 @@ use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 
 // const CHANNEL_CAPACITY: usize = 32;
 
-use crate::protocol::{self, Message};
+use crate::protocol::{self, HandshakeMessage, Message, ProtocolMessage};
 
 pub struct Connection {
     reader: FramedRead<OwnedReadHalf, LengthDelimitedCodec>,
@@ -32,9 +32,7 @@ impl Connection {
     pub async fn start_from_connect(&mut self) -> Result<(), Box<dyn Error>> {
         use futures::SinkExt;
         println!("Starting from connect");
-        let message = protocol::Message::Ping(protocol::PingMessage {
-            message: String::from("ping"),
-        });
+        let message = HandshakeMessage::start().unwrap();
         self.writer.send(message.as_bytes().unwrap()).await?;
         self.start_read_loop().await?;
         Ok(())

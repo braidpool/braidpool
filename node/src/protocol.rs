@@ -12,8 +12,15 @@ pub struct PingMessage {
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub struct HandshakeMessage {
+    pub message: String,
+    pub version: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub enum Message {
     Ping(PingMessage),
+    Handshake(HandshakeMessage),
 }
 
 impl Message {
@@ -30,6 +37,7 @@ impl Message {
     pub fn response_for_received(&self) -> Option<Message> {
         match self {
             Message::Ping(m) => m.response_for_received(),
+            Message::Handshake(m) => m.response_for_received(),
         }
     }
 }
@@ -57,6 +65,26 @@ impl ProtocolMessage for PingMessage {
             }))
         } else {
             None
+        }
+    }
+}
+
+impl ProtocolMessage for HandshakeMessage {
+    fn start() -> Option<Message> {
+        Some(Message::Handshake(HandshakeMessage {
+            message: String::from("helo"),
+            version: String::from("0.1.0"),
+        }))
+    }
+
+    fn response_for_received(&self) -> Option<Message> {
+        println!("Received {:?}", self.version);
+        match self.message.as_str() {
+            "helo" => Some(Message::Handshake(HandshakeMessage {
+                message: String::from("oleh"),
+                version: String::from("0.1.0"),
+            })),
+            _ => None,
         }
     }
 }
@@ -110,17 +138,5 @@ mod tests {
                 message: String::from("pong")
             })
         );
-
-        match msg {
-            Ping(m) => {
-                let response: Message = m.response_for_received().unwrap();
-                assert_eq!(
-                    response,
-                    Message::Ping(PingMessage {
-                        message: String::from("pong")
-                    })
-                );
-            }
-        };
     }
 }
