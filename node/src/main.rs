@@ -1,33 +1,39 @@
-use std::env;
 use std::error::Error;
 use tokio::net::{TcpListener, TcpStream};
 use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
+use clap::Parser;
 
 mod connection;
 mod protocol;
+mod cli;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    let args = cli::Cli::parse();
+
+    let datadir = args.datadir;
+    println!("Using braid data directory: {}", datadir.display());
+
     setup_tracing()?;
 
-    let seed_addr = env::args().nth(1).unwrap();
-    let addr = env::args().nth(2).unwrap();
-
-    // Connect to seed node, if found, else continue
-    if seed_addr != addr {
-        let stream = TcpStream::connect(seed_addr)
-            .await
-            .expect("Error connecting");
-        let (r, w) = stream.into_split();
-        let framed_reader = FramedRead::new(r, LengthDelimitedCodec::new());
-        let framed_writer = FramedWrite::new(w, LengthDelimitedCodec::new());
-        let mut conn = connection::Connection::new(framed_reader, framed_writer);
-        tokio::spawn(async move {
-            conn.start_from_connect().await.unwrap();
-        });
+    if let Some(addnode) = args.addnode.as_deref() {
+        for node in addnode.iter() {
+            println!("Connecting to node: {:?}", node);
+            let stream = TcpStream::connect(node)
+                .await
+                .expect("Error connecting");
+            let (r, w) = stream.into_split();
+            let framed_reader = FramedRead::new(r, LengthDelimitedCodec::new());
+            let framed_writer = FramedWrite::new(w, LengthDelimitedCodec::new());
+            let mut conn = connection::Connection::new(framed_reader, framed_writer);
+            tokio::spawn(async move {
+                conn.start_from_connect().await.unwrap();
+            });
+        }
     }
 
-    let listener = TcpListener::bind(&addr).await?;
+    println!("Binding to {}", args.bind);
+    let listener = TcpListener::bind(&args.bind).await?;
     loop {
         // Asynchronously wait for an inbound TcpStream.
         println!("Starting accept");
