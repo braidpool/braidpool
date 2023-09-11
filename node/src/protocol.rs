@@ -6,16 +6,11 @@ extern crate serde;
 // extern crate serde_derive;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub struct PingMessage {
-    pub message: String,
-}
+mod handshake;
+mod ping;
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub struct HandshakeMessage {
-    pub message: String,
-    pub version: String,
-}
+pub use handshake::HandshakeMessage;
+pub use ping::PingMessage;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub enum Message {
@@ -48,46 +43,6 @@ where
 {
     fn start() -> Option<Message>;
     fn response_for_received(&self) -> Result<Option<Message>, &'static str>;
-}
-
-impl ProtocolMessage for PingMessage {
-    fn start() -> Option<Message> {
-        Some(Message::Ping(PingMessage {
-            message: String::from("ping"),
-        }))
-    }
-
-    fn response_for_received(&self) -> Result<Option<Message>, &'static str> {
-        println!("Received {:?}", self.message);
-        if self.message == "ping" {
-            Ok(Some(Message::Ping(PingMessage {
-                message: String::from("pong"),
-            })))
-        } else {
-            Ok(None)
-        }
-    }
-}
-
-impl ProtocolMessage for HandshakeMessage {
-    fn start() -> Option<Message> {
-        Some(Message::Handshake(HandshakeMessage {
-            message: String::from("helo"),
-            version: String::from("0.1.0"),
-        }))
-    }
-
-    fn response_for_received(&self) -> Result<Option<Message>, &'static str> {
-        println!("Received {:?}", self);
-        match self.message.as_str() {
-            "helo" => Ok(Some(Message::Handshake(HandshakeMessage {
-                message: String::from("oleh"),
-                version: String::from("0.1.0"),
-            }))),
-            "oleh" => Ok(None),
-            _ => Err("Bad message"),
-        }
-    }
 }
 
 #[cfg(test)]
