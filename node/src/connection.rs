@@ -66,17 +66,24 @@ impl Connection {
         }
     }
 
-    async fn message_received(&mut self, message: &Bytes) -> Result<(), Box<dyn Error>> {
+    async fn message_received(&mut self, message: &Bytes) -> Result<(), &'static str> {
         use futures::SinkExt;
 
         let message: Message = protocol::Message::from_bytes(message).unwrap();
-        if let Some(response) = message.response_for_received() {
-            let to_send = response.as_bytes().unwrap();
-            match self.writer.send(to_send).await {
-                Err(_) => {
-                    return Err("peer closed connection".into());
+        match message.response_for_received() {
+            Ok(result) => {
+                if let Some(response) = result {
+                    if let Some(to_send) = response.as_bytes() {
+                        if (self.writer.send(to_send).await).is_err() {
+                            return Err("Send failed: Closing peer connection");
+                        }
+                    } else {
+                        return Err("Error serializing: Closing peer connection");
+                    }
                 }
-                Ok(_) => return Ok(()),
+            }
+            Err(_) => {
+                return Err("Error constructing response: Closing peer connection");
             }
         }
         Ok(())
