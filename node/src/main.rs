@@ -1,11 +1,11 @@
+use clap::Parser;
 use std::error::Error;
 use tokio::net::{TcpListener, TcpStream};
 use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
-use clap::Parser;
 
+mod cli;
 mod connection;
 mod protocol;
-mod cli;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -19,9 +19,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if let Some(addnode) = args.addnode.as_deref() {
         for node in addnode.iter() {
             println!("Connecting to node: {:?}", node);
-            let stream = TcpStream::connect(node)
-                .await
-                .expect("Error connecting");
+            let stream = TcpStream::connect(node).await.expect("Error connecting");
             let (r, w) = stream.into_split();
             let framed_reader = FramedRead::new(r, LengthDelimitedCodec::new());
             let framed_writer = FramedWrite::new(w, LengthDelimitedCodec::new());
