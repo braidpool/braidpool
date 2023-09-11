@@ -16,3 +16,5 @@ bytes = "1.4.0"
 flexbuffers = { version = "2.0.0", features = ["deserialize_human_readable", "serialize_human_readable"] }
 serde = { version = "1.0.188", features = ["derive"] }
 serde_derive = "1.0.188"
+sqlite = { version = "0.31.1" }
+clap = { version = "4.4.2", features = ["derive", "string"] }
