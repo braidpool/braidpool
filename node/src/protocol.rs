@@ -34,7 +34,7 @@ impl Message {
         Ok(flexbuffers::from_slice(b)?)
     }
 
-    pub fn response_for_received(&self) -> Option<Message> {
+    pub fn response_for_received(&self) -> Result<Option<Message>, &'static str> {
         match self {
             Message::Ping(m) => m.response_for_received(),
             Message::Handshake(m) => m.response_for_received(),
@@ -47,7 +47,7 @@ where
     Self: Sized,
 {
     fn start() -> Option<Message>;
-    fn response_for_received(&self) -> Option<Message>;
+    fn response_for_received(&self) -> Result<Option<Message>, &'static str>;
 }
 
 impl ProtocolMessage for PingMessage {
@@ -57,14 +57,14 @@ impl ProtocolMessage for PingMessage {
         }))
     }
 
-    fn response_for_received(&self) -> Option<Message> {
+    fn response_for_received(&self) -> Result<Option<Message>, &'static str> {
         println!("Received {:?}", self.message);
         if self.message == "ping" {
-            Some(Message::Ping(PingMessage {
+            Ok(Some(Message::Ping(PingMessage {
                 message: String::from("pong"),
-            }))
+            })))
         } else {
-            None
+            Ok(None)
         }
     }
 }
@@ -77,21 +77,22 @@ impl ProtocolMessage for HandshakeMessage {
         }))
     }
 
-    fn response_for_received(&self) -> Option<Message> {
-        println!("Received {:?}", self.version);
+    fn response_for_received(&self) -> Result<Option<Message>, &'static str> {
+        println!("Received {:?}", self);
         match self.message.as_str() {
-            "helo" => Some(Message::Handshake(HandshakeMessage {
+            "helo" => Ok(Some(Message::Handshake(HandshakeMessage {
                 message: String::from("oleh"),
                 version: String::from("0.1.0"),
-            })),
-            _ => None,
+            }))),
+            "oleh" => Ok(None),
+            _ => Err("Bad message"),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::Message::{self, Ping};
+    use super::Message;
     use super::PingMessage;
     use super::ProtocolMessage;
     use crate::protocol::serde::Serialize;
@@ -134,9 +135,9 @@ mod tests {
         let response = msg.response_for_received().unwrap();
         assert_eq!(
             response,
-            Message::Ping(PingMessage {
+            Some(Message::Ping(PingMessage {
                 message: String::from("pong")
-            })
+            }))
         );
     }
 }
