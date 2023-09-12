@@ -1,5 +1,6 @@
 use super::{Message, ProtocolMessage};
 use serde::{Deserialize, Serialize};
+use std::net::SocketAddr;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct HandshakeMessage {
@@ -8,7 +9,7 @@ pub struct HandshakeMessage {
 }
 
 impl ProtocolMessage for HandshakeMessage {
-    fn start() -> Option<Message> {
+    fn start(_: &SocketAddr) -> Option<Message> {
         Some(Message::Handshake(HandshakeMessage {
             message: String::from("helo"),
             version: String::from("0.1.0"),
@@ -34,11 +35,15 @@ impl ProtocolMessage for HandshakeMessage {
 
 #[cfg(test)]
 mod tests {
+    use std::net::SocketAddr;
+    use std::str::FromStr;
+
     use crate::protocol::{HandshakeMessage, Message, ProtocolMessage};
 
     #[test]
     fn it_matches_start_message_for_handshake() {
-        let start_message = HandshakeMessage::start().unwrap();
+        let addr = SocketAddr::from_str("127.0.0.1:25188").unwrap();
+        let start_message = HandshakeMessage::start(&addr).unwrap();
         assert_eq!(
             start_message,
             Message::Handshake(HandshakeMessage {
@@ -50,7 +55,8 @@ mod tests {
 
     #[test]
     fn it_matches_response_message_for_correct_handshake_start() {
-        let start_message = HandshakeMessage::start().unwrap();
+        let addr = SocketAddr::from_str("127.0.0.1:25188").unwrap();
+        let start_message = HandshakeMessage::start(&addr).unwrap();
         let response = start_message.response_for_received().unwrap();
         assert_eq!(
             response,

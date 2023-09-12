@@ -5,17 +5,21 @@ extern crate serde;
 // #[macro_use]
 // extern crate serde_derive;
 use serde::{Deserialize, Serialize};
+use std::net::SocketAddr;
 
 mod handshake;
+mod heartbeat;
 mod ping;
 
 pub use handshake::HandshakeMessage;
+pub use heartbeat::HeartbeatMessage;
 pub use ping::PingMessage;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub enum Message {
     Ping(PingMessage),
     Handshake(HandshakeMessage),
+    Heartbeat(HeartbeatMessage),
 }
 
 impl Message {
@@ -33,6 +37,7 @@ impl Message {
         match self {
             Message::Ping(m) => m.response_for_received(),
             Message::Handshake(m) => m.response_for_received(),
+            Message::Heartbeat(m) => m.response_for_received(),
         }
     }
 }
@@ -41,7 +46,7 @@ pub trait ProtocolMessage
 where
     Self: Sized,
 {
-    fn start() -> Option<Message>;
+    fn start(addr: &SocketAddr) -> Option<Message>;
     fn response_for_received(&self) -> Result<Option<Message>, &'static str>;
 }
 
@@ -52,6 +57,8 @@ mod tests {
     use super::ProtocolMessage;
     use crate::protocol::serde::Serialize;
     use bytes::Bytes;
+    use std::net::SocketAddr;
+    use std::str::FromStr;
 
     #[test]
     fn it_serialized_ping_message() {
@@ -68,7 +75,8 @@ mod tests {
 
     #[test]
     fn it_matches_start_message_for_ping() {
-        let start_message = PingMessage::start().unwrap();
+        let addr = SocketAddr::from_str("127.0.0.1:25188").unwrap();
+        let start_message = PingMessage::start(&addr).unwrap();
         assert_eq!(
             start_message,
             Message::Ping(PingMessage {

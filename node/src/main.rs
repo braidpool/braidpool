@@ -1,5 +1,6 @@
 use clap::Parser;
 use std::error::Error;
+use std::net::ToSocketAddrs;
 use tokio::net::{TcpListener, TcpStream};
 use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 
@@ -16,17 +17,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     setup_tracing()?;
 
-    if let Some(addnode) = args.addnode.as_deref() {
+    if let Some(addnode) = args.addnode {
         for node in addnode.iter() {
-            println!("Connecting to node: {:?}", node);
+            //println!("Connecting to node: {:?}", node);
             let stream = TcpStream::connect(node).await.expect("Error connecting");
             let (r, w) = stream.into_split();
             let framed_reader = FramedRead::new(r, LengthDelimitedCodec::new());
             let framed_writer = FramedWrite::new(w, LengthDelimitedCodec::new());
             let mut conn = connection::Connection::new(framed_reader, framed_writer);
-            tokio::spawn(async move {
-                conn.start_from_connect().await.unwrap();
-            });
+            if let Ok(addr_iter) = node.to_socket_addrs() {
+                if let Some(addr) = addr_iter.into_iter().next() {
+                    tokio::spawn(async move {
+                        if conn.start_from_connect(&addr).await.is_err() {
+                            println!("Peer closed connection")
+                        }
+                    });
+                }
+            }
         }
     }
 
