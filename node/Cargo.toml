@@ -18,3 +18,4 @@ serde = { version = "1.0.188", features = ["derive"] }
 serde_derive = "1.0.188"
 sqlite = { version = "0.31.1" }
 clap = { version = "4.4.2", features = ["derive", "string"] }
+bitcoin = "0.30.1"

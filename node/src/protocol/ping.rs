@@ -1,3 +1,5 @@
+use std::net::SocketAddr;
+
 use super::{Message, ProtocolMessage};
 use serde::{Deserialize, Serialize};
 
@@ -7,7 +9,7 @@ pub struct PingMessage {
 }
 
 impl ProtocolMessage for PingMessage {
-    fn start() -> Option<Message> {
+    fn start(_: &SocketAddr) -> Option<Message> {
         Some(Message::Ping(PingMessage {
             message: String::from("ping"),
         }))

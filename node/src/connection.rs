@@ -1,5 +1,5 @@
 use bytes::Bytes;
-use std::error::Error;
+use std::{error::Error, net::SocketAddr};
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 //use tokio::sync::mpsc;
 use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
@@ -29,10 +29,10 @@ impl Connection {
         }
     }
 
-    pub async fn start_from_connect(&mut self) -> Result<(), Box<dyn Error>> {
+    pub async fn start_from_connect(&mut self, addr: &SocketAddr) -> Result<(), Box<dyn Error>> {
         use futures::SinkExt;
         println!("Starting from connect");
-        let message = HandshakeMessage::start().unwrap();
+        let message = HandshakeMessage::start(addr).unwrap();
         self.writer.send(message.as_bytes().unwrap()).await?;
         self.start_read_loop().await?;
         Ok(())
