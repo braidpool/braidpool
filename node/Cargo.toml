@@ -18,3 +18,6 @@ serde = { version = "1.0.188", features = ["derive"] }
 serde_derive = "1.0.188"
 sqlite = { version = "0.31.1" }
 clap = { version = "4.4.2", features = ["derive", "string"] }
+bitcoincore-rpc = { version = "0.17.0" }
+bitcoincore-rpc-json = { version = "0.17.0" }
+chrono = "0.4"

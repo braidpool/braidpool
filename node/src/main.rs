@@ -2,11 +2,15 @@ use clap::Parser;
 use std::error::Error;
 use std::net::ToSocketAddrs;
 use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::mpsc;
 use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 
 mod cli;
 mod connection;
 mod protocol;
+mod template;
+
+use crate::template::{template_consumer, template_poll};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -16,6 +20,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("Using braid data directory: {}", datadir.display());
 
     setup_tracing()?;
+
+    let (template_tx, template_rx) = mpsc::channel(1);
+    tokio::spawn(template_poll(
+        args.rpc_url,
+        args.rpc_user,
+        args.rpc_pass,
+        args.poll_interval,
+        template_tx,
+    ));
+    tokio::spawn(template_consumer(template_rx));
 
     if let Some(addnode) = args.addnode {
         for node in addnode.iter() {
