@@ -29,10 +29,11 @@ cd node
 cargo build
 
 # run the first seed node on port 8989
-cargo run localhost:8989 localhost:8989 
+cargo run -- --bind=localhost:8989
 
-# run other nodes pointing to the seeding node and specify their own port as 9899
-cargo run localhost:8989 localhost:9899
+# run another node while specifying their own port as 9899 and pointing to the seed node
+cargo run -- --bind=localhost:9899 --addnode=localhost:8989
+
 ```
 
 # Progress
