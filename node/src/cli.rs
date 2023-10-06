@@ -17,7 +17,7 @@ pub struct Cli {
     pub addnode: Option<Vec<String>>,
 
     /// Connect to this bitcoin RPC node
-    #[arg(long, default_value = "0.0.0.0:8332")]
+    #[arg(long, default_value = "0.0.0.0:38332")]
     pub rpc_url: String,
 
     /// Use this username for bitcoin RPC
