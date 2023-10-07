@@ -8,9 +8,7 @@ use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 mod cli;
 mod connection;
 mod protocol;
-mod template;
-
-use crate::template::{template_consumer, template_poll};
+mod block_template;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -21,15 +19,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     setup_tracing()?;
 
-    let (template_tx, template_rx) = mpsc::channel(1);
-    tokio::spawn(template_poll(
+    let (block_template_tx, block_template_rx) = mpsc::channel(1);
+    tokio::spawn(block_template::poll(
         args.rpc_url,
         args.rpc_user,
         args.rpc_pass,
         args.poll_interval,
-        template_tx,
+        block_template_tx,
     ));
-    tokio::spawn(template_consumer(template_rx));
+    tokio::spawn(block_template::consumer(block_template_rx));
 
     if let Some(addnode) = args.addnode {
         for node in addnode.iter() {
