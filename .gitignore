@@ -16,4 +16,3 @@ proposal/proposal.blg
 simulations/logs/*
 simulations/*.toolbox
 venv
-.idea
