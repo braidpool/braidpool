@@ -5,10 +5,10 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc;
 use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 
+mod block_template;
 mod cli;
 mod connection;
 mod protocol;
-mod block_template;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {

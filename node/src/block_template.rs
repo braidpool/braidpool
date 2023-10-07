@@ -29,10 +29,10 @@ pub async fn poll(
     let rpc = Client::new(&rpc_url, Auth::UserPass(rpc_user, rpc_pass)).unwrap();
 
     loop {
-        match rpc.get_block_template(GetBlockTemplateModes::Template, &BLOCK_TEMPLATE_RULES, &[])
-        {
+        match rpc.get_block_template(GetBlockTemplateModes::Template, &BLOCK_TEMPLATE_RULES, &[]) {
             Ok(get_block_template_result) => {
-                if get_block_template_result.previous_block_hash != last_block_template_parent_hash {
+                if get_block_template_result.previous_block_hash != last_block_template_parent_hash
+                {
                     // send block template over mpsc channel
                     block_template_tx
                         .send(get_block_template_result.clone())
@@ -46,14 +46,15 @@ pub async fn poll(
                     // sleep until it's time to poll again
                     sleep(Duration::from_secs(poll_interval.clone())).await;
                 }
-            },
+            }
             Err(_) => {
                 rpc_failure_counter += 1;
                 if rpc_failure_counter > MAX_RPC_FAILURES {
                     println!("Exceeded the maximum number of failed getblocktemplate RPC attempts. Halting.");
                     std::process::exit(1);
                 }
-                rpc_failure_backoff = u64::checked_pow(BACKOFF_BASE, rpc_failure_counter.clone()).unwrap();
+                rpc_failure_backoff =
+                    u64::checked_pow(BACKOFF_BASE, rpc_failure_counter.clone()).unwrap();
 
                 // sleep until it's time to poll again
                 sleep(Duration::from_secs(rpc_failure_backoff)).await;
@@ -66,6 +67,12 @@ pub async fn poll(
 pub async fn consumer(mut block_template_rx: Receiver<GetBlockTemplateResult>) {
     while let Some(block_template) = block_template_rx.recv().await {
         let now = Local::now();
-        println!("[{:0>2}:{:0>2}:{:0>2}] Received new block template: {:?}", now.hour(), now.minute(), now.second(), block_template);
+        println!(
+            "[{:0>2}:{:0>2}:{:0>2}] Received new block template: {:?}",
+            now.hour(),
+            now.minute(),
+            now.second(),
+            block_template
+        );
     }
 }
