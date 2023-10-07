@@ -1,9 +1,9 @@
-use bitcoincore_rpc::{Auth, Client, RpcApi};
+use bitcoincore_rpc::{bitcoin, bitcoin::hashes::Hash, Auth, Client, RpcApi};
 use bitcoincore_rpc_json::{GetBlockTemplateModes, GetBlockTemplateResult, GetBlockTemplateRules};
+use chrono::prelude::*;
 use std::error::Error;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::time::{sleep, Duration};
-use chrono::prelude::*;
 
 const BLOCK_TEMPLATE_RULES: [GetBlockTemplateRules; 4] = [
     GetBlockTemplateRules::SegWit,
@@ -12,6 +12,9 @@ const BLOCK_TEMPLATE_RULES: [GetBlockTemplateRules; 4] = [
     GetBlockTemplateRules::Taproot,
 ];
 
+const BACKOFF_BASE: u64 = 2;
+const MAX_RPC_FAILURES: u32 = 20;
+
 pub async fn poll(
     rpc_url: String,
     rpc_user: String,
@@ -19,27 +22,43 @@ pub async fn poll(
     poll_interval: u64,
     block_template_tx: Sender<GetBlockTemplateResult>,
 ) -> Result<(), Box<dyn Error + Send>> {
+    let mut rpc_failure_counter = 0;
+    let mut rpc_failure_backoff;
+    let mut last_block_template_parent_hash = bitcoin::BlockHash::all_zeros();
+
     let rpc = Client::new(&rpc_url, Auth::UserPass(rpc_user, rpc_pass)).unwrap();
-    
-    let mut last_block_template = rpc
-        .get_block_template(GetBlockTemplateModes::Template, &BLOCK_TEMPLATE_RULES, &[])
-        .unwrap();
-    block_template_tx.send(last_block_template.clone()).await.unwrap();
 
     loop {
-        // sleep until it's time to poll again
-        sleep(Duration::from_secs(poll_interval.clone())).await;
+        match rpc.get_block_template(GetBlockTemplateModes::Template, &BLOCK_TEMPLATE_RULES, &[])
+        {
+            Ok(get_block_template_result) => {
+                if get_block_template_result.previous_block_hash != last_block_template_parent_hash {
+                    // send block template over mpsc channel
+                    block_template_tx
+                        .send(get_block_template_result.clone())
+                        .await
+                        .unwrap();
 
-        let block_template = rpc
-            .get_block_template(GetBlockTemplateModes::Template, &BLOCK_TEMPLATE_RULES, &[])
-            .unwrap();
+                    // prepare for next loop
+                    last_block_template_parent_hash = get_block_template_result.previous_block_hash;
+                    rpc_failure_counter = 0;
 
-        // check if this is a new template
-        if block_template.previous_block_hash != last_block_template.previous_block_hash {
-            block_template_tx.send(block_template.clone()).await.unwrap();
-        }
+                    // sleep until it's time to poll again
+                    sleep(Duration::from_secs(poll_interval.clone())).await;
+                }
+            },
+            Err(_) => {
+                rpc_failure_counter += 1;
+                if rpc_failure_counter > MAX_RPC_FAILURES {
+                    println!("Exceeded the maximum number of failed getblocktemplate RPC attempts. Halting.");
+                    std::process::exit(1);
+                }
+                rpc_failure_backoff = u64::checked_pow(BACKOFF_BASE, rpc_failure_counter.clone()).unwrap();
 
-        last_block_template = block_template;
+                // sleep until it's time to poll again
+                sleep(Duration::from_secs(rpc_failure_backoff)).await;
+            }
+        };
     }
 }
 
