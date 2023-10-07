@@ -47,7 +47,8 @@ pub async fn poll(
                     sleep(Duration::from_secs(poll_interval.clone())).await;
                 }
             }
-            Err(_) => {
+            Err(e) => {
+                println!("Error on getblocktemplate RPC: {}", e);
                 rpc_failure_counter += 1;
                 if rpc_failure_counter > MAX_RPC_FAILURES {
                     println!("Exceeded the maximum number of failed getblocktemplate RPC attempts. Halting.");
