@@ -19,24 +19,11 @@ The goals of the pool are:
    miners on the pool.
 4. Provide building blocks for enabling a futures market of hash rates.
 
-# Running a mutinynet node
+# Running the node
 
-As a strategy to optimize the development workflow, you should use [mutinynet](https://mutinynet.com/) (a modified `signet` with 30s block time). You can
-start a local node via
-```
-cd mutinynet
-./run.sh
-cd ..
-```
+For the moment, the node runs a simple p2p broadcast. To run it you need to do
+the usual cargo things
 
-The node RPC will be available on `0.0.0.0:38332` with username `braidpooldev` and password `braidpooldev`.
-
-# Running the braidpool node
-
-For the moment, the braidpool node runs a simple p2p broadcast. 
-It also connects to a bitcoin RPC node to get new block templates.
-
-To run the braidpool node you need to do the usual cargo things:
 ```
 cd node
 cargo build
