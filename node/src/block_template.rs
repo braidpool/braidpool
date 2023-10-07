@@ -53,8 +53,8 @@ pub async fn poll(
                     println!("Exceeded the maximum number of failed getblocktemplate RPC attempts. Halting.");
                     std::process::exit(1);
                 }
-                rpc_failure_backoff =
-                    u64::checked_pow(BACKOFF_BASE, rpc_failure_counter.clone()).unwrap();
+                rpc_failure_backoff = u64::checked_pow(BACKOFF_BASE, rpc_failure_counter.clone())
+                    .expect("MAX_RPC_FAILURES doesn't allow overflow; qed");
 
                 // sleep until it's time to poll again
                 sleep(Duration::from_secs(rpc_failure_backoff)).await;
