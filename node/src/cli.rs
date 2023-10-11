@@ -16,19 +16,23 @@ pub struct Cli {
     #[arg(long)]
     pub addnode: Option<Vec<String>>,
 
-    /// Connect to this bitcoin RPC node
-    #[arg(long, default_value = "0.0.0.0:8332")]
-    pub rpc_url: String,
+    /// Connect to this bitcoin node
+    #[arg(long, default_value = "0.0.0.0")]
+    pub bitcoin: String,
+
+    /// Use this port for bitcoin RPC
+    #[arg(long, default_value = "8332")]
+    pub rpcport: u16,
 
     /// Use this username for bitcoin RPC
     #[arg(long)]
-    pub rpc_user: String,
+    pub rpcuser: String,
 
     /// Use this password for bitcoin RPC
     #[arg(long)]
-    pub rpc_pass: String,
+    pub rpcpass: String,
 
-    /// Interval for polling bitcoin RPC for new block templates (seconds)
-    #[arg(long, default_value = "10")]
-    pub poll_interval: u64,
+    /// Use this port for bitcoin ZMQ
+    #[arg(long, default_value = "28332")]
+    pub zmqport: u16,
 }

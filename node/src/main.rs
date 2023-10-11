@@ -20,11 +20,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     setup_tracing()?;
 
     let (block_template_tx, block_template_rx) = mpsc::channel(1);
-    tokio::spawn(block_template::poll(
-        args.rpc_url,
-        args.rpc_user,
-        args.rpc_pass,
-        args.poll_interval,
+    tokio::spawn(block_template::listener(
+        args.bitcoin,
+        args.rpcport,
+        args.rpcuser,
+        args.rpcpass,
+        args.zmqport,
         block_template_tx,
     ));
     tokio::spawn(block_template::consumer(block_template_rx));

@@ -24,6 +24,9 @@ The goals of the pool are:
 Braidpool nodes need to connect to a bitcoin RPC node. Let's assume you are running
 one on `0.0.0.0:8332` with username `xxxx` and password `yyyy`.
 
+The bitcoin node also needs to have the `hashblock` [ZMQ notification](https://github.com/bitcoin/bitcoin/blob/master/doc/zmq.md) enabled.
+Let's assume this is enabled on port `28332`.
+
 For the moment, the braidpool node runs a simple p2p broadcast. To run it you need to do
 the usual cargo things
 
@@ -32,10 +35,10 @@ cd node
 cargo build
 
 # run the first seed node on port 8989
-cargo run -- --bind=localhost:8989 --rpc-url=0.0.0.0:8332 --rpc-user=xxxx --rpc-pass=yyyy
+cargo run -- --bind=localhost:8989 --bitcoin=0.0.0.0 --rpcport=8332 --rpcuser=xxxx --rpcpass=yyyy --zmqport=28332
 
 # run other nodes pointing to the seeding node and specify their own port as 9899
-cargo run --bind=localhost:9899 --addnode=localhost:8989 --rpc-url=0.0.0.0:8332 --rpc-user=xxxx --rpc-pass=yyyy
+cargo run -- --bind=localhost:9899 --addnode=localhost:8989 --bitcoin=0.0.0.0 --rpcport=8332 --rpcuser=xxxx --rpcpass=yyyy --zmqport=28332
 ```
 
 # Progress
