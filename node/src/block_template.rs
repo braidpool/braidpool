@@ -1,6 +1,5 @@
 use bitcoincore_rpc::RpcApi;
 use bitcoincore_rpc_json::{GetBlockTemplateModes, GetBlockTemplateResult, GetBlockTemplateRules};
-use chrono::prelude::*;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::time::{sleep, Duration};
@@ -85,10 +84,9 @@ pub async fn listener(
             // As long as we only subscribe to the `hashblock` topic, we don't really need to
             // deserialize the multipart message.
             Ok(_msg) => {
-                println!(
-                    "{} Received a new `hashblock` notification via ZeroMQ. \
-                    Calling `getblocktemplate` RPC now...",
-                    format_now()
+                log::info!(
+                    "Received a new `hashblock` notification via ZeroMQ. \
+                    Calling `getblocktemplate` RPC now..."
                 );
                 fetcher(&rpc, block_template_tx.clone()).await;
             }
@@ -116,18 +114,22 @@ pub async fn fetcher(
             Err(e) => {
                 rpc_failure_counter += 1;
                 if rpc_failure_counter > MAX_RPC_FAILURES {
-                    println!("Exceeded the maximum number of failed `getblocktemplate` RPC attempts. Halting.");
+                    log::error!(
+                        "Exceeded the maximum number of failed `getblocktemplate` RPC \
+                    attempts. Halting."
+                    );
                     std::process::exit(1);
                 }
                 rpc_failure_backoff = u64::checked_pow(BACKOFF_BASE, rpc_failure_counter.clone())
                     .expect("MAX_RPC_FAILURES doesn't allow overflow; qed");
 
                 // sleep until it's time to try again
-                println!("{}, Error on `getblocktemplate` RPC: {}", format_now(), e);
-                println!(
+                log::error!("Error on `getblocktemplate` RPC: {}", e);
+                log::error!(
                     "Exponential Backoff: `getblocktemplate` RPC failed {} times, waiting {} \
                     seconds before attempting `getblocktemplate` RPC again.",
-                    rpc_failure_counter, rpc_failure_backoff
+                    rpc_failure_counter,
+                    rpc_failure_backoff
                 );
                 sleep(Duration::from_secs(rpc_failure_backoff)).await;
             }
@@ -141,22 +143,11 @@ pub async fn consumer(mut block_template_rx: Receiver<GetBlockTemplateResult>) {
     while let Some(block_template) = block_template_rx.recv().await {
         // if block template is from some outdated exponential backoff RPC, ignore it
         if block_template.height > last_block_template_height {
-            println!(
-                "{} Received new block template via `getblocktemplate` RPC: {:?}",
-                format_now(),
+            log::info!(
+                "Received new block template via `getblocktemplate` RPC: {:?}",
                 block_template
             );
             last_block_template_height = block_template.height;
         }
     }
-}
-
-fn format_now() -> String {
-    let now = Local::now();
-    format!(
-        "[{:0>2}:{:0>2}:{:0>2}]",
-        now.hour(),
-        now.minute(),
-        now.second(),
-    )
 }
