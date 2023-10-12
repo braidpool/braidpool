@@ -17,7 +17,7 @@ impl ProtocolMessage for HeartbeatMessage {
     }
 
     fn response_for_received(&self) -> Result<Option<Message>, &'static str> {
-        println!("Received {:?}", self);
+        log::info!("Received {:?}", self);
         Ok(None)
     }
 }

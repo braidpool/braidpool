@@ -31,7 +31,7 @@ impl Connection {
 
     pub async fn start_from_connect(&mut self, addr: &SocketAddr) -> Result<(), Box<dyn Error>> {
         use futures::SinkExt;
-        println!("Starting from connect");
+        log::info!("Starting from connect");
         let message = HandshakeMessage::start(addr).unwrap();
         self.writer.send(message.as_bytes().unwrap()).await?;
         self.start_read_loop().await?;
@@ -39,14 +39,14 @@ impl Connection {
     }
 
     pub async fn start_from_accept(&mut self) -> Result<(), Box<dyn Error>> {
-        println!("Starting from accept");
+        log::info!("Starting from accept");
         self.start_read_loop().await?;
         Ok(())
     }
 
     pub async fn start_read_loop(&mut self) -> Result<(), Box<dyn Error>> {
         use futures::StreamExt;
-        println!("Start read loop....");
+        log::info!("Start read loop....");
         loop {
             match self.reader.next().await {
                 None => {

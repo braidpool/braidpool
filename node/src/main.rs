@@ -12,14 +12,15 @@ mod protocol;
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = cli::Cli::parse();
 
-    let datadir = args.datadir;
-    println!("Using braid data directory: {}", datadir.display());
-
+    setup_logging();
     setup_tracing()?;
+
+    let datadir = args.datadir;
+    log::info!("Using braid data directory: {}", datadir.display());
 
     if let Some(addnode) = args.addnode {
         for node in addnode.iter() {
-            //println!("Connecting to node: {:?}", node);
+            //log::info!("Connecting to node: {:?}", node);
             let stream = TcpStream::connect(node).await.expect("Error connecting");
             let (r, w) = stream.into_split();
             let framed_reader = FramedRead::new(r, LengthDelimitedCodec::new());
@@ -29,7 +30,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 if let Some(addr) = addr_iter.into_iter().next() {
                     tokio::spawn(async move {
                         if conn.start_from_connect(&addr).await.is_err() {
-                            println!("Peer closed connection")
+                            log::warn!("Peer {} closed connection", addr)
                         }
                     });
                 }
@@ -37,14 +38,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    println!("Binding to {}", args.bind);
+    log::info!("Binding to {}", args.bind);
     let listener = TcpListener::bind(&args.bind).await?;
     loop {
         // Asynchronously wait for an inbound TcpStream.
-        println!("Starting accept");
+        log::info!("Starting accept");
         match listener.accept().await {
             Ok((stream, _)) => {
-                println!("\n\naccepted connection");
+                let addr = stream.peer_addr()?;
+                log::info!("Accepted connection from {}", addr);
                 let (r, w) = stream.into_split();
                 let framed_reader = FramedRead::new(r, LengthDelimitedCodec::new());
                 let framed_writer = FramedWrite::new(w, LengthDelimitedCodec::new());
@@ -52,34 +54,33 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
                 tokio::spawn(async move {
                     if conn.start_from_accept().await.is_err() {
-                        println!("Peer closed connection")
+                        log::warn!("Peer {} closed connection", addr)
                     }
                 });
             }
-            Err(e) => println!("couldn't get client: {:?}", e),
+            Err(e) => log::error!("couldn't get client: {:?}", e),
         }
     }
 }
 
+fn setup_logging() {
+    env_logger::init_from_env(
+        env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info"),
+    );
+}
+
 fn setup_tracing() -> Result<(), Box<dyn Error>> {
-    use tracing_subscriber::{fmt::format::FmtSpan, EnvFilter};
-    // Configure a `tracing` subscriber that logs traces emitted by the chat
-    // server.
-    tracing_subscriber::fmt()
-        // Filter what traces are displayed based on the RUST_LOG environment
-        // variable.
-        //
-        // Traces emitted by the example code will always be displayed. You
-        // can set `RUST_LOG=tokio=trace` to enable additional traces emitted by
-        // Tokio itself.
-        .with_env_filter(EnvFilter::from_default_env().add_directive("chat=info".parse()?))
-        // Log events when `tracing` spans are created, entered, exited, or
-        // closed. When Tokio's internal tracing support is enabled (as
-        // described above), this can be used to track the lifecycle of spawned
-        // tasks on the Tokio runtime.
-        .with_span_events(FmtSpan::FULL)
-        // Set this subscriber as the default, to collect all traces emitted by
-        // the program.
-        .init();
+    // Create a filter for controlling the verbosity of tracing output
+    let filter =
+        tracing_subscriber::EnvFilter::from_default_env().add_directive("chat=info".parse()?);
+
+    // Build a `tracing` subscriber with the specified filter
+    let subscriber = tracing_subscriber::FmtSubscriber::builder()
+        .with_env_filter(filter)
+        .finish();
+
+    // Set the subscriber as the global default for tracing
+    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
+
     Ok(())
 }

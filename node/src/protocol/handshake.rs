@@ -17,7 +17,7 @@ impl ProtocolMessage for HandshakeMessage {
     }
 
     fn response_for_received(&self) -> Result<Option<Message>, &'static str> {
-        println!("Received {:?}", self);
+        log::info!("Received {:?}", self);
         match self {
             HandshakeMessage { message, version } if message == "helo" && version == "0.1.0" => {
                 Ok(Some(Message::Handshake(HandshakeMessage {
