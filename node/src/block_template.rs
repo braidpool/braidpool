@@ -68,8 +68,7 @@ pub async fn listener(
     zmq_port: u16,
     block_template_tx: Sender<GetBlockTemplateResult>,
 ) -> Result<(), BlockTemplateError> {
-    let rpc: bitcoincore_rpc::Client =
-        rpc_setup(bitcoin.clone(), rpc_port, rpc_user, rpc_pass)?;
+    let rpc: bitcoincore_rpc::Client = rpc_setup(bitcoin.clone(), rpc_port, rpc_user, rpc_pass)?;
     let zmq: Arc<Mutex<zmq::Socket>> = zmq_setup(bitcoin, zmq_port)?;
 
     loop {
