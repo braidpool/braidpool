@@ -20,6 +20,7 @@ sqlite = { version = "0.31.1" }
 clap = { version = "4.4.2", features = ["derive", "string"] }
 bitcoincore-rpc = { version = "0.17.0" }
 bitcoincore-rpc-json = { version = "0.17.0" }
+bitcoincore-zmq = { version = "1.2.0", git = "https://github.com/bernardoaraujor/tokio-bitcoincore-zmq.git" }
 zmq = "0.10.0"
 env_logger = "0.10.0"
 log = "0.4.16"

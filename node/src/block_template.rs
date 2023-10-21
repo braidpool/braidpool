@@ -1,6 +1,5 @@
 use bitcoincore_rpc::RpcApi;
 use bitcoincore_rpc_json::{GetBlockTemplateModes, GetBlockTemplateResult, GetBlockTemplateRules};
-use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::time::{sleep, Duration};
 
@@ -17,30 +16,20 @@ const MAX_RPC_FAILURES: u32 = 20;
 #[derive(Debug)]
 pub enum BlockTemplateError {
     Rpc(bitcoincore_rpc::Error),
-    Zmq(zmq::Error),
+    Zmq(bitcoincore_zmq::Error),
 }
 
-fn zmq_setup(
+async fn zmq_setup(
     bitcoin: String,
     zmq_port: u16,
-) -> Result<Arc<Mutex<zmq::Socket>>, BlockTemplateError> {
+) -> Result<Receiver<Result<bitcoincore_zmq::Message, bitcoincore_zmq::Error>>, BlockTemplateError>
+{
     let zmq_url = format!("tcp://{}:{}", bitcoin, zmq_port);
-    let zmq_ctx = zmq::Context::new();
 
-    let zmq_socket = match zmq_ctx.socket(zmq::SUB) {
-        Ok(socket) => socket,
-        Err(err) => return Err(BlockTemplateError::Zmq(err)),
-    };
-
-    if let Err(err) = zmq_socket.connect(&zmq_url) {
-        return Err(BlockTemplateError::Zmq(err));
+    match bitcoincore_zmq::subscribe_single(&zmq_url).await {
+        Ok(zmq) => Ok(zmq),
+        Err(err) => Err(BlockTemplateError::Zmq(err)),
     }
-
-    if let Err(err) = zmq_socket.set_subscribe(b"hashblock") {
-        return Err(BlockTemplateError::Zmq(err));
-    }
-
-    Ok(Arc::new(Mutex::new(zmq_socket)))
 }
 
 fn rpc_setup(
@@ -68,31 +57,31 @@ pub async fn listener(
     block_template_tx: Sender<GetBlockTemplateResult>,
 ) -> Result<(), BlockTemplateError> {
     let rpc: bitcoincore_rpc::Client = rpc_setup(bitcoin.clone(), rpc_port, rpc_user, rpc_pass)?;
-    let zmq: Arc<Mutex<zmq::Socket>> = zmq_setup(bitcoin, zmq_port)?;
+    let mut zmq: Receiver<Result<bitcoincore_zmq::Message, bitcoincore_zmq::Error>> =
+        zmq_setup(bitcoin, zmq_port).await?;
 
-    loop {
-        let zmq_clone = Arc::clone(&zmq);
-
-        match tokio::task::spawn_blocking(move || {
-            let zmq = zmq_clone.lock().expect("lock zmq socket");
-            zmq.recv_multipart(0)
-        })
-        .await
-        .expect("receive zmq notification")
-        {
-            // This is simply a trigger to call the `getblocktemplate` RPC via `fetcher`.
-            // As long as we only subscribe to the `hashblock` topic, we don't really need to
-            // deserialize the multipart message.
-            Ok(_msg) => {
-                log::info!(
-                    "Received a new `hashblock` notification via ZeroMQ. \
-                    Calling `getblocktemplate` RPC now..."
-                );
-                fetcher(&rpc, block_template_tx.clone()).await;
+    while let Some(msg) = zmq.recv().await {
+        match msg {
+            Ok(m) => {
+                match m {
+                    bitcoincore_zmq::Message::HashBlock(_, _) => {
+                        log::info!(
+                            "Received a new `hashblock` notification via ZeroMQ. \
+                            Calling `getblocktemplate` RPC now..."
+                        );
+                        fetcher(&rpc, block_template_tx.clone()).await;
+                    }
+                    bitcoincore_zmq::Message::HashTx(_, _) => todo!(),
+                    bitcoincore_zmq::Message::Block(_, _) => todo!(),
+                    bitcoincore_zmq::Message::Tx(_, _) => todo!(),
+                    bitcoincore_zmq::Message::Sequence(_, _) => todo!(),
+                };
             }
             Err(err) => return Err(BlockTemplateError::Zmq(err)),
-        };
+        }
     }
+
+    Ok(())
 }
 
 pub async fn fetcher(
