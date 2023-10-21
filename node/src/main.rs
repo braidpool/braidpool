@@ -3,7 +3,6 @@ use std::error::Error;
 use std::net::ToSocketAddrs;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc;
-use tokio::sync::mpsc::Receiver;
 use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 
 mod block_template;

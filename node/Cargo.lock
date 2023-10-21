@@ -218,7 +218,6 @@ dependencies = [
  "tokio-util",
  "tracing",
  "tracing-subscriber",
- "zmq",
 ]
 
 [[package]]
