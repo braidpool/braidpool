@@ -1,13 +1,23 @@
 use crate::block_template;
 use tokio::sync::mpsc::{Receiver, Sender};
 
+pub async fn setup(
+    bitcoin: String,
+    zmq_port: u16,
+) -> Result<
+    Receiver<Result<bitcoincore_zmq::Message, bitcoincore_zmq::Error>>,
+    bitcoincore_zmq::Error,
+> {
+    let zmq_url = format!("tcp://{}:{}", bitcoin, zmq_port);
+
+    bitcoincore_zmq::subscribe_single(&zmq_url).await
+}
+
 pub async fn listener(
-    zmq_url: String,
+    mut zmq: Receiver<Result<bitcoincore_zmq::Message, bitcoincore_zmq::Error>>,
     rpc: bitcoincore_rpc::Client,
     block_template_tx: Sender<bitcoincore_rpc_json::GetBlockTemplateResult>,
 ) -> Result<(), bitcoincore_zmq::Error> {
-    let mut zmq = bitcoincore_zmq::subscribe_single(&zmq_url).await?;
-
     while let Some(msg) = zmq.recv().await {
         match msg {
             Ok(m) => {

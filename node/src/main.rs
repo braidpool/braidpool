@@ -3,12 +3,15 @@ use std::error::Error;
 use std::net::ToSocketAddrs;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc;
+use tokio::sync::mpsc::Receiver;
 use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 
 mod block_template;
 mod cli;
 mod connection;
 mod protocol;
+mod rpc;
+mod zmq;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -20,15 +23,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let datadir = args.datadir;
     log::info!("Using braid data directory: {}", datadir.display());
 
-    let (block_template_tx, block_template_rx) = mpsc::channel(1);
-    tokio::spawn(block_template::listener(
-        args.bitcoin,
+    let rpc = rpc::setup(
+        args.bitcoin.clone(),
         args.rpcport,
         args.rpcuser,
         args.rpcpass,
-        args.zmqport,
-        block_template_tx,
-    ));
+    )?;
+    let zmq = zmq::setup(args.bitcoin, args.zmqport).await?;
+
+    let (block_template_tx, block_template_rx) = mpsc::channel(1);
+    tokio::spawn(zmq::listener(zmq, rpc, block_template_tx));
     tokio::spawn(block_template::consumer(block_template_rx));
 
     if let Some(addnode) = args.addnode {
