@@ -21,6 +21,8 @@ The goals of the pool are:
 
 # Running the node
 
+You will need to have `cmake` available on your system to build the node.
+
 For the moment, the node runs a simple p2p broadcast. To run it you need to do
 the usual cargo things
 
@@ -29,11 +31,11 @@ cd node
 cargo build
 
 # run the first seed node on port 8989
-cargo run -- --bind=localhost:8989
+cargo run -- --bindport=8989
+[2023-10-24T01:26:44Z INFO  braidpool_node] Braidpool node multiaddr: /ip4/127.0.0.1/udp/8989/quic-v1/p2p/12D3KooWBx3CTpqd6N7Hetnz3TYsDUwmPQt9S7wV6Wiw8G47agjT
 
 # run another node while specifying their own port as 9899 and pointing to the seed node
-cargo run -- --bind=localhost:9899 --addnode=localhost:8989
-
+cargo run -- --bindport=9989 --addpeer=/ip4/127.0.0.1/udp/8989/quic-v1/p2p/12D3KooWBx3CTpqd6N7Hetnz3TYsDUwmPQt9S7wV6Wiw8G47agjT
 ```
 
 # Progress

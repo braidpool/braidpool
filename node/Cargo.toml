@@ -20,3 +20,5 @@ sqlite = { version = "0.31.1" }
 clap = { version = "4.4.2", features = ["derive", "string"] }
 env_logger = "0.10.0"
 log = "0.4.16"
+litep2p = { git = "https://github.com/altonen/litep2p.git", rev = "a90764ecbf270a2dff6e0251f5a6464e4e8ed92f" }
+multiaddr = "0.18.0"
