@@ -21,7 +21,7 @@ The goals of the pool are:
 
 # Running the node
 
-You will need to have `cmake` available on your system to build the node.
+You will need to have `cmake` and `protoc` available on your system to build the node.
 
 For the moment, the node runs a simple p2p broadcast. To run it you need to do
 the usual cargo things
