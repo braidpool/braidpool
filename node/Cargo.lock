@@ -190,8 +190,8 @@ dependencies = [
 
 [[package]]
 name = "bitcoincore-zmq"
-version = "1.2.0"
-source = "git+https://github.com/antonilol/rust-bitcoincore-zmq.git?branch=async#d84d1165a60538a93d44b0a0435d01f40e1b874d"
+version = "1.3.0"
+source = "git+https://github.com/antonilol/rust-bitcoincore-zmq.git#ab598112f3e9cf3370f46fc75ee3c3f579bb8afd"
 dependencies = [
  "async_zmq",
  "bitcoin",
