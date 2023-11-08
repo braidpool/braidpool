@@ -2,7 +2,7 @@ use crate::block_template;
 use futures::StreamExt;
 use tokio::sync::mpsc::Sender;
 
-pub async fn listener(
+pub async fn zmq_hashblock_listener(
     zmq_url: String,
     rpc: bitcoincore_rpc::Client,
     block_template_tx: Sender<bitcoincore_rpc_json::GetBlockTemplateResult>,
@@ -20,10 +20,7 @@ pub async fn listener(
                         );
                         block_template::fetcher(&rpc, block_template_tx.clone()).await;
                     }
-                    bitcoincore_zmq::Message::HashTx(_, _) => todo!(),
-                    bitcoincore_zmq::Message::Block(_, _) => todo!(),
-                    bitcoincore_zmq::Message::Tx(_, _) => todo!(),
-                    bitcoincore_zmq::Message::Sequence(_, _) => todo!(),
+                    _=> {},
                 };
             }
             Err(err) => return Err(err),

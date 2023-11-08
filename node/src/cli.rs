@@ -34,5 +34,5 @@ pub struct Cli {
 
     /// Use this port for bitcoin ZMQ
     #[arg(long, default_value = "28332")]
-    pub zmqport: u16,
+    pub zmqhashblockport: u16,
 }

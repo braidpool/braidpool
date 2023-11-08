@@ -28,10 +28,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         args.rpcuser,
         args.rpcpass,
     )?;
-    let zmq_url = format!("tcp://{}:{}", args.bitcoin, args.zmqport);
+    let zmq_url = format!("tcp://{}:{}", args.bitcoin, args.zmqhashblockport);
 
     let (block_template_tx, block_template_rx) = mpsc::channel(1);
-    tokio::spawn(zmq::listener(zmq_url, rpc, block_template_tx));
+    tokio::spawn(zmq::zmq_hashblock_listener(zmq_url, rpc, block_template_tx));
     tokio::spawn(block_template::consumer(block_template_rx));
 
     if let Some(addnode) = args.addnode {
