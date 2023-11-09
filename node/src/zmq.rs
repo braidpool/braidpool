@@ -20,7 +20,7 @@ pub async fn zmq_hashblock_listener(
                         );
                         block_template::fetcher(&rpc, block_template_tx.clone()).await;
                     }
-                    _=> {},
+                    _ => {}
                 };
             }
             Err(err) => return Err(err),
