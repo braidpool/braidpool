@@ -21,11 +21,12 @@ The goals of the pool are:
 
 # Running the node
 
-Braidpool nodes need to connect to a bitcoin RPC node. Let's assume you are running
-one on `0.0.0.0:8332` with username `xxxx` and password `yyyy`.
+Braidpool nodes need to connect to a bitcoin RPC node. The bitcoin node also needs to have the `hashblock` [ZMQ notification](https://github.com/bitcoin/bitcoin/blob/master/doc/zmq.md) enabled.
 
-The bitcoin node also needs to have the `hashblock` [ZMQ notification](https://github.com/bitcoin/bitcoin/blob/master/doc/zmq.md) enabled.
-Let's assume this is enabled on port `28332`.
+Let's assume there is a `bitcoind` running on `0.0.0.0:8332` with username `xxxx`, password `yyyy`, and `zmqpubhashblock` enabled on port `28332`:
+```
+$ bitcoind -rpcport=8332 -rpcuser=xxxx -rpcpassword=yyyy -zmqpubhashblock=tcp://localhost:28332
+```
 
 For the moment, the braidpool node runs a simple p2p broadcast. To run it you need to do
 the usual cargo things
