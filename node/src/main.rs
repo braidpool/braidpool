@@ -27,6 +27,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         args.rpcport,
         args.rpcuser,
         args.rpcpass,
+        args.rpccookie,
     )?;
     let zmq_url = format!("tcp://{}:{}", args.bitcoin, args.zmqhashblockport);
 
