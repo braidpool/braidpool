@@ -26,11 +26,15 @@ pub struct Cli {
 
     /// Use this username for bitcoin RPC
     #[arg(long)]
-    pub rpcuser: String,
+    pub rpcuser: Option<String>,
 
     /// Use this password for bitcoin RPC
-    #[arg(long)]
-    pub rpcpass: String,
+    #[arg(long, default_value = "")]
+    pub rpcpass: Option<String>,
+
+    /// Use this cookie file for bitcoin RPC
+    #[arg(long, default_value = "~/.bitcoin/.cookie")]
+    pub rpccookie: Option<String>,
 
     /// Use this port for bitcoin ZMQ
     #[arg(long, default_value = "28332")]

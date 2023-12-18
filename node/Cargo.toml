@@ -23,3 +23,4 @@ bitcoincore-rpc-json = { version = "0.17.0" }
 bitcoincore-zmq = { version = "1.2.0", git = "https://github.com/antonilol/rust-bitcoincore-zmq.git", features = ["async"] }
 env_logger = "0.10.0"
 log = "0.4.16"
+shellexpand = "3.1.0"
