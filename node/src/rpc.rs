@@ -10,32 +10,44 @@ pub fn setup(
     rpc_cookie: Option<String>,
 ) -> Result<bitcoincore_rpc::Client, bitcoincore_rpc::Error> {
     let rpc_url = format!("{}:{}", bitcoin, rpc_port);
-    println!("{:?}", rpc_user);
-    let rpc = if rpc_user.is_some() {
+    let (rpc, is_cookie_auth) = if rpc_user.is_some() {
         log::info!(
             "Using username/password RPC authentication with username: {:?}",
             rpc_user.as_ref().unwrap()
         );
-        bitcoincore_rpc::Client::new(
-            &rpc_url,
-            bitcoincore_rpc::Auth::UserPass(rpc_user.unwrap(), rpc_pass.unwrap()),
-        )?
+        (
+            bitcoincore_rpc::Client::new(
+                &rpc_url,
+                bitcoincore_rpc::Auth::UserPass(rpc_user.unwrap(), rpc_pass.unwrap()),
+            )?,
+            false,
+        )
     } else {
         log::info!(
             "Using Cookie authentication with cookie: {:?}",
             rpc_cookie.as_ref().unwrap()
         );
-        bitcoincore_rpc::Client::new(
-            &rpc_url,
-            bitcoincore_rpc::Auth::CookieFile(PathBuf::from(
-                shellexpand::tilde(&rpc_cookie.unwrap()).to_string(),
-            )),
-        )?
+        (
+            bitcoincore_rpc::Client::new(
+                &rpc_url,
+                bitcoincore_rpc::Auth::CookieFile(PathBuf::from(
+                    shellexpand::tilde(&rpc_cookie.unwrap()).to_string(),
+                )),
+            )?,
+            true,
+        )
     };
 
     // check if rpc is alive
-    let res = rpc.get_blockchain_info()?;
-    log::info!("{:?}", res);
+    if let Err(e) = rpc.get_blockchain_info() {
+        log::error!("{:?}", e);
+        if is_cookie_auth {
+            log::error!(
+                "make sure the provided cookie file is identical to the one used by bitcoind"
+            );
+        }
+        std::process::exit(1);
+    }
 
     Ok(rpc)
 }
