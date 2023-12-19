@@ -54,8 +54,9 @@ Custody of accumulated coinbase rewards and fees is performed by a large multi-s
 
 Braidpool is a nascent project written in Rust. We have published a spec and have a github which currently connects to peers and bitcoind. If any of the above features excite you, it's a great project to get in on the ground floor of a brand new blockchain that is *not* a shitcoin. No premine, no ICO, no BS, and with real utility.
 
-We are taking donations at address bcXXXXX and will distribute any received funds to contributors using a bounty and project system.
+More detailed specifications can be found in the [Braidpool
+Spec](https://github.com/braidpool/braidpool/blob/master/docs/braidpool_spec.md)
+which should be regarded as a work-in-progress.
 
-FIXME mention Matrix chat.
-
-FIXME link to spec after it's moved to braidpool github.
+If you want to chat about Braidpool, [join us on
+Matrix](https://matrix.to/#/#braidpool:matrix.org)
