@@ -15,4 +15,28 @@ pub struct Cli {
     /// specified multiple times
     #[arg(long)]
     pub addnode: Option<Vec<String>>,
+
+    /// Connect to this bitcoin node
+    #[arg(long, default_value = "0.0.0.0")]
+    pub bitcoin: String,
+
+    /// Use this port for bitcoin RPC
+    #[arg(long, default_value = "8332")]
+    pub rpcport: u16,
+
+    /// Use this username for bitcoin RPC
+    #[arg(long)]
+    pub rpcuser: Option<String>,
+
+    /// Use this password for bitcoin RPC
+    #[arg(long, default_value = "")]
+    pub rpcpass: Option<String>,
+
+    /// Use this cookie file for bitcoin RPC
+    #[arg(long, default_value = "~/.bitcoin/.cookie")]
+    pub rpccookie: Option<String>,
+
+    /// Use this port for bitcoin ZMQ
+    #[arg(long, default_value = "28332")]
+    pub zmqhashblockport: u16,
 }

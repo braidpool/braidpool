@@ -2,11 +2,15 @@ use clap::Parser;
 use std::error::Error;
 use std::net::ToSocketAddrs;
 use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::mpsc;
 use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 
+mod block_template;
 mod cli;
 mod connection;
 mod protocol;
+mod rpc;
+mod zmq;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -17,6 +21,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let datadir = args.datadir;
     log::info!("Using braid data directory: {}", datadir.display());
+
+    let rpc = rpc::setup(
+        args.bitcoin.clone(),
+        args.rpcport,
+        args.rpcuser,
+        args.rpcpass,
+        args.rpccookie,
+    )?;
+    let zmq_url = format!("tcp://{}:{}", args.bitcoin, args.zmqhashblockport);
+
+    let (block_template_tx, block_template_rx) = mpsc::channel(1);
+    tokio::spawn(zmq::zmq_hashblock_listener(zmq_url, rpc, block_template_tx));
+    tokio::spawn(block_template::consumer(block_template_rx));
 
     if let Some(addnode) = args.addnode {
         for node in addnode.iter() {
