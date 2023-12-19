@@ -43,7 +43,9 @@ pub fn setup(
         log::error!("{:?}", e);
         if is_cookie_auth {
             log::error!(
-                "make sure the provided cookie file is identical to the one used by bitcoind"
+                "Unable to authenticate to bitcoind using a cookie file. \
+                Ensure that bitcoind is running on the same node or use \
+                rpcuser/rpcpass instead."
             );
         }
         std::process::exit(1);
