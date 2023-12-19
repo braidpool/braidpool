@@ -48,6 +48,8 @@ Braidpool is a Directed Acyclic Graph (DAG) of "beads" rather than a blockchain 
 
 These beads are "shares" and every time a miner wins one he adds an entry into the decentralized share accounting ledger that is Braidpool's UTXO set. Every bead could be a bitcoin full bitcoin block had it met Bitcoin's difficulty target, but Braidpool has a dynamic difficulty target that is around 1000x easier to hit, resulting in 1000 times more beads than Bitcoin blocks. At the end of the 2016-block difficulty window, all shares are automatically paid out according to the consensus rules of Braidpool, which enforce the Full Proportional payout algorithm.
 
+Each bead has an associated value corresponding to the estimate of the number of sha256d hashes performed, commonly known as the [difficulty](https://en.bitcoin.it/wiki/Difficulty). This quantity has units of number of hashes performed and a miner's share of the total payout over one difficulty adjustment epoch is the sum of the difficulty of all the shares he found, relative to the sum of difficulty for all shares found by the pool. Therefore the share-coin, as a transferrable asset is difficulty, which settles out to Bitcoin on-chain at the end of the difficulty adjustment epoch.
+
 Custody of accumulated coinbase rewards and fees is performed by a large multi-sig among miners who have recently mined blocks using the [FROST Schnorr signature algorithm](https://glossary.blockstream.com/frost/). Consensus rules on the network ensure that only a payout properly paying all miners can be signed and no individual miner or small group of colluding miners can steal the rewards.
 
 # Current Status and How To Contribute
