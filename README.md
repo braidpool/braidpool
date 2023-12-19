@@ -4,12 +4,8 @@
 # Proposal
 
 Read the
-[proposal](https://github.com/pool2win/braidpool/raw/main/proposal/proposal.pdf)
-for braidpool.
-
-For details on how delivering shares to market makers for enabling hashrate
-futures, read the blog post: [Deliver Hashrate to Market
-Markets](https://blog.opdup.com/2021/08/18/deliver-hashrate-to-market-makers.html).
+[Overview](https://github.com/braidpool/braidpool/blob/master/docs/overview.md)
+for [General Considerations for Decentralized Mining Pools](https://github.com/braidpool/braidpool/blob/master/docs/general_considerations.md), or [Braidpool Spec](https://github.com/braidpool/braidpool/blob/master/docs/braidpool_spec.md) in increasing levels of complexity. You may also be interested in our [Roadmap](https://github.com/braidpool/braidpool/blob/master/docs/roadmap.md)
 
 The goals of the pool are:
 
@@ -62,4 +58,3 @@ Mailing list: [https://sourceforge.net/p/braidpool/mailman/braidpool-discuss/](h
 
 Development blog: [https://blog.opdup.com/](https://blog.opdup.com/)
 
-Donations: bitcoin:bc1q6xms5xsq6kvk9h57mvsdxdjnnrl0vsc942xlxe
