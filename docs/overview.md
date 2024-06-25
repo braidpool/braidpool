@@ -13,7 +13,7 @@ Braidpool aims to decouple the problems of transaction selection, variance reduc
 Existing pools can run *on top* of Braidpool at no cost to them (Braidpool will be zero-fee) and we encourage them to do so. Doing this allows pools to decouple themselves from two unwinnable games:
 
 **Variance reduction**:
-    Pools can only reduce revenue variance by being big, but being big makes them an attack risk to a decentralized network, and a single point of control for hostile governments. The 51% attack risk still exists but is transferred to Briadpool itself. By having many miners acting individually in Braidpool instead of the pool appearing as one big miner, the risk of a 51% is substantially reduced. It would be safer if all miners operated on top of Braidpool, as long as no single miner has more than 51% of the hashrate. It's also safe for a buyer of shares to buy more than 51% of the shares without becoming a risk to decentralization.
+    Pools can only reduce revenue variance by being big, but being big makes them an attack risk to a decentralized network, and a single point of control for hostile governments. The 51% attack risk still exists but is transferred to Braidpool itself. By having many miners acting individually in Braidpool instead of the pool appearing as one big miner, the risk of a 51% is substantially reduced. It would be safer if all miners operated on top of Braidpool, as long as no single miner has more than 51% of the hashrate. It's also safe for a buyer of shares to buy more than 51% of the shares without becoming a risk to decentralization.
 
 **Transaction selection**:
     Pools are commonly accused of censoring transactions and constantly fight a PR battle over it. By leaving this responsibility to individual miners, transaction selection is decentralized. Block template construction is not outsourced as it is on Ethereum, which has resulted in more centralization around MEV-boosting traders and "compliant" blocks which are antithetical to Bitcoin.
@@ -54,7 +54,7 @@ Custody of accumulated coinbase rewards and fees is performed by a large multi-s
 
 # Current Status and How To Contribute
 
-Braidpool is a nascent project written in Rust. We have published a spec and have a github which currently connects to peers and bitcoind. If any of the above features excite you, it's a great project to get in on the ground floor of a brand new blockchain that is *not* a shitcoin. No premine, no ICO, no BS, and with real utility.
+Braidpool is a nascent project written in Rust. We have published a [spec](https://github.com/braidpool/braidpool/blob/main/docs/braidpool_spec.md), and code which connects to peers and bitcoind. If any of the above features excite you, it's a great project to get in on the ground floor of a brand new blockchain that is *not* a shitcoin. No premine, no ICO, no BS, and with real utility.
 
 More detailed specifications can be found in the [Braidpool
 Spec](https://github.com/braidpool/braidpool/blob/master/docs/braidpool_spec.md)
