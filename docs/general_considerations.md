@@ -206,7 +206,7 @@ rules.
 
 In p2pool this UHPO set was placed directly in the coinbase of every block,
 resulting in a large number of very small payments to hashers. One advantage of
-traditional pools is that the *aggregate* these payments over multiple blocks so
+traditional pools is that they *aggregate* these payments over multiple blocks so
 that the number of withdrawals per hasher is reduced. A decentralized mining
 pool should do the same. The consequence of this was that in p2pool, the large
 coinbase with small outputs competed for block space with fee-paying
@@ -368,8 +368,6 @@ agreed upon by the signing participants before signing, and is committed to in
 the signature itself. This is generally done by running an additional round of
 the DKG to compute $k$ such that everyone has a secret share of it.
 
-### Distributed Key Generation
-
 # Transaction Selection
 
 The [Stratum V2](https://github.com/stratum-mining/sv2-spec) project is focusing
@@ -390,7 +388,9 @@ bitcoin's difficulty threshold, it is probably best to elide the transaction set
 entirely for faster verification of shares. This introduces a problem that a
 hasher could construct a block with invalid transactions, but this would be
 easily discovered if that hasher ever mined a block, and his shares could
-invalidated.
+invalidated. A decentralized pool really needs to verify the entire bitcoin
+block implied by every share. One idea to speed this up is [deterministic
+transaction selection](https://github.com/braidpool/braidpool/discussions/69).
 
 A transaction selection mechanism using both a decentralized mining pool and
 Stratum V2 should be able to easily slot into the block structure required by
