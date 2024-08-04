@@ -1,0 +1,10 @@
+# Build and run an interactive Docker container.
+
+CONTEXT="$PWD"
+PROJECT="braidpool"
+
+docker build --tag "$PROJECT:dev" "$CONTEXT" &&
+docker run -it --rm \
+  --hostname "$PROJECT" \
+  "$PROJECT:dev" \
+  "${@:2}"
