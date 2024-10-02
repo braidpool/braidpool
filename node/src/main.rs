@@ -1,5 +1,6 @@
 use clap::Parser;
 use std::error::Error;
+use std::fs;
 use std::net::ToSocketAddrs;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc;
@@ -19,8 +20,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
     setup_logging();
     setup_tracing()?;
 
-    let datadir = args.datadir;
-    log::info!("Using braid data directory: {}", datadir.display());
+    let datadir = shellexpand::full(args.datadir.to_str().unwrap()).unwrap();
+    match fs::metadata(&*datadir) {
+        Ok(m) => {
+            if !m.is_dir() {
+                log::error!("Data directory {} exists but is not a directory", datadir);
+            }
+            log::info!("Using existing data directory: {}", datadir);
+        }
+        Err(_) => {
+            log::info!("Creating data directory: {}", datadir);
+            fs::create_dir_all(&*datadir)?;
+        }
+    }
 
     let rpc = rpc::setup(
         args.bitcoin.clone(),
