@@ -1,0 +1,9 @@
+# Hidden files and folders
+**/.*
+
+# Contents of tmp folder
+tmp/*
+
+# Python debris
+**/__pycache__
+venv
