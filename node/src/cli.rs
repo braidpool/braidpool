@@ -32,6 +32,10 @@ pub struct Cli {
     #[arg(long, default_value = "")]
     pub rpcpass: Option<String>,
 
+    /// Which network to use. Valid options are mainnet, testnet4, signet, cpunet (preferred)
+    #[arg(long, default_value = "main")]
+    pub network: Option<String>,
+
     /// Use this cookie file for bitcoin RPC
     #[arg(long, default_value = "~/.bitcoin/.cookie")]
     pub rpccookie: Option<String>,

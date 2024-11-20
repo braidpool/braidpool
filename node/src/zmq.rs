@@ -7,7 +7,7 @@ pub async fn zmq_hashblock_listener(
     rpc: bitcoincore_rpc::Client,
     block_template_tx: Sender<bitcoincore_rpc_json::GetBlockTemplateResult>,
 ) -> Result<(), bitcoincore_zmq::Error> {
-    let mut zmq = bitcoincore_zmq::subscribe_single_async(&zmq_url)?;
+    let mut zmq = bitcoincore_zmq::subscribe_async(&[&zmq_url])?;
 
     while let Some(msg) = zmq.next().await {
         match msg {

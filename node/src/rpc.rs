@@ -24,9 +24,11 @@ pub fn setup(
         )
     } else {
         log::info!(
-            "Using Cookie authentication with cookie: {:?}",
-            rpc_cookie.as_ref().unwrap()
+            "Using Cookie authentication with cookie: {:?} {:?}",
+            rpc_cookie.as_ref().unwrap(),
+            rpc_url
         );
+        log::info!("Connecting to RPC endpoint: {:?}", rpc_url);
         (
             bitcoincore_rpc::Client::new(
                 &rpc_url,
@@ -39,8 +41,15 @@ pub fn setup(
     };
 
     // check if rpc is alive
+    //
+    // get_best_block_hash just returns a string
+    let best_block_hash = rpc.get_best_block_hash()?;
+    log::info!("Best block hash: {:?}", best_block_hash);
+    // get_blockchain_info returns a json blob
+    let info = rpc.get_blockchain_info().unwrap();
+    log::info!("Blockchain info: {:?}", info);
     if let Err(e) = rpc.get_blockchain_info() {
-        log::error!("{:?}", e);
+        log::error!("get_blockchain_info returned an error: {:?}", e);
         if is_cookie_auth {
             log::error!(
                 "Unable to authenticate to bitcoind using a cookie file. \

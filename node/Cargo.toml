@@ -18,9 +18,10 @@ serde = { version = "1.0.188", features = ["derive"] }
 serde_derive = "1.0.188"
 sqlite = { version = "0.31.1" }
 clap = { version = "4.4.2", features = ["derive", "string"] }
-bitcoincore-rpc = { version = "0.17.0" }
-bitcoincore-rpc-json = { version = "0.17.0" }
-bitcoincore-zmq = { version = "1.2.0", git = "https://github.com/antonilol/rust-bitcoincore-zmq.git", features = ["async"] }
+bitcoin = { git = "https://github.com/braidpool/rust-bitcoin.git", branch = "cpunet" }
+bitcoincore-rpc = { version = "0.19.0-cpunet", git = "https://github.com/braidpool/rust-bitcoincore-rpc.git", branch = "cpunet" }
+bitcoincore-rpc-json = { version = "0.19.0-cpunet", git = "https://github.com/braidpool/rust-bitcoincore-rpc.git", branch = "cpunet" }
+bitcoincore-zmq = { version = "1.5.2", git = "https://github.com/antonilol/rust-bitcoincore-zmq.git", features = ["async"] }
 env_logger = "0.10.0"
 log = "0.4.16"
 shellexpand = "3.1.0"
