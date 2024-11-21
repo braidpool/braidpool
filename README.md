@@ -40,8 +40,7 @@ cargo run -- --bind=localhost:9899 --addnode=localhost:8989 --bitcoin=0.0.0.0 --
 
 # Progress
 
-The [project on github](https://github.com/wholooks/braidpool/projects/1)
-tracks the main components to build. Here's a list to keep us focused:
+A list with TODO's:
 
 - [ ] P2P gossip based broadcast of miner blocks and shares.
 - [ ] Use FROST rust implementation for providing threshold schnorr
