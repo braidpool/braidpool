@@ -52,9 +52,5 @@ tracks the main components to build. Here's a list to keep us focused:
       docker).
 
 
-Matrix chat: [https://matrix.to/#/#braidpool:matrix.org](https://matrix.to/#/#braidpool:matrix.org)
-
-Mailing list: [https://sourceforge.net/p/braidpool/mailman/braidpool-discuss/](https://sourceforge.net/p/braidpool/mailman/braidpool-discuss/)
-
-Development blog: [https://blog.opdup.com/](https://blog.opdup.com/)
+[Discord chat](https://discord.gg/pZYUDwkpPv)
 
