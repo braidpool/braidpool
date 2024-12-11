@@ -138,8 +138,13 @@ $$
 $$
 
 The required difficulty for his bead which then given by $x_0$. This difficulty
-is committed to in the [committed metadata]() and verified to be correct
-according to the DAG and parent beads by all nodes.
+is committed to in the [committed metadata](https://github.com/braidpool/braidpool/blob/main/docs/braidpool_spec.md#metadata-commitments) and verified to be correct
+according to the DAG and parent beads by all nodes. The committed metadata also
+contains a millisecond-resolution timestamp which is required to be monotonic. A
+bead's timestamp must be strictly greater than that of any of its parents. This
+timestamp is *different* from the timestamp in the Bitcoin block header, which
+is commonly used as nonce space for mining and not accurate. All time-dependent
+calculations herein use this timestamp, not the Bitcoin block header timestamp.
 
 ### Critical Damping
 
