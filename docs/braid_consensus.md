@@ -181,12 +181,12 @@ within that window, and then computing:
 
 $$
 \begin{array}{rcll}
-\overline x       &=& \displaystyle \left(\frac{1}{N_B} \sum_{i \in {\rm beads}} \frac{1}{x_i} \right)^{-1}   & {\rm average\ target} \\[1.5em]
-\overline \lambda &=& \displaystyle \frac{N_B}{\overline x T} & {\rm average\ hashrate} \\[1.5em]
-a                 &=& \displaystyle \frac{T}{N_C} W\left(\frac{N_C}{N_B}-1\right) & {\rm latency\ parameter} \\[1.5em]
-\overline x_1     &=& \displaystyle \left(\frac{1}{N_p} \displaystyle \sum_{p \in {\rm parents}} \frac{1}{x_p}\right)^{-1} & {\rm average\ parental\ target} \\[1.5em]
-x_0               &=& \displaystyle \frac{2 W\left(\frac12\right)}{a \overline \lambda} & {\rm optimal\ target} \\[1.5em]
-x                 &=& \displaystyle x_0 + (\overline x_1 - x_0) e^{-\pi a/T} & {\rm damped\ target}
+\bar x       &=& \displaystyle \left(\frac{1}{N_B} \sum_{i \in {\rm beads}} \frac{1}{x_i} \right)^{-1}   & {\rm average\ target} \\
+\bar \lambda &=& \displaystyle \frac{N_B}{\overline x T} & {\rm average\ hashrate} \\
+a                 &=& \displaystyle \frac{T}{N_C} W\left(\frac{N_C}{N_B}-1\right) & {\rm latency\ parameter} \\
+\bar x_1     &=& \displaystyle \left(\frac{1}{N_p} \displaystyle \sum_{p \in {\rm parents}} \frac{1}{x_p}\right)^{-1} & {\rm average\ parental\ target} \\
+x_0               &=& \displaystyle \frac{2 W\left(\frac12\right)}{a \bar \lambda} & {\rm optimal\ target} \\
+x                 &=& \displaystyle x_0 + (\bar x_1 - x_0) e^{-\pi a/T} & {\rm damped\ target}
 \end{array}
 $$
 
