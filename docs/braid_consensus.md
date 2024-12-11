@@ -43,9 +43,11 @@ algorithm, which can be computed in linear time.
 
 The production of Proof of Work shares is a Poisson process, given by the
 Poisson probability mass function
+
 $$
 P(k) = \frac{(\lambda a)^k e^{\lambda a}}{k!}
 $$
+
 where the parameter $\lambda$ is the total hashrate of the network having units
 [hashes/second] and $a$ is a global latency parameter having units [seconds].
 
@@ -74,6 +76,7 @@ P(0) = e^{-\lambda a}
 $$
 
 leading to a cohort time
+
 $$
 T_C|_{x\to\infty} = \frac{a}{P(0)} = a e^{\lambda a}
 $$
@@ -95,6 +98,7 @@ by
 $$
 x_0 = \frac{2 W\left(\frac12\right)}{a\lambda} \simeq \frac{0.7035}{a \lambda}
 $$
+
 where $W(z)$ is the [Lambert W function](https://en.wikipedia.org/wiki/Lambert_W_function).
 
 This value $x_0$ represents having the most-frequent consensus points within a
@@ -176,14 +180,14 @@ given by first computing the desired time window $T$, counting $N_B$ and $N_C$
 within that window, and then computing:
 
 $$
-\begin{darray}{rcll}
-\overline x       &=& \left(\sum_i \frac{1}{x_i} \right)^{-1}   & {\rm average\ target} \\[1.5em]
-\overline \lambda &=& \frac{N_B}{\overline x T} & {\rm average\ hashrate} \\[1.5em]
-a                 &=& \frac{T}{N_C} W\left(\frac{N_C}{N_B}-1\right) & {\rm latency\ parameter} \\[1.5em]
-\overline x_1     &=& \left(\sum_p \frac{1}{x_p}\right) & {\rm average\ parental\ target} \\[1.5em]
-x_0               &=& \frac{2 W\left(\frac12\right)}{a \overline \lambda} & {\rm optimal\ target} \\[1.5em]
-x                 &=& x_0 + (\overline x_1 - x_0) e^{-\pi a/T} & {\rm damped\ target}
-\end{darray}
+\begin{array}{rcll}
+\overline x       &=& \displaystyle \left(\frac{1}{N_B} \sum_{i \in {\rm beads}} \frac{1}{x_i} \right)^{-1}   & {\rm average\ target} \\[1.5em]
+\overline \lambda &=& \displaystyle \frac{N_B}{\overline x T} & {\rm average\ hashrate} \\[1.5em]
+a                 &=& \displaystyle \frac{T}{N_C} W\left(\frac{N_C}{N_B}-1\right) & {\rm latency\ parameter} \\[1.5em]
+\overline x_1     &=& \displaystyle \left(\frac{1}{N_p} \displaystyle \sum_{p \in {\rm parents}} \frac{1}{x_p}\right)^{-1} & {\rm average\ parental\ target} \\[1.5em]
+x_0               &=& \displaystyle \frac{2 W\left(\frac12\right)}{a \overline \lambda} & {\rm optimal\ target} \\[1.5em]
+x                 &=& \displaystyle x_0 + (\overline x_1 - x_0) e^{-\pi a/T} & {\rm damped\ target}
+\end{array}
 $$
 
 where the index $i$ ranges over all beads within the time window $T$, and the
@@ -235,7 +239,7 @@ where the bead with the larger work value is preferred to resolve conflicting
 information, and the sum need only be carried out until the next cohort
 boundary, since by the definition of cohorts, all additional work after the
 cohort boundary is added to the work of *all* potentially conflicting beads and
-does not affect conflict resolution.
+does not affect conflict resolution, and DAGs don't fork.
 
 ## Byzantine Broadcast
 
