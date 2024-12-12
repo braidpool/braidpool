@@ -120,6 +120,33 @@ transactions. As the first version of Braidpool will not have transactions, that
 leaves the target difficulty for shares as the only quantity that needs to be
 decided by consensus, which we describe how to compute below.
 
+### Bead Timestamps
+
+Difficulty adjustment algorithms historically have a problem with miner-attested
+timestamps being placed too far in the future, and often reject blocks with
+times too far in the future. A number of timing-based attacks are possible by
+manipulating timestamps in this way.
+
+Instead of relying on the miner's attested timestamps, we will instead use
+*observer* timestamps. Whenever a node receives a bead, he records a timestamp
+of when that bead was observed. The [committed
+metadata](https://github.com/braidpool/braidpool/blob/main/docs/braidpool_spec.md#metadata-commitments)
+will contain not only the miner's timestamp which indicates when he started
+mining this bead, but timestamps of each bead in his parent cohort, the
+parent's-parent cohort, and the parent's-parent's cohort (as observed from this
+bead). This gives us a minimum of three observations of the
+*received* timestamp for each bead. The `median_bead_time` for a bead is then
+taken to be the median of these observations. In the following all references to
+bead timestamps refer to this `median_bead_time`.
+
+In order to pull off any timing-based attacks, a miner would need to control on
+average 2 of these 3 timestamps, which is anyway a 51% attack and the system
+breaks down anyway.
+
+We can also compute the average solve time by comparing the miner's timestamp to
+this observer timestamp. This may be used in a future update of this algorithm
+to detect misbehaving miners.
+
 ### Difficulty Adjustment
 
 It is necessary to rate-limit shares. Since shares are broadcast to all nodes,
@@ -168,6 +195,18 @@ factor $e^{-\pi t/T}$ will go into our difficulty adjustment algorithm, and the
 $\cos\left(\frac{\pi t}{T}\right)$ term comes from the natural behavior after a
 change in hashrate. The value $t$ is the expected time to the next bead.
 
+One can imagine this behavior by starting from blockchain-like DAG within the
+time window $T$. At $t=0$ there is an decrease in hashrate, causing beads to be
+produced much faster and the resultant DAG to be "thicker". The first cohort
+formed after $t=0$ has multiple beads. The algorithm slightly increases the
+difficulty. The second cohort formed is still pretty "thick" and further beads
+have their difficulty increased slightly more. After a time $T$ corresponding to
+our observation window, the cohorts within $T$ are all pretty "thick" and we now
+have an observation window $T$ containing all "thick" cohorts, which causes us
+to overshoot the target difficulty, making the DAG blockchain-like again. This
+then repeats, oscillating between a "thin" DAG" and a "thick" DAG with a period
+$2T$.
+
 ### Averaging Window
 
 The last remaining free parameter in this algorithm is the averaging window $T$.
@@ -177,6 +216,86 @@ those in a reasonable manner. The change in the network hashrate is just its
 time derivative $\lambda^\prime(t)$ which can be measured from the network.
 
 FIXME more details and explicit formula
+
+### Edge Cases
+
+#### Blockchain-like $N_C = N_B$
+
+An edge case occurs when the number of cohorts is the same as the number of
+beads. Here the DAG is blockchain-like, with no higher-order structures. As a
+consequence, $W(0)=0$ and therefore $a=0$. If this was a blockchain we'd say
+that within the time window it had no orphans, and we fail to get a measurement
+of the network latency.  This might happen if:
+
+1. The difficulty is too high
+2. There's only one miner on the network and he's configured synchronous block
+template updates for his mine.
+3. All miners are geographically centralized very near to each other, giving a
+relative latency between mining nodes that is much smaller than that expected of
+a global network.
+
+We know that this network is operating on planet Earth which has a fixed size,
+and a fixed latency to get a message around the globe. Therefore we can
+configure a reasonable minimum $a$ as follows: consider a mining network with 4
+mining nodes distributed as a tetrahedron on the surface of the Earth.  This
+largest number of nodes in which all nodes are directly connected to each other.
+The physical distance between these nodes is the arc length on the surface of a
+sphere of radius corresponding to the mean radius of the earth $r_e=6371\ {\rm
+km}$. This arc length is $\ell = r_e \arccos(-1/3) = 12,173\ {\rm km}$ where
+this angle is approximately $109.47^\circ$.  Assuming signal propagation can
+happen at the speed of light (e.g. using satellites) this is a propagation
+latency of $a_{\rm min} = \ell/c = 40.60\ {\rm ms}$. We will use this as a
+minimum value for $a$.
+
+This will produce a maximum share rate for the network of approximately 24.628
+shares per second, corresponding to 14777 shares per bitcoin block. If Braidpool
+is used as a proxy server for e.g. a hosting provider with multiple hosts in a
+single location, this is the expected share rate in the absence of
+customizations for that use case.
+
+#### Thick DAG $N_C \ll N_B$
+
+An edge case occurs when the bead rate is too high. This can effectively prevent
+cohorts from forming because there's always a new bead in flight that wasn't
+included as a parent in the most recently observed bead. The following bead
+ties up this with the previous cohort, growing the cohort over time. This might
+happen if:
+
+1. The network difficulty is too low
+2. A miner is performing an attack where he intentionally excludes known tips
+3. A network split has occurred and a miner is not receiving beads from some
+portion of the network
+
+From the perspective of any single bead, it always closes a cohort and creates a
+graph cut between this bead and his parent beads. When the bead rate is too high
+one would observe this parent cohort growing over time.
+
+Therefore a solution to this edge case is to artificially increase the
+difficulty when we see that the cohort formed by the parents of a bead is large.
+Given an "optimal" network configuration of four mining nodes placed at the
+vertices of a tetrahedron on the surface of the Earth, this would produce graph
+cuts in the "thickest" average case with four beads on one side of the graph
+cut, and four beads on the other side of the graph cut. Therefore if the parent
+cohort contains more than four beads, we are entering this edge case and need to
+increase the difficulty. Let us count the number of beads in the parent cohort
+$N_{PC}$. If this is greater than four, we will implement an exponential falloff
+in difficulty
+
+$$
+x = 2^{-\max(0,N_{PC}-4)} x_0
+$$
+
+This doubles the difficulty (halves the target) for every bead in the parent
+cohort greater than 4.
+
+WIP Note that in the case of an extended network split, a very large cohort may be
+formed when the network split is resolved. This cohort may extend beyond the
+observation window $T$.
+
+FIXME WIP need to decide which beads in the cohort don't get rewareded
+
+WIP Logical maximum is Bitcoin's network difficulty, or some fraction thereof.
+Fraction set by threshold where beads don't get rewarded?
 
 ### Final Difficulty Adjustment Formula
 
@@ -188,10 +307,10 @@ $$
 \begin{array}{rcll}
 \bar x       &=& \displaystyle \left(\frac{1}{N_B} \sum_{i \in {\rm beads}} \frac{1}{x_i} \right)^{-1}   & {\rm average\ target} \\
 \bar \lambda &=& \displaystyle \frac{N_B}{\overline x T} & {\rm average\ hashrate} \\
-a                 &=& \displaystyle \frac{T}{N_C} W\left(\frac{N_C}{N_B}-1\right) & {\rm latency\ parameter} \\
+a                 &=& \displaystyle \max \left(a_{\rm min}, \frac{T}{N_C} W\left(\frac{N_B}{N_C}-1\right)\right) & {\rm latency\ parameter} \\
 \bar x_1     &=& \displaystyle \left(\frac{1}{N_p} \displaystyle \sum_{p \in {\rm parents}} \frac{1}{x_p}\right)^{-1} & {\rm average\ parental\ target} \\
 x_0               &=& \displaystyle \frac{2 W\left(\frac12\right)}{a \bar \lambda} & {\rm optimal\ target} \\
-x                 &=& \displaystyle x_0 + (\bar x_1 - x_0) e^{-\pi a/T} & {\rm damped\ target}
+x                 &=& \left(\displaystyle x_0 + (\bar x_1 - x_0) e^{-\pi a/T}\right) 2^{-\max(0,N_{PC}-4)} & {\rm damped\ target}
 \end{array}
 $$
 
