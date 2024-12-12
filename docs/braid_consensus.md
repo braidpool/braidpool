@@ -139,6 +139,13 @@ bead). This gives us a minimum of three observations of the
 taken to be the median of these observations. In the following all references to
 bead timestamps refer to this `median_bead_time`.
 
+Because of the necessity to have at least 3 measurements of bead time for each
+bead, when computing $T_B$ and $T_C$, we exclude the three most recent ancestor
+cohorts (as observed from the bead under consideration, including that bead as
+the final cohort) as there aren't enough observations of their received time to
+evaluate the bead time. Therefore the observation window $T$ starts 3 cohorts
+back and extends backwards in time for an interval $T$.
+
 In order to pull off any timing-based attacks, a miner would need to control on
 average 2 of these 3 timestamps, which is anyway a 51% attack and the system
 breaks down anyway.
@@ -161,7 +168,7 @@ descendants) and names them as parents of his new share. He then traverses the
 graph going back a time $T$ to compute $N_B$, and $N_C$. He then computes the parameters $\lambda$ and $a$ (which are different for *each* bead) as
 
 $$
-\lambda = \frac{N_B}{x T}, \qquad a = \frac{T}{N_C} W\left(\frac{N_C}{N_B}-1\right).
+\lambda = \frac{N_B}{x T}, \qquad a = \frac{T}{N_C} W\left(\frac{N_B}{N_C}-1\right).
 $$
 
 The required difficulty for his bead which then given by $x_0$. This difficulty
@@ -196,16 +203,16 @@ $\cos\left(\frac{\pi t}{T}\right)$ term comes from the natural behavior after a
 change in hashrate. The value $t$ is the expected time to the next bead.
 
 One can imagine this behavior by starting from blockchain-like DAG within the
-time window $T$. At $t=0$ there is an decrease in hashrate, causing beads to be
-produced much faster and the resultant DAG to be "thicker". The first cohort
-formed after $t=0$ has multiple beads. The algorithm slightly increases the
-difficulty. The second cohort formed is still pretty "thick" and further beads
-have their difficulty increased slightly more. After a time $T$ corresponding to
-our observation window, the cohorts within $T$ are all pretty "thick" and we now
-have an observation window $T$ containing all "thick" cohorts, which causes us
-to overshoot the target difficulty, making the DAG blockchain-like again. This
-then repeats, oscillating between a "thin" DAG" and a "thick" DAG with a period
-$2T$.
+time window $T$. At $t=0$ there is an instantaneous decrease in hashrate,
+causing beads to be produced much faster and the resultant DAG to be "thicker".
+The first cohort formed after $t=0$ has multiple beads. The algorithm slightly
+increases the difficulty. The second cohort formed is still pretty "thick" and
+further beads have their difficulty increased slightly more. After a time $T$
+corresponding to our observation window, the cohorts within $T$ are all pretty
+"thick" and we now have an observation window $T$ containing all "thick"
+cohorts, which causes us to overshoot the target difficulty, making the DAG
+blockchain-like again. This then repeats, oscillating between a "thin" DAG" and
+a "thick" DAG with a period $2T$.
 
 ### Averaging Window
 
@@ -238,14 +245,14 @@ We know that this network is operating on planet Earth which has a fixed size,
 and a fixed latency to get a message around the globe. Therefore we can
 configure a reasonable minimum $a$ as follows: consider a mining network with 4
 mining nodes distributed as a tetrahedron on the surface of the Earth.  This
-largest number of nodes in which all nodes are directly connected to each other.
-The physical distance between these nodes is the arc length on the surface of a
-sphere of radius corresponding to the mean radius of the earth $r_e=6371\ {\rm
-km}$. This arc length is $\ell = r_e \arccos(-1/3) = 12,173\ {\rm km}$ where
-this angle is approximately $109.47^\circ$.  Assuming signal propagation can
-happen at the speed of light (e.g. using satellites) this is a propagation
-latency of $a_{\rm min} = \ell/c = 40.60\ {\rm ms}$. We will use this as a
-minimum value for $a$.
+is the largest number of nodes in which all nodes are directly connected to each
+other.  The physical distance between these nodes is the arc length on the
+surface of a sphere of radius corresponding to the mean radius of the earth
+$r_e=6371\ {\rm km}$. This arc length is $\ell = r_e \arccos(-1/3) = 12,173\
+{\rm km}$ where this angle is approximately $109.47^\circ$.  Assuming signal
+propagation can happen at the speed of light (e.g. using satellites) this is a
+propagation latency of $a_{\rm min} = \ell/c = 40.60\ {\rm ms}$. We will use
+this as a minimum value for $a$.
 
 This will produce a maximum share rate for the network of approximately 24.628
 shares per second, corresponding to 14777 shares per bitcoin block. If Braidpool
@@ -290,7 +297,7 @@ cohort greater than 4.
 
 WIP Note that in the case of an extended network split, a very large cohort may be
 formed when the network split is resolved. This cohort may extend beyond the
-observation window $T$.
+observation window $T$, and stall the network.
 
 FIXME WIP need to decide which beads in the cohort don't get rewareded
 
@@ -317,7 +324,7 @@ $$
 where the index $i$ ranges over all beads within the time window $T$, and the
 index $p$ ranges over parents to this bead.
 
-FIXME is $a$ correct in the last formula?
+FIXME is $a$ correct in the last formula? Should be median solve time.
 
 #### Difficulty Discussion
 
