@@ -22,7 +22,7 @@ example, beads 8 and 9 cannot name beads 0-6 as direct parents. The colors
 correspond to "cohorts" which are sub-graphs separated by graph cuts. A graph
 cut is a line drawn through the graph where *all* beads on the right side of the
 cut have *all* beads on the left side of the cut as ancestors. The braid tip in
-this example is the bead (10), which is expected be named as the sole ancestor
+this example is the bead (10), which is expected be named as the sole parent
 by a miner starting from this graph state.
 
 An example of a "thick" braid is:
