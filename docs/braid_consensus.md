@@ -92,14 +92,37 @@ $$
 
 The exact behavior of the graph near the minimum is a function of the exact
 network topology and inter-node latencies, and one can expect there to be some
-"wiggles" in this graph near the minimum. The location of the minimum is given
-by
+"wiggles" in this graph near the minimum.  We may solve $T_C$ for $a$ to get
+
+$$
+a = \frac{T}{N_C} W\left(\frac{N_B}{N_C}-1\right)
+$$
+
+The location of the minimum is given by
 
 $$
 x_0 = \frac{2 W\left(\frac12\right)}{a\lambda} \simeq \frac{0.7035}{a \lambda}
 $$
 
-where $W(z)$ is the [Lambert W function](https://en.wikipedia.org/wiki/Lambert_W_function).
+where $W(z)$ is the [Lambert W
+function](https://en.wikipedia.org/wiki/Lambert_W_function).
+
+If we let $\lambda = \frac{N_B}{x_1 T}$ we can come up with an update mechanism
+for the next target $x_0$ in terms of the last target $x_1$:
+
+$$
+x_0 = x_1 \frac{2 W\left(\frac12\right)}{N_B/N_C W\left(\frac{N_B}{N_C}-1\right)}
+$$
+
+We may solve this for the steady state condition $x_0=x_1$ which gives:
+
+$$
+\frac{N_B}{N_C} = 1.65192
+$$
+
+indicating that in the steady state (constant hashrate) scenario, there are on
+average 1.65 beads per cohort. This result is independent of latency $a$,
+hashrate $\lambda$, and observation window $T$.
 
 This value $x_0$ represents having the most-frequent consensus points within a
 global network having a latency parameter $a$. Given the shallow trough at the
