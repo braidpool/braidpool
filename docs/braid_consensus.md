@@ -101,35 +101,32 @@ $$
 The location of the minimum is given by
 
 $$
+\frac{\partial T_C}{\partial x}=0
+\qquad
+\implies
+\qquad
 x_0 = \frac{2 W\left(\frac12\right)}{a\lambda} \simeq \frac{0.7035}{a \lambda}
 $$
 
 where $W(z)$ is the [Lambert W
-function](https://en.wikipedia.org/wiki/Lambert_W_function).
-
-If we let $\lambda = \frac{N_B}{x_1 T}$ we can come up with an update mechanism
-for the next target $x_0$ in terms of the last target $x_1$:
-
-$$
-x_0 = x_1 \frac{2 W\left(\frac12\right)}{N_B/N_C W\left(\frac{N_B}{N_C}-1\right)}
-$$
-
-We may solve this for the steady state condition $x_0=x_1$ which gives:
+function](https://en.wikipedia.org/wiki/Lambert_W_function).  If we let $\lambda
+= N_B/x T$, and using $a$ from above, the factors of $\lambda$, $a$, and $T$ all
+cancel out, giving us:
 
 $$
-\frac{N_B}{N_C} = 1.65192
+1 = \frac{2 W\left(\frac12\right)}{\frac{N_B}{N_C} W\left(\frac{N_B}{N_C}-1\right)}
+\qquad
+\implies
+\qquad
+\frac{N_B}{N_C} = 1.65192,
 $$
 
 indicating that in the steady state (constant hashrate) scenario, there are on
 average 1.65 beads per cohort. This result is independent of latency $a$,
 hashrate $\lambda$, and observation window $T$.
 
-This value $x_0$ represents having the most-frequent consensus points within a
-global network having a latency parameter $a$. Given the shallow trough at the
-minimum, it may be desirable to consider a slightly higher target in order to
-increase the bead rate and capture more shares within a window of time. But the
-above analysis indicates that there's a hard exponential wall in how high we can
-make the difficulty before the system fails to function.
+This value $x_0$ or equivalently $N_B/N_C = 1.65192$ represents having the
+most-frequent consensus points within a global network.
 
 ## Consensus
 
