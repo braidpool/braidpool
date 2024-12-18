@@ -42,20 +42,25 @@ algorithm, which can be computed in linear time.
 ## Braid Mathematics
 
 The production of Proof of Work shares is a Poisson process, given by the
-Poisson probability mass function
+Poisson probability mass function which gives the probability mass that $k$
+beads are formed within a time $t$ assuming constant hashrate $\lambda$ and difficulty $x$:
 
 $$
-P(k) = \frac{(\lambda a)^k e^{\lambda a}}{k!}
+P(t,k) = \frac{(\lambda x t)^k e^{-\lambda x t}}{k!}
 $$
 
 where the parameter $\lambda$ is the total hashrate of the network having units
-[hashes/second] and $a$ is a global latency parameter having units [seconds].
+[hashes/second], $t$ havs units [seconds], and $x$ is unitless.
 
 For any subgraph corresponding to a length of time $T$, we can *measure* the
 number of beads $N_B$, the number of cohorts $N_C$ as well as the average time
 per bead $T_B = T/N_B$ and average time per cohort $T_C = T/N_C$. Finally the
 quantity $x$ is the "target difficulty" representing the maximum acceptable
-value for a proof of work hash.
+value for a proof of work hash. This gives the hashrate as:
+
+$$
+\lambda = \frac{N_B}{xT}
+$$
 
 The cohort time $T_C$ is easy to understand in the two limits $x\to0$ (high
 difficulty - blockchain-like) and $x\to \infty$ (low difficulty - thick braid).
@@ -69,16 +74,24 @@ $$
 In the opposite limit, in order to form a cohort, no beads must be produced
 within a time approximately $a$ such that all beads have time to propagate to
 other nodes, and be named as parents for the next bead(s), creating a cohort.
-The probability that no beads are created within a time interval $a$ is given by
+Here $a$ is a global latency parameter that you can think of as the "size" of
+the network, with units of [seconds].  The probability that no beads are created
+within a time interval $a$ is given by
 
 $$
-P(0) = e^{-\lambda a}
+P(a,0) = e^{-\lambda x a}.
 $$
 
-leading to a cohort time
+On average within a window $T$ we want $a$ to be our latency parameter satisfying:
 
 $$
-T_C|_{x\to\infty} = \frac{a}{P(0)} = a e^{\lambda a}
+T P(a,0) = a.
+$$
+
+Rearranging this using $T=T_CN_C$ and $N_C=1$:
+
+$$
+T_C|_{x\to\infty} = \frac{a}{P(a,0)} = a e^{\lambda x a}
 $$
 
 Taken together, an extremely precise fit for the cohort time is given by the sum
@@ -95,7 +108,7 @@ network topology and inter-node latencies, and one can expect there to be some
 "wiggles" in this graph near the minimum.  We may solve $T_C$ for $a$ to get
 
 $$
-a = \frac{T}{N_C} W\left(\frac{N_B}{N_C}-1\right)
+a = \frac{T}{N_B} W\left(\frac{N_B}{N_C}-1\right)
 $$
 
 The location of the minimum is given by
@@ -105,28 +118,30 @@ $$
 \qquad
 \implies
 \qquad
-x_0 = \frac{2 W\left(\frac12\right)}{a\lambda} \simeq \frac{0.7035}{a \lambda}
+x = x_0 = \frac{2 W\left(\frac12\right)}{a\lambda} \simeq \frac{0.7035}{a \lambda}
 $$
 
 where $W(z)$ is the [Lambert W
-function](https://en.wikipedia.org/wiki/Lambert_W_function).  If we let $\lambda
-= N_B/x T$, and using $a$ from above, the factors of $\lambda$, $a$, and $T$ all
-cancel out, giving us:
+function](https://en.wikipedia.org/wiki/Lambert_W_function).  Using $a$ from
+above, the factors of $\lambda$, $a$, and $T$ all cancel out, giving us:
 
 $$
-1 = \frac{2 W\left(\frac12\right)}{\frac{N_B}{N_C} W\left(\frac{N_B}{N_C}-1\right)}
+1 = \frac{2 W\left(\frac12\right)}{W\left(\frac{N_B}{N_C}-1\right)}
 \qquad
 \implies
 \qquad
-\frac{N_B}{N_C} = 1.65192,
+\frac{N_B}{N_C} = 2.4215
 $$
 
 indicating that in the steady state (constant hashrate) scenario, there are on
-average 1.65 beads per cohort. This result is independent of latency $a$,
+average 2.42 beads per cohort. This result is independent of latency $a$,
 hashrate $\lambda$, and observation window $T$.
 
-This value $x_0$ or equivalently $N_B/N_C = 1.65192$ represents having the
-most-frequent consensus points within a global network.
+This value $x_0$ or equivalently $N_B/N_C = 2.42$ represents having the
+most-frequent consensus points within a global network. Below we will use this
+ratio to create our difficulty adjustment algorithm targeting "most-frequent
+consensus" in a way that is insensitive to latency $a$, hashrate $\lambda$, and
+averaging window $T$.
 
 ## Consensus
 
@@ -153,8 +168,8 @@ of when that bead was observed. The [committed
 metadata](https://github.com/braidpool/braidpool/blob/main/docs/braidpool_spec.md#metadata-commitments)
 will contain not only the miner's timestamp which indicates when he started
 mining this bead, but timestamps of each bead in his parent cohort, the
-parent's-parent cohort, and the parent's-parent's cohort (as observed from this
-bead). This gives us a minimum of three observations of the
+parent's-parent cohort, and the parent's-parent's-parent cohort (as observed
+from this bead). This gives us a minimum of three observations of the
 *received* timestamp for each bead. The `median_bead_time` for a bead is then
 taken to be the median of these observations. In the following all references to
 bead timestamps refer to this `median_bead_time`.
@@ -391,6 +406,28 @@ information, and the sum need only be carried out until the next cohort
 boundary, since by the definition of cohorts, all additional work after the
 cohort boundary is added to the work of *all* potentially conflicting beads and
 does not affect conflict resolution, and DAGs don't fork.
+
+### Rewards
+
+We would like to reward all beads regardless of graph structure: equal pay for
+equal (proof-of) work, however there's a limit on the latency we can accept. A
+very high latency bead is less likely to contribute to Bitcoin's proof of work
+and would create orphans, which do not increase the revenue of the pool.
+Parallel work does not contribute to the total proof of work. At the same time
+we do not want to create incentives on latency that are so strong that they
+encourage geographic centralization or latency and connectivity games as
+[occurred with P2Pool](https://bitcointalk.org/index.php?topic=153232.0).
+
+Practically this means that if we have a very large cohort, we must decide which
+beads within that cohort receive rewards and which don't. Large cohorts can be
+created by miners with very high latency, network splits, or intentional selfish
+mining attacks.
+
+FIXME To solve this we will compute the work of each bead *within* a cohort
+using the simple sum of descendant work formula above.
+
+FIXME this penalizes the last bead in the cohort and enhances the first bead in
+a cohort. I think I need to measure latency here and sort by latency.
 
 ## Byzantine Broadcast
 
