@@ -32,7 +32,11 @@ by a miner starting from this graph state.
 An example of a "thick" braid is:
 
 [thick-braid]: thick_braid.png
+<a id="thick-braid">
+
 ![Thick Braid][thick-braid]
+
+</a>
 
 In this image we can see an example of a higher order graph cut between cohort
 (1,2,3) and cohort (4,5,6,7,8). The tips in this case are the beads (40,41),
@@ -49,13 +53,11 @@ The production of Proof of Work shares is a Poisson process, given by the
 Poisson probability mass function which gives the probability mass that $k$
 beads are formed within a time $t$ assuming constant hashrate $\lambda$ and difficulty $x$:
 
-<a id="1"></a>
-
-```math
+<a name="1"></a>
+$$
 P(t,k) = \frac{(\lambda x t)^k e^{-\lambda x t}}{k!}
-\tag{1}
-```
-
+\qquad \qquad \qquad (1) \tag{1}
+$$
 where the parameter $\lambda$ is the total hashrate of the network having units
 [hashes/second], $t$ has units [seconds], and $x$ is unitless.
 
@@ -65,8 +67,10 @@ per bead $T_B = T/N_B$ and average time per cohort $T_C = T/N_C$. Finally the
 quantity $x$ is the "target difficulty" representing the maximum acceptable
 value for a proof of work hash. This gives the hashrate as:
 
+<a id="2"></a>
 $$
 \lambda = \frac{N_B}{xT}
+\qquad \qquad \qquad (2) \tag{2}
 $$
 
 The cohort time $T_C$ is easy to understand in the two limits $x\to0$ (high
@@ -74,8 +78,10 @@ difficulty - blockchain-like) and $x\to \infty$ (low difficulty - thick braid).
 In the $x\to0$ limit, no beads have multiple parents, and each bead is a cohort.
 The cohort time is then:
 
+<a id="3"></a>
 $$
 T_C|_{x\to0} = T_B = \frac{1}{\lambda x}.
+\qquad \qquad \qquad (3) \tag{3}
 $$
 
 In the opposite limit, in order to form a cohort, no beads must be produced
@@ -85,27 +91,35 @@ Here $a$ is a global latency parameter that you can think of as the "size" of
 the network, with units of [seconds].  The probability that no beads are created
 within a time interval $a$ is given by
 
+<a id="4"></a>
 $$
 P(a,0) = e^{-\lambda x a}.
+\qquad \qquad \qquad (4) \tag{4}
 $$
 
 On average within a window $T$ we want $a$ to be our latency parameter satisfying:
 
+<a id="5"></a>
 $$
 T P(a,0) = a.
+\qquad \qquad \qquad (5) \tag{5}
 $$
 
 Rearranging this using $T=T_CN_C$ and $N_C=1$:
 
+<a id="6"></a>
 $$
 T_C|_{x\to\infty} = \frac{a}{P(a,0)} = a e^{\lambda x a}
+\qquad \qquad \qquad (6) \tag{6}
 $$
 
 Taken together, an extremely precise fit for the cohort time is given by the sum
-of these two contributions which is shown in the green line in the graph below.
+of these two contributions (Eqs.[3](#3),[6](#6)) which is shown in the green line in the graph below.
 
+<a id="7"></a>
 $$
 T_C = \frac{1}{\lambda x} + a e^{a\lambda x}
+\qquad \qquad \qquad (7) \tag{7}
 $$
 
 ![Cohort Time vs target difficulty](T_C_x.png)
@@ -114,30 +128,36 @@ The exact behavior of the graph near the minimum is a function of the exact
 network topology and inter-node latencies, and one can expect there to be some
 "wiggles" in this graph near the minimum.  We may solve $T_C$ for $a$ to get
 
+<a id="8"></a>
 $$
 a = \frac{T}{N_B} W\left(\frac{N_B}{N_C}-1\right)
+\qquad \qquad \qquad (8) \tag{8}
 $$
 
 The location of the minimum is given by
 
+<a id="9"></a>
 $$
 \frac{\partial T_C}{\partial x}=0
 \qquad
 \implies
 \qquad
 x = x_0 = \frac{2 W\left(\frac12\right)}{a\lambda} \simeq \frac{0.7035}{a \lambda}
+\qquad \qquad \qquad (9) \tag{9}
 $$
 
 where $W(z)$ is the [Lambert W
 function](https://en.wikipedia.org/wiki/Lambert_W_function).  Using $a$ from
 above, the factors of $\lambda$, $a$, and $T$ all cancel out, giving us:
 
+<a id="9"></a>
 $$
 1 = \frac{2 W\left(\frac12\right)}{W\left(\frac{N_B}{N_C}-1\right)}
 \qquad
 \implies
 \qquad
 \frac{N_B}{N_C} = 2.4215
+\qquad \qquad \qquad (10) \tag{10}
 $$
 
 indicating that in the steady state (constant hashrate) scenario, there are on
