@@ -15,7 +15,11 @@ parents (and all other ancestors) are already considered.
 An example of a "thin" braid is:
 
 [thin-braid]: thin_braid.png
+<a id="thin-braid">
+
 ![Thin Braid][thin-braid]
+
+</a>
 
 Here time is increasing as we move right.  The "no incest" rule means that for
 example, beads 8 and 9 cannot name beads 0-6 as direct parents. The colors
@@ -45,12 +49,15 @@ The production of Proof of Work shares is a Poisson process, given by the
 Poisson probability mass function which gives the probability mass that $k$
 beads are formed within a time $t$ assuming constant hashrate $\lambda$ and difficulty $x$:
 
-$$
+<a id="1"></a>
+
+```math
 P(t,k) = \frac{(\lambda x t)^k e^{-\lambda x t}}{k!}
-$$
+\tag{1}
+```
 
 where the parameter $\lambda$ is the total hashrate of the network having units
-[hashes/second], $t$ havs units [seconds], and $x$ is unitless.
+[hashes/second], $t$ has units [seconds], and $x$ is unitless.
 
 For any subgraph corresponding to a length of time $T$, we can *measure* the
 number of beads $N_B$, the number of cohorts $N_C$ as well as the average time
@@ -388,7 +395,7 @@ reach consensus we require that:
 
 Consensus points occur at graph cuts (cohort boundaries).  Because of the above
 rules, it is only necessary to decide between conflicting information *within* a
-cohort. For example, in the [thin braid](#thinbraid) example, beads (8) and (9)
+cohort. For example, in the [thin braid](#thin-braid) example, beads (8) and (9)
 can contain conflicting information, the resolution of which is decided by a
 "merge" rule in the parent bead that ties them together. In Nakamoto consensus
 this "merge" rule is work weighting where work $w=1/x$ in terms of the target
@@ -432,3 +439,5 @@ a cohort. I think I need to measure latency here and sort by latency.
 ## Byzantine Broadcast
 
 FIXME Discuss Radpool proposal and it's total lack of rate-limiting.
+
+[equation link test](#1)
