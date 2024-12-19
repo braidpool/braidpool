@@ -54,10 +54,12 @@ Poisson probability mass function which gives the probability mass that $k$
 beads are formed within a time $t$ assuming constant hashrate $\lambda$ and difficulty $x$:
 
 <a name="1"></a>
+
 $$
 P(t,k) = \frac{(\lambda x t)^k e^{-\lambda x t}}{k!}
 \qquad \qquad \qquad (1) \tag{1}
 $$
+
 where the parameter $\lambda$ is the total hashrate of the network having units
 [hashes/second], $t$ has units [seconds], and $x$ is unitless.
 
@@ -68,6 +70,7 @@ quantity $x$ is the "target difficulty" representing the maximum acceptable
 value for a proof of work hash. This gives the hashrate as:
 
 <a id="2"></a>
+
 $$
 \lambda = \frac{N_B}{xT}
 \qquad \qquad \qquad (2) \tag{2}
@@ -79,6 +82,7 @@ In the $x\to0$ limit, no beads have multiple parents, and each bead is a cohort.
 The cohort time is then:
 
 <a id="3"></a>
+
 $$
 T_C|_{x\to0} = T_B = \frac{1}{\lambda x}.
 \qquad \qquad \qquad (3) \tag{3}
@@ -92,6 +96,7 @@ the network, with units of [seconds].  The probability that no beads are created
 within a time interval $a$ is given by
 
 <a id="4"></a>
+
 $$
 P(a,0) = e^{-\lambda x a}.
 \qquad \qquad \qquad (4) \tag{4}
@@ -100,6 +105,7 @@ $$
 On average within a window $T$ we want $a$ to be our latency parameter satisfying:
 
 <a id="5"></a>
+
 $$
 T P(a,0) = a.
 \qquad \qquad \qquad (5) \tag{5}
@@ -108,6 +114,7 @@ $$
 Rearranging this using $T=T_CN_C$ and $N_C=1$:
 
 <a id="6"></a>
+
 $$
 T_C|_{x\to\infty} = \frac{a}{P(a,0)} = a e^{\lambda x a}
 \qquad \qquad \qquad (6) \tag{6}
@@ -117,6 +124,7 @@ Taken together, an extremely precise fit for the cohort time is given by the sum
 of these two contributions (Eqs.[3](#3),[6](#6)) which is shown in the green line in the graph below.
 
 <a id="7"></a>
+
 $$
 T_C = \frac{1}{\lambda x} + a e^{a\lambda x}
 \qquad \qquad \qquad (7) \tag{7}
@@ -129,6 +137,7 @@ network topology and inter-node latencies, and one can expect there to be some
 "wiggles" in this graph near the minimum.  We may solve $T_C$ for $a$ to get
 
 <a id="8"></a>
+
 $$
 a = \frac{T}{N_B} W\left(\frac{N_B}{N_C}-1\right)
 \qquad \qquad \qquad (8) \tag{8}
@@ -137,6 +146,7 @@ $$
 The location of the minimum is given by
 
 <a id="9"></a>
+
 $$
 \frac{\partial T_C}{\partial x}=0
 \qquad
@@ -150,7 +160,8 @@ where $W(z)$ is the [Lambert W
 function](https://en.wikipedia.org/wiki/Lambert_W_function).  Using $a$ from
 above, the factors of $\lambda$, $a$, and $T$ all cancel out, giving us:
 
-<a id="9"></a>
+<a id="10"></a>
+
 $$
 1 = \frac{2 W\left(\frac12\right)}{W\left(\frac{N_B}{N_C}-1\right)}
 \qquad
