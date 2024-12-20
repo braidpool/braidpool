@@ -55,9 +55,10 @@ beads are formed within a time $t$ assuming constant hashrate $\lambda$ and diff
 
 <a name="1"></a>
 
-$$
+$$\tag{1}
+\begin{align}
 P(t,k) = \frac{(\lambda x t)^k e^{-\lambda x t}}{k!}
-\qquad \qquad \qquad (1) \tag{1}
+\end{align}
 $$
 
 where the parameter $\lambda$ is the total hashrate of the network having units
@@ -71,9 +72,10 @@ value for a proof of work hash. This gives the hashrate as:
 
 <a id="2"></a>
 
-$$
-\lambda = \frac{N_B}{xT}
-\qquad \qquad \qquad (2) \tag{2}
+$$\tag{2}
+\begin{align}
+\lambda = \frac{N_B}{xTa}
+\end{align}
 $$
 
 The cohort time $T_C$ is easy to understand in the two limits $x\to0$ (high
@@ -83,9 +85,10 @@ The cohort time is then:
 
 <a id="3"></a>
 
-$$
+$$\tag{3}
+\begin{align}
 T_C|_{x\to0} = T_B = \frac{1}{\lambda x}.
-\qquad \qquad \qquad (3) \tag{3}
+\end{align}
 $$
 
 In the opposite limit, in order to form a cohort, no beads must be produced
@@ -97,27 +100,30 @@ within a time interval $a$ is given by
 
 <a id="4"></a>
 
-$$
+$$\tag{4}
+\begin{align}
 P(a,0) = e^{-\lambda x a}.
-\qquad \qquad \qquad (4) \tag{4}
+\end{align}
 $$
 
 On average within a window $T$ we want $a$ to be our latency parameter satisfying:
 
 <a id="5"></a>
 
-$$
+$$\tag{5}
+\begin{align}
 T P(a,0) = a.
-\qquad \qquad \qquad (5) \tag{5}
+\end{align}
 $$
 
 Rearranging this using $T=T_CN_C$ and $N_C=1$:
 
 <a id="6"></a>
 
-$$
+$$\tag{6}
+\begin{align}
 T_C|_{x\to\infty} = \frac{a}{P(a,0)} = a e^{\lambda x a}
-\qquad \qquad \qquad (6) \tag{6}
+\end{align}
 $$
 
 Taken together, an extremely precise fit for the cohort time is given by the sum
@@ -125,9 +131,10 @@ of these two contributions (Eqs.[3](#3),[6](#6)) which is shown in the green lin
 
 <a id="7"></a>
 
-$$
+$$\tag{7}
+\begin{align}
 T_C = \frac{1}{\lambda x} + a e^{a\lambda x}
-\qquad \qquad \qquad (7) \tag{7}
+\end{align}
 $$
 
 ![Cohort Time vs target difficulty](T_C_x.png)
@@ -138,22 +145,24 @@ network topology and inter-node latencies, and one can expect there to be some
 
 <a id="8"></a>
 
-$$
+$$\tag{8}
+\begin{align}
 a = \frac{T}{N_B} W\left(\frac{N_B}{N_C}-1\right)
-\qquad \qquad \qquad (8) \tag{8}
+\end{align}
 $$
 
 The location of the minimum is given by
 
 <a id="9"></a>
 
-$$
+$$\tag{9}
+\begin{align}
 \frac{\partial T_C}{\partial x}=0
 \qquad
 \implies
 \qquad
 x = x_0 = \frac{2 W\left(\frac12\right)}{a\lambda} \simeq \frac{0.7035}{a \lambda}
-\qquad \qquad \qquad (9) \tag{9}
+\end{align}
 $$
 
 where $W(z)$ is the [Lambert W
@@ -162,13 +171,14 @@ above, the factors of $\lambda$, $a$, and $T$ all cancel out, giving us:
 
 <a id="10"></a>
 
-$$
+$$\tag{10}
+\begin{align}
 1 = \frac{2 W\left(\frac12\right)}{W\left(\frac{N_B}{N_C}-1\right)}
 \qquad
 \implies
 \qquad
 \frac{N_B}{N_C} = 2.4215
-\qquad \qquad \qquad (10) \tag{10}
+\end{align}
 $$
 
 indicating that in the steady state (constant hashrate) scenario, there are on
