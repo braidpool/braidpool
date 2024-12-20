@@ -74,7 +74,7 @@ value for a proof of work hash. This gives the hashrate as:
 
 $$\tag{2}
 \begin{align}
-\lambda = \frac{N_B}{xTa}
+\lambda = \frac{N_B}{xT}
 \end{align}
 $$
 
