@@ -401,5 +401,16 @@ class TestCohortMethods(unittest.TestCase):
                 self.assertEqual(list(cohorts(sub_braid(c, dag["parents"]))),
                                  [c], msg=msg)
 
+    def test_head_tail_files(self):
+        """ Test that cohort_head and cohort_tail do the same thing as geneses and tips. """
+        for filename in sorted([filename for filename in os.listdir() if filename.endswith(".braid")]):
+            dag = load_braid(filename)
+            for c in dag["cohorts"]:
+                msg = f"Test file: {filename}"
+                self.assertEqual(cohort_head(c, dag["parents"], dag["children"]),
+                                 geneses(sub_braid(c, dag["parents"])), msg=msg)
+                self.assertEqual(cohort_tail(c, dag["parents"], dag["children"]),
+                                 tips(sub_braid(c, dag["parents"])), msg=msg)
+
 if __name__ == "__main__":
     unittest.main()
