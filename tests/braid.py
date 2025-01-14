@@ -137,6 +137,19 @@ def cohort_headtail(cohort, parents, children):
         return tips
     return tail
 
+def sub_braid(beads, parents):
+    """ Given a set of <beads> (which generally will be a cohort), return the sub-DAG corresponding
+        to only those beads. That is, compute the parents dict: {p: {children} for p in beads} such
+        that the returned parents dict contains only the beads in <beads> and the parents of all
+        beads are only those parents within <beads>.
+
+        The result has the properties:
+            geneses(sub_braid(beads, parents)) = cohort_head(beads, parents)
+            tips(sub_braid(beads, parents)) = cohort_tail(beads, parents)
+            cohorts(sub_braid(beads, parents)) == [beads]
+    """
+    return {b: {p for p in parents[b] if p in beads} for b in beads}
+
 def work(parents, children=None):
     """ Find the work of each bead by adding the work of each parent
         bead using BFS.
@@ -373,6 +386,17 @@ class TestCohortMethods(unittest.TestCase):
             for c in dag["cohorts"]:
                 self.assertEqual(check_cohort(c, dag["parents"], dag["children"]), True, msg=f"Test file: {filename}")
 
+    def test_sub_braid_files(self):
+        for filename in sorted([filename for filename in os.listdir() if filename.endswith(".braid")]):
+            dag = load_braid(filename)
+            for c in dag["cohorts"]:
+                msg = f"Test file: {filename}"
+                self.assertEqual(geneses(sub_braid(c, dag["parents"])),
+                                 cohort_head(c, dag["parents"], dag["children"]), msg=msg)
+                self.assertEqual(tips(sub_braid(c, dag["parents"])),
+                                 cohort_tail(c, dag["parents"], dag["children"]), msg=msg)
+                self.assertEqual(list(cohorts(sub_braid(c, dag["parents"]))),
+                                 [c], msg=msg)
 
 if __name__ == "__main__":
     unittest.main()
