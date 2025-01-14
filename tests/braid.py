@@ -122,15 +122,18 @@ def cohorts(parents, children=None, initial_cohort=None):
         oldcohort = set()
         yield cohort
 
-def cohort_head(cohort, parents, children):
-    """ Given a cohort as a set of beads, compute its head. """
-    return cohort_headtail(cohort, parents, children)
+def cohort_tail(cohort, parents, children=None):
+    """ Given a cohort as a set of beads, compute its tail. If the tail intersects the tips,
+        return all tips.
+    """
+    children = reverse(parents) if not children else children
+    return cohort_head(cohort, parents=children, children=parents)
 
-def cohort_tail(cohort, parents, children):
-    """ Given a cohort as a set of beads, compute its tail. If the tail intersects the tips, return all tips. """
-    return cohort_headtail(cohort, children, parents)
-
-def cohort_headtail(cohort, parents, children):
+def cohort_head(cohort, parents, children=None):
+    """ Given a cohort as a set of beads, compute its head. If the tail intersects the geneses,
+        return all geneses.
+    """
+    children = reverse(parents) if not children else children
     tail = generation(generation(cohort, parents) - cohort, children)
     tips = geneses(parents)
     if not tail or any({t in tips for t in tail}):
