@@ -166,6 +166,32 @@ def work(parents, children=None):
 
     return weights
 
+def check_cohort(cohort, parents, children=None):
+    """ Check a cohort using check_cohort_ancestors in both directions. """
+    children = reverse(parents) if not children else children
+    return check_cohort_ancestors(cohort, parents, children) \
+            and check_cohort_ancestors(cohort, children, parents)
+
+def check_cohort_ancestors(cohort, parents, children=None):
+    """ Check a cohort by determining the set of ancestors of all beads.  This computation is done
+        over the ENTIRE DAG since any ancestor could have a long dangling path leading to this
+        cohort.  This will not determine if a cohort has valid sub-cohorts since the merging of any
+        two or more adjacent cohorts is still a valid cohort.
+
+        This checks in one direction only, looking at the ancestors of `cohort`. To check in the
+        other direction, reverse the order of the parents and children arguments.
+    """
+    children = reverse(parents) if not children else children
+    ancestors = dict()
+    allancestors = set()
+    head = cohort_head(cohort, parents, children)
+    for b in cohort:
+        all_ancestors(b, parents, ancestors)
+        allancestors |= ancestors[b]
+    allancestors -= cohort
+    if allancestors and generation(allancestors, children) - allancestors != head:
+        return False
+    return True
 
 def layout(parents):
     """Create a graphical layout of a cohort on a 2D grid.
@@ -340,6 +366,12 @@ class TestCohortMethods(unittest.TestCase):
             dag = load_braid(filename)
             self.assertEqual(highest_work_path(dag["parents"], dag["children"]),
                              dag["highest_work_path"], msg=f"Test file: {filename}")
+
+    def test_check_cohort_files(self):
+        for filename in sorted([filename for filename in os.listdir() if filename.endswith(".braid")]):
+            dag = load_braid(filename)
+            for c in dag["cohorts"]:
+                self.assertEqual(check_cohort(c, dag["parents"], dag["children"]), True, msg=f"Test file: {filename}")
 
 
 if __name__ == "__main__":
