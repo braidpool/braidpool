@@ -4,7 +4,7 @@ import json, os, unittest
 from copy import copy
 from collections import deque, OrderedDict
 
-def makedag(parents, description=None):
+def make_dag(parents, description=None):
     """ Make a DAG object which caches the children, geneses, tips, cohorts, and highest work path. """
     dag = {}
     dag["description"] = description
@@ -13,7 +13,7 @@ def makedag(parents, description=None):
     dag["cohorts"] = cohorts(parents)
     dag["geneses"] = geneses(parents)
     dag["tips"] = geneses(dag["children"])
-    dag["highestworkpath"] = highest_work_path(parents, dag["children"])
+    dag["highest_work_path"] = highest_work_path(parents, dag["children"])
     return dag
 
 def geneses(parents):
@@ -23,9 +23,10 @@ def geneses(parents):
         if not p: geneses.add(b)
     return geneses
 
-def tips(parents):
+def tips(parents, children=None):
     """ Given a dict of {bead: {parents}}, return the set of beads which have no children. """
-    return geneses(reverse(parents))
+    if not children: children = reverse(parents)
+    return geneses(children)
 
 def reverse(parents):
     """ Given a dict of {bead: {parents}}, compute the corresponding {bead: {children}} (or
@@ -42,7 +43,7 @@ def reverse(parents):
             children[p].add(bead)
     return children
 
-def generation(beads, children):
+def generation(beads, children=None):
     """ Given a set of <beads>, compute the set of all children of all {beads}. """
     if not beads: return set()
     retval = set()
@@ -50,24 +51,25 @@ def generation(beads, children):
         retval |= children[b]
     return retval
 
-def getallancestors(b, parents, ancestors):
+def all_ancestors(b, parents, ancestors):
     """ Gets all ancestors for a bead <b>, filling in ancestors of
         any other ancestors encountered, using a recursive
         algorithm.  Assumes b not in parents and b not in ancestors.
     """
     ancestors[b] = set(copy(parents[b]))
     for p in parents[b]:
-        if p not in ancestors: getallancestors(p, parents, ancestors)
+        if p not in ancestors: all_ancestors(p, parents, ancestors)
         ancestors[b].update(ancestors[p])
 
-def cohorts(parents, initial_cohort=None):
+def cohorts(parents, children=None, initial_cohort=None):
     """ Given the seed of the next cohort (which is the set of beads one step older, in the next
         cohort), build an ancestor/descendant set for each visited bead.  A new cohort is
         formed if we encounter a set of beads, stepping in the descendant direction, for which
         *all* beads in this cohort are ancestors of the first generation of beads in the next
         cohort.
     """
-    dag          = {"parents": parents, "children": reverse(parents), "tips": tips(parents)}
+    children     = reverse(parents) if not children else children
+    dag          = {"parents": parents, "children": children, "tips": tips(parents, children)}
     cohort       = initial_cohort or geneses(parents)
     oldcohort    = set()
     head         = copy(cohort)
@@ -95,7 +97,7 @@ def cohorts(parents, initial_cohort=None):
             for t in tail:                              # Find all ancestors of all beads in the tail
                 if t not in ancestors:
                     # 50.6% of CPU time
-                    getallancestors(t, dag["parents"], ancestors)
+                    all_ancestors(t, dag["parents"], ancestors)
 
             # Calculate cohort
             cohort = set()
@@ -135,22 +137,21 @@ def cohort_headtail(cohort, parents, children):
         return tips
     return tail
 
-def highest_work_path(parents, children):
+def work(parents, children=None):
     """ Find the highest work path by adding the work of each parent
         bead using BFS.  We only need to do this within cohorts, since a
         cohort has all the same ancestors and descendants. This assumes
         all beads have the same work.
     """
-    hwpath = []
-    work = 1 # work per bead. Update this if if a DAA is used and different beads have different work
+    if not children: children = reverse(parents)
+    beadwork = 1 # work per bead. Update this if if a DAA is used and different
+                 # beads have different work
+    parentwork = 0
+    weights = {h: beadwork for h in geneses(parents)}
     for c in cohorts(parents):
         head = cohort_head(c, parents, children) # Youngest set of beads in the cohort
         tail = cohort_tail(c, parents, children) # Oldest set of beads in the cohort
-        if head == tail:
-            hwpath.append(next(iter(c)))
-            continue
         queue = deque(set.union(*[children[h] for h in head]))
-        weights = {h: work for h in head}
 
         # build weights dict
         while queue:
@@ -162,14 +163,26 @@ def highest_work_path(parents, children):
                    queue.extend(missingparents)
                    continue
                else:
-                   weights[b] = work + sum([weights[p] for p in cparents])
+                   weights[b] = beadwork + sum([weights[p] for p in cparents])
                    queue.extendleft(generation({b}, children))
 
-        # Follow the highest weights through the DAG from tail to head and build hwpath
-        chwpath = [max(tail, key=lambda x: weights[x])]
-        while chwpath[-1] not in head:
-            chwpath.append(max(generation({chwpath[-1]}, parents), key=lambda x: weights[x]))
-        hwpath.extend(reversed(chwpath))
+    return weights
+
+def highest_work_path(parents, children=None):
+    """ Find the highest work path by adding the work of each parent
+        bead using BFS.  We only need to do this within cohorts, since a
+        cohort has all the same ancestors and descendants. This assumes
+        all beads have the same work.
+    """
+    if not children: children = reverse(parents)
+    hwpath = []
+    weights = work(parents, children)
+
+    # Follow the highest weights through the DAG from tail to head and build hwpath
+    chwpath = [max(tips(parents, children), key=lambda x: weights[x])]
+    while chwpath[-1] not in geneses(parents):
+        chwpath.append(max(generation({chwpath[-1]}, parents), key=lambda x: weights[x]))
+    hwpath.extend(reversed(chwpath))
     return hwpath
 
 def load_braid(filename):
@@ -182,7 +195,7 @@ def load_braid(filename):
         dag["parents"] = {int(k): set(v) for k,v in d["parents"].items()}
         dag["children"] = {int(k): set(v) for k,v in d["children"].items()}
         dag["cohorts"] = [set(map(int,c)) for c in d["cohorts"]]
-        dag["highestworkpath"] = d["highestworkpath"]
+        dag["highest_work_path"] = d["highest_work_path"]
         dag["tips"] = set(d["tips"])
         dag["geneses"] = set(d["geneses"])
 
@@ -194,7 +207,7 @@ def save_braid(parents, filename, description=None):
         "cohorts", and "workpath"
     """
     with open(filename, 'w') as file:
-        dag = makedag(parents)
+        dag = make_dag(parents)
         result = OrderedDict([
             ("description", description),
             ("parents", {k: list(v) for k,v in dag["parents"].items()}),
@@ -202,7 +215,7 @@ def save_braid(parents, filename, description=None):
             ("geneses", list(dag["geneses"])),
             ("tips", list(dag["tips"])),
             ("cohorts", [sorted(list(map(int, c))) for c in dag["cohorts"]]),
-            ("highestworkpath", dag["highestworkpath"])
+            ("highest_work_path", dag["highest_work_path"])
         ])
         file.write(json.dumps(result, sort_keys=False, indent=4))
         file.close()
@@ -261,7 +274,7 @@ class TestCohortMethods(unittest.TestCase):
             p = reverse(dag["parents"])
             c = dag["cohorts"]
             c.reverse()
-            self.assertEqual(list(cohorts(p)), c)
+            self.assertEqual(list(cohorts(p)), c, msg="Test file: {filename}")
 
     def test_highest_work_path(self):
         self.assertEqual(highest_work_path(self.parents1, reverse(self.parents1)), [0,1,2,3])
@@ -269,7 +282,8 @@ class TestCohortMethods(unittest.TestCase):
     def test_higest_work_path_files(self):
         for filename in sorted([filename for filename in os.listdir() if filename.endswith(".braid")]):
             dag = load_braid(filename)
-            self.assertEqual(highest_work_path(dag["parents"], dag["children"]), dag["highestworkpath"])
+            self.assertEqual(highest_work_path(dag["parents"], dag["children"]),
+                             dag["highest_work_path"], msg=f"Test file: {filename}")
 
 
 if __name__ == "__main__":
