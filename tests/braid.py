@@ -138,10 +138,8 @@ def cohort_headtail(cohort, parents, children):
     return tail
 
 def work(parents, children=None):
-    """ Find the highest work path by adding the work of each parent
-        bead using BFS.  We only need to do this within cohorts, since a
-        cohort has all the same ancestors and descendants. This assumes
-        all beads have the same work.
+    """ Find the work of each bead by adding the work of each parent
+        bead using BFS.
     """
     if not children: children = reverse(parents)
     beadwork = 1 # work per bead. Update this if if a DAA is used and different
@@ -168,11 +166,69 @@ def work(parents, children=None):
 
     return weights
 
+
+def layout(parents):
+    """Create a graphical layout of a cohort on a 2D grid.
+
+    Args:
+        parents: Dict mapping beads to their set of parent beads
+
+    Returns:
+        Dict mapping beads to their [x,y] coordinates
+    """
+    # Get children mapping and compute work for each bead
+    children = reverse(parents)
+    bead_work = work(parents, children)
+    hwpath = highest_work_path(parents, children)
+
+    # Initialize result dictionary for coordinates
+    coords = {}
+    used_coords = set()  # Track used coordinates to prevent overlaps
+
+    # Place highest work path beads along the top row (y=0)
+    # Sort hwpath beads by work to ensure highest work is rightmost
+    hwpath_sorted = sorted(hwpath, key=lambda b: bead_work[b])
+    for x, bead in enumerate(hwpath_sorted):
+        coords[bead] = [x, 0]
+        used_coords.add((x, 0))
+
+    # Process remaining beads by cohorts
+    y = 1  # Start on row 1 since row 0 is for hwpath
+    for cohort in cohorts(parents):
+        # Skip beads already placed (from hwpath)
+        remaining_beads = [b for b in cohort if b not in coords]
+        if not remaining_beads:
+            continue
+
+        # Sort remaining beads by work
+        sorted_beads = sorted(remaining_beads, key=lambda b: bead_work[b], reverse=True)
+
+        # For each bead in cohort, find valid position
+        for bead in sorted_beads:
+            # Get parent coordinates to ensure proper positioning
+            parent_coords = [coords[p] for p in parents[bead] if p in coords]
+            if not parent_coords:
+                # No parents placed yet, put at beginning of next row
+                x = 0
+            else:
+                # Place to the right of rightmost parent
+                min_x = max(c[0] for c in parent_coords)
+                x = min_x
+
+            # Find first available position that doesn't intersect with existing beads
+            while (x, y) in used_coords:
+                x += 1
+
+            coords[bead] = [x, y]
+            used_coords.add((x, y))
+
+        y += 1  # Move to next row for next cohort
+
+    return coords
+
 def highest_work_path(parents, children=None):
-    """ Find the highest work path by adding the work of each parent
-        bead using BFS.  We only need to do this within cohorts, since a
-        cohort has all the same ancestors and descendants. This assumes
-        all beads have the same work.
+    """ Find the highest work path. We only need to do this within cohorts, since a cohort has all
+        the same ancestors and descendants, all beads in the head of a cohort have the same work.
     """
     if not children: children = reverse(parents)
     hwpath = []
