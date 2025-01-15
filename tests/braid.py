@@ -1,11 +1,15 @@
 # A set of tools for manipulating test braids
 
 import json, os, unittest
+from bidict import bidict
 from copy import copy
 from collections import deque, OrderedDict
 from functools import cmp_to_key
+from math import gcd
+from random import shuffle
 
 TEST_CASE_DIR = "braids/"
+FIXED_BEAD_WORK = 1        # The work per bead if work is not passed.
 
 def make_dag(parents, bead_work=None, description=None):
     """ Make a DAG object which caches the children, geneses, tips, cohorts, and highest work path. """
@@ -17,7 +21,7 @@ def make_dag(parents, bead_work=None, description=None):
     dag["tips"]              = tips(parents, dag["children"])
     dag["cohorts"]           = cohorts(parents)
     dag["bead_work"]         = bead_work if bead_work else {b:1 for b in dag["parents"]}
-    dag["work"]              = work(parents, dag["children"], bead_work)
+    dag["work"]              = descendant_work(parents, dag["children"], bead_work)
     dag["highest_work_path"] = highest_work_path(parents, dag["children"])
     return dag
 
@@ -30,7 +34,7 @@ def geneses(parents):
 
 def tips(parents, children=None):
     """ Given a dict of {bead: {parents}}, return the set of beads which have no children. """
-    if not children: children = reverse(parents)
+    children = children if children else reverse(parents)
     return geneses(children)
 
 def reverse(parents):
@@ -49,7 +53,9 @@ def reverse(parents):
     return children
 
 def generation(beads, children=None):
-    """ Given a set of <beads>, compute the set of all children of all {beads}. """
+    """ Given a set of <beads>, compute the set of all children of all {beads}.
+        Call this with parents instead of children to move in the other direction.
+    """
     if not beads: return set()
     retval = set()
     for b in beads:
@@ -131,16 +137,16 @@ def cohort_tail(cohort, parents, children=None):
     """ Given a cohort as a set of beads, compute its tail. If the tail intersects the tips,
         return all tips.
     """
-    children = reverse(parents) if not children else children
+    children = children if children else reverse(parents)
     return cohort_head(cohort, parents=children, children=parents)
 
 def cohort_head(cohort, parents, children=None):
     """ Given a cohort as a set of beads, compute its head. If the tail intersects the geneses,
         return all geneses.
     """
-    children = reverse(parents) if not children else children
-    tail = generation(generation(cohort, parents) - cohort, children)
-    tips = geneses(parents)
+    children = children if children else reverse(parents)
+    tail     = generation(generation(cohort, parents) - cohort, children)
+    tips     = geneses(parents)
     if not tail or any({t in tips for t in tail}):
         return tips
     return tail
@@ -158,32 +164,94 @@ def sub_braid(beads, parents):
     """
     return {b: {p for p in parents[b] if p in beads} for b in beads}
 
-def work(parents, children=None, bead_work=None):
-    """ Find the cumulative work of each bead by adding the work of all ancestor beads.
+def descendant_work(parents, children=None, bead_work=None):
+    """ Find the work in descendants.  Work in ancestors can be found by reverseing the order of
+        parents and children:
 
-        <bead_work>: {bead:work} is the self-work for each bead (e.g. 1/x where x is the PoW target)
-        With fixed_bead_work=1 per bead, work is equivalent the number of ancestors for each bead.
+            ancestor_work = descendant_work(children, parents)
     """
-    if not children: children = reverse(parents)
-    fixed_bead_work = 1
-    bead_work       = bead_work if bead_work else {b: fixed_bead_work for b in parents}
+    children  = children if children else reverse(parents)
+    bead_work = bead_work if bead_work else {b: FIXED_BEAD_WORK for b in parents}
     previous_work   = 0
     retval          = {} # The cumulative work for each bead
-    for c in cohorts(parents):
-        sub_parents   = sub_braid(c, parents)    # Parents dict within the cohort
-        sub_ancestors = {}                       # Ancestors within the cohort
-        head = cohort_head(c, parents, children) # Youngest set of beads in the cohort
-        tail = cohort_tail(c, parents, children) # Oldest set of beads in the cohort
+    for c in cohorts(children):
+        sub_children   = sub_braid(c, children)    # children dict within the cohort
+        sub_descendants = {}                       # descendants within the cohort
+        head = cohort_head(c, children, parents) # Youngest set of beads in the cohort
+        tail = cohort_tail(c, children, parents) # Oldest set of beads in the cohort
         for b in c:
-            all_ancestors(b, sub_parents, sub_ancestors)
-            retval[b] = previous_work + bead_work[b] + sum([bead_work[a] for a in sub_ancestors[b]])
-        # All beads in the next cohort have ALL beads in this cohort as ancestors.
+            all_ancestors(b, sub_children, sub_descendants)
+            retval[b] = previous_work + bead_work[b] + sum([bead_work[a] for a in sub_descendants[b]])
+        # All beads in the next cohort have ALL beads in this cohort as descendants.
         previous_work += sum([bead_work[b] for b in c])
     return retval
 
+def bead_cmp(a, b, parents, work):
+    """ A custom cmp(b1,b2) function for sorting beads. This function requires the work function,
+        which should be the output of work().
+
+        In the event of a tie it resolves the tie in the following order:
+        1. Highest work
+        2. FUTURE UNIMPLEMENTED: Lowest hash ("luck")
+        3. FUTURE UNIMPLEMENTED: Earliest timestamp
+        4. Lowest label (block hash) -- this is "earliest" in simulations
+
+        Use this like:
+
+            work = ancestor_work(parents,children,bead_work)
+            cmp = lambda x,y: bead_cmp(x,y,parents,ancestor_work(parents,children,bead_work))
+            sort_key = cmp_to_key(lambda x,y: cmp(x,y))
+
+            sorted(beads, key=sort_key)
+    """
+    if work[a] < work[b]: return -1               # highest work
+    elif work[a] > work[b]: return 1
+    # else both have the same work
+    elif a > b: return -1                         # lexical order (lowest first)
+    elif a < b: return 1
+    else: return 0
+
+def work_sort_key(parents, children, bead_work=None, work=None):
+    """ Return a sorting key lambda suitable to feed to python's min, max, sort etc. Note that
+        sort() sorts values from lowest to highest. When using work_sort_key it will sort beads from
+        lowest work to highest. Use `reverse=True` as an argument to sort() if you want the highest
+        work, or reverse the resultant list.
+
+        One of <work> or <bead_work> must be passed.
+
+        Use this like:
+            work = ancestor_work(parents, children, bead_work)
+            sorted(beads, key=max_work_key(parents, work))   # sorted from lowest work to highest
+            max(beads, key=work_sort_key(parents, work))     # maximum work
+            min(beads, key=work_sort_key(parents, work))     # minimum work
+    """
+    bead_work = bead_work if bead_work else {b: FIXED_BEAD_WORK for b in parents}
+    if bead_work and not work:
+        work = work if work else descendant_work(parents,children,bead_work)
+    return cmp_to_key(lambda a,b: bead_cmp(a,b,children,work))
+
+def highest_work_path(parents, children=None, work=None, bead_work=None):
+    """ Find the highest (descendant) work path, by following the highest weights through the DAG.
+
+        The highest *ancestor* work path can be found by calling with children and parents reversed:
+
+            highest_work_path(children, parents)
+    """
+    children  = children if children else reverse(parents)
+    bead_work = bead_work if bead_work else {b: FIXED_BEAD_WORK for b in parents}
+    work      = work if work else descendant_work(parents, children, bead_work)
+    sort_key  = work_sort_key(parents, children, work=work)
+    hwpath    = [max(geneses(parents), key=sort_key)]
+
+    while hwpath[-1] not in tips(parents, children):
+        gen = generation({hwpath[-1]}, children)
+        hwpath.append(max(generation({hwpath[-1]}, children), key=sort_key))
+    return sorted(hwpath)   # return in ascending order no matter whether we're doing ancestor work
+                            # or descendant work.
+
 def check_cohort(cohort, parents, children=None):
     """ Check a cohort using check_cohort_ancestors in both directions. """
-    children = reverse(parents) if not children else children
+    children = children if children else reverse(parents)
     return check_cohort_ancestors(cohort, parents, children) \
             and check_cohort_ancestors(cohort, children, parents)
 
@@ -196,7 +264,7 @@ def check_cohort_ancestors(cohort, parents, children=None):
         This checks in one direction only, looking at the ancestors of `cohort`. To check in the
         other direction, reverse the order of the parents and children arguments.
     """
-    children = reverse(parents) if not children else children
+    children = children if children else reverse(parents)
     ancestors = dict()
     allancestors = set()
     head = cohort_head(cohort, parents, children)
@@ -208,254 +276,210 @@ def check_cohort_ancestors(cohort, parents, children=None):
         return False
     return True
 
-def layout(cohort, parents, children, weights=None):
-    """Create a left-to-right layout of a cohort on a 2D grid with no edge-bead intersections.
-    All coordinates are integers, and edges are considered to intersect beads that lie on
-    grid points between the child and parent on the same row.
-    """
-    children = children if children else reverse(parents)
-    cohort_parents  = sub_braid(cohort, parents)
-    cohort_children = reverse(cohort_parents)
-    bead_work = weights if weights else work(parents, children)
-    hwpath = [b for b in highest_work_path(parents, children, weights=weights) if b in cohort]
-    coords = {}
-    used_coords = set()
+def layout(cohort, parents, children=None, bead_work=None):
+    """Create a graphical layout of a cohort on a 2D grid with minimal space usage."""
 
-    # Initial layout code (unchanged)
-    depth_map = {}
-    max_depth = 0
-    queue = [(b, 0) for b in geneses(cohort_parents)]
-    while queue:
-        bead, depth = queue.pop(0)
-        current_depth = depth_map.get(bead, -1)
-        depth_map[bead] = max(current_depth, depth)
-        max_depth = max(max_depth, depth_map[bead])
-        for child in cohort_children.get(bead, []):
-            queue.append((child, depth + 1))
+    children  = children if children else reverse(parents)
+    bead_work = bead_work if bead_work else {b: FIXED_BEAD_WORK for b in parents}
 
-    leaves = set(b for b in cohort_parents if b not in cohort_children or not cohort_children[b])
-    for leaf in leaves:
-        depth_map[leaf] = max_depth
+    # Get the sub-DAG for this cohort. Cast to int to get rid of graph_tool vertices
+    sub_parents = {b: c for b,c in sub_braid(cohort, parents).items()}
+    sub_children = reverse(sub_parents)
 
-    beads_by_x = {}
-    for bead in cohort_parents:
-        x = depth_map[bead]
-        beads_by_x.setdefault(x, []).append(bead)
+    # Get head, tail, and highest work path
+    head     = cohort_head(cohort, parents, children)
+    tail     = cohort_tail(cohort, parents, children)
+    hwpath   = highest_work_path(sub_parents, sub_children)
+    width    = len(hwpath)
+    work     = descendant_work(parents, children)
+    sort_key = work_sort_key(parents, children, work=work)
 
-    # Initial placement code (unchanged)
-    for x in range(max_depth + 1):
-        if x not in beads_by_x:
+    # Variables we will fill in
+    coords   = bidict() # Bidirectional Map {bead: [x, y]}
+    edges    = set()    # {(x,y) for edge crossings}
+    unplaced = []      # beads yet to be placed
+
+    # Helper functions
+    def place(bead, xy):
+        """Mark edge crossings between two beads"""
+        nonlocal coords, edges, parents, children
+        if bead in coords:
+            return coords[bead] == xy # Bead is already in coords at a different locatation
+        if xy in coords.inv or xy in edges:
+            return False
+        newedges = set() # cache new edges in case of success
+        for relative in [r for r in [*parents[bead], *children[bead]] if r in coords]:
+            x1, y1 = xy
+            x2, y2 = coords[relative]
+            if x1 > x2:
+                x1, x2 = x2, x1
+                y1, y2 = y2, y1
+            dx = x2 - x1
+            dy = y2 - y1
+            g = gcd(dx,dy) if dy != 0 else gcd(dx,1)
+            step_x = dx // g if dy !=0 else 1
+            step_y = dy // g
+            for i in range(1, g):
+                x = x1 + (step_x*i)
+                y = y1 + (step_y*i)
+                if (x,y) in coords.inv:
+                    return False
+                newedges.add((x,y))
+        coords[bead] = xy
+        edges.update(newedges)
+        return True
+
+    def place_unplaced():
+        """ Place unplaced beads within the calculated x range. """
+        nonlocal coords, unplaced
+        for bead in copy(unplaced):
+            min_x, max_x = x_range(bead)
+            for y in range(1, 15):
+                for x in range(min_x, max_x+1):
+                    if place(bead, (x,y)):
+                        unplaced.remove(bead)
+                        break
+                if bead in coords: break
+        return coords, unplaced
+
+#    def side(edges):
+#        """ Return +/- 1 depending on whether the vertex v has a side preference. """
+#        sidecnt = 0
+#        for e in edges:
+#            if pin[e.target()]:
+#                sidecnt += int(pos[e.target()][1])
+#        return sidecnt//abs(sidecnt) if sidecnt else 0
+
+    def x_range(bead):
+        """ Compute minimum and maximum x coordinate for a bead based on parents and children.
+
+            This function is recursive and terminates only if the head and tail have been placed in
+            coords.
+        """
+        nonlocal coords
+        def find_xs(bead, parents):
+            """ Recurse on parents (or children) until an x coordiate is found, adding <incremenet>
+                for each generation traversed. """
+            nonlocal coords
+            if bead in coords:
+                return [coords[bead][0]]
+            return [x for p in parents[bead] for x in find_xs(p, parents)]
+
+        #if not find_xs(bead, sub_parents):
+        #    print(f"find_xs({bead}, sub_parents) = ", find_xs(bead, sub_parents))
+        #    print("sub_parents = ", sub_parents)
+        min_x = max(find_xs(bead, sub_parents))
+        #if not find_xs(bead, sub_children):
+        #    print(f"find_xs({bead}, sub_children) = ", find_xs(bead, sub_children))
+        #    print("sub_children = ", sub_children)
+        max_x = min(find_xs(bead, sub_children))
+        return (min_x+1, max_x-1)
+
+    def insert_x_range():
+        """ Attempt to place all unplaced who have x_min > x > x_max by adding columns.
+            Return True if columns were inserted.
+        """
+        nonlocal coords, unplaced
+        column_inserted = False
+        for bead in unplaced:
+            min_x, max_x = x_range(bead)
+            if max_x < min_x:
+                for insert_x in range(min_x, max_x, -1):
+                    insert_row_column(insert_x, 0)
+                column_inserted = True
+        return column_inserted
+
+    def insert_row_column(x,y):
+        """ Insert one row and/or column at x,y. """
+        nonlocal coords, edges, width
+        edges     = set()           # reset edges and coordinate maps
+        oldcoords = copy(coords)
+        coords    = bidict()
+        for b in oldcoords:
+            if b in unplaced: continue
+            if not place(b, (oldcoords[b][0] if oldcoords[b][0]<x or x == 0 else oldcoords[b][0]+1,
+                             oldcoords[b][1] if oldcoords[b][1]<y or y == 0 else oldcoords[b][1]+1)):
+                unplaced.append(b)
+
+    # Main code for layout()
+
+    # Place hwpath beads first
+    for x, bead in enumerate(hwpath):
+        place(bead, (x,0))
+
+    # Place head beads, excluding those in hwpath
+    y = 1
+    for bead in sorted(head-set(hwpath), key=sort_key, reverse=True):
+        if bead in coords: print(f"ERROR: {bead} already has coordinate {coords[bead]}")
+        place(bead, (0,y))
+        y += 1
+
+    # Place tail beads (excluding those in hwpath)
+    y = 1
+    if width == 1 and tail != head: width = 2 # this happens if there's only one bead in hwpath
+    for bead in sorted(tail - head - set(hwpath), key=sort_key, reverse=True):
+        if bead in coords: print(f"ERROR: {bead} already has coordinate {coords[bead]}")
+        place(bead, (width-1, y))
+        y += 1
+
+    initial_coords = copy(coords)
+    unplaced = sorted(list(cohort - set(coords.keys())), key=lambda b: (x_range(b), -work[b]))
+    initial_unplaced = copy(unplaced)
+
+    # Determine if columns need to be inserted because there's not enough space between
+    # parents and children based only on head/tail/hwpath.
+    if insert_x_range():
+        place_unplaced()
+    best_coords = copy(coords)
+    best_unplaced = copy(unplaced)
+    height = max([coords[b][1] for b in coords])+1
+    width = max([coords[b][0] for b in coords])+1
+    best_area = height * width
+    #print(f"Initial graph is {width}x{height} with area {best_area} and unplaced = {unplaced}")
+
+    # Try to optimize area
+    while width >= 3:
+        coords = copy(initial_coords)
+        unplaced = copy(initial_unplaced)
+        last_unplaced = copy(best_unplaced)
+
+        # Minimize the area of the resulting graph by inserting rows and columns
+        height = max([coords[b][1] for b in coords])+1
+        width = max([coords[b][0] for b in coords])+1
+        for insert_x in range(width):
+            for insert_y in range(height): # FIXME do head and tail separately
+                if insert_x == insert_y and insert_x == 0:
+                    continue
+                coords = copy(initial_coords)
+                unplaced = copy(initial_unplaced)
+                insert_row_column(insert_x, insert_y)
+                place_unplaced()
+                while insert_x_range():
+                    place_unplaced()
+                height = max([coords[b][1] for b in coords])+1
+                width = max([coords[b][0] for b in coords])+1
+                area = width * height
+                if len(unplaced) < len(best_unplaced) or (not unplaced and not best_unplaced and
+                                                          area < best_area):
+                    best_area = area
+                    best_coords = copy(coords)
+                    best_unplaced = copy(unplaced)
+        if best_unplaced and best_unplaced != last_unplaced:
+            print(f"WARNING: continuing because {best_unplaced} are still unplaced.")
+            print(f"best_unplaced = {best_unplaced}, last_unplaced = {last_unplaced}")
             continue
-        beads = sorted(beads_by_x[x], key=max_work_key(parents,weights), reverse=True)
-        bhwpath = [b for b in hwpath if b in beads]
-        if len(bhwpath) > 1: print("ERROR: more than one hwpath bead in a column: ", beads)
-        elif bhwpath:
-            beads.remove(bhwpath[0])
-            beads = [bhwpath[0], *beads]
+        # FIXME this will loop forever if there wasn't an incremental improvement.
+        else:
+            if best_unplaced:
+                print(f"WARNING: terminating layout() with beads {best_unplaced} still unplaced.")
+                for bead in best_unplaced:
+                    min_x, max_x = x_range(bead)
+                    print(f"    {bead} should be {min_x} <= x <= {max_x}")
 
-        y = 0
-        y_offset = 0
-
-        for bead in beads:
-            if y_offset == 0:
-                y = 0
-            elif y_offset > 0:
-                y = y_offset
-            else:
-                y = y_offset
-
-            while (x, y) in used_coords:
-                if y >= 0:
-                    y = -(y + 1)
-                else:
-                    y = -y
-
-            coords[bead] = [x, y]
-            used_coords.add((x, y))
-
-            if y >= 0:
-                y_offset = y + 1
-            else:
-                y_offset = -y
-
-    def find_edge_bead_intersections():
-        """Find all cases where edges pass through beads on same row."""
-        intersections = []
-
-        # Check each child-parent edge
-        for child in cohort_parents:
-            child_x, child_y = coords[child]
-            for parent in cohort_parents[child]:
-                parent_x, parent_y = coords[parent]
-
-                # If parent and child are on same row
-                if child_y == parent_y:
-                    # Check each bead at intermediate x-coordinates on this row
-                    for x in range(parent_x + 1, child_x):
-                        if (x, child_y) in used_coords:
-                            # Find which bead is at this position
-                            for b, (bx, by) in coords.items():
-                                if bx == x and by == child_y:
-                                    intersections.append((b, child, parent))
-                                    break
-
-        return intersections
-
-    def move_bead_down(bead, coords, used_coords):
-        """Move a bead down to the next available position."""
-        x, y = coords[bead]
-        new_y = y + 1  # Try one row down
-
-        # Keep moving down until we find a free spot
-        while (x, new_y) in used_coords:
-            new_y += 1
-
-        used_coords.remove((x, y))
-        used_coords.add((x, new_y))
-        coords[bead] = [x, new_y]
-
-    # Resolve edge-bead intersections
-    while True:
-        intersections = find_edge_bead_intersections()
-        if not intersections:
             break
 
-        # Move intersected beads down one row at a time
-        for bead, _, _ in intersections:
-            move_bead_down(bead, coords, used_coords)
-
-    return coords
-
-def oldlayout(cohort, parents, children, weights=None):
-    """Create a left-to-right layout of a cohort on a 2D grid.
-    Parents are always to the left of their children, leaves are rightmost,
-    and beads are placed in rows closest to y=0 based on their work.
-
-    Args:
-        parents: Dict mapping beads to their set of parent beads
-
-    Returns:
-        Dict mapping beads to their [x,y] coordinates
-    """
-    children = children if children else reverse(parents)
-    cohort_parents  = sub_braid(cohort, parents)
-    cohort_children = reverse(cohort_parents)
-    bead_work = weights if weights else work(parents, children)
-    hwpath = [b for b in highest_work_path(parents, children, weights=weights) if b in cohort]
-    coords = {}
-    used_coords = set()
-
-    # Compute depth map and identify leaves
-    depth_map = {}
-    max_depth = 0
-    queue = [(b, 0) for b in geneses(cohort_parents)]
-    while queue:
-        bead, depth = queue.pop(0)
-        current_depth = depth_map.get(bead, -1)
-        depth_map[bead] = max(current_depth, depth)
-        max_depth = max(max_depth, depth_map[bead])
-        for child in cohort_children.get(bead, []):
-            queue.append((child, depth + 1))
-
-    # Force leaves to rightmost column
-    leaves = set(b for b in cohort_parents if b not in cohort_children or not cohort_children[b])
-    for leaf in leaves:
-        depth_map[leaf] = max_depth
-
-    # Group beads by x-coordinate (depth)
-    beads_by_x = {}
-    for bead in cohort_parents:
-        x = depth_map[bead]
-        beads_by_x.setdefault(x, []).append(bead)
-
-    # For each x-coordinate, sort beads by work and assign y-coordinates
-    # starting from y=0 and alternating above/below
-    for x in range(max_depth + 1):
-        if x not in beads_by_x:
-            continue
-
-        # Sort beads at this x-coordinate by work (highest to lowest)
-        beads = sorted(beads_by_x[x], key=lambda b: bead_work[b], reverse=True)
-        print("Considering beads in a column: ", list(map(int, beads)))
-        max_work_bead = max_work(beads_by_x[x], parents, bead_work)
-        beads.remove(max_work_bead)
-        beads = [max_work_bead, *beads]
-        print("Sorted column is: ", list(map(int, beads)))
-        for b in beads:
-            print(f"work[{b}] = {bead_work[b]}, \tlen(parents[{b}]) = {len(parents[b])}")
-
-        y = 0
-        y_offset = 0
-
-        for bead in beads:
-            if y_offset == 0:
-                y = 0
-            elif y_offset > 0:
-                y = y_offset
-            else:
-                y = y_offset
-
-            # Find next available y at this x-coordinate
-            while (x, y) in used_coords:
-                if y >= 0:
-                    y = -(y + 1)  # Try below
-                else:
-                    y = -y  # Try above
-
-            coords[bead] = [x, y]
-            used_coords.add((x, y))
-
-            # Update y_offset for next bead
-            if y >= 0:
-                y_offset = y + 1
-            else:
-                y_offset = -y
-
-    return coords
-
-def bead_cmp(a, b, parents, weights=None):
-    """ A custom cmp(b1,b2) function for sorting beads.
-
-        In the event of a tie it resolves the tie in the following order:
-        1. Highest work
-        2. FUTURE UNIMPLEMENTED: Lowest hash ("luck")
-        3. FUTURE UNIMPLEMENTED: Earliest timestamp
-        4. Lowest label (block hash) -- this is "earliest" in simulations
-
-        Use this like:
-
-            sorted(beads, key=cmp_to_key(lambda x,y: braid.bead_cmp(x,y,parents,weights)))
-    """
-    weights = weights if weights else work(parents)
-    if weights[a] < weights[b]: return -1               # highest weight
-    elif weights[a] > weights[b]: return 1
-    # else both have the same number of parents
-    elif a > b: return -1                               # lexical order (lowest first)
-    elif a < b: return 1
-    else: return 0
-
-def max_work_key(parents, weights=None):
-    """ Return a sorting key lambda suitable to feed to python's min, max, sort etc.
-
-        Use this like:
-            sorted(beads, key=max_work_key(parents, weights))
-    """
-    weights = weights if weights else work(parents)
-    return cmp_to_key(lambda a,b: bead_cmp(a,b,parents,weights))
-
-def highest_work_path(parents, children=None, weights=None):
-    """ Find the highest work path, by following the highest weights through the DAG as given by
-        max_work().
-    """
-    weights = weights if weights else work(parents)
-    key     = cmp_to_key(lambda x,y: bead_cmp(x,y,parents,weights))
-    hwpath  = [max(tips(parents, children), key=key)]
-
-    while hwpath[-1] not in geneses(parents):
-        gen = generation({hwpath[-1]}, parents)
-        hwpath.append(max(generation({hwpath[-1]}, parents),
-                          key=max_work_key(parents, weights)))
-    return list(reversed(hwpath))
+    #print(f"Returning best solution with area {best_area} and unplaced = {best_unplaced}")
+    return best_coords
 
 def load_braid(filename):
     """ Load a JSON file containing a braid.
