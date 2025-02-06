@@ -8,21 +8,21 @@ from functools import cmp_to_key
 from math import gcd
 from random import shuffle
 
-TEST_CASE_DIR = "braids/"
+TEST_CASE_DIR   = "braids/"
 FIXED_BEAD_WORK = 1        # The work per bead if work is not passed.
 
 def make_dag(parents, bead_work=None, description=None):
     """ Make a DAG object which caches the children, geneses, tips, cohorts, and highest work path. """
-    dag = {}
+    dag                      = {}
     dag["description"]       = description
     dag["parents"]           = parents
     dag["children"]          = reverse(parents)
     dag["geneses"]           = geneses(parents)
     dag["tips"]              = tips(parents, dag["children"])
-    dag["cohorts"]           = cohorts(parents)
+    dag["cohorts"]           = list(cohorts(parents))
     dag["bead_work"]         = bead_work if bead_work else {b:1 for b in dag["parents"]}
-    dag["work"]              = descendant_work(parents, dag["children"], bead_work)
-    dag["highest_work_path"] = highest_work_path(parents, dag["children"])
+    dag["work"]              = descendant_work(parents, dag["children"], dag["bead_work"], dag["cohorts"])
+    dag["highest_work_path"] = highest_work_path(parents, dag["children"], dag["work"])
     return dag
 
 def geneses(parents):
@@ -56,7 +56,6 @@ def generation(beads, children=None):
     """ Given a set of <beads>, compute the set of all children of all {beads}.
         Call this with parents instead of children to move in the other direction.
     """
-    if not beads: return set()
     retval = set()
     for b in beads:
         retval |= children[b]
@@ -71,6 +70,37 @@ def all_ancestors(b, parents, ancestors):
     for p in parents[b]:
         if p not in ancestors: all_ancestors(p, parents, ancestors)
         ancestors[b].update(ancestors[p])
+
+def all_ancestors_iterative(b, parents, ancestors):
+    """ Gets all ancestors for a bead <b>, filling in ancestors of any other ancestors
+        encountered, using an iterative algorithm.
+        FIXME broken
+    """
+    visited = dict()
+    pstack = [b]
+    while pstack: # Loop 1: ensure we have parents of all ancestors
+        current = pstack.pop()
+        if current in parents: continue
+        else:
+            parents[current] = generation(current, parents)
+            pstack.extend([p for p in parents[current] if p not in parents])
+    astack = [b]    # astack is by construction a topological sort, and therefore a partial order
+    while astack:
+        current = astack[-1]
+        if current in ancestors:
+            astack.pop()
+            continue
+        else:
+            if all([p in ancestors for p in parents[current]]):
+                ancestors[current] = set.union(parents[current], *[ancestors[p] for p in parents[current]])
+                astack.pop()
+            else: # we are missing ancestors
+                if current not in visited: visited[current] = 1
+                else: visited[current] += 1
+                astack.extend([p for p in parents[current] if p not in ancestors])
+    if any([visited[v] > 1 for v in visited]):
+        print(f"ancestors visited multiple times in getallancestors_iterative({int(b)})")
+        print(visited)
 
 def cohorts(parents, children=None, initial_cohort=None):
     """ Given the seed of the next cohort (which is the set of beads one step older, in the next
@@ -164,21 +194,20 @@ def sub_braid(beads, parents):
     """
     return {b: {p for p in parents[b] if p in beads} for b in beads}
 
-def descendant_work(parents, children=None, bead_work=None):
+def descendant_work(parents, children=None, bead_work=None, in_cohorts=None):
     """ Find the work in descendants.  Work in ancestors can be found by reverseing the order of
         parents and children:
 
             ancestor_work = descendant_work(children, parents)
     """
-    children  = children if children else reverse(parents)
-    bead_work = bead_work if bead_work else {b: FIXED_BEAD_WORK for b in parents}
+    children        = children if children else reverse(parents)
+    bead_work       = bead_work if bead_work else {b: FIXED_BEAD_WORK for b in parents}
     previous_work   = 0
+    in_cohorts      = reversed(in_cohorts) if in_cohorts else cohorts(children)
     retval          = {} # The cumulative work for each bead
-    for c in cohorts(children):
+    for c in in_cohorts:
         sub_children   = sub_braid(c, children)    # children dict within the cohort
         sub_descendants = {}                       # descendants within the cohort
-        head = cohort_head(c, children, parents) # Youngest set of beads in the cohort
-        tail = cohort_tail(c, children, parents) # Oldest set of beads in the cohort
         for b in c:
             all_ancestors(b, sub_children, sub_descendants)
             retval[b] = previous_work + bead_work[b] + sum([bead_work[a] for a in sub_descendants[b]])
@@ -507,8 +536,8 @@ def save_braid(parents, filename, description=None):
     """ Save a JSON file containing a braid. It should contain the keys "description", "parents",
         "cohorts", and "workpath"
     """
+    dag = make_dag(parents)
     with open(filename, 'w') as file:
-        dag = make_dag(parents)
         result = OrderedDict([
             ("description", description),
             ("parents", {k: list(v) for k,v in dag["parents"].items()}),
@@ -522,6 +551,7 @@ def save_braid(parents, filename, description=None):
         ])
         file.write(json.dumps(result, sort_keys=False, indent=4))
         file.close()
+    return dag
 
 class TestCohortMethods(unittest.TestCase):
     parents1 = {0:set(), 1:{0}, 2:{1}, 3:{2}} # blockchain
