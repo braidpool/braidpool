@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
+"""
+    Braidpool Simulator
 
-# Braidpool Simulator
-
-# This code simulates a network of nodes distributed on a sphere (the Earth)
-# with realistic latency defined by the path length between them on the surface
-# of the sphere. Note that all signals are assumed to propagate at the speed
-# of light -- propagation speed in copper or global fiber optics is not simulated.
+    This code simulates a network of nodes distributed on a sphere (the Earth)
+    with realistic latency defined by the path length between them on the surface
+    of the sphere. Note that all signals are assumed to propagate at the speed
+    of light -- propagation speed in copper or global fiber optics is not simulated.
+"""
 
 # FIXME give numbers for network and per-node hashrate
 
@@ -16,25 +17,28 @@ from argparse import ArgumentParser, BooleanOptionalAction
 from copy import copy
 from math import pi, sqrt, sin, cos, acos, log, ceil
 from random import randint, random, sample
-import braid, hashlib, struct, sys, time
+import hashlib
+import struct
+import sys
+import time
+import braid
 sys.setrecursionlimit(10000) # all_ancestors is recursive. If you generate large cohorts you'll blow
                              # out the maximum recursion depth.
 
 NETWORK_SIZE     = 0.06676  # The round-trip time in seconds to traverse the network = pi*r_e/c
 TICKSIZE         = 0.001    # One "tick" in seconds in which beads will be propagated and mined
                             # You can use this as a per-node processing latency also
-MAX_HASH         = 2**256-1 # Maximum value a 256 bit unsigned hash can have, used to calculate targets
+MAX_HASH         = 2**256-1 # Maximum value a 256 bit unsigned hash can have, to calculate targets
 NETWORK_HASHRATE = 800000   # Single core hashrate in hashes/s (will be benchmarked)
 OVERHEAD_FUDGE   = 1.95     # Fudge factor for processing overhead compared to pure sha256d mining
 
-def Hash(msg: bytes):
+def sha256d(msg: bytes):
     """(SHA256^2)(msg) -> bytes"""
-    if type(msg) == bytes:
+    if isinstance(msg, bytes):
         return hashlib.sha256(hashlib.sha256(msg).digest()).digest()
-    elif type(msg) == int:
+    if isinstance(msg, int):
         return hashlib.sha256(hashlib.sha256(msg.to_bytes(32, byteorder='big')).digest()).digest()
-    else:
-        raise Exception("Unknown type to hash: ", type(msg))
+    raise Exception("Unknown type to hash: ", type(msg))
 
 def sph_arclen(n1, n2):
     """ Compute the arc length on the surface of a unit sphere. """
@@ -64,24 +68,24 @@ class Network:
         from a uniform distribution on [0,1) so <ticksize> should be < 1.
     """
     def __init__(self, nnodes, hashrate, ticksize=TICKSIZE, npeers=4, target=None, topology='sphere'):
-        self.t                      = 0                 # the current "time"
-        self.nnodes                 = nnodes
-        self.hashrate               = hashrate
-        self.ticksize               = ticksize          # the size of a "tick": self.t += self.tick at each step
-        self.npeers                 = npeers
-        self.target                 = target
-        self.genesis                = uint256(Hash(0))
-        self.beads                  = {}                # a hash map of all beads in existence
-        self.beads[self.genesis]    = Bead(self.genesis, set(), self, -1)
+        self.t                   = 0        # the current "time"
+        self.nnodes              = nnodes
+        self.hashrate            = hashrate
+        self.ticksize            = ticksize # the size of a tick: self.t += self.tick at each step
+        self.npeers              = npeers
+        self.target              = target
+        self.genesis             = uint256(sha256d(0))
+        self.beads               = {}
+        self.beads[self.genesis] = Bead(self.genesis, set(), self, -1)
         # FIXME asymmetrically divide the hashrate among nodes
-        self.nodes                  = [Node(self.genesis, self, nodeid, hashrate/nnodes,
-                                            initial_target=target) for nodeid in
-                                       range(nnodes)]
-        latencies                   = None
+        self.nodes               = [Node(self.genesis, self, nodeid, hashrate/nnodes,
+                                         initial_target=target) for nodeid in
+                                    range(nnodes)]
+        latencies                = None
         for (node, peers) in zip(self.nodes, [sample(list(set(range(nnodes)) - {me}),  \
                 npeers) for me in range(nnodes)]):
             if topology == 'sphere':
-                latencies = [10*sph_arclen(node, self.nodes[i]) for i in peers];
+                latencies = [10*sph_arclen(node, self.nodes[i]) for i in peers]
             node.setpeers([self.nodes[i] for i in peers], latencies)
         self.reset(target=target)
 
@@ -114,6 +118,7 @@ class Network:
             self.inflightdelay[(node, bead)] = min(prevdelay, delay)
 
     def reset(self, target=None):
+        """ Reset the computed braid for each node while keeping the network layout.  """
         self.t = 0
         self.beads = {}
         self.beads[self.genesis] = Bead(self.genesis, set(), self, -1)
@@ -122,8 +127,10 @@ class Network:
             node.reset(target)
 
     def printinflightdelays(self):
+        """ print in flight delays for debugging. """
         for (node, bead) in self.inflightdelay:
-            print("bead ", bead, " to node ", node, " will arrive in %fs"%self.inflightdelay[(node, bead)])
+            print("bead ", bead, " to node ", node,
+                  " will arrive in %fs"%self.inflightdelay[(node, bead)])
 
 class Node:
     """ Abstraction for a node. """
@@ -134,8 +141,9 @@ class Node:
         self.latencies  = []
         self.nodeid     = nodeid
         # A salt for this node, so all nodes don't produce the same hashes
-        self.nodesalt   = uint256(Hash(randint(0,MAX_HASH)))
+        self.nodesalt   = uint256(sha256d(randint(0,MAX_HASH)))
         self.hashrate   = hashrate
+        self.target     = initial_target
         self.nonce      = 0         # Will be increased in the mining process
         self.tremaining = None      # Ticks remaining before this node produces a bead
         self.reset(initial_target)
@@ -144,6 +152,7 @@ class Node:
         self.longitude  = 2*pi*random()
 
     def reset(self, initial_target=None):
+        """ Reset the computed braid while keeping the network layout. """
         self.beads      = [self.network.beads[self.network.genesis]] # A list of beads in the order received
         self.braid      = Braid(self.beads)
         self.incoming   = set()                                      # incoming beads we were unable to process
@@ -152,7 +161,7 @@ class Node:
         self.tremaining = self.time_to_next_bead()
 
     def __str__(self):
-        return "<Node %d>"%self.nodeid
+        return f"<Node {self.nodeid}>"
 
     # Define the geometric distribution instead of importing numpy
     def time_to_next_bead(self):
@@ -161,7 +170,7 @@ class Node:
         this node with <self.hashrate> finds a block with <self.target>.
         """
         p = self.target/MAX_HASH
-        if not (0 < p < 1):
+        if p > 1:
             raise ValueError(f"target {self.target:064x} is larger than {MAX_HASH:064x}")
         if p < 1e-6: # If p is very small, use a Taylor series to prevent log(1-p) from overflowing
             nhashes = int(log(1 - random()) / -(p+p**2/2+p**3/3+p**4/4+p**5/5)) + 1
@@ -184,12 +193,12 @@ class Node:
         if mine:
             nhashes = ceil(self.hashrate*dt)
             for _ in range(nhashes):
-                PoW = uint256(Hash(self.nodesalt+self.nonce))
+                PoW = uint256(sha256d(self.nodesalt+self.nonce))
                 self.nonce += 1
                 if PoW < self.target:
                     print(f" solution target = {b.target:064x} for {len(oldtips)} parents")
                     #print('.', end='', flush=True)
-                    b.addPoW(PoW)
+                    b.add_PoW(PoW)
                     self.receive(b)     # Send it to myself (will rebroadcast to peers)
                     break
         else :
@@ -197,7 +206,7 @@ class Node:
             if self.tremaining <= 0:
                 print(f" solution target = {b.target:064x} for {len(oldtips)} parents")
                 self.nonce += 1
-                b.addPoW((uint256(Hash(self.nodesalt+self.nonce))*self.target)//MAX_HASH)
+                b.add_PoW((uint256(sha256d(self.nodesalt+self.nonce))*self.target)//MAX_HASH)
                 self.receive(b)     # Send it to myself (will rebroadcast to peers)
                 self.tremaining = self.time_to_next_bead()
         self.process_incoming()
@@ -206,8 +215,9 @@ class Node:
 
     def receive(self, bead):
         """ Recieve announcement of a new bead. """
-        if bead in self.beads: return
-        else: self.beads.append(bead)
+        if bead in self.beads:
+            return
+        self.beads.append(bead)
         if not self.braid.extend(bead): # We don't have parents for this bead
             self.incoming.add(bead)
         self.process_incoming()
@@ -220,7 +230,8 @@ class Node:
         while True:
             oldincoming = copy(self.incoming)
             for bead in oldincoming:
-                if self.braid.extend(bead): self.incoming.remove(bead)
+                if self.braid.extend(bead):
+                    self.incoming.remove(bead)
             if oldincoming == self.incoming:
                 break
 
@@ -250,9 +261,10 @@ class Bead:
             network.beads[hash] = self # add myself to global list
 
     def __str__(self):
-        return "<Bead ...%04d>"%(self.hash%10000)
+        return f"<Bead ...{self.hash%10000}>"
 
-    def addPoW(self, hash):
+    def add_PoW(self, hash):
+        """ Add proof of work hash after it is computed. """
         self.hash = hash
         self.network.beads[hash] = self
 
@@ -266,7 +278,7 @@ class Bead:
     def calc_target_simple(self):
         """ Compute the average target of its parents.  """
         DELTA_NUM   = 2     # FIXME if we change the target too quickly, a string of 1-bead cohorts
-        DELTA_DENOM = 128   # will cause the difficulty to hit MAX_HASH and we error out.
+        DELTA_DENOM = 32   # will cause the difficulty to hit MAX_HASH and we error out.
         ASYM_FACTOR = 2     # An "asymmetry factor" that reduces the target harder when there are too many parents.
         TARGET_PARENTS = 2
         # Harmonic average parent targets
@@ -279,11 +291,27 @@ class Bead:
             retval = htarget
         return retval
 
+    def calc_target_cohort(self):
+        """ Compute the average target of its parents.  """
+        DELTA_NUM   = 2     # FIXME if we change the target too quickly, a string of 1-bead cohorts
+        DELTA_DENOM = 32   # will cause the difficulty to hit MAX_HASH and we error out.
+        ASYM_FACTOR = 2     # An "asymmetry factor" that reduces the target harder when there are too many parents.
+        TARGET_PARENTS = 2
+        # Harmonic average parent targets
+        htarget = len(self.parents)*MAX_HASH//sum(MAX_HASH//p.target for p in self.parents)
+        if len(self.parents) > TARGET_PARENTS:   # Make it more difficult if we have too many parents.
+            retval = htarget - ASYM_FACTOR*htarget*DELTA_NUM//DELTA_DENOM*(len(self.parents) - TARGET_PARENTS)
+        elif len(self.parents) < TARGET_PARENTS: # Make it easier if we have too few parents
+            retval = htarget + htarget*DELTA_NUM//DELTA_DENOM
+        else:
+            retval = htarget
+        return retval
+
 class Braid:
     """ A Braid is a Directed Acyclic Graph with no incest (parents may not also
         be non-parent ancestors).  A braid may have multiple tips. """
 
-    def __init__(self, beads=[], filename=None):
+    def __init__(self, beads=None, filename=None):
         self.beads    = []                          # A list of beads in this braid
         self.times    = {}                          # Time of arrival for each bead
         self.vhashes  = {}                          # A dict of (hash, Bead) for each bead
@@ -312,9 +340,9 @@ class Braid:
     def extend(self, bead):
         """ Add a bead to the end of this braid. Returns True if the bead
             successfully extended this braid, and False otherwise. """
-        if (not bead.parents                                                # No parents -- bad block
-                or not all([p.hash in self.vhashes for p in bead.parents])  # We don't have all parents
-                or bead in self.beads):                                     # We've already seen this bead
+        if (not bead.parents                                             # No parents: bad block
+                or not all(p.hash in self.vhashes for p in bead.parents) # Don't have all parents
+                or bead in self.beads):                                  # Already seen this bead
             return False
         self.beads.append(bead)
         self.vhashes[bead.hash]   = bead
@@ -325,7 +353,9 @@ class Braid:
         self.tips.add(bead)
         return True
 
-if __name__ == "__main__":
+def main():
+    """ Main function so it doesn't make a bunch of globals. """
+    global NETWORK_HASHRATE
     parser = ArgumentParser()
     parser.add_argument("-o", "--output-file", dest="filename",
         help="Base filename to which we will write the generated braid, '.json' will be added",
@@ -358,15 +388,17 @@ if __name__ == "__main__":
         start = time.process_time()
         N_HASHES = 10000 # number of hashes to compute for benchmarking purposes
         for nonce in range(N_HASHES):
-            PoW = Hash(nonce)
+            sha256d(nonce)
         stop = time.process_time()
         print(f"Network hashrate (single core) benchmark: {int(N_HASHES/(stop-start)/1000)} kh/s")
         NETWORK_HASHRATE = N_HASHES/(stop-start)
         node_hashrate = NETWORK_HASHRATE/args.nodes # hashes/s
         bead_time     = MAX_HASH/(2**int(args.target)-1)/NETWORK_HASHRATE
-        print(f"mining with difficulty 2**{args.target}-1 and hashrate {int(node_hashrate/1000)}kh/s per node.")
+        print(f"mining with difficulty 2**{args.target}-1 and hashrate "
+              "{int(node_hashrate/1000)}kh/s per node.")
         print(f"We should generate a bead roughly once every {bead_time*1000:{8}.{4}}ms")
-        print(f"Expected time to completion: {bead_time*OVERHEAD_FUDGE*int(args.beads):{8}.{4}}s to mine {args.beads} beads")
+        print(f"Expected time to completion: {bead_time*OVERHEAD_FUDGE*int(args.beads):{8}.{4}}s "
+              "to mine {args.beads} beads")
         print("Printing a dot every time a bead is mined: ")
     else:
         print("using the geometric distribution to simulate mining.")
@@ -397,3 +429,6 @@ if __name__ == "__main__":
         Ncerr = 1/sqrt(Nc)
         print(f"\nno-mined Nb/Nc = {len(dag['parents'])/len(dag['cohorts']):{8}.{4}} +/- {Ncerr:{5}.{4}}")
         print(f"Wrote {len(b.beads)} beads to {args.filename}.json.")
+
+if __name__ == "__main__":
+    main()
