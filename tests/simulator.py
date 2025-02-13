@@ -133,44 +133,6 @@ class Network:
                   " will arrive in %fs"%self.inflightdelay[(node, bead)])
 
 class Node:
-    def calc_target_zawy(self, parents):
-        """ Calculate a target based on a desired number of parents (2). """
-        TARGET_PARENTS = 2
-        INTERVAL = 100
-        htarget = len(parents)*MAX_HASH//sum([MAX_HASH//p.target for p in parents])
-        return htarget + htarget*(TARGET_PARENTS-len(parents))//INTERVAL
-
-    def calc_target_simple(self, parents):
-        """ Compute the average target of its parents.  """
-        DELTA_NUM   = 2     # FIXME if we change the target too quickly, a string of 1-bead cohorts
-        DELTA_DENOM = 32   # will cause the difficulty to hit MAX_HASH and we error out.
-        ASYM_FACTOR = 2     # An "asymmetry factor" that reduces the target harder when there are too many parents.
-        TARGET_PARENTS = 2
-        # Harmonic average parent targets
-        htarget = len(parents)*MAX_HASH//sum([MAX_HASH//p.target for p in parents])
-        if len(parents) > TARGET_PARENTS:   # Make it more difficult if we have too many parents.
-            retval = htarget - ASYM_FACTOR*htarget*DELTA_NUM//DELTA_DENOM*(len(parents) - TARGET_PARENTS)
-        elif len(parents) < TARGET_PARENTS: # Make it easier if we have too few parents
-            retval = htarget + htarget*DELTA_NUM//DELTA_DENOM
-        else:
-            retval = htarget
-        return retval
-
-    def calc_target_cohort(self, parents):
-        """ Compute the average target of its parents.  """
-        DELTA_NUM   = 2     # FIXME if we change the target too quickly, a string of 1-bead cohorts
-        DELTA_DENOM = 32   # will cause the difficulty to hit MAX_HASH and we error out.
-        ASYM_FACTOR = 2     # An "asymmetry factor" that reduces the target harder when there are too many parents.
-        TARGET_PARENTS = 2
-        # Harmonic average parent targets
-        htarget = len(parents)*MAX_HASH//sum(MAX_HASH//p.target for p in parents)
-        if len(parents) > TARGET_PARENTS:   # Make it more difficult if we have too many parents.
-            retval = htarget - ASYM_FACTOR*htarget*DELTA_NUM//DELTA_DENOM*(len(parents) - TARGET_PARENTS)
-        elif len(parents) < TARGET_PARENTS: # Make it easier if we have too few parents
-            retval = htarget + htarget*DELTA_NUM//DELTA_DENOM
-        else:
-            retval = htarget
-        return retval
     """ Abstraction for a node. """
     def __init__(self, genesis, network, nodeid, hashrate, initial_target=None):
         self.genesis    = genesis
@@ -278,6 +240,45 @@ class Node:
         """ Announce a new block from a peer to this node. """
         for (peer, delay) in zip(self.peers, self.latencies):
             self.network.broadcast(peer, bead, delay)
+
+    def calc_target_zawy(self, parents):
+        """ Calculate a target based on a desired number of parents (2). """
+        TARGET_PARENTS = 2
+        INTERVAL = 100
+        htarget = len(parents)*MAX_HASH//sum([MAX_HASH//p.target for p in parents])
+        return htarget + htarget*(TARGET_PARENTS-len(parents))//INTERVAL
+
+    def calc_target_simple(self, parents):
+        """ Compute the average target of its parents.  """
+        DELTA_NUM   = 2     # FIXME if we change the target too quickly, a string of 1-bead cohorts
+        DELTA_DENOM = 32   # will cause the difficulty to hit MAX_HASH and we error out.
+        ASYM_FACTOR = 2     # An "asymmetry factor" that reduces the target harder when there are too many parents.
+        TARGET_PARENTS = 2
+        # Harmonic average parent targets
+        htarget = len(parents)*MAX_HASH//sum([MAX_HASH//p.target for p in parents])
+        if len(parents) > TARGET_PARENTS:   # Make it more difficult if we have too many parents.
+            retval = htarget - ASYM_FACTOR*htarget*DELTA_NUM//DELTA_DENOM*(len(parents) - TARGET_PARENTS)
+        elif len(parents) < TARGET_PARENTS: # Make it easier if we have too few parents
+            retval = htarget + htarget*DELTA_NUM//DELTA_DENOM
+        else:
+            retval = htarget
+        return retval
+
+    def calc_target_cohort(self, parents):
+        """ Compute the average target of its parents.  """
+        DELTA_NUM   = 2     # FIXME if we change the target too quickly, a string of 1-bead cohorts
+        DELTA_DENOM = 32   # will cause the difficulty to hit MAX_HASH and we error out.
+        ASYM_FACTOR = 2     # An "asymmetry factor" that reduces the target harder when there are too many parents.
+        TARGET_PARENTS = 2
+        # Harmonic average parent targets
+        htarget = len(parents)*MAX_HASH//sum(MAX_HASH//p.target for p in parents)
+        if len(parents) > TARGET_PARENTS:   # Make it more difficult if we have too many parents.
+            retval = htarget - ASYM_FACTOR*htarget*DELTA_NUM//DELTA_DENOM*(len(parents) - TARGET_PARENTS)
+        elif len(parents) < TARGET_PARENTS: # Make it easier if we have too few parents
+            retval = htarget + htarget*DELTA_NUM//DELTA_DENOM
+        else:
+            retval = htarget
+        return retval
 
 class Bead:
     """ A Bead is a full bitcoin (weak) block that may miss Bitcoin's difficulty target.
