@@ -22,6 +22,7 @@ import struct
 import sys
 import time
 import braid
+import braid
 sys.setrecursionlimit(10000) # all_ancestors is recursive. If you generate large cohorts you'll blow
                              # out the maximum recursion depth.
 
@@ -265,16 +266,23 @@ class Node:
         return retval
 
     def calc_target_cohort(self, parents):
-        """ Compute the average target of its parents.  """
+        """ Compute the average target of its parents, adjusted by cohort size.  """
         DELTA_NUM   = 2     # FIXME if we change the target too quickly, a string of 1-bead cohorts
-        DELTA_DENOM = 32   # will cause the difficulty to hit MAX_HASH and we error out.
+        DELTA_DENOM = 32    # will cause the difficulty to hit MAX_HASH and we error out.
         ASYM_FACTOR = 2     # An "asymmetry factor" that reduces the target harder when there are too many parents.
         TARGET_PARENTS = 2
+        
+        # Get the current braid state
+        braid_dict = dict(self.braid)
+        # Get cohorts and find size of most recent one
+        cohorts = braid.cohorts(braid_dict)
+        latest_cohort_size = len(cohorts[-1]) if cohorts else 1
+        
         # Harmonic average parent targets
         htarget = len(parents)*MAX_HASH//sum(MAX_HASH//p.target for p in parents)
-        if len(parents) > TARGET_PARENTS:   # Make it more difficult if we have too many parents.
-            retval = htarget - ASYM_FACTOR*htarget*DELTA_NUM//DELTA_DENOM*(len(parents) - TARGET_PARENTS)
-        elif len(parents) < TARGET_PARENTS: # Make it easier if we have too few parents
+        if latest_cohort_size > TARGET_PARENTS:   # Make it more difficult if cohort is too large
+            retval = htarget - ASYM_FACTOR*htarget*DELTA_NUM//DELTA_DENOM*(latest_cohort_size - TARGET_PARENTS)
+        elif latest_cohort_size < TARGET_PARENTS: # Make it easier if cohort is too small
             retval = htarget + htarget*DELTA_NUM//DELTA_DENOM
         else:
             retval = htarget
