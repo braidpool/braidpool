@@ -392,7 +392,6 @@ def main():
         stop = time.process_time()
         print(f"Network hashrate (single core) benchmark: {int(N_HASHES/(stop-start)/1000)} kh/s")
         NETWORK_HASHRATE = N_HASHES/(stop-start)
-        node_hashrate = NETWORK_HASHRATE/args.nodes # hashes/s
         bead_time     = MAX_HASH/(2**int(args.target)-1)/NETWORK_HASHRATE
         print(f"mining with difficulty 2**{args.target}-1 and hashrate "
               "{int(node_hashrate/1000)}kh/s per node.")
