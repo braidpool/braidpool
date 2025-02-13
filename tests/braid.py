@@ -1,5 +1,11 @@
 """
-    A set of tools for manipulating test braids
+    A set of tools for manipulating test braids. The algorithms herein are intended to work with any
+    bead object supporting:
+        Bead.__gt__ (for lexical ordering when PoW ordering fails)
+        Bead.__int__ (for dumping to a file)
+            # FIXME using __str__ to print bitcoin-BE hex encoding might be better...
+    Since parents are always explicitly passed in, we don't depend on getting parents from the Bead
+    object used.
 """
 
 import json
@@ -552,14 +558,16 @@ def save_braid(parents, filename, description=None):
     with open(filename, 'w', encoding="utf8") as file:
         result = OrderedDict([
             ("description", description),
-            ("parents", {k: list(v) for k,v in dag["parents"].items()}),
-            ("children", {k: list(v) for k,v in dag["children"].items()}),
-            ("geneses", list(dag["geneses"])),
-            ("tips", list(dag["tips"])),
+            ("parents", {int(bead): [int(p) for p in parents]
+                         for bead,parents in dag["parents"].items()}),
+            ("children", {int(bead): [int(c) for c in children]
+                          for bead,children in dag["children"].items()}),
+            ("geneses", [int(bead) for bead in dag["geneses"]]),
+            ("tips", [int(bead) for bead in dag["tips"]]),
             ("cohorts", [sorted(list(map(int, c))) for c in dag["cohorts"]]),
-            ("bead_work", dag["bead_work"]),
-            ("work", dag["work"]),
-            ("highest_work_path", dag["highest_work_path"])
+            ("bead_work", {int(bead): work for bead,work in dag["bead_work"].items()}),
+            ("work", {int(bead): work for bead,work in dag["work"].items()}),
+            ("highest_work_path", [int(bead) for bead in dag["highest_work_path"]])
         ])
         file.write(json.dumps(result, sort_keys=False, indent=4))
         file.close()
