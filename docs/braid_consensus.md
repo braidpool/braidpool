@@ -3,6 +3,9 @@
 Herein we describe the Braid consensus mechanism, which is a generalization of
 Nakamoto consensus to a Directed Acyclic Graph (DAG).
 
+If the math in this document isn't rendering correctly, ensure that you have the 
+Latin Modern fonts installed on your system.
+
 ## Braid Structure
 
 The Braid is a DAG structure where each node (bead) may have one or more
