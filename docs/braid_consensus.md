@@ -180,7 +180,7 @@ $$\tag{10}
 \qquad
 \implies
 \qquad
-\frac{N_B}{N_C} = 2.4215
+\frac{N_B}{N_C} = \frac{W(\frac12)+\frac12}{W(\frac12)} \simeq 2.4215
 \end{align}
 $$
 
@@ -193,6 +193,15 @@ most-frequent consensus points within a global network. Below we will use this
 ratio to create our difficulty adjustment algorithm targeting "most-frequent
 consensus" in a way that is insensitive to latency $a$, hashrate $\lambda$, and
 averaging window $T$.
+
+Furthermore given any $x$, we can determine how far we are from the desired
+target $x_0$ and $N_B/N_C=2.42$ by making a ratio which cancels out the factors
+of $a$ and $\lambda$.
+<a id="11"></a>
+
+$$\tag{11}
+x_0 = x W\left(\frac12\right) W\left(\frac{N_B}{N_C}-1\right)
+$$
 
 ## Consensus
 

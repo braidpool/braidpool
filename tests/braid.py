@@ -151,8 +151,7 @@ def cohorts(parents, children=None, initial_cohort=None):
             # Calculate ancestors
             for t in tail:                   # Find all ancestors of all beads in the tail
                 if t not in ancestors:
-                    # 50.6% of CPU time
-                    all_ancestors(t, dag["parents"], ancestors)
+                    all_ancestors(t, dag["parents"], ancestors) # half the CPU time is here
 
             # Calculate cohort
             cohort = set()
@@ -208,7 +207,7 @@ def sub_braid(beads, parents):
     return {b: {p for p in parents[b] if p in beads} for b in beads}
 
 def descendant_work(parents, children=None, bead_work=None, in_cohorts=None):
-    """ Find the work in descendants.  Work in ancestors can be found by reverseing the order of
+    """ Find the work in descendants.  Work in ancestors can be found by reversing the order of
         parents and children:
 
             ancestor_work = descendant_work(children, parents)
