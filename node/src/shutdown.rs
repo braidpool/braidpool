@@ -11,6 +11,7 @@ pub enum ShutdownReason {
 }
 
 /// Handles graceful shutdown of the node
+#[derive(Clone)]
 pub struct ShutdownHandler {
     shutdown_tx: broadcast::Sender<ShutdownReason>,
 }
