@@ -20,10 +20,11 @@ from bidict import bidict
 TEST_CASE_DIR   = "braids/"
 FIXED_BEAD_WORK = 1        # The work per bead if work is not passed.
 
-def make_dag(parents, bead_work=None, description=None):
+def make_dag(hashed_parents, bead_work=None, description=None):
     """ Make a DAG object which caches the children, geneses, tips, cohorts,
         and highest work path.
     """
+    parents                  = number_beads(hashed_parents)
     dag                      = {}
     dag["description"]       = description
     dag["parents"]           = parents
@@ -73,7 +74,7 @@ def generation(beads, children=None):
         retval |= children[b]
     return retval
 
-def all_ancestors(b, parents, ancestors):
+def all_ancestors_recursive(b, parents, ancestors={}):
     """ Gets all ancestors for a bead <b>, filling in ancestors of
         any other ancestors encountered, using a recursive
         algorithm.  Assumes b not in parents and b not in ancestors.
@@ -83,37 +84,36 @@ def all_ancestors(b, parents, ancestors):
         if p not in ancestors:
             all_ancestors(p, parents, ancestors)
         ancestors[b].update(ancestors[p])
+    return ancestors
 
-def all_ancestors_iterative(b, parents, ancestors):
-    """ Gets all ancestors for a bead <b>, filling in ancestors of any other ancestors
-        encountered, using an iterative algorithm.
-        FIXME broken
+def all_ancestors(b, parents, ancestors={}):
+    """ Gets all ancestors for a bead <b>, filling in ancestors of any other
+        ancestors encountered, using an iterative algorithm. Assumes b not in
+        parents and b not in ancestors.
     """
-    visited = {}
-    pstack = [b]
-    while pstack: # Loop 1: ensure we have parents of all ancestors
-        current = pstack.pop()
-        if current in parents:
-            continue
-        parents[current] = generation(current, parents)
-        pstack.extend([p for p in parents[current] if p not in parents])
-    astack = [b]    # astack is by construction a topological sort, and therefore a partial order
-    while astack:
-        current = astack[-1]
-        if current in ancestors:
-            astack.pop()
-            continue
-        if all(p in ancestors for p in parents[current]):
-            ancestors[current] = set.union(parents[current], *[ancestors[p] for p in parents[current]])
-            astack.pop()
-        else: # we are missing ancestors
-            if current not in visited:
-                visited[current] = 1
-            else: visited[current] += 1
-            astack.extend([p for p in parents[current] if p not in ancestors])
-    if any(v > 1 for k,v in visited.items()):
-        print(f"ancestors visited multiple times in getallancestors_iterative({int(b)})")
-        print(visited)
+    work_stack = [(b, False)]  # (bead, is_processed)
+
+    while work_stack:
+        current, is_processed = work_stack[-1]
+
+        if is_processed:
+            # We've finished processing all parents, compute ancestors
+            work_stack.pop()
+            ancestors[current] = set(copy(parents[current]))
+
+            # Update with ancestors of all parents
+            for p in parents[current]:
+                ancestors[current].update(ancestors[p])
+        else:
+            # Mark as being processed
+            work_stack[-1] = (current, True)
+
+            # Add any unprocessed parents to the stack
+            for p in parents[current]:
+                if p not in ancestors:
+                    work_stack.append((p, False))
+
+    return ancestors
 
 def cohorts(parents, children=None, initial_cohort=None):
     """ Given the seed of the next cohort (which is the set of beads one step older, in the next
@@ -548,6 +548,40 @@ def load_braid(filename):
 
         json_data.close()
         return dag
+    raise FileNotFoundError("load_braid could not open file: ", filename)
+
+def number_beads(hashed_parents):
+    """ Number the beads in a braid sequentially in topological order starting at genesis.  This is useful for test
+        cases to not print huge hashes.
+    """
+    bead_id  = 0
+    parents  = {}
+    bead_ids = bidict() # a hash map from the bead identifier (a hash) to its (small) number and v/v
+    for bead_hash in geneses(hashed_parents):
+        bead_ids[bead_hash] = bead_id
+        parents[bead_id]    = set()
+        bead_id            += 1
+    # Traverse the DAG in BFS in the descendant direction
+    hashed_children = reverse(hashed_parents)
+    next_parents = copy(parents)
+    while next_parents:
+        working_parents = copy(next_parents)
+        next_parents    = {}
+        for parent in working_parents:
+            for bead_hash in hashed_children[bead_ids.inv[parent]]:
+                this_id = bead_id
+                if bead_hash not in bead_ids:
+                    this_id = bead_ids[bead_hash] = bead_id
+                    bead_id += 1
+                else:
+                    this_id = bead_ids[bead_hash]
+                if this_id not in parents:
+                    parents[this_id] = set()
+                if this_id not in next_parents:
+                    next_parents[this_id] = set()
+                next_parents[this_id].add(parent)
+                parents[this_id].add(parent)
+    return parents
 
 def save_braid(parents, filename, description=None):
     """ Save a JSON file containing a braid. It should contain the keys "description", "parents",
@@ -590,8 +624,8 @@ class TestCohortMethods(unittest.TestCase):
         self.assertEqual(geneses(self.parents3), {0, 1, 2})
 
     def test_geneses_files(self):
-        for filename in sorted([filename for filename in os.listdir(TEST_CASE_DIR) if filename.endswith(".braid")]):
-            dag = load_braid(filename)
+        for filename in sorted([filename for filename in os.listdir(TEST_CASE_DIR) if filename.endswith(".json")]):
+            dag = load_braid(TEST_CASE_DIR+filename)
             self.assertEqual(geneses(dag["parents"]), {0})
 
     def test_tips1(self):
@@ -615,15 +649,15 @@ class TestCohortMethods(unittest.TestCase):
         self.assertEqual(list(cohorts(self.parents1)), [{0}, {1}, {2}, {3}])
 
     def test_cohorts_files(self):
-        """ Test an assortment of example *.braid files. """
-        for filename in sorted([filename for filename in os.listdir(TEST_CASE_DIR) if filename.endswith(".braid")]):
-            dag = load_braid(filename)
+        """ Test an assortment of example *.json files. """
+        for filename in sorted([filename for filename in os.listdir(TEST_CASE_DIR) if filename.endswith(".json")]):
+            dag = load_braid(TEST_CASE_DIR+filename)
             self.assertEqual(list(cohorts(dag["parents"])), dag["cohorts"])
 
     def test_cohorts_reversed_files(self):
         """ Does it find the same cohorts in the forward and backward directions? """
-        for filename in sorted([filename for filename in os.listdir(TEST_CASE_DIR) if filename.endswith(".braid")]):
-            dag = load_braid(filename)
+        for filename in sorted([filename for filename in os.listdir(TEST_CASE_DIR) if filename.endswith(".json")]):
+            dag = load_braid(TEST_CASE_DIR+filename)
             p = reverse(dag["parents"])
             c = dag["cohorts"]
             c.reverse()
@@ -633,27 +667,29 @@ class TestCohortMethods(unittest.TestCase):
         self.assertEqual(highest_work_path(self.parents1, reverse(self.parents1)), [0,1,2,3])
 
     def test_higest_work_path_files(self):
-        for filename in sorted([filename for filename in os.listdir(TEST_CASE_DIR) if filename.endswith(".braid")]):
-            dag = load_braid(filename)
-            self.assertEqual(highest_work_path(dag["parents"], dag["children"]),
-                             dag["highest_work_path"], msg=f"Test file: {filename}")
+        for filename in sorted([filename for filename in os.listdir(TEST_CASE_DIR) if filename.endswith(".json")]):
+            msg = f"Test file: {filename}"
+            dag = load_braid(TEST_CASE_DIR+filename)
+            self.assertEqual(highest_work_path(dag["parents"], dag["children"]), dag["highest_work_path"], msg=msg)
 
     def test_check_cohort_files(self):
-        for filename in sorted([filename for filename in os.listdir(TEST_CASE_DIR) if filename.endswith(".braid")]):
-            dag = load_braid(filename)
+        for filename in sorted([filename for filename in os.listdir(TEST_CASE_DIR) if filename.endswith(".json")]):
+            msg = f"Test file: {filename}"
+            dag = load_braid(TEST_CASE_DIR+filename)
             for c in dag["cohorts"]:
-                self.assertEqual(check_cohort(c, dag["parents"], dag["children"]), True, msg=f"Test file: {filename}")
+                self.assertEqual(check_cohort(c, dag["parents"], dag["children"]), True, msg=msg)
 
     def test_check_work_files(self):
-        for filename in sorted([filename for filename in os.listdir(TEST_CASE_DIR) if filename.endswith(".braid")]):
-            dag = load_braid(filename)
+        for filename in sorted([filename for filename in os.listdir(TEST_CASE_DIR) if filename.endswith(".json")]):
+            msg = f"Test file: {filename}"
+            dag = load_braid(TEST_CASE_DIR+filename)
             for c in dag["cohorts"]:
-                self.assertEqual(dag["work"], work(dag["parents"], dag["children"], dag["bead_work"]),
-                                 msg=f"Test file: {filename}")
+                self.assertEqual(dag["work"], descendant_work(dag["parents"], dag["children"], dag["bead_work"]),
+                                    msg=msg)
 
     def test_sub_braid_files(self):
-        for filename in sorted([filename for filename in os.listdir(TEST_CASE_DIR) if filename.endswith(".braid")]):
-            dag = load_braid(filename)
+        for filename in sorted([filename for filename in os.listdir(TEST_CASE_DIR) if filename.endswith(".json")]):
+            dag = load_braid(TEST_CASE_DIR+filename)
             for c in dag["cohorts"]:
                 msg = f"Test file: {filename}"
                 self.assertEqual(geneses(sub_braid(c, dag["parents"])),
@@ -665,14 +701,25 @@ class TestCohortMethods(unittest.TestCase):
 
     def test_head_tail_files(self):
         """ Test that cohort_head and cohort_tail do the same thing as geneses and tips. """
-        for filename in sorted([filename for filename in os.listdir(TEST_CASE_DIR) if filename.endswith(".braid")]):
-            dag = load_braid(filename)
+        for filename in sorted([filename for filename in
+                                os.listdir(TEST_CASE_DIR) if
+                                filename.endswith(".json")]):
+            dag = load_braid(TEST_CASE_DIR+filename)
             for c in dag["cohorts"]:
                 msg = f"Test file: {filename}"
                 self.assertEqual(cohort_head(c, dag["parents"], dag["children"]),
                                  geneses(sub_braid(c, dag["parents"])), msg=msg)
                 self.assertEqual(cohort_tail(c, dag["parents"], dag["children"]),
                                  tips(sub_braid(c, dag["parents"])), msg=msg)
+
+    def test_all_ancestors(self):
+        """ Test that the iterative and recursive definitions of all_ancestors match.
+        """
+        for filename in sorted([filename for filename in os.listdir(TEST_CASE_DIR) if filename.endswith(".json")]):
+            dag = load_braid(TEST_CASE_DIR+filename)
+            for b in dag["parents"]:
+                msg = f"Test file: {filename}"
+                self.assertEqual(all_ancestors(b, dag["parents"]), all_ancestors_recursive(b, dag["parents"]), msg=msg)
 
 if __name__ == "__main__":
     unittest.main()
