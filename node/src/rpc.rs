@@ -1,6 +1,7 @@
 use bitcoincore_rpc::RpcApi;
 use shellexpand;
 use std::path::PathBuf;
+use crate::shutdown::ShutdownHandler;
 
 pub fn setup(
     bitcoin: String,
@@ -43,22 +44,43 @@ pub fn setup(
     // check if rpc is alive
     //
     // get_best_block_hash just returns a string
-    let best_block_hash = rpc.get_best_block_hash()?;
-    log::info!("Best block hash: {:?}", best_block_hash);
-    // get_blockchain_info returns a json blob
-    let info = rpc.get_blockchain_info().unwrap();
-    log::info!("Blockchain info: {:?}", info);
-    if let Err(e) = rpc.get_blockchain_info() {
-        log::error!("get_blockchain_info returned an error: {:?}", e);
-        if is_cookie_auth {
-            log::error!(
-                "Unable to authenticate to bitcoind using a cookie file. \
-                Ensure that bitcoind is running on the same node or use \
-                rpcuser/rpcpass instead."
-            );
+    let best_block_hash = match rpc.get_best_block_hash() {
+        Ok(hash) => hash,
+        Err(e) => {
+            log::error!("Failed to get best block hash: {}", e);
+            return Err(e);
         }
-        std::process::exit(1);
+    };
+    log::info!("Best block hash: {:?}", best_block_hash);
+
+    // get_blockchain_info returns a json blob
+    match rpc.get_blockchain_info() {
+        Ok(info) => {
+            log::info!("Blockchain info: {:?}", info);
+        }
+        Err(e) => {
+            log::error!("get_blockchain_info returned an error: {:?}", e);
+            if is_cookie_auth {
+                log::error!(
+                    "Unable to authenticate to bitcoind using a cookie file. \
+                    Ensure that bitcoind is running on the same node or use \
+                    rpcuser/rpcpass instead."
+                );
+            }
+            return Err(e);
+        }
     }
 
     Ok(rpc)
+}
+
+pub async fn check_bitcoin_node(rpc: &bitcoincore_rpc::Client, shutdown_handler: &ShutdownHandler) {
+    match rpc.get_blockchain_info() {
+        Ok(_) => {
+            // Node is healthy
+        }
+        Err(e) => {
+            shutdown_handler.shutdown_bitcoin_error(format!("Bitcoin node error: {}", e));
+        }
+    }
 }

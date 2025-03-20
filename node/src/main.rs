@@ -11,7 +11,10 @@ mod cli;
 mod connection;
 mod protocol;
 mod rpc;
+mod shutdown;
 mod zmq;
+
+use shutdown::ShutdownHandler;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -34,13 +37,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    let rpc = rpc::setup(
+    // Create shutdown handler
+    let (shutdown_handler, _shutdown_rx) = ShutdownHandler::new();
+    let shutdown_handler_clone = shutdown_handler.clone();
+
+    // Setup RPC with error handling
+    let rpc = match rpc::setup(
         args.bitcoin.clone(),
         args.rpcport,
         args.rpcuser,
         args.rpcpass,
         args.rpccookie,
-    )?;
+    ) {
+        Ok(rpc) => rpc,
+        Err(e) => {
+            shutdown_handler.shutdown_bitcoin_error(format!("Failed to setup Bitcoin RPC: {}", e));
+            return Err(e.into());
+        }
+    };
+
     let zmq_url = format!("tcp://{}:{}", args.bitcoin, args.zmqhashblockport);
 
     let (block_template_tx, block_template_rx) = mpsc::channel(1);
@@ -49,17 +64,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     if let Some(addnode) = args.addnode {
         for node in addnode.iter() {
-            //log::info!("Connecting to node: {:?}", node);
-            let stream = TcpStream::connect(node).await.expect("Error connecting");
+            let stream = match TcpStream::connect(node).await {
+                Ok(stream) => stream,
+                Err(e) => {
+                    shutdown_handler.shutdown_connection_error(format!("Error connecting to {}: {}", node, e));
+                    return Err(e.into());
+                }
+            };
+            
             let (r, w) = stream.into_split();
             let framed_reader = FramedRead::new(r, LengthDelimitedCodec::new());
             let framed_writer = FramedWrite::new(w, LengthDelimitedCodec::new());
             let mut conn = connection::Connection::new(framed_reader, framed_writer);
+            
             if let Ok(addr_iter) = node.to_socket_addrs() {
                 if let Some(addr) = addr_iter.into_iter().next() {
+                    let shutdown_handler = shutdown_handler_clone.clone();
                     tokio::spawn(async move {
-                        if conn.start_from_connect(&addr).await.is_err() {
-                            log::warn!("Peer {} closed connection", addr)
+                        if let Err(e) = conn.start_from_connect(&addr).await {
+                            shutdown_handler.shutdown_connection_error(format!("Peer {} error: {}", addr, e));
                         }
                     });
                 }
@@ -68,26 +91,35 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     log::info!("Binding to {}", args.bind);
-    let listener = TcpListener::bind(&args.bind).await?;
+    let listener = match TcpListener::bind(&args.bind).await {
+        Ok(listener) => listener,
+        Err(e) => {
+            shutdown_handler.shutdown_connection_error(format!("Failed to bind to {}: {}", args.bind, e));
+            return Err(e.into());
+        }
+    };
+
     loop {
-        // Asynchronously wait for an inbound TcpStream.
         log::info!("Starting accept");
         match listener.accept().await {
-            Ok((stream, _)) => {
-                let addr = stream.peer_addr()?;
+            Ok((stream, addr)) => {
                 log::info!("Accepted connection from {}", addr);
                 let (r, w) = stream.into_split();
                 let framed_reader = FramedRead::new(r, LengthDelimitedCodec::new());
                 let framed_writer = FramedWrite::new(w, LengthDelimitedCodec::new());
                 let mut conn = connection::Connection::new(framed_reader, framed_writer);
+                let shutdown_handler = shutdown_handler_clone.clone();
 
                 tokio::spawn(async move {
-                    if conn.start_from_accept().await.is_err() {
-                        log::warn!("Peer {} closed connection", addr)
+                    if let Err(e) = conn.start_from_accept().await {
+                        shutdown_handler.shutdown_connection_error(format!("Peer {} error: {}", addr, e));
                     }
                 });
             }
-            Err(e) => log::error!("couldn't get client: {:?}", e),
+            Err(e) => {
+                shutdown_handler.shutdown_connection_error(format!("Accept error: {}", e));
+                return Err(e.into());
+            }
         }
     }
 }
@@ -99,16 +131,13 @@ fn setup_logging() {
 }
 
 fn setup_tracing() -> Result<(), Box<dyn Error>> {
-    // Create a filter for controlling the verbosity of tracing output
     let filter =
         tracing_subscriber::EnvFilter::from_default_env().add_directive("chat=info".parse()?);
 
-    // Build a `tracing` subscriber with the specified filter
     let subscriber = tracing_subscriber::FmtSubscriber::builder()
         .with_env_filter(filter)
         .finish();
 
-    // Set the subscriber as the global default for tracing
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
     Ok(())
