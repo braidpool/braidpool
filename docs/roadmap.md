@@ -1,9 +1,30 @@
-# Version 0.0 (current)
+# Roadmap
+
+## Version 0.0 (current)
 
 1. Connects to other nodes via a command line option (no peer discovery)
 2. Connects to bitcoind to receive block headers and transactions
 
-# Version 0.1
+## Version 0.01: CPUNet Mining (in progress)
+
+- ✅ CPU-only mining using our forks of [bitcoin](https://github.com/braidpool/bitcoin/tree/cpunet) and [rust-bitcoin](https://github.com/braidpool/rust-bitcoin/tree/cpunet), and [rust-bitcoincore-rpc](https://github.com/braidpool/rust-bitcoincore-rpc/tree/cpunet)
+
+#### Requirements
+
+- ✅ Working CPUNet fork of bitcoin (completed)
+- ✅ Adapt rust-bitcoin an rust-bitcioncore-rpc to use the modfied PoW function (completed)
+
+## Version 0.02: Audit Mode
+
+1. This version will *audit* mining and act as a proxy to an upstream pool.
+2. The data in the DAG can be used to prove hashrate for a single miner within their data center, or for hosted mining companies with multiple downstream clients.
+
+#### Requirements
+
+- ⬜️ Connection to an upstream pool
+
+
+## Version 0.1: Data Gathering
 
 The goal of the first version is to gather useful data about mining devices and expected particpants in Braidpool. We need to find out:
 
@@ -25,44 +46,44 @@ Requirements:
 4. Docker images (or other runnable image solution)
 5. Manual peer discovery via command line
 
-# Version 0.2
+## Version 0.2:
 
 1. Peer discovery mechanism (DHT or other)
 2. Testnet version available, keep mainnet "donation" running, continue to solicit hashrate from new devices
 3. Expansion of p2p system to include block and tx relay
 
-# Version 0.3
+## Version 0.3
 
 1. Implementation of "slots" key-value store to keep track of FROST signers
 2. Implementation of share validation checks (full block checks with txs)
 
-# Version 0.4
+## Version 0.4
 
 1. Implementation of difficulty adjustment algorithm, with user selected difficulty (software will provide a recommended difficulty given the number of mining devices it sees to keep a constant variance among miners regardless of their size)
 2. Initial implentation of FROST signing using "slots"
 
-# Version 0.5
+## Version 0.5
 
 1. Public launch of Braidpool. You will be able to actually mine on it with payouts every 2 weeks. UX will be command line and shit but we will provide Docker images.
 2. Miner monitoring console (UX) initial implementation
 
-# Version 0.6
+## Version 0.6
 
-1. Initial implementation of transaction system (sending of shares). We will probably straight up copy bitcoin using libconsensus or similar. 
+1. Initial implementation of transaction system (sending of shares). We will probably straight up copy bitcoin using libconsensus or similar.
 
-# Version 0.7
+## Version 0.7
 
 1. P2P latency improvements through Forward Error Correction over UDP (FEC).
 2. Polish that UX
 
-# Version 0.8
+## Version 0.8
 
 1. Initial implementation of "sub-pools". (Braidpool that mines into parent Braidpool) to decrease the smallest possible miner by 1000x.
 
-# Version 0.9
+## Version 0.9
 
 1. Everything I forgot in the above
 
-# Version 1.0
+## Version 1.0
 
 To the moon!
