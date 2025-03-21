@@ -94,7 +94,7 @@ def print_hash(h):
     """
     if type(h) == int:
         hex_string = f"{h:064x}"
-        color = re.search(r'0*([^0].{5})', hex_string).group(1)
+        color = re.search(r'0*.([^0].{5})', hex_string).group(1)
         # Convert hex to RGB
         r, g, b = tuple(int(color[i:i+2], 16) for i in (0, 2, 4))
         # ANSI escape code for setting color
