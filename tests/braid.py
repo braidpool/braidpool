@@ -390,12 +390,50 @@ def layout(cohort, parents, children=None, bead_work=None):
         nonlocal coords, unplaced
         for bead in copy(unplaced):
             min_x, max_x = x_range(bead)
+            
+            # Handle invalid range (min_x > max_x)
+            if min_x > max_x or max_x < min_x:
+                # Try to place at min_x first, then at max_x, then at any available position
+                placed = False
+                
+                # Try positions near min_x
+                for y in range(1, 15):
+                    if place(bead, (min_x, y)):
+                        unplaced.remove(bead)
+                        placed = True
+                        break
+                
+                # If that didn't work, try positions near max_x
+                if not placed:
+                    for y in range(1, 15):
+                        if place(bead, (max_x, y)):
+                            unplaced.remove(bead)
+                            placed = True
+                            break
+                
+                # If still not placed, try to find any available position
+                if not placed:
+                    width = max(coords[b][0] for b in coords) + 1 if coords else 1
+                    for x in range(width + 1):  # Try existing width + 1 new column
+                        for y in range(1, 15):
+                            if place(bead, (x, y)):
+                                unplaced.remove(bead)
+                                placed = True
+                                break
+                        if placed:
+                            break
+                
+                continue
+            
+            placed = False
+            # Limit the y-range to prevent infinite loops
             for y in range(1, 15):
                 for x in range(min_x, max_x+1):
                     if place(bead, (x,y)):
                         unplaced.remove(bead)
+                        placed = True
                         break
-                if bead in coords:
+                if placed:
                     break
         return coords, unplaced
 
@@ -437,8 +475,11 @@ def layout(cohort, parents, children=None, bead_work=None):
         for bead in unplaced:
             min_x, max_x = x_range(bead)
             if max_x < min_x:
-                for insert_x in range(min_x, max_x, -1):
-                    insert_row_column(insert_x, 0)
+                # Limit the number of columns to insert to prevent infinite loops
+                # Only insert up to 3 columns at a time
+                columns_to_insert = min(3, min_x - max_x)
+                for i in range(columns_to_insert):
+                    insert_row_column(max_x + i + 1, 0)
                 column_inserted = True
         return column_inserted
 
@@ -495,7 +536,13 @@ def layout(cohort, parents, children=None, bead_work=None):
     #print(f"Initial graph is {width}x{height} with area {best_area} and unplaced = {unplaced}")
 
     # Try to optimize area
-    while width >= 3:
+    max_iterations = 10  # Prevent infinite loops by limiting iterations
+    iteration = 0
+    # Keep track of tried insertion points to avoid repeating the same work
+    tried_insertions = set()
+    
+    while width >= 3 and iteration < max_iterations:
+        iteration += 1
         coords = copy(initial_coords)
         unplaced = copy(initial_unplaced)
         last_unplaced = copy(best_unplaced)
@@ -503,16 +550,39 @@ def layout(cohort, parents, children=None, bead_work=None):
         # Minimize the area of the resulting graph by inserting rows and columns
         height = max(coords[b][1] for b in coords)+1
         width = max(coords[b][0] for b in coords)+1
+        
+        # Limit the number of insertion points to try per iteration
+        max_insertion_attempts = 5
+        insertion_attempts = 0
+        
         for insert_x in range(width):
+            if insertion_attempts >= max_insertion_attempts:
+                break
+                
             for insert_y in range(height): # FIXME do head and tail separately
+                # Skip already tried insertion points
+                if (insert_x, insert_y) in tried_insertions:
+                    continue
+                    
                 if insert_x == insert_y and insert_x == 0:
                     continue
+                    
+                # Mark this insertion point as tried
+                tried_insertions.add((insert_x, insert_y))
+                insertion_attempts += 1
+                
+                if insertion_attempts >= max_insertion_attempts:
+                    break
                 coords = copy(initial_coords)
                 unplaced = copy(initial_unplaced)
                 insert_row_column(insert_x, insert_y)
                 place_unplaced()
-                while insert_x_range():
+                # Limit the number of column insertion attempts to prevent infinite loops
+                max_column_insertions = 5
+                column_insertions = 0
+                while insert_x_range() and column_insertions < max_column_insertions:
                     place_unplaced()
+                    column_insertions += 1
                 height = max(coords[b][1] for b in coords)+1
                 width = max(coords[b][0] for b in coords)+1
                 area = width * height
@@ -526,12 +596,46 @@ def layout(cohort, parents, children=None, bead_work=None):
                 print(f"WARNING: continuing because {best_unplaced} are still unplaced.")
                 print(f"best_unplaced = {best_unplaced}, last_unplaced = {last_unplaced}")
                 continue
-            # FIXME this will loop forever if there wasn't an incremental improvement.
-            print(f"WARNING: terminating layout() with beads {best_unplaced} still unplaced.")
-            for bead in best_unplaced:
-                min_x, max_x = x_range(bead)
-                print(f"    {bead} should be {min_x} <= x <= {max_x}")
-        break
+            # Try one last attempt to place remaining beads at any position
+            print(f"WARNING: attempting final placement for beads {best_unplaced}.")
+            coords = copy(best_coords)
+            unplaced = copy(best_unplaced)
+            
+            # Force placement at any available position
+            width = max(coords[b][0] for b in coords) + 1 if coords else 1
+            for bead in copy(unplaced):
+                placed = False
+                # Try to place at the rightmost column + 1
+                for y in range(1, 15):
+                    if place(bead, (width, y)):
+                        unplaced.remove(bead)
+                        placed = True
+                        break
+                if not placed:
+                    # If that didn't work, try any position
+                    for x in range(width + 2):  # Try even wider
+                        for y in range(1, 15):
+                            if place(bead, (x, y)):
+                                unplaced.remove(bead)
+                                placed = True
+                                break
+                        if placed:
+                            break
+            
+            # Update best_coords if we made progress
+            if len(unplaced) < len(best_unplaced):
+                best_coords = copy(coords)
+                best_unplaced = copy(unplaced)
+            
+            if best_unplaced:
+                print(f"WARNING: terminating layout() with beads {best_unplaced} still unplaced.")
+                for bead in best_unplaced:
+                    min_x, max_x = x_range(bead)
+                    print(f"    {bead} should be {min_x} <= x <= {max_x}")
+            break
+        # If we've successfully placed all beads, we can stop optimizing
+        if not best_unplaced:
+            break
 
     #print(f"Returning best solution with area {best_area} and unplaced = {best_unplaced}")
     return best_coords
