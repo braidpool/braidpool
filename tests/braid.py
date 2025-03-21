@@ -32,7 +32,7 @@ def make_dag(hashed_parents, bead_work=None, description=None):
     dag["geneses"]           = geneses(parents)
     dag["tips"]              = tips(parents, dag["children"])
     dag["cohorts"]           = list(cohorts(parents))
-    dag["bead_work"]         = bead_work if bead_work else {b:1 for b in dag["parents"]}
+    dag["bead_work"]         = bead_work if bead_work else {b:FIXED_BEAD_WORK for b in dag["parents"]}
     dag["work"]              = descendant_work(parents, dag["children"], dag["bead_work"], dag["cohorts"])
     dag["highest_work_path"] = highest_work_path(parents, dag["children"], dag["work"])
     return dag
@@ -218,7 +218,7 @@ def descendant_work(parents, children=None, bead_work=None, in_cohorts=None):
     in_cohorts      = reversed(in_cohorts) if in_cohorts else cohorts(children)
     retval          = {} # The cumulative work for each bead
     for c in in_cohorts:
-        sub_children   = sub_braid(c, children)    # children dict within the cohort
+        sub_children    = sub_braid(c, children)   # children dict within the cohort
         sub_descendants = {}                       # descendants within the cohort
         for b in c:
             all_ancestors(b, sub_children, sub_descendants)
@@ -232,7 +232,8 @@ def bead_cmp(a, b, work):
         which should be the output of work().
 
         In the event of a tie it resolves the tie in the following order:
-        1. Highest work
+        1. Highest descendant work
+        2. FUTURE UNIMPLEMENTED: Highest ancestor work
         2. FUTURE UNIMPLEMENTED: Lowest hash ("luck")
         3. FUTURE UNIMPLEMENTED: Earliest timestamp
         4. Lowest label (block hash) -- this is "earliest" in simulations
@@ -320,12 +321,24 @@ def check_cohort_ancestors(cohort, parents, children=None):
     return True
 
 def layout(cohort, parents, children=None, bead_work=None):
-    """Create a graphical layout of a cohort on a 2D grid with minimal space usage."""
+    """ Create a graphical layout of a cohort on a 2D grid with minimal space usage.
+        When simulating you should first call `number_beads()` to make small, sequential
+        integer numbers for the beads instead of using hashes as bead identifiers.
+
+        FIXME BUG: Will draw arrows over beads if the parent of a tail bead is in the head.
+        FIXME BUG: Sometime space is inserted horizontally where it isn't required
+        FIXME BUG: Tips should be in the same column, place tips before head.
+        FIXME ENHANCEMENT: If a bead is in both the head and tail, place it centered over
+                           the others (it always has lower work)
+        FIXME ENHANCEMENT: Place beads both above and below the highest work path, such
+                           that beads with higher work are closer to the highest work path
+        FIXME ENHANCEMENT: Minimize the number of parent arrow line-crossings
+    """
 
     children  = children if children else reverse(parents)
     bead_work = bead_work if bead_work else {b: FIXED_BEAD_WORK for b in parents}
 
-    # Get the sub-DAG for this cohort. Cast to int to get rid of graph_tool vertices
+    # Get the sub-DAG for this cohort.
     sub_parents = dict(sub_braid(cohort, parents).items())
     sub_children = reverse(sub_parents)
 
@@ -409,14 +422,10 @@ def layout(cohort, parents, children=None, bead_work=None):
                 return [coords[bead][0]]
             return [x for p in parents[bead] for x in find_xs(p, parents)]
 
-        #if not find_xs(bead, sub_parents):
-        #    print(f"find_xs({bead}, sub_parents) = ", find_xs(bead, sub_parents))
-        #    print("sub_parents = ", sub_parents)
-        min_x = max(find_xs(bead, sub_parents))
-        #if not find_xs(bead, sub_children):
-        #    print(f"find_xs({bead}, sub_children) = ", find_xs(bead, sub_children))
-        #    print("sub_children = ", sub_children)
-        max_x = min(find_xs(bead, sub_children))
+        min_xs = find_xs(bead, sub_parents)
+        max_xs = find_xs(bead, sub_children)
+        min_x = max(min_xs) if min_xs else 0
+        max_x = min(max_xs) if max_xs else 1
         return (min_x+1, max_x-1)
 
     def insert_x_range():

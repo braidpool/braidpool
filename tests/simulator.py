@@ -126,7 +126,7 @@ class Network:
         a internal clock for simulation which uses <ticksize>.  Latencies are taken
         from a uniform distribution on [0,1) so <ticksize> should be < 1.
     """
-    def __init__(self, nnodes, hashrate, ticksize=TICKSIZE, npeers=4, target=None, log=False):
+    def __init__(self, nnodes, hashrate=NETWORK_HASHRATE, ticksize=TICKSIZE, npeers=4, target=None, log=False):
         self.t                   = 0.0      # the current "time"
         self.nnodes              = nnodes
         self.hashrate            = hashrate
@@ -240,7 +240,8 @@ class Node:
         self.incoming     = set()                                        # incoming beads we were unable to process
         if initial_target:
             self.target   = initial_target
-        self.tremaining   = self.time_to_next_bead()
+        if self.target:
+            self.tremaining   = self.time_to_next_bead()
         self.working_bead = Bead(None, frozenset(self.braid.tips), self.network, self.nodeid)
 
     def __str__(self):
@@ -531,14 +532,16 @@ class Bead:
 
 class Braid:
     """ A Braid is a Directed Acyclic Graph with no incest (parents may not also
-        be non-parent ancestors).  A braid may have multiple tips. """
+        be non-parent ancestors).  A braid may have multiple tips. Test case files
+        may be loaded from a JSON file created by `save_braid()` for display and
+        examination purposes.
+    """
 
     def __init__(self, beads=None, filename=None):
         self.beads    = {}      # A hash map of hashes of all beads for quick lookup
         self.times    = {}      # Time of arrival for each bead
         self.tips     = set()   # A tip is a bead with no children.
         self.cohorts  = []      # A running tally of cohorts # FIXME extending this list is probably causing nonlinear runtime
-        self.dangling = set()   # The set of beads not yet in a cohort
 
         if beads:
             for b in beads:
@@ -550,20 +553,26 @@ class Braid:
                         self.tips.remove(p)
             self.cohorts = list(braid.cohorts(dict(self)))
         elif filename:
-            dag = braid.load_braid(filename)
-            for b in dag["parents"]:
-                self.beads[b.hash] = b
-                self.tips.add(b)
-                for p in b.parents:
-                    self.times[b.hash] = b.t
-                    if p in self.tips:
-                        self.tips.remove(p)
-            self.cohorts = list(braid.cohorts(dict(self)))
+            dag      = braid.load_braid(filename)
+            network  = Network(nnodes=1, npeers=0) # Create a dummy network with one node
+            for bead_hash in dag["parents"]:
+                self.beads[bead_hash] = Bead(bead_hash, set(), network, network.nodes[0])
+            for bead_hash, parent_hashes in dag["parents"].items():
+                self.beads[bead_hash].parents = set(self.beads[p] for p in parent_hashes)
+            self.tips = {self.beads[bead_hash] for bead_hash in dag["tips"]}
+            self.cohorts = [{self.beads[bead_hash] for bead_hash in c} for c in dag["cohorts"]]
 
     def __iter__(self):
         """ You can dump a representation of a braid as a python dictionary like:
-            dict(b), which uses this iterator. This gives integer indices for
-            the beads (instead of hashes) suitable for test cases.
+            dict(b), which uses this iterator. The result will contain <Bead> objects
+            which you can cast to int, or use `braid.number_beads()` to assign new
+            numbers for display purposes.
+
+            Given an instance of Braid `b`, the parents map using hashes instead of
+            Bead objects is obtained using the Bead.__int__ cast:
+                hashed_parents = {int(k): set(map(int, v)) for k,v in dict(b).items()}
+            A more display-friendly format can be obtained as:
+                parents = braid.number_beads(hashed_parents)
         """
         for h, b in self.beads.items():
             yield b, set(p for p in b.parents if p.hash in self.beads)
