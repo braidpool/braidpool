@@ -123,7 +123,7 @@ def cohorts(parents, children=None, initial_cohort=None):
         cohort.
     """
     children     = reverse(parents) if not children else children
-    dag          = {"parents": parents, "children": children, "tips": tips(parents, children)}
+    dag_tips     = tips(parents, children)
     cohort       = initial_cohort or geneses(parents)
     oldcohort    = set()
     head         = copy(cohort)
@@ -137,10 +137,10 @@ def cohorts(parents, children=None, initial_cohort=None):
             if not head:
                 return                       # StopIteration and return
             for b in cohort-oldcohort:
-                tail |= dag["children"][b]   # Add the next generation to the tail
+                tail |= children[b]          # Add the next generation to the tail
             tail |= cohort ^ oldcohort       # Add any beads in oldcohort but not in cohort
-            if cohort & dag["tips"]:         # If there are any tips in cohort, add tips to tail
-                tail |= dag["tips"]-cohort
+            if cohort & dag_tips:            # If there are any tips in cohort, add tips to tail
+                tail |= dag_tips-cohort
             else:
                 tail -= cohort               # If there are no tips in cohort subtract off cohort
 
@@ -151,7 +151,7 @@ def cohorts(parents, children=None, initial_cohort=None):
             # Calculate ancestors
             for t in tail:                   # Find all ancestors of all beads in the tail
                 if t not in ancestors:
-                    all_ancestors(t, dag["parents"], ancestors) # half the CPU time is here
+                    all_ancestors(t, parents, ancestors) # half the CPU time is here
 
             # Calculate cohort
             cohort = set()
@@ -159,14 +159,14 @@ def cohorts(parents, children=None, initial_cohort=None):
                 cohort |= ancestors[a]       # Union all ancestors with the cohort
 
             # Check termination cases
-            if dag["tips"] <= cohort:        # Cohort contains all tips
+            if dag_tips <= cohort:           # Cohort contains all tips
                 head = set()                 # StopIteration and return
                 break                        # and yield the current cohort
             if cohort and all(ancestors[t] == cohort for t in tail): # Standard cohort case
                 head = copy(tail)            # Head of next cohort is tail from previous iteration
                 break                        # Yield successful cohort
             if cohort == oldcohort:          # Cohort hasn't changed, we may be looping
-                if dag["tips"] <= tail:      # Tail contains all tips but we didn't form a cohort
+                if dag_tips <= tail:         # Tail contains all tips but we didn't form a cohort
                     head = set()
                     cohort |= tail
                     tail = set()
