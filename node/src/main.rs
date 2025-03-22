@@ -1,115 +1,149 @@
-use clap::Parser;
-use std::error::Error;
-use std::fs;
-use std::net::ToSocketAddrs;
-use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::mpsc;
-use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
-
-mod block_template;
-mod cli;
-mod connection;
-mod protocol;
-mod rpc;
-mod zmq;
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
-    let args = cli::Cli::parse();
-
-    setup_logging();
-    setup_tracing()?;
-
-    let datadir = shellexpand::full(args.datadir.to_str().unwrap()).unwrap();
-    match fs::metadata(&*datadir) {
-        Ok(m) => {
-            if !m.is_dir() {
-                log::error!("Data directory {} exists but is not a directory", datadir);
-            }
-            log::info!("Using existing data directory: {}", datadir);
-        }
-        Err(_) => {
-            log::info!("Creating data directory: {}", datadir);
-            fs::create_dir_all(&*datadir)?;
-        }
+@Library('Shared') _
+pipeline {
+    agent { label 'Node' }
+    
+    environment {
+        SONAR_HOME = tool "Sonar"
     }
+    
+    parameters {
+        string(name: 'FRONTEND_DOCKER_TAG', defaultValue: '', description: 'Docker tag for frontend image')
+        string(name: 'BACKEND_DOCKER_TAG', defaultValue: '', description: 'Docker tag for backend image')
+    }
+    
+    stages {
+        stage("Validate Parameters") {
+            steps {
+                script {
+                    if (!params.FRONTEND_DOCKER_TAG?.trim() || !params.BACKEND_DOCKER_TAG?.trim()) {
+                        error("Both FRONTEND_DOCKER_TAG and BACKEND_DOCKER_TAG must be provided.")
+                    }
+                    echo "Parameters validated: FRONTEND_DOCKER_TAG=${params.FRONTEND_DOCKER_TAG}, BACKEND_DOCKER_TAG=${params.BACKEND_DOCKER_TAG}"
+                }
+            }
+        }
 
-    let rpc = rpc::setup(
-        args.bitcoin.clone(),
-        args.rpcport,
-        args.rpcuser,
-        args.rpcpass,
-        args.rpccookie,
-    )?;
-    let zmq_url = format!("tcp://{}:{}", args.bitcoin, args.zmqhashblockport);
+        stage("Cleanup Workspace") {
+            steps {
+                cleanWs()
+                echo "Workspace cleaned successfully."
+            }
+        }
 
-    let (block_template_tx, block_template_rx) = mpsc::channel(1);
-    tokio::spawn(zmq::zmq_hashblock_listener(zmq_url, rpc, block_template_tx));
-    tokio::spawn(block_template::consumer(block_template_rx));
+        stage('Git: Checkout Code') {
+            steps {
+                script {
+                    echo "Checking out source code..."
+                    code_checkout("https://github.com/LondheShubham153/Wanderlust-Mega-Project.git", "main")
+                }
+            }
+        }
 
-    if let Some(addnode) = args.addnode {
-        for node in addnode.iter() {
-            //log::info!("Connecting to node: {:?}", node);
-            let stream = TcpStream::connect(node).await.expect("Error connecting");
-            let (r, w) = stream.into_split();
-            let framed_reader = FramedRead::new(r, LengthDelimitedCodec::new());
-            let framed_writer = FramedWrite::new(w, LengthDelimitedCodec::new());
-            let mut conn = connection::Connection::new(framed_reader, framed_writer);
-            if let Ok(addr_iter) = node.to_socket_addrs() {
-                if let Some(addr) = addr_iter.into_iter().next() {
-                    tokio::spawn(async move {
-                        if conn.start_from_connect(&addr).await.is_err() {
-                            log::warn!("Peer {} closed connection", addr)
+        stage("Security Scans") {
+            parallel {
+                stage("Trivy: Filesystem Scan") {
+                    steps {
+                        script {
+                            echo "Running Trivy scan..."
+                            trivy_scan()
                         }
-                    });
+                    }
+                }
+
+                stage("OWASP: Dependency Check") {
+                    steps {
+                        script {
+                            echo "Running OWASP Dependency Check..."
+                            owasp_dependency()
+                        }
+                    }
+                }
+            }
+        }
+
+        stage("SonarQube: Code Analysis") {
+            steps {
+                script {
+                    echo "Starting SonarQube analysis..."
+                    sonarqube_analysis("Sonar", "wanderlust", "wanderlust")
+                }
+            }
+        }
+
+        stage("SonarQube: Quality Gate Check") {
+            steps {
+                script {
+                    echo "Checking SonarQube Quality Gates..."
+                    sonarqube_code_quality()
+                }
+            }
+        }
+
+        stage("Setup Environment Variables") {
+            parallel {
+                stage("Backend Setup") {
+                    steps {
+                        script {
+                            dir("Automations") {
+                                sh "bash updatebackendnew.sh"
+                                echo "Backend environment updated."
+                            }
+                        }
+                    }
+                }
+
+                stage("Frontend Setup") {
+                    steps {
+                        script {
+                            dir("Automations") {
+                                sh "bash updatefrontendnew.sh"
+                                echo "Frontend environment updated."
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        stage("Docker: Build and Push Images") {
+            steps {
+                script {
+                    try {
+                        echo "Building and pushing backend image..."
+                        dir('backend') {
+                            docker_build("wanderlust-backend-beta", params.BACKEND_DOCKER_TAG, "trainwithshubham")
+                            docker_push("wanderlust-backend-beta", params.BACKEND_DOCKER_TAG, "trainwithshubham")
+                        }
+
+                        echo "Building and pushing frontend image..."
+                        dir('frontend') {
+                            docker_build("wanderlust-frontend-beta", params.FRONTEND_DOCKER_TAG, "trainwithshubham")
+                            docker_push("wanderlust-frontend-beta", params.FRONTEND_DOCKER_TAG, "trainwithshubham")
+                        }
+
+                        echo "Docker images built and pushed successfully."
+                    } catch (Exception e) {
+                        error "Docker build or push failed: ${e.message}"
+                    }
                 }
             }
         }
     }
 
-    log::info!("Binding to {}", args.bind);
-    let listener = TcpListener::bind(&args.bind).await?;
-    loop {
-        // Asynchronously wait for an inbound TcpStream.
-        log::info!("Starting accept");
-        match listener.accept().await {
-            Ok((stream, _)) => {
-                let addr = stream.peer_addr()?;
-                log::info!("Accepted connection from {}", addr);
-                let (r, w) = stream.into_split();
-                let framed_reader = FramedRead::new(r, LengthDelimitedCodec::new());
-                let framed_writer = FramedWrite::new(w, LengthDelimitedCodec::new());
-                let mut conn = connection::Connection::new(framed_reader, framed_writer);
+    post {
+        success {
+            echo "Pipeline execution successful. Archiving artifacts..."
+            archiveArtifacts artifacts: '*.xml', followSymlinks: false
 
-                tokio::spawn(async move {
-                    if conn.start_from_accept().await.is_err() {
-                        log::warn!("Peer {} closed connection", addr)
-                    }
-                });
-            }
-            Err(e) => log::error!("couldn't get client: {:?}", e),
+            echo "Triggering Wanderlust-CD pipeline..."
+            build job: "Wanderlust-CD", parameters: [
+                string(name: 'FRONTEND_DOCKER_TAG', value: params.FRONTEND_DOCKER_TAG),
+                string(name: 'BACKEND_DOCKER_TAG', value: params.BACKEND_DOCKER_TAG)
+            ]
+        }
+
+        failure {
+            echo "Pipeline execution failed. Check logs for details."
         }
     }
-}
-
-fn setup_logging() {
-    env_logger::init_from_env(
-        env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info"),
-    );
-}
-
-fn setup_tracing() -> Result<(), Box<dyn Error>> {
-    // Create a filter for controlling the verbosity of tracing output
-    let filter =
-        tracing_subscriber::EnvFilter::from_default_env().add_directive("chat=info".parse()?);
-
-    // Build a `tracing` subscriber with the specified filter
-    let subscriber = tracing_subscriber::FmtSubscriber::builder()
-        .with_env_filter(filter)
-        .finish();
-
-    // Set the subscriber as the global default for tracing
-    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
-
-    Ok(())
 }
