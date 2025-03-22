@@ -324,16 +324,20 @@ def check_cohort_ancestors(cohort, parents, children=None):
 
 def layout(cohort, all_parents, all_children=None, bead_work=None):
     """
-    Places beads on a grid based on DAG structure and highest work path.
+    Places beads on a grid based on DAG structure and highest work path. This
+    algorithm operates on one <cohort> at a time.
 
     Args:
+        cohort (set): Set of beads in the cohort.
         all_parents (dict): Dictionary mapping bead to a set of its parents.
         all_children (dict): Dictionary mapping bead to a set of its children.
+        bead_work (dict): Dictionary mapping bead to its work.
 
     Returns:
         dict: Dictionary mapping bead to its (x, y) coordinates on the grid.
 
     FIXME will draw lines over other beads when a bead is in both the head and tail.
+    FIXME place beads both above and below the highest work path.
     """
 
     all_children  = all_children if all_children else reverse(all_parents)
@@ -406,31 +410,8 @@ def layout(cohort, all_parents, all_children=None, bead_work=None):
 
     # Adjust beads with no children to be at the right edge
     for bead in tail:
-        if bead not in hwpath:  # Don't override hwpath coordinates
+        if bead not in hwpath:
             x_coords[bead] = max_x
-
-    # Fix any remaining issues
-    for bead in parents.keys():
-        if bead not in x_coords:
-            # If we couldn't assign a position, find a reasonable one
-            parent_xs = [x_coords.get(p, 0) for p in parents.get(bead, set()) if p in x_coords]
-            child_xs = [x_coords.get(c, max_x) for c in children.get(bead, set()) if c in x_coords]
-
-            if parent_xs and child_xs:
-                max_parent_x = max(parent_xs)
-                min_child_x = min(child_xs)
-                if max_parent_x < min_child_x - 1:
-                    x_coords[bead] = max_parent_x + 1
-                else:
-                    # Place it at the average of parent and child positions
-                    x_coords[bead] = (max_parent_x + min_child_x) // 2
-            elif parent_xs:
-                x_coords[bead] = max(parent_xs) + 1
-            elif child_xs:
-                x_coords[bead] = min(child_xs) - 1
-            else:
-                # Isolated bead, place it at 0
-                x_coords[bead] = 0
 
     # Adjust hwpath beads to maintain relative positions if needed
     hwpath_left = min(x_coords[bead] for bead in hwpath)
