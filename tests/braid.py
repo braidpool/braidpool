@@ -322,7 +322,7 @@ def check_cohort_ancestors(cohort, parents, children=None):
         return False
     return True
 
-def layout(cohort, all_parents, all_children=None, bead_work=None):
+def layout(cohort, all_parents, bead_work=None):
     """
     Places beads on a grid based on DAG structure and highest work path. This
     algorithm operates on one <cohort> at a time.
@@ -330,7 +330,6 @@ def layout(cohort, all_parents, all_children=None, bead_work=None):
     Args:
         cohort (set): Set of beads in the cohort.
         all_parents (dict): Dictionary mapping bead to a set of its parents.
-        all_children (dict): Dictionary mapping bead to a set of its children.
         bead_work (dict): Dictionary mapping bead to its work.
 
     Returns:
@@ -340,182 +339,103 @@ def layout(cohort, all_parents, all_children=None, bead_work=None):
     FIXME place beads both above and below the highest work path.
     """
 
-    all_children  = all_children if all_children else reverse(all_parents)
-    bead_work = bead_work if bead_work else {b: FIXED_BEAD_WORK for b in all_parents}
+    def intersection(x1, y1, x2, y2, x3, y3):
+        """ Check if the point (x3, y3) lies on the line segment from (x1, y1) to (x2, y2) """
+        if [x1,y1] == [x3,y3] or [x2,y2] == [x3,y3]: return False # Ignore duplicate endpoints
+        return ((x2 - x1) * (y3 - y1) == (y2 - y1) * (x3 - x1) and
+                min(x1, x2) <= x3 <= max(x1, x2) and
+                min(y1, y2) <= y3 <= max(y1, y2))
 
-    # Get the sub-DAG for this cohort.
-    parents  = dict(sub_braid(cohort, all_parents).items())
-    children = reverse(parents)
-    hwpath   = highest_work_path(parents, children, bead_work=bead_work)
-    head     = cohort_head(cohort, parents, children)
-    tail     = cohort_tail(cohort, parents, children)
+    def set_x_coord(bead):
+        """ Set an x-coordinate for a bead based on being right of its parents
+            and left of its children.
+        """
+        nonlocal proposed_x
+        if bead in proposed_x:
+            return
 
-    # Assign x-coordinates to hwpath beads initially
-    x_coords = {}
-    for i, bead in enumerate(hwpath):
-        x_coords[bead] = i
-
-    # Assign x-coordinates to remaining beads using a topological sort
-    visited = set()
-
-    def get_x_coord(bead):
-        if bead in x_coords:
-            return x_coords[bead]
-
-        if bead in visited:
-            return x_coords[bead]
-
-        # Special case: beads with no parents should be at x=0
+        # Beads with no parents should be at x=0
         if bead in head:
             min_x = 0
-        else:
-            # Determine the minimum x-coordinate based on parents
+        else: # Determine the minimum x-coordinate based on parents
             min_x = 0
-            for parent in parents.get(bead, set()):
-                # Handle parent-child relationship issues
-                parent_x = get_x_coord(parent)
-                min_x = max(min_x, parent_x + 1)  # Ensure at least 1 unit to the right
+            for parent in parents[bead]: # Handle parent-child relationship issues
+                set_x_coord(parent)
+                min_x = max(min_x, proposed_x[parent] + 1)
 
         # Determine the maximum x-coordinate based on children
         # This is a soft constraint - we'll try to respect it but parent constraints take priority
         max_x = float('inf')
-        for child in children.get(bead, set()):
-            if child in x_coords:
-                max_x = min(max_x, x_coords[child] - 1)
+        for child in children[bead]:
+            if child in proposed_x:
+                max_x = min(max_x, proposed_x[child] - 1)
 
         if min_x > max_x and max_x < float('inf'):
             # Constraint conflict - parent and child constraints can't both be satisfied
-            for child in children.get(bead, set()):
-                if child in x_coords and x_coords[child] <= min_x:
+            for child in children[bead]:
+                if child in proposed_x and proposed_x[child] <= min_x:
                     # Shift this child and all beads to its right
-                    shift_amount = min_x + 1 - x_coords[child]
-                    for other_bead in x_coords:
-                        if x_coords[other_bead] >= x_coords[child]:
-                            x_coords[other_bead] += shift_amount
-            x_coords[bead] = min_x
-        else:
-            x_coords[bead] = min_x
+                    shift_amount = min_x + 1 - proposed_x[child]
+                    for other in proposed_x:
+                        if proposed_x[other] >= proposed_x[child]:
+                            proposed_x[other] += shift_amount
+        proposed_x[bead] = min_x
 
-        visited.add(bead)
+    # Get the sub-DAG for this cohort.
+    parents   = dict(sub_braid(cohort, all_parents).items())
+    children  = reverse(parents)
+    hwpath    = highest_work_path(parents, children, bead_work=bead_work)
+    head      = cohort_head(cohort, parents, children)
+    tail      = cohort_tail(cohort, parents, children)
+    bead_work = bead_work if bead_work else {b: FIXED_BEAD_WORK for b in parents}
 
-        return x_coords[bead]
+    # Assign x-coordinates to hwpath beads in order of decreasing work along the y=0 axis
+    proposed_x = {bead: i for i, bead in enumerate(hwpath)}
 
-    # Try to assign coordinates to all beads
-    for bead in parents.keys():
-        if bead not in x_coords and bead not in visited:
-            get_x_coord(bead)
+    # Try to assign x coordinates to all beads based on being right of their parents and left of their children
+    for bead in set(parents) - set(hwpath):
+        set_x_coord(bead)
 
     # find the maximum x-coordinate
-    max_x = max(x_coords.values()) if x_coords else 0
+    max_x = max(proposed_x[bead] for bead in proposed_x)
 
-    # Adjust beads with no children to be at the right edge
-    for bead in tail:
-        if bead not in hwpath:
-            x_coords[bead] = max_x
+    # Put beads with no children to be at the right edge
+    for bead in set(tail) - set(hwpath):
+        proposed_x[bead] = max_x
 
-    # Adjust hwpath beads to maintain relative positions if needed
-    hwpath_left = min(x_coords[bead] for bead in hwpath)
-    hwpath_offset = 0
-    if hwpath_left > 0:
-        hwpath_offset = -hwpath_left
+    # Ensure consistency for hwpath which may have moved due to parent-child relationships.
+    for i, bead in enumerate(hwpath[:-1]):
+        if proposed_x[bead] >= proposed_x[hwpath[i+1]]:
+            proposed_x[hwpath[i+1]] = proposed_x[bead] + 1
 
-    # Shift all coordinates to ensure beads with no parents are at x=0
-    min_x = min(x_coords.values())
-    if min_x > 0:
-        offset = -min_x
-        for bead in parents.keys():
-            x_coords[bead] += offset
-
-    # Assign y-coordinates
-    positions = {}
-
-    # Place hwpath beads at y=0
-    for bead in hwpath:
-        positions[bead] = (x_coords[bead] + hwpath_offset, 0)
-
-    # Ensure consistency for hwpath coordinates
-    for i in range(len(hwpath) - 1):
-        if positions[hwpath[i]][0] >= positions[hwpath[i+1]][0]:
-            positions[hwpath[i+1]] = (positions[hwpath[i]][0] + 1, 0)
-
-    # Update x_coords for hwpath beads to match positions
-    for bead in hwpath:
-        x_coords[bead] = positions[bead][0]
-
-    # Process remaining beads in order of their x-coordinate
-    remaining_beads = sorted([b for b in parents.keys() if b not in hwpath], key=lambda b: x_coords[b])
-
-    def intersection(x1, y1, x2, y2, x3, y3):
-        """ Check if the point (x3, y3) lies on the line segment from (x1, y1) to (x2, y2) """
-        if (x2 - x1) * (y3 - y1) == (y2 - y1) * (x3 - x1):
-            if min(x1, x2) <= x3 <= max(x1, x2) and min(y1, y2) <= y3 <= max(y1, y2):
-                return True
-        return False
+    pos = {bead: [proposed_x[bead], 0] for bead in hwpath}
+    lines = [] # A running tally of lines on the graph
 
     # Place remaining beads in work sorted order (lowest work at top)
-    for bead in sorted(remaining_beads, key=work_sort_key(parents, children, bead_work), reverse=True):
-        x = x_coords[bead]
-        y = 1  # Start with y=1 (above hwpath)
+    for bead in sorted(set(parents) - set(hwpath),
+                       key=work_sort_key(parents, children, bead_work), reverse=True):
+        x = proposed_x[bead]
+        y = 0
 
         while True:
-            valid = True
+            y += 1
+            if [x,y] in pos.values(): continue
 
-            # Check if position (x, y) is already occupied
-            for other_bead, (other_x, other_y) in positions.items():
-                if other_x == x and other_y == y:
-                    valid = False
-                    break
+            # Create a list of all lines on the graph including the proposed <bead> position [x,y]
+            pos[bead] = [x, y]
+            new_lines = [(pos[parent], pos[child])
+                          for parent, child in
+                              [(bead, c) for c in children[bead] if c in pos] +
+                              [(p, bead) for p in parents[bead] if p in pos]
+                        ]
 
-            if not valid:
-                y += 1
-                continue
-
-            # Check if any existing edge passes through the new bead's position
-            for parent_bead, (parent_x, parent_y) in positions.items():
-                for child_bead in children.get(parent_bead, set()):
-                    if child_bead in positions:
-                        child_x, child_y = positions[child_bead]
-                        if intersection(parent_x, parent_y, child_x, child_y, x, y):
-                            valid = False
-                            break
-                if not valid:
-                    break
-
-            # Check if any edge from the new bead to its parents or children passes through any existing bead
-            for parent in parents.get(bead, set()):
-                if parent in positions:
-                    parent_x, parent_y = positions[parent]
-                    for other_bead, (other_x, other_y) in positions.items():
-                        if other_bead != parent and other_bead != bead:
-                            if intersection(parent_x, parent_y, x, y, other_x, other_y):
-                                valid = False
-                                break
-                if not valid:
-                    break
-
-            if not valid:
-                y += 1
-                continue
-
-            for child in children.get(bead, set()):
-                if child in positions:
-                    child_x, child_y = positions[child]
-                    for other_bead, (other_x, other_y) in positions.items():
-                        if other_bead != child and other_bead != bead:
-                            if intersection(x, y, child_x, child_y, other_x, other_y):
-                                valid = False
-                                break
-                if not valid:
-                    break
-
-            if valid:
+            # If there are no intersections of a parent-child edge with any middle bead, break
+            if not any(intersection(*line[0], *line[1], *pos[middle]) for line in lines + new_lines
+                       for middle in pos):
                 break
 
-            y += 1
-
-        positions[bead] = (x, y)
-
-    return positions
+        lines += new_lines
+    return pos
 
 def load_braid(filename):
     """ Load a JSON file containing a braid.
