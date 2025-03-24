@@ -313,6 +313,7 @@ dependencies = [
  "lazy_static",
  "log",
  "num",
+ "num-rational",
  "num-traits",
  "once_cell",
  "ordered-float",

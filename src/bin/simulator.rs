@@ -6,7 +6,7 @@
 //! of light -- propagation speed in copper or global fiber optics is not simulated.
 
 use clap::{Parser, ArgAction};
-use num::{BigUint, Zero, One};
+use num::{BigUint, Zero};
 use num_traits::cast::ToPrimitive;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
@@ -16,20 +16,16 @@ use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::f64::consts::PI;
 use std::fs::File;
-use std::io::Write;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use std::str::FromStr;
 use std::cmp::min;
 use std::rc::Rc;
 use std::cell::RefCell;
-use std::collections::BTreeMap;
-use std::sync::Arc;
 use bimap::BiMap;
-use ordered_float::OrderedFloat;
 use regex::Regex;
 
 // Import our braid module
-use braidpool::braid::{self, Bead, Relatives, BeadWork, Work};
+use braidpool::braid::{self, Relatives, BeadWork};
 
 // Constants
 const NETWORK_SIZE: f64 = 0.06676; // The round-trip time in seconds to traverse the network = pi*r_e/c
@@ -44,8 +40,10 @@ const TARGET_NC: usize = 7;
 const TARGET_NB: usize = 17;
 const TARGET_DAMPING: usize = 4 * TARGET_NB;
 
-// Global debug flag
-static mut DEBUG: bool = false;
+// Debug flag in thread-local storage for safety
+thread_local! {
+    static DEBUG: std::cell::Cell<bool> = std::cell::Cell::new(false);
+}
 
 // Maximum hash value (2^256-1)
 lazy_static::lazy_static! {
@@ -155,6 +153,7 @@ fn sph_arclen(n1: &Node, n2: &Node) -> f64 {
 
 /// A Bead is a full bitcoin (weak) block that may miss Bitcoin's difficulty target
 #[derive(Clone, Debug)]
+#[derive(PartialEq)]
 struct BeadImpl {
     t: f64,                  // Time when created
     hash: Option<BigUint>,   // Hash that identifies this block
@@ -273,18 +272,19 @@ struct Network {
     genesis_bead: Rc<RefCell<BeadImpl>>, // Genesis bead
     target: BigUint,                 // Initial target difficulty
     log: bool,                       // Whether to log events
+    pending_broadcasts: Rc<RefCell<Vec<(usize, BigUint, f64)>>>, // Queue of pending broadcasts
 }
 
 impl Network {
     fn new(
         nnodes: usize,
         hashrate: f64,
-        ticksize: f64,
+        _ticksize: f64,
         npeers: usize,
         target: BigUint,
         log: bool,
         rng: &mut StdRng,
-    ) -> Self {
+    ) -> std::rc::Rc<std::cell::RefCell<Network>> {
         let t = 0.0;
 
         // Create genesis block
@@ -306,6 +306,7 @@ impl Network {
                 Some(target.clone()),
                 log,
                 rng,
+                std::rc::Weak::new(),
             );
             nodes.push(Rc::new(RefCell::new(node)));
         }
@@ -352,6 +353,7 @@ impl Network {
             genesis_bead,
             target,
             log,
+            pending_broadcasts: Rc::new(RefCell::new(Vec::new())),
         };
 
         // Set up incoming peers for each node
@@ -381,12 +383,12 @@ impl Network {
             network.nodes[nodeid].borrow_mut().add_peers(in_peers, in_latencies);
         }
 
-        if log {
-            println!("# Starting network with genesis bead {} at time {:.8}",
-                     print_hash_simple(&network.genesis_hash), network.t);
+        // Wrap the network in an Rc<RefCell<>> and update each node’s network field
+        let network_rc = Rc::new(RefCell::new(network));
+        for node in network_rc.borrow().nodes.iter() {
+            node.borrow_mut().network = Rc::downgrade(&network_rc);
         }
-
-        network
+        return network_rc;
     }
 
     fn tick(&mut self, mine: bool) {
@@ -431,6 +433,17 @@ impl Network {
             }
         }
 
+        // Process any pending broadcasts
+        let broadcasts = {
+            let mut pending = self.pending_broadcasts.borrow_mut();
+            let broadcasts = std::mem::take(&mut *pending);
+            broadcasts
+        };
+
+        for (nodeid, bead_hash, delay) in broadcasts {
+            self.broadcast(nodeid, bead_hash, delay);
+        }
+
         // Tick all nodes
         for node in &self.nodes {
             node.borrow_mut().tick(mine, dt, self.t);
@@ -444,17 +457,15 @@ impl Network {
     }
 
     fn broadcast(&mut self, node_id: usize, bead_hash: BigUint, delay: f64) {
-        let node = &self.nodes[node_id];
-        if !node.borrow().braid.contains(&bead_hash) {
-            let key = (node_id, bead_hash.clone());
-            let prev_delay = self.inflightdelay.get(&key).cloned().unwrap_or(NETWORK_SIZE);
-            self.inflightdelay.insert(key, prev_delay.min(delay));
-        }
+        let key = (node_id, bead_hash);
+        let prev_delay = self.inflightdelay.get(&key).cloned().unwrap_or(NETWORK_SIZE);
+        self.inflightdelay.insert(key, prev_delay.min(delay));
     }
 
     fn reset(&mut self, target: Option<BigUint>) {
         self.t = 0.0;
         self.inflightdelay.clear();
+        self.pending_broadcasts.borrow_mut().clear();
 
         let target = target.unwrap_or_else(|| self.target.clone());
 
@@ -480,6 +491,7 @@ impl Network {
 #[derive(Debug)]
 struct Node {
     nodeid: usize,
+    network: std::rc::Weak<RefCell<Network>>,
     peers: Vec<Rc<RefCell<Node>>>,
     latencies: Vec<f64>,
     nodesalt: BigUint,
@@ -489,7 +501,7 @@ struct Node {
     nonce: u64,
     tremaining: f64,
     braid: BraidImpl,
-    incoming: HashSet<BigUint>,
+    incoming: HashMap<BigUint, Rc<RefCell<BeadImpl>>>,
     working_bead: Rc<RefCell<BeadImpl>>,
     latitude: f64,
     longitude: f64,
@@ -513,6 +525,7 @@ impl Node {
         initial_target: Option<BigUint>,
         log: bool,
         rng: &mut StdRng,
+        network: std::rc::Weak<RefCell<Network>>,
     ) -> Self {
         // Generate a random salt for this node
         let mut salt_bytes = [0u8; 32];
@@ -538,6 +551,7 @@ impl Node {
 
         let mut node = Self {
             nodeid,
+            network,
             peers: Vec::new(),
             latencies: Vec::new(),
             nodesalt,
@@ -547,7 +561,7 @@ impl Node {
             nonce: 0,
             tremaining: 0.0,
             braid,
-            incoming: HashSet::new(),
+            incoming: HashMap::new(),
             working_bead,
             latitude,
             longitude,
@@ -591,20 +605,21 @@ impl Node {
 
     fn time_to_next_bead(&self) -> f64 {
         // Sample from geometric distribution
-        let p = self.target.clone() / MAX_HASH.clone();
+        let p = {
+            let ratio = num_rational::BigRational::new(self.target.clone().into(), MAX_HASH.clone().into());
+            ratio.to_f64().unwrap_or(1e-10)
+        };
 
         // Generate random number in [0, 1)
         let r = rand::random::<f64>();
 
         // Calculate number of hashes needed
-        let nhashes = if p < BigUint::from(1_000_000u32) / BigUint::from(1_000_000_000u32) {
+        let nhashes = if p < 1e-6 {
             // Use Taylor series for small p
-            let p_f64 = p.to_f64().unwrap_or(1e-10);
-            let taylor = p_f64 + p_f64.powi(2)/2.0 + p_f64.powi(3)/3.0 + p_f64.powi(4)/4.0 + p_f64.powi(5)/5.0;
+            let taylor = p + p.powi(2)/2.0 + p.powi(3)/3.0 + p.powi(4)/4.0 + p.powi(5)/5.0;
             (-r.ln() / taylor).ceil() as u64 + 1
         } else {
-            let p_f64 = p.to_f64().unwrap_or(0.5);
-            (-(1.0 - r).ln() / (1.0 - p_f64).ln()).ceil() as u64 + 1
+            (-(1.0 - r).ln() / (1.0 - p).ln()).ceil() as u64 + 1
         };
 
         // Convert to time
@@ -670,14 +685,14 @@ impl Node {
                                  network_time,
                                  nb as f64 / TARGET_NC as f64);
 
-                        unsafe {
-                            if DEBUG {
+                        DEBUG.with(|debug| {
+                            if debug.get() {
                                 println!("    Having parents: {:?}",
                                          self.working_bead.borrow().parents.iter()
                                              .map(|p| print_hash_simple(p))
                                              .collect::<Vec<_>>());
                             }
-                        }
+                        });
                     }
 
                     // Add PoW to the working bead
@@ -729,14 +744,14 @@ impl Node {
                          network_time,
                          nb as f64 / TARGET_NC as f64);
 
-                unsafe {
-                    if DEBUG {
+                DEBUG.with(|debug| {
+                    if debug.get() {
                         println!("    Having parents: {:?}",
                                  self.working_bead.borrow().parents.iter()
                                      .map(|p| print_hash_simple(p))
                                      .collect::<Vec<_>>());
                     }
-                }
+                });
             }
 
             // Send it to ourselves (will rebroadcast to peers)
@@ -767,7 +782,7 @@ impl Node {
         }
 
         // Add to incoming beads
-        self.incoming.insert(bead_hash.clone());
+        self.incoming.insert(bead_hash.clone(), bead.clone());
 
         // Try to process incoming beads
         self.process_incoming();
@@ -785,11 +800,11 @@ impl Node {
         // Reset mining timer
         self.tremaining = self.time_to_next_bead();
 
-        // Send to peers
-        self.send(bead_hash.clone());
+        // Clone the hash for sending to avoid borrowing conflicts
+        let hash_to_send = bead_hash.clone();
 
-        unsafe {
-            if DEBUG {
+        DEBUG.with(|debug| {
+            if debug.get() {
                 println!("Node {:2} received bead {} at time {:.6} we have {} tips: {:?}",
                          self.nodeid,
                          print_hash_simple(&bead_hash),
@@ -799,63 +814,58 @@ impl Node {
                              .map(|t| print_hash_simple(t))
                              .collect::<Vec<_>>());
             }
-        }
+        });
+
+        // Send to peers after we're done with all other operations
+        self.send(hash_to_send);
     }
 
     fn process_incoming(&mut self) {
         loop {
             let old_incoming = self.incoming.clone();
             let mut processed = Vec::new();
-
-            for bead_hash in &old_incoming {
-                // Find the bead in any peer's braid
-                let mut found_bead = None;
-
-                for peer in &self.peers {
-                    let peer_borrow = peer.borrow();
-                    if let Some(bead) = peer_borrow.braid.beads.get(bead_hash) {
-                        found_bead = Some(bead.clone());
-                        break;
-                    }
-                }
-
-                // If we found the bead, try to add it to our braid
-                if let Some(bead) = found_bead {
-                    if self.braid.extend(bead) {
-                        processed.push(bead_hash.clone());
-                    } else {
-                        println!("    Unable to add {} to braid, missing parents",
-                                 print_hash_simple(bead_hash));
-                    }
+            for (bead_hash, bead) in old_incoming.iter() {
+                if self.braid.extend(bead.clone()) {
+                    processed.push(bead_hash.clone());
+                } else {
+                    println!("    Unable to add {} to braid, missing parents",
+                             print_hash_simple(bead_hash));
                 }
             }
-
-            // Remove processed beads from incoming
             for bead_hash in processed {
                 self.incoming.remove(&bead_hash);
             }
-
-            // If we didn't process any beads, we're done
-            if self.incoming == old_incoming {
+            if self.incoming.keys().eq(old_incoming.keys()) {
                 break;
             }
         }
-
         if !self.incoming.is_empty() {
             println!("Node {:2} has {} incoming beads", self.nodeid, self.incoming.len());
         }
     }
 
     fn send(&self, bead_hash: BigUint) {
-        // This would call network.broadcast for each peer
-        // In the actual implementation, this would be handled by the Network
-        for (peer, delay) in self.peers.iter().zip(self.latencies.iter()) {
-            let peer_id = peer.borrow().nodeid;
-            unsafe {
-                // This is a hack to access the network from the node
-                // In a real implementation, we would pass the network reference
-                let network_ptr = self as *const _ as *mut Network;
-                (*network_ptr).broadcast(peer_id, bead_hash.clone(), *delay);
+        // Collect all broadcast data first without any borrows
+        let broadcasts: Vec<(usize, BigUint, f64)> = self.peers.iter()
+            .zip(self.latencies.iter())
+            .map(|(peer, delay)| {
+                let peer_id = peer.borrow().nodeid;
+                (peer_id, bead_hash.clone(), *delay)
+            })
+            .collect();
+
+        // Then do a single mutable borrow to push all messages
+        if let Some(net_rc) = self.network.upgrade() {
+            // Get pending_broadcasts without holding network borrow
+            let pending_broadcasts = {
+                let net = net_rc.borrow();
+                net.pending_broadcasts.clone()
+            };
+            
+            // Now borrow mutably just the pending_broadcasts
+            let mut pending = pending_broadcasts.borrow_mut();
+            for (peer_id, hash, delay) in broadcasts {
+                pending.push((peer_id, hash, delay));
             }
         }
     }
@@ -888,6 +898,9 @@ impl Node {
         }
 
         let htarget = (BigUint::from(parents.len() as u32) * MAX_HASH.clone()) / sum;
+        if self.braid.beads.len() <= TARGET_NC {
+            return htarget.clone() + htarget.clone() / BigUint::from(32u32);
+        }
 
         // Adjust based on number of parents
         if parents.len() < TARGET_PARENTS {
@@ -1232,13 +1245,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Parse command line arguments
     let mut args = Args::parse();
 
-    // Set global debug flag
-    unsafe {
-        DEBUG = args.debug;
-        if DEBUG {
+    // Set debug flag in thread-local storage
+    DEBUG.with(|debug| {
+        debug.set(args.debug);
+        if debug.get() {
             args.log = true;
         }
-    }
+    });
 
     // Parse target ratio
     let re = Regex::new(r"(\d+)/(\d+)").unwrap();
@@ -1296,7 +1309,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let target = (BigUint::from(1u32) << args.target) - BigUint::from(1u32);
 
     // Create network
-    let mut network = Network::new(
+    let network = Network::new(
         args.nodes,
         network_hashrate,
         TICKSIZE,
@@ -1307,7 +1320,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     );
 
     // Set algorithm for each node
-    for node in &network.nodes {
+    for node in &network.borrow().nodes {
         let mut node = node.borrow_mut();
         node.calc_target_method = match args.algorithm.as_str() {
             "exp" => TargetMethod::ExponentialDamping,
@@ -1321,10 +1334,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     if args.test_mining {
         // Simulate with mining
-        network.simulate(args.beads, true);
+        network.borrow_mut().simulate(args.beads, true);
 
         // Get the braid from the first node
-        let bmine = network.nodes[0].borrow().braid.clone();
+        let bmine = network.borrow().nodes[0].borrow().braid.clone();
 
         // Convert to relatives format
         let mined_parents = bmine.to_relatives();
@@ -1343,13 +1356,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("Wrote {} beads to {}-mine.json.", bmine.beads.len(), args.output_file);
 
         // Reset network
-        network.reset(Some(target.clone()));
+        network.borrow_mut().reset(Some(target.clone()));
 
         // Simulate without mining
-        network.simulate(args.beads, false);
+        network.borrow_mut().simulate(args.beads, false);
 
         // Get the braid from the first node
-        let bnomine = network.nodes[0].borrow().braid.clone();
+        let bnomine = network.borrow().nodes[0].borrow().braid.clone();
 
         // Convert to relatives format
         let nomine_parents = bnomine.to_relatives();
@@ -1368,10 +1381,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("Wrote {} beads to {}-no-mine.json.", bnomine.beads.len(), args.output_file);
     } else {
         // Simulate with the specified mining mode
-        network.simulate(args.beads, args.mine);
+        network.borrow_mut().simulate(args.beads, args.mine);
 
         // Get the braid from the first node
-        let b = network.nodes[0].borrow().braid.clone();
+        let b = network.borrow().nodes[0].borrow().braid.clone();
 
         // Convert to relatives format
         let parents = b.to_relatives();
