@@ -56,9 +56,9 @@ Or you can just click on the docs directory in the code and Github will render t
 
 A list with TODO's:
 
-- [*] Global simulator for Braids
-- [*] Python braid cohorts() implementation and tests
-- [*] Rust braid object handling
+- [x] Global simulator for Braids (`tests/simulator.py`)
+- [x] Python braid `cohorts()` implementation and tests
+- [x] Rust braid object handling
 - [ ] Connect braid algorithms to blocks on CPUNet
 - [ ] P2P gossip based broadcast of miner blocks and shares.
 - [ ] Use FROST rust implementation for providing threshold schnorr
