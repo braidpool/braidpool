@@ -227,7 +227,7 @@ def descendant_work(parents, children=None, bead_work=None, in_cohorts=None):
         previous_work += sum(bead_work[b] for b in c)
     return retval
 
-def bead_cmp(a, b, dwork, awork=None):
+def bead_cmp(a:int, b:int, dwork, awork=None):
     """ A custom cmp(b1,b2) function for sorting beads. This function requires the work function,
         which should be the output of descendant_work().
 
@@ -256,7 +256,7 @@ def bead_cmp(a, b, dwork, awork=None):
             return -1
         if awork[a] > awork[b]:
             return 1
-    if a > b:                   # same work, fall back on lexical order
+    if a > b:                     # same work, fall back on block hash ("luck")
         return -1
     if a < b:
         return 1
@@ -279,7 +279,7 @@ def work_sort_key(parents, children=None, bead_work=None):
     awork = descendant_work(children,parents,bead_work)
     return cmp_to_key(lambda a,b: bead_cmp(a,b,dwork,awork))
 
-def highest_work_path(parents, children=None, work=None, bead_work=None):
+def highest_work_path(parents, children=None, bead_work=None):
     """ Find the highest (descendant) work path, by following the highest weights through the DAG.
 
         The highest *ancestor* work path can be found by calling with children and parents reversed:

@@ -32,8 +32,3 @@ num = { version = "0.4.1", features = ["serde"] }
 [dev-dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-
-[[test]]
-name = "braid_tests"
-path = "tests/braid_tests.rs"
-harness = false
