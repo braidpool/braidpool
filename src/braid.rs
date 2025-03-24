@@ -4,10 +4,9 @@
 //! where each node (bead) can have multiple parents and children.
 
 // FIXME this is temporary
-#[allow(unused_variables)]
-
-use std::collections::{HashMap, HashSet};
 use num::BigUint;
+#[allow(unused_variables)]
+use std::collections::{HashMap, HashSet};
 
 /// A type alias for a bead (A 256-bit uint)
 pub type Bead = BigUint;
@@ -48,14 +47,14 @@ pub fn reverse(parents: &Relatives) -> Relatives {
     // Add all parent-child relationships
     for (bead, bparents) in parents {
         for p in bparents {
-            children.entry(p.clone())
+            children
+                .entry(p.clone())
                 .or_insert_with(HashSet::new)
                 .insert(bead.clone());
         }
 
         // Ensure all beads are in the children map, even if they have no children
-        children.entry(bead.clone())
-            .or_insert_with(HashSet::new);
+        children.entry(bead.clone()).or_insert_with(HashSet::new);
     }
 
     children
@@ -75,9 +74,11 @@ pub fn generation(beads: &HashSet<Bead>, children: &Relatives) -> HashSet<Bead> 
 }
 
 /// Gets all ancestors for a bead, filling in ancestors of any other ancestors encountered
-pub fn all_ancestors<'a>(b: &Bead, parents: &Relatives, ancestors: &'a mut HashMap<Bead, HashSet<Bead>>)
-    -> &'a HashMap<Bead, HashSet<Bead>> {
-
+pub fn all_ancestors<'a>(
+    b: &Bead,
+    parents: &Relatives,
+    ancestors: &'a mut HashMap<Bead, HashSet<Bead>>,
+) -> &'a HashMap<Bead, HashSet<Bead>> {
     let mut work_stack = vec![(b.clone(), false)]; // (bead, is_processed)
 
     while !work_stack.is_empty() {
@@ -121,9 +122,11 @@ pub fn all_ancestors<'a>(b: &Bead, parents: &Relatives, ancestors: &'a mut HashM
 }
 
 /// Given the seed of the next cohort, build an ancestor/descendant set for each visited bead
-pub fn cohorts(parents: &Relatives, children: Option<&Relatives>, initial_cohort: Option<&HashSet<Bead>>)
-    -> Vec<HashSet<Bead>> {
-
+pub fn cohorts(
+    parents: &Relatives,
+    children: Option<&Relatives>,
+    initial_cohort: Option<&HashSet<Bead>>,
+) -> Vec<HashSet<Bead>> {
     let child_map = match children {
         Some(c) => c.clone(),
         None => reverse(parents),
@@ -213,10 +216,10 @@ pub fn cohorts(parents: &Relatives, children: Option<&Relatives>, initial_cohort
                 break 'inner; // and yield the current cohort
             }
 
-            let all_ancestors_match_cohort = !tail.is_empty() &&
-                tail.iter().all(|t| {
-                    ancestors.get(t).map_or(false, |a| *a == cohort)
-                });
+            let all_ancestors_match_cohort = !tail.is_empty()
+                && tail
+                    .iter()
+                    .all(|t| ancestors.get(t).map_or(false, |a| *a == cohort));
 
             if !cohort.is_empty() && all_ancestors_match_cohort {
                 // Standard cohort case
@@ -256,7 +259,11 @@ pub fn cohorts(parents: &Relatives, children: Option<&Relatives>, initial_cohort
 
 /// Given a cohort as a set of beads, compute its tail
 #[allow(dead_code)]
-pub fn cohort_tail(cohort: &HashSet<Bead>, parents: &Relatives, children: Option<&Relatives>) -> HashSet<Bead> {
+pub fn cohort_tail(
+    cohort: &HashSet<Bead>,
+    parents: &Relatives,
+    children: Option<&Relatives>,
+) -> HashSet<Bead> {
     let children_map = match children {
         Some(c) => c.clone(),
         None => reverse(parents),
@@ -269,7 +276,11 @@ pub fn cohort_tail(cohort: &HashSet<Bead>, parents: &Relatives, children: Option
 
 /// Given a cohort as a set of beads, compute its head
 #[allow(dead_code)]
-pub fn cohort_head(cohort: &HashSet<Bead>, parents: &Relatives, children: Option<&Relatives>) -> HashSet<Bead> {
+pub fn cohort_head(
+    cohort: &HashSet<Bead>,
+    parents: &Relatives,
+    children: Option<&Relatives>,
+) -> HashSet<Bead> {
     let children_map = match children {
         Some(c) => c.clone(),
         None => reverse(parents),
@@ -322,7 +333,7 @@ pub fn descendant_work(
     parents: &Relatives,
     children: Option<&Relatives>,
     bead_work: &BeadWork,
-    in_cohorts: Option<&Vec<HashSet<Bead>>>
+    in_cohorts: Option<&Vec<HashSet<Bead>>>,
 ) -> HashMap<Bead, Work> {
     let children_map = match children {
         Some(c) => c.clone(),
@@ -362,7 +373,8 @@ pub fn descendant_work(
         }
 
         // Update previous_work with sum of all work in this cohort
-        previous_work += c.iter()
+        previous_work += c
+            .iter()
             .map(|b| bead_work.get(b).cloned().unwrap())
             .sum::<Work>();
     }
@@ -372,7 +384,12 @@ pub fn descendant_work(
 
 /// A custom comparison function for sorting beads
 #[allow(dead_code)]
-pub fn bead_cmp(a: &Bead, b: &Bead, dwork: &HashMap<Bead, Work>, awork: &HashMap<Bead, Work>) -> std::cmp::Ordering {
+pub fn bead_cmp(
+    a: &Bead,
+    b: &Bead,
+    dwork: &HashMap<Bead, Work>,
+    awork: &HashMap<Bead, Work>,
+) -> std::cmp::Ordering {
     let zero = BigUint::from(0u64);
     let a_dwork = dwork.get(a).unwrap_or(&zero);
     let b_dwork = dwork.get(b).unwrap_or(&zero);
@@ -409,9 +426,8 @@ pub fn bead_cmp(a: &Bead, b: &Bead, dwork: &HashMap<Bead, Work>, awork: &HashMap
 pub fn work_sort_key<'a>(
     parents: &'a Relatives,
     children: Option<&'a Relatives>,
-    bead_work: &'a BeadWork
+    bead_work: &'a BeadWork,
 ) -> impl Fn(&Bead, &Bead) -> std::cmp::Ordering + 'a {
-
     let children = match children {
         Some(c) => c.clone(),
         None => reverse(parents),
@@ -428,7 +444,7 @@ pub fn work_sort_key<'a>(
 pub fn highest_work_path(
     parents: &Relatives,
     children: Option<&Relatives>,
-    bead_work: &BeadWork
+    bead_work: &BeadWork,
 ) -> Vec<Bead> {
     let children = match children {
         Some(c) => c.clone(),
@@ -441,7 +457,8 @@ pub fn highest_work_path(
 
     // Find the genesis bead with maximum work using full comparison logic
     let genesis_beads = geneses(parents);
-    let max_genesis = genesis_beads.iter()
+    let max_genesis = genesis_beads
+        .iter()
         .max_by(|a, b| bead_cmp(a, b, &dwork, &awork))
         .unwrap()
         .clone();
@@ -459,7 +476,8 @@ pub fn highest_work_path(
         };
 
         // Find child with maximum work using full comparison logic
-        let max_child = children_set.iter()
+        let max_child = children_set
+            .iter()
             .max_by(|a, b| bead_cmp(a, b, &dwork, &awork))
             .unwrap()
             .clone();
@@ -509,8 +527,14 @@ pub fn number_beads(hashed_parents: &Relatives) -> Relatives {
                             bead_id += 1;
                         }
 
-                        parents.entry(this_id.clone()).or_insert_with(HashSet::new).insert(parent.clone());
-                        next_parents.entry(this_id).or_insert_with(HashSet::new).insert(parent.clone());
+                        parents
+                            .entry(this_id.clone())
+                            .or_insert_with(HashSet::new)
+                            .insert(parent.clone());
+                        next_parents
+                            .entry(this_id)
+                            .or_insert_with(HashSet::new)
+                            .insert(parent.clone());
                     }
                 }
             }
@@ -519,4 +543,3 @@ pub fn number_beads(hashed_parents: &Relatives) -> Relatives {
 
     parents
 }
-

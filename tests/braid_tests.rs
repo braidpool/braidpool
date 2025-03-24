@@ -1,15 +1,15 @@
+use braidpool::braid::*;
+use braidpool::*;
+use num::BigUint;
+use serde::{Deserialize, Serialize};
+use serde_json;
 use std::clone::Clone;
 use std::collections::{HashMap, HashSet};
-use std::fs;
-use std::fs::{File};
 use std::error::Error;
-use num::BigUint;
-use braidpool::*;
-use braidpool::braid::*;
-use serde::{Serialize, Deserialize};
-use serde_json;
-use std::path::Path;
+use std::fs;
+use std::fs::File;
 use std::io::{Read, Write};
+use std::path::Path;
 
 const TEST_CASE_DIR: &str = "tests/braids/";
 
@@ -17,7 +17,6 @@ const TEST_CASE_DIR: &str = "tests/braids/";
 fn fixed_bead_work() -> BigUint {
     BigUint::from(1u32)
 }
-
 
 /// A DAG structure representing a braid
 #[derive(Debug, Clone)]
@@ -87,7 +86,8 @@ impl<'de> Deserialize<'de> for Dag {
         let value = serde_json::Value::deserialize(deserializer)?;
 
         // Parse description
-        let description = value.get("description")
+        let description = value
+            .get("description")
             .and_then(|v| v.as_str())
             .map(String::from);
 
@@ -239,7 +239,11 @@ impl<'de> Deserialize<'de> for Dag {
 }
 
 /// Make a DAG object which caches the children, geneses, tips, cohorts, and highest work path
-pub fn make_dag(hashed_parents: &Relatives, bead_work: Option<&BeadWork>, description: Option<&str>) -> Dag {
+pub fn make_dag(
+    hashed_parents: &Relatives,
+    bead_work: Option<&BeadWork>,
+    description: Option<&str>,
+) -> Dag {
     let parents = number_beads(hashed_parents);
     let children = reverse(&parents);
     let geneses = geneses(&parents);
@@ -248,7 +252,10 @@ pub fn make_dag(hashed_parents: &Relatives, bead_work: Option<&BeadWork>, descri
 
     let bead_work = match bead_work {
         Some(bw) => bw.clone(),
-        None => parents.keys().map(|b| (b.clone(), fixed_bead_work())).collect(),
+        None => parents
+            .keys()
+            .map(|b| (b.clone(), fixed_bead_work()))
+            .collect(),
     };
 
     let work = descendant_work(&parents, Some(&children), &bead_work, Some(&cohorts));
@@ -278,75 +285,118 @@ pub fn load_braid<P: AsRef<Path>>(filename: P) -> Result<Dag, Box<dyn Error>> {
 }
 
 /// Save a JSON file containing a braid
-pub fn save_braid<P: AsRef<Path>>(parents: &Relatives, filename: P, description: Option<&str>) -> Result<Dag, Box<dyn Error>> {
+pub fn save_braid<P: AsRef<Path>>(
+    parents: &Relatives,
+    filename: P,
+    description: Option<&str>,
+) -> Result<Dag, Box<dyn Error>> {
     let dag = make_dag(parents, None, description);
 
     let mut result = serde_json::Map::new();
-    result.insert("description".to_string(), serde_json::Value::String(description.unwrap_or("").to_string()));
+    result.insert(
+        "description".to_string(),
+        serde_json::Value::String(description.unwrap_or("").to_string()),
+    );
 
     // Convert parents
     let mut parents_map = serde_json::Map::new();
     for (bead, parent_set) in &dag.parents {
         let bead_str = bead.to_string();
         let parents_array = serde_json::Value::Array(
-            parent_set.iter().map(|p| serde_json::Value::String(p.to_string())).collect()
+            parent_set
+                .iter()
+                .map(|p| serde_json::Value::String(p.to_string()))
+                .collect(),
         );
         parents_map.insert(bead_str, parents_array);
     }
-    result.insert("parents".to_string(), serde_json::Value::Object(parents_map));
+    result.insert(
+        "parents".to_string(),
+        serde_json::Value::Object(parents_map),
+    );
 
     // Convert children
     let mut children_map = serde_json::Map::new();
     for (bead, child_set) in &dag.children {
         let bead_str = bead.to_string();
         let children_array = serde_json::Value::Array(
-            child_set.iter().map(|c| serde_json::Value::String(c.to_string())).collect()
+            child_set
+                .iter()
+                .map(|c| serde_json::Value::String(c.to_string()))
+                .collect(),
         );
         children_map.insert(bead_str, children_array);
     }
-    result.insert("children".to_string(), serde_json::Value::Object(children_map));
+    result.insert(
+        "children".to_string(),
+        serde_json::Value::Object(children_map),
+    );
 
     // Convert geneses
     let geneses_array = serde_json::Value::Array(
-        dag.geneses.iter().map(|g| serde_json::Value::String(g.to_string())).collect()
+        dag.geneses
+            .iter()
+            .map(|g| serde_json::Value::String(g.to_string()))
+            .collect(),
     );
     result.insert("geneses".to_string(), geneses_array);
 
     // Convert tips
     let tips_array = serde_json::Value::Array(
-        dag.tips.iter().map(|t| serde_json::Value::String(t.to_string())).collect()
+        dag.tips
+            .iter()
+            .map(|t| serde_json::Value::String(t.to_string()))
+            .collect(),
     );
     result.insert("tips".to_string(), tips_array);
 
     // Convert cohorts
     let cohorts_array = serde_json::Value::Array(
-        dag.cohorts.iter().map(|cohort| {
-            let mut sorted_cohort: Vec<_> = cohort.iter().collect();
-            sorted_cohort.sort();
-            serde_json::Value::Array(
-                sorted_cohort.iter().map(|b| serde_json::Value::String(b.to_string())).collect()
-            )
-        }).collect()
+        dag.cohorts
+            .iter()
+            .map(|cohort| {
+                let mut sorted_cohort: Vec<_> = cohort.iter().collect();
+                sorted_cohort.sort();
+                serde_json::Value::Array(
+                    sorted_cohort
+                        .iter()
+                        .map(|b| serde_json::Value::String(b.to_string()))
+                        .collect(),
+                )
+            })
+            .collect(),
     );
     result.insert("cohorts".to_string(), cohorts_array);
 
     // Convert bead_work
     let mut bead_work_map = serde_json::Map::new();
     for (bead, work) in &dag.bead_work {
-        bead_work_map.insert(bead.to_string(), serde_json::Value::String(work.to_string()));
+        bead_work_map.insert(
+            bead.to_string(),
+            serde_json::Value::String(work.to_string()),
+        );
     }
-    result.insert("bead_work".to_string(), serde_json::Value::Object(bead_work_map));
+    result.insert(
+        "bead_work".to_string(),
+        serde_json::Value::Object(bead_work_map),
+    );
 
     // Convert work
     let mut work_map = serde_json::Map::new();
     for (bead, work) in &dag.work {
-        work_map.insert(bead.to_string(), serde_json::Value::String(work.to_string()));
+        work_map.insert(
+            bead.to_string(),
+            serde_json::Value::String(work.to_string()),
+        );
     }
     result.insert("work".to_string(), serde_json::Value::Object(work_map));
 
     // Convert highest_work_path
     let hwp_array = serde_json::Value::Array(
-        dag.highest_work_path.iter().map(|b| serde_json::Value::String(b.to_string())).collect()
+        dag.highest_work_path
+            .iter()
+            .map(|b| serde_json::Value::String(b.to_string()))
+            .collect(),
     );
     result.insert("highest_work_path".to_string(), hwp_array);
 
@@ -358,18 +408,26 @@ pub fn save_braid<P: AsRef<Path>>(parents: &Relatives, filename: P, description:
 }
 
 /// Check a cohort using check_cohort_ancestors in both directions
-pub fn check_cohort(cohort: &HashSet<BigUint>, parents: &Relatives, children: Option<&Relatives>) -> bool {
+pub fn check_cohort(
+    cohort: &HashSet<BigUint>,
+    parents: &Relatives,
+    children: Option<&Relatives>,
+) -> bool {
     let children = match children {
         Some(c) => c.clone(),
         None => reverse(parents),
     };
 
-    check_cohort_ancestors(cohort, parents, Some(&children)) &&
-    check_cohort_ancestors(cohort, &children, Some(parents))
+    check_cohort_ancestors(cohort, parents, Some(&children))
+        && check_cohort_ancestors(cohort, &children, Some(parents))
 }
 
 /// Check a cohort by determining the set of ancestors of all beads
-pub fn check_cohort_ancestors(cohort: &HashSet<BigUint>, parents: &Relatives, children: Option<&Relatives>) -> bool {
+pub fn check_cohort_ancestors(
+    cohort: &HashSet<BigUint>,
+    parents: &Relatives,
+    children: Option<&Relatives>,
+) -> bool {
     let children = match children {
         Some(c) => c.clone(),
         None => reverse(parents),
@@ -402,17 +460,34 @@ pub fn check_cohort_ancestors(cohort: &HashSet<BigUint>, parents: &Relatives, ch
     true
 }
 
-
 #[test]
 fn test_geneses1() {
     let parents1: Relatives = [
         (BigUint::from(0u64), HashSet::new()),
-        (BigUint::from(1u64), [BigUint::from(0u64)].iter().cloned().collect()),
-        (BigUint::from(2u64), [BigUint::from(1u64)].iter().cloned().collect()),
-        (BigUint::from(3u64), [BigUint::from(2u64)].iter().cloned().collect()),
-    ].iter().cloned().collect();
+        (
+            BigUint::from(1u64),
+            [BigUint::from(0u64)].iter().cloned().collect(),
+        ),
+        (
+            BigUint::from(2u64),
+            [BigUint::from(1u64)].iter().cloned().collect(),
+        ),
+        (
+            BigUint::from(3u64),
+            [BigUint::from(2u64)].iter().cloned().collect(),
+        ),
+    ]
+    .iter()
+    .cloned()
+    .collect();
 
-    assert_eq!(braid::geneses(&parents1), [BigUint::from(0u64)].iter().cloned().collect::<HashSet<_>>());
+    assert_eq!(
+        braid::geneses(&parents1),
+        [BigUint::from(0u64)]
+            .iter()
+            .cloned()
+            .collect::<HashSet<_>>()
+    );
 }
 
 #[test]
@@ -420,11 +495,26 @@ fn test_geneses2() {
     let parents2: Relatives = [
         (BigUint::from(0u64), HashSet::new()),
         (BigUint::from(1u64), HashSet::new()),
-        (BigUint::from(2u64), [BigUint::from(1u64)].iter().cloned().collect()),
-        (BigUint::from(3u64), [BigUint::from(1u64)].iter().cloned().collect()),
-    ].iter().cloned().collect();
+        (
+            BigUint::from(2u64),
+            [BigUint::from(1u64)].iter().cloned().collect(),
+        ),
+        (
+            BigUint::from(3u64),
+            [BigUint::from(1u64)].iter().cloned().collect(),
+        ),
+    ]
+    .iter()
+    .cloned()
+    .collect();
 
-    assert_eq!(braid::geneses(&parents2), [BigUint::from(0u64), BigUint::from(1u64)].iter().cloned().collect::<HashSet<_>>());
+    assert_eq!(
+        braid::geneses(&parents2),
+        [BigUint::from(0u64), BigUint::from(1u64)]
+            .iter()
+            .cloned()
+            .collect::<HashSet<_>>()
+    );
 }
 
 #[test]
@@ -433,11 +523,30 @@ fn test_geneses3() {
         (BigUint::from(0u64), HashSet::new()),
         (BigUint::from(1u64), HashSet::new()),
         (BigUint::from(2u64), HashSet::new()),
-        (BigUint::from(3u64), [BigUint::from(1u64)].iter().cloned().collect()),
-        (BigUint::from(4u64), [BigUint::from(0u64)].iter().cloned().collect()),
-    ].iter().cloned().collect();
+        (
+            BigUint::from(3u64),
+            [BigUint::from(1u64)].iter().cloned().collect(),
+        ),
+        (
+            BigUint::from(4u64),
+            [BigUint::from(0u64)].iter().cloned().collect(),
+        ),
+    ]
+    .iter()
+    .cloned()
+    .collect();
 
-    assert_eq!(braid::geneses(&parents3), [BigUint::from(0u64), BigUint::from(1u64), BigUint::from(2u64)].iter().cloned().collect::<HashSet<_>>());
+    assert_eq!(
+        braid::geneses(&parents3),
+        [
+            BigUint::from(0u64),
+            BigUint::from(1u64),
+            BigUint::from(2u64)
+        ]
+        .iter()
+        .cloned()
+        .collect::<HashSet<_>>()
+    );
 }
 
 #[test]
@@ -449,7 +558,8 @@ fn test_geneses_files() {
 
     // Skip if directory is empty
     let entries = fs::read_dir(TEST_CASE_DIR).unwrap();
-    let has_json_files = entries.filter_map(Result::ok)
+    let has_json_files = entries
+        .filter_map(Result::ok)
         .any(|e| e.path().extension().map_or(false, |ext| ext == "json"));
 
     if !has_json_files {
@@ -465,8 +575,12 @@ fn test_geneses_files() {
             let dag = load_braid(&path).unwrap();
             assert_eq!(
                 braid::geneses(&dag.parents),
-                [BigUint::from(0u64)].iter().cloned().collect::<HashSet<_>>(),
-                "Failed on file: {}", path_str
+                [BigUint::from(0u64)]
+                    .iter()
+                    .cloned()
+                    .collect::<HashSet<_>>(),
+                "Failed on file: {}",
+                path_str
             );
         }
     }
@@ -476,24 +590,60 @@ fn test_geneses_files() {
 fn test_tips1() {
     let parents1: Relatives = [
         (BigUint::from(0u64), HashSet::new()),
-        (BigUint::from(1u64), [BigUint::from(0u64)].iter().cloned().collect()),
-        (BigUint::from(2u64), [BigUint::from(1u64)].iter().cloned().collect()),
-        (BigUint::from(3u64), [BigUint::from(2u64)].iter().cloned().collect()),
-    ].iter().cloned().collect();
+        (
+            BigUint::from(1u64),
+            [BigUint::from(0u64)].iter().cloned().collect(),
+        ),
+        (
+            BigUint::from(2u64),
+            [BigUint::from(1u64)].iter().cloned().collect(),
+        ),
+        (
+            BigUint::from(3u64),
+            [BigUint::from(2u64)].iter().cloned().collect(),
+        ),
+    ]
+    .iter()
+    .cloned()
+    .collect();
 
-    assert_eq!(braid::tips(&parents1, None), [BigUint::from(3u64)].iter().cloned().collect::<HashSet<_>>());
+    assert_eq!(
+        braid::tips(&parents1, None),
+        [BigUint::from(3u64)]
+            .iter()
+            .cloned()
+            .collect::<HashSet<_>>()
+    );
 }
 
 #[test]
 fn test_tips2() {
     let parents2: Relatives = [
         (BigUint::from(0u64), HashSet::new()),
-        (BigUint::from(1u64), [BigUint::from(0u64)].iter().cloned().collect()),
-        (BigUint::from(2u64), [BigUint::from(1u64)].iter().cloned().collect()),
-        (BigUint::from(3u64), [BigUint::from(1u64)].iter().cloned().collect()),
-    ].iter().cloned().collect();
+        (
+            BigUint::from(1u64),
+            [BigUint::from(0u64)].iter().cloned().collect(),
+        ),
+        (
+            BigUint::from(2u64),
+            [BigUint::from(1u64)].iter().cloned().collect(),
+        ),
+        (
+            BigUint::from(3u64),
+            [BigUint::from(1u64)].iter().cloned().collect(),
+        ),
+    ]
+    .iter()
+    .cloned()
+    .collect();
 
-    assert_eq!(braid::tips(&parents2, None), [BigUint::from(2u64), BigUint::from(3u64)].iter().cloned().collect::<HashSet<_>>());
+    assert_eq!(
+        braid::tips(&parents2, None),
+        [BigUint::from(2u64), BigUint::from(3u64)]
+            .iter()
+            .cloned()
+            .collect::<HashSet<_>>()
+    );
 }
 
 #[test]
@@ -502,12 +652,55 @@ fn test_tips3() {
         (BigUint::from(0u64), HashSet::new()),
         (BigUint::from(1u64), HashSet::new()),
         (BigUint::from(2u64), HashSet::new()),
-        (BigUint::from(3u64), [BigUint::from(0u64), BigUint::from(1u64), BigUint::from(2u64)].iter().cloned().collect()),
-        (BigUint::from(4u64), [BigUint::from(0u64), BigUint::from(1u64), BigUint::from(2u64)].iter().cloned().collect()),
-        (BigUint::from(5u64), [BigUint::from(0u64), BigUint::from(1u64), BigUint::from(2u64)].iter().cloned().collect()),
-    ].iter().cloned().collect();
+        (
+            BigUint::from(3u64),
+            [
+                BigUint::from(0u64),
+                BigUint::from(1u64),
+                BigUint::from(2u64),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+        ),
+        (
+            BigUint::from(4u64),
+            [
+                BigUint::from(0u64),
+                BigUint::from(1u64),
+                BigUint::from(2u64),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+        ),
+        (
+            BigUint::from(5u64),
+            [
+                BigUint::from(0u64),
+                BigUint::from(1u64),
+                BigUint::from(2u64),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+        ),
+    ]
+    .iter()
+    .cloned()
+    .collect();
 
-    assert_eq!(braid::tips(&parents3, None), [BigUint::from(3u64), BigUint::from(4u64), BigUint::from(5u64)].iter().cloned().collect::<HashSet<_>>());
+    assert_eq!(
+        braid::tips(&parents3, None),
+        [
+            BigUint::from(3u64),
+            BigUint::from(4u64),
+            BigUint::from(5u64)
+        ]
+        .iter()
+        .cloned()
+        .collect::<HashSet<_>>()
+    );
 }
 
 #[test]
@@ -516,19 +709,85 @@ fn test_reverse() {
         (BigUint::from(0u64), HashSet::new()),
         (BigUint::from(1u64), HashSet::new()),
         (BigUint::from(2u64), HashSet::new()),
-        (BigUint::from(3u64), [BigUint::from(0u64), BigUint::from(1u64), BigUint::from(2u64)].iter().cloned().collect()),
-        (BigUint::from(4u64), [BigUint::from(0u64), BigUint::from(1u64), BigUint::from(2u64)].iter().cloned().collect()),
-        (BigUint::from(5u64), [BigUint::from(0u64), BigUint::from(1u64), BigUint::from(2u64)].iter().cloned().collect()),
-    ].iter().cloned().collect();
+        (
+            BigUint::from(3u64),
+            [
+                BigUint::from(0u64),
+                BigUint::from(1u64),
+                BigUint::from(2u64),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+        ),
+        (
+            BigUint::from(4u64),
+            [
+                BigUint::from(0u64),
+                BigUint::from(1u64),
+                BigUint::from(2u64),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+        ),
+        (
+            BigUint::from(5u64),
+            [
+                BigUint::from(0u64),
+                BigUint::from(1u64),
+                BigUint::from(2u64),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+        ),
+    ]
+    .iter()
+    .cloned()
+    .collect();
 
     let expected: HashMap<BigUint, HashSet<BigUint>> = [
-        (BigUint::from(0u64), [BigUint::from(3u64), BigUint::from(4u64), BigUint::from(5u64)].iter().cloned().collect()),
-        (BigUint::from(1u64), [BigUint::from(3u64), BigUint::from(4u64), BigUint::from(5u64)].iter().cloned().collect()),
-        (BigUint::from(2u64), [BigUint::from(3u64), BigUint::from(4u64), BigUint::from(5u64)].iter().cloned().collect()),
+        (
+            BigUint::from(0u64),
+            [
+                BigUint::from(3u64),
+                BigUint::from(4u64),
+                BigUint::from(5u64),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+        ),
+        (
+            BigUint::from(1u64),
+            [
+                BigUint::from(3u64),
+                BigUint::from(4u64),
+                BigUint::from(5u64),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+        ),
+        (
+            BigUint::from(2u64),
+            [
+                BigUint::from(3u64),
+                BigUint::from(4u64),
+                BigUint::from(5u64),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+        ),
         (BigUint::from(3u64), HashSet::new()),
         (BigUint::from(4u64), HashSet::new()),
         (BigUint::from(5u64), HashSet::new()),
-    ].iter().cloned().collect();
+    ]
+    .iter()
+    .cloned()
+    .collect();
 
     assert_eq!(braid::reverse(&parents), expected);
 }
@@ -537,16 +796,40 @@ fn test_reverse() {
 fn test_cohorts() {
     let parents1: Relatives = [
         (BigUint::from(0u64), HashSet::new()),
-        (BigUint::from(1u64), [BigUint::from(0u64)].iter().cloned().collect()),
-        (BigUint::from(2u64), [BigUint::from(1u64)].iter().cloned().collect()),
-        (BigUint::from(3u64), [BigUint::from(2u64)].iter().cloned().collect()),
-    ].iter().cloned().collect();
+        (
+            BigUint::from(1u64),
+            [BigUint::from(0u64)].iter().cloned().collect(),
+        ),
+        (
+            BigUint::from(2u64),
+            [BigUint::from(1u64)].iter().cloned().collect(),
+        ),
+        (
+            BigUint::from(3u64),
+            [BigUint::from(2u64)].iter().cloned().collect(),
+        ),
+    ]
+    .iter()
+    .cloned()
+    .collect();
 
     let expected = vec![
-        [BigUint::from(0u64)].iter().cloned().collect::<HashSet<_>>(),
-        [BigUint::from(1u64)].iter().cloned().collect::<HashSet<_>>(),
-        [BigUint::from(2u64)].iter().cloned().collect::<HashSet<_>>(),
-        [BigUint::from(3u64)].iter().cloned().collect::<HashSet<_>>(),
+        [BigUint::from(0u64)]
+            .iter()
+            .cloned()
+            .collect::<HashSet<_>>(),
+        [BigUint::from(1u64)]
+            .iter()
+            .cloned()
+            .collect::<HashSet<_>>(),
+        [BigUint::from(2u64)]
+            .iter()
+            .cloned()
+            .collect::<HashSet<_>>(),
+        [BigUint::from(3u64)]
+            .iter()
+            .cloned()
+            .collect::<HashSet<_>>(),
     ];
 
     assert_eq!(braid::cohorts(&parents1, None, None), expected);
@@ -564,7 +847,8 @@ fn test_cohorts_files() {
             assert_eq!(
                 braid::cohorts(&dag.parents, None, None),
                 dag.cohorts,
-                "Failed on file: {}", path_str
+                "Failed on file: {}",
+                path_str
             );
         }
     }
@@ -574,7 +858,8 @@ fn test_cohorts_files() {
 fn test_cohorts_reversed_files() {
     // Skip if directory is empty
     let entries = fs::read_dir(TEST_CASE_DIR).unwrap();
-    let has_json_files = entries.filter_map(Result::ok)
+    let has_json_files = entries
+        .filter_map(Result::ok)
         .any(|e| e.path().extension().map_or(false, |ext| ext == "json"));
 
     if !has_json_files {
@@ -594,7 +879,8 @@ fn test_cohorts_reversed_files() {
             assert_eq!(
                 braid::cohorts(&p, None, None),
                 c,
-                "Failed on file: {}", path_str
+                "Failed on file: {}",
+                path_str
             );
         }
     }
@@ -604,10 +890,22 @@ fn test_cohorts_reversed_files() {
 fn test_highest_work_path() {
     let parents1: Relatives = [
         (BigUint::from(0u64), HashSet::new()),
-        (BigUint::from(1u64), [BigUint::from(0u64)].iter().cloned().collect()),
-        (BigUint::from(2u64), [BigUint::from(1u64)].iter().cloned().collect()),
-        (BigUint::from(3u64), [BigUint::from(2u64)].iter().cloned().collect()),
-    ].iter().cloned().collect();
+        (
+            BigUint::from(1u64),
+            [BigUint::from(0u64)].iter().cloned().collect(),
+        ),
+        (
+            BigUint::from(2u64),
+            [BigUint::from(1u64)].iter().cloned().collect(),
+        ),
+        (
+            BigUint::from(3u64),
+            [BigUint::from(2u64)].iter().cloned().collect(),
+        ),
+    ]
+    .iter()
+    .cloned()
+    .collect();
 
     let children1 = braid::reverse(&parents1);
 
@@ -618,15 +916,22 @@ fn test_highest_work_path() {
         BigUint::from(3u64),
     ];
 
-    let bead_work: BeadWork = parents1.keys().map(|b| (b.clone(), BigUint::from(1u32))).collect();
-    assert_eq!(braid::highest_work_path(&parents1, Some(&children1), &bead_work), expected);
+    let bead_work: BeadWork = parents1
+        .keys()
+        .map(|b| (b.clone(), BigUint::from(1u32)))
+        .collect();
+    assert_eq!(
+        braid::highest_work_path(&parents1, Some(&children1), &bead_work),
+        expected
+    );
 }
 
 #[test]
 fn test_highest_work_path_files() {
     // Skip if directory is empty
     let entries = fs::read_dir(TEST_CASE_DIR).unwrap();
-    let has_json_files = entries.filter_map(Result::ok)
+    let has_json_files = entries
+        .filter_map(Result::ok)
         .any(|e| e.path().extension().map_or(false, |ext| ext == "json"));
 
     if !has_json_files {
@@ -643,7 +948,8 @@ fn test_highest_work_path_files() {
             assert_eq!(
                 braid::highest_work_path(&dag.parents, Some(&dag.children), &dag.bead_work),
                 dag.highest_work_path,
-                "Failed on file: {}", path_str
+                "Failed on file: {}",
+                path_str
             );
         }
     }
@@ -653,7 +959,8 @@ fn test_highest_work_path_files() {
 fn test_check_cohort_files() {
     // Skip if directory is empty
     let entries = fs::read_dir(TEST_CASE_DIR).unwrap();
-    let has_json_files = entries.filter_map(Result::ok)
+    let has_json_files = entries
+        .filter_map(Result::ok)
         .any(|e| e.path().extension().map_or(false, |ext| ext == "json"));
 
     if !has_json_files {
@@ -670,7 +977,9 @@ fn test_check_cohort_files() {
             for (i, c) in dag.cohorts.iter().enumerate() {
                 assert!(
                     check_cohort(c, &dag.parents, Some(&dag.children)),
-                    "Failed on file: {}, cohort index: {}", path_str, i
+                    "Failed on file: {}, cohort index: {}",
+                    path_str,
+                    i
                 );
             }
         }
@@ -681,7 +990,8 @@ fn test_check_cohort_files() {
 fn test_check_work_files() {
     // Skip if directory is empty
     let entries = fs::read_dir(TEST_CASE_DIR).unwrap();
-    let has_json_files = entries.filter_map(Result::ok)
+    let has_json_files = entries
+        .filter_map(Result::ok)
         .any(|e| e.path().extension().map_or(false, |ext| ext == "json"));
 
     if !has_json_files {
@@ -698,7 +1008,8 @@ fn test_check_work_files() {
             assert_eq!(
                 dag.work,
                 braid::descendant_work(&dag.parents, Some(&dag.children), &dag.bead_work, None),
-                "Failed on file: {}", path_str
+                "Failed on file: {}",
+                path_str
             );
         }
     }
@@ -708,7 +1019,8 @@ fn test_check_work_files() {
 fn test_sub_braid_files() {
     // Skip if directory is empty
     let entries = fs::read_dir(TEST_CASE_DIR).unwrap();
-    let has_json_files = entries.filter_map(Result::ok)
+    let has_json_files = entries
+        .filter_map(Result::ok)
         .any(|e| e.path().extension().map_or(false, |ext| ext == "json"));
 
     if !has_json_files {
@@ -726,19 +1038,25 @@ fn test_sub_braid_files() {
                 assert_eq!(
                     braid::geneses(&braid::sub_braid(c, &dag.parents)),
                     braid::cohort_head(c, &dag.parents, Some(&dag.children)),
-                    "Failed on file: {}, cohort index: {}, geneses check", path_str, i
+                    "Failed on file: {}, cohort index: {}, geneses check",
+                    path_str,
+                    i
                 );
 
                 assert_eq!(
                     braid::tips(&braid::sub_braid(c, &dag.parents), None),
                     braid::cohort_tail(c, &dag.parents, Some(&dag.children)),
-                    "Failed on file: {}, cohort index: {}, tips check", path_str, i
+                    "Failed on file: {}, cohort index: {}, tips check",
+                    path_str,
+                    i
                 );
 
                 assert_eq!(
                     braid::cohorts(&braid::sub_braid(c, &dag.parents), None, None),
                     vec![c.clone()],
-                    "Failed on file: {}, cohort index: {}, cohorts check", path_str, i
+                    "Failed on file: {}, cohort index: {}, cohorts check",
+                    path_str,
+                    i
                 );
             }
         }
@@ -749,7 +1067,8 @@ fn test_sub_braid_files() {
 fn test_head_tail_files() {
     // Skip if directory is empty
     let entries = fs::read_dir(TEST_CASE_DIR).unwrap();
-    let has_json_files = entries.filter_map(Result::ok)
+    let has_json_files = entries
+        .filter_map(Result::ok)
         .any(|e| e.path().extension().map_or(false, |ext| ext == "json"));
 
     if !has_json_files {
@@ -767,13 +1086,17 @@ fn test_head_tail_files() {
                 assert_eq!(
                     braid::cohort_head(c, &dag.parents, Some(&dag.children)),
                     braid::geneses(&braid::sub_braid(c, &dag.parents)),
-                    "Failed on file: {}, cohort index: {}, head check", path_str, i
+                    "Failed on file: {}, cohort index: {}, head check",
+                    path_str,
+                    i
                 );
 
                 assert_eq!(
                     braid::cohort_tail(c, &dag.parents, Some(&dag.children)),
                     braid::tips(&braid::sub_braid(c, &dag.parents), None),
-                    "Failed on file: {}, cohort index: {}, tail check", path_str, i
+                    "Failed on file: {}, cohort index: {}, tail check",
+                    path_str,
+                    i
                 );
             }
         }
@@ -784,20 +1107,54 @@ fn test_head_tail_files() {
 fn test_all_ancestors() {
     let parents = [
         (BigUint::from(0u64), HashSet::new()),
-        (BigUint::from(1u64), [BigUint::from(0u64)].iter().cloned().collect()),
-        (BigUint::from(2u64), [BigUint::from(1u64)].iter().cloned().collect()),
-        (BigUint::from(3u64), [BigUint::from(2u64)].iter().cloned().collect()),
-    ].iter().cloned().collect();
+        (
+            BigUint::from(1u64),
+            [BigUint::from(0u64)].iter().cloned().collect(),
+        ),
+        (
+            BigUint::from(2u64),
+            [BigUint::from(1u64)].iter().cloned().collect(),
+        ),
+        (
+            BigUint::from(3u64),
+            [BigUint::from(2u64)].iter().cloned().collect(),
+        ),
+    ]
+    .iter()
+    .cloned()
+    .collect();
 
     let mut ancestors = std::collections::HashMap::new();
     braid::all_ancestors(&BigUint::from(3u64), &parents, &mut ancestors);
 
     let expected_ancestors = [
-        (BigUint::from(3u64), [BigUint::from(0u64), BigUint::from(1u64), BigUint::from(2u64)].iter().cloned().collect()),
-        (BigUint::from(2u64), [BigUint::from(0u64), BigUint::from(1u64)].iter().cloned().collect()),
-        (BigUint::from(1u64), [BigUint::from(0u64)].iter().cloned().collect()),
+        (
+            BigUint::from(3u64),
+            [
+                BigUint::from(0u64),
+                BigUint::from(1u64),
+                BigUint::from(2u64),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+        ),
+        (
+            BigUint::from(2u64),
+            [BigUint::from(0u64), BigUint::from(1u64)]
+                .iter()
+                .cloned()
+                .collect(),
+        ),
+        (
+            BigUint::from(1u64),
+            [BigUint::from(0u64)].iter().cloned().collect(),
+        ),
         (BigUint::from(0u64), HashSet::new()),
-    ].iter().cloned().collect();
+    ]
+    .iter()
+    .cloned()
+    .collect();
 
     assert_eq!(ancestors, expected_ancestors);
 }
@@ -806,10 +1163,22 @@ fn test_all_ancestors() {
 fn test_save_load_braid() {
     let parents = [
         (BigUint::from(0u64), HashSet::new()),
-        (BigUint::from(1u64), [BigUint::from(0u64)].iter().cloned().collect()),
-        (BigUint::from(2u64), [BigUint::from(1u64)].iter().cloned().collect()),
-        (BigUint::from(3u64), [BigUint::from(2u64)].iter().cloned().collect()),
-    ].iter().cloned().collect();
+        (
+            BigUint::from(1u64),
+            [BigUint::from(0u64)].iter().cloned().collect(),
+        ),
+        (
+            BigUint::from(2u64),
+            [BigUint::from(1u64)].iter().cloned().collect(),
+        ),
+        (
+            BigUint::from(3u64),
+            [BigUint::from(2u64)].iter().cloned().collect(),
+        ),
+    ]
+    .iter()
+    .cloned()
+    .collect();
 
     let temp_file = "tests/temp_braid_test.json";
     let description = "Test braid";
@@ -834,4 +1203,3 @@ fn test_save_load_braid() {
     // Clean up
     std::fs::remove_file(temp_file).unwrap();
 }
-
