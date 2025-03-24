@@ -38,6 +38,20 @@ cargo run -- --bind=localhost:8989 --bitcoin=0.0.0.0 --rpcport=8332 --rpcuser=xx
 cargo run -- --bind=localhost:9899 --addnode=localhost:8989 --bitcoin=0.0.0.0 --rpcport=8332 --rpcuser=xxxx --rpcpass=yyyy --zmqhashblockport=28332
 ```
 
+# Documentation
+
+The documentation is in the `docs/` directory and contains a bunch of math. To
+view it locally rendered in your browser including the math, use
+[MkDocs](https://www.mkdocs.org/):
+
+```
+cd braidpool
+mkdocs serve
+xdg-open http://localhost:8000
+```
+
+You'll find available documents in the top bar.
+
 # Progress
 
 A list with TODO's:

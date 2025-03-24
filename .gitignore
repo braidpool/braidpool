@@ -1,7 +1,10 @@
+target
 **/__pycache__
 **/.pytest_cache
 channels/build
 *\.cache
+*\.dat
+*\.log
 pool/build
 proposal/.dep/
 proposal/figures/epoch.pdf
@@ -15,5 +18,7 @@ proposal/proposal.bbl
 proposal/proposal.blg
 simulations/logs/*
 simulations/*.toolbox
+notes/
 venv
 *~
+.aider*
