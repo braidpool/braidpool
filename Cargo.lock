@@ -296,6 +296,8 @@ dependencies = [
  "futures",
  "log",
  "num",
+ "num-traits",
+ "once_cell",
  "serde",
  "serde_derive",
  "serde_json",
