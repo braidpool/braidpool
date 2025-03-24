@@ -3,15 +3,13 @@
 //! This module provides tools for manipulating braids, which are directed acyclic graphs (DAGs)
 //! where each node (bead) can have multiple parents and children.
 
-// FIXME this is temporary
 use num::BigUint;
-#[allow(unused_variables)]
 use std::collections::{HashMap, HashSet};
 
-/// A type alias for a bead (A 256-bit uint)
+/// A type alias for a bead (A 256-bit uint representing a block hash)
 pub type Bead = BigUint;
 
-/// A type alias for work
+/// A type alias for work (A 256-bit uint representing work)
 pub type Work = BigUint;
 
 /// A type alias for a map from bead to its parents or children
@@ -275,7 +273,6 @@ pub fn cohort_tail(
 }
 
 /// Given a cohort as a set of beads, compute its head
-#[allow(dead_code)]
 pub fn cohort_head(
     cohort: &HashSet<Bead>,
     parents: &Relatives,
@@ -328,7 +325,6 @@ pub fn sub_braid(beads: &HashSet<Bead>, parents: &Relatives) -> Relatives {
 }
 
 /// Find the work in descendants
-#[allow(dead_code)]
 pub fn descendant_work(
     parents: &Relatives,
     children: Option<&Relatives>,
@@ -383,7 +379,6 @@ pub fn descendant_work(
 }
 
 /// A custom comparison function for sorting beads
-#[allow(dead_code)]
 pub fn bead_cmp(
     a: &Bead,
     b: &Bead,
