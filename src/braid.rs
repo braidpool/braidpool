@@ -3,50 +3,11 @@
 //! This module provides tools for manipulating braids, which are directed acyclic graphs (DAGs)
 //! where each node (bead) can have multiple parents and children.
 
-use std::collections::{HashMap, HashSet};
-//use std::io::{Read, Write};
-use std::str::FromStr;
-use num::BigUint;
+// FIXME this is temporary
+#[allow(unused_variables)]
 
-// Add serde support for BigUint
-//mod biguint_serde {
-//    use num::BigUint;
-//    use serde::{self, Serializer, Deserializer};
-//    use serde::de::{self, Visitor};
-//    use std::fmt;
-//    use std::str::FromStr;
-//
-//    pub fn serialize<S>(biguint: &BigUint, serializer: S) -> Result<S::Ok, S::Error>
-//    where
-//        S: Serializer,
-//    {
-//        serializer.serialize_str(&biguint.to_string())
-//    }
-//
-//    struct BigUintVisitor;
-//
-//    impl<'de> Visitor<'de> for BigUintVisitor {
-//        type Value = BigUint;
-//
-//        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-//            formatter.write_str("a string representing a BigUint")
-//        }
-//
-//        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-//        where
-//            E: de::Error,
-//        {
-//            BigUint::from_str(value).map_err(|_| de::Error::custom("failed to parse BigUint"))
-//        }
-//    }
-//
-//    pub fn deserialize<'de, D>(deserializer: D) -> Result<BigUint, D::Error>
-//    where
-//        D: Deserializer<'de>,
-//    {
-//        deserializer.deserialize_str(BigUintVisitor)
-//    }
-//}
+use std::collections::{HashMap, HashSet};
+use num::BigUint;
 
 /// The work per bead if work is not passed
 pub const FIXED_BEAD_WORK: u64 = 1;
@@ -56,99 +17,6 @@ pub type Relatives = HashMap<BigUint, HashSet<BigUint>>;
 
 /// A type alias for a map from bead to its work
 pub type BeadWork = HashMap<BigUint, u64>; // FIXME change u64 to BigUint
-
-/// A type alias for a cohort (set of beads)
-pub type Cohort = HashSet<BigUint>;
-
-//mod biguint_cohorts_serde {
-//    use super::*;
-//    use serde::{Deserialize, Deserializer, Serializer};
-//    use std::collections::HashSet;
-//
-//    pub fn serialize<S>(cohorts: &Vec<HashSet<BigUint>>, serializer: S) -> Result<S::Ok, S::Error>
-//    where
-//        S: Serializer,
-//    {
-//        let string_cohorts: Vec<Vec<String>> = cohorts
-//            .iter()
-//            .map(|cohort| cohort.iter().map(|b| b.to_string()).collect())
-//            .collect();
-//        string_cohorts.serialize(serializer)
-//    }
-//
-//    pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<HashSet<BigUint>>, D::Error>
-//    where
-//        D: Deserializer<'de>,
-//    {
-//        let string_cohorts: Vec<Vec<String>> = Vec::deserialize(deserializer)?;
-//        let mut result = Vec::new();
-//        for string_cohort in string_cohorts {
-//            let mut cohort = HashSet::new();
-//            for s in string_cohort {
-//                let value = BigUint::from_str(&s).map_err(serde::de::Error::custom)?;
-//                cohort.insert(value);
-//            }
-//            result.push(cohort);
-//        }
-//        Ok(result)
-//    }
-//}
-//
-//mod biguint_work_serde {
-//    use super::*;
-//    use serde::{Deserialize, Deserializer, Serializer};
-//    use std::collections::HashMap;
-//
-//    pub fn serialize<S>(map: &HashMap<BigUint, u64>, serializer: S) -> Result<S::Ok, S::Error>
-//    where
-//        S: Serializer,
-//    {
-//        let string_map: HashMap<String, u64> = map
-//            .iter()
-//            .map(|(k, v)| (k.to_string(), *v))
-//            .collect();
-//        string_map.serialize(serializer)
-//    }
-//
-//    pub fn deserialize<'de, D>(deserializer: D) -> Result<HashMap<BigUint, u64>, D::Error>
-//    where
-//        D: Deserializer<'de>,
-//    {
-//        let string_map: HashMap<String, u64> = HashMap::deserialize(deserializer)?;
-//        let mut result = HashMap::new();
-//        for (k, v) in string_map {
-//            let key = BigUint::from_str(&k).map_err(serde::de::Error::custom)?;
-//            result.insert(key, v);
-//        }
-//        Ok(result)
-//    }
-//}
-//
-//mod biguint_vec_serde {
-//    use super::*;
-//    use serde::{Deserialize, Deserializer, Serializer};
-//
-//    pub fn serialize<S>(vec: &Vec<BigUint>, serializer: S) -> Result<S::Ok, S::Error>
-//    where
-//        S: Serializer,
-//    {
-//        let string_vec: Vec<String> = vec.iter().map(|b| b.to_string()).collect();
-//        string_vec.serialize(serializer)
-//    }
-//
-//    pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<BigUint>, D::Error>
-//    where
-//        D: Deserializer<'de>,
-//    {
-//        let string_vec: Vec<String> = Vec::deserialize(deserializer)?;
-//        let mut result = Vec::new();
-//        for s in string_vec {
-//            let value = BigUint::from_str(&s).map_err(serde::de::Error::custom)?;
-//            result.push(value);
-//        }
-//        Ok(result)
-//    }
-//}
 
 /// Given a dict of {bead: {parents}}, return the set of beads which have no parents
 pub fn geneses(parents: &Relatives) -> HashSet<BigUint> {
@@ -384,6 +252,7 @@ pub fn cohorts(parents: &Relatives, children: Option<&Relatives>, initial_cohort
 }
 
 /// Given a cohort as a set of beads, compute its tail
+#[allow(dead_code)]
 pub fn cohort_tail(cohort: &HashSet<BigUint>, parents: &Relatives, children: Option<&Relatives>) -> HashSet<BigUint> {
     let children_map = match children {
         Some(c) => c.clone(),
@@ -396,6 +265,7 @@ pub fn cohort_tail(cohort: &HashSet<BigUint>, parents: &Relatives, children: Opt
 }
 
 /// Given a cohort as a set of beads, compute its head
+#[allow(dead_code)]
 pub fn cohort_head(cohort: &HashSet<BigUint>, parents: &Relatives, children: Option<&Relatives>) -> HashSet<BigUint> {
     let children_map = match children {
         Some(c) => c.clone(),
@@ -444,6 +314,7 @@ pub fn sub_braid(beads: &HashSet<BigUint>, parents: &Relatives) -> Relatives {
 }
 
 /// Find the work in descendants
+#[allow(dead_code)]
 pub fn descendant_work(
     parents: &Relatives,
     children: Option<&Relatives>,
@@ -502,6 +373,7 @@ pub fn descendant_work(
 }
 
 /// A custom comparison function for sorting beads
+#[allow(dead_code)]
 pub fn bead_cmp(a: &BigUint, b: &BigUint, dwork: &HashMap<BigUint, u64>, awork: Option<&HashMap<BigUint, u64>>) -> std::cmp::Ordering {
     let a_dwork = dwork.get(a).unwrap_or(&0);
     let b_dwork = dwork.get(b).unwrap_or(&0);
@@ -536,6 +408,7 @@ pub fn bead_cmp(a: &BigUint, b: &BigUint, dwork: &HashMap<BigUint, u64>, awork: 
 }
 
 /// Return a sorting function for beads based on work
+#[allow(dead_code)]
 pub fn work_sort_key<'a>(
     parents: &'a Relatives,
     children: Option<&'a Relatives>,
@@ -559,6 +432,7 @@ pub fn work_sort_key<'a>(
 }
 
 /// Find the highest (descendant) work path, by following the highest weights through the DAG
+#[allow(dead_code)]
 pub fn highest_work_path(
     parents: &Relatives,
     children: Option<&Relatives>,
@@ -609,52 +483,8 @@ pub fn highest_work_path(
     hwpath
 }
 
-/// Check a cohort using check_cohort_ancestors in both directions
-pub fn check_cohort(cohort: &HashSet<BigUint>, parents: &Relatives, children: Option<&Relatives>) -> bool {
-    let children = match children {
-        Some(c) => c.clone(),
-        None => reverse(parents),
-    };
-
-    check_cohort_ancestors(cohort, parents, Some(&children)) &&
-    check_cohort_ancestors(cohort, &children, Some(parents))
-}
-
-/// Check a cohort by determining the set of ancestors of all beads
-pub fn check_cohort_ancestors(cohort: &HashSet<BigUint>, parents: &Relatives, children: Option<&Relatives>) -> bool {
-    let children = match children {
-        Some(c) => c.clone(),
-        None => reverse(parents),
-    };
-
-    let mut ancestors = HashMap::new();
-    let mut allancestors = HashSet::new();
-    let head = cohort_head(cohort, parents, Some(&children));
-
-    for b in cohort {
-        all_ancestors(b, parents, &mut ancestors);
-        if let Some(b_ancestors) = ancestors.get(b) {
-            for a in b_ancestors {
-                if !cohort.contains(a) {
-                    allancestors.insert(a.clone());
-                }
-            }
-        }
-    }
-
-    if !allancestors.is_empty() {
-        let gen = generation(&allancestors, &children);
-        let gen_minus_allancestors: HashSet<_> = gen.difference(&allancestors).cloned().collect();
-
-        if gen_minus_allancestors != head {
-            return false;
-        }
-    }
-
-    true
-}
-
 /// Number the beads in a braid sequentially in topological order starting at genesis
+#[allow(dead_code)]
 pub fn number_beads(hashed_parents: &Relatives) -> Relatives {
     let mut bead_id: u64 = 0;
     let mut parents = Relatives::new();

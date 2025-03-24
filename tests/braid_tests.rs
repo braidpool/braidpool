@@ -1,3 +1,4 @@
+use std::clone::Clone;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::fs::{File};
@@ -32,7 +33,7 @@ pub struct Dag {
     pub tips: HashSet<BigUint>,
 
     /// List of cohorts in the DAG
-    pub cohorts: Vec<Cohort>,
+    pub cohorts: Vec<HashSet<BigUint>>,
 
     /// Map from bead to its work
     pub bead_work: BeadWork,
@@ -73,21 +74,21 @@ impl<'de> Deserialize<'de> for Dag {
         #[derive(Deserialize)]
         struct DagHelper {
             description: Option<String>,
-            #[serde(with = "biguint_map_serde")]
+            #[serde(with = "biguint_serde::biguint_map_set")]
             parents: Relatives,
-            #[serde(with = "biguint_map_serde")]
+            #[serde(with = "biguint_serde::biguint_map_set")]
             children: Relatives,
-            #[serde(with = "biguint_set_serde")]
+            #[serde(with = "biguint_serde::biguint_set")]
             geneses: HashSet<BigUint>,
-            #[serde(with = "biguint_set_serde")]
+            #[serde(with = "biguint_serde::biguint_set")]
             tips: HashSet<BigUint>,
-            #[serde(with = "biguint_cohorts_serde")]
-            cohorts: Vec<Cohort>,
-            #[serde(with = "biguint_work_serde")]
+            #[serde(with = "biguint_serde::biguint_vec_set")]
+            cohorts: Vec<HashSet<BigUint>>,
+            #[serde(with = "biguint_serde::biguint_map")]
             bead_work: BeadWork,
-            #[serde(with = "biguint_work_serde")]
+            #[serde(with = "biguint_serde::biguint_map")]
             work: HashMap<BigUint, u64>,
-            #[serde(with = "biguint_vec_serde")]
+            #[serde(with = "biguint_serde::biguint_vec")]
             highest_work_path: Vec<BigUint>,
         }
 
@@ -106,14 +107,17 @@ impl<'de> Deserialize<'de> for Dag {
     }
 }
 
-// Add serde support for BigUint
+// Generic serialization helpers for BigUint collections
 mod biguint_serde {
     use num::BigUint;
-    use serde::{self, Serializer, Deserializer};
+    use serde::{Serialize, Deserialize, Serializer, Deserializer};
     use serde::de::{self, Visitor};
     use std::fmt;
     use std::str::FromStr;
+    use std::collections::{HashMap, HashSet};
+    use std::borrow::Borrow;
 
+    // BigUint serialization as string
     pub fn serialize<S>(biguint: &BigUint, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -144,160 +148,148 @@ mod biguint_serde {
     {
         deserializer.deserialize_str(BigUintVisitor)
     }
-}
 
-// Serde modules for various BigUint collections
-mod biguint_map_serde {
-    use super::*;
-    use serde::{Deserialize, Deserializer, Serializer};
-    use std::collections::{HashMap, HashSet};
-
-    pub fn serialize<S>(map: &HashMap<BigUint, HashSet<BigUint>>, serializer: S) -> Result<S::Ok, S::Error>
+    // Generic collection serialization
+    pub fn serialize_collection<T, S, F>(collection: &T, serializer: S, to_string: F) -> Result<S::Ok, S::Error>
     where
+        T: IntoIterator + Clone,
+        <T as IntoIterator>::Item: std::borrow::Borrow<BigUint>,
         S: Serializer,
+        F: Fn(&BigUint) -> String,
     {
-        let mut string_map: HashMap<String, Vec<String>> = HashMap::new();
-        for (k, v) in map {
-            let key = k.to_string();
-            let values: Vec<String> = v.iter().map(|b| b.to_string()).collect();
-            string_map.insert(key, values);
-        }
-        string_map.serialize(serializer)
+        let string_collection: Vec<String> = collection.clone().into_iter().map(|b| to_string(b.borrow())).collect();
+        string_collection.serialize(serializer)
     }
 
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<HashMap<BigUint, HashSet<BigUint>>, D::Error>
+    pub fn deserialize_collection<'de, D, T, F>(deserializer: D, from_str: F) -> Result<T, D::Error>
     where
         D: Deserializer<'de>,
-    {
-        let string_map: HashMap<String, Vec<String>> = HashMap::deserialize(deserializer)?;
-        let mut result = HashMap::new();
-        for (k, v) in string_map {
-            let key = BigUint::from_str(&k).map_err(serde::de::Error::custom)?;
-            let mut values = HashSet::new();
-            for val in v {
-                let value = BigUint::from_str(&val).map_err(serde::de::Error::custom)?;
-                values.insert(value);
-            }
-            result.insert(key, values);
-        }
-        Ok(result)
-    }
-}
-
-mod biguint_set_serde {
-    use super::*;
-    use serde::{Deserialize, Deserializer, Serializer};
-    use std::collections::HashSet;
-
-    pub fn serialize<S>(set: &HashSet<BigUint>, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let string_set: Vec<String> = set.iter().map(|b| b.to_string()).collect();
-        string_set.serialize(serializer)
-    }
-
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<HashSet<BigUint>, D::Error>
-    where
-        D: Deserializer<'de>,
+        T: FromIterator<BigUint>,
+        F: Fn(&str) -> Result<BigUint, D::Error>,
     {
         let string_vec: Vec<String> = Vec::deserialize(deserializer)?;
-        let mut result = HashSet::new();
-        for s in string_vec {
-            let value = BigUint::from_str(&s).map_err(serde::de::Error::custom)?;
-            result.insert(value);
-        }
-        Ok(result)
-    }
-}
-
-mod biguint_cohorts_serde {
-    use super::*;
-    use serde::{Deserialize, Deserializer, Serializer};
-    use std::collections::HashSet;
-
-    pub fn serialize<S>(cohorts: &Vec<HashSet<BigUint>>, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let string_cohorts: Vec<Vec<String>> = cohorts
-            .iter()
-            .map(|cohort| cohort.iter().map(|b| b.to_string()).collect())
-            .collect();
-        string_cohorts.serialize(serializer)
+        string_vec.into_iter().map(|s| from_str(&s)).collect()
     }
 
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<HashSet<BigUint>>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let string_cohorts: Vec<Vec<String>> = Vec::deserialize(deserializer)?;
-        let mut result = Vec::new();
-        for string_cohort in string_cohorts {
-            let mut cohort = HashSet::new();
-            for s in string_cohort {
-                let value = BigUint::from_str(&s).map_err(serde::de::Error::custom)?;
-                cohort.insert(value);
+    // Macro to generate serde implementations for collections
+    macro_rules! impl_biguint_serde {
+        ($name:ident, $type:ty, $iter:ty) => {
+            pub mod $name {
+                use super::*;
+
+                pub fn serialize<S>(value: &$type, serializer: S) -> Result<S::Ok, S::Error>
+                where
+                    S: Serializer,
+                {
+                    serialize_collection(value, serializer, |b| b.to_string())
+                }
+
+                pub fn deserialize<'de, D>(deserializer: D) -> Result<$type, D::Error>
+                where
+                    D: Deserializer<'de>,
+                {
+                    deserialize_collection(deserializer, |s| BigUint::from_str(s).map_err(de::Error::custom))
+                }
             }
-            result.push(cohort);
+        };
+    }
+
+    // Implement for common collection types
+    impl_biguint_serde!(biguint_set, HashSet<BigUint>, impl Iterator<Item = &'a BigUint>);
+    impl_biguint_serde!(biguint_vec, Vec<BigUint>, impl Iterator<Item = &'a BigUint>);
+
+    // Special implementation for Vec<HashSet<BigUint>> (cohorts)
+    pub mod biguint_vec_set {
+        use super::*;
+
+        pub fn serialize<S>(value: &Vec<HashSet<BigUint>>, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            let vec_of_vecs: Vec<Vec<String>> = value
+                .iter()
+                .map(|set| set.iter().map(|b| b.to_string()).collect())
+                .collect();
+            vec_of_vecs.serialize(serializer)
         }
-        Ok(result)
-    }
-}
 
-mod biguint_work_serde {
-    use super::*;
-    use serde::{Deserialize, Deserializer, Serializer};
-    use std::collections::HashMap;
-
-    pub fn serialize<S>(map: &HashMap<BigUint, u64>, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let string_map: HashMap<String, u64> = map
-            .iter()
-            .map(|(k, v)| (k.to_string(), *v))
-            .collect();
-        string_map.serialize(serializer)
-    }
-
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<HashMap<BigUint, u64>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let string_map: HashMap<String, u64> = HashMap::deserialize(deserializer)?;
-        let mut result = HashMap::new();
-        for (k, v) in string_map {
-            let key = BigUint::from_str(&k).map_err(serde::de::Error::custom)?;
-            result.insert(key, v);
+        pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<HashSet<BigUint>>, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            let vec_of_vecs: Vec<Vec<String>> = Vec::deserialize(deserializer)?;
+            vec_of_vecs
+                .into_iter()
+                .map(|vec| {
+                    vec.into_iter()
+                        .map(|s| BigUint::from_str(&s).map_err(de::Error::custom))
+                        .collect()
+                })
+                .collect()
         }
-        Ok(result)
-    }
-}
-
-mod biguint_vec_serde {
-    use super::*;
-    use serde::{Deserialize, Deserializer, Serializer};
-
-    pub fn serialize<S>(vec: &Vec<BigUint>, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let string_vec: Vec<String> = vec.iter().map(|b| b.to_string()).collect();
-        string_vec.serialize(serializer)
     }
 
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<BigUint>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let string_vec: Vec<String> = Vec::deserialize(deserializer)?;
-        let mut result = Vec::new();
-        for s in string_vec {
-            let value = BigUint::from_str(&s).map_err(serde::de::Error::custom)?;
-            result.push(value);
+    // Special case for HashMap<BigUint, V>
+    pub mod biguint_map {
+        use super::*;
+
+        pub fn serialize<S, V: Serialize + Clone>(map: &HashMap<BigUint, V>, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            let string_map: HashMap<String, V> = map
+                .iter()
+                .map(|(k, v)| (k.to_string(), (*v).clone()))
+                .collect();
+            string_map.serialize(serializer)
         }
-        Ok(result)
+
+        pub fn deserialize<'de, D, V: Deserialize<'de>>(
+            deserializer: D,
+        ) -> Result<HashMap<BigUint, V>, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            let string_map: HashMap<String, V> = HashMap::deserialize(deserializer)?;
+            string_map
+                .into_iter()
+                .map(|(k, v)| Ok((BigUint::from_str(&k).map_err(de::Error::custom)?, v)))
+                .collect()
+        }
+    }
+
+    // Special case for HashMap<BigUint, HashSet<BigUint>>
+    pub mod biguint_map_set {
+        use super::*;
+
+        pub fn serialize<S>(map: &HashMap<BigUint, HashSet<BigUint>>, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            biguint_map::serialize(
+                &map.iter()
+                    .map(|(k, v)| (k.clone(), v.iter().map(|b| b.to_string()).collect::<Vec<_>>()))
+                    .collect(),
+                serializer,
+            )
+        }
+
+        pub fn deserialize<'de, D>(deserializer: D) -> Result<HashMap<BigUint, HashSet<BigUint>>, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            let string_map: HashMap<String, Vec<String>> = HashMap::deserialize(deserializer)?;
+            string_map
+                .into_iter()
+                .map(|(k, v)| {
+                    let key = BigUint::from_str(&k).map_err(de::Error::custom)?;
+                    let values = v.into_iter()
+                        .map(|s| BigUint::from_str(&s).map_err(de::Error::custom))
+                        .collect::<Result<HashSet<_>, _>>()?;
+                    Ok((key, values))
+                })
+                .collect()
+        }
     }
 }
 
@@ -558,6 +550,51 @@ pub fn save_braid<P: AsRef<Path>>(parents: &Relatives, filename: P, description:
     Ok(dag)
 }
 
+/// Check a cohort using check_cohort_ancestors in both directions
+pub fn check_cohort(cohort: &HashSet<BigUint>, parents: &Relatives, children: Option<&Relatives>) -> bool {
+    let children = match children {
+        Some(c) => c.clone(),
+        None => reverse(parents),
+    };
+
+    check_cohort_ancestors(cohort, parents, Some(&children)) &&
+    check_cohort_ancestors(cohort, &children, Some(parents))
+}
+
+/// Check a cohort by determining the set of ancestors of all beads
+pub fn check_cohort_ancestors(cohort: &HashSet<BigUint>, parents: &Relatives, children: Option<&Relatives>) -> bool {
+    let children = match children {
+        Some(c) => c.clone(),
+        None => reverse(parents),
+    };
+
+    let mut ancestors = HashMap::new();
+    let mut allancestors = HashSet::new();
+    let head = cohort_head(cohort, parents, Some(&children));
+
+    for b in cohort {
+        all_ancestors(b, parents, &mut ancestors);
+        if let Some(b_ancestors) = ancestors.get(b) {
+            for a in b_ancestors {
+                if !cohort.contains(a) {
+                    allancestors.insert(a.clone());
+                }
+            }
+        }
+    }
+
+    if !allancestors.is_empty() {
+        let gen = generation(&allancestors, &children);
+        let gen_minus_allancestors: HashSet<_> = gen.difference(&allancestors).cloned().collect();
+
+        if gen_minus_allancestors != head {
+            return false;
+        }
+    }
+
+    true
+}
+
 
 #[test]
 fn test_geneses1() {
@@ -783,7 +820,7 @@ fn test_check_cohort_files() {
             let dag = load_braid(&path).unwrap();
             for (i, c) in dag.cohorts.iter().enumerate() {
                 assert!(
-                    braid::check_cohort(c, &dag.parents, Some(&dag.children)),
+                    check_cohort(c, &dag.parents, Some(&dag.children)),
                     "Failed on file: {}, cohort index: {}", path_str, i
                 );
             }
