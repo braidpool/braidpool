@@ -50,16 +50,19 @@ mkdocs serve
 xdg-open http://localhost:8000
 ```
 
-You'll find available documents in the top bar.
+Or you can just click on the docs directory in the code and Github will render the math in these markdown docs.
 
 # Progress
 
 A list with TODO's:
 
+- [*] Global simulator for Braids
+- [*] Python braid cohorts() implementation and tests
+- [*] Rust braid object handling
+- [ ] Connect braid algorithms to blocks on CPUNet
 - [ ] P2P gossip based broadcast of miner blocks and shares.
 - [ ] Use FROST rust implementation for providing threshold schnorr
       signatures. Use mock clock for identifying rounds.
-- [ ] A DAG of shares to track contributions for miners.
 - [ ] Validate received blocks and shares.
 - [ ] Single script installer (limited to Linux variants, potentially using
       docker).
