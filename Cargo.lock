@@ -146,6 +146,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "230c5f1ca6a325a32553f8640d31ac9b49f2411e901e427570154868b46da4f7"
 
 [[package]]
+name = "bincode"
+version = "1.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1f45e9417d87227c7a56d22e471c6206462cba514c7590c09aff4cf6d1ddcad"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "bitcoin"
 version = "0.32.4-cpunet"
 source = "git+https://github.com/braidpool/rust-bitcoin.git?branch=cpunet#bd93f2f23976c5c90017bcd37ed4a3ce2d5c7790"
@@ -300,6 +309,7 @@ name = "braidpool"
 version = "0.1.0"
 dependencies = [
  "bimap",
+ "bincode",
  "bitcoin 0.32.4-cpunet",
  "bitcoin_hashes 0.16.0",
  "bitcoincore-rpc",
@@ -320,7 +330,6 @@ dependencies = [
  "rand",
  "regex",
  "serde",
- "serde_derive",
  "serde_json",
  "sha2",
  "shellexpand",
