@@ -1,23 +1,48 @@
+// Standard Imports
+use std::cell::Cell;
+use std::collections::HashSet;
+
 // Custom Imports
-use crate::utils::Hash;
-use crate::utils::bitcoin::{Transaction, MerkleHash, BlockHeader};
+use crate::utils::{Time, Hash};
+use crate::utils::bitcoin::{Transaction, MiningBlockHeader, BlockHeader, CompactTarget, BlockHash};
 
-struct BeadCommittedMetadata<'a> {
-    lesser_target_difficulty: u32,
-    parents: Vec<(&'a DagBead<'a>, u32)>
-}
+// Typedefs
+type BeadHash = BlockHash;
 
+// TODO: Add in the uncommitted metadata into the Bead Structs!
+
+/// Refers to the final immutable beads that are added
+/// into the DagBraid data structure. 
 pub struct DagBead<'a> {
     block_header: BlockHeader,
-    bead_hash: Hash,
+    bead_hash: BeadHash,
     coinbase_transaction: Transaction,
     payout_update_transaction: Transaction,
-    bead_committed_metadata: BeadCommittedMetadata<'a>
+    
+    // Committed Braidpool Metadata
+    lesser_difficulty_target: CompactTarget,
+    parents: HashSet<(&'a DagBead<'a>, Time)>
 }
 
-pub struct NetworkBead<'a> {
+/// Refers to the bead data structure that will be used
+/// to send beads to other nodes connected on the Network
+pub struct NetworkBead {
     block_header: BlockHeader,
+    bead_hash: BeadHash,
     coinbase_transaction: Transaction,
     payout_update_transaction: Transaction,
-    bead_committed_metadata: BeadCommittedMetadata<'a>
+    
+    lesser_difficulty_target: CompactTarget,
+    parents: HashSet<BeadHash>
+}
+
+/// Refers to the bead that is currently being mined by a
+/// Node.
+pub struct MiningBead {
+    block_header: MiningBlockHeader,
+    coinbase_transaction: Transaction,
+    payout_update_transaction: Transaction,
+    
+    lesser_difficulty_target: CompactTarget,
+    parents: HashSet<BeadHash>
 }
