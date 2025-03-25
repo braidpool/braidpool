@@ -1,13 +1,9 @@
-use braidpool::braid::*;
-use braidpool::*;
-use num::BigUint;
-use std::clone::Clone;
-use std::collections::{HashMap, HashSet};
-use std::fs;
-use std::path::Path;
+use std::{collections::{HashMap, HashSet}, fs, path::Path};
 
-mod braid_io_json;
-use braid_io_json::{check_cohort, load_braid, save_braid};
+use num::BigUint;
+
+use braidpool::braid::{self, *};
+use braidpool::braid::io_json::{check_cohort, load_braid, save_braid};
 
 const TEST_CASE_DIR: &str = "tests/braids/";
 
@@ -123,7 +119,7 @@ fn test_geneses_files() {
 
         if path.extension().map_or(false, |ext| ext == "json") {
             let path_str = path.to_string_lossy();
-            let dag = braid_io_json::load_braid(&path).unwrap();
+            let dag = load_braid(&path).unwrap();
             assert_eq!(
                 braid::geneses(&dag.parents),
                 [BigUint::from(0u64)]
@@ -394,7 +390,7 @@ fn test_cohorts_files() {
 
         if path.extension().map_or(false, |ext| ext == "json") {
             let path_str = path.to_string_lossy();
-            let dag = braid_io_json::load_braid(&path).unwrap();
+            let dag = load_braid(&path).unwrap();
             assert_eq!(
                 braid::cohorts(&dag.parents, None, None),
                 dag.cohorts,
@@ -423,7 +419,7 @@ fn test_cohorts_reversed_files() {
 
         if path.extension().map_or(false, |ext| ext == "json") {
             let path_str = path.to_string_lossy();
-            let dag = braid_io_json::load_braid(&path).unwrap();
+            let dag = load_braid(&path).unwrap();
             let p = braid::reverse(&dag.parents);
             let mut c = dag.cohorts.clone();
             c.reverse();
@@ -467,7 +463,7 @@ fn test_highest_work_path() {
         BigUint::from(3u64),
     ];
 
-    let bead_work: BeadWork = parents1
+    let bead_work: HashMap<BeadHash, Work> = parents1
         .keys()
         .map(|b| (b.clone(), BigUint::from(1u32)))
         .collect();
@@ -495,7 +491,7 @@ fn test_highest_work_path_files() {
 
         if path.extension().map_or(false, |ext| ext == "json") {
             let path_str = path.to_string_lossy();
-            let dag = braid_io_json::load_braid(&path).unwrap();
+            let dag = load_braid(&path).unwrap();
             assert_eq!(
                 braid::highest_work_path(&dag.parents, Some(&dag.children), &dag.bead_work),
                 dag.highest_work_path,
@@ -524,10 +520,10 @@ fn test_check_cohort_files() {
 
         if path.extension().map_or(false, |ext| ext == "json") {
             let path_str = path.to_string_lossy();
-            let dag = braid_io_json::load_braid(&path).unwrap();
+            let dag = load_braid(&path).unwrap();
             for (i, c) in dag.cohorts.iter().enumerate() {
                 assert!(
-                    braid_io_json::check_cohort(c, &dag.parents, Some(&dag.children)),
+                    check_cohort(c, &dag.parents, Some(&dag.children)),
                     "Failed on file: {}, cohort index: {}",
                     path_str,
                     i
@@ -555,7 +551,7 @@ fn test_check_work_files() {
 
         if path.extension().map_or(false, |ext| ext == "json") {
             let path_str = path.to_string_lossy();
-            let dag = braid_io_json::load_braid(&path).unwrap();
+            let dag = load_braid(&path).unwrap();
             assert_eq!(
                 dag.work,
                 braid::descendant_work(&dag.parents, Some(&dag.children), &dag.bead_work, None),
@@ -584,7 +580,7 @@ fn test_sub_braid_files() {
 
         if path.extension().map_or(false, |ext| ext == "json") {
             let path_str = path.to_string_lossy();
-            let dag = braid_io_json::load_braid(&path).unwrap();
+            let dag = load_braid(&path).unwrap();
             for (i, c) in dag.cohorts.iter().enumerate() {
                 assert_eq!(
                     braid::geneses(&braid::sub_braid(c, &dag.parents)),
@@ -632,7 +628,7 @@ fn test_head_tail_files() {
 
         if path.extension().map_or(false, |ext| ext == "json") {
             let path_str = path.to_string_lossy();
-            let dag = braid_io_json::load_braid(&path).unwrap();
+            let dag = load_braid(&path).unwrap();
             for (i, c) in dag.cohorts.iter().enumerate() {
                 assert_eq!(
                     braid::cohort_head(c, &dag.parents, Some(&dag.children)),
@@ -735,10 +731,10 @@ fn test_save_load_braid() {
     let description = "Test braid";
 
     // Save the braid
-    let dag = braid_io_json::save_braid(&parents, temp_file, Some(description)).unwrap();
+    let dag = save_braid(&parents, temp_file, Some(description)).unwrap();
 
     // Load the braid
-    let loaded_dag = braid_io_json::load_braid(temp_file).unwrap();
+    let loaded_dag = load_braid(temp_file).unwrap();
 
     // Compare the original and loaded DAGs
     assert_eq!(loaded_dag.description.unwrap(), description);
