@@ -27,20 +27,20 @@ pub struct Location {
 #[derive(Debug)]
 pub struct Salt(pub [u64; 4]);
 
-pub struct PeerConnection<'node_lifetime> {
-    peer: &'node_lifetime Node<'node_lifetime>,
+pub struct PeerConnection<'node> {
+    peer: &'node Node<'node>,
     latency: NetworkLatency
 }
-pub struct Node<'node_lifetime> {
+pub struct Node<'node> {
     node_identifier: NodeIdentifier,
     hash_rate: HashRate,
-    dag_braid: DagBraid<'node_lifetime>,
+    dag_braid: DagBraid<'node>,
     lower_mining_target: Option<CompactTarget>,
     location: Location,
     node_salt: Salt,
     current_bead_being_mined: Option<MiningBead>,
     incoming_network_beads: VecDeque<NetworkBead>,
-    peers: RefCell<Vec<PeerConnection<'node_lifetime>>>,
+    peers: RefCell<Vec<PeerConnection<'node>>>,
     difficulty_adjusting_algorithm: DifficultyAdjustingAlgorithm
 }
 
@@ -88,12 +88,12 @@ struct NetworkBeadPacket <'network_bead_packet_lifetime, 'node_lifetime>{
     bead: NetworkBead
 }
 
-pub struct Network<'network_lifetime, 'network_bead_packet_lifetime> {
+pub struct Network<'network, 'network_bead_packet> {
     pub current_time: Time,
-    pub nodes: Vec<Node<'network_lifetime>>,
+    pub nodes: Vec<Node<'network>>,
     pub initial_target_difficulty: CompactTarget,
-    pub pending_broadcasts: VecDeque<NetworkBeadPacket<'network_bead_packet_lifetime, 'network_lifetime>>,
-    pub beads_in_flight: Vec<NetworkBeadPacket<'network_bead_packet_lifetime, 'network_lifetime>>
+    pub pending_broadcasts: VecDeque<NetworkBeadPacket<'network_bead_packet, 'network>>,
+    pub beads_in_flight: Vec<NetworkBeadPacket<'network_bead_packet, 'network>>
 }
 
 impl <'a, 'b> Network<'a, 'b> {
