@@ -1,4 +1,10 @@
-use std::{collections::{HashMap, HashSet}, error::Error, fs::File, io::{Read, Write}, path::Path};
+use std::{
+    collections::{HashMap, HashSet},
+    error::Error,
+    fs::File,
+    io::{Read, Write},
+    path::Path,
+};
 
 use num::BigUint;
 use serde::{Deserialize, Serialize};

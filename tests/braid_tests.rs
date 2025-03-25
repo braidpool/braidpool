@@ -1,7 +1,11 @@
-use std::{collections::{HashMap, HashSet}, fs, path::Path};
+use std::{
+    collections::{HashMap, HashSet},
+    fs,
+    path::Path,
+};
 
-use braidpool::braid::{self, *};
 use braidpool::braid::io_json::{check_cohort, load_braid, save_braid};
+use braidpool::braid::{self, *};
 
 const TEST_CASE_DIR: &str = "tests/braids/";
 
