@@ -16,7 +16,7 @@ pub type BeadHash = BigUint;
 pub type Work = BigUint;
 
 /// A type alias for target (A 256-bit uint representing work)
-#[allow(dead_code)]
+#[allow(dead_code)] // this is only used by the simulator so far
 pub type Target = BigUint;
 
 /// A type alias for a map from bead to its parents or children
@@ -343,7 +343,7 @@ pub fn descendant_work(
         None => reverse(parents),
     };
 
-    let mut previous_work = BigUint::from(0u64);
+    let mut previous_work = Work::from(0u64);
     let cohorts = match in_cohorts {
         Some(c) => c.iter().rev().cloned().collect::<Vec<_>>(),
         None => cohorts(&children_map, Some(parents), None),
@@ -392,7 +392,7 @@ pub fn bead_cmp(
     dwork: &HashMap<BeadHash, Work>,
     awork: &HashMap<BeadHash, Work>,
 ) -> std::cmp::Ordering {
-    let zero = BigUint::from(0u64);
+    let zero = Work::from(0u64);
     let a_dwork = dwork.get(a).unwrap_or(&zero);
     let b_dwork = dwork.get(b).unwrap_or(&zero);
 
@@ -500,9 +500,9 @@ pub fn number_beads(hashed_parents: &Relatives) -> Relatives {
 
     // First handle genesis beads
     for bead_hash in geneses(hashed_parents) {
-        bead_ids.insert(bead_hash.clone(), BigUint::from(bead_id));
-        reverse_bead_ids.insert(BigUint::from(bead_id), bead_hash);
-        parents.insert(BigUint::from(bead_id), HashSet::new());
+        bead_ids.insert(bead_hash.clone(), BeadHash::from(bead_id));
+        reverse_bead_ids.insert(BeadHash::from(bead_id), bead_hash);
+        parents.insert(BeadHash::from(bead_id), HashSet::new());
         bead_id += 1;
     }
 
@@ -523,7 +523,7 @@ pub fn number_beads(hashed_parents: &Relatives) -> Relatives {
                         if let Some(id) = bead_ids.get(bead_hash) {
                             this_id = id.clone();
                         } else {
-                            this_id = BigUint::from(bead_id);
+                            this_id = BeadHash::from(bead_id);
                             bead_ids.insert(bead_hash.clone(), this_id.clone());
                             reverse_bead_ids.insert(this_id.clone(), bead_hash.clone());
                             bead_id += 1;
