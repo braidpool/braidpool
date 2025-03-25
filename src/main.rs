@@ -4,5 +4,5 @@ mod beads;
 mod utils;
 
 fn main() {
-    // Some Main Function
+
 }
