@@ -82,10 +82,10 @@ pub enum DifficultyAdjustingAlgorithm {
     SimpleAsymDamped
 }
 
-struct NetworkBeadPacket <'network_bead_packet_lifetime, 'node_lifetime>{
-    source: &'network_bead_packet_lifetime Node<'node_lifetime>,
-    destinations: Vec<&'network_bead_packet_lifetime Node<'node_lifetime>>,
-    bead: NetworkBead
+pub struct NetworkBeadPacket <'network_bead_packet, 'node>{
+    pub source: &'network_bead_packet Node<'node>,
+    pub destinations: Vec<&'network_bead_packet Node<'node>>,
+    pub bead: NetworkBead
 }
 
 pub struct Network<'network, 'network_bead_packet> {
