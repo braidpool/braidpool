@@ -7,6 +7,8 @@ edition = "2021"
 
 [dependencies]
 tokio = { version = "1", features = ["rt", "net", "macros", "rt-multi-thread", "tracing", "io-util"] }
+serde = { version = "^1.0", features = ["derive"] }
+bincode = "1.3"
 tokio-util = { version = "0.7.0", features = ["full"] }
 tokio-stream = { version = "0.1" }
 tracing = "0.1"
@@ -14,8 +16,6 @@ tracing-subscriber = { version = "0.3.1", default-features = false, features = [
 futures = { version = "0.3.28", features = ["thread-pool"]}
 bytes = "1.4.0"
 flexbuffers = { version = "25.2", features = ["deserialize_human_readable", "serialize_human_readable"] }
-serde = { version = "1.0.188", features = ["derive"] }
-serde_derive = "1.0.188"
 serde_json = "1.0.10"
 sqlite = { version = "0.36" }
 clap = { version = "4.4.2", features = ["derive", "string"] }
@@ -38,9 +38,5 @@ lazy_static = "1.4.0"
 regex = "1.11.1"
 
 [dev-dependencies]
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+# Test dependencies are already covered by main dependencies
 
-[[bin]]
-name = "simulator"
-path = "src/bin/simulator.rs"

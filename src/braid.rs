@@ -3,23 +3,30 @@
 //! This module provides tools for manipulating braids, which are directed acyclic graphs (DAGs)
 //! where each node (bead) can have multiple parents and children.
 
-use num::BigUint;
 use std::collections::{HashMap, HashSet};
 
+pub mod io_json;
+
+use num::BigUint;
+
 /// A type alias for a bead (A 256-bit uint representing a block hash)
-pub type Bead = BigUint;
+pub type BeadHash = BigUint;
 
 /// A type alias for work (A 256-bit uint representing work)
 pub type Work = BigUint;
 
+/// A type alias for target (A 256-bit uint representing work)
+#[allow(dead_code)]
+pub type Target = BigUint;
+
 /// A type alias for a map from bead to its parents or children
-pub type Relatives = HashMap<Bead, HashSet<Bead>>;
+pub type Relatives = HashMap<BeadHash, HashSet<BeadHash>>;
 
 /// A type alias for a map from bead to its work
-pub type BeadWork = HashMap<Bead, Work>;
+pub type BeadWork = HashMap<BeadHash, Work>;
 
 /// Given a dict of {bead: {parents}}, return the set of beads which have no parents
-pub fn geneses(parents: &Relatives) -> HashSet<Bead> {
+pub fn geneses(parents: &Relatives) -> HashSet<BeadHash> {
     let mut retval = HashSet::new();
     for (b, p) in parents {
         if p.is_empty() {
@@ -30,7 +37,7 @@ pub fn geneses(parents: &Relatives) -> HashSet<Bead> {
 }
 
 /// Given a dict of {bead: {parents}}, return the set of beads which have no children
-pub fn tips(parents: &Relatives, children: Option<&Relatives>) -> HashSet<Bead> {
+pub fn tips(parents: &Relatives, children: Option<&Relatives>) -> HashSet<BeadHash> {
     let children_map = match children {
         Some(c) => c.clone(),
         None => reverse(parents),
@@ -59,7 +66,7 @@ pub fn reverse(parents: &Relatives) -> Relatives {
 }
 
 /// Given a set of beads, compute the set of all children of all beads
-pub fn generation(beads: &HashSet<Bead>, children: &Relatives) -> HashSet<Bead> {
+pub fn generation(beads: &HashSet<BeadHash>, children: &Relatives) -> HashSet<BeadHash> {
     let mut retval = HashSet::new();
     for b in beads {
         if let Some(child_set) = children.get(b) {
@@ -73,10 +80,10 @@ pub fn generation(beads: &HashSet<Bead>, children: &Relatives) -> HashSet<Bead> 
 
 /// Gets all ancestors for a bead, filling in ancestors of any other ancestors encountered
 pub fn all_ancestors<'a>(
-    b: &Bead,
+    b: &BeadHash,
     parents: &Relatives,
-    ancestors: &'a mut HashMap<Bead, HashSet<Bead>>,
-) -> &'a HashMap<Bead, HashSet<Bead>> {
+    ancestors: &'a mut HashMap<BeadHash, HashSet<BeadHash>>,
+) -> &'a HashMap<BeadHash, HashSet<BeadHash>> {
     let mut work_stack = vec![(b.clone(), false)]; // (bead, is_processed)
 
     while !work_stack.is_empty() {
@@ -123,8 +130,8 @@ pub fn all_ancestors<'a>(
 pub fn cohorts(
     parents: &Relatives,
     children: Option<&Relatives>,
-    initial_cohort: Option<&HashSet<Bead>>,
-) -> Vec<HashSet<Bead>> {
+    initial_cohort: Option<&HashSet<BeadHash>>,
+) -> Vec<HashSet<BeadHash>> {
     let child_map = match children {
         Some(c) => c.clone(),
         None => reverse(parents),
@@ -142,7 +149,7 @@ pub fn cohorts(
     let mut tail = cohort.clone();
 
     'outer: loop {
-        let mut ancestors: HashMap<Bead, HashSet<Bead>> = HashMap::new();
+        let mut ancestors: HashMap<BeadHash, HashSet<BeadHash>> = HashMap::new();
         for h in &head {
             ancestors.insert(h.clone(), HashSet::new()); // Don't let head have ancestors to stop iteration
         }
@@ -258,10 +265,10 @@ pub fn cohorts(
 /// Given a cohort as a set of beads, compute its tail
 #[allow(dead_code)]
 pub fn cohort_tail(
-    cohort: &HashSet<Bead>,
+    cohort: &HashSet<BeadHash>,
     parents: &Relatives,
     children: Option<&Relatives>,
-) -> HashSet<Bead> {
+) -> HashSet<BeadHash> {
     let children_map = match children {
         Some(c) => c.clone(),
         None => reverse(parents),
@@ -274,10 +281,10 @@ pub fn cohort_tail(
 
 /// Given a cohort as a set of beads, compute its head
 pub fn cohort_head(
-    cohort: &HashSet<Bead>,
+    cohort: &HashSet<BeadHash>,
     parents: &Relatives,
     children: Option<&Relatives>,
-) -> HashSet<Bead> {
+) -> HashSet<BeadHash> {
     let children_map = match children {
         Some(c) => c.clone(),
         None => reverse(parents),
@@ -306,7 +313,7 @@ pub fn cohort_head(
 ///     geneses(sub_braid(beads, parents)) = cohort_head(beads, parents)
 ///     tips(sub_braid(beads, parents)) = cohort_tail(beads, parents)
 ///     cohorts(sub_braid(beads, parents)) == [beads]
-pub fn sub_braid(beads: &HashSet<Bead>, parents: &Relatives) -> Relatives {
+pub fn sub_braid(beads: &HashSet<BeadHash>, parents: &Relatives) -> Relatives {
     let mut result = Relatives::new();
 
     for b in beads {
@@ -329,8 +336,8 @@ pub fn descendant_work(
     parents: &Relatives,
     children: Option<&Relatives>,
     bead_work: &BeadWork,
-    in_cohorts: Option<&Vec<HashSet<Bead>>>,
-) -> HashMap<Bead, Work> {
+    in_cohorts: Option<&Vec<HashSet<BeadHash>>>,
+) -> HashMap<BeadHash, Work> {
     let children_map = match children {
         Some(c) => c.clone(),
         None => reverse(parents),
@@ -380,10 +387,10 @@ pub fn descendant_work(
 
 /// A custom comparison function for sorting beads
 pub fn bead_cmp(
-    a: &Bead,
-    b: &Bead,
-    dwork: &HashMap<Bead, Work>,
-    awork: &HashMap<Bead, Work>,
+    a: &BeadHash,
+    b: &BeadHash,
+    dwork: &HashMap<BeadHash, Work>,
+    awork: &HashMap<BeadHash, Work>,
 ) -> std::cmp::Ordering {
     let zero = BigUint::from(0u64);
     let a_dwork = dwork.get(a).unwrap_or(&zero);
@@ -422,7 +429,7 @@ pub fn work_sort_key<'a>(
     parents: &'a Relatives,
     children: Option<&'a Relatives>,
     bead_work: &'a BeadWork,
-) -> impl Fn(&Bead, &Bead) -> std::cmp::Ordering + 'a {
+) -> impl Fn(&BeadHash, &BeadHash) -> std::cmp::Ordering + 'a {
     let children = match children {
         Some(c) => c.clone(),
         None => reverse(parents),
@@ -440,7 +447,7 @@ pub fn highest_work_path(
     parents: &Relatives,
     children: Option<&Relatives>,
     bead_work: &BeadWork,
-) -> Vec<Bead> {
+) -> Vec<BeadHash> {
     let children = match children {
         Some(c) => c.clone(),
         None => reverse(parents),
