@@ -26,6 +26,7 @@ pub struct DagBead<'a> {
 
 /// Refers to the bead data structure that will be used
 /// to send beads to other nodes connected on the Network
+#[derive(Debug, Clone)]
 pub struct NetworkBead {
     block_header: BlockHeader,
     bead_hash: BeadHash,
