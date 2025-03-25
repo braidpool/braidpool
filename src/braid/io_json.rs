@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 use crate::braid::*;
 
 /// The work per bead if work is not passed
-fn fixed_bead_work() -> BigUint {
-    BigUint::from(1u32)
+fn fixed_bead_work() -> Work {
+    Work::from(1u32)
 }
 
 /// A DAG structure representing a braid
@@ -95,7 +95,7 @@ impl<'de> Deserialize<'de> for Dag {
                         if let Some(p_str) = p.as_str() {
                             parent_set.insert(parse_biguint::<D::Error>(p_str)?);
                         } else if let Some(p_num) = p.as_u64() {
-                            parent_set.insert(BigUint::from(p_num));
+                            parent_set.insert(BeadHash::from(p_num));
                         }
                     }
                 }
@@ -116,7 +116,7 @@ impl<'de> Deserialize<'de> for Dag {
                         if let Some(c_str) = c.as_str() {
                             child_set.insert(parse_biguint::<D::Error>(c_str)?);
                         } else if let Some(c_num) = c.as_u64() {
-                            child_set.insert(BigUint::from(c_num));
+                            child_set.insert(BeadHash::from(c_num));
                         }
                     }
                 }
@@ -132,7 +132,7 @@ impl<'de> Deserialize<'de> for Dag {
                 if let Some(g_str) = g.as_str() {
                     geneses.insert(parse_biguint::<D::Error>(g_str)?);
                 } else if let Some(g_num) = g.as_u64() {
-                    geneses.insert(BigUint::from(g_num));
+                    geneses.insert(BeadHash::from(g_num));
                 }
             }
         }
@@ -144,7 +144,7 @@ impl<'de> Deserialize<'de> for Dag {
                 if let Some(t_str) = t.as_str() {
                     tips.insert(parse_biguint::<D::Error>(t_str)?);
                 } else if let Some(t_num) = t.as_u64() {
-                    tips.insert(BigUint::from(t_num));
+                    tips.insert(BeadHash::from(t_num));
                 }
             }
         }
@@ -159,7 +159,7 @@ impl<'de> Deserialize<'de> for Dag {
                         if let Some(b_str) = b.as_str() {
                             cohort.insert(parse_biguint::<D::Error>(b_str)?);
                         } else if let Some(b_num) = b.as_u64() {
-                            cohort.insert(BigUint::from(b_num));
+                            cohort.insert(BeadHash::from(b_num));
                         }
                     }
                 }
@@ -175,7 +175,7 @@ impl<'de> Deserialize<'de> for Dag {
                 let w = if let Some(v_str) = v.as_str() {
                     parse_biguint::<D::Error>(v_str)?
                 } else if let Some(v_num) = v.as_u64() {
-                    BigUint::from(v_num)
+                    BeadHash::from(v_num)
                 } else {
                     return Err(D::Error::custom(format!("Invalid work value: {:?}", v)));
                 };
@@ -196,7 +196,7 @@ impl<'de> Deserialize<'de> for Dag {
                 let w = if let Some(v_str) = v.as_str() {
                     parse_biguint::<D::Error>(v_str)?
                 } else if let Some(v_num) = v.as_u64() {
-                    BigUint::from(v_num)
+                    Work::from(v_num)
                 } else {
                     return Err(D::Error::custom(format!("Invalid work value: {:?}", v)));
                 };
@@ -211,7 +211,7 @@ impl<'de> Deserialize<'de> for Dag {
                 if let Some(b_str) = b.as_str() {
                     highest_work_path.push(parse_biguint::<D::Error>(b_str)?);
                 } else if let Some(b_num) = b.as_u64() {
-                    highest_work_path.push(BigUint::from(b_num));
+                    highest_work_path.push(BeadHash::from(b_num));
                 }
             }
         }
@@ -405,7 +405,7 @@ pub fn save_braid<P: AsRef<Path>>(
 /// Check a cohort using check_cohort_ancestors in both directions
 #[allow(dead_code)]
 pub fn check_cohort(
-    cohort: &HashSet<BigUint>,
+    cohort: &HashSet<BeadHash>,
     parents: &Relatives,
     children: Option<&Relatives>,
 ) -> bool {
@@ -421,7 +421,7 @@ pub fn check_cohort(
 /// Check a cohort by determining the set of ancestors of all beads
 #[allow(dead_code)]
 pub fn check_cohort_ancestors(
-    cohort: &HashSet<BigUint>,
+    cohort: &HashSet<BeadHash>,
     parents: &Relatives,
     children: Option<&Relatives>,
 ) -> bool {
