@@ -1,5 +1,7 @@
 // Standard Imports
 use std::cell::Cell;
+use transitive::Transitive;
+use num_bigint::BigUint;
 
 // Custom Imports
 use super::{Hash, Bytes};
@@ -10,14 +12,29 @@ pub struct BlockTime(pub u32);
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Version(pub u32);
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Transitive)]
+#[transitive(from(String, Hash))]
+#[transitive(from(&str, Hash))]
+#[transitive(from(BigUint, Hash))]
 pub struct MerkleHash(pub Hash);
+
+impl From<Hash> for MerkleHash {
+    fn from(merkle_hash: Hash) -> Self{
+        MerkleHash(merkle_hash)
+    }
+}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct CompactTarget(pub u32);
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct BlockHash(pub Hash);
+
+impl From<Hash> for BlockHash {
+    fn from(block_hash: Hash) -> Self {
+        BlockHash(block_hash)
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Transaction {
