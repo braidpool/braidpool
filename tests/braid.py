@@ -322,7 +322,7 @@ def check_cohort_ancestors(cohort, parents, children=None):
         return False
     return True
 
-def layout(cohort, all_parents, bead_work=None):
+def layout(cohort, all_parents, bead_work=None, previous_cohort_tips=None):
     """
     Places beads on a grid based on DAG structure and highest work path. This
     algorithm operates on one <cohort> at a time.
@@ -331,9 +331,10 @@ def layout(cohort, all_parents, bead_work=None):
         cohort (set): Set of beads in the cohort.
         all_parents (dict): Dictionary mapping bead to a set of its parents.
         bead_work (dict): Dictionary mapping bead to its work.
+        previous_cohort_tips (dict): Dictionary mapping bead to its y-coordinate in the previous cohort.
 
     Returns:
-        dict: Dictionary mapping bead to its (x, y) coordinates on the grid.
+        dict, dict: Dictionary mapping bead and tip to its (x, y) coordinates on the grid.
 
     FIXME will draw lines over other beads when a bead is in both the head and tail.
     FIXME place beads both above and below the highest work path.
@@ -382,12 +383,14 @@ def layout(cohort, all_parents, bead_work=None):
         proposed_x[bead] = min_x
 
     # Get the sub-DAG for this cohort.
-    parents   = dict(sub_braid(cohort, all_parents).items())
-    children  = reverse(parents)
-    hwpath    = highest_work_path(parents, children, bead_work=bead_work)
-    head      = cohort_head(cohort, parents, children)
-    tail      = cohort_tail(cohort, parents, children)
-    bead_work = bead_work if bead_work else {b: FIXED_BEAD_WORK for b in parents}
+    all_children      = reverse(all_parents) # children dict of the whole braid
+    prev_cohort_edges = {k: v for k, v in all_children.items() if k in previous_cohort_tips} if previous_cohort_tips else {} # extract connectivity with the tips of previous cohort
+    parents           = dict(sub_braid(cohort, all_parents).items())
+    children          = reverse(parents)
+    hwpath            = highest_work_path(parents, children, bead_work=bead_work)
+    head              = cohort_head(cohort, parents, children)
+    tail              = cohort_tail(cohort, parents, children)
+    bead_work         = bead_work if bead_work else {b: FIXED_BEAD_WORK for b in parents}
 
     # Assign x-coordinates to hwpath beads in order of decreasing work along the y=0 axis
     proposed_x = {bead: i for i, bead in enumerate(hwpath)}
@@ -411,22 +414,36 @@ def layout(cohort, all_parents, bead_work=None):
     pos = {bead: [proposed_x[bead], 0] for bead in hwpath}
     lines = [] # A running tally of lines on the graph
 
+    extended_children = copy(children) 
+    for key, value in prev_cohort_edges.items():
+        if key not in children:
+            extended_children[key] = set()
+        extended_children[key] = extended_children[key].union(value)
+    extended_parents = reverse(extended_children)
+    if previous_cohort_tips:
+        for key, value in previous_cohort_tips.items():
+            pos[key] = [-1, value[1]] # add the position of tips from the previous cohort as (-1, y_coord) 
     # Place remaining beads in work sorted order (lowest work at top)
     for bead in sorted(set(parents) - set(hwpath),
                        key=work_sort_key(parents, children, bead_work), reverse=True):
         x = proposed_x[bead]
         y = 0
+        dist = 0
 
         while True:
-            y += 1
+            dist += 1
+            if y <= 0:
+                y += dist
+            else:
+                y -= dist
             if [x,y] in pos.values(): continue
 
             # Create a list of all lines on the graph including the proposed <bead> position [x,y]
             pos[bead] = [x, y]
             new_lines = [(pos[parent], pos[child])
                           for parent, child in
-                              [(bead, c) for c in children[bead] if c in pos] +
-                              [(p, bead) for p in parents[bead] if p in pos]
+                              [(bead, c) for c in extended_children[bead] if c in pos] +
+                              [(p, bead) for p in extended_parents[bead] if p in pos]
                         ]
 
             # If there are no intersections of a parent-child edge with any middle bead, break
@@ -435,7 +452,9 @@ def layout(cohort, all_parents, bead_work=None):
                 break
 
         lines += new_lines
-    return pos
+    cohort_tips = tips(parents, children)
+    tips_pos = {tip: pos[tip] for tip in cohort_tips}
+    return pos, tips_pos
 
 def load_braid(filename):
     """ Load a JSON file containing a braid.

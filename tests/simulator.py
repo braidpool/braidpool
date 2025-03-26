@@ -646,7 +646,12 @@ class Braid:
         children = braid.reverse(parents)
         cohorts  = list(braid.cohorts(parents, children))
         hwpath   = braid.highest_work_path(parents, children)
-        layouts  = [braid.layout(c, parents) for c in cohorts]
+        layouts  = []
+        tips_pos = {} # stores positions of the tips from the previous cohort
+        # layout() now returns the positions of beads as well as positions of tips required for placing the beads in the next cohort.
+        for c in cohorts:
+            layout, tips_pos = braid.layout(c, parents, None, tips_pos)
+            layouts.append(layout)
         layout   = {}
         startx   = 0
         # Put all cohorts together in one layout map
@@ -661,7 +666,8 @@ class Braid:
                 x,y = layout[bead]
                 ax.plot(x, y, 'o', markersize=markersize, markerfacecolor=color_palette[i % len(color_palette)],
                         markeredgecolor='black', markeredgewidth=0.5)
-                ax.text(x, y, str(bead), ha='center', va='center_baseline', color='white', fontsize=10, fontweight='bold')
+                va_position = 'center' if y < 0 else 'center_baseline'
+                ax.text(x, y, str(bead), ha='center', va=va_position, color='white', fontsize=10, fontweight='bold')
 
         # Plot edges (arrows)
         for node, parent_set in parents.items():
@@ -674,7 +680,7 @@ class Braid:
                     else:
                         add_arrow(ax, layout[node], layout[parent], markersize, linewidth=0.5)
         ax.set_aspect('equal')
-        ax.set_ylim(-0.5, max(y for x,y in layout.values())+0.5)
+        ax.set_ylim(min(y for x,y in layout.values())-0.5, max(y for x,y in layout.values())+0.5)
         plt.axis('off')
         plt.tight_layout()
         plt.show()
