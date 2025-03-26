@@ -4,6 +4,9 @@ pub mod bitcoin;
 use num_bigint::BigUint;
 use hex;
 
+// Custom Imports
+use self::bitcoin::{BlockHash, MerkleHash};
+
 // TODO: Implement the various traits for implicit conversions!
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Hash(pub [u8; 32]);
@@ -17,12 +20,6 @@ impl From<BigUint> for Hash {
         array[0..].copy_from_slice(&bytes);
 
         Hash(array)
-    }
-}
-
-impl Into<BigUint> for Hash {
-    fn into(self) -> BigUint {
-        BigUint::from_bytes_le(&self.0)
     }
 }
 
@@ -46,11 +43,8 @@ impl From<&str> for Hash {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct Byte(pub u8);
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Bytes(pub Vec<Byte>);
+type Byte = u8;
+type Bytes = Vec<Byte>;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Time(pub u32);

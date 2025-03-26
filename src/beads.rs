@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 // Custom Imports
 use crate::utils::{Time, Hash};
-use crate::utils::bitcoin::{Transaction, MiningBlockHeader, BlockHeader, CompactTarget, BlockHash};
+use crate::utils::bitcoin::{SerializedTransaction, MiningBlockHeader, BlockHeader, CompactTarget, BlockHash};
 
 // Typedefs
 type BeadHash = BlockHash;
@@ -16,12 +16,13 @@ type BeadHash = BlockHash;
 pub struct DagBead<'a> {
     block_header: BlockHeader,
     bead_hash: BeadHash,
-    coinbase_transaction: Transaction,
-    payout_update_transaction: Transaction,
+    coinbase_transaction: SerializedTransaction,
+    payout_update_transaction: SerializedTransaction,
     
     // Committed Braidpool Metadata
     lesser_difficulty_target: CompactTarget,
-    parents: HashSet<(&'a DagBead<'a>, Time)>
+    parents: HashSet<(&'a DagBead<'a>, Time)>,
+    transactions: Vec<SerializedTransaction>
 }
 
 /// Refers to the bead data structure that will be used
@@ -29,20 +30,22 @@ pub struct DagBead<'a> {
 pub struct NetworkBead {
     block_header: BlockHeader,
     bead_hash: BeadHash,
-    coinbase_transaction: Transaction,
-    payout_update_transaction: Transaction,
+    coinbase_transaction: SerializedTransaction,
+    payout_update_transaction: SerializedTransaction,
     
     lesser_difficulty_target: CompactTarget,
-    parents: HashSet<BeadHash>
+    parents: HashSet<BeadHash>,
+    transactions: Vec<SerializedTransaction>
 }
 
 /// Refers to the bead that is currently being mined by a
 /// Node.
 pub struct MiningBead {
     block_header: MiningBlockHeader,
-    coinbase_transaction: Transaction,
-    payout_update_transaction: Transaction,
+    coinbase_transaction: SerializedTransaction,
+    payout_update_transaction: SerializedTransaction,
     
     lesser_difficulty_target: CompactTarget,
-    parents: HashSet<BeadHash>
+    parents: HashSet<BeadHash>,
+    transactions: Vec<SerializedTransaction>
 }
