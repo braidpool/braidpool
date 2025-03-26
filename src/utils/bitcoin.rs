@@ -44,3 +44,16 @@ pub struct BlockHeader {
     pub network_difficulty_target: CompactTarget,
     pub nonce: u32
 }
+
+impl From<MiningBlockHeader> for BlockHeader {
+    fn from(mined_header: MiningBlockHeader) -> Self {
+        BlockHeader {
+            version: mined_header.version,
+            previous_block_hash: mined_header.previous_block_hash,
+            merkle_root: mined_header.merkle_root,
+            time: mined_header.time,
+            network_difficulty_target: mined_header.network_difficulty_target,
+            nonce: mined_header.nonce.get()
+        }
+    }
+}
