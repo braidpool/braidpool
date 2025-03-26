@@ -1,16 +1,17 @@
 // Standard Imports
-use std::cell::Cell;
 use std::collections::HashSet;
 
 // Custom Imports
-use crate::utils::{Time, Hash};
-use crate::utils::bitcoin::{BlockHash, BlockHeader, CompactTarget, MiningBlockHeader, SerializedTransaction, SerializedTransactionWithMerkleProof};
+use crate::utils::Time;
+use crate::utils::bitcoin::{BlockHash, BlockHeader, CompactTarget, MiningBlockHeader};
+use crate::utils::bitcoin::{MerklePathProof, SerializedTransaction};
 
 // Typedefs
 type BeadHash = BlockHash;
 
 // TODO: Add in the uncommitted metadata into the Bead Structs!
 
+type SerializedTransactionWithMerklePath = (SerializedTransaction, MerklePathProof);
 /// Refers to the final immutable beads that are added
 /// into the DagBraid data structure. 
 pub struct DagBead<'dag> {
@@ -22,7 +23,7 @@ pub struct DagBead<'dag> {
     // Committed Braidpool Metadata
     pub lesser_difficulty_target: CompactTarget,
     pub parents: HashSet<(&'dag DagBead<'dag>, Time)>,
-    pub transactions: Vec<SerializedTransactionWithMerkleProof>
+    pub transactions: Vec<SerializedTransactionWithMerklePath>
 }
 
 /// Refers to the bead data structure that will be used

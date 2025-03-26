@@ -16,12 +16,30 @@ pub struct Version(pub u32);
 #[transitive(from(String, Hash))]
 #[transitive(from(&str, Hash))]
 #[transitive(from(BigUint, Hash))]
+
+pub struct TransactionHash(pub Hash);
+
+impl From<Hash> for TransactionHash {
+    fn from(transaction_hash: Hash) -> Self {
+        TransactionHash(transaction_hash)
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Transitive)]
+#[transitive(from(String, Hash))]
+#[transitive(from(&str, Hash))]
+#[transitive(from(BigUint, Hash))]
 pub struct MerkleHash(pub Hash);
 
 impl From<Hash> for MerkleHash {
     fn from(merkle_hash: Hash) -> Self{
         MerkleHash(merkle_hash)
     }
+}
+
+pub struct MerklePathProof {
+    transaction_hash: TransactionHash,
+    merkle_path: Vec<MerkleHash>
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -41,17 +59,6 @@ impl From<Hash> for BlockHash {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SerializedTransaction(Bytes);
-
-impl From<SerializedTransactionWithMerkleProof> for SerializedTransaction {
-    fn from(serialized_transaction: SerializedTransactionWithMerkleProof) -> Self {
-        serialized_transaction.serialized_transaction
-    }
-}
-
-pub struct SerializedTransactionWithMerkleProof {
-    pub serialized_transaction: SerializedTransaction,
-    pub merkle_path_proof: Vec<MerkleHash>
-}
 
 #[derive(Debug)]
 pub struct MiningBlockHeader {
