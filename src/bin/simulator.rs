@@ -7,24 +7,24 @@
 
 use clap::{Parser, ArgAction};
 use num::{BigUint, Zero};
-use serde::{Serialize, Deserialize};
 use num_traits::cast::ToPrimitive;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
+use serde_json::{json, Value};
 use sha2::{Sha256, Digest};
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::f64::consts::PI;
+use std::fs::File;
 use std::time::Instant;
 use std::str::FromStr;
 use std::cmp::min;
-use std::rc::Rc;
 use std::cell::RefCell;
+use bimap::BiMap;
 use regex::Regex;
 
 // Import our braid module
-use braidpool::braid::{self, Relatives, BeadWork, BeadHash, Target};
-use braidpool::braid::io_json::{save_braid};
+use braidpool::braid::{self, Relatives, BeadWork};
 
 // Constants
 const NETWORK_SIZE: f64 = 0.06676; // The round-trip time in seconds to traverse the network = pi*r_e/c
@@ -39,9 +39,15 @@ const TARGET_NC: usize = 7;
 const TARGET_NB: usize = 17;
 const TARGET_DAMPING: usize = 4 * TARGET_NB;
 
-// Debug flag in thread-local storage for safety
+// Configuration struct to hold debug settings
+#[derive(Clone, Copy, Debug)]
+struct Config {
+    debug: bool,
+}
+
+// Global network messages (this is a hack for the simulation)
 thread_local! {
-    static DEBUG: std::cell::Cell<bool> = std::cell::Cell::new(false);
+    static NETWORK_MESSAGES: RefCell<HashMap<BigUint, BeadMessage>> = RefCell::new(HashMap::new());
 }
 
 // Maximum hash value (2^256-1)
@@ -67,7 +73,7 @@ struct Args {
 
     /// Target difficulty exponent t where T=2**t-1
     #[clap(short, long, default_value_t = 239)]
-    target_exponent: u32,
+    target: u32,
 
     /// Number of beads to simulate
     #[clap(short, long, default_value_t = 50)]
@@ -124,16 +130,94 @@ fn uint256(bytes: &[u8]) -> BigUint {
     BigUint::from_bytes_be(bytes)
 }
 
-/// Print a hash in a simplified format (first 8 hex digits)
-fn print_hash_simple(hash: &BigUint) -> String {
+/// Print a hash in a simplified format (first 8 hex digits) with color based on hash value
+fn print_hash(hash: &BigUint) -> String {
+    // Create a 64-character hex string of the hash, padded with zeros.
+    let hex_string = format!("{:0>64}", hash.to_str_radix(16));
+    // Use a regex to extract 6 hex digits after any leading zeros.
+    let re = regex::Regex::new(r"^0*([^0].{5})").unwrap();
+    let color_match = re.captures(&hex_string);
+    let (r, g, b) = if let Some(cap) = color_match {
+        let color_hex = &cap[1];
+        let r = u8::from_str_radix(&color_hex[0..2], 16).unwrap_or(255);
+        let g = u8::from_str_radix(&color_hex[2..4], 16).unwrap_or(255);
+        let b = u8::from_str_radix(&color_hex[4..6], 16).unwrap_or(255);
+        (r, g, b)
+    } else {
+        (255, 255, 255)
+    };
+    let ansi_color = format!("\x1b[38;2;{};{};{}m", r, g, b);
+    let reset = "\x1b[0m";
     // Create a BigUint representing 2^(256-32)
     let shift_amount = BigUint::from(1u32) << (256 - 32);
-
     // Divide the hash by the shift amount to get the first 32 bits
     let shifted: BigUint = hash / &shift_amount;
+    format!("{}{:0>8}{}", ansi_color, shifted.to_str_radix(16), reset)
+}
 
-    // Format as hex with leading zeros using the string representation of BigUint
-    format!("{:0>8}", shifted.to_str_radix(16))
+/// Print a HashSet of BigUint values
+fn print_hash_set(hashes: &HashSet<BigUint>) -> String {
+    if hashes.is_empty() {
+        return "{}".to_string();
+    }
+
+    let mut result = "{".to_string();
+    let mut first = true;
+
+    // Sort the hashes for consistent output
+    let mut sorted_hashes: Vec<&BigUint> = hashes.iter().collect();
+    sorted_hashes.sort();
+
+    for hash in sorted_hashes {
+        if !first {
+            result.push_str(", ");
+        }
+        result.push_str(&print_hash(hash));
+        first = false;
+    }
+
+    result.push('}');
+    result
+}
+
+/// Print a Vec of BigUint values
+fn print_hash_vec(hashes: &[BigUint]) -> String {
+    if hashes.is_empty() {
+        return "[]".to_string();
+    }
+
+    let mut result = "[".to_string();
+    let mut first = true;
+
+    for hash in hashes {
+        if !first {
+            result.push_str(", ");
+        }
+        result.push_str(&print_hash(hash));
+        first = false;
+    }
+
+    result.push(']');
+    result
+}
+
+/// Print a Vec of HashSet of BigUint values (e.g., cohorts)
+fn print_hash_vec_set(vec_set: &[HashSet<BigUint>]) -> String {
+    if vec_set.is_empty() {
+        return "[]".to_string();
+    }
+
+    let mut result = "[\n".to_string();
+
+    for (i, set) in vec_set.iter().enumerate() {
+        result.push_str(&format!("  {}", print_hash_set(set)));
+        if i < vec_set.len() - 1 {
+            result.push_str(",\n");
+        }
+    }
+
+    result.push_str("\n]");
+    result
 }
 
 /// Compute the arc length on the surface of a unit sphere
@@ -151,28 +235,24 @@ fn sph_arclen(n1: &Node, n2: &Node) -> f64 {
 }
 
 /// A Bead is a full bitcoin (weak) block that may miss Bitcoin's difficulty target
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 struct BeadImpl {
     t: f64,                  // Time when created
-    hash: Option<BeadHash>,   // Hash that identifies this block
-    parents: HashSet<BeadHash>, // Parent beads
+    hash: BigUint,           // Hash that identifies this block
+    parents: HashSet<BigUint>, // Parent beads
     creator: usize,          // Node ID that created this bead
-    target: Target,         // Target difficulty
+    target: BigUint,         // Target difficulty
 }
 
 impl BeadImpl {
-    fn new(t: f64, parents: HashSet<BigUint>, creator: usize, target: Target) -> Self {
+    fn new(t: f64, hash: BigUint, parents: HashSet<BigUint>, creator: usize, target: BigUint) -> Self {
         Self {
             t,
-            hash: None,
+            hash,
             parents,
             creator,
             target,
         }
-    }
-
-    fn add_pow(&mut self, hash: BigUint) {
-        self.hash = Some(hash);
     }
 }
 
@@ -180,14 +260,13 @@ impl BeadImpl {
 #[derive(Clone, Debug)]
 struct BraidImpl {
     beads: HashMap<BigUint, BeadImpl>,
-    times: HashMap<BigUint, f64>,
     tips: HashSet<BigUint>,
     cohorts: Vec<HashSet<BigUint>>,
 }
 
 impl BraidImpl {
     fn new(genesis_bead: BeadImpl) -> Self {
-        let genesis_hash = genesis_bead.hash.clone().unwrap();
+        let genesis_hash = genesis_bead.hash.clone();
         let mut beads = HashMap::new();
         beads.insert(genesis_hash.clone(), genesis_bead);
 
@@ -203,7 +282,6 @@ impl BraidImpl {
 
         Self {
             beads,
-            times: HashMap::new(),
             tips,
             cohorts,
         }
@@ -214,10 +292,7 @@ impl BraidImpl {
     }
 
     fn extend(&mut self, bead: BeadImpl) -> bool {
-        let hash = match &bead.hash {
-            Some(h) => h.clone(),
-            None => return false, // Can't add a bead without a hash
-        };
+        let hash = bead.hash.clone();
 
         // Check if we already have this bead
         if self.beads.contains_key(&hash) {
@@ -231,15 +306,14 @@ impl BraidImpl {
             }
         }
 
-        // Add the bead
-        self.beads.insert(hash.clone(), bead.clone());
-        self.times.insert(hash.clone(), bead.t);
-
         // Update tips
         for parent in &bead.parents {
             self.tips.remove(parent);
         }
         self.tips.insert(hash.clone());
+
+        // Add the bead
+        self.beads.insert(hash, bead);
 
         // Recalculate cohorts
         let parents_map = self.to_relatives();
@@ -252,23 +326,32 @@ impl BraidImpl {
         let mut parents = HashMap::new();
 
         for (hash, bead) in &self.beads {
-            let parent_set = bead.parents.clone();
-            parents.insert(hash.clone(), parent_set);
+            parents.insert(hash.clone(), bead.parents.clone());
         }
 
         parents
     }
 }
 
+/// Message sent between nodes
+#[derive(Clone, Debug)]
+struct BeadMessage {
+    hash: BigUint,                  // Hash of the bead
+    parents: HashSet<BigUint>,      // Parent beads
+    creator: usize,                 // Node ID that created this bead
+    target: BigUint,                // Target difficulty
+    creation_time: f64,             // Time when created
+}
+
 /// Network abstraction containing nodes
 struct Network {
     t: f64,                          // Current simulation time
-    nodes: Vec<Rc<RefCell<Node>>>,   // Network nodes
-    inflightdelay: HashMap<(usize, BeadHash), (Vec<u8>, f64)>, // (serialized bead, delay)
-    genesis_hash: BeadHash,          // Hash of genesis block
-    target: Target,                  // Initial target difficulty
+    nodes: Vec<Node>,                // Network nodes
+    inflightdelay: HashMap<(usize, BigUint), f64>, // Beads in flight with delays
+    genesis_hash: BigUint,           // Hash of genesis block
+    target: BigUint,                 // Initial target difficulty
     log: bool,                       // Whether to log events
-    pending_broadcasts: Vec<(usize, BeadImpl, f64)>, // Queue of pending broadcasts
+    config: Config,                  // Configuration settings
 }
 
 impl Network {
@@ -277,10 +360,11 @@ impl Network {
         hashrate: f64,
         _ticksize: f64,
         npeers: usize,
-        target: Target,
+        target: BigUint,
         log: bool,
+        config: Config,
         rng: &mut StdRng,
-    ) -> std::rc::Rc<std::cell::RefCell<Network>> {
+    ) -> Self {
         let t = 0.0;
 
         // Create genesis block
@@ -288,11 +372,9 @@ impl Network {
         let genesis_hash = uint256(&genesis_bytes);
 
         // Create a genesis bead
-        let mut genesis_bead = BeadImpl::new(t, HashSet::new(), 0, target.clone());
-        genesis_bead.add_pow(genesis_hash.clone());
-        let genesis_bead = genesis_bead;
+        let genesis_bead = BeadImpl::new(t, genesis_hash.clone(), HashSet::new(), 0, target.clone());
 
-        // Create nodes
+        // Create nodes first
         let mut nodes = Vec::with_capacity(nnodes);
         for nodeid in 0..nnodes {
             let node = Node::new(
@@ -301,17 +383,28 @@ impl Network {
                 hashrate / nnodes as f64 / NETWORK_SIZE,
                 Some(target.clone()),
                 log,
+                config,
                 rng,
-                std::rc::Weak::new(),
+                None, // We'll set the network reference later
             );
-            nodes.push(Rc::new(RefCell::new(node)));
+            nodes.push(node);
         }
+
+        // Create a network instance with the nodes
+        let mut network = Self {
+            t,
+            nodes,
+            inflightdelay: HashMap::new(),
+            genesis_hash: genesis_hash.clone(),
+            target: target.clone(),
+            log,
+            config,
+        };
 
         // Set up peer connections
         for nodeid in 0..nnodes {
             // Select random peers
             let mut peers = Vec::new();
-            let mut peer_indices = Vec::new();
 
             // Create a list of potential peers (all nodes except self)
             let mut potential_peers: Vec<usize> = (0..nnodes).filter(|&id| id != nodeid).collect();
@@ -320,97 +413,62 @@ impl Network {
             for _ in 0..min(npeers, potential_peers.len()) {
                 let idx = rng.gen_range(0..potential_peers.len());
                 let peer_id = potential_peers.remove(idx);
-                peer_indices.push(peer_id);
-                peers.push(nodes[peer_id].clone());
+                peers.push(peer_id);
             }
 
             // Calculate latencies
-            let latencies: Vec<f64> = peer_indices.iter()
+            let latencies: Vec<f64> = peers.iter()
                 .map(|&peer_id| {
-                    NETWORK_SIZE * sph_arclen(&nodes[nodeid].borrow(), &nodes[peer_id].borrow())
+                    NETWORK_SIZE * sph_arclen(&network.nodes[nodeid], &network.nodes[peer_id])
                 })
                 .collect();
 
             // Add peers to the node
-            nodes[nodeid].borrow_mut().add_peers(peers, latencies);
+            network.nodes[nodeid].add_peers(peers, latencies);
         }
 
-        // Reset all nodes to ensure proper initialization
-        for node in &nodes {
-            node.borrow_mut().reset(Some(target.clone()));
+        // We no longer need to set network pointers
+
+        if log {
+            println!("# Starting network with genesis bead {} at time {:.8}",
+                     print_hash(&network.genesis_hash), network.t);
         }
 
-        // Create the network
-        let network = Self {
-            t,
-            nodes,
-            inflightdelay: HashMap::new(),
-            genesis_hash,
-            target,
-            log,
-            pending_broadcasts: Rc::new(RefCell::new(Vec::new())),
-        };
-
-        // Set up incoming peers for each node
-        for nodeid in 0..nnodes {
-            let mut in_peers = Vec::new();
-            let mut in_latencies = Vec::new();
-
-            for other_id in 0..nnodes {
-                if other_id == nodeid {
-                    continue;
-                }
-
-                let other_node = &network.nodes[other_id];
-                let peers = &other_node.borrow().peers;
-
-                // Check if this node is a peer of the other node
-                for (i, peer) in peers.iter().enumerate() {
-                    if Rc::ptr_eq(peer, &network.nodes[nodeid]) {
-                        in_peers.push(other_node.clone());
-                        in_latencies.push(other_node.borrow().latencies[i]);
-                        break;
-                    }
-                }
-            }
-
-            // Add incoming peers
-            network.nodes[nodeid].borrow_mut().add_peers(in_peers, in_latencies);
-        }
-
-        // Wrap the network in an Rc<RefCell<>> and update each node’s network field
-        let network_rc = Rc::new(RefCell::new(network));
-        for node in network_rc.borrow().nodes.iter() {
-            node.borrow_mut().network = Rc::downgrade(&network_rc);
-        }
-        return network_rc;
+        network
     }
 
     fn tick(&mut self, mine: bool) {
-        // Find the next event time
-        let next_bead_dt = self.nodes.iter()
-            .map(|n| n.borrow().tremaining)
-            .min_by(|a, b| a.partial_cmp(b).unwrap())
-            .unwrap_or(f64::MAX);
+        let dt = if mine {
+            TICKSIZE
+        } else {
+            // Find the minimum time until next bead from any node
+            let next_bead_dt = self.nodes.iter()
+                .map(|n| n.tremaining)
+                .min_by(|a, b| a.partial_cmp(b).unwrap())
+                .unwrap();
 
-        let next_recv_dt = self.inflightdelay.values()
-            .map(|(_, delay)| *delay)
-            .min_by(|a, b| a.partial_cmp(b).unwrap())
-            .unwrap_or(next_bead_dt + NETWORK_SIZE);
+            // Find minimum time until next message arrival
+            let next_recv_dt = self.inflightdelay.values()
+                .min_by(|a, b| a.partial_cmp(b).unwrap())
+                .cloned()
+                .unwrap_or(next_bead_dt + NETWORK_SIZE);
 
-        let dt = if mine { TICKSIZE } else { next_bead_dt.min(next_recv_dt) };
+            // Take the minimum of the two
+            next_bead_dt.min(next_recv_dt)
+        };
+
+        // Increment the simulation time
         self.t += dt;
 
         // Process in-flight beads
         let mut to_remove = Vec::new();
         let mut to_deliver = Vec::new();
 
-        for ((nodeid, bead_hash), (serialized, delay)) in &mut self.inflightdelay {
+        for ((nodeid, bead_hash), delay) in &mut self.inflightdelay {
             *delay -= dt;
             if *delay <= 0.0 {
-                let bead = bincode::deserialize(serialized).unwrap();
                 to_remove.push((*nodeid, bead_hash.clone()));
-                to_deliver.push((*nodeid, bead));
+                to_deliver.push((*nodeid, bead_hash.clone()));
             }
         }
 
@@ -419,50 +477,78 @@ impl Network {
         }
 
         for (nodeid, bead_hash) in to_deliver {
-            self.nodes[nodeid].borrow_mut().receive(bead_hash);
-        }
+            // Find the message in the global map
+            let message_opt = NETWORK_MESSAGES.with(|messages| {
+                messages.borrow().get(&bead_hash).cloned()
+            });
 
-        // Process any pending broadcasts
-        let broadcasts = {
-            let mut pending = self.pending_broadcasts.borrow_mut();
-            let broadcasts = std::mem::take(&mut *pending);
-            broadcasts
-        };
-
-        for (nodeid, bead_hash, delay) in broadcasts {
-            self.broadcast(nodeid, bead_hash, delay);
+            if let Some(message) = message_opt {
+                if nodeid < self.nodes.len() {
+                    // Deliver the message to the node
+                    self.nodes[nodeid].receive(message);
+                }
+            }
         }
 
         // Tick all nodes
-        for node in &self.nodes {
-            node.borrow_mut().tick(mine, dt, self.t);
+        for i in 0..self.nodes.len() {
+            // If logging is enabled and this node is about to create a bead, print in-flight delays
+            if self.log && self.nodes[i].tremaining <= 0.0 {
+                self.print_in_flight_delays();
+            }
+
+            if let Some(message) = self.nodes[i].tick(mine, dt, self.t) {
+                self.send_message(i, message);
+            }
         }
     }
 
     fn simulate(&mut self, nbeads: usize, mine: bool) {
-        while self.nodes[0].borrow().braid.beads.len() < nbeads {
+        while self.nodes[0].braid.beads.len() < nbeads {
             self.tick(mine);
         }
     }
 
-    fn broadcast(&mut self, node_id: usize, bead: BeadImpl, delay: f64) {
-        let bead_hash = bead.hash.clone().unwrap();
-        let serialized = bincode::serialize(&bead).unwrap();
-        let key = (node_id, bead_hash);
-        let prev_entry = self.inflightdelay.get(&key);
-        let new_delay = prev_entry.map(|(_, d)| *d).unwrap_or(NETWORK_SIZE).min(delay);
-        self.inflightdelay.insert(key, (serialized, new_delay));
+    // New method to handle sending messages between nodes
+    fn send_message(&mut self, from_node: usize, message: BeadMessage) {
+        let bead_hash = message.hash.clone();
+
+        // Store the message in the global map
+        NETWORK_MESSAGES.with(|messages| {
+            messages.borrow_mut().insert(bead_hash.clone(), message.clone());
+        });
+
+        // Broadcast message to all nodes except the sender
+        if from_node < self.nodes.len() {
+            let sender = &self.nodes[from_node];
+
+            for peer_id in 0..self.nodes.len() {
+                if peer_id == from_node {
+                    continue;
+                }
+                if self.nodes[peer_id].braid.contains(&bead_hash) {
+                    continue;
+                }
+
+                // Calculate delay based on spherical arc length between nodes
+                let delay = NETWORK_SIZE * sph_arclen(sender, &self.nodes[peer_id]);
+
+                // Schedule delivery
+                let key = (peer_id, bead_hash.clone());
+                let prev_delay = self.inflightdelay.get(&key).cloned().unwrap_or(NETWORK_SIZE);
+                self.inflightdelay.insert(key, prev_delay.min(delay));
+            }
+        }
     }
 
-    fn reset(&mut self, target: Option<Target>) {
+    fn reset(&mut self, target: Option<BigUint>) {
         self.t = 0.0;
         self.inflightdelay.clear();
-        self.pending_broadcasts.borrow_mut().clear();
 
         let target = target.unwrap_or_else(|| self.target.clone());
 
-        for node in &self.nodes {
-            node.borrow_mut().reset(Some(target.clone()));
+        for node in &mut self.nodes {
+            node.reset(Some(target.clone()));
         }
     }
 
@@ -474,7 +560,7 @@ impl Network {
 
         for ((node_id, bead_hash), delay) in &self.inflightdelay {
             println!("bead {} to node {} will arrive in {}s",
-                     print_hash_simple(bead_hash), node_id, delay.1);
+                     print_hash(bead_hash), node_id, delay);
         }
     }
 }
@@ -483,21 +569,23 @@ impl Network {
 #[derive(Debug)]
 struct Node {
     nodeid: usize,
-    network: std::rc::Weak<RefCell<Network>>,
-    peers: Vec<Rc<RefCell<Node>>>,
+    peers: Vec<usize>,               // Peer node IDs instead of references
     latencies: Vec<f64>,
     nodesalt: BigUint,
     hashrate: f64,
-    target: Target,
+    target: BigUint,
     log: bool,
     nonce: u64,
     tremaining: f64,
     braid: BraidImpl,
-    incoming: HashMap<BigUint, BeadImpl>,
-    working_bead: BeadImpl,
+    incoming: HashSet<BigUint>,      // Hashes of incoming beads
+    working_parents: HashSet<BigUint>, // Parents for the next bead
     latitude: f64,
     longitude: f64,
     calc_target_method: TargetMethod,
+    current_time: f64,
+    config: Config,                  // Configuration settings
+    // We'll remove the network reference entirely and handle this differently
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -514,10 +602,11 @@ impl Node {
         genesis_bead: BeadImpl,
         nodeid: usize,
         hashrate: f64,
-        initial_target: Option<Target>,
+        initial_target: Option<BigUint>,
         log: bool,
+        config: Config,
         rng: &mut StdRng,
-        network: std::rc::Weak<RefCell<Network>>,
+        network: Option<()>, // Placeholder to maintain function signature
     ) -> Self {
         // Generate a random salt for this node
         let mut salt_bytes = [0u8; 32];
@@ -528,20 +617,18 @@ impl Node {
         let braid = BraidImpl::new(genesis_bead.clone());
 
         // Set the target
-        let target = initial_target.unwrap_or_else(|| Target::from(1u32));
+        let target = initial_target.unwrap_or_else(|| BigUint::from(1u32));
 
         // Generate random geospatial location
         let latitude = 90.0 * (0.5 - rng.gen::<f64>());
         let longitude = 180.0 * (2.0 * rng.gen::<f64>() - 1.0);
 
-        // Create a working bead
-        let mut tips = HashSet::new();
-        tips.insert(genesis_bead.borrow().hash.clone().unwrap());
-        let working_bead = BeadImpl::new(0.0, tips, nodeid, target.clone());
+        // Set up working parents (initially just the genesis hash)
+        let mut working_parents = HashSet::new();
+        working_parents.insert(genesis_bead.hash.clone());
 
         let mut node = Self {
             nodeid,
-            network,
             peers: Vec::new(),
             latencies: Vec::new(),
             nodesalt,
@@ -549,13 +636,15 @@ impl Node {
             target,
             log,
             nonce: 0,
-            tremaining: 0.0,
+            tremaining: 0.0, // Will be set below
             braid,
-            incoming: HashMap::new(),
-            working_bead,
+            incoming: HashSet::new(),
+            working_parents,
             latitude,
             longitude,
             calc_target_method: TargetMethod::ExponentialDamping,
+            current_time: 0.0,
+            config
         };
 
         // Calculate initial time to next bead
@@ -564,10 +653,12 @@ impl Node {
         node
     }
 
-    fn reset(&mut self, initial_target: Option<Target>) {
-        // Reset the braid
+    fn reset(&mut self, initial_target: Option<BigUint>) {
+        // Get the genesis bead
         let genesis_bead = self.braid.beads.values().next().unwrap().clone();
-        self.braid = BraidImpl::new(genesis_bead.clone());
+
+        // Reset the braid
+        self.braid = BraidImpl::new(genesis_bead);
 
         // Update target if provided
         if let Some(target) = initial_target {
@@ -577,60 +668,65 @@ impl Node {
         // Reset incoming beads
         self.incoming.clear();
 
+        // Reset working parents to just the genesis hash
+        self.working_parents.clear();
+        self.working_parents.insert(self.braid.tips.iter().next().unwrap().clone());
+
         // Recalculate time to next bead
         self.tremaining = self.time_to_next_bead();
-
-        // Create a new working bead
-        let mut tips = HashSet::new();
-        tips.insert(genesis_bead.borrow().hash.clone().unwrap());
-        self.working_bead = BeadImpl::new(0.0, tips, self.nodeid, self.target.clone());
     }
 
-    fn add_peers(&mut self, peers: Vec<Rc<RefCell<Node>>>, latencies: Vec<f64>) {
+    fn add_peers(&mut self, peers: Vec<usize>, latencies: Vec<f64>) {
         self.peers.extend(peers);
         self.latencies.extend(latencies);
     }
 
     fn time_to_next_bead(&self) -> f64 {
         // Sample from geometric distribution
-        let p = {
-            let ratio = num_rational::BigRational::new(self.target.clone().into(), MAX_HASH.clone().into());
-            ratio.to_f64().unwrap_or(1e-10)
-        };
+        // Calculate p as a floating point value directly to avoid integer division resulting in 0
+        let p = self.target.to_f64().unwrap() / MAX_HASH.to_f64().unwrap();
 
         // Generate random number in [0, 1)
         let r = rand::random::<f64>();
 
+        if p > 1.0 {
+            panic!("target {} is larger than MAX_HASH", self.target);
+        }
         // Calculate number of hashes needed
         let nhashes = if p < 1e-6 {
             // Use Taylor series for small p
             let taylor = p + p.powi(2)/2.0 + p.powi(3)/3.0 + p.powi(4)/4.0 + p.powi(5)/5.0;
-            (-r.ln() / taylor).ceil() as u64 + 1
+            ((1.0 - r).ln() / - taylor).ceil() as u64 + 1
         } else {
-            (-(1.0 - r).ln() / (1.0 - p).ln()).ceil() as u64 + 1
+            ((1.0 - r).ln() / (1.0 - p).ln()).ceil() as u64 + 1
         };
 
-        // Convert to time
+        // Convert to time (using f64 throughout to avoid overflow)
+        // Match Python implementation exactly
         nhashes as f64 / self.hashrate
     }
 
-    fn tick(&mut self, mine: bool, dt: f64, network_time: f64) {
+    fn tick(&mut self, mine: bool, dt: f64, network_time: f64) -> Option<BeadMessage> {
+        // Store the current network time
+        self.current_time = network_time;
+
         if !mine {
+            // Decrement the remaining time
             self.tremaining -= dt;
 
             // If we have no incoming beads and our tips haven't changed and we're not ready to mine, return
             if self.incoming.is_empty() &&
-               self.working_bead.borrow().parents == self.braid.tips &&
+               self.working_parents == self.braid.tips &&
                self.tremaining > 0.0 {
-                return;
+                return None;
             }
         }
 
         // Check if tips have changed
         let old_tips = self.braid.tips.clone();
-        if old_tips != self.working_bead.borrow().parents {
-            // Create a new working bead with updated parents
-            self.working_bead = BeadImpl::new(network_time, old_tips.clone(), self.nodeid, self.target.clone());
+        if old_tips != self.working_parents {
+            // Update working parents to match current tips
+            self.working_parents = old_tips.clone();
         }
 
         if mine {
@@ -654,49 +750,70 @@ impl Node {
                 // Check if we found a solution
                 if pow < self.target {
                     // Calculate cohort size for logging
-                    let nb = if self.braid.cohorts.len() >= TARGET_NC {
-                        self.braid.cohorts[self.braid.cohorts.len() - TARGET_NC..].iter()
+                    let nb = if self.braid.cohorts.is_empty() {
+                        0
+                    } else {
+                        // Take up to TARGET_NC cohorts from the end, similar to Python's [-TARGET_NC:]
+                        let start_idx = self.braid.cohorts.len().saturating_sub(TARGET_NC);
+                        self.braid.cohorts[start_idx..].iter()
                             .map(|c| c.len())
                             .sum::<usize>()
-                    } else {
-                        0
                     };
 
                     if self.log {
                         println!("== Solution bead {} target = {:08x}... for cohort size {:2} on node {:2} at time {:.6} Nb/Nc={:.4}",
-                                 print_hash_simple(&pow),
-                                 (self.working_bead.target.clone() >> 224u32).to_u64().unwrap_or(0),
+                                 print_hash(&pow),
+                                 (self.target.clone() >> 224u32).to_u64().unwrap_or(0),
                                  self.braid.cohorts.last().map_or(0, |c| c.len()),
                                  self.nodeid,
                                  network_time,
                                  nb as f64 / TARGET_NC as f64);
 
-                        DEBUG.with(|debug| {
-                            if debug.get() {
-                                println!("    Having parents: {:?}",
-                                         self.working_bead.borrow().parents.iter()
-                                             .map(|p| print_hash_simple(p))
-                                             .collect::<Vec<_>>());
-                            }
-                        });
+                        if self.config.debug {
+                            println!("    Having parents: {}", print_hash_set(&self.working_parents));
+                        }
                     }
 
-                    // Add PoW to the working bead
-                    self.working_bead.borrow_mut().add_pow(pow);
+                    // Create a new bead with the solution
+                    let new_bead = BeadImpl::new(
+                        network_time,
+                        pow.clone(),
+                        self.working_parents.clone(),
+                        self.nodeid,
+                        self.target.clone()
+                    );
 
-                    // Send it to ourselves (will rebroadcast to peers)
-                    self.receive(self.working_bead.clone());
-                    break;
+                    // Add the bead to our braid
+                    self.braid.extend(new_bead.clone());
+                    self.working_parents = self.braid.tips.clone();
+
+                    // Create a message to send to peers using the parent's set of the new bead
+                    let message = BeadMessage {
+                        hash: pow,
+                        parents: new_bead.parents.clone(),
+                        creator: self.nodeid,
+                        target: self.target.clone(),
+                        creation_time: network_time,
+                    };
+
+                    // Reset tremaining for the next bead
+                    self.tremaining = self.time_to_next_bead();
+
+                    return Some(message);
                 }
             }
         } else if self.tremaining <= 0.0 {
             // Time to create a new bead
-            let nb = if self.braid.cohorts.len() >= TARGET_NC {
-                self.braid.cohorts[self.braid.cohorts.len() - TARGET_NC..].iter()
+            //println!("cohorts = {}", print_hash_vec_set(&self.braid.cohorts));
+            //println!("tips = {}", print_hash_set(&self.braid.tips));
+            let nb = if self.braid.cohorts.is_empty() {
+                0
+            } else {
+                // Take up to TARGET_NC cohorts from the end, similar to Python's [-TARGET_NC:]
+                let start_idx = self.braid.cohorts.len().saturating_sub(TARGET_NC);
+                self.braid.cohorts[start_idx..].iter()
                     .map(|c| c.len())
                     .sum::<usize>()
-            } else {
-                0
             };
 
             self.nonce += 1;
@@ -715,36 +832,52 @@ impl Node {
             // Scale the hash to be below target
             let scaled_pow = (pow * self.target.clone()) / MAX_HASH.clone();
 
-            self.working_bead.borrow_mut().add_pow(scaled_pow.clone());
-
             if self.log {
-                println!("== Solution {} target = {}... for cohort size {:3} on node {:2} and at time {:.6} Nb/Nc={:.6}",
-                         print_hash_simple(&scaled_pow),
+                println!("== Solution {} target = {}... for cohort size {:3} on node {:2} and at time {:.6} Nb={:3} Nc={:3} Nb/Nc={:.6}",
+                         print_hash(&scaled_pow),
                          {
                              let shift_amount = BigUint::from(1u32) << (256 - 32);
-                             let shifted = self.working_bead.target.clone() / shift_amount;
+                             let shifted = self.target.clone() / shift_amount;
                              format!("{:08x}", shifted)
                          },
                          self.braid.cohorts.last().map_or(0, |c| c.len()),
                          self.nodeid,
                          network_time,
+                         nb,
+                         TARGET_NC,
                          nb as f64 / TARGET_NC as f64);
 
-                DEBUG.with(|debug| {
-                    if debug.get() {
-                        println!("    Having parents: {:?}",
-                                 self.working_bead.borrow().parents.iter()
-                                     .map(|p| print_hash_simple(p))
-                                     .collect::<Vec<_>>());
-                    }
-                });
+                if self.config.debug {
+                    println!("    Having parents: {}", print_hash_set(&self.working_parents));
+                }
             }
 
-            // Send it to ourselves (will rebroadcast to peers)
-            self.receive(self.working_bead.clone());
+            // Create a new bead
+            let new_bead = BeadImpl::new(
+                network_time,
+                scaled_pow.clone(),
+                self.working_parents.clone(),
+                self.nodeid,
+                self.target.clone()
+            );
 
-            // Calculate time to next bead
+            // Add the bead to our braid
+            self.braid.extend(new_bead.clone());
+            self.working_parents = self.braid.tips.clone();
+
+            // Create a message to send to peers using the parent's set from the new bead
+            let message = BeadMessage {
+                hash: scaled_pow,
+                parents: new_bead.parents.clone(),
+                creator: self.nodeid,
+                target: self.target.clone(),
+                creation_time: network_time,
+            };
+
+            // Reset tremaining for the next bead
             self.tremaining = self.time_to_next_bead();
+
+            return Some(message);
         }
 
         // Process any incoming beads
@@ -754,13 +887,11 @@ impl Node {
         if self.braid.tips != old_tips && !mine {
             self.tremaining = self.time_to_next_bead();
         }
+        return None;
     }
 
-    fn receive(&mut self, bead: BeadImpl) {
-        let bead_hash = match bead.hash {
-            Some(ref h) => h.clone(),
-            None => return, // Can't receive a bead without a hash
-        };
+    fn receive(&mut self, message: BeadMessage) {
+        let bead_hash = message.hash.clone();
 
         // If we already have this bead, ignore it
         if self.braid.contains(&bead_hash) {
@@ -768,95 +899,73 @@ impl Node {
         }
 
         // Add to incoming beads
-        self.incoming.insert(bead_hash.clone(), bead.clone());
+        self.incoming.insert(bead_hash.clone());
 
         // Try to process incoming beads
         self.process_incoming();
 
-        // Update working bead with new tips
-        let tips = self.braid.tips.clone();
-        self.working_bead = Rc::new(RefCell::new(
-            BeadImpl::new(0.0, tips, self.nodeid, self.target.clone())
-        ));
+        // Update working parents with new tips
+        self.working_parents = self.braid.tips.clone();
 
         // Recalculate target
-        self.target = self.calc_target(&self.working_bead.parents);
-        self.working_bead.borrow_mut().target = self.target.clone();
+        self.target = self.calc_target(&self.working_parents);
 
         // Reset mining timer
         self.tremaining = self.time_to_next_bead();
 
-        // Clone the hash for sending to avoid borrowing conflicts
-        let bead_to_send = bead.clone();
+        // Return message to be sent by Network
+        self.send_message(message);
 
-        DEBUG.with(|debug| {
-            if debug.get() {
-                println!("Node {:2} received bead {} at time {:.6} we have {} tips: {:?}",
-                         self.nodeid,
-                         print_hash_simple(&bead_hash),
-                         0.0, // network.t would go here
-                         self.braid.tips.len(),
-                         self.braid.tips.iter()
-                             .map(|t| print_hash_simple(t))
-                             .collect::<Vec<_>>());
-            }
-        });
-
-        // Send to peers after we're done with all other operations
-        self.send(bead_to_send);
+        if self.config.debug {
+            println!("Node {:2} received bead {} at time {:.6} we have {} tips: {}",
+                     self.nodeid,
+                     print_hash(&bead_hash),
+                     self.current_time,
+                     self.braid.tips.len(),
+                     print_hash_set(&self.braid.tips));
+        }
     }
 
     fn process_incoming(&mut self) {
-        loop {
-            let old_incoming = self.incoming.clone();
-            let mut processed = Vec::new();
-            for (bead_hash, bead) in old_incoming.iter() {
-                if self.braid.extend(bead.clone()) {
+        // Process all incoming bead hashes
+        let mut processed = Vec::new();
+
+        for bead_hash in &self.incoming {
+            // Try to create a bead from the message
+            let message_opt = NETWORK_MESSAGES.with(|messages| {
+                messages.borrow().get(bead_hash).cloned()
+            });
+
+            if let Some(message) = message_opt {
+                let bead = BeadImpl::new(
+                    message.creation_time,
+                    message.hash.clone(),
+                    message.parents.clone(),
+                    message.creator,
+                    message.target.clone()
+                );
+
+                // Try to add it to our braid
+                if self.braid.extend(bead) {
                     processed.push(bead_hash.clone());
-                } else {
-                    println!("    Unable to add {} to braid, missing parents",
-                             print_hash_simple(bead_hash));
                 }
             }
-            for bead_hash in processed {
-                self.incoming.remove(&bead_hash);
-            }
-            if self.incoming.keys().eq(old_incoming.keys()) {
-                break;
-            }
         }
-        if !self.incoming.is_empty() {
-            println!("Node {:2} has {} incoming beads", self.nodeid, self.incoming.len());
+
+        // Remove processed beads from incoming
+        for bead_hash in processed {
+            self.incoming.remove(&bead_hash);
         }
+
     }
 
-    fn send(&self, bead: BeadImpl) {
-        // Collect all broadcast data first without any borrows
-        let broadcasts: Vec<(usize, BeadImpl, f64)> = self.peers.iter()
-            .zip(self.latencies.iter())
-            .map(|(peer, delay)| {
-                let peer_id = peer.borrow().nodeid;
-                (peer_id, bead.clone(), *delay)
-            })
-            .collect();
-
-        // Then do a single mutable borrow to push all messages
-        if let Some(net_rc) = self.network.upgrade() {
-            // Get pending_broadcasts without holding network borrow
-            let pending_broadcasts = {
-                let net = net_rc.borrow();
-                net.pending_broadcasts.clone()
-            };
-
-            // Now borrow mutably just the pending_broadcasts
-            let mut pending = pending_broadcasts.borrow_mut();
-            for (peer_id, hash, delay) in broadcasts {
-                pending.push((peer_id, hash, delay));
-            }
-        }
+    // This method will be called by the Network
+    fn send_message(&self, _message: BeadMessage) {
+        // In a real implementation, this would send the message to the network
+        // For our simulation, the Network will handle this
     }
 
-    fn calc_target(&self, parents: &HashSet<BeadHash>) -> Target {
+    fn calc_target(&self, parents: &HashSet<BigUint>) -> BigUint {
         match self.calc_target_method {
             TargetMethod::Simple => self.calc_target_simple(parents),
             TargetMethod::ExponentialDamping => self.calc_target_exponential_damping(parents),
@@ -866,7 +975,7 @@ impl Node {
         }
     }
 
-    fn calc_target_parents(&self, parents: &HashSet<BeadHash>) -> Target {
+    fn calc_target_parents(&self, parents: &HashSet<BigUint>) -> BigUint {
         const TARGET_PARENTS: usize = 2;
         const INTERVAL: usize = 100;
 
@@ -874,7 +983,7 @@ impl Node {
         let mut sum = BigUint::zero();
         for parent_hash in parents {
             if let Some(parent_bead) = self.braid.beads.get(parent_hash) {
-                let parent_target = parent_bead.borrow().target.clone();
+                let parent_target = parent_bead.target.clone();
                 sum += MAX_HASH.clone() / parent_target;
             }
         }
@@ -884,9 +993,6 @@ impl Node {
         }
 
         let htarget = (BigUint::from(parents.len() as u32) * MAX_HASH.clone()) / sum;
-        if self.braid.beads.len() <= TARGET_NC {
-            return htarget.clone() + htarget.clone() / BigUint::from(32u32);
-        }
 
         // Adjust based on number of parents
         if parents.len() < TARGET_PARENTS {
@@ -898,17 +1004,19 @@ impl Node {
         }
     }
 
-    fn calc_target_simple(&self, parents: &HashSet<BeadHash>) -> Target {
+    fn calc_target_simple(&self, parents: &HashSet<BigUint>) -> BigUint {
         const DELTA_NUM: usize = 2;
         const DELTA_DENOM: usize = 128;
 
         // Calculate Nb (sum of beads in last TARGET_NC cohorts)
-        let nb = if self.braid.cohorts.len() >= TARGET_NC {
-            self.braid.cohorts[self.braid.cohorts.len() - TARGET_NC..].iter()
+        let nb = if self.braid.cohorts.is_empty() {
+            0
+        } else {
+            // Take up to TARGET_NC cohorts from the end, similar to Python's [-TARGET_NC:]
+            let start_idx = self.braid.cohorts.len().saturating_sub(TARGET_NC);
+            self.braid.cohorts[start_idx..].iter()
                 .map(|c| c.len())
                 .sum::<usize>()
-        } else {
-            0
         };
 
         // Calculate harmonic average of parent targets
@@ -924,7 +1032,7 @@ impl Node {
             return self.target.clone(); // Avoid division by zero
         }
 
-        let htarget = (Target::from(parents.len() as u32) * MAX_HASH.clone()) / sum;
+        let htarget = (BigUint::from(parents.len() as u32) * MAX_HASH.clone()) / sum;
 
         // Adjust based on cohort size
         if nb > TARGET_NB {
@@ -938,14 +1046,16 @@ impl Node {
         }
     }
 
-    fn calc_target_exponential_damping(&self, parents: &HashSet<BeadHash>) -> Target {
+    fn calc_target_exponential_damping(&self, parents: &HashSet<BigUint>) -> BigUint {
         // Calculate Nb (sum of beads in last TARGET_NC cohorts)
-        let nb = if self.braid.cohorts.len() >= TARGET_NC {
-            self.braid.cohorts[self.braid.cohorts.len() - TARGET_NC..].iter()
+        let nb = if self.braid.cohorts.is_empty() {
+            0
+        } else {
+            // Take up to TARGET_NC cohorts from the end, similar to Python's [-TARGET_NC:]
+            let start_idx = self.braid.cohorts.len().saturating_sub(TARGET_NC);
+            self.braid.cohorts[start_idx..].iter()
                 .map(|c| c.len())
                 .sum::<usize>()
-        } else {
-            0
         };
 
         let adev = nb as i64 - TARGET_NB as i64;
@@ -964,7 +1074,7 @@ impl Node {
             return self.target.clone(); // Avoid division by zero
         }
 
-        let htarget = (Target::from(parents.len() as u32) * MAX_HASH.clone()) / sum;
+        let htarget = (BigUint::from(parents.len() as u32) * MAX_HASH.clone()) / sum;
 
         // Apply exponential damping using Taylor series
         let mut result = htarget.clone();
@@ -1015,7 +1125,7 @@ impl Node {
         let mut sum = BigUint::zero();
         for parent_hash in parents {
             if let Some(parent_bead) = self.braid.beads.get(parent_hash) {
-                let parent_target = parent_bead.borrow().target.clone();
+                let parent_target = parent_bead.target.clone();
                 sum += MAX_HASH.clone() / parent_target;
             }
         }
@@ -1100,17 +1210,146 @@ impl Node {
     }
 }
 
+/// Save a braid to a JSON file
+fn save_braid(
+    parents: &Relatives,
+    filename: &str,
+    description: &str,
+) -> Result<Value, Box<dyn Error>> {
+    // Create a DAG using our braid module
+    let children = braid::reverse(parents);
+    let geneses = braid::geneses(parents);
+    let tips = braid::tips(parents, Some(&children));
+    let cohorts = braid::cohorts(parents, Some(&children), None);
+
+    // Create bead_work map (all beads have work=1)
+    let mut bead_work = BeadWork::new();
+    for bead in parents.keys() {
+        bead_work.insert(bead.clone(), BigUint::from(1u32));
+    }
+
+    // Calculate work
+    let work = braid::descendant_work(parents, Some(&children), &bead_work, Some(&cohorts));
+
+    // Calculate highest work path
+    let highest_work_path = braid::highest_work_path(parents, Some(&children), &bead_work);
+
+    // Create the JSON structure
+    let mut result = json!({
+        "description": description,
+        "geneses": geneses.iter().map(|b| b.to_string()).collect::<Vec<_>>(),
+        "tips": tips.iter().map(|b| b.to_string()).collect::<Vec<_>>(),
+        "cohorts": cohorts.iter().map(|c|
+            c.iter().map(|b| b.to_string()).collect::<Vec<_>>()
+        ).collect::<Vec<_>>(),
+        "highest_work_path": highest_work_path.iter().map(|b| b.to_string()).collect::<Vec<_>>(),
+    });
+
+    // Add parents and children as objects with string keys
+    let mut parents_obj = serde_json::Map::new();
+    for (bead, parent_set) in parents {
+        parents_obj.insert(
+            bead.to_string(),
+            json!(parent_set.iter().map(|p| p.to_string()).collect::<Vec<_>>())
+        );
+    }
+    result["parents"] = json!(parents_obj);
+
+    let mut children_obj = serde_json::Map::new();
+    for (bead, child_set) in &children {
+        children_obj.insert(
+            bead.to_string(),
+            json!(child_set.iter().map(|c| c.to_string()).collect::<Vec<_>>())
+        );
+    }
+    result["children"] = json!(children_obj);
+
+    // Add bead_work as object with string keys
+    let mut bead_work_obj = serde_json::Map::new();
+    for (bead, work) in &bead_work {
+        bead_work_obj.insert(bead.to_string(), json!(work.to_string()));
+    }
+    result["bead_work"] = json!(bead_work_obj);
+
+    // Add work as object with string keys
+    let mut work_obj = serde_json::Map::new();
+    for (bead, w) in &work {
+        work_obj.insert(bead.to_string(), json!(w.to_string()));
+    }
+    result["work"] = json!(work_obj);
+
+    // Write to file
+    let file = File::create(filename)?;
+    serde_json::to_writer_pretty(file, &result)?;
+
+    Ok(result)
+}
+
+/// Number the beads in a braid sequentially in topological order starting at genesis
+fn number_beads(hashed_parents: &Relatives) -> Relatives {
+    let mut bead_id: u64 = 0;
+    let mut parents = Relatives::new();
+    let mut bead_ids = BiMap::new();
+
+    // First handle genesis beads
+    for bead_hash in braid::geneses(hashed_parents) {
+        bead_ids.insert(bead_hash.clone(), BigUint::from(bead_id));
+        parents.insert(BigUint::from(bead_id), HashSet::new());
+        bead_id += 1;
+    }
+
+    // Traverse the DAG in BFS in the descendant direction
+    let hashed_children = braid::reverse(hashed_parents);
+    let mut next_parents = parents.clone();
+
+    while !next_parents.is_empty() {
+        let working_parents = next_parents.clone();
+        next_parents = Relatives::new();
+
+        for (parent, _) in working_parents {
+            if let Some(parent_hash) = bead_ids.get_by_right(&parent) {
+                if let Some(children_set) = hashed_children.get(parent_hash) {
+                    for bead_hash in children_set {
+                        let this_id;
+
+                        if let Some(id) = bead_ids.get_by_left(bead_hash) {
+                            this_id = id.clone();
+                        } else {
+                            this_id = BigUint::from(bead_id);
+                            bead_ids.insert(bead_hash.clone(), this_id.clone());
+                            bead_id += 1;
+                        }
+
+                        parents
+                            .entry(this_id.clone())
+                            .or_insert_with(HashSet::new)
+                            .insert(parent.clone());
+                        next_parents
+                            .entry(this_id)
+                            .or_insert_with(HashSet::new)
+                            .insert(parent.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    parents
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     // Parse command line arguments
     let mut args = Args::parse();
 
-    // Set debug flag in thread-local storage
-    DEBUG.with(|debug| {
-        debug.set(args.debug);
-        if debug.get() {
-            args.log = true;
-        }
-    });
+    // Create configuration
+    let config = Config {
+        debug: args.debug,
+    };
+
+    // If debug is enabled, also enable logging
+    if config.debug {
+        args.log = true;
+    }
 
     // Parse target ratio
     let re = Regex::new(r"(\d+)/(\d+)").unwrap();
@@ -1168,19 +1407,19 @@ fn main() -> Result<(), Box<dyn Error>> {
     let target = (BigUint::from(1u32) << args.target) - BigUint::from(1u32);
 
     // Create network
-    let network = Network::new(
+    let mut network = Network::new(
         args.nodes,
         network_hashrate,
         TICKSIZE,
         args.peers,
         target.clone(),
         args.log,
+        config,
         &mut rng,
     );
 
     // Set algorithm for each node
-    for node in &network.borrow().nodes {
-        let mut node = node.borrow_mut();
+    for node in &mut network.nodes {
         node.calc_target_method = match args.algorithm.as_str() {
             "exp" => TargetMethod::ExponentialDamping,
             "parents" => TargetMethod::Parents,
@@ -1193,10 +1432,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     if args.test_mining {
         // Simulate with mining
-        network.borrow_mut().simulate(args.beads, true);
+        network.simulate(args.beads, true);
 
         // Get the braid from the first node
-        let bmine = network.borrow().nodes[0].borrow().braid.clone();
+        let bmine = network.nodes[0].braid.clone();
 
         // Convert to relatives format
         let mined_parents = bmine.to_relatives();
@@ -1215,13 +1454,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("Wrote {} beads to {}-mine.json.", bmine.beads.len(), args.output_file);
 
         // Reset network
-        network.borrow_mut().reset(Some(target.clone()));
+        network.reset(Some(target.clone()));
 
         // Simulate without mining
-        network.borrow_mut().simulate(args.beads, false);
+        network.simulate(args.beads, false);
 
         // Get the braid from the first node
-        let bnomine = network.borrow().nodes[0].borrow().braid.clone();
+        let bnomine = network.nodes[0].braid.clone();
 
         // Convert to relatives format
         let nomine_parents = bnomine.to_relatives();
@@ -1240,10 +1479,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("Wrote {} beads to {}-no-mine.json.", bnomine.beads.len(), args.output_file);
     } else {
         // Simulate with the specified mining mode
-        network.borrow_mut().simulate(args.beads, args.mine);
+        network.simulate(args.beads, args.mine);
 
         // Get the braid from the first node
-        let b = network.borrow().nodes[0].borrow().braid.clone();
+        let b = network.nodes[0].braid.clone();
 
         // Convert to relatives format
         let parents = b.to_relatives();
