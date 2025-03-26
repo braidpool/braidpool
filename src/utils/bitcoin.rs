@@ -27,7 +27,10 @@ impl From<Hash> for MerkleHash {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct CompactTarget(pub u32);
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Transitive)]
+#[transitive(from(String, Hash))]
+#[transitive(from(&str, Hash))]
+#[transitive(from(BigUint, Hash))]
 pub struct BlockHash(pub Hash);
 
 impl From<Hash> for BlockHash {
