@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 // Custom Imports
 use crate::utils::{Time, Hash};
-use crate::utils::bitcoin::{SerializedTransaction, MiningBlockHeader, BlockHeader, CompactTarget, BlockHash};
+use crate::utils::bitcoin::{BlockHash, BlockHeader, CompactTarget, MiningBlockHeader, SerializedTransaction, SerializedTransactionWithMerkleProof};
 
 // Typedefs
 type BeadHash = BlockHash;
@@ -13,16 +13,16 @@ type BeadHash = BlockHash;
 
 /// Refers to the final immutable beads that are added
 /// into the DagBraid data structure. 
-pub struct DagBead<'a> {
-    block_header: BlockHeader,
-    bead_hash: BeadHash,
-    coinbase_transaction: SerializedTransaction,
-    payout_update_transaction: SerializedTransaction,
+pub struct DagBead<'dag> {
+    pub block_header: BlockHeader,
+    pub bead_hash: BeadHash,
+    pub coinbase_transaction: SerializedTransaction,
+    pub payout_update_transaction: SerializedTransaction,
     
     // Committed Braidpool Metadata
-    lesser_difficulty_target: CompactTarget,
-    parents: HashSet<(&'a DagBead<'a>, Time)>,
-    transactions: Vec<SerializedTransaction>
+    pub lesser_difficulty_target: CompactTarget,
+    pub parents: HashSet<(&'dag DagBead<'dag>, Time)>,
+    pub transactions: Vec<SerializedTransactionWithMerkleProof>
 }
 
 /// Refers to the bead data structure that will be used

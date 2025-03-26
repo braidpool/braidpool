@@ -40,9 +40,17 @@ impl From<Hash> for BlockHash {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct SerializedTransaction {
-    pub serialized_transaction_bytes: Bytes,
-    pub merkle_proof_path: Option<Vec<MerkleHash>>
+pub struct SerializedTransaction(Bytes);
+
+impl From<SerializedTransactionWithMerkleProof> for SerializedTransaction {
+    fn from(serialized_transaction: SerializedTransactionWithMerkleProof) -> Self {
+        serialized_transaction.serialized_transaction
+    }
+}
+
+pub struct SerializedTransactionWithMerkleProof {
+    pub serialized_transaction: SerializedTransaction,
+    pub merkle_path_proof: Vec<MerkleHash>
 }
 
 #[derive(Debug)]

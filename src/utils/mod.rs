@@ -43,6 +43,13 @@ impl From<&str> for Hash {
     }
 }
 
+
+impl From<Hash> for BigUint {
+    fn from(hash: Hash) -> Self {
+        BigUint::from_bytes_le(&hash.0)
+    }
+}
+
 type Byte = u8;
 type Bytes = Vec<Byte>;
 
