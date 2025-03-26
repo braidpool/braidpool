@@ -10,13 +10,11 @@ pub struct Hash(pub [u8; 32]);
 
 impl From<BigUint> for Hash {
     fn from(value: BigUint) -> Self {
-        let mut bytes = value.to_bytes_be();
+        let mut bytes = value.to_bytes_le();
         bytes.resize(32, 0);
 
-        let mut array = [0u8; 32];
-        for i in 0..32 {
-            array[i] = bytes[i];
-        };
+        let mut array = [0_u8; 32];
+        array[0..].copy_from_slice(&bytes);
 
         Hash(array)
     }
@@ -24,7 +22,7 @@ impl From<BigUint> for Hash {
 
 impl Into<BigUint> for Hash {
     fn into(self) -> BigUint {
-        BigUint::from_bytes_be(&self.0)
+        BigUint::from_bytes_le(&self.0)
     }
 }
 
@@ -37,14 +35,13 @@ impl From<String> for Hash {
 impl From<&str> for Hash {
     fn from(hex: &str) -> Self {
         let hex = hex.trim_start_matches("0x");
-        let mut bytes = hex::decode(hex).expect("Invalid hex string");
-        bytes.resize(32, 0);
+        let big_endian_bytes = hex::decode(hex).expect("Invalid hex string");
+        let mut little_endian_bytes = big_endian_bytes.clone();
+        little_endian_bytes.reverse();
 
-        let mut array = [0u8; 32];
-        for i in 0..32 {
-            array[i] = bytes[i];
-        };
 
+        let mut array= [0u8; 32];
+        array[0..].copy_from_slice(&little_endian_bytes);
         Hash(array)
     }
 }
