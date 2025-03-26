@@ -126,13 +126,14 @@ class Network:
         a internal clock for simulation which uses <ticksize>.  Latencies are taken
         from a uniform distribution on [0,1) so <ticksize> should be < 1.
     """
-    def __init__(self, nnodes, hashrate=NETWORK_HASHRATE, ticksize=TICKSIZE, npeers=4, target=None, log=False):
+    def __init__(self, nnodes, hashrate=NETWORK_HASHRATE, ticksize=TICKSIZE, npeers=4, target=None,
+                 target_algo=None, log=False):
         self.t                   = 0.0      # the current "time"
         self.nnodes              = nnodes
         self.hashrate            = hashrate
         self.ticksize            = ticksize # the size of a tick: self.t += self.tick at each step
         self.npeers              = npeers
-        self.target              = target
+        self.target              = target if target is not None else MAX_HASH // 1000
         self.log                 = log
         self.genesis_hash        = uint256(sha256d(0))
         self.genesis_bead        = Bead(self.genesis_hash, set(), self, -1)
@@ -149,7 +150,7 @@ class Network:
             self.nodes[nodeid].add_peers([self.nodes[p] for p in peers], latencies)
             out_peers[nodeid] = peers
         for nodeid in range(nnodes):
-            self.nodes[nodeid].reset()
+            self.nodes[nodeid].reset(target, target_algo)
         # Compute incoming peers
         in_peers = {nodeid: [] for nodeid in range(nnodes)}
         for nodeid,peers in out_peers.items():
@@ -159,10 +160,11 @@ class Network:
             latencies = [NETWORK_SIZE*sph_arclen(self.nodes[nodeid], self.nodes[p]) for p in peers]
             self.nodes[nodeid].add_peers([self.nodes[p] for p in in_peers[nodeid]], latencies)
 
-        self.reset(target=target)
+        self.reset(target, target_algo)
         # FIXME we need to make sure no peers are isolated, we could have a disjoint network.
 
-        print(f"# Starting network with genesis bead {print_hash(self.genesis_hash)} at time {self.t:12.8}")
+        if DEBUG:
+            print(f"# Starting network with genesis bead {print_hash(self.genesis_hash)} at time {self.t:12.8}")
 
     def tick(self, mine=True):
         """ Execute one tick. """
@@ -192,12 +194,12 @@ class Network:
                 prevdelay = self.inflightdelay[(node.nodeid, bead)]
             self.inflightdelay[(node.nodeid, bead)] = min(prevdelay, delay)
 
-    def reset(self, target=None):
+    def reset(self, target=None, target_algo=None):
         """ Reset the computed braid for each node while keeping the network layout.  """
         self.t                   = 0.0
         self.inflightdelay       = {}
         for node in self.nodes:
-            node.reset(target)
+            node.reset(target, target_algo)
 
     def print_in_flight_delays(self):
         """ print in flight delays for debugging. """
@@ -217,10 +219,11 @@ class Node:
         # A salt for this node, so all nodes don't produce the same hashes
         self.nodesalt     = uint256(sha256d(random.randint(0,MAX_HASH)))
         self.hashrate     = hashrate
-        self.target       = initial_target
+        self.target       = initial_target if initial_target is not None else network.target
         self.log          = log
         self.nonce        = 0         # Will be increased in the mining process
         self.tremaining   = None      # Ticks remaining before this node produces a bead
+        self.incoming     = set()     # Initialize incoming set
         self.calc_target  = self.calc_target_simple # Default target calculation method
         # A braid of all beads for this node
         self.braid        = Braid([genesis_bead])
@@ -230,7 +233,7 @@ class Node:
         self.latitude     = pi*(1/2-random.random())
         self.longitude    = 2*pi*random.random()
 
-    def reset(self, initial_target=None):
+    def reset(self, initial_target=None, target_algo=None):
         """ Reset the computed braid while keeping the network layout. This must be called after the
             geospatial information for all nodes is filled in, to calculate self.tremaining if not
             mining.
@@ -238,11 +241,27 @@ class Node:
         self.braid        = Braid([self.genesis_bead])
         self.braid.tips   = {list(self.braid.beads.values())[0]}
         self.incoming     = set()                                        # incoming beads we were unable to process
-        if initial_target:
+        if initial_target is not None:
             self.target   = initial_target
-        if self.target:
+        elif self.network.target is not None:
+            self.target   = self.network.target
+
+        if self.target is not None:
             self.tremaining   = self.time_to_next_bead()
         self.working_bead = Bead(None, frozenset(self.braid.tips), self.network, self.nodeid)
+
+        if target_algo is None or target_algo == "fixed":
+            self.calc_target = self.calc_target_fixed
+        elif target_algo == "exp":
+            self.calc_target = self.calc_target_exponential_damping
+        elif target_algo == "parents":
+            self.calc_target = self.calc_target_parents
+        elif target_algo == "simple":
+            self.calc_target = self.calc_target_simple
+        elif target_algo == "simple_asym":
+            self.calc_target = self.calc_target_simple_asym
+        elif target_algo == "simple_asym_damped":
+            self.calc_target = self.calc_target_simple_asym_damped
 
     def __str__(self):
         return f"<Node {self.nodeid}>"
@@ -335,17 +354,19 @@ class Node:
             for bead in oldincoming:
                 if self.braid.extend(bead):
                     self.incoming.remove(bead)
-                else:
-                    print(f"    Unable to add {print_hash(bead.hash)} to braid, missing parents")
+                elif DEBUG:
+                    print(f"Node {self.nodeid} unable to add {print_hash(bead.hash)} to braid, missing parents")
             if oldincoming == self.incoming:
                 break
-        if len(self.incoming) > 0:
-            print(f"Node {self.nodeid:2} has {len(self.incoming)} incoming beads")
 
     def send(self, bead):
         """ Announce a new block from this node to all peers. """
         for (peer, delay) in zip(self.peers, self.latencies):
             self.network.broadcast(peer, bead, delay)
+
+    def calc_target_fixed(self, parents):
+        """ Use a fixed target (constant difficulty) """
+        return self.target
 
     def calc_target_parents(self, parents):
         """ Calculate a target based on a desired number of parents, targeting 2.
@@ -524,7 +545,7 @@ class Bead:
         return self.hash
 
     def __str__(self):
-        return f"<Bead ...{self.hash%10000}>"
+        return f"<Bead ...{self.hash%100000000}>"
 
     def add_PoW(self, hash):
         """ Add proof of work hash after it is computed. """
@@ -537,7 +558,7 @@ class Braid:
         examination purposes.
     """
 
-    def __init__(self, beads=None, filename=None):
+    def __init__(self, beads=None, filename=None, parents=None):
         self.beads    = {}      # A hash map of hashes of all beads for quick lookup
         self.times    = {}      # Time of arrival for each bead
         self.tips     = set()   # A tip is a bead with no children.
@@ -552,8 +573,11 @@ class Braid:
                     if p in self.tips:
                         self.tips.remove(p)
             self.cohorts = list(braid.cohorts(dict(self)))
-        elif filename:
-            dag      = braid.load_braid(filename)
+        elif filename or parents:
+            if filename:
+                dag      = braid.load_braid(filename)
+            if parents:
+                dag      = braid.make_dag(parents)
             network  = Network(nnodes=1, npeers=0) # Create a dummy network with one node
             for bead_hash in dag["parents"]:
                 self.beads[bead_hash] = Bead(bead_hash, set(), network, network.nodes[0])
@@ -620,7 +644,7 @@ class Braid:
     def print_cohorts(self):
         print("    cohorts:  ", [set(self.beads.index(b) for b in c) for c in self.cohorts])
 
-    def plot(self):
+    def plot(self, filename=None):
         def add_arrow(ax, source, target, markersize, arrow_head_width=0.4, arrow_head_length=0.5, linewidth=0.3):
             distance = sqrt((target[0] - source[0])**2 + (target[1] - source[1])**2)
             offset = 1.5*markersize/ax.figure.dpi # Adjust this value as needed to keep arrows from overlapping beads, esp if you change DPI
@@ -677,7 +701,10 @@ class Braid:
         ax.set_ylim(-0.5, max(y for x,y in layout.values())+0.5)
         plt.axis('off')
         plt.tight_layout()
-        plt.show()
+        if filename:
+            plt.savefig(filename)
+        else:
+            plt.show()
 
 def main():
     """ Main function so it doesn't make a bunch of globals. """
@@ -717,7 +744,7 @@ def main():
         help="Damping factor for difficulty adjustment",
         default=TARGET_DAMPING)
     parser.add_argument("-A", "--algorithm",
-        help="Select the Difficulty Alorithm ('exp', 'parents', 'simple', 'simple_asym', "
+        help="Select the Difficulty Algorithm ('fixed', 'exp', 'parents', 'simple', 'simple_asym', "
              "'simple_asym_damped')",
         default="exp")
     parser.add_argument("-l", "--log", action=BooleanOptionalAction,
@@ -734,6 +761,7 @@ def main():
     print(f"# Simulating a global network of {args.nodes} nodes having {args.peers} peers each,")
     print(f"# targeting N_B/N_C = {TARGET_NB}/{TARGET_NC} and damping factor {TARGET_DAMPING},")
     print(f"# with hashrate {NETWORK_HASHRATE/args.nodes/NETWORK_SIZE/1000:5.4} kh/s per node, and target 2**{args.target}-1")
+    print(f"# Using {args.algorithm} difficulty targeting algorithm")
     if args.mine:
         start = time.process_time()
         N_HASHES = 10000 # number of hashes to compute for benchmarking purposes
@@ -747,29 +775,11 @@ def main():
         print(f"# Expected time to completion: {bead_time*OVERHEAD_FUDGE*int(args.beads):{8}.{4}}s "
               f" to mine {args.beads} beads")
     else:
-        print("# using the geometric distribution to simulate mining.")
+        print("# Using the geometric distribution to simulate mining.")
 
     target = 2**int(args.target)-1
-    n = Network(int(args.nodes), NETWORK_HASHRATE, target=target, npeers=int(args.peers),
+    n = Network(int(args.nodes), NETWORK_HASHRATE, target=target, target_algo=args.algorithm, npeers=int(args.peers),
                 log=args.log)
-    if args.algorithm == "exp":
-        for node in n.nodes:
-            node.calc_target = node.calc_target_exponential_damping
-    if args.algorithm == "lambert":
-        for node in n.nodes:
-            node.calc_target = node.calc_target_lambertw_damping
-    elif args.algorithm == "parents":
-        for node in n.nodes:
-            node.calc_target = node.calc_target_parents
-    elif args.algorithm == "simple":
-        for node in n.nodes:
-            node.calc_target = node.calc_target_simple
-    elif args.algorithm == "simple_asym":
-        for node in n.nodes:
-            node.calc_target = node.calc_target_simple_asym
-    elif args.algorithm == "simple_asym_damped":
-        for node in n.nodes:
-            node.calc_target = node.calc_target_simple_asym_damped
     if args.test_mining:
         n.simulate(nbeads=int(args.beads), mine=True)
         bmine   = copy(n.nodes[0].braid)
