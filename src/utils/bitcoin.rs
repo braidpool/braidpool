@@ -25,6 +25,13 @@ impl From<Hash> for TransactionHash {
     }
 }
 
+impl TransactionHash {
+    pub fn generate_hash_for_transaction(transaction: &SerializedTransaction) -> Self {
+        // TODO: Implement the Hash Functions
+        TransactionHash(Hash([0_u8; 32]))
+    }
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Transitive)]
 #[transitive(from(String, Hash))]
 #[transitive(from(&str, Hash))]
@@ -92,3 +99,4 @@ impl From<MiningBlockHeader> for BlockHeader {
         }
     }
 }
+

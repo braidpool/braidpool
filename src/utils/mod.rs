@@ -4,10 +4,6 @@ pub mod bitcoin;
 use num_bigint::BigUint;
 use hex;
 
-// Custom Imports
-use self::bitcoin::{BlockHash, MerkleHash};
-
-// TODO: Implement the various traits for implicit conversions!
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Hash(pub [u8; 32]);
 
