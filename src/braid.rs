@@ -1,8 +1,9 @@
 // Standard Imports
-use std::collections::{HashSet, HashMap};
+use std::collections::HashSet;
+
 // Custom Imports
-use crate::beads::{DagBead, BeadHash};
-use crate::utils::Time;
+use crate::utils::BeadHash;
+use crate::beads::DagBead;
 
 pub struct Cohort(HashSet<BeadHash>);
 
@@ -43,7 +44,7 @@ impl DagBraid {
         for cohort in self.cohorts.iter().rev() {
             temporary_cohort.clear();
             for tip in tips.iter() {
-                if cohort.0.contains(&tip) {
+                if cohort.0.contains(tip) {
                     temporary_cohort.insert(tip.clone());
                 }
             }
