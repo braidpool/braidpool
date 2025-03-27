@@ -182,8 +182,9 @@ class Network:
             n.tick(mine=mine, dt=dt)
 
     def simulate(self, nbeads=20, mine=False):
-        """ Simulate the network until we have <nbeads> beads """
-        while len(self.nodes[0].braid.beads) < nbeads:
+        """ Simulate the network until we have added <nbeads> beads """
+        initial_beads = len(self.nodes[0].braid.beads)
+        while len(self.nodes[0].braid.beads) < initial_beads + nbeads:
             self.tick(mine=mine)
 
     def broadcast(self, node, bead, delay):
@@ -321,7 +322,7 @@ class Node:
                 if self.log:
                     print(f"== Solution {print_hash(self.working_bead.hash)} "
                           f"target = {self.working_bead.target>>(256-32):08x}... for cohort size "
-                          f"{len(self.braid.cohorts[-1]):3} on node {self.nodeid:2} and "
+                          f"{len(self.braid.cohorts[-1]):3} on node {self.nodeid:2} "
                           f"at time {self.network.t:12.6f} Nb/Nc={Nb/TARGET_NC:12.6}") # moving average
                     if DEBUG:
                         print(f"    Having parents: {print_hash([p.hash for p in self.working_bead.parents])}")
@@ -352,7 +353,9 @@ class Node:
         while True:
             oldincoming = copy(self.incoming)
             for bead in oldincoming:
-                if self.braid.extend(bead):
+                if self.braid.extend(bead, compute_cohorts=False if
+                                     self.calc_target == self.calc_target_fixed
+                                     else True):
                     self.incoming.remove(bead)
                 elif DEBUG:
                     print(f"Node {self.nodeid} unable to add {print_hash(bead.hash)} to braid, missing parents")
@@ -604,40 +607,49 @@ class Braid:
     def __contains__(self, bead):
         return bead.hash in self.beads
 
-    def extend(self, bead):
+    def parents(self):
+        """ Return a dict of {bead: {parents}} for this braid, for use with the
+            functions in braid.py.
+        """
+        return {b: set(p for p in b.parents) for b in self.beads.values()}
+
+    def extend(self, bead, compute_cohorts=True):
         """ Add a bead to the end of this braid. Returns True if the bead
             successfully extended this braid, and False otherwise.
 
             <bead> is a data structure from another node, and objects referenced by it in e.g.
             parents won't necessarily be the same object as this node has, so we have to check
             everything by hash and use our own objects.
+
+            Arguments:
+                bead:               A Bead object
+                adjust_difficulty:  If True, compute cohorts for the difficulty adjustment algorithm
+            Returns:
+                True if the bead was successfully added, False otherwise
         """
         if (not bead.parents                                           # No parents: bad block
                 or not all(p.hash in self.beads for p in bead.parents) # Don't have all parents
                 or bead.hash in self.beads):                           # Already seen this bead
             return False
-        self.beads[bead.hash]     = bead
-        for p in bead.parents:
-            self.times[bead.hash] = bead.t
-            if p in self.tips:
-                for t in copy(self.tips):
-                    if p == t:
-                        self.tips.remove(t)
+        self.beads[bead.hash] = bead
+        self.times[bead.hash] = bead.t
+        self.tips            -= bead.parents
         self.tips.add(bead)
 
         # Find earliest parent of <bead> in cohorts and nuke all cohorts after that.
-        found_parents = set()
-        dangling      = set([bead])
-        for c in reversed(self.cohorts): # <bead> is never going to be in my cohorts
-            found_parents |= set(p for p in bead.parents) & c
-            dangling |= self.cohorts.pop()
-            if len(found_parents) == len(bead.parents):
-                break
-        # Construct a sub-braid from dangling and compute any new cohorts
-        sub_braid = {d: set(p for p in d.parents if p in dangling) for d in dangling}
-        self.cohorts.extend(braid.cohorts(sub_braid))
-        if DEBUG:
-            print(f"    Last cohort: ", print_hash([b.hash for b in self.cohorts[-1]]))
+        if compute_cohorts:
+            found_parents = set()
+            dangling      = set([bead])
+            for c in reversed(self.cohorts): # <bead> is never going to be in my cohorts
+                found_parents |= set(p for p in bead.parents) & c
+                dangling |= self.cohorts.pop()
+                if len(found_parents) == len(bead.parents):
+                    break
+            # Construct a sub-braid from dangling and compute any new cohorts
+            sub_braid = {d: set(p for p in d.parents if p in dangling) for d in dangling}
+            self.cohorts.extend(braid.cohorts(sub_braid))
+            if DEBUG:
+                print(f"    Last cohort: ", print_hash([b.hash for b in self.cohorts[-1]]))
 
         return True
 
