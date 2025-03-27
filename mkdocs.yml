@@ -1,4 +1,4 @@
-site_name: Braidpool<br/>Documentation
+site_name: Braidpool Documentation
 
 markdown_extensions:
   - pymdownx.arithmatex:
