@@ -3,7 +3,7 @@
 Herein we describe the Braid consensus mechanism, which is a generalization of
 Nakamoto consensus to a Directed Acyclic Graph (DAG).
 
-If the math in this document isn't rendering correctly, ensure that you have the 
+If the math in this document isn't rendering correctly, ensure that you have the
 Latin Modern fonts installed on your system.
 
 ## Braid Structure
@@ -41,10 +41,17 @@ An example of a "thick" braid is:
 
 </a>
 
-In this image we can see an example of a higher order graph cut between cohort
-(1,2,3) and cohort (4,5,6,7,8). The tips in this case are the beads (40,41),
-both of which should be named as parents of a miner starting from this graph
-state.
+In this image we can see examples of several higher order graph cut, for example
+between cohort (17,18,19,20,21) and cohort (22,23,24,25).  The tips in this case
+are the beads (38,39), both of which should be named as parents of a miner
+starting from this graph state.
+
+The highest work path is indicated by the thick arrows running through the
+middle of the graph, and beads away from the highest work path have decreasing
+work as you move away from the path.  The work of each bead is the *descendant*
+work, with ancestor work being used as a tie-breaker. By using descendant work,
+we incentivize miners to broadcast their beads quickly so that they collect
+descendants.
 
 Graph cuts can be found with high speed using a depth first search and the
 [Lowest Common Ancestor](https://en.wikipedia.org/wiki/Lowest_common_ancestor)
