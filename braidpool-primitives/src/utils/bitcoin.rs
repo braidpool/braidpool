@@ -3,7 +3,7 @@ use std::cell::Cell;
 
 // Primitives Imports
 use bitcoin::{BlockHash, BlockHeader, BlockTime, BlockVersion, CompactTarget, TxMerkleNode, Txid};
-use bitcoin::hashes::{Sha256d};
+use bitcoin::hashes::Sha256d;
 
 // Internal Type Definitions for Clarity
 type MerkleRoot = TxMerkleNode;
