@@ -12,6 +12,9 @@ use crate::beads::{Bead, DagBead};
 
 pub struct Cohort(HashSet<BeadHash>);
 
+// Type Aliases
+type NumberOfBeadsUnorphaned = usize;
+
 // Placeholder struct (Will be replaced with appropriate implementation later!)
 struct Database();
 impl Database {
@@ -140,8 +143,24 @@ impl DagBraid {
         false
     }
 
+    fn update_orphan_bead_set(&mut self) -> NumberOfBeadsUnorphaned {
+        let old_orphan_set_length = self.orphan_beads.len();
+        let old_orphan_set = std::mem::replace(&mut self.orphan_beads, Vec::new());
+        for orphan_bead in old_orphan_set {
+            if self.is_bead_orphaned(&orphan_bead) {
+                self.orphan_beads.push(orphan_bead)
+            }
+        };
+
+        return old_orphan_set_length - self.orphan_beads.len();
+    }
+
     pub fn add_bead(&mut self, bead: DagBead) -> AddBeadStatus {
         if bead.is_valid_bead() == false {
+            return AddBeadStatus::InvalidBead;
+        }
+
+        if bead.bead_data.lesser_difficulty_target != self.calculate_valid_difficulty_for_bead(&bead) {
             return AddBeadStatus::InvalidBead;
         }
 
@@ -159,9 +178,15 @@ impl DagBraid {
         self.tips.insert(bead.bead_data.bead_hash);
 
         self.cohorts = self.calculate_cohorts();
+        self.update_orphan_bead_set();
 
         AddBeadStatus::BeadAdded
-    }    
+    }
+
+    fn calculate_valid_difficulty_for_bead(&self, bead: &DagBead) -> CompactTarget {
+        // TODO: Implement this function!
+        CompactTarget::from_hex("0x1d00ffff").unwrap()
+    }
 }
 
 pub enum AddBeadStatus {
