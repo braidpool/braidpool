@@ -37,6 +37,42 @@ cargo run -- --bind=localhost:8989 --bitcoin=0.0.0.0 --rpcport=8332 --rpcuser=xx
 # run other nodes pointing to the seeding node and specify their own port as 9899
 cargo run -- --bind=localhost:9899 --addnode=localhost:8989 --bitcoin=0.0.0.0 --rpcport=8332 --rpcuser=xxxx --rpcpass=yyyy --zmqhashblockport=28332
 ```
+# Running the CPUnet testing node using nix-script
+
+Setting up `nix` locally for utilizing it from the specific releases check - [Nix setup](https://github.com/DeterminateSystems/nix-installer/releases) 
+```
+curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | \
+  sh -s -- install
+```
+
+The `.nix` script present in the root directory `/braidpool/cpunet_node.nix` contains the CPUnet patched 
+bitcoin-node , can be set up locally as testnet for Braidpool.
+
+```
+# Path to the parent directory
+cd /braidpool
+
+# Run the nix-script
+nix-build cpunet_node.nix
+
+# Path to the result directory created after successful build 
+cd result
+
+# Running the CPUnet node
+./bin/bitcoind -cpunet -zmqpubsequence=tcp://127.0.0.1:28338
+
+# Creating/loading a corresponding wallet 
+./bin/bitcoin-cli -cpunet createwallet cpunet
+
+# Load an  wallet created previously
+./bin/bitcoin-cli -cpunet loadwallet cpunet
+
+# Generate blocks     
+./contrib/cpunet/miner --cli=./bin/bitcoin-cli --ongoing --address `./bin/bitcoin-cli -cpunet getnewaddress` --grind-cmd="./bin/bitcoin-util -cpunet -ntasks=1 grind"
+
+
+```
+
 
 # Documentation
 
