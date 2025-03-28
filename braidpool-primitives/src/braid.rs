@@ -1,16 +1,71 @@
 // Standard Imports
 use std::collections::HashSet;
 
+use bitcoin::absolute::Time;
+use bitcoin::pow::CompactTargetExt;
+use bitcoin::{BlockHash, BlockHeader, BlockTime, BlockVersion, CompactTarget, Transaction, TransactionVersion, TxMerkleNode, Txid};
+
+use crate::utils::bitcoin::MerklePathProof;
 // Custom Imports
 use crate::utils::BeadHash;
-use crate::beads::DagBead;
+use crate::beads::{Bead, DagBead};
 
 pub struct Cohort(HashSet<BeadHash>);
+
+// Placeholder struct (Will be replaced with appropriate implementation later!)
+struct Database();
+impl Database {
+    pub fn fetch_bead_from_memory(&self, bead_hash: BeadHash) -> DagBead {
+        // Dummy Implementation
+        DagBead {
+            bead_data: Bead {
+                block_header: BlockHeader {
+                    version: BlockVersion::ONE,
+                    prev_blockhash: BlockHash::from_byte_array([0; 32]),
+                    merkle_root: TxMerkleNode::from_byte_array([0; 32]),
+                    time: BlockTime::from_u32(Time::MIN.to_consensus_u32()),
+                    bits: CompactTarget::from_hex("0x1d00ffff").unwrap(),
+                    nonce: 0
+                },
+                bead_hash: BeadHash::from_byte_array([0; 32]),
+                coinbase_transaction: (Transaction {
+                    version: TransactionVersion::ONE,
+                    lock_time: bitcoin::absolute::LockTime::from_height(0).unwrap(),
+                    input: Vec::new(),
+                    output: Vec::new()
+                }, MerklePathProof {
+                    transaction_hash: Txid::from_byte_array([0; 32]),
+                    merkle_path: Vec::new()
+                }),
+                payout_update_transaction: (Transaction {
+                    version: TransactionVersion::ONE,
+                    lock_time: bitcoin::absolute::LockTime::from_height(0).unwrap(),
+                    input: Vec::new(),
+                    output: Vec::new()
+                }, MerklePathProof {
+                    transaction_hash: Txid::from_byte_array([0; 32]),
+                    merkle_path: Vec::new()
+                }),
+
+                lesser_difficulty_target: CompactTarget::from_hex("0x1d00ffff").unwrap(),
+                parents: HashSet::new(),
+                transactions: Vec::new()
+            }, 
+            observed_time_at_node: Time::MIN
+        }
+    }
+}
 
 pub struct DagBraid {
     beads: HashSet<BeadHash>,
     tips: HashSet<BeadHash>,
-    cohorts: Vec<Cohort>
+    cohorts: Vec<Cohort>,
+
+    orphan_beads: Vec<DagBead>,
+
+    // Database related functions!
+    loaded_beads_in_memory: Vec<DagBead>,
+    database_reference: Database
 }
 
 impl DagBraid {
@@ -18,7 +73,10 @@ impl DagBraid {
         DagBraid {
             beads: genesis_beads.clone(),
             tips: genesis_beads.clone(),
-            cohorts: vec![Cohort(genesis_beads)]
+            cohorts: vec![Cohort(genesis_beads)],
+            orphan_beads: Vec::new(),
+            loaded_beads_in_memory: Vec::new(),
+            database_reference: Database()
         }
     }
 
@@ -27,7 +85,10 @@ impl DagBraid {
         DagBraid {
             beads: previous_dag_braid.tips.clone(),
             tips: previous_dag_braid.tips,
-            cohorts
+            cohorts,
+            orphan_beads: Vec::new(),
+            loaded_beads_in_memory: Vec::new(),
+            database_reference: Database()
         }
     }
 
@@ -68,6 +129,17 @@ impl DagBraid {
         }
     }
 
+    #[inline]
+    fn is_bead_orphaned(&self, bead: &DagBead) -> bool {
+        for (parent, _) in &bead.bead_data.parents {
+            if self.beads.contains(parent) == false {
+                return true
+            }
+        };
+
+        false
+    }
+
     pub fn add_bead(&mut self, bead: DagBead) -> AddBeadStatus {
         if bead.is_valid_bead() == false {
             return AddBeadStatus::InvalidBead;
@@ -75,6 +147,11 @@ impl DagBraid {
 
         if self.contains_bead(bead.bead_data.bead_hash) {
             return AddBeadStatus::DagAlreadyContainsBead
+        }
+
+        if self.is_bead_orphaned(&bead) {
+            self.orphan_beads.push(bead);
+            return AddBeadStatus::ParentsNotYetReceived
         }
 
         self.beads.insert(bead.bead_data.bead_hash);
@@ -90,5 +167,6 @@ impl DagBraid {
 pub enum AddBeadStatus {
     DagAlreadyContainsBead,
     InvalidBead,
-    BeadAdded
+    BeadAdded,
+    ParentsNotYetReceived
 }
