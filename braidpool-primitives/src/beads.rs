@@ -3,7 +3,6 @@ use std::collections::HashSet;
 
 // Bitcoin primitives
 use bitcoin::absolute::Time;
-use bitcoin::hashes::Sha256d;
 use bitcoin::transaction::TransactionExt;
 use bitcoin::{BlockHeader, CompactTarget, Transaction};
 
