@@ -3,6 +3,8 @@ use std::collections::HashSet;
 
 // Bitcoin primitives
 use bitcoin::absolute::Time;
+use bitcoin::hashes::Sha256d;
+use bitcoin::transaction::TransactionExt;
 use bitcoin::{BlockHeader, CompactTarget, Transaction};
 
 // Custom Imports
@@ -38,8 +40,26 @@ impl DagBead {
 }
 
 impl Bead {
+
+    #[inline]
+    fn is_transaction_included_in_block(&self, transaction_with_proof: &TransactionWithMerklePath)
+        -> bool 
+    {
+        transaction_with_proof.1.calculate_corresponding_merkle_root() == self.block_header.merkle_root
+    }
+
     pub fn is_valid_bead(&self) -> bool {
-        // TODO: Implement Checks
-        true
+        // Check whether the transactions are included in the block!
+        if self.is_transaction_included_in_block(&self.coinbase_transaction) == false {
+            return false
+        } else if self.is_transaction_included_in_block(&self.payout_update_transaction) == false {
+            return false
+        } else if self.coinbase_transaction.0.is_coinbase() == false {
+            return false
+        } else if self.bead_hash != self.block_header.block_hash() {
+            return false
+        } else {
+            true
+        }
     }
 }
