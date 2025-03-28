@@ -9,8 +9,8 @@ use bitcoin::hashes::Sha256d;
 type MerkleRoot = TxMerkleNode;
 
 pub struct MerklePathProof {
-    transaction_hash: Txid,
-    merkle_path: Vec<TxMerkleNode>
+    pub transaction_hash: Txid,
+    pub merkle_path: Vec<TxMerkleNode>
 }
 
 impl MerklePathProof {

@@ -4,7 +4,7 @@ use std::collections::HashSet;
 // Bitcoin primitives
 use bitcoin::absolute::Time;
 use bitcoin::transaction::TransactionExt;
-use bitcoin::{BlockHeader, CompactTarget, Transaction};
+use bitcoin::{ BlockHeader, CompactTarget, Transaction };
 
 // Custom Imports
 use crate::utils::bitcoin::MerklePathProof;
