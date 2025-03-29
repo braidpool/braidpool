@@ -51,13 +51,13 @@ impl Bead {
     pub fn is_valid_bead(&self) -> bool {
         // Check whether the transactions are included in the block!
         if self.is_transaction_included_in_block(&self.coinbase_transaction) == false {
-            return false
+            false
         } else if self.is_transaction_included_in_block(&self.payout_update_transaction) == false {
-            return false
+            false
         } else if self.coinbase_transaction.0.is_coinbase() == false {
-            return false
+            false
         } else if self.bead_hash != self.block_header.block_hash() {
-            return false
+            false
         } else {
             true
         }
