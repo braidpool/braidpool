@@ -14,12 +14,7 @@ use crate::utils::bitcoin::MerklePathProof;
 
 type TransactionWithMerklePath = (Transaction, MerklePathProof);
 /// Refers to the final immutable beads that are added
-/// into the DagBraid data structure.
-pub struct DagBead {
-    pub bead_data: Bead,
-    pub observed_time_at_node: Time,
-}
-
+/// into the Braid data structure.
 pub struct Bead {
     pub block_header: BlockHeader,
     pub bead_hash: BeadHash,
@@ -30,12 +25,8 @@ pub struct Bead {
     pub lesser_difficulty_target: CompactTarget,
     pub parents: HashSet<(BeadHash, Time)>,
     pub transactions: Vec<Transaction>,
-}
 
-impl DagBead {
-    pub fn is_valid_bead(&self) -> bool {
-        self.bead_data.is_valid_bead()
-    }
+    pub observed_time_at_node: Time,
 }
 
 impl Bead {
