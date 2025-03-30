@@ -9,6 +9,7 @@
 """
 
 from argparse import ArgumentParser, BooleanOptionalAction
+from collections import OrderedDict
 from copy import copy
 from math import pi, sqrt, sin, cos, acos, log, ceil
 from fractions import Fraction
@@ -34,6 +35,7 @@ NETWORK_HASHRATE = 800000    # Single core hashrate in hashes/s (will be benchma
 OVERHEAD_FUDGE   = 1.95      # Fudge factor for processing overhead compared to pure sha256d mining
 EARTH_RADIUS     = 6371000   # Mean radius of earth in meters
 SPEED_OF_LIGHT   = 299792458 # speed of light in m/s
+MAX_CACHE        = 10000     # Maximum number of cohorts to cache
 DEBUG            = False
 
 # Good integer choices that closely approximate (W(1/2)+1)/W(1/2) = 2.421529936
@@ -92,8 +94,8 @@ def print_hash(h):
     Prints a string to the console with the color specified by the hash for easy visual
     identification.
     """
-    if type(h) == int:
-        hex_string = f"{h:064x}"
+    if type(h) == int or hasattr(h, 'hash'):
+        hex_string = f"{h:064x}" if type(h) == int else f"{h.hash:064x}"
         color = re.search(r'0*.([^0].{5})', hex_string).group(1)
         # Convert hex to RGB
         r, g, b = tuple(int(color[i:i+2], 16) for i in (0, 2, 4))
@@ -101,7 +103,7 @@ def print_hash(h):
         color_code = f"\033[38;2;{r};{g};{b}m"
         reset_code = "\033[0m"  # Reset to default color
         # Print with color
-        return f"{color_code}{h>>(256-32):08x}{reset_code}"
+        return f"{color_code}{hex_string[:8]}{reset_code}"
     elif isinstance(h, dict):
         retval = "{"
         for k,v in h.items():
@@ -112,11 +114,18 @@ def print_hash(h):
         return retval
     elif isinstance(h, Iterable):
         retval = "["
+        if isinstance(h, set):
+            retval = "{"
+        nprinted = 0
         for i in h:
+            nprinted += 1
             retval += print_hash(i)
-            if i != h[-1]:
+            if nprinted != len(h):
                 retval += ", "
-        retval += "]"
+        if isinstance(h, set):
+            retval += "}"
+        else:
+            retval += "]"
         return retval
     else:
         raise Exception("Unknown type passed to print_hash: ", type(h))
@@ -138,8 +147,13 @@ class Network:
         self.genesis_hash        = uint256(sha256d(0))
         self.genesis_bead        = Bead(self.genesis_hash, set(), self, -1)
         # FIXME asymmetrically divide the hashrate among nodes
+        self.cohort_cache        = OrderedDict() # Keep a global cohort cache so nodes
+                                                 # don't have to repeat cohorts calculations.
+                                                 # This is also passed as the ancestor cache to cohorts()
+                                                 # (they use different keys for cohorts and ancestors)
         self.nodes               = [Node(self.genesis_bead, self, nodeid, hashrate/nnodes/NETWORK_SIZE,
-                                         initial_target=target, log=log) for nodeid in
+                                         initial_target=target, log=log,
+                                         cohort_cache=self.cohort_cache) for nodeid in
                                     range(nnodes)]
         # FIXME initial target should be calcluated to produce a bead once every <NETWORK_SIZE>?
         latencies                = None
@@ -211,12 +225,15 @@ class Network:
 
 class Node:
     """ Abstraction for a node. """
-    def __init__(self, genesis_bead, network, nodeid, hashrate, initial_target=None, log=False):
+    def __init__(self, genesis_bead, network, nodeid, hashrate,
+                 initial_target=None, cohort_cache=None, log=False):
         self.genesis_bead = genesis_bead
         self.network      = network
         self.peers        = []
         self.latencies    = []
         self.nodeid       = nodeid
+        self.cohort_cache = cohort_cache # Store the cohort cache on the network
+                                         # object and pass it by reference to Braid.extend()
         # A salt for this node, so all nodes don't produce the same hashes
         self.nodesalt     = uint256(sha256d(random.randint(0,MAX_HASH)))
         self.hashrate     = hashrate
@@ -295,6 +312,7 @@ class Node:
             if not self.incoming and self.braid.tips == self.working_bead.parents and self.tremaining > 0:
                 return
         oldtips = copy(self.braid.tips)
+        added_bead = None
         if oldtips != self.working_bead.parents:
             self.working_bead = Bead(None, oldtips, self.network, self.nodeid)
         if mine:
@@ -304,14 +322,8 @@ class Node:
                 self.nonce += 1
                 if PoW < self.target:
                     Nb = sum(map(len, self.braid.cohorts[-TARGET_NC:]))
-                    if self.log:
-                        print(f"== Solution bead {print_hash(PoW)} "
-                              f"target = {self.working_bead.target>>(256-32):08x}... for cohort size "
-                              f"{len(self.braid.cohorts[-1]):2} on node {self.nodeid:2} "
-                              f"at time {self.network.t:12.6f} Nb/Nc={Nb/TARGET_NC:6.4}") # moving average
-                        if DEBUG:
-                            print(f"    Having parents: {print_hash([p.hash for p in self.working_bead.parents])}")
                     self.working_bead.add_PoW(PoW)
+                    added_bead = copy(self.working_bead)
                     self.receive(self.working_bead)     # Send it to myself (will rebroadcast to peers)
                     break
         else :
@@ -319,15 +331,16 @@ class Node:
                 Nb = sum(map(len, self.braid.cohorts[-TARGET_NC:]))
                 self.nonce += 1
                 self.working_bead.add_PoW((uint256(sha256d(self.nodesalt+self.nonce))*self.target)//MAX_HASH)
-                if self.log:
-                    print(f"== Solution {print_hash(self.working_bead.hash)} "
-                          f"target = {self.working_bead.target>>(256-32):08x}... for cohort size "
-                          f"{len(self.braid.cohorts[-1]):3} on node {self.nodeid:2} "
-                          f"at time {self.network.t:12.6f} Nb/Nc={Nb/TARGET_NC:12.6}") # moving average
-                    if DEBUG:
-                        print(f"    Having parents: {print_hash([p.hash for p in self.working_bead.parents])}")
-                self.receive(self.working_bead)     # Send it to myself (will rebroadcast to peers)
+                added_bead = copy(self.working_bead)
                 self.tremaining = self.time_to_next_bead()
+                self.receive(self.working_bead)
+        if self.log and added_bead:
+            print(f"== Solution {print_hash(added_bead.hash)} "
+                  f"target = {added_bead.target>>(256-32):08x}... for cohort size "
+                  f"{len(self.braid.cohorts[-2]):3} on node {self.nodeid:2} "
+                  f"at time {self.network.t:12.6f} Nb/Nc={Nb/TARGET_NC:12.6}") # moving average
+            if DEBUG:
+                print(f"    Having parents: {print_hash([p.hash for p in self.working_bead.parents])}")
         self.process_incoming()
         if self.braid.tips != oldtips and not mine: # reset mining if we have new tips
             self.tremaining = self.time_to_next_bead()
@@ -353,8 +366,8 @@ class Node:
         while True:
             oldincoming = copy(self.incoming)
             for bead in oldincoming:
-                if self.braid.extend(bead, compute_cohorts=False if
-                                     self.calc_target == self.calc_target_fixed
+                if self.braid.extend(bead, cohort_cache=self.cohort_cache,
+                                     compute_cohorts=False if self.calc_target == self.calc_target_fixed
                                      else True):
                     self.incoming.remove(bead)
                 elif DEBUG:
@@ -613,7 +626,7 @@ class Braid:
         """
         return {b: set(p for p in b.parents) for b in self.beads.values()}
 
-    def extend(self, bead, compute_cohorts=True):
+    def extend(self, bead, cohort_cache=None, compute_cohorts=True):
         """ Add a bead to the end of this braid. Returns True if the bead
             successfully extended this braid, and False otherwise.
 
@@ -623,7 +636,7 @@ class Braid:
 
             Arguments:
                 bead:               A Bead object
-                adjust_difficulty:  If True, compute cohorts for the difficulty adjustment algorithm
+                compute_cohorts:    If True, compute cohorts for the difficulty adjustment algorithm
             Returns:
                 True if the bead was successfully added, False otherwise
         """
@@ -645,11 +658,27 @@ class Braid:
                 dangling |= self.cohorts.pop()
                 if len(found_parents) == len(bead.parents):
                     break
-            # Construct a sub-braid from dangling and compute any new cohorts
-            sub_braid = {d: set(p for p in d.parents if p in dangling) for d in dangling}
-            self.cohorts.extend(braid.cohorts(sub_braid))
-            if DEBUG:
-                print(f"    Last cohort: ", print_hash([b.hash for b in self.cohorts[-1]]))
+            frozen_dangling = frozenset(dangling)
+            if cohort_cache is not None and frozen_dangling in cohort_cache:
+                if DEBUG:
+                    print(f"    Using cached cohorts for dangling set {print_hash(frozen_dangling)}")
+                self.cohorts.extend(cohort_cache[frozen_dangling])
+            else:
+                # Construct a sub-braid from dangling and compute any new cohorts
+                sub_braid = {d: set(p for p in d.parents if p in dangling) for d in dangling}
+                # pass cohort_cache to cohorts() which will use it as an ancestor cache
+                new_cohorts = list(braid.cohorts(sub_braid,
+                                                 ancestor_cache=cohort_cache))
+                if cohort_cache is not None:
+                    cohort_cache[frozen_dangling] = new_cohorts
+                    # Purge old cohorts and ancestors from the cache
+                    if len(cohort_cache) > MAX_CACHE:
+                        for _ in range(len(cohort_cache)-MAX_CACHE):
+                            cohort_cache.popitem(last=False)
+
+                self.cohorts.extend(new_cohorts)
+                if DEBUG:
+                    print(f"    Computed new cohorts: ", print_hash(new_cohorts))
 
         return True
 
