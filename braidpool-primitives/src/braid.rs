@@ -151,6 +151,7 @@ impl Braid {
     }
 
     fn update_orphan_bead_set(&mut self) -> NumberOfBeadsUnorphaned {
+        
         let old_orphan_set_length = self.orphan_beads.len();
         let old_orphan_set = std::mem::replace(&mut self.orphan_beads, Vec::new());
         for orphan_bead in old_orphan_set {
