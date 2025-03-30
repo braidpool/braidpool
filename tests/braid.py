@@ -94,9 +94,9 @@ def all_ancestors(b, parents, ancestors={}):
     work_stack = [(b, False)]
 
     while work_stack:
-        current, processed = work_stack[-1]
+        current, parents_processed = work_stack[-1]
 
-        if not processed:
+        if not parents_processed:
             work_stack[-1] = (current, True)
 
             for p in parents[current]:  # Add any unprocessed parents to the stack
@@ -111,7 +111,7 @@ def all_ancestors(b, parents, ancestors={}):
 
     return ancestors
 
-def cohorts(parents, children=None, initial_cohort=None):
+def cohorts(parents, children=None, initial_cohort=None, ancestor_cache=None):
     """ Given the seed of the next cohort (which is the set of beads one step older, in the next
         cohort), build an ancestor/descendant set for each visited bead.  A new cohort is
         formed if we encounter a set of beads, stepping in the descendant direction, for which
@@ -131,15 +131,19 @@ def cohorts(parents, children=None, initial_cohort=None):
     head         = copy(cohort)
     tail         = copy(cohort)
     while True :
-        ancestors = {h: set() for h in head} # Don't let head have ancestors to stop iteration
         cohort    = copy(head)               # Initial cohort is the head
         oldcohort = set()
+        ancestors = {h: set() for h in head} # Don't let head have ancestors to stop iteration
+        if ancestor_cache is not None:
+            cache_key = (frozenset(head), frozenset(parents.keys()))
+            if cache_key in ancestor_cache:
+                ancestors = ancestor_cache[cache_key]
 
         while True:                          # DFS search
-            # Calculate new tail
+
             if not head:
                 return                       # StopIteration and return
-            for b in cohort-oldcohort:
+            for b in cohort-oldcohort:       # Calculate new tail
                 tail |= children[b]          # Add the next generation to the tail
             tail |= cohort ^ oldcohort       # Add any beads in oldcohort but not in cohort
             if cohort & dag_tips:            # If there are any tips in cohort, add tips to tail
@@ -150,7 +154,6 @@ def cohorts(parents, children=None, initial_cohort=None):
             oldcohort = copy(cohort)         # Copy so we can tell if new tail has changed anything
                                              # because changing the tail but not cohort may find
                                              # new ancestors
-
             # Calculate ancestors
             for t in tail:                   # Find all ancestors of all beads in the tail
                 if t not in ancestors:
@@ -175,6 +178,8 @@ def cohorts(parents, children=None, initial_cohort=None):
                     tail = set()
                     break                    # Yield cohort+tail
                 cohort.update(tail)
+        if ancestor_cache is not None and cache_key not in ancestor_cache:
+            ancestor_cache[cache_key] = copy(ancestors)
         yield cohort
 
 def cohort_tail(cohort, parents, children=None):
