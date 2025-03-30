@@ -167,9 +167,7 @@ impl Braid {
             return AddBeadStatus::InvalidBead;
         }
 
-        if bead.lesser_difficulty_target
-            != self.calculate_valid_difficulty_for_bead(&bead)
-        {
+        if bead.lesser_difficulty_target != self.calculate_valid_difficulty_for_bead(&bead) {
             return AddBeadStatus::InvalidBead;
         }
 
