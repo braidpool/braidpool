@@ -10,7 +10,7 @@ use bitcoin::{
 
 use crate::utils::bitcoin::MerklePathProof;
 // Custom Imports
-use crate::beads::{Bead, DagBead};
+use crate::beads::Bead;
 use crate::utils::BeadHash;
 
 pub struct Cohort(HashSet<BeadHash>);
@@ -21,68 +21,66 @@ type NumberOfBeadsUnorphaned = usize;
 // Placeholder struct (Will be replaced with appropriate implementation later!)
 struct Database();
 impl Database {
-    pub fn fetch_bead_from_memory(&self, bead_hash: BeadHash) -> DagBead {
+    pub fn fetch_bead_from_memory(&self, bead_hash: BeadHash) -> Bead {
         // Dummy Implementation
-        DagBead {
-            bead_data: Bead {
-                block_header: BlockHeader {
-                    version: BlockVersion::ONE,
-                    prev_blockhash: BlockHash::from_byte_array([0; 32]),
-                    merkle_root: TxMerkleNode::from_byte_array([0; 32]),
-                    time: BlockTime::from_u32(Time::MIN.to_consensus_u32()),
-                    bits: CompactTarget::from_hex("0x1d00ffff").unwrap(),
-                    nonce: 0,
-                },
-                bead_hash: BeadHash::from_byte_array([0; 32]),
-                coinbase_transaction: (
-                    Transaction {
-                        version: TransactionVersion::ONE,
-                        lock_time: bitcoin::absolute::LockTime::from_height(0).unwrap(),
-                        input: Vec::new(),
-                        output: Vec::new(),
-                    },
-                    MerklePathProof {
-                        transaction_hash: Txid::from_byte_array([0; 32]),
-                        merkle_path: Vec::new(),
-                    },
-                ),
-                payout_update_transaction: (
-                    Transaction {
-                        version: TransactionVersion::ONE,
-                        lock_time: bitcoin::absolute::LockTime::from_height(0).unwrap(),
-                        input: Vec::new(),
-                        output: Vec::new(),
-                    },
-                    MerklePathProof {
-                        transaction_hash: Txid::from_byte_array([0; 32]),
-                        merkle_path: Vec::new(),
-                    },
-                ),
-
-                lesser_difficulty_target: CompactTarget::from_hex("0x1d00ffff").unwrap(),
-                parents: HashSet::new(),
-                transactions: Vec::new(),
+        Bead {
+            block_header: BlockHeader {
+                version: BlockVersion::ONE,
+                prev_blockhash: BlockHash::from_byte_array([0; 32]),
+                merkle_root: TxMerkleNode::from_byte_array([0; 32]),
+                time: BlockTime::from_u32(Time::MIN.to_consensus_u32()),
+                bits: CompactTarget::from_hex("0x1d00ffff").unwrap(),
+                nonce: 0,
             },
+            bead_hash: BeadHash::from_byte_array([0; 32]),
+            coinbase_transaction: (
+                Transaction {
+                    version: TransactionVersion::ONE,
+                    lock_time: bitcoin::absolute::LockTime::from_height(0).unwrap(),
+                    input: Vec::new(),
+                    output: Vec::new(),
+                },
+                MerklePathProof {
+                    transaction_hash: Txid::from_byte_array([0; 32]),
+                    merkle_path: Vec::new(),
+                },
+            ),
+            payout_update_transaction: (
+                Transaction {
+                    version: TransactionVersion::ONE,
+                    lock_time: bitcoin::absolute::LockTime::from_height(0).unwrap(),
+                    input: Vec::new(),
+                    output: Vec::new(),
+                },
+                MerklePathProof {
+                    transaction_hash: Txid::from_byte_array([0; 32]),
+                    merkle_path: Vec::new(),
+                },
+            ),
+
+            lesser_difficulty_target: CompactTarget::from_hex("0x1d00ffff").unwrap(),
+            parents: HashSet::new(),
+            transactions: Vec::new(),
             observed_time_at_node: Time::MIN,
         }
     }
 }
 
-pub struct DagBraid {
+pub struct Braid {
     beads: HashSet<BeadHash>,
     tips: HashSet<BeadHash>,
     cohorts: Vec<Cohort>,
 
-    orphan_beads: Vec<DagBead>,
+    orphan_beads: Vec<Bead>,
 
     // Database related functions!
-    loaded_beads_in_memory: Vec<DagBead>,
+    loaded_beads_in_memory: Vec<Bead>,
     database_reference: Database,
 }
 
-impl DagBraid {
+impl Braid {
     pub fn new(genesis_beads: HashSet<BeadHash>) -> Self {
-        DagBraid {
+        Braid {
             beads: genesis_beads.clone(),
             tips: genesis_beads.clone(),
             cohorts: vec![Cohort(genesis_beads)],
@@ -92,9 +90,9 @@ impl DagBraid {
         }
     }
 
-    pub fn generate_from_previous_dag(previous_dag_braid: DagBraid) -> Self {
+    pub fn generate_from_previous_dag(previous_dag_braid: Braid) -> Self {
         let cohorts = previous_dag_braid.generate_tip_cohorts();
-        DagBraid {
+        Braid {
             beads: previous_dag_braid.tips.clone(),
             tips: previous_dag_braid.tips,
             cohorts,
@@ -135,15 +133,15 @@ impl DagBraid {
     }
 
     #[inline]
-    fn remove_parent_beads_from_tips(&mut self, bead: &DagBead) {
-        for (parent_hash, _) in &bead.bead_data.parents {
+    fn remove_parent_beads_from_tips(&mut self, bead: &Bead) {
+        for (parent_hash, _) in &bead.parents {
             self.tips.remove(parent_hash);
         }
     }
 
     #[inline]
-    fn is_bead_orphaned(&self, bead: &DagBead) -> bool {
-        for (parent, _) in &bead.bead_data.parents {
+    fn is_bead_orphaned(&self, bead: &Bead) -> bool {
+        for (parent, _) in &bead.parents {
             if self.beads.contains(parent) == false {
                 return true;
             }
@@ -164,18 +162,18 @@ impl DagBraid {
         return old_orphan_set_length - self.orphan_beads.len();
     }
 
-    pub fn add_bead(&mut self, bead: DagBead) -> AddBeadStatus {
+    pub fn add_bead(&mut self, bead: Bead) -> AddBeadStatus {
         if bead.is_valid_bead() == false {
             return AddBeadStatus::InvalidBead;
         }
 
-        if bead.bead_data.lesser_difficulty_target
+        if bead.lesser_difficulty_target
             != self.calculate_valid_difficulty_for_bead(&bead)
         {
             return AddBeadStatus::InvalidBead;
         }
 
-        if self.contains_bead(bead.bead_data.bead_hash) {
+        if self.contains_bead(bead.bead_hash) {
             return AddBeadStatus::DagAlreadyContainsBead;
         }
 
@@ -184,9 +182,9 @@ impl DagBraid {
             return AddBeadStatus::ParentsNotYetReceived;
         }
 
-        self.beads.insert(bead.bead_data.bead_hash);
+        self.beads.insert(bead.bead_hash);
         self.remove_parent_beads_from_tips(&bead);
-        self.tips.insert(bead.bead_data.bead_hash);
+        self.tips.insert(bead.bead_hash);
 
         self.cohorts = self.calculate_cohorts();
         self.update_orphan_bead_set();
@@ -194,7 +192,7 @@ impl DagBraid {
         AddBeadStatus::BeadAdded
     }
 
-    fn calculate_valid_difficulty_for_bead(&self, bead: &DagBead) -> CompactTarget {
+    fn calculate_valid_difficulty_for_bead(&self, bead: &Bead) -> CompactTarget {
         // TODO: Implement this function!
         CompactTarget::from_hex("0x1d00ffff").unwrap()
     }
