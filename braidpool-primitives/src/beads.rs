@@ -4,20 +4,20 @@ use std::collections::HashSet;
 // Bitcoin primitives
 use bitcoin::absolute::Time;
 use bitcoin::transaction::TransactionExt;
-use bitcoin::{ BlockHeader, CompactTarget, Transaction };
+use bitcoin::{BlockHeader, CompactTarget, Transaction};
 
 // Custom Imports
-use crate::utils::bitcoin::MerklePathProof;
 use crate::utils::BeadHash;
+use crate::utils::bitcoin::MerklePathProof;
 
 // TODO: Add in the uncommitted metadata into the Bead Structs!
 
 type TransactionWithMerklePath = (Transaction, MerklePathProof);
 /// Refers to the final immutable beads that are added
-/// into the DagBraid data structure. 
+/// into the DagBraid data structure.
 pub struct DagBead {
     pub bead_data: Bead,
-    pub observed_time_at_node: Time
+    pub observed_time_at_node: Time,
 }
 
 pub struct Bead {
@@ -29,7 +29,7 @@ pub struct Bead {
     // Committed Braidpool Metadata,
     pub lesser_difficulty_target: CompactTarget,
     pub parents: HashSet<(BeadHash, Time)>,
-    pub transactions: Vec<Transaction>
+    pub transactions: Vec<Transaction>,
 }
 
 impl DagBead {
@@ -39,12 +39,15 @@ impl DagBead {
 }
 
 impl Bead {
-
     #[inline]
-    fn is_transaction_included_in_block(&self, transaction_with_proof: &TransactionWithMerklePath)
-        -> bool 
-    {
-        transaction_with_proof.1.calculate_corresponding_merkle_root() == self.block_header.merkle_root
+    fn is_transaction_included_in_block(
+        &self,
+        transaction_with_proof: &TransactionWithMerklePath,
+    ) -> bool {
+        transaction_with_proof
+            .1
+            .calculate_corresponding_merkle_root()
+            == self.block_header.merkle_root
     }
 
     pub fn is_valid_bead(&self) -> bool {
