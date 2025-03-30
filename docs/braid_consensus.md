@@ -1,3 +1,7 @@
+# TODO
+1. Analyze asymptotic behavior of `cohorts()`
+2. Analyze standard deviation of `calc_difficulty()`
+
 # Braid Consensus
 
 Herein we describe the Braid consensus mechanism, which is a generalization of
@@ -27,10 +31,10 @@ An example of a "thin" braid is:
 Here time is increasing as we move right.  The "no incest" rule means that for
 example, beads 8 and 9 cannot name beads 0-6 as direct parents. The colors
 correspond to "cohorts" which are sub-graphs separated by graph cuts. A graph
-cut is a line drawn through the graph where *all* beads on the right side of the
-cut have *all* beads on the left side of the cut as ancestors. The braid tip in
-this example is the bead (10), which is expected be named as the sole parent
-by a miner starting from this graph state.
+cut is a line drawn vertically through the graph where *all* beads on the right
+side of the cut have *all* beads on the left side of the cut as ancestors. The
+braid tip in this example is the bead (10), which is expected be named as the
+sole parent by a miner starting from this graph state.
 
 An example of a "thick" braid is:
 
@@ -41,10 +45,10 @@ An example of a "thick" braid is:
 
 </a>
 
-In this image we can see examples of several higher order graph cut, for example
-between cohort (17,18,19,20,21) and cohort (22,23,24,25).  The tips in this case
-are the beads (38,39), both of which should be named as parents of a miner
-starting from this graph state.
+In this image we can see examples of several higher order graph cuts, for
+example between cohort (17,18,19,20,21) and cohort (22,23,24,25).  The tips in
+this case are the beads (38,39), both of which should be named as parents of a
+miner starting from this graph state.
 
 The highest work path is indicated by the thick arrows running through the
 middle of the graph, and beads away from the highest work path have decreasing
@@ -53,9 +57,11 @@ work, with ancestor work being used as a tie-breaker. By using descendant work,
 we incentivize miners to broadcast their beads quickly so that they collect
 descendants.
 
+<!--
 Graph cuts can be found with high speed using a depth first search and the
 [Lowest Common Ancestor](https://en.wikipedia.org/wiki/Lowest_common_ancestor)
 algorithm, which can be computed in linear time.
+-->
 
 ## Braid Mathematics
 
@@ -67,7 +73,7 @@ beads are formed within a time $t$ assuming constant hashrate $\lambda$ and diff
 
 $$\tag{1}
 \begin{align}
-P(t,k) = \frac{(\lambda x t)^k e^{-\lambda x t}}{k!}
+P(t,k) = \frac{(t \lambda x)^k e^{-t \lambda x}}{k!}
 \end{align}
 $$
 
@@ -112,7 +118,7 @@ within a time interval $a$ is given by
 
 $$\tag{4}
 \begin{align}
-P(a,0) = e^{-\lambda x a}.
+P(a,0) = e^{-a \lambda x}.
 \end{align}
 $$
 
@@ -136,14 +142,25 @@ T_C|_{x\to\infty} = \frac{a}{P(a,0)} = a e^{\lambda x a}
 \end{align}
 $$
 
-Taken together, an extremely precise fit for the cohort time is given by the sum
-of these two contributions (Eqs.[3](#3),[6](#6)) which is shown in the green line in the graph below.
+Taken together, an extremely precise fit for the cohort time $T_C$ in units of
+the latency $a$ is given by the sum of these two contributions
+(Eqs.[3](#3),[6](#6)) which is shown in the orange line in the graph below.
 
 <a id="7"></a>
 
 $$\tag{7}
 \begin{align}
-T_C = \frac{1}{\lambda x} + a e^{a\lambda x}
+\frac{T_C}{a} = \frac{1}{a \lambda x} + e^{a\lambda x}
+\end{align}
+$$
+
+We can also determine the analytic behavior of the number of beads per cohort
+
+<a id="8"></a>
+
+$$\tag{8}
+\begin{align}
+\frac{N_B}{N_C} = 1 + a \lambda x\ e^{a\lambda x}.
 \end{align}
 $$
 
@@ -153,9 +170,9 @@ The exact behavior of the graph near the minimum is a function of the exact
 network topology and inter-node latencies, and one can expect there to be some
 "wiggles" in this graph near the minimum.  We may solve $T_C$ for $a$ to get
 
-<a id="8"></a>
+<a id="9"></a>
 
-$$\tag{8}
+$$\tag{9}
 \begin{align}
 a = \frac{T}{N_B} W\left(\frac{N_B}{N_C}-1\right)
 \end{align}
@@ -163,9 +180,9 @@ $$
 
 The location of the minimum is given by
 
-<a id="9"></a>
+<a id="10"></a>
 
-$$\tag{9}
+$$\tag{10}
 \begin{align}
 \frac{\partial T_C}{\partial x}=0
 \qquad
@@ -179,36 +196,64 @@ where $W(z)$ is the [Lambert W
 function](https://en.wikipedia.org/wiki/Lambert_W_function).  Using $a$ from
 above, the factors of $\lambda$, $a$, and $T$ all cancel out, giving us:
 
-<a id="10"></a>
+<a id="11"></a>
 
-$$\tag{10}
+$$\tag{11}
 \begin{align}
 1 = \frac{2 W\left(\frac12\right)}{W\left(\frac{N_B}{N_C}-1\right)}
 \qquad
 \implies
 \qquad
-\frac{N_B}{N_C} = \frac{W(\frac12)+\frac12}{W(\frac12)} \simeq 2.4215
+\frac{N_B}{N_C} = 1 + \frac{1}{2W(\frac12)} \simeq 2.4215
 \end{align}
 $$
 
 indicating that in the steady state (constant hashrate) scenario, there are on
 average 2.42 beads per cohort. This result is independent of latency $a$,
-hashrate $\lambda$, and observation window $T$.
+hashrate $\lambda$, and observation window $T$. The minimum value of $T_C$ in
+units of latency $a$ is given by
 
-This value $x_0$ or equivalently $N_B/N_C = 2.42$ represents having the
-most-frequent consensus points within a global network. Below we will use this
-ratio to create our difficulty adjustment algorithm targeting "most-frequent
-consensus" in a way that is insensitive to latency $a$, hashrate $\lambda$, and
-averaging window $T$.
+<a id="12"></a>
 
+$$\tag{12}
+\begin{align}
+\frac{T_{C,min}}{a} = \frac{1}{a\lambda x_0} + e^{a\lambda x_0} =
+    \frac{1}{2 W(\frac12)} + \frac{1}{4 W(\frac12)} \simeq 3.44
+\end{align}
+$$
+
+This value $x_0$ or $N_B/N_C\simeq 2.42$ and corresponding $T_{C,min} \simeq
+3.44 a$ represents having the most-frequent consensus points within a global
+network.  Below we will use these results to create our difficulty adjustment
+algorithm targeting "most-frequent consensus" in a way that is independent of
+the latency $a$, hashrate $\lambda$, and averaging window $T$.
+
+<!--
 Furthermore given any $x$, we can determine how far we are from the desired
 target $x_0$ and $N_B/N_C=2.42$ by making a ratio which cancels out the factors
 of $a$ and $\lambda$.
-<a id="11"></a>
+<a id="12"></a>
 
-$$\tag{11}
+$$\tag{12}
 x_0 = x W\left(\frac12\right) W\left(\frac{N_B}{N_C}-1\right)
 $$
+-->
+
+### Discussion
+
+We present times in units of the latency $a$, because while we have attempted to
+be as accurate as possible in our simulation, there are many sources of latency
+not taken into account, including actual transmission speed in copper or fiber
+optic cables, the topology of the global network, processing time of beads and
+creating block templates, and switching latency in directing mining devices to
+change their work unit. Nonetheless our results indicate that we can devise an
+algorithm completely insensitive to all these sources of latency, and
+furthermore completely independent of timestamps which have been a source of
+manipulation on other blockchains. It will operate as fast as it possibly can,
+given the (measured) latency constraints, and automatically adjust to changing
+network conditions and hashrate. We anticipate that the latency from all sources
+will be on the order of 100-200ms, resulting in a bead rate around 500ms,
+resulting in approximately 1000 beads (shares) per bitcoin block.
 
 ## Consensus
 
@@ -221,6 +266,29 @@ The majority of consensus considerations in Bitcoin are regarding acceptable
 transactions. As the first version of Braidpool will not have transactions, that
 leaves the target difficulty for shares as the only quantity that needs to be
 decided by consensus, which we describe how to compute below.
+
+Let us define an arbitrary quantity upon which we want to reach consensus:
+```python
+    def consensus_quantity(parents:dict, highest_work_path:list, work:dict):
+```
+This will be called on a single cohort, with the `head` of the cohort having no
+parents in the `parents` dict, and the `tail` of the cohort having no children.
+This function will be called with one cohort at a time, and it's expected that
+the consensus quantity can be decided without reference to any other beads. It
+may use any *committed* data within any beads within the cohort, and it should
+use data in the `highest_work_path` in preference to data in other beads if
+necessary. The dictionary `work` is also passed, and contains a mapping from
+beads to their work.
+
+For our first example, consier the target difficulty for each bead. At a cohort
+boundary, the target difficulty of all beads is identical, making it unnecessary
+to reference beads outside the cohort (because beads in the head of a cohort
+have exactly the same parents and ancestors).
+
+As a second example consider transactions.
+
+Time needs to iterate over several cohorts to get
+[Median Time Past (MTP)](https://github.com/bitcoin/bips/blob/master/bip-0113.mediawiki)
 
 ### Bead Timestamps
 
@@ -266,12 +334,25 @@ effectively never have graph cuts. This is because in order for a graph cut to
 occur, the network must be quiescent for a time proportional to $a$.
 
 When a miner starts mining, he chooses all available tips (beads with no
-descendants) and names them as parents of his new share. He then traverses the
-graph going back a time $T$ to compute $N_B$, and $N_C$. He then computes the parameters $\lambda$ and $a$ (which are different for *each* bead) as
+descendants) and names them as parents of his new bead. He then traverses the
+graph going back until he has a target number of cohorts $N_{C,target}$, and
+computes the number of beads $N_B$ combined in all cohorts. We will be targeting
+a value of $N_B/N_C = 1 + \frac{1}{2 W(1/2)} \simeq 2.4215$ for which we can
+form an integer ratio such as $17/7 \simeq 2.4286$ which are fairly close. The
+value of $N_C$ essentially defines a "time" window over which we grab all beads.
 
-$$
-\lambda = \frac{N_B}{x T}, \qquad a = \frac{T}{N_C} W\left(\frac{N_B}{N_C}-1\right).
-$$
+We want the target number of cohorts to be as small as reasonable, so that the
+algorithm adjusts quickly to changing network conditions and hashrate. The
+smallest reasonable integer ratio is 17/7, meaning we want there to be 17 beads
+in the last 7 cohorts combined. When the number of beads is larger than this, we
+will adjust the difficulty downwards, and when the number of beads is smaller
+than this, we will adjust the difficulty upwards. We can choose larger ratios
+such as 46/19, 75/31, 138/57, 201/83, 247/102, 540/223, etc and they will cause
+us to respond more slowly to changes in the network hashrate and latency, but
+achieve lower variation in the target difficulty.
+
+The miner then computes the target difficulty $x_0$ for his bead as follows:
+
 
 The required difficulty for his bead which then given by $x_0$. This difficulty
 is committed to in the [committed metadata](https://github.com/braidpool/braidpool/blob/main/docs/braidpool_spec.md#metadata-commitments) and verified to be correct
