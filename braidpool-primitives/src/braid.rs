@@ -1,70 +1,27 @@
 // Standard Imports
 use std::collections::HashSet;
 
-use bitcoin::absolute::Time;
-use bitcoin::pow::CompactTargetExt;
-use bitcoin::{
-    BlockHash, BlockHeader, BlockTime, BlockVersion, CompactTarget, Transaction,
-    TransactionVersion, TxMerkleNode, Txid,
-};
+// Bitcoin Imports
+use bitcoin::CompactTarget;
 
-use crate::utils::bitcoin::MerklePathProof;
 // Custom Imports
 use crate::beads::Bead;
 use crate::utils::BeadHash;
 
-pub struct Cohort(HashSet<BeadHash>);
+// Type Definitions
+struct Cohort(HashSet<BeadHash>);
+
+pub enum AddBeadStatus {
+    DagAlreadyContainsBead,
+    InvalidBead,
+    BeadAdded,
+    ParentsNotYetReceived,
+}
+
 
 // Type Aliases
 type NumberOfBeadsUnorphaned = usize;
 
-// Placeholder struct (Will be replaced with appropriate implementation later!)
-struct Database();
-impl Database {
-    pub fn fetch_bead_from_memory(&self, bead_hash: BeadHash) -> Bead {
-        // Dummy Implementation
-        Bead {
-            block_header: BlockHeader {
-                version: BlockVersion::ONE,
-                prev_blockhash: BlockHash::from_byte_array([0; 32]),
-                merkle_root: TxMerkleNode::from_byte_array([0; 32]),
-                time: BlockTime::from_u32(Time::MIN.to_consensus_u32()),
-                bits: CompactTarget::from_hex("0x1d00ffff").unwrap(),
-                nonce: 0,
-            },
-            bead_hash: BeadHash::from_byte_array([0; 32]),
-            coinbase_transaction: (
-                Transaction {
-                    version: TransactionVersion::ONE,
-                    lock_time: bitcoin::absolute::LockTime::from_height(0).unwrap(),
-                    input: Vec::new(),
-                    output: Vec::new(),
-                },
-                MerklePathProof {
-                    transaction_hash: Txid::from_byte_array([0; 32]),
-                    merkle_path: Vec::new(),
-                },
-            ),
-            payout_update_transaction: (
-                Transaction {
-                    version: TransactionVersion::ONE,
-                    lock_time: bitcoin::absolute::LockTime::from_height(0).unwrap(),
-                    input: Vec::new(),
-                    output: Vec::new(),
-                },
-                MerklePathProof {
-                    transaction_hash: Txid::from_byte_array([0; 32]),
-                    merkle_path: Vec::new(),
-                },
-            ),
-
-            lesser_difficulty_target: CompactTarget::from_hex("0x1d00ffff").unwrap(),
-            parents: HashSet::new(),
-            transactions: Vec::new(),
-            observed_time_at_node: Time::MIN,
-        }
-    }
-}
 
 pub struct Braid {
     beads: HashSet<BeadHash>,
@@ -75,10 +32,10 @@ pub struct Braid {
 
     // Database related functions!
     loaded_beads_in_memory: Vec<Bead>,
-    database_reference: Database,
 }
 
 impl Braid {
+    // All public funtions go here!
     pub fn new(genesis_beads: HashSet<BeadHash>) -> Self {
         Braid {
             beads: genesis_beads.clone(),
@@ -86,7 +43,6 @@ impl Braid {
             cohorts: vec![Cohort(genesis_beads)],
             orphan_beads: Vec::new(),
             loaded_beads_in_memory: Vec::new(),
-            database_reference: Database(),
         }
     }
 
@@ -98,10 +54,40 @@ impl Braid {
             cohorts,
             orphan_beads: Vec::new(),
             loaded_beads_in_memory: Vec::new(),
-            database_reference: Database(),
         }
     }
 
+    pub fn add_bead(&mut self, bead: Bead) -> AddBeadStatus {
+        if bead.is_valid_bead() == false {
+            return AddBeadStatus::InvalidBead;
+        }
+
+        if bead.lesser_difficulty_target != self.calculate_valid_difficulty_for_bead(&bead) {
+            return AddBeadStatus::InvalidBead;
+        }
+
+        if self.contains_bead(bead.bead_hash) {
+            return AddBeadStatus::DagAlreadyContainsBead;
+        }
+
+        if self.is_bead_orphaned(&bead) {
+            self.orphan_beads.push(bead);
+            return AddBeadStatus::ParentsNotYetReceived;
+        }
+
+        self.beads.insert(bead.bead_hash);
+        self.remove_parent_beads_from_tips(&bead);
+        self.tips.insert(bead.bead_hash);
+
+        self.cohorts = self.calculate_cohorts();
+        self.update_orphan_bead_set();
+
+        AddBeadStatus::BeadAdded
+    }
+}
+
+impl Braid {
+    // All private functions go here!
     fn calculate_cohorts(&self) -> Vec<Cohort> {
         // TODO: Implement the cohorts calculating function!
         vec![Cohort(HashSet::new())]
@@ -128,7 +114,7 @@ impl Braid {
         cohorts
     }
 
-    pub fn contains_bead(&self, bead_hash: BeadHash) -> bool {
+    fn contains_bead(&self, bead_hash: BeadHash) -> bool {
         self.beads.contains(&bead_hash)
     }
 
@@ -162,43 +148,7 @@ impl Braid {
         return old_orphan_set_length - self.orphan_beads.len();
     }
 
-    pub fn add_bead(&mut self, bead: Bead) -> AddBeadStatus {
-        if bead.is_valid_bead() == false {
-            return AddBeadStatus::InvalidBead;
-        }
-
-        if bead.lesser_difficulty_target != self.calculate_valid_difficulty_for_bead(&bead) {
-            return AddBeadStatus::InvalidBead;
-        }
-
-        if self.contains_bead(bead.bead_hash) {
-            return AddBeadStatus::DagAlreadyContainsBead;
-        }
-
-        if self.is_bead_orphaned(&bead) {
-            self.orphan_beads.push(bead);
-            return AddBeadStatus::ParentsNotYetReceived;
-        }
-
-        self.beads.insert(bead.bead_hash);
-        self.remove_parent_beads_from_tips(&bead);
-        self.tips.insert(bead.bead_hash);
-
-        self.cohorts = self.calculate_cohorts();
-        self.update_orphan_bead_set();
-
-        AddBeadStatus::BeadAdded
-    }
-
     fn calculate_valid_difficulty_for_bead(&self, bead: &Bead) -> CompactTarget {
-        // TODO: Implement this function!
-        CompactTarget::from_hex("0x1d00ffff").unwrap()
+        unimplemented!()
     }
-}
-
-pub enum AddBeadStatus {
-    DagAlreadyContainsBead,
-    InvalidBead,
-    BeadAdded,
-    ParentsNotYetReceived,
 }
