@@ -10,11 +10,9 @@ use bitcoin::{BlockHeader, CompactTarget, Transaction};
 use crate::utils::BeadHash;
 use crate::utils::bitcoin::MerklePathProof;
 
-// TODO: Add in the uncommitted metadata into the Bead Structs!
-
+// Type Aliases
 type TransactionWithMerklePath = (Transaction, MerklePathProof);
-/// Refers to the final immutable beads that are added
-/// into the Braid data structure.
+
 pub struct Bead {
     pub block_header: BlockHeader,
     pub bead_hash: BeadHash,
@@ -30,8 +28,9 @@ pub struct Bead {
 }
 
 impl Bead {
+    // All public definitions go in here!
     #[inline]
-    fn is_transaction_included_in_block(
+    pub fn is_transaction_included_in_block(
         &self,
         transaction_with_proof: &TransactionWithMerklePath,
     ) -> bool {
@@ -55,4 +54,24 @@ impl Bead {
             true
         }
     }
+
+    pub fn get_coinbase_transaction(&self) -> Transaction {
+        // TODO: Implement this function.
+        unimplemented!()
+
+    }
+
+    pub fn get_payout_update_transaction(&self) -> Transaction {
+        // TODO: Implement this function.
+        unimplemented!()
+    }
+}
+
+impl Bead {
+    // All private function definitions go here!
+}
+
+#[cfg(test)]
+mod tests {
+    // Unit Tests for Private Functions
 }
