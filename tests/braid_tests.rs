@@ -4,8 +4,8 @@ use std::{
     path::Path,
 };
 
-use braidpool::braid::io_json::{check_cohort, load_braid, save_braid};
-use braidpool::braid::{self, *};
+use node::braid::io_json::{check_cohort, load_braid, save_braid};
+use node::braid::{self, *};
 
 const TEST_CASE_DIR: &str = "tests/braids/";
 

@@ -305,42 +305,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "braidpool"
-version = "0.1.0"
-dependencies = [
- "bimap",
- "bincode",
- "bitcoin 0.32.4-cpunet",
- "bitcoin_hashes 0.16.0",
- "bitcoincore-rpc",
- "bitcoincore-rpc-json",
- "bitcoincore-zmq",
- "bytes",
- "clap",
- "env_logger",
- "flexbuffers",
- "futures",
- "lazy_static",
- "log",
- "num",
- "num-traits",
- "once_cell",
- "ordered-float",
- "rand",
- "regex",
- "serde",
- "serde_json",
- "sha2",
- "shellexpand",
- "sqlite",
- "tokio",
- "tokio-stream",
- "tokio-util",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "byteorder"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -987,6 +951,42 @@ dependencies = [
  "cfg-if 0.1.10",
  "libc",
  "winapi 0.3.9",
+]
+
+[[package]]
+name = "node"
+version = "0.1.0"
+dependencies = [
+ "bimap",
+ "bincode",
+ "bitcoin 0.32.4-cpunet",
+ "bitcoin_hashes 0.16.0",
+ "bitcoincore-rpc",
+ "bitcoincore-rpc-json",
+ "bitcoincore-zmq",
+ "bytes",
+ "clap",
+ "env_logger",
+ "flexbuffers",
+ "futures",
+ "lazy_static",
+ "log",
+ "num",
+ "num-traits",
+ "once_cell",
+ "ordered-float",
+ "rand",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha2",
+ "shellexpand",
+ "sqlite",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
