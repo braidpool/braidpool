@@ -7,12 +7,13 @@ use bitcoin::transaction::TransactionExt;
 use bitcoin::{BlockHeader, CompactTarget, Transaction};
 
 // Custom Imports
-use crate::utils::BeadHash;
 use crate::utils::bitcoin::MerklePathProof;
+use crate::utils::BeadHash;
 
 // Type Aliases
-type TransactionWithMerklePath = (Transaction, MerklePathProof);
+pub type TransactionWithMerklePath = (Transaction, MerklePathProof);
 
+#[derive(Clone, Debug)]
 pub struct Bead {
     pub block_header: BlockHeader,
     pub bead_hash: BeadHash,
@@ -58,7 +59,6 @@ impl Bead {
     pub fn get_coinbase_transaction(&self) -> Transaction {
         // TODO: Implement this function.
         unimplemented!()
-
     }
 
     pub fn get_payout_update_transaction(&self) -> Transaction {
