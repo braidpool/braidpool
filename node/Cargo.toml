@@ -3,7 +3,9 @@ name = "node"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[[test]]
+name = "braid_tests"
+path = "../tests/braid_tests.rs"
 
 [dependencies]
 tokio = { version = "1", features = ["rt", "net", "macros", "rt-multi-thread", "tracing", "io-util"] }
