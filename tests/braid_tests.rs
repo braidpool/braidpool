@@ -1,13 +1,15 @@
 use std::{
     collections::{HashMap, HashSet},
     fs,
-    path::Path,
 };
 
-use braidpool::braid::io_json::{check_cohort, load_braid, save_braid};
-use braidpool::braid::{self, *};
+use node::braid::io_json::{check_cohort, load_braid, save_braid};
+use node::braid::{self, *};
 
-const TEST_CASE_DIR: &str = "tests/braids/";
+// Cargo runs tests from the node/Cargo.toml file so the cwd is set to node/
+// when this is run, even though the docs say the cwd will be the project root.
+// Therefore we have to use this relative path here.
+const TEST_CASE_DIR: &str = "../tests/braids/";
 
 #[test]
 fn test_geneses1() {
@@ -100,21 +102,6 @@ fn test_geneses3() {
 
 #[test]
 fn test_geneses_files() {
-    // Create directory if it doesn't exist
-    if !Path::new(TEST_CASE_DIR).exists() {
-        fs::create_dir_all(TEST_CASE_DIR).unwrap();
-    }
-
-    // Skip if directory is empty
-    let entries = fs::read_dir(TEST_CASE_DIR).unwrap();
-    let has_json_files = entries
-        .filter_map(Result::ok)
-        .any(|e| e.path().extension().map_or(false, |ext| ext == "json"));
-
-    if !has_json_files {
-        return; // Skip test if no JSON files
-    }
-
     for entry in fs::read_dir(TEST_CASE_DIR).unwrap() {
         let entry = entry.unwrap();
         let path = entry.path();
@@ -405,16 +392,6 @@ fn test_cohorts_files() {
 
 #[test]
 fn test_cohorts_reversed_files() {
-    // Skip if directory is empty
-    let entries = fs::read_dir(TEST_CASE_DIR).unwrap();
-    let has_json_files = entries
-        .filter_map(Result::ok)
-        .any(|e| e.path().extension().map_or(false, |ext| ext == "json"));
-
-    if !has_json_files {
-        return; // Skip test if no JSON files
-    }
-
     for entry in fs::read_dir(TEST_CASE_DIR).unwrap() {
         let entry = entry.unwrap();
         let path = entry.path();
@@ -477,16 +454,6 @@ fn test_highest_work_path() {
 
 #[test]
 fn test_highest_work_path_files() {
-    // Skip if directory is empty
-    let entries = fs::read_dir(TEST_CASE_DIR).unwrap();
-    let has_json_files = entries
-        .filter_map(Result::ok)
-        .any(|e| e.path().extension().map_or(false, |ext| ext == "json"));
-
-    if !has_json_files {
-        return; // Skip test if no JSON files
-    }
-
     for entry in fs::read_dir(TEST_CASE_DIR).unwrap() {
         let entry = entry.unwrap();
         let path = entry.path();
@@ -506,16 +473,10 @@ fn test_highest_work_path_files() {
 
 #[test]
 fn test_check_cohort_files() {
-    // Skip if directory is empty
-    let entries = fs::read_dir(TEST_CASE_DIR).unwrap();
-    let has_json_files = entries
-        .filter_map(Result::ok)
-        .any(|e| e.path().extension().map_or(false, |ext| ext == "json"));
-
-    if !has_json_files {
-        return; // Skip test if no JSON files
-    }
-
+    println!(
+        "Current working directory: {:?}",
+        std::env::current_dir().unwrap()
+    );
     for entry in fs::read_dir(TEST_CASE_DIR).unwrap() {
         let entry = entry.unwrap();
         let path = entry.path();
@@ -537,16 +498,6 @@ fn test_check_cohort_files() {
 
 #[test]
 fn test_check_work_files() {
-    // Skip if directory is empty
-    let entries = fs::read_dir(TEST_CASE_DIR).unwrap();
-    let has_json_files = entries
-        .filter_map(Result::ok)
-        .any(|e| e.path().extension().map_or(false, |ext| ext == "json"));
-
-    if !has_json_files {
-        return; // Skip test if no JSON files
-    }
-
     for entry in fs::read_dir(TEST_CASE_DIR).unwrap() {
         let entry = entry.unwrap();
         let path = entry.path();
@@ -566,16 +517,6 @@ fn test_check_work_files() {
 
 #[test]
 fn test_sub_braid_files() {
-    // Skip if directory is empty
-    let entries = fs::read_dir(TEST_CASE_DIR).unwrap();
-    let has_json_files = entries
-        .filter_map(Result::ok)
-        .any(|e| e.path().extension().map_or(false, |ext| ext == "json"));
-
-    if !has_json_files {
-        return; // Skip test if no JSON files
-    }
-
     for entry in fs::read_dir(TEST_CASE_DIR).unwrap() {
         let entry = entry.unwrap();
         let path = entry.path();
@@ -614,16 +555,6 @@ fn test_sub_braid_files() {
 
 #[test]
 fn test_head_tail_files() {
-    // Skip if directory is empty
-    let entries = fs::read_dir(TEST_CASE_DIR).unwrap();
-    let has_json_files = entries
-        .filter_map(Result::ok)
-        .any(|e| e.path().extension().map_or(false, |ext| ext == "json"));
-
-    if !has_json_files {
-        return; // Skip test if no JSON files
-    }
-
     for entry in fs::read_dir(TEST_CASE_DIR).unwrap() {
         let entry = entry.unwrap();
         let path = entry.path();
@@ -729,14 +660,14 @@ fn test_save_load_braid() {
     .cloned()
     .collect();
 
-    let temp_file = "tests/temp_braid_test.json";
+    let temp_file = TEST_CASE_DIR.to_owned() + "/temp_braid_test.json";
     let description = "Test braid";
 
     // Save the braid
-    let dag = save_braid(&parents, temp_file, Some(description)).unwrap();
+    let dag = save_braid(&parents, &temp_file, Some(description)).unwrap();
 
     // Load the braid
-    let loaded_dag = load_braid(temp_file).unwrap();
+    let loaded_dag = load_braid(&temp_file).unwrap();
 
     // Compare the original and loaded DAGs
     assert_eq!(loaded_dag.description.unwrap(), description);

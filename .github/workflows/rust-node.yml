@@ -16,7 +16,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: check
-          args: --manifest-path node/Cargo.toml
+          args: --manifest-path Cargo.toml
 
   test:
     name: Test Suite
@@ -28,10 +28,9 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --manifest-path node/Cargo.toml
+      - name: Run tests
+        run: |
+          cargo test
 
   fmt:
     name: Rustfmt
@@ -47,7 +46,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: fmt
-          args: --manifest-path node/Cargo.toml --all -- --check
+          args: --manifest-path Cargo.toml --all -- --check
 
 
   # clippy:
