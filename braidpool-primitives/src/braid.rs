@@ -9,6 +9,8 @@ use crate::beads::Bead;
 use crate::utils::BeadHash;
 
 // Type Definitions
+#[derive(Clone, Debug)]
+
 struct Cohort(HashSet<BeadHash>);
 
 pub enum AddBeadStatus {
@@ -18,10 +20,8 @@ pub enum AddBeadStatus {
     ParentsNotYetReceived,
 }
 
-
 // Type Aliases
 type NumberOfBeadsUnorphaned = usize;
-
 
 pub struct Braid {
     beads: HashSet<BeadHash>,
@@ -150,5 +150,239 @@ impl Braid {
 
     fn calculate_valid_difficulty_for_bead(&self, bead: &Bead) -> CompactTarget {
         unimplemented!()
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::Cohort;
+    use super::{BeadHash, HashSet};
+    use crate::braid::Braid;
+    use crate::utils::test_utils::create_test_bead;
+    use ::bitcoin::BlockHash;
+    use ::bitcoin::absolute::Time;
+
+    #[test]
+    fn test_update_orphans() {
+        let test_dag_bead_1 = create_test_bead(
+            2,
+            [0x00; 32],
+            [
+                0xf3, 0xb8, 0x76, 0x2e, 0x7c, 0x1b, 0xd6, 0x47, 0xf1, 0xf6, 0x9d, 0x2a, 0x7f, 0x9c,
+                0x85, 0xf0, 0xb2, 0x5e, 0x64, 0x69, 0xf1, 0x07, 0xd2, 0x31, 0xdf, 0xf4, 0x5c, 0x47,
+                0x1f, 0x88, 0x94, 0x58,
+            ],
+            1653195600,
+            486604799,
+            0,
+            [0x00; 32],
+            [0xbb; 32],
+            [0xbb; 32],
+            4040404,
+            vec![
+                (
+                    BeadHash::from_byte_array([0x01; 32]),
+                    Time::from_consensus(1690000000).expect("invalid time value"),
+                ),
+                (
+                    BeadHash::from_byte_array([0x02; 32]),
+                    Time::from_consensus(1690001000).expect("invalid time value"),
+                ),
+                (
+                    BeadHash::from_byte_array([0x03; 32]),
+                    Time::from_consensus(1690002000).expect("invalid time value"),
+                ),
+            ],
+            vec![[0x11; 32], [0x22; 32], [0x33; 32], [0x44; 32]],
+            436864982,
+            [0x00; 32],
+            1653195600,
+        );
+        let test_dag_bead_2 = create_test_bead(
+            2,
+            [0x00; 32],
+            [
+                0xf3, 0xb8, 0x76, 0x2e, 0x7c, 0x1b, 0xd6, 0x47, 0xf1, 0xf6, 0x9d, 0x2a, 0x7f, 0x9c,
+                0x85, 0xf0, 0xb2, 0x5e, 0x64, 0x69, 0xf1, 0x07, 0xd2, 0x31, 0xdf, 0xf4, 0x5c, 0x47,
+                0x1f, 0x88, 0x94, 0x58,
+            ],
+            1653195600,
+            486604799,
+            0,
+            [0x00; 32],
+            [0xbb; 32],
+            [0xbb; 32],
+            4040404,
+            vec![
+                (
+                    BeadHash::from_byte_array([0x01; 32]),
+                    Time::from_consensus(1690000000).expect("invalid time value"),
+                ),
+                (
+                    BeadHash::from_byte_array([0x02; 32]),
+                    Time::from_consensus(1690001000).expect("invalid time value"),
+                ),
+                (
+                    BeadHash::from_byte_array([0x03; 32]),
+                    Time::from_consensus(1690002000).expect("invalid time value"),
+                ),
+            ],
+            vec![[0x11; 32], [0x22; 32], [0x33; 32], [0x44; 32]],
+            436864982,
+            [0x00; 32],
+            1653195600,
+        );
+        let mut genesis_beads: HashSet<BeadHash> = HashSet::new();
+        let child_bead_1 = create_test_bead(
+            2,
+            [0x00; 32],
+            [
+                0xf3, 0xb8, 0x76, 0x2e, 0x7c, 0x1b, 0xd6, 0x47, 0xf1, 0xf6, 0x9d, 0x2a, 0x7f, 0x9c,
+                0x85, 0xf0, 0xb2, 0x5e, 0x64, 0x69, 0xf1, 0x07, 0xd2, 0x31, 0xdf, 0xf4, 0x5c, 0x47,
+                0x1f, 0x88, 0x94, 0x58,
+            ],
+            1653195600,
+            486604799,
+            0,
+            [0x00; 32],
+            [0xbb; 32],
+            [0xbb; 32],
+            4040404,
+            vec![(
+                test_dag_bead_1.bead_hash,
+                Time::from_consensus(1690000000).expect("invalid time value"),
+            )],
+            vec![[0x11; 32], [0x22; 32], [0x33; 32], [0x44; 32]],
+            436864982,
+            [0x00; 32],
+            1653195600,
+        );
+
+        genesis_beads.insert(test_dag_bead_1.bead_hash);
+        genesis_beads.insert(test_dag_bead_2.bead_hash);
+
+        let mut test_braid = Braid::new(genesis_beads);
+
+        test_braid.add_bead(child_bead_1);
+        println!(
+            "{:?} orphans remaning after above operations.",
+            test_braid.update_orphan_bead_set()
+        );
+        assert_eq!(test_braid.update_orphan_bead_set(), 0);
+    }
+    #[test]
+    fn test_orphan_bead() {
+        let test_dag_bead = create_test_bead(
+            2,
+            [0x00; 32],
+            [
+                0xf3, 0xb8, 0x76, 0x2e, 0x7c, 0x1b, 0xd6, 0x47, 0xf1, 0xf6, 0x9d, 0x2a, 0x7f, 0x9c,
+                0x85, 0xf0, 0xb2, 0x5e, 0x64, 0x69, 0xf1, 0x07, 0xd2, 0x31, 0xdf, 0xf4, 0x5c, 0x47,
+                0x1f, 0x88, 0x94, 0x58,
+            ],
+            1653195600,
+            486604799,
+            0,
+            [0x00; 32],
+            [0xbb; 32],
+            [0xbb; 32],
+            4040404,
+            vec![
+                (
+                    BeadHash::from_byte_array([0x01; 32]),
+                    Time::from_consensus(1690000000).expect("invalid time value"),
+                ),
+                (
+                    BeadHash::from_byte_array([0x02; 32]),
+                    Time::from_consensus(1690001000).expect("invalid time value"),
+                ),
+                (
+                    BeadHash::from_byte_array([0x03; 32]),
+                    Time::from_consensus(1690002000).expect("invalid time value"),
+                ),
+            ], // parents
+            vec![[0x11; 32], [0x22; 32], [0x33; 32], [0x44; 32]],
+            436864982,
+            [0x00; 32],
+            1653195600,
+        );
+        let bytes: [u8; 32] = [0; 32];
+        let mut genesis_beads: HashSet<BeadHash> = HashSet::new();
+        genesis_beads.insert(BlockHash::from_byte_array(bytes));
+        let mut test_braid = Braid::new(genesis_beads);
+        let referenced_bead = test_dag_bead.clone();
+        test_braid.add_bead(test_dag_bead);
+
+        assert_eq!(test_braid.is_bead_orphaned(&referenced_bead), true);
+    }
+    #[test]
+    fn test_remove_parents() {
+        let test_dag_bead = create_test_bead(
+            2,
+            [0x00; 32],
+            [
+                0xf3, 0xb8, 0x76, 0x2e, 0x7c, 0x1b, 0xd6, 0x47, 0xf1, 0xf6, 0x9d, 0x2a, 0x7f, 0x9c,
+                0x85, 0xf0, 0xb2, 0x5e, 0x64, 0x69, 0xf1, 0x07, 0xd2, 0x31, 0xdf, 0xf4, 0x5c, 0x47,
+                0x1f, 0x88, 0x94, 0x58,
+            ],
+            1653195600,
+            486604799,
+            0,
+            [0x00; 32],
+            [0xbb; 32],
+            [0xbb; 32],
+            4040404,
+            vec![
+                (
+                    BeadHash::from_byte_array([0x01; 32]),
+                    Time::from_consensus(1690000000).expect("invalid time value"),
+                ),
+                (
+                    BeadHash::from_byte_array([0x02; 32]),
+                    Time::from_consensus(1690001000).expect("invalid time value"),
+                ),
+                (
+                    BeadHash::from_byte_array([0x03; 32]),
+                    Time::from_consensus(1690002000).expect("invalid time value"),
+                ),
+            ], // parents
+            vec![[0x11; 32], [0x22; 32], [0x33; 32], [0x44; 32]],
+            436864982,
+            [0x00; 32],
+            1653195600,
+        );
+        let bytes: [u8; 32] = [0; 32];
+        let mut genesis_beads: HashSet<BeadHash> = HashSet::new();
+        genesis_beads.insert(BlockHash::from_byte_array(bytes));
+        let mut test_braid = Braid::new(genesis_beads);
+
+        let referenced_val = test_dag_bead.clone();
+        test_braid.add_bead(test_dag_bead);
+        test_braid.remove_parent_beads_from_tips(&referenced_val);
+
+        let parents = referenced_val.parents;
+        for parent in parents {
+            assert_eq!(test_braid.tips.contains(&parent.0), false);
+        }
+    }
+
+    #[test]
+    fn test_bead_cohort_1() {
+        let bytes: [u8; 32] = [0; 32];
+        let mut genesis_beads: HashSet<BeadHash> = HashSet::new();
+        let reference = genesis_beads.clone();
+        genesis_beads.insert(BlockHash::from_byte_array(bytes));
+        let test_braid = Braid::new(genesis_beads);
+        let computed_tip_cohorts = test_braid.generate_tip_cohorts();
+        let mut expected_tip_cohorts = Vec::new();
+        expected_tip_cohorts.push(Cohort(reference));
+        assert_eq!(expected_tip_cohorts.len(), computed_tip_cohorts.len());
+        for index in 0..computed_tip_cohorts.len() {
+            let expected_cohort = expected_tip_cohorts[index].clone();
+            let computed_cohort = expected_tip_cohorts[index].clone();
+
+            for cohort_element in computed_cohort.0 {
+                assert_eq!(expected_cohort.0.contains(&cohort_element), true);
+            }
+        }
     }
 }
