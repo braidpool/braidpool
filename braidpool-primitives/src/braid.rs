@@ -1,5 +1,5 @@
 // Standard Imports
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 
 // Bitcoin Imports
 use bitcoin::CompactTarget;
@@ -31,7 +31,7 @@ pub struct Braid {
     orphan_beads: Vec<Bead>,
 
     // Database related functions!
-    loaded_beads_in_memory: Vec<Bead>,
+    loaded_beads_in_memory: HashMap<BeadHash, Bead>,
 }
 
 impl Braid {
@@ -42,7 +42,7 @@ impl Braid {
             tips: genesis_beads.clone(),
             cohorts: vec![Cohort(genesis_beads)],
             orphan_beads: Vec::new(),
-            loaded_beads_in_memory: Vec::new(),
+            loaded_beads_in_memory: HashMap::new(),
         }
     }
 
@@ -53,7 +53,7 @@ impl Braid {
             tips: previous_dag_braid.tips,
             cohorts,
             orphan_beads: Vec::new(),
-            loaded_beads_in_memory: Vec::new(),
+            loaded_beads_in_memory: HashMap::new(),
         }
     }
 
@@ -152,3 +152,23 @@ impl Braid {
         unimplemented!()
     }
 }
+
+use std::fmt;
+#[derive(Debug)]
+pub enum BeadLoadError {
+    BeadNotFound,
+    InvalidBeadHash,
+    DatabaseError
+}
+
+impl fmt::Display for BeadLoadError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BeadLoadError::BeadNotFound => write!(f, "Bead not found"),
+            BeadLoadError::InvalidBeadHash => write!(f, "Invalid bead hash"),
+            BeadLoadError::DatabaseError => write!(f, "Database error occurred"),
+        }
+    }
+}
+
+impl std::error::Error for BeadLoadError {}
