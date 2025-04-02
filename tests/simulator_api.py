@@ -47,10 +47,6 @@ def run_simulator_live():
 
             time.sleep(3)
 
-@app.route('/')
-def index():
-    return send_from_directory('.', 'client.html')
-
 @app.route('/braid.json')
 def serve_braid():
     return send_from_directory('.', 'braid.json')
