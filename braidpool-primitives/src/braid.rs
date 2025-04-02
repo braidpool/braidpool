@@ -1,5 +1,5 @@
 // Standard Imports
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashMap, HashSet};
 
 // Bitcoin Imports
 use bitcoin::CompactTarget;
@@ -18,10 +18,8 @@ pub enum AddBeadStatus {
     ParentsNotYetReceived,
 }
 
-
 // Type Aliases
 type NumberOfBeadsUnorphaned = usize;
-
 
 pub struct Braid {
     beads: HashSet<BeadHash>,
@@ -158,7 +156,7 @@ use std::fmt;
 pub enum BeadLoadError {
     BeadNotFound,
     InvalidBeadHash,
-    DatabaseError
+    DatabaseError,
 }
 
 impl fmt::Display for BeadLoadError {
