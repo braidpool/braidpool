@@ -170,3 +170,8 @@ impl fmt::Display for BeadLoadError {
 }
 
 impl std::error::Error for BeadLoadError {}
+
+#[cfg(test)]
+mod tests {
+    // Tests for private functions!
+}
