@@ -129,10 +129,10 @@ impl Braid {
             if let Err(error_type) = parent_bead {
                 match error_type {
                     BeadLoadError::BeadNotFound => return Ok(true),
-                    _ => return Err(error_type)
+                    _ => return Err(error_type),
                 };
             }
-        };
+        }
 
         Ok(false)
     }
@@ -145,7 +145,7 @@ impl Braid {
 
         match self.loaded_beads_in_memory.get(&bead_hash) {
             Some(bead) => Ok(bead),
-            None => Err(BeadLoadError::BeadNotFound)
+            None => Err(BeadLoadError::BeadNotFound),
         }
     }
 
