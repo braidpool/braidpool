@@ -58,7 +58,6 @@ impl Bead {
     pub fn get_coinbase_transaction(&self) -> Transaction {
         // TODO: Implement this function.
         unimplemented!()
-
     }
 
     pub fn get_payout_update_transaction(&self) -> Transaction {

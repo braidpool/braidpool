@@ -1,5 +1,5 @@
 // Standard Imports
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashMap, HashSet};
 
 // Bitcoin Imports
 use bitcoin::CompactTarget;
@@ -18,10 +18,8 @@ pub enum AddBeadStatus {
     ParentsNotYetReceived,
 }
 
-
 // Type Aliases
 type NumberOfBeadsUnorphaned = usize;
-
 
 pub struct Braid {
     beads: HashSet<BeadHash>,
@@ -118,6 +116,39 @@ impl Braid {
         self.beads.contains(&bead_hash)
     }
 
+    fn is_genesis_bead(&self, bead_hash: BeadHash) -> Result<bool, BeadLoadError> {
+        let bead = self.load_bead_from_memory(bead_hash)?;
+
+        if bead.parents.is_empty() {
+            return Ok(true);
+        };
+
+        // We need to check whether even one of the parent beads have been pruned from memory!
+        for (parent_bead_hash, _) in &bead.parents {
+            let parent_bead = self.load_bead_from_memory(parent_bead_hash.clone());
+            if let Err(error_type) = parent_bead {
+                match error_type {
+                    BeadLoadError::BeadNotFound => return Ok(true),
+                    _ => return Err(error_type),
+                };
+            }
+        }
+
+        Ok(false)
+    }
+
+    #[inline]
+    fn load_bead_from_memory(&self, bead_hash: BeadHash) -> Result<&Bead, BeadLoadError> {
+        // This functions returns a bead from memory! Future DB work goes in here!
+
+        // TODO: Add in a check for whether a bead_hash is valid!
+
+        match self.loaded_beads_in_memory.get(&bead_hash) {
+            Some(bead) => Ok(bead),
+            None => Err(BeadLoadError::BeadNotFound),
+        }
+    }
+
     #[inline]
     fn remove_parent_beads_from_tips(&mut self, bead: &Bead) {
         for (parent_hash, _) in &bead.parents {
@@ -154,11 +185,11 @@ impl Braid {
 }
 
 use std::fmt;
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BeadLoadError {
     BeadNotFound,
     InvalidBeadHash,
-    DatabaseError
+    DatabaseError,
 }
 
 impl fmt::Display for BeadLoadError {
