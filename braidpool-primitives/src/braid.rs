@@ -117,6 +117,18 @@ impl Braid {
     }
 
     #[inline]
+    fn load_bead_from_memory(&self, bead_hash: BeadHash) -> Result<&Bead, BeadLoadError> {
+        // This functions returns a bead from memory! Future DB work goes in here!
+
+        // TODO: Add in a check for whether a bead_hash is valid!
+
+        match self.loaded_beads_in_memory.get(&bead_hash) {
+            Some(bead) => Ok(bead),
+            None => Err(BeadLoadError::BeadNotFound)
+        }
+    }
+
+    #[inline]
     fn remove_parent_beads_from_tips(&mut self, bead: &Bead) {
         for (parent_hash, _) in &bead.parents {
             self.tips.remove(parent_hash);
