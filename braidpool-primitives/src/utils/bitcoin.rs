@@ -7,6 +7,7 @@ use bitcoin::{BlockHash, BlockHeader, BlockTime, BlockVersion, CompactTarget, Tx
 
 // Internal Type Definitions for Clarity
 type MerkleRoot = TxMerkleNode;
+#[derive(Clone, Debug)]
 
 pub struct MerklePathProof {
     pub transaction_hash: Txid,
