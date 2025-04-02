@@ -22,3 +22,8 @@ notes/
 venv
 *~
 .aider*
+/.cursor/
+/worklog/
+/worklog/*
+/WORKLOG_*.md
+WORKLOG_*.md
