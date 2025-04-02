@@ -116,6 +116,27 @@ impl Braid {
         self.beads.contains(&bead_hash)
     }
 
+    fn is_genesis_bead(&self, bead_hash: BeadHash) -> Result<bool, BeadLoadError> {
+        let bead = self.load_bead_from_memory(bead_hash)?;
+
+        if bead.parents.is_empty() {
+            return Ok(true);
+        };
+
+        // We need to check whether even one of the parent beads have been pruned from memory!
+        for (parent_bead_hash, _) in &bead.parents {
+            let parent_bead = self.load_bead_from_memory(parent_bead_hash);
+            if let Err(error_type) = parent_bead {
+                match error_type {
+                    BeadLoadError::BeadNotFound => return Ok(true),
+                    _ => return Err(error_type)
+                };
+            }
+        };
+
+        Ok(false)
+    }
+
     #[inline]
     fn load_bead_from_memory(&self, bead_hash: BeadHash) -> Result<&Bead, BeadLoadError> {
         // This functions returns a bead from memory! Future DB work goes in here!
@@ -164,7 +185,7 @@ impl Braid {
 }
 
 use std::fmt;
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BeadLoadError {
     BeadNotFound,
     InvalidBeadHash,
