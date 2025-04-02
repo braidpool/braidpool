@@ -1,8 +1,14 @@
-# TODO
-1. Analyze asymptotic behavior of `cohorts()`
-2. Analyze standard deviation of `calc_difficulty()`
-
 # Braid Consensus
+
+## TODO
+1. Analyze asymptotic behavior of `cohorts()`
+2. Analyze the SD of the EMA algorithm
+3. Analyze the SD of the PID algorithm in LambertW-transformed variables
+4. Estimate parameters $K_p$, $K_i$, $K_d$ for the PID algorithm (see `tests/pid_calibrate.py`)
+5. Modify simulator to slew the hashrate in order to estimate $K_i$ and look for
+   oscillations.
+6. Write PID algorithm using 256-bit integers (see `tests/LambertW
+   Fractions.ipynb` to calculate them)
 
 Herein we describe the Braid consensus mechanism, which is a generalization of
 Nakamoto consensus to a Directed Acyclic Graph (DAG).
@@ -255,6 +261,27 @@ network conditions and hashrate. We anticipate that the latency from all sources
 will be on the order of 100-200ms, resulting in a bead rate around 500ms,
 resulting in approximately 1000 beads (shares) per bitcoin block.
 
+The above behavior of $\left(N_B/N_C\right)(x)$ is highly nonlinear, however we
+can transform it into a linear system using the Lambert W function, where
+
+<a id="13"></a>
+
+$$\tag{13}
+\begin{align}
+a \lambda x = W\left(\frac{N_B}{N_C}-1\right)
+\end{align}
+$$
+
+and we treat the product $a\lambda$ as a single unknown parameter in terms of
+the measured single parameter $N_B/N_C$.
+
+Similarly we can analytically calculate the derivative instead of using a
+numeric approximation. Using this we can create a difficulty adjustment
+algorithm that adapts quickly and simultaneously estimates the quantity
+$a\lambda$. Separating $a$ from $\lambda$ requires the use of a clock, and
+timestamps. Thus we can create a difficulty adjustment algorithm that is
+independent of timing measurements.
+
 ## Consensus
 
 Given a bead with $n$ parents $\{p_i\}$, $i=1..n$, any computable quantity
@@ -362,6 +389,8 @@ bead's timestamp must be strictly greater than that of any of its parents. This
 timestamp is *different* from the timestamp in the Bitcoin block header, which
 is commonly used as nonce space for mining and not accurate. All time-dependent
 calculations herein use this timestamp, not the Bitcoin block header timestamp.
+
+# CONTENT BELOW HERE IS OUTDATED
 
 ### Critical Damping
 
