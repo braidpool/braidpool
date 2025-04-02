@@ -9,8 +9,12 @@
 """
 
 from argparse import ArgumentParser, BooleanOptionalAction
+from collections import OrderedDict
 from copy import copy
-from math import pi, sqrt, sin, cos, acos, log, ceil
+import math
+from math import pi, sqrt, sin, cos, acos, log, ceil, exp
+import numpy as np
+from scipy.optimize import curve_fit
 from fractions import Fraction
 from typing import Iterable
 import random
@@ -34,6 +38,7 @@ NETWORK_HASHRATE = 800000    # Single core hashrate in hashes/s (will be benchma
 OVERHEAD_FUDGE   = 1.95      # Fudge factor for processing overhead compared to pure sha256d mining
 EARTH_RADIUS     = 6371000   # Mean radius of earth in meters
 SPEED_OF_LIGHT   = 299792458 # speed of light in m/s
+MAX_CACHE        = 100       # Maximum number of cohorts to cache
 DEBUG            = False
 
 # Good integer choices that closely approximate (W(1/2)+1)/W(1/2) = 2.421529936
@@ -92,8 +97,8 @@ def print_hash(h):
     Prints a string to the console with the color specified by the hash for easy visual
     identification.
     """
-    if type(h) == int:
-        hex_string = f"{h:064x}"
+    if type(h) == int or hasattr(h, 'hash'):
+        hex_string = f"{h:064x}" if type(h) == int else f"{h.hash:064x}"
         color = re.search(r'0*.([^0].{5})', hex_string).group(1)
         # Convert hex to RGB
         r, g, b = tuple(int(color[i:i+2], 16) for i in (0, 2, 4))
@@ -101,7 +106,7 @@ def print_hash(h):
         color_code = f"\033[38;2;{r};{g};{b}m"
         reset_code = "\033[0m"  # Reset to default color
         # Print with color
-        return f"{color_code}{h>>(256-32):08x}{reset_code}"
+        return f"{color_code}{hex_string[:8]}{reset_code}"
     elif isinstance(h, dict):
         retval = "{"
         for k,v in h.items():
@@ -112,11 +117,18 @@ def print_hash(h):
         return retval
     elif isinstance(h, Iterable):
         retval = "["
+        if isinstance(h, set):
+            retval = "{"
+        nprinted = 0
         for i in h:
+            nprinted += 1
             retval += print_hash(i)
-            if i != h[-1]:
+            if nprinted != len(h):
                 retval += ", "
-        retval += "]"
+        if isinstance(h, set):
+            retval += "}"
+        else:
+            retval += "]"
         return retval
     else:
         raise Exception("Unknown type passed to print_hash: ", type(h))
@@ -138,8 +150,13 @@ class Network:
         self.genesis_hash        = uint256(sha256d(0))
         self.genesis_bead        = Bead(self.genesis_hash, set(), self, -1)
         # FIXME asymmetrically divide the hashrate among nodes
+        self.cohort_cache        = OrderedDict() # Keep a global cohort cache so nodes
+                                                 # don't have to repeat cohorts calculations.
+                                                 # This is also passed as the ancestor cache to cohorts()
+                                                 # (they use different keys for cohorts and ancestors)
         self.nodes               = [Node(self.genesis_bead, self, nodeid, hashrate/nnodes/NETWORK_SIZE,
-                                         initial_target=target, log=log) for nodeid in
+                                         initial_target=target, log=log,
+                                         cohort_cache=self.cohort_cache) for nodeid in
                                     range(nnodes)]
         # FIXME initial target should be calcluated to produce a bead once every <NETWORK_SIZE>?
         latencies                = None
@@ -182,8 +199,9 @@ class Network:
             n.tick(mine=mine, dt=dt)
 
     def simulate(self, nbeads=20, mine=False):
-        """ Simulate the network until we have <nbeads> beads """
-        while len(self.nodes[0].braid.beads) < nbeads:
+        """ Simulate the network until we have added <nbeads> beads """
+        initial_beads = len(self.nodes[0].braid.beads)
+        while len(self.nodes[0].braid.beads) < initial_beads + nbeads:
             self.tick(mine=mine)
 
     def broadcast(self, node, bead, delay):
@@ -210,12 +228,18 @@ class Network:
 
 class Node:
     """ Abstraction for a node. """
-    def __init__(self, genesis_bead, network, nodeid, hashrate, initial_target=None, log=False):
+    def __init__(self, genesis_bead, network, nodeid, hashrate,
+                 initial_target=None, cohort_cache=None, log=False):
         self.genesis_bead = genesis_bead
         self.network      = network
         self.peers        = []
         self.latencies    = []
         self.nodeid       = nodeid
+        self.cohort_cache = cohort_cache # Store the cohort cache on the network
+                                         # object and pass it by reference to Braid.extend()
+        # PID controller state
+        self.prev_errors = []  # Store previous errors for integral and derivative terms
+        self.max_error_history = 10  # Maximum number of errors to store
         # A salt for this node, so all nodes don't produce the same hashes
         self.nodesalt     = uint256(sha256d(random.randint(0,MAX_HASH)))
         self.hashrate     = hashrate
@@ -250,6 +274,10 @@ class Node:
             self.tremaining   = self.time_to_next_bead()
         self.working_bead = Bead(None, frozenset(self.braid.tips), self.network, self.nodeid)
 
+        # Reset controller state
+        self.prev_errors = []
+        self.target_history = []  # For model-based controller
+
         if target_algo is None or target_algo == "fixed":
             self.calc_target = self.calc_target_fixed
         elif target_algo == "exp":
@@ -258,6 +286,12 @@ class Node:
             self.calc_target = self.calc_target_parents
         elif target_algo == "simple":
             self.calc_target = self.calc_target_simple
+        elif target_algo == "instant":
+            self.calc_target = self.calc_target_instant
+        elif target_algo == "pid":
+            self.calc_target = self.calc_target_pid
+        elif target_algo == "model":
+            self.calc_target = self.calc_target_model
         elif target_algo == "simple_asym":
             self.calc_target = self.calc_target_simple_asym
         elif target_algo == "simple_asym_damped":
@@ -273,12 +307,17 @@ class Node:
         this node with <self.hashrate> finds a block with <self.target>.
         """
         p = self.target/MAX_HASH
-        if p > 1:
+        if p >= 1.0:
             raise ValueError(f"target {self.target:064x} is larger than {MAX_HASH:064x}")
-        if p < 1e-6: # If p is very small, use a Taylor series to prevent log(1-p) from overflowing
-            nhashes = int(log(1 - random.random()) / -(p+p**2/2+p**3/3+p**4/4+p**5/5)) + 1
-        else:
-            nhashes = int(log(1 - random.random()) / log(1 - p)) + 1
+        try:
+            r = random.random()
+            if p < 1e-6: # If p is very small, use a Taylor series to prevent log(1-p) from overflowing
+                nhashes = int(log(1 - r) / -(p+p**2/2+p**3/3+p**4/4+p**5/5)) + 1
+            else:
+                nhashes = int(log(1 - r) / log(1 - p)) + 1
+        except ValueError as e:
+            print(f"{e}: p={p} r={r}")
+            raise
         return nhashes/self.hashrate
 
     def add_peers(self, peers, latencies):
@@ -294,6 +333,7 @@ class Node:
             if not self.incoming and self.braid.tips == self.working_bead.parents and self.tremaining > 0:
                 return
         oldtips = copy(self.braid.tips)
+        added_bead = None
         if oldtips != self.working_bead.parents:
             self.working_bead = Bead(None, oldtips, self.network, self.nodeid)
         if mine:
@@ -303,14 +343,8 @@ class Node:
                 self.nonce += 1
                 if PoW < self.target:
                     Nb = sum(map(len, self.braid.cohorts[-TARGET_NC:]))
-                    if self.log:
-                        print(f"== Solution bead {print_hash(PoW)} "
-                              f"target = {self.working_bead.target>>(256-32):08x}... for cohort size "
-                              f"{len(self.braid.cohorts[-1]):2} on node {self.nodeid:2} "
-                              f"at time {self.network.t:12.6f} Nb/Nc={Nb/TARGET_NC:6.4}") # moving average
-                        if DEBUG:
-                            print(f"    Having parents: {print_hash([p.hash for p in self.working_bead.parents])}")
                     self.working_bead.add_PoW(PoW)
+                    added_bead = copy(self.working_bead)
                     self.receive(self.working_bead)     # Send it to myself (will rebroadcast to peers)
                     break
         else :
@@ -318,15 +352,16 @@ class Node:
                 Nb = sum(map(len, self.braid.cohorts[-TARGET_NC:]))
                 self.nonce += 1
                 self.working_bead.add_PoW((uint256(sha256d(self.nodesalt+self.nonce))*self.target)//MAX_HASH)
-                if self.log:
-                    print(f"== Solution {print_hash(self.working_bead.hash)} "
-                          f"target = {self.working_bead.target>>(256-32):08x}... for cohort size "
-                          f"{len(self.braid.cohorts[-1]):3} on node {self.nodeid:2} and "
-                          f"at time {self.network.t:12.6f} Nb/Nc={Nb/TARGET_NC:12.6}") # moving average
-                    if DEBUG:
-                        print(f"    Having parents: {print_hash([p.hash for p in self.working_bead.parents])}")
-                self.receive(self.working_bead)     # Send it to myself (will rebroadcast to peers)
+                added_bead = copy(self.working_bead)
                 self.tremaining = self.time_to_next_bead()
+                self.receive(self.working_bead)
+        if self.log and added_bead:
+            print(f"== Solution {print_hash(added_bead.hash)} "
+                  f"target = {added_bead.target>>(256-32):08x}... for cohort size "
+                  f"{len(self.braid.cohorts[-2]):3} on node {self.nodeid:2} "
+                  f"at time {self.network.t:12.6f} Nb/Nc={Nb/TARGET_NC:12.6}") # moving average
+            if DEBUG:
+                print(f"    Having parents: {print_hash([p.hash for p in self.working_bead.parents])}")
         self.process_incoming()
         if self.braid.tips != oldtips and not mine: # reset mining if we have new tips
             self.tremaining = self.time_to_next_bead()
@@ -352,7 +387,9 @@ class Node:
         while True:
             oldincoming = copy(self.incoming)
             for bead in oldincoming:
-                if self.braid.extend(bead):
+                if self.braid.extend(bead, cohort_cache=self.cohort_cache,
+                                     compute_cohorts=False if self.calc_target == self.calc_target_fixed
+                                     else True):
                     self.incoming.remove(bead)
                 elif DEBUG:
                     print(f"Node {self.nodeid} unable to add {print_hash(bead.hash)} to braid, missing parents")
@@ -401,6 +438,239 @@ class Node:
         else:
             retval = htarget
         return retval
+
+    def calc_target_instant(self, parents):
+        """ Calculate a target based on the number of cohorts using TARGET_NB and TARGET_NC where
+            TARGET_NB/TARGET_NC =~ 2.42. Herein we compute the desired value of x_0 given the
+            harmonic average of our parents x_1 as:
+                x_0 = 2 x_1 W(1/2)/W(N_B/N_C-1)
+            FIXME this fails if N_B/N_C = 1
+            FIXME we can enumerate values for W(N_B/N_C-1): see "LambertW Fractions.ipynb"
+        """
+        Nb = sum(map(len,self.braid.cohorts[-TARGET_NC:]))
+        Nb_Nc = Nb/len(self.braid.cohorts[-TARGET_NC:])
+
+        # Harmonic average parent targets
+        x_1 = len(parents)*MAX_HASH//sum(MAX_HASH//p.target for p in parents)
+        return 2*x_1*W(1/2)/W(Nb_Nc-1)
+
+    # Model function for Nb/Nc ratio
+    def model_nb_nc_ratio(self, x, a, lambda_val):
+        """
+        Model the relationship between target difficulty (x) and Nb/Nc ratio
+        using the formula: Nb/Nc = 1 + a*λ*x*exp(a*λ*x)
+
+        Args:
+            x: Target difficulty
+            a: Constant related to network propagation
+            lambda_val: Constant related to mining rate
+
+        Returns:
+            Predicted Nb/Nc ratio
+        """
+        print(f"model_nb_nc_ratio: x={x} a={a} lambda={lambda_val}")
+        return 1 + a * lambda_val * x * exp(a * lambda_val * x)
+
+    # Inverse function to solve for x given a desired Nb/Nc ratio
+    def solve_for_target(self, desired_ratio, a, lambda_val, x_initial=None):
+        """
+        Solve for the target difficulty (x) that would give the desired Nb/Nc ratio
+
+        Args:
+            desired_ratio: Target Nb/Nc ratio
+            a: Estimated parameter a
+            lambda_val: Estimated parameter λ
+            x_initial: Initial guess for x
+
+        Returns:
+            Estimated target difficulty
+        """
+        if desired_ratio <= 1:
+            return MAX_HASH  # Maximum difficulty for ratios <= 1
+
+        # Use current target as initial guess if not provided
+        if x_initial is None:
+            x_initial = self.target
+
+        # Simple iterative solver using Newton's method
+        x = x_initial/MAX_HASH
+        max_iter = 10
+        tolerance = 1e-6
+
+        for _ in range(max_iter):
+            # Current function value
+            f_x = self.model_nb_nc_ratio(x, a, lambda_val) - desired_ratio
+
+            # If we're close enough, return the result
+            if abs(f_x) < tolerance:
+                break
+
+            # Derivative of the function with respect to x
+            df_dx = a * lambda_val * exp(a * lambda_val * x) * (1 + a * lambda_val * x)
+
+            # Newton's method update
+            x_new = x - f_x / df_dx
+
+            # Ensure x stays positive
+            x = max(1, x_new)*MAX_HASH
+
+        return int(x)
+
+    def estimate_model_parameters(self):
+        """
+        Estimate the parameters a and λ from historical data
+
+        Returns:
+            Tuple of (a, λ)
+        """
+        # Need at least a few data points to estimate parameters
+        if not hasattr(self, 'target_history') or len(self.target_history) < 5:
+            # Return default values if we don't have enough data
+            return 0.1, 0.01
+
+        # Extract x values (targets) and y values (Nb/Nc ratios)
+        x_data = np.array([t for t, _ in self.target_history])
+        y_data = np.array([r for _, r in self.target_history])
+
+        # Normalize x data to avoid numerical issues
+        x_scale = np.mean(x_data)
+        x_data_norm = x_data / x_scale
+
+        # Initial parameter guess
+        p0 = [0.1, 0.01]
+
+        try:
+            # Define the model function for curve fitting
+            def fit_func(x, a, lambda_val):
+                return 1 + a * lambda_val * x * np.exp(a * lambda_val * x)
+
+            # Fit the model to the data
+            popt, _ = curve_fit(fit_func, x_data_norm, y_data, p0=p0, bounds=([0, 0], [10, 10]))
+
+            # Adjust lambda for the scaling we applied
+            a_est, lambda_est = popt
+            lambda_est = lambda_est / x_scale
+
+            return a_est, lambda_est
+
+        except (RuntimeError, ValueError):
+            # If curve fitting fails, return default values
+            return 0.1, 0.01
+
+    def calc_target_model(self, parents):
+        """ Calculate a target based on the analytic model of the relationship between
+            target difficulty and Nb/Nc ratio: N_B/N_C = 1 + a*λ*x*exp(a*λ*x)
+
+            This approach directly solves for the target difficulty that would give
+            the desired Nb/Nc ratio, based on estimated parameters a and λ.
+        """
+        # Get the current state
+        Nb = sum(map(len, self.braid.cohorts[-TARGET_NC:]))
+        Nc = len(self.braid.cohorts[-TARGET_NC:])
+        Nb_Nc = Nb/Nc
+
+        # Target ratio we want to achieve
+        target_ratio = TARGET_NB/TARGET_NC
+
+        # Harmonic average of parent targets
+        x_1 = len(parents)*MAX_HASH//sum(MAX_HASH//p.target for p in parents)
+
+        # Initialize target history if it doesn't exist
+        if not hasattr(self, 'target_history'):
+            self.target_history = []
+
+        # Add current data point to history
+        self.target_history.append((x_1, Nb_Nc))
+
+        # Keep history at a reasonable size
+        max_history = 20
+        if len(self.target_history) > max_history:
+            self.target_history = self.target_history[-max_history:]
+
+        # Estimate model parameters
+        a, lambda_val = self.estimate_model_parameters()
+
+        # Solve for the target that would give the desired ratio
+        new_target = self.solve_for_target(target_ratio, a, lambda_val, x_1)
+
+        # Apply a damping factor to avoid large jumps
+        damping = 0.7
+        new_target = int(damping * new_target + (1 - damping) * x_1)
+
+        # Ensure target stays within reasonable bounds
+        new_target = max(1, min(MAX_HASH, new_target))
+
+        if self.log and self.nodeid == 0:
+            print(f"MODEL: Nb/Nc={Nb_Nc:.4f} Target={target_ratio:.4f} "
+                  f"a={a:.6f} λ={lambda_val:.6f} "
+                  f"Old={print_hash_simple(x_1)} New={print_hash_simple(new_target)}")
+
+        return new_target
+
+    def calc_target_pid(self, parents):
+        """ Calculate a target based on the number of cohorts using TARGET_NB and TARGET_NC where
+            TARGET_NB/TARGET_NC =~ 2.42. Herein we use a Proportional Integral Derivative (PID)
+            controller to adjust the difficulty up if there are too many cohorts, and down if
+            there are too few cohorts.
+
+            The analytic behavior follows: N_B/N_C = 1 + a*λ*x*exp(a*λ*x)
+            where:
+            - a is a constant related to network propagation
+            - λ is related to the mining rate
+            - x is our control variable (target difficulty)
+        """
+        # Get the current state
+        Nb = sum(map(len, self.braid.cohorts[-TARGET_NC:]))
+        Nc = len(self.braid.cohorts[-TARGET_NC:])
+        Nb_Nc = Nb/Nc
+
+        # Calculate the error (difference between current and target ratio)
+        target_ratio = TARGET_NB/TARGET_NC
+        error = target_ratio - Nb_Nc
+
+        # PID controller parameters - these values can be optimized with --pid-calibrate
+        Kp = 0.05  # Proportional gain
+        Ki = 0.00  # Integral gain
+        Kd = 0.02  # Derivative gain
+
+        # Harmonic average of parent targets
+        x_1 = len(parents)*MAX_HASH//sum(MAX_HASH//p.target for p in parents)
+
+        # Proportional term
+        p_term = Kp * error
+
+        # Integral term - sum of all previous errors
+        self.prev_errors.append(error)
+        if len(self.prev_errors) > self.max_error_history:
+            self.prev_errors.pop(0)  # Remove oldest error
+        i_term = Ki * sum(self.prev_errors)
+
+        # Derivative term - rate of change of error
+        d_term = 0
+        if len(self.prev_errors) >= 2:
+            d_term = Kd * (self.prev_errors[-1] - self.prev_errors[-2])
+
+        # Combine terms to get the adjustment factor
+        adjustment = p_term + i_term + d_term
+
+        # Apply adjustment to the target using a constrained approach
+        # Use tanh-like function to limit adjustment to [-0.9, 0.9] range
+        # This ensures we never adjust by more than 90% in either direction
+        constrained_adjustment = 0.9 * (2 / (1 + math.exp(-2 * adjustment)) - 1)
+
+        # Positive error means Nb/Nc is too low, so increase target (make mining easier)
+        # Negative error means Nb/Nc is too high, so decrease target (make mining harder)
+        new_target = int(x_1 * (1 + constrained_adjustment))
+
+        # Additional safety check to ensure target stays within reasonable bounds
+        new_target = max(1, min(MAX_HASH, new_target))
+
+        if self.log and self.nodeid == 0:
+            print(f"PID: Nb/Nc={Nb_Nc:.4f} Target={target_ratio:.4f} Error={error:.4f} "
+                  f"P={p_term:.4f} I={i_term:.4f} D={d_term:.4f} "
+                  f"Adjustment={adjustment:.4f} Old={print_hash_simple(x_1)} New={print_hash_simple(new_target)}")
+
+        return new_target
 
     def calc_target_exponential_damping(self, parents):
         """ Calculate a target based on the number of cohorts using TARGET_NB and TARGET_NC where
@@ -604,40 +874,65 @@ class Braid:
     def __contains__(self, bead):
         return bead.hash in self.beads
 
-    def extend(self, bead):
+    def parents(self):
+        """ Return a dict of {bead: {parents}} for this braid, for use with the
+            functions in braid.py.
+        """
+        return {b: set(p for p in b.parents) for b in self.beads.values()}
+
+    def extend(self, bead, cohort_cache=None, compute_cohorts=True):
         """ Add a bead to the end of this braid. Returns True if the bead
             successfully extended this braid, and False otherwise.
 
             <bead> is a data structure from another node, and objects referenced by it in e.g.
             parents won't necessarily be the same object as this node has, so we have to check
             everything by hash and use our own objects.
+
+            Arguments:
+                bead:               A Bead object
+                compute_cohorts:    If True, compute cohorts for the difficulty adjustment algorithm
+            Returns:
+                True if the bead was successfully added, False otherwise
         """
         if (not bead.parents                                           # No parents: bad block
                 or not all(p.hash in self.beads for p in bead.parents) # Don't have all parents
                 or bead.hash in self.beads):                           # Already seen this bead
             return False
-        self.beads[bead.hash]     = bead
-        for p in bead.parents:
-            self.times[bead.hash] = bead.t
-            if p in self.tips:
-                for t in copy(self.tips):
-                    if p == t:
-                        self.tips.remove(t)
+        self.beads[bead.hash] = bead
+        self.times[bead.hash] = bead.t
+        self.tips            -= bead.parents
         self.tips.add(bead)
 
         # Find earliest parent of <bead> in cohorts and nuke all cohorts after that.
-        found_parents = set()
-        dangling      = set([bead])
-        for c in reversed(self.cohorts): # <bead> is never going to be in my cohorts
-            found_parents |= set(p for p in bead.parents) & c
-            dangling |= self.cohorts.pop()
-            if len(found_parents) == len(bead.parents):
-                break
-        # Construct a sub-braid from dangling and compute any new cohorts
-        sub_braid = {d: set(p for p in d.parents if p in dangling) for d in dangling}
-        self.cohorts.extend(braid.cohorts(sub_braid))
-        if DEBUG:
-            print(f"    Last cohort: ", print_hash([b.hash for b in self.cohorts[-1]]))
+        if compute_cohorts:
+            found_parents = set()
+            dangling      = set([bead])
+            for c in reversed(self.cohorts): # <bead> is never going to be in my cohorts
+                found_parents |= set(p for p in bead.parents) & c
+                dangling |= self.cohorts.pop()
+                if len(found_parents) == len(bead.parents):
+                    break
+            frozen_dangling = frozenset(dangling)
+            if cohort_cache is not None and frozen_dangling in cohort_cache:
+                if DEBUG:
+                    print(f"    Using cached cohorts for dangling set {print_hash(frozen_dangling)}")
+                self.cohorts.extend(cohort_cache[frozen_dangling])
+            else:
+                # Construct a sub-braid from dangling and compute any new cohorts
+                sub_braid = {d: set(p for p in d.parents if p in dangling) for d in dangling}
+                # pass cohort_cache to cohorts() which will use it as an ancestor cache
+                new_cohorts = list(braid.cohorts(sub_braid,
+                                                 ancestor_cache=cohort_cache))
+                if cohort_cache is not None:
+                    cohort_cache[frozen_dangling] = new_cohorts
+                    # Purge old cohorts and ancestors from the cache
+                    if len(cohort_cache) > MAX_CACHE:
+                        for _ in range(len(cohort_cache)-MAX_CACHE):
+                            cohort_cache.popitem(last=False)
+
+                self.cohorts.extend(new_cohorts)
+                if DEBUG:
+                    print(f"    Computed new cohorts: ", print_hash(new_cohorts))
 
         return True
 
@@ -750,7 +1045,7 @@ def main():
         help="Damping factor for difficulty adjustment",
         default=TARGET_DAMPING)
     parser.add_argument("-A", "--algorithm",
-        help="Select the Difficulty Algorithm ('fixed', 'exp', 'parents', 'simple', 'simple_asym', "
+        help="Select the Difficulty Algorithm ('fixed', 'exp', 'parents', 'simple', 'pid', 'model', 'simple_asym', "
              "'simple_asym_damped')",
         default="exp")
     parser.add_argument("-l", "--log", action=BooleanOptionalAction,

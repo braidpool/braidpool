@@ -91,52 +91,59 @@ def all_ancestors(b, parents, ancestors={}):
         ancestors encountered, using an iterative algorithm. Assumes b not in
         parents and b not in ancestors.
     """
-    work_stack = [(b, False)]  # (bead, is_processed)
+    work_stack = [(b, False)]
 
     while work_stack:
-        current, is_processed = work_stack[-1]
+        current, parents_processed = work_stack[-1]
 
-        if is_processed:
-            # We've finished processing all parents, compute ancestors
+        if not parents_processed:
+            work_stack[-1] = (current, True)
+
+            for p in parents[current]:  # Add any unprocessed parents to the stack
+                if p not in ancestors:
+                    work_stack.append((p, False))
+        else:                           # We've finished processing all parents, compute ancestors
             work_stack.pop()
             ancestors[current] = set(copy(parents[current]))
 
-            # Update with ancestors of all parents
-            for p in parents[current]:
+            for p in parents[current]:  # Update with ancestors of all parents
                 ancestors[current].update(ancestors[p])
-        else:
-            # Mark as being processed
-            work_stack[-1] = (current, True)
-
-            # Add any unprocessed parents to the stack
-            for p in parents[current]:
-                if p not in ancestors:
-                    work_stack.append((p, False))
 
     return ancestors
 
-def cohorts(parents, children=None, initial_cohort=None):
+def cohorts(parents, children=None, initial_cohort=None, ancestor_cache=None):
     """ Given the seed of the next cohort (which is the set of beads one step older, in the next
         cohort), build an ancestor/descendant set for each visited bead.  A new cohort is
         formed if we encounter a set of beads, stepping in the descendant direction, for which
         *all* beads in this cohort are ancestors of the first generation of beads in the next
         cohort.
+
+        Arguments:
+            parents:        {bead: {parents}} dict
+            children:       {bead: {children}} dict (optional, will be computed if not passed)
+            initial_cohort: set of beads to start with (optional, will be computed if not passed)
+        Returns:
+            A generator yielding cohorts as sets of beads.
     """
-    children     = reverse(parents) if not children else children
+    children     = children if children is not None else reverse(parents)
     dag_tips     = tips(parents, children)
     cohort       = initial_cohort or geneses(parents)
-    oldcohort    = set()
     head         = copy(cohort)
     tail         = copy(cohort)
     while True :
-        ancestors = {h: set() for h in head} # Don't let head have ancestors to stop iteration
         cohort    = copy(head)               # Initial cohort is the head
+        oldcohort = set()
+        ancestors = {h: set() for h in head} # Don't let head have ancestors to stop iteration
+        if ancestor_cache is not None:
+            cache_key = (frozenset(head), frozenset(parents.keys()))
+            if cache_key in ancestor_cache:
+                ancestors = ancestor_cache[cache_key]
 
         while True:                          # DFS search
-            # Calculate new tail
+
             if not head:
                 return                       # StopIteration and return
-            for b in cohort-oldcohort:
+            for b in cohort-oldcohort:       # Calculate new tail
                 tail |= children[b]          # Add the next generation to the tail
             tail |= cohort ^ oldcohort       # Add any beads in oldcohort but not in cohort
             if cohort & dag_tips:            # If there are any tips in cohort, add tips to tail
@@ -147,7 +154,6 @@ def cohorts(parents, children=None, initial_cohort=None):
             oldcohort = copy(cohort)         # Copy so we can tell if new tail has changed anything
                                              # because changing the tail but not cohort may find
                                              # new ancestors
-
             # Calculate ancestors
             for t in tail:                   # Find all ancestors of all beads in the tail
                 if t not in ancestors:
@@ -167,12 +173,13 @@ def cohorts(parents, children=None, initial_cohort=None):
                 break                        # Yield successful cohort
             if cohort == oldcohort:          # Cohort hasn't changed, we may be looping
                 if dag_tips <= tail:         # Tail contains all tips but we didn't form a cohort
-                    head = set()
                     cohort |= tail
+                    head = set()
                     tail = set()
                     break                    # Yield cohort+tail
                 cohort.update(tail)
-        oldcohort = set()
+        if ancestor_cache is not None and cache_key not in ancestor_cache:
+            ancestor_cache[cache_key] = copy(ancestors)
         yield cohort
 
 def cohort_tail(cohort, parents, children=None):
@@ -414,7 +421,7 @@ def layout(cohort, all_parents, bead_work=None, previous_cohort_tips=None):
     pos = {bead: [proposed_x[bead], 0] for bead in hwpath}
     lines = [] # A running tally of lines on the graph
 
-    extended_children = copy(children) 
+    extended_children = copy(children)
     for key, value in prev_cohort_edges.items():
         if key not in children:
             extended_children[key] = set()
@@ -422,7 +429,7 @@ def layout(cohort, all_parents, bead_work=None, previous_cohort_tips=None):
     extended_parents = reverse(extended_children)
     if previous_cohort_tips:
         for key, value in previous_cohort_tips.items():
-            pos[key] = [-1, value[1]] # add the position of tips from the previous cohort as (-1, y_coord) 
+            pos[key] = [-1, value[1]] # add the position of tips from the previous cohort as (-1, y_coord)
     # Place remaining beads in work sorted order (lowest work at top)
     for bead in sorted(set(parents) - set(hwpath),
                        key=work_sort_key(parents, children, bead_work), reverse=True):
