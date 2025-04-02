@@ -125,7 +125,7 @@ impl Braid {
 
         // We need to check whether even one of the parent beads have been pruned from memory!
         for (parent_bead_hash, _) in &bead.parents {
-            let parent_bead = self.load_bead_from_memory(parent_bead_hash);
+            let parent_bead = self.load_bead_from_memory(parent_bead_hash.clone());
             if let Err(error_type) = parent_bead {
                 match error_type {
                     BeadLoadError::BeadNotFound => return Ok(true),
