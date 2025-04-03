@@ -128,12 +128,12 @@ impl Braid {
     fn get_geneses(&self) -> HashSet<BeadHash> {
         let mut geneses = HashSet::new();
         let parents = self.get_parents();
-        for (beadhash, parents) in parents {
-            if parents.is_empty() {
+        for (beadhash, parents_set) in parents {
+            if parents_set.is_empty() {
                 geneses.insert(beadhash.clone());
             }
             let mut is_genesis = false;
-            for parent in parents {
+            for parent in parents_set {
                 if self.loaded_beads_in_memory.get(&parent).is_none() {
                     is_genesis = true;
                 }
@@ -148,8 +148,8 @@ impl Braid {
     fn get_tips(&self) -> HashSet<BeadHash> {
         let mut tips = HashSet::new();
         let children = self.get_children();
-        for (beadhash, parents) in children {
-            if parents.is_empty() {
+        for (beadhash, children_set) in children {
+            if children_set.is_empty() {
                 tips.insert(beadhash.clone());
             }
         }
