@@ -44,6 +44,13 @@ impl Braid {
         }
     }
 
+    pub fn load_beads_in_memory(&mut self, beads: Vec<Bead>) {
+        for bead in beads {
+            let bead_hash = bead.bead_hash;
+            self.loaded_beads_in_memory.insert(bead_hash, bead);
+        }
+    }
+
     pub fn generate_from_previous_dag(previous_dag_braid: Braid) -> Self {
         let cohorts = previous_dag_braid.generate_tip_cohorts();
         Braid {
@@ -86,6 +93,69 @@ impl Braid {
 
 impl Braid {
     // All private functions go here!
+    fn get_parents(&self) -> HashMap<BeadHash, HashSet<BeadHash>> {
+        let mut parents = HashMap::new();
+        for beadhash in self.beads.iter() {
+            let bead = match self.loaded_beads_in_memory.get(beadhash) {
+                Some(bead) => bead,
+                None => continue, // TODO: Load from the database
+            };
+            let mut this_parents = HashSet::new();
+            for (parent_hash, _) in &bead.parents {
+                this_parents.insert(parent_hash.clone());
+            }
+            parents.insert(beadhash.clone(), this_parents);
+        }
+        parents
+    }
+
+    fn get_children(&self) -> HashMap<BeadHash, HashSet<BeadHash>> {
+        let mut children = HashMap::new();
+        for (beadhash, parents) in self.get_parents() {
+            for parent in parents {
+                children
+                    .entry(parent.clone())
+                    .or_insert_with(HashSet::new)
+                    .insert(beadhash.clone());
+            }
+            children
+                .entry(beadhash.clone())
+                .or_insert_with(HashSet::new);
+        }
+        children
+    }
+
+    fn get_geneses(&self) -> HashSet<BeadHash> {
+        let mut geneses = HashSet::new();
+        let parents = self.get_parents();
+        for (beadhash, parents) in parents {
+            if parents.is_empty() {
+                geneses.insert(beadhash.clone());
+            }
+            let mut is_genesis = false;
+            for parent in parents {
+                if self.loaded_beads_in_memory.get(&parent).is_none() {
+                    is_genesis = true;
+                }
+            }
+            if is_genesis {
+                geneses.insert(beadhash.clone());
+            }
+        }
+        geneses
+    }
+
+    fn get_tips(&self) -> HashSet<BeadHash> {
+        let mut tips = HashSet::new();
+        let children = self.get_children();
+        for (beadhash, parents) in children {
+            if parents.is_empty() {
+                tips.insert(beadhash.clone());
+            }
+        }
+        tips
+    }
+
     fn calculate_cohorts(&self) -> Vec<Cohort> {
         // TODO: Implement the cohorts calculating function!
         vec![Cohort(HashSet::new())]
