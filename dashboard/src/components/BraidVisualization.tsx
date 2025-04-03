@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
-import { BraidVisualizationData, BraidNode, BraidLink } from '../types/braid';
+import { BraidVisualizationData } from '../types/braid';
 import {
   Box,
   Typography,
   Divider,
   useTheme,
   useMediaQuery,
+  Paper,
 } from '@mui/material';
 
 interface BraidVisualizationProps {
@@ -24,6 +25,7 @@ const BraidVisualization: React.FC<BraidVisualizationProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const theme = useTheme();
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('md'));
+  const isExtraSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
 
   // Calculate available width for SVG (container width minus legend and margins)
   const [svgWidth, setSvgWidth] = useState(width);
@@ -32,8 +34,8 @@ const BraidVisualization: React.FC<BraidVisualizationProps> = ({
   useEffect(() => {
     const updateDimensions = () => {
       if (containerRef.current) {
-        // Account for legend width (160px) and margins
-        const legendSpace = 180;
+        // Account for legend width and margins
+        const legendSpace = isSmallScreen ? 0 : 160; // Reduced space for legend
         const containerWidth = containerRef.current.clientWidth;
         setSvgWidth(Math.max(300, containerWidth - legendSpace));
       }
@@ -45,7 +47,7 @@ const BraidVisualization: React.FC<BraidVisualizationProps> = ({
     return () => {
       window.removeEventListener('resize', updateDimensions);
     };
-  }, []);
+  }, [isSmallScreen]);
 
   // Color scheme for cohorts
   const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
@@ -75,7 +77,7 @@ const BraidVisualization: React.FC<BraidVisualizationProps> = ({
       .style('opacity', 0);
 
     // Draw links first (so they're behind nodes)
-    const links = svg
+    svg
       .append('g')
       .selectAll('line')
       .data(data.links)
@@ -106,7 +108,7 @@ const BraidVisualization: React.FC<BraidVisualizationProps> = ({
       .attr('fill', '#999');
 
     // Draw the nodes
-    const nodes = svg
+    svg
       .append('g')
       .selectAll('circle')
       .data(data.nodes)
@@ -140,7 +142,7 @@ const BraidVisualization: React.FC<BraidVisualizationProps> = ({
       });
 
     // Add text labels for node IDs
-    const labels = svg
+    svg
       .append('g')
       .selectAll('text')
       .data(data.nodes)
@@ -177,23 +179,73 @@ const BraidVisualization: React.FC<BraidVisualizationProps> = ({
       // Cleanup
       tooltip.remove();
     };
-  }, [data, svgWidth, height]);
+  }, [data, svgWidth, height, colorScale]);
 
   // Generate legend items for cohorts
   const renderCohortLegendItems = () => {
-    return data.cohorts.map((cohort, index) => (
-      <Box key={index} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-        <Box
-          sx={{
-            width: 12,
-            height: 12,
-            backgroundColor: colorScale(index.toString()),
-            mr: 1,
-          }}
-        />
-        <Typography variant='body2'>{`Cohort ${index}`}</Typography>
+    // Calculate how to split cohorts into columns
+    const columns = isExtraSmallScreen ? 2 : isSmallScreen ? 3 : 1;
+    const itemsPerColumn = Math.ceil(data.cohorts.length / columns);
+
+    // Create column arrays
+    const columnItems = Array.from({ length: columns }, (_, colIndex) => {
+      const startIdx = colIndex * itemsPerColumn;
+      const endIdx = Math.min(startIdx + itemsPerColumn, data.cohorts.length);
+      return Array.from({ length: endIdx - startIdx }, (_, i) => {
+        const index = startIdx + i;
+        return (
+          <Box
+            key={index}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              mb: 0.75,
+              mr: 1,
+              minWidth: 'auto',
+              width: '100%',
+            }}>
+            <Box
+              sx={{
+                width: 10,
+                height: 10,
+                backgroundColor: colorScale(index.toString()),
+                mr: 0.75,
+                border: '1px solid rgba(0,0,0,0.1)',
+                flexShrink: 0,
+              }}
+            />
+            <Typography
+              variant='caption'
+              sx={{
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}>{`Cohort ${index}`}</Typography>
+          </Box>
+        );
+      });
+    });
+
+    // Render items in a flex container for columns
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          maxHeight: isSmallScreen ? '120px' : '280px',
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          '&::-webkit-scrollbar': {
+            width: '6px',
+          },
+          '&::-webkit-scrollbar-thumb': {
+            backgroundColor: 'rgba(0,0,0,0.2)',
+            borderRadius: '3px',
+          },
+        }}>
+        {columnItems.flat()}
       </Box>
-    ));
+    );
   };
 
   return (
@@ -202,17 +254,23 @@ const BraidVisualization: React.FC<BraidVisualizationProps> = ({
       sx={{
         display: 'flex',
         flexDirection: isSmallScreen ? 'column' : 'row',
-        alignItems: isSmallScreen ? 'center' : 'flex-start',
+        alignItems: 'flex-start',
         width: '100%',
+        height: '100%',
         overflow: 'hidden',
+        borderRadius: 1,
+        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+        bgcolor: 'white',
       }}>
       <Box
         sx={{
           flex: '1 1 auto',
-          overflow: 'hidden',
           display: 'flex',
           justifyContent: 'center',
+          alignItems: 'center',
           maxWidth: '100%',
+          height: isSmallScreen ? 'auto' : '100%',
+          p: 1,
         }}>
         <svg
           ref={svgRef}
@@ -220,59 +278,85 @@ const BraidVisualization: React.FC<BraidVisualizationProps> = ({
           height={height}
           style={{
             backgroundColor: '#f8f9fa',
-            borderRadius: '8px',
+            borderRadius: '6px',
             maxWidth: '100%',
+            boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.05)',
           }}
         />
       </Box>
-      <Box
+      <Paper
+        elevation={0}
         sx={{
-          p: 2,
-          ml: isSmallScreen ? 0 : 2,
-          mt: isSmallScreen ? 2 : 0,
-          border: '1px solid #ddd',
-          borderRadius: '8px',
+          p: 1,
+          ml: isSmallScreen ? 1 : 0,
+          mt: isSmallScreen ? 0 : 1,
+          mr: isSmallScreen ? 1 : 1,
+          mb: isSmallScreen ? 1 : 1,
+          border: '1px solid rgba(0,0,0,0.05)',
+          borderRadius: '6px',
           backgroundColor: 'white',
-          minWidth: '140px',
-          maxWidth: isSmallScreen ? '100%' : '160px',
-          flex: isSmallScreen ? '1 1 auto' : '0 0 160px',
+          minWidth: isSmallScreen ? 'auto' : '150px',
+          maxWidth: isSmallScreen ? '100%' : '150px',
+          width: isSmallScreen ? '100%' : '150px',
+          flex: isSmallScreen ? '1 1 auto' : '0 0 150px',
+          alignSelf: isSmallScreen ? 'stretch' : 'flex-start',
+          maxHeight: isSmallScreen ? 'auto' : 'calc(100% - 16px)',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
         }}>
-        <Typography variant='subtitle1' fontWeight='bold' sx={{ mb: 1 }}>
+        <Typography
+          variant='subtitle2'
+          fontWeight='500'
+          sx={{ mb: 1, color: 'text.primary' }}>
           Legend
         </Typography>
 
         {renderCohortLegendItems()}
 
-        <Divider sx={{ my: 1 }} />
+        <Divider sx={{ my: 0.75 }} />
 
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-          <Box
-            component='hr'
-            sx={{
-              width: 15,
-              height: 2,
-              backgroundColor: '#ff6b6b',
-              border: 'none',
-              mr: 1,
-            }}
-          />
-          <Typography variant='body2'>High-work path</Typography>
-        </Box>
+        <Box sx={{ pt: 0.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.75 }}>
+            <Box
+              sx={{
+                width: 10,
+                height: 10,
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                mr: 0.75,
+                flexShrink: 0,
+              }}>
+              <Box
+                component='hr'
+                sx={{
+                  width: 15,
+                  height: 2,
+                  backgroundColor: '#ff6b6b',
+                  border: 'none',
+                }}
+              />
+            </Box>
+            <Typography variant='caption'>High-work path</Typography>
+          </Box>
 
-        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-          <Box
-            sx={{
-              width: 12,
-              height: 12,
-              borderRadius: '50%',
-              backgroundColor: colorScale('0'),
-              border: '2px solid #ff6b6b',
-              mr: 1,
-            }}
-          />
-          <Typography variant='body2'>Tip nodes</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <Box
+              sx={{
+                width: 10,
+                height: 10,
+                borderRadius: '50%',
+                backgroundColor: colorScale('0'),
+                border: '2px solid #ff6b6b',
+                mr: 0.75,
+                flexShrink: 0,
+              }}
+            />
+            <Typography variant='caption'>Tip nodes</Typography>
+          </Box>
         </Box>
-      </Box>
+      </Paper>
     </Box>
   );
 };
