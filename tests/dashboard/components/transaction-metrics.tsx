@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react"
 import * as d3 from "d3"
 import { Loader2 } from "lucide-react"
 import type { TransactionMetricsData } from "@/lib/types"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+
 
 interface TransactionMetricsProps {
   data: TransactionMetricsData | null
