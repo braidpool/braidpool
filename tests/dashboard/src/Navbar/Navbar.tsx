@@ -1,8 +1,12 @@
-import { useState } from "react";
 import { cn } from "@/lib/utils";
 
-const Navbar = () => {
-  const [active, setActive] = useState("BraidPool");
+const Navbar = ({
+  active,
+  setActive,
+}: {
+  active: string;
+  setActive: (item: string) => void;
+}) => {
 
   const navItems = ["BraidPool", "Bitcoin Stats", "Mining Stats"];
 
