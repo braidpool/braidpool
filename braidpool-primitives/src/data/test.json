@@ -1,0 +1,28 @@
+{  "set_1": {
+    "prev_block_bytes_str": "00000000000000000002a7d5f0b2a6e4ff8d5e2a3c47f5c9b4f8e7d1c2b3a9e7",
+    "payout_txin": "450c309b70fb3f71b63b10ce60af17499bd21b1db39aa47b19bf22166ee67144",
+    "tx_included_in_bead": [
+      "c9d1b7e4f5a3d2c6b8e0f5a7d3c9b1e6f4a7b2e0c5d1b8e6f4a3d7b9c2e5f0d8",
+      "e6f4a3d7b9c2e5f0d8c9d1b7e4f5a3d2c6b8e0f5a7d3c9b1e6f4a7b2e0c5d1b8"
+    ],
+    "curr_bead_hash": "a9e59b78a8b37cb3f8a6001a5f89224ef67847e46e0bead3af980b8aca512ffe"
+  },
+  "set_2":{
+    "prev_block_bytes_str": "00000000000000000000efc4be188e9d2053681791a5c53b07ecfe8ba00f8464",
+    "payout_txin": "450c309b70fb3f71b63b10ce60af17499bd21b1db39aa47b19bf22166ee67144",
+    "tx_included_in_bead": [
+      "c8f0a4e7b3d5c1f9a6c2d5f9e7b4d1c7f3a5e9b2d6c8f0a4e7b3d5c1f9a6c2d5",
+      "f3a5e9b2d6c8f0a4e7b3d5c1f9a6c2d5f9e7b4d1c7f3a5e9b2d6c8f0a4e7b3d5"
+    ],
+    "curr_bead_hash": "a9e59b78a8b37cb3f8a6001a5f89224ef67847e46e0bead3af980b8aca512ffe"
+  },
+  "set_3":{
+    "prev_block_bytes_str": "00000000000000000000efc4be188e9d2053681791a5c53b07ecfe8ba00f8464",
+    "payout_txin": "450c309b70fb3f71b63b10ce60af17499bd21b1db39aa47b19bf22166ee67144",
+    "tx_included_in_bead": [
+      "a5e7f3c9e2a7d5f3b1c6d8e4a9b2f5c7d3e6a0b4f9d1c8a5e7f3c9e2a7d5f3b1",
+      "c6d8e4a9b2f5c7d3e6a0b4f9d1c8a5e7f3c9e2a7d5f3b1c6d8e4a9b2f5c7d3e6"
+    ],
+    "curr_bead_hash": "d8e4a9b2f5c7d3e6a0b4f9d1c8a5e7f3c9e2a7d5f3b1c6d8e4a9b2f5c7d3e6a0"
+  }
+}
