@@ -9,14 +9,10 @@ import {
   ListItemIcon,
   ListItemText,
   Drawer,
+  Grid,
 } from '@mui/material';
 import BraidVisualization from '../components/BraidVisualization';
-import BraidStats from '../components/BraidStats';
 import Header from '../components/Header';
-import {
-  PrimaryMetrics,
-  SecondaryMetrics,
-} from '../components/DashboardMetrics';
 import { BraidVisualizationData } from '../types/braid';
 import {
   loadSampleBraidData,
@@ -24,6 +20,9 @@ import {
 } from '../utils/braidDataTransformer';
 import Card from '../components/common/Card';
 import colors from '../theme/colors';
+import TopStatsBar from '../components/TopStatsBar';
+import PoolHashrateChart from '../components/PoolHashrateChart';
+import RecentBlocksTable from '../components/RecentBlocksTable';
 
 // Sidebar icons
 import DashboardIcon from '@mui/icons-material/Dashboard';
@@ -73,8 +72,8 @@ const Dashboard: React.FC = () => {
         '& .MuiDrawer-paper': {
           width: drawerWidth,
           boxSizing: 'border-box',
-          backgroundColor: '#f8f9fa',
-          borderRight: '1px solid #eee',
+          backgroundColor: colors.paper,
+          borderRight: `1px solid ${colors.border}`,
           mt: '50px', // Adjusted for header height
           zIndex: (theme) => theme.zIndex.drawer,
         },
@@ -93,12 +92,12 @@ const Dashboard: React.FC = () => {
           sx={{
             pl: 2,
             py: 1.5,
-            borderLeft: '4px solid #1976d2',
+            borderLeft: `4px solid ${colors.primary}`,
             '&.Mui-selected': {
-              backgroundColor: 'rgba(25, 118, 210, 0.08)',
+              backgroundColor: 'rgba(57, 134, 232, 0.08)',
             },
           }}>
-          <ListItemIcon sx={{ minWidth: 40 }}>
+          <ListItemIcon sx={{ minWidth: 40, color: colors.primary }}>
             <DashboardIcon fontSize='small' />
           </ListItemIcon>
           <ListItemText
@@ -107,7 +106,7 @@ const Dashboard: React.FC = () => {
           />
         </ListItemButton>
         <ListItemButton sx={{ pl: 2, py: 1.5 }}>
-          <ListItemIcon sx={{ minWidth: 40 }}>
+          <ListItemIcon sx={{ minWidth: 40, color: colors.textSecondary }}>
             <ComputerIcon fontSize='small' />
           </ListItemIcon>
           <ListItemText
@@ -116,7 +115,7 @@ const Dashboard: React.FC = () => {
           />
         </ListItemButton>
         <ListItemButton sx={{ pl: 2, py: 1.5 }}>
-          <ListItemIcon sx={{ minWidth: 40 }}>
+          <ListItemIcon sx={{ minWidth: 40, color: colors.textSecondary }}>
             <PeopleIcon fontSize='small' />
           </ListItemIcon>
           <ListItemText
@@ -125,7 +124,7 @@ const Dashboard: React.FC = () => {
           />
         </ListItemButton>
         <ListItemButton sx={{ pl: 2, py: 1.5 }}>
-          <ListItemIcon sx={{ minWidth: 40 }}>
+          <ListItemIcon sx={{ minWidth: 40, color: colors.textSecondary }}>
             <WarningIcon fontSize='small' />
           </ListItemIcon>
           <ListItemText
@@ -134,7 +133,7 @@ const Dashboard: React.FC = () => {
           />
         </ListItemButton>
         <ListItemButton sx={{ pl: 2, py: 1.5 }}>
-          <ListItemIcon sx={{ minWidth: 40 }}>
+          <ListItemIcon sx={{ minWidth: 40, color: colors.textSecondary }}>
             <SecurityIcon fontSize='small' />
           </ListItemIcon>
           <ListItemText
@@ -143,7 +142,7 @@ const Dashboard: React.FC = () => {
           />
         </ListItemButton>
         <ListItemButton sx={{ pl: 2, py: 1.5 }}>
-          <ListItemIcon sx={{ minWidth: 40 }}>
+          <ListItemIcon sx={{ minWidth: 40, color: colors.textSecondary }}>
             <BarChartIcon fontSize='small' />
           </ListItemIcon>
           <ListItemText
@@ -152,7 +151,7 @@ const Dashboard: React.FC = () => {
           />
         </ListItemButton>
         <ListItemButton sx={{ pl: 2, py: 1.5 }}>
-          <ListItemIcon sx={{ minWidth: 40 }}>
+          <ListItemIcon sx={{ minWidth: 40, color: colors.textSecondary }}>
             <AccountBalanceWalletIcon fontSize='small' />
           </ListItemIcon>
           <ListItemText
@@ -161,7 +160,7 @@ const Dashboard: React.FC = () => {
           />
         </ListItemButton>
         <ListItemButton sx={{ pl: 2, py: 1.5 }}>
-          <ListItemIcon sx={{ minWidth: 40 }}>
+          <ListItemIcon sx={{ minWidth: 40, color: colors.textSecondary }}>
             <InventoryIcon fontSize='small' />
           </ListItemIcon>
           <ListItemText
@@ -181,6 +180,7 @@ const Dashboard: React.FC = () => {
         mt: '50px',
         pb: 6, // Add extra bottom padding to avoid footer overlap
         mb: 4, // Add additional bottom margin
+        backgroundColor: colors.background,
       }}>
       {loading ? (
         <Box
@@ -191,7 +191,7 @@ const Dashboard: React.FC = () => {
             height: '50vh',
           }}>
           <CircularProgress />
-          <Typography variant='h6' sx={{ ml: 2 }}>
+          <Typography variant='h6' sx={{ ml: 2, color: colors.textPrimary }}>
             Loading Data...
           </Typography>
         </Box>
@@ -200,94 +200,54 @@ const Dashboard: React.FC = () => {
           {error}
         </Alert>
       ) : (
-        data && (
-          <>
-            {/* Metrics Section */}
-            <PrimaryMetrics />
-            <SecondaryMetrics />
+        <>
+          {/* Top Stats Bar */}
+          <TopStatsBar />
 
-            {/* Charts Section */}
-            <Box sx={{ mt: 4 }}>
-              {/* Pool Stats Chart */}
-              <Box sx={{ mb: 4 }}>
-                <Card
-                  title='Pool Statistics'
-                  subtitle='Updated every 5 minutes'
-                  accentColor={colors.cardAccentPrimary}>
-                  <Box
-                    sx={{
-                      height: 'auto',
-                      maxHeight: '400px',
-                      position: 'relative',
-                    }}>
-                    <BraidVisualization
-                      data={data}
-                      width={
-                        window.innerWidth > 1200
-                          ? 1100
-                          : window.innerWidth - 250
-                      }
-                      height={300}
-                    />
-                  </Box>
-                </Card>
-              </Box>
-
-              {/* Live Worker Stats */}
-              <Box>
-                <Card
-                  title={
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <Box
-                        component='span'
-                        sx={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: '50%',
-                          bgcolor: colors.success,
-                          mr: 1,
-                          animation: 'pulse 2s infinite',
-                          '@keyframes pulse': {
-                            '0%': { opacity: 1 },
-                            '50%': { opacity: 0.6 },
-                            '100%': { opacity: 1 },
-                          },
-                        }}
-                      />
-                      LIVE: ASIC Worker Real-Time Stats (1-min)
-                    </Box>
-                  }
-                  accentColor={colors.cardAccentSuccess}>
-                  <Box
-                    sx={{
-                      height: 'auto',
-                      pb: 3,
-                    }}>
-                    <BraidStats data={data} />
-                  </Box>
-                </Card>
-              </Box>
+          {/* Middle Section - Hashrate Graph and Recent Blocks */}
+          <Box
+            sx={{
+              display: 'flex',
+              flexDirection: { xs: 'column', md: 'row' },
+              gap: 3,
+              mb: 3,
+            }}>
+            <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 66.67%' } }}>
+              <PoolHashrateChart height={350} />
             </Box>
-          </>
-        )
+            <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 33.33%' } }}>
+              <RecentBlocksTable maxHeight={350} />
+            </Box>
+          </Box>
+
+          {/* Bottom Section - DAG Visualization */}
+          <Card
+            title='DAG Visualization'
+            subtitle='Directed Acyclic Graph of the braid structure'
+            accentColor={colors.cardAccentSuccess}>
+            <Box
+              sx={{
+                borderRadius: 1,
+                overflow: 'hidden',
+                height: 500,
+                width: '100%',
+              }}>
+              {data && <BraidVisualization data={data} height={500} />}
+            </Box>
+          </Card>
+        </>
       )}
     </Box>
   );
 
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        backgroundColor: colors.background,
-        minHeight: '100vh',
-      }}>
+    <>
       <Header />
       <Box sx={{ display: 'flex' }}>
         {sidebar}
         {mainContent}
       </Box>
-    </Box>
+    </>
   );
 };
 

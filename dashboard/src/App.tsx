@@ -4,15 +4,19 @@ import CssBaseline from '@mui/material/CssBaseline';
 import { Box, Container, Link, Typography } from '@mui/material';
 import Dashboard from './pages/Dashboard';
 
-// Create a theme
+// Create a dark theme
 const theme = createTheme({
   palette: {
-    mode: 'light',
+    mode: 'dark',
     primary: {
-      main: '#1976d2',
+      main: '#3986e8',
     },
     secondary: {
       main: '#dc004e',
+    },
+    background: {
+      default: '#121212',
+      paper: '#1e1e1e',
     },
   },
   components: {
@@ -52,7 +56,7 @@ function App() {
           display: 'flex',
           flexDirection: 'column',
           minHeight: '100vh',
-          backgroundColor: '#f8f9fa',
+          backgroundColor: '#121212',
         }}>
         <Dashboard />
         <Box
@@ -61,7 +65,7 @@ function App() {
             py: 3,
             mt: 'auto',
             bgcolor: 'background.paper',
-            borderTop: '1px solid rgba(0,0,0,0.05)',
+            borderTop: '1px solid rgba(255,255,255,0.05)',
           }}>
           <Container maxWidth='lg'>
             <Typography variant='body1' align='center' gutterBottom>

@@ -1,11 +1,11 @@
 /**
- * Common color constants for the Braidpool dashboard
+ * Common color constants for the Braidpool dashboard (Dark Theme)
  */
 export const colors = {
   // Primary colors
-  primary: '#1976d2',
-  primaryLight: '#2196f3',
-  primaryDark: '#0d47a1',
+  primary: '#3986e8',
+  primaryLight: '#64b5f6',
+  primaryDark: '#1565c0',
 
   // Secondary colors
   secondary: '#ff9800',
@@ -23,29 +23,40 @@ export const colors = {
   info: '#2196f3',
 
   // UI colors
-  background: '#f8f9fa',
-  border: 'rgba(0,0,0,0.05)',
-  shadow: 'rgba(0,0,0,0.08)',
-  headerBackground: '#f8f9fa',
+  background: '#121212',
+  paper: '#1e1e1e',
+  border: 'rgba(255,255,255,0.08)',
+  shadow: 'rgba(0,0,0,0.25)',
+  headerBackground: '#1a1a1a',
+  chartBackground: '#1e1e1e',
+  chartLine: '#ffffff',
+  chartGrid: 'rgba(255,255,255,0.1)',
 
   // Text colors
-  textPrimary: '#212121',
-  textSecondary: '#757575',
-  textDisabled: '#9e9e9e',
+  textPrimary: '#ffffff',
+  textSecondary: '#b0b0b0',
+  textDisabled: '#686868',
   textLight: '#ffffff',
 
   // Element colors
-  buttonBackground: '#f2f2f2',
-  buttonBackgroundHover: '#e6e6e6',
-  buttonText: '#7f7f7f',
+  buttonBackground: '#2d2d2d',
+  buttonBackgroundHover: '#3d3d3d',
+  buttonText: '#ffffff',
 
   // Card accent colors
-  cardAccentPrimary: '#1976d2',
+  cardAccentPrimary: '#3986e8',
   cardAccentSecondary: '#ff9800',
   cardAccentSuccess: '#4caf50',
 
   // Special elements
   notification: '#f8485e',
+
+  // DAG Visualization colors
+  tipNode: '#ff6b6b',
+  regularNode: '#3986e8',
+  nodeStroke: '#ffffff',
+  linkColor: '#555555',
+  highWorkPathColor: '#ff6b6b',
 };
 
 export default colors;
