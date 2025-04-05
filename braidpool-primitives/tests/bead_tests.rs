@@ -1,41 +1,81 @@
-use ::bitcoin::absolute::Time;
+use braidpool_primitives::beads::Bead;
 use braidpool_primitives::utils::test_utils::create_test_bead;
-use braidpool_primitives::{beads::Bead, utils::BeadHash};
 #[test]
 fn test_valid_bead() {
+    let prev_block_bytes_str_1 = "00000000000000000000efc4be188e9d2053681791a5c53b07ecfe8ba00f8464";
+    let mut prev_bytes_1 = [0u8; 32];
+    let result = hex::decode_to_slice(prev_block_bytes_str_1, &mut prev_bytes_1 as &mut [u8]);
+    match result {
+        Ok(val) => {
+            println!("Successfully decoded {:?}", val);
+        }
+        Err(e) => {
+            println!(
+                "{:?} this error occurred while decoding the corresponding bytes",
+                e
+            );
+        }
+    }
+    let payout_txin_1 = "450c309b70fb3f71b63b10ce60af17499bd21b1db39aa47b19bf22166ee67144";
+    let mut payout_tx_bytes_1 = [0u8; 32];
+    let result = hex::decode_to_slice(payout_txin_1, &mut payout_tx_bytes_1);
+    match result {
+        Ok(val) => {
+            println!("Successfully decoded {:?}", val);
+        }
+        Err(e) => {
+            println!(
+                "{:?} this error occurred while decoding the corresponding bytes",
+                e
+            );
+        }
+    }
+
+    let mut tx_included_in_bead_1: Vec<[u8; 32]> = Vec::new();
+    let txs_1 = [
+        "c8f0a4e7b3d5c1f9a6c2d5f9e7b4d1c7f3a5e9b2d6c8f0a4e7b3d5c1f9a6c2d5",
+        "f3a5e9b2d6c8f0a4e7b3d5c1f9a6c2d5f9e7b4d1c7f3a5e9b2d6c8f0a4e7b3d5",
+    ];
+
+    for tx in txs_1 {
+        let mut curr_bytes_1 = [0u8; 32];
+        let result = hex::decode_to_slice(tx, &mut curr_bytes_1);
+        match result {
+            Ok(val) => {
+                println!("Successfully decoded {:?}", val);
+                tx_included_in_bead_1.push(curr_bytes_1);
+            }
+            Err(e) => {
+                println!(
+                    "{:?} this error occurred while decoding the corresponding bytes",
+                    e
+                );
+            }
+        }
+    }
+
     let test_dag_bead: Bead = create_test_bead(
         2,
-        [0x00; 32],
-        [
-            0xf3, 0xb8, 0x76, 0x2e, 0x7c, 0x1b, 0xd6, 0x47, 0xf1, 0xf6, 0x9d, 0x2a, 0x7f, 0x9c,
-            0x85, 0xf0, 0xb2, 0x5e, 0x64, 0x69, 0xf1, 0x07, 0xd2, 0x31, 0xdf, 0xf4, 0x5c, 0x47,
-            0x1f, 0x88, 0x94, 0x58,
-        ],
-        1653195600,
-        486604799,
-        0,
-        [0x00; 32],
-        [0xbb; 32],
-        [0xbb; 32],
-        4040404,
-        vec![
-            (
-                BeadHash::from_byte_array([0x01; 32]),
-                Time::from_consensus(1690000000).expect("invalid time value"),
-            ),
-            (
-                BeadHash::from_byte_array([0x02; 32]),
-                Time::from_consensus(1690001000).expect("invalid time value"),
-            ),
-            (
-                BeadHash::from_byte_array([0x03; 32]),
-                Time::from_consensus(1690002000).expect("invalid time value"),
-            ),
-        ], // parents
-        vec![[0x11; 32], [0x22; 32], [0x33; 32], [0x44; 32]],
-        436864982,
-        [0x00; 32],
-        1653195600,
+        prev_bytes_1,
+        1653195601,
+        486604790,
+        1,
+        payout_tx_bytes_1,
+        123455,
+        vec![],
+        vec![],
+        223456,
+        123456,
     );
-    assert_eq!(test_dag_bead.is_valid_bead(), false);
+    let test_bead_reference = test_dag_bead.clone();
+    let mut all_txs = Vec::new();
+    all_txs.push(test_dag_bead.coinbase_transaction.0);
+    for tx in test_dag_bead.transactions {
+        all_txs.push(tx);
+    }
+    all_txs.push(test_dag_bead.payout_update_transaction.0);
+    assert_eq!(
+        test_bead_reference.is_valid_bead(Some((String::from("testing"), all_txs))),
+        true
+    );
 }
