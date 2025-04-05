@@ -163,8 +163,8 @@ mod tests {
     use super::{BeadHash, HashSet};
     use crate::braid::Braid;
     use crate::utils::test_utils::create_test_bead;
-    use ::bitcoin::absolute::Time;
     use ::bitcoin::BlockHash;
+    use ::bitcoin::absolute::Time;
     #[test]
     fn add_bead_test() {
         let mut genesis_beads: HashSet<BeadHash> = HashSet::new();
@@ -213,7 +213,6 @@ mod tests {
                 }
             }
         }
-
 
         let test_dag_bead_1 = create_test_bead(
             2,

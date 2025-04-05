@@ -1,7 +1,7 @@
 #![allow(unused)]
 use crate::beads::{Bead, TransactionWithMerklePath};
-use crate::utils::bitcoin::MerklePathProof;
 use crate::utils::BeadHash;
+use crate::utils::bitcoin::MerklePathProof;
 use ::bitcoin::absolute::LockTime;
 use ::bitcoin::absolute::Time;
 use ::bitcoin::hex::FromHex;
