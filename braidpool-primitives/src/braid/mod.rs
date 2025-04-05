@@ -92,6 +92,21 @@ impl Braid {
 }
 
 impl Braid {
+    // All pub(crate) functions go here!
+    #[inline]
+    pub(crate) fn load_bead_from_hash(&self, bead_hash: BeadHash) -> Result<&Bead, BeadLoadError> {
+        // This functions returns a bead from memory! Future DB work goes in here!
+
+        // TODO: Add in a check for whether a bead_hash is valid!
+
+        match self.loaded_beads_in_memory.get(&bead_hash) {
+            Some(bead) => Ok(bead),
+            None => Err(BeadLoadError::BeadNotFound),
+        }
+    }
+}
+
+impl Braid {
     // All private functions go here!
     fn get_parents(&self) -> HashMap<BeadHash, HashSet<BeadHash>> {
         let mut parents = HashMap::new();
@@ -187,7 +202,7 @@ impl Braid {
     }
 
     fn is_genesis_bead(&self, bead_hash: BeadHash) -> Result<bool, BeadLoadError> {
-        let bead = self.load_bead_from_memory(bead_hash)?;
+        let bead = self.load_bead_from_hash(bead_hash)?;
 
         if bead.parents.is_empty() {
             return Ok(true);
@@ -195,7 +210,7 @@ impl Braid {
 
         // We need to check whether even one of the parent beads have been pruned from memory!
         for (parent_bead_hash, _) in &bead.parents {
-            let parent_bead = self.load_bead_from_memory(parent_bead_hash.clone());
+            let parent_bead = self.load_bead_from_hash(parent_bead_hash.clone());
             if let Err(error_type) = parent_bead {
                 match error_type {
                     BeadLoadError::BeadNotFound => return Ok(true),
@@ -205,18 +220,6 @@ impl Braid {
         }
 
         Ok(false)
-    }
-
-    #[inline]
-    fn load_bead_from_memory(&self, bead_hash: BeadHash) -> Result<&Bead, BeadLoadError> {
-        // This functions returns a bead from memory! Future DB work goes in here!
-
-        // TODO: Add in a check for whether a bead_hash is valid!
-
-        match self.loaded_beads_in_memory.get(&bead_hash) {
-            Some(bead) => Ok(bead),
-            None => Err(BeadLoadError::BeadNotFound),
-        }
     }
 
     #[inline]
