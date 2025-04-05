@@ -11,7 +11,8 @@ use crate::utils::BeadHash;
 use crate::utils::bitcoin::MerklePathProof;
 
 // Type Aliases
-type TransactionWithMerklePath = (Transaction, MerklePathProof);
+pub type TransactionWithMerklePath = (Transaction, MerklePathProof);
+#[derive(Clone, Debug)]
 
 pub struct Bead {
     pub block_header: BlockHeader,
@@ -33,18 +34,29 @@ impl Bead {
     pub fn is_transaction_included_in_block(
         &self,
         transaction_with_proof: &TransactionWithMerklePath,
+        testing_option: Option<(String, Vec<Transaction>)>,
     ) -> bool {
         transaction_with_proof
             .1
-            .calculate_corresponding_merkle_root()
-            == self.block_header.merkle_root
+            .calculate_corresponding_merkle_root(Some(testing_option.unwrap()))
+            .to_string()
+            == self.block_header.merkle_root.to_string()
     }
 
-    pub fn is_valid_bead(&self) -> bool {
+    pub fn is_valid_bead(&self, testing_option: Option<(String, Vec<Transaction>)>) -> bool {
+        let testing_option_reference = testing_option.clone();
         // Check whether the transactions are included in the block!
-        if self.is_transaction_included_in_block(&self.coinbase_transaction) == false {
+        if self.is_transaction_included_in_block(
+            &self.coinbase_transaction,
+            Some(testing_option.unwrap()),
+        ) == false
+        {
             false
-        } else if self.is_transaction_included_in_block(&self.payout_update_transaction) == false {
+        } else if self.is_transaction_included_in_block(
+            &self.payout_update_transaction,
+            Some(testing_option_reference.unwrap()),
+        ) == false
+        {
             false
         } else if self.coinbase_transaction.0.is_coinbase() == false {
             false
@@ -58,7 +70,6 @@ impl Bead {
     pub fn get_coinbase_transaction(&self) -> Transaction {
         // TODO: Implement this function.
         unimplemented!()
-
     }
 
     pub fn get_payout_update_transaction(&self) -> Transaction {
