@@ -1,5 +1,6 @@
 import React, { ReactNode } from 'react';
 import { IconButton, SxProps, Theme } from '@mui/material';
+import colors from '../../theme/colors';
 
 interface ActionIconButtonProps {
   icon: ReactNode;
@@ -20,15 +21,15 @@ const ActionIconButton: React.FC<ActionIconButtonProps> = ({
       size='small'
       onClick={onClick}
       sx={{
-        color: '#7f7f7f',
-        bgcolor: '#f2f2f2',
+        color: '#000',
+        bgcolor: colors.accent,
         p: 1,
         width: 34,
         height: 34,
-        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+        boxShadow: '0 1px 2px rgba(0,0,0,0.3)',
         '&:hover': {
-          bgcolor: '#e6e6e6',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+          bgcolor: colors.accentDark,
+          boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
         },
         ...sx,
       }}>

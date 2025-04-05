@@ -150,29 +150,15 @@ const Header: React.FC<HeaderProps> = ({ title = 'BRAIDPOOL' }) => {
               gap: 1,
               height: '100%',
             }}>
-            <ActionIconButton
-              icon={
-                <HomeIcon
-                  sx={{ fontSize: '1.2rem', color: colors.textLight }}
-                />
-              }
-            />
+            <ActionIconButton icon={<HomeIcon sx={{ fontSize: '1.2rem' }} />} />
 
             <ActionIconButton
-              icon={
-                <FilterListIcon
-                  sx={{ fontSize: '1.2rem', color: colors.textLight }}
-                />
-              }
+              icon={<FilterListIcon sx={{ fontSize: '1.2rem' }} />}
             />
 
             <Box sx={{ position: 'relative' }}>
               <ActionIconButton
-                icon={
-                  <NotificationsIcon
-                    sx={{ fontSize: '1.2rem', color: colors.textLight }}
-                  />
-                }
+                icon={<NotificationsIcon sx={{ fontSize: '1.2rem' }} />}
               />
               {notificationCount > 0 && (
                 <Box
@@ -199,11 +185,7 @@ const Header: React.FC<HeaderProps> = ({ title = 'BRAIDPOOL' }) => {
             </Box>
 
             <ActionIconButton
-              icon={
-                <SettingsIcon
-                  sx={{ fontSize: '1.2rem', color: colors.textLight }}
-                />
-              }
+              icon={<SettingsIcon sx={{ fontSize: '1.2rem' }} />}
             />
           </Box>
         </Box>

@@ -9,6 +9,7 @@ import {
   useMediaQuery,
   Paper,
 } from '@mui/material';
+import colors from '../theme/colors';
 
 interface BraidVisualizationProps {
   data: BraidVisualizationData;
@@ -69,12 +70,13 @@ const BraidVisualization: React.FC<BraidVisualizationProps> = ({
       .append('div')
       .attr('class', 'tooltip')
       .style('position', 'absolute')
-      .style('background-color', 'white')
-      .style('border', '1px solid #ddd')
+      .style('background-color', colors.paper)
+      .style('border', `1px solid ${colors.border}`)
       .style('border-radius', '4px')
       .style('padding', '6px')
       .style('pointer-events', 'none')
-      .style('opacity', 0);
+      .style('opacity', 0)
+      .style('color', colors.textPrimary);
 
     // Draw links first (so they're behind nodes)
     svg
@@ -87,7 +89,9 @@ const BraidVisualization: React.FC<BraidVisualizationProps> = ({
       .attr('y1', (d) => dagLayout.get(d.source)?.y || 0)
       .attr('x2', (d) => dagLayout.get(d.target)?.x || 0)
       .attr('y2', (d) => dagLayout.get(d.target)?.y || 0)
-      .attr('stroke', (d) => (d.isHighWorkPath ? '#ff6b6b' : '#999'))
+      .attr('stroke', (d) =>
+        d.isHighWorkPath ? colors.tipNode : colors.linkColor
+      )
       .attr('stroke-width', (d) => (d.isHighWorkPath ? 2.5 : 1))
       .attr('stroke-opacity', 0.6)
       .attr('marker-end', 'url(#arrow)');
@@ -105,7 +109,7 @@ const BraidVisualization: React.FC<BraidVisualizationProps> = ({
       .attr('orient', 'auto')
       .append('path')
       .attr('d', 'M0,-5L10,0L0,5')
-      .attr('fill', '#999');
+      .attr('fill', colors.linkColor);
 
     // Draw the nodes
     svg
@@ -118,7 +122,7 @@ const BraidVisualization: React.FC<BraidVisualizationProps> = ({
       .attr('cx', (d) => dagLayout.get(d.id)?.x || 0)
       .attr('cy', (d) => dagLayout.get(d.id)?.y || 0)
       .attr('fill', (d) => colorScale(d.cohort.toString()))
-      .attr('stroke', (d) => (d.isTip ? '#ff6b6b' : '#fff'))
+      .attr('stroke', (d) => (d.isTip ? colors.tipNode : colors.nodeStroke))
       .attr('stroke-width', (d) => (d.isTip ? 3 : 1.5))
       .on('mouseover', (event, d) => {
         tooltip.transition().duration(200).style('opacity', 0.9);
@@ -152,7 +156,7 @@ const BraidVisualization: React.FC<BraidVisualizationProps> = ({
       .attr('y', (d) => dagLayout.get(d.id)?.y || 0)
       .attr('dy', '.35em')
       .attr('text-anchor', 'middle')
-      .style('fill', 'white')
+      .style('fill', colors.textPrimary)
       .style('font-size', '10px')
       .style('pointer-events', 'none')
       .text((d) => d.id.toString());
@@ -163,6 +167,7 @@ const BraidVisualization: React.FC<BraidVisualizationProps> = ({
       .attr('x', svgWidth / 2)
       .attr('y', 30)
       .attr('text-anchor', 'middle')
+      .style('fill', colors.textPrimary)
       .style('font-size', '20px')
       .style('font-weight', 'bold')
       .text('Braid Visualization');
@@ -210,7 +215,7 @@ const BraidVisualization: React.FC<BraidVisualizationProps> = ({
                 height: 10,
                 backgroundColor: colorScale(index.toString()),
                 mr: 0.75,
-                border: '1px solid rgba(0,0,0,0.1)',
+                border: `1px solid ${colors.border}`,
                 flexShrink: 0,
               }}
             />
@@ -220,6 +225,7 @@ const BraidVisualization: React.FC<BraidVisualizationProps> = ({
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
+                color: colors.textPrimary,
               }}>{`Cohort ${index}`}</Typography>
           </Box>
         );
@@ -239,7 +245,7 @@ const BraidVisualization: React.FC<BraidVisualizationProps> = ({
             width: '6px',
           },
           '&::-webkit-scrollbar-thumb': {
-            backgroundColor: 'rgba(0,0,0,0.2)',
+            backgroundColor: 'rgba(255,255,255,0.2)',
             borderRadius: '3px',
           },
         }}>
@@ -259,8 +265,8 @@ const BraidVisualization: React.FC<BraidVisualizationProps> = ({
         height: '100%',
         overflow: 'hidden',
         borderRadius: 1,
-        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-        bgcolor: 'white',
+        boxShadow: `0 1px 3px ${colors.shadow}`,
+        bgcolor: colors.background,
       }}>
       <Box
         sx={{
@@ -277,10 +283,10 @@ const BraidVisualization: React.FC<BraidVisualizationProps> = ({
           width={svgWidth}
           height={height}
           style={{
-            backgroundColor: '#f8f9fa',
+            backgroundColor: colors.chartBackground,
             borderRadius: '6px',
             maxWidth: '100%',
-            boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.05)',
+            boxShadow: `inset 0 0 0 1px ${colors.border}`,
           }}
         />
       </Box>
@@ -292,9 +298,9 @@ const BraidVisualization: React.FC<BraidVisualizationProps> = ({
           mt: isSmallScreen ? 0 : 1,
           mr: isSmallScreen ? 1 : 1,
           mb: isSmallScreen ? 1 : 1,
-          border: '1px solid rgba(0,0,0,0.05)',
+          border: `1px solid ${colors.border}`,
           borderRadius: '6px',
-          backgroundColor: 'white',
+          backgroundColor: colors.paper,
           minWidth: isSmallScreen ? 'auto' : '150px',
           maxWidth: isSmallScreen ? '100%' : '150px',
           width: isSmallScreen ? '100%' : '150px',
@@ -308,13 +314,13 @@ const BraidVisualization: React.FC<BraidVisualizationProps> = ({
         <Typography
           variant='subtitle2'
           fontWeight='500'
-          sx={{ mb: 1, color: 'text.primary' }}>
+          sx={{ mb: 1, color: colors.textPrimary }}>
           Legend
         </Typography>
 
         {renderCohortLegendItems()}
 
-        <Divider sx={{ my: 0.75 }} />
+        <Divider sx={{ my: 0.75, backgroundColor: colors.border }} />
 
         <Box sx={{ pt: 0.5 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.75 }}>
@@ -333,12 +339,14 @@ const BraidVisualization: React.FC<BraidVisualizationProps> = ({
                 sx={{
                   width: 15,
                   height: 2,
-                  backgroundColor: '#ff6b6b',
+                  backgroundColor: colors.tipNode,
                   border: 'none',
                 }}
               />
             </Box>
-            <Typography variant='caption'>High-work path</Typography>
+            <Typography variant='caption' sx={{ color: colors.textPrimary }}>
+              High-work path
+            </Typography>
           </Box>
 
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -348,12 +356,14 @@ const BraidVisualization: React.FC<BraidVisualizationProps> = ({
                 height: 10,
                 borderRadius: '50%',
                 backgroundColor: colorScale('0'),
-                border: '2px solid #ff6b6b',
+                border: `2px solid ${colors.tipNode}`,
                 mr: 0.75,
                 flexShrink: 0,
               }}
             />
-            <Typography variant='caption'>Tip nodes</Typography>
+            <Typography variant='caption' sx={{ color: colors.textPrimary }}>
+              Tip nodes
+            </Typography>
           </Box>
         </Box>
       </Paper>

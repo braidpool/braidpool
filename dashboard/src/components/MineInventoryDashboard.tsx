@@ -154,13 +154,14 @@ const DeviceCard = ({
       sx={{
         backgroundColor: colors.paper,
         borderRadius: 1,
-        border: `1px solid ${colors.border}`,
+        border: `1px solid ${colors.primary}20`,
         p: 2,
         position: 'relative',
         transition: 'transform 0.2s, box-shadow 0.2s',
         '&:hover': {
           transform: 'translateY(-3px)',
           boxShadow: `0 8px 16px -8px ${colors.shadow}`,
+          borderColor: colors.primary,
         },
       }}>
       {/* Status indicator */}
@@ -265,8 +266,8 @@ const DeviceCard = ({
           sx={{
             fontSize: '0.75rem',
             textTransform: 'none',
-            borderColor: colors.border,
-            color: colors.textPrimary,
+            borderColor: colors.primary,
+            color: colors.primary,
             '&:hover': {
               borderColor: colors.primary,
               backgroundColor: 'rgba(57, 134, 232, 0.08)',
@@ -282,8 +283,8 @@ const DeviceCard = ({
             sx={{
               fontSize: '0.75rem',
               textTransform: 'none',
-              borderColor: colors.border,
-              color: colors.textPrimary,
+              borderColor: colors.primary,
+              color: colors.primary,
               '&:hover': {
                 borderColor: colors.primary,
                 backgroundColor: 'rgba(57, 134, 232, 0.08)',
@@ -347,7 +348,7 @@ const MineInventoryDashboard = () => {
         <Chip
           label={`${totalMiners} Total Devices`}
           variant='outlined'
-          sx={{ borderColor: colors.border, color: colors.textPrimary }}
+          sx={{ borderColor: colors.primary, color: colors.primary }}
         />
       </Box>
 

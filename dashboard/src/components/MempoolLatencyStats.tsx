@@ -131,7 +131,7 @@ const MempoolLatencyStats = () => {
             sx={{
               backgroundColor: colors.paper,
               borderRadius: 1,
-              border: `1px solid ${colors.border}`,
+              border: `1px solid ${colors.primary}20`,
               p: 2,
               height: '100%',
             }}>
@@ -198,7 +198,7 @@ const MempoolLatencyStats = () => {
             sx={{
               backgroundColor: colors.paper,
               borderRadius: 1,
-              border: `1px solid ${colors.border}`,
+              border: `1px solid ${colors.primary}20`,
               p: 2,
               height: '100%',
             }}>
