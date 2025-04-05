@@ -1,5 +1,6 @@
+use std::cell::RefCell;
 // Standard Imports
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 // Bitcoin primitives
 use bitcoin::absolute::Time;
@@ -27,6 +28,9 @@ pub struct Bead {
     pub transactions: Vec<Transaction>,
 
     pub observed_time_at_node: Time,
+
+    // Optimizations (not part of specification!)
+    pub children: RefCell<HashSet<BeadHash>>
 }
 
 impl Bead {
@@ -66,14 +70,10 @@ impl Bead {
         // TODO: Implement this function.
         unimplemented!()
     }
-}
 
-impl Bead {
-    // All pub(crate) function definitions go here!
-
-    pub(crate) fn is_parent_of(&self, child_bead_hash: BeadHash, braid: &Braid) -> Result<bool, BeadLoadError> {
-        let child_bead = braid.load_bead_from_hash(child_bead_hash)?;
-        Ok(child_bead.parents.contains_key(&child_bead.bead_hash))
+    #[inline]
+    pub fn is_parent_of(&self, child_bead_hash: BeadHash) -> bool {
+        self.children.borrow().contains(&child_bead_hash)
     }
 }
 
