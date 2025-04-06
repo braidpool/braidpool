@@ -73,3 +73,6 @@ impl From<MiningBlockHeader> for BlockHeader {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;
