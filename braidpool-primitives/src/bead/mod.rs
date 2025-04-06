@@ -120,6 +120,14 @@ impl Bead {
 }
 
 impl Bead {
+    // All pub(crate) function definitions go here!
+    #[inline]
+    pub(crate) fn add_child(&self, child_bead_hash: BeadHash) {
+        self.children.borrow_mut().insert(child_bead_hash);
+    }
+}
+
+impl Bead {
     // All private function definitions go here!
 }
 
