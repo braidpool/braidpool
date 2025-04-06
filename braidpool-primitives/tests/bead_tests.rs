@@ -1,4 +1,4 @@
-use braidpool_primitives::beads::Bead;
+use braidpool_primitives::bead::Bead;
 use braidpool_primitives::utils::test_utils::create_test_bead;
 #[test]
 fn test_valid_bead() {

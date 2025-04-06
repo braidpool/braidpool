@@ -1,5 +1,5 @@
 #![allow(unused)]
-use crate::beads::{Bead, TransactionWithMerklePath};
+use crate::bead::{Bead, TransactionWithMerklePath};
 use crate::utils::BeadHash;
 use crate::utils::bitcoin::MerklePathProof;
 use ::bitcoin::absolute::LockTime;
