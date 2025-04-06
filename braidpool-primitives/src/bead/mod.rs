@@ -1,6 +1,7 @@
-use std::cell::RefCell;
 // Standard Imports
 use std::collections::{HashMap, HashSet};
+use std::hash::{Hash, DefaultHasher, Hasher};
+use std::cell::{Cell, RefCell};
 
 // Bitcoin primitives
 use bitcoin::absolute::Time;
@@ -8,7 +9,7 @@ use bitcoin::transaction::TransactionExt;
 use bitcoin::{BlockHeader, CompactTarget, Transaction};
 
 // Custom Imports
-use crate::utils::{BeadHash, BeadLoadError};
+use crate::utils::{BeadHash, BeadLoadError, Children, Parents};
 use crate::utils::bitcoin::MerklePathProof;
 use crate::braid::Braid;
 
@@ -29,7 +30,7 @@ pub struct Bead {
     pub observed_time_at_node: Time,
 
     // Optimizations (not part of specification!)
-    pub children: RefCell<HashSet<BeadHash>>
+    pub(crate) children: RefCell<HashSet<BeadHash>>,
 }
 
 impl Bead {
@@ -104,6 +105,18 @@ impl Bead {
 
         false
     }
+
+    #[inline]
+    pub fn get_parents(&self) -> Parents {
+        // The bead might get pruned later, so we can't give a shared reference!
+        self.parents.keys().cloned().collect()
+    }
+
+    #[inline]
+    pub fn get_children(&self) -> Children {
+        self.children.borrow().iter().cloned().collect()
+    }
+
 }
 
 impl Bead {

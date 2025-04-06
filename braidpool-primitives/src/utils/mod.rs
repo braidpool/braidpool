@@ -1,11 +1,22 @@
+// Bitcoin Imports
 use ::bitcoin::BlockHash;
+
+// Standard Imports
+use std::collections::HashSet;
 
 pub mod bitcoin;
 
-// Type Definitions
+// External Type Aliases
 pub type BeadHash = BlockHash;
 pub type Byte = u8;
 pub type Bytes = Vec<Byte>;
+
+// Internal Type Aliases
+pub(crate) type ParentBeadHash = BeadHash;
+pub(crate) type ChildrenBeadHash = BeadHash;
+pub(crate) type RelativeBeadHash = BeadHash;
+pub(crate) type Parents = HashSet<BeadHash>;
+pub(crate) type Children = HashSet<BeadHash>;
 
 // Error Definitions
 use std::fmt;

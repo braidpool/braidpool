@@ -6,7 +6,7 @@ use bitcoin::CompactTarget;
 
 // Custom Imports
 use crate::bead::Bead;
-use crate::utils::BeadHash;
+use crate::utils::{BeadHash, BeadLoadError};
 
 // Type Definitions
 struct Cohort(HashSet<BeadHash>);
@@ -22,14 +22,14 @@ pub enum AddBeadStatus {
 type NumberOfBeadsUnorphaned = usize;
 
 pub struct Braid {
-    beads: HashSet<BeadHash>,
-    tips: HashSet<BeadHash>,
-    cohorts: Vec<Cohort>,
+    pub(crate) beads: HashSet<BeadHash>,
+    pub(crate) tips: HashSet<BeadHash>,
+    pub(crate) cohorts: Vec<Cohort>,
 
-    orphan_beads: Vec<Bead>,
+    pub(crate) orphan_beads: Vec<Bead>,
 
     // Database related functions!
-    loaded_beads_in_memory: HashMap<BeadHash, Bead>,
+    pub(crate) loaded_beads_in_memory: HashMap<BeadHash, Bead>,
 }
 
 impl Braid {
@@ -75,7 +75,7 @@ impl Braid {
             return AddBeadStatus::DagAlreadyContainsBead;
         }
 
-        if self.is_bead_orphaned(&bead) {
+        if bead.is_orphaned(self) {
             self.orphan_beads.push(bead);
             return AddBeadStatus::ParentsNotYetReceived;
         }
@@ -101,7 +101,7 @@ impl Braid {
 
         match self.loaded_beads_in_memory.get(&bead_hash) {
             Some(bead) => Ok(bead),
-            None => Err(BeadLoadError::BeadNotFound),
+            None => Err(BeadLoadError::BeadPruned),
         }
     }
 }
@@ -201,27 +201,6 @@ impl Braid {
         self.beads.contains(&bead_hash)
     }
 
-    fn is_genesis_bead(&self, bead_hash: BeadHash) -> Result<bool, BeadLoadError> {
-        let bead = self.load_bead_from_hash(bead_hash)?;
-
-        if bead.parents.is_empty() {
-            return Ok(true);
-        };
-
-        // We need to check whether even one of the parent beads have been pruned from memory!
-        for (parent_bead_hash, _) in &bead.parents {
-            let parent_bead = self.load_bead_from_hash(parent_bead_hash.clone());
-            if let Err(error_type) = parent_bead {
-                match error_type {
-                    BeadLoadError::BeadNotFound => return Ok(true),
-                    _ => return Err(error_type),
-                };
-            }
-        }
-
-        Ok(false)
-    }
-
     #[inline]
     fn remove_parent_beads_from_tips(&mut self, bead: &Bead) {
         for (parent_hash, _) in &bead.parents {
@@ -229,22 +208,11 @@ impl Braid {
         }
     }
 
-    #[inline]
-    fn is_bead_orphaned(&self, bead: &Bead) -> bool {
-        for (parent, _) in &bead.parents {
-            if self.beads.contains(parent) == false {
-                return true;
-            }
-        }
-
-        false
-    }
-
     fn update_orphan_bead_set(&mut self) -> NumberOfBeadsUnorphaned {
         let old_orphan_set_length = self.orphan_beads.len();
         let old_orphan_set = std::mem::replace(&mut self.orphan_beads, Vec::new());
         for orphan_bead in old_orphan_set {
-            if self.is_bead_orphaned(&orphan_bead) {
+            if orphan_bead.is_genesis_bead(self) {
                 self.orphan_beads.push(orphan_bead)
             }
         }
@@ -256,26 +224,6 @@ impl Braid {
         unimplemented!()
     }
 }
-
-use std::fmt;
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum BeadLoadError {
-    BeadNotFound,
-    InvalidBeadHash,
-    DatabaseError,
-}
-
-impl fmt::Display for BeadLoadError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            BeadLoadError::BeadNotFound => write!(f, "Bead not found"),
-            BeadLoadError::InvalidBeadHash => write!(f, "Invalid bead hash"),
-            BeadLoadError::DatabaseError => write!(f, "Database error occurred"),
-        }
-    }
-}
-
-impl std::error::Error for BeadLoadError {}
 
 #[cfg(test)]
 mod tests;
