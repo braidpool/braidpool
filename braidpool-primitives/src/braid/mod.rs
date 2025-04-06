@@ -9,7 +9,7 @@ use crate::bead::Bead;
 use crate::utils::{BeadHash, BeadLoadError};
 
 // Type Definitions
-struct Cohort(HashSet<BeadHash>);
+pub(crate) struct Cohort(HashSet<BeadHash>);
 
 pub enum AddBeadStatus {
     DagAlreadyContainsBead,
@@ -88,6 +88,7 @@ impl Braid {
         self.beads.insert(bead.bead_hash);
         self.remove_parent_beads_from_tips(&bead);
         self.tips.insert(bead.bead_hash);
+        self.update_parents_of_bead(&bead);
 
         self.cohorts = self.calculate_cohorts();
         self.update_orphan_bead_set();
@@ -112,6 +113,23 @@ impl Braid {
 }
 
 impl Braid {
+    fn update_parents_of_bead(&self, child_bead: &Bead) {
+        // For now, this function is expected to run synchronously, such that in case, the bead's
+        // parent just got pruned, we'd still have to handle of this
+
+        // TODO: We have to make this code better for Async version in V2 for DB implementation.
+        for (parent_hash, _) in child_bead.parents.iter() {
+            let bead = {
+                match self.load_bead_from_hash(*parent_hash) {
+                    Ok(bead) => bead,
+                    Err(_) => panic!("This shouldn't be happening!"),
+                }
+            };
+
+            bead.add_child(child_bead.bead_hash);
+        }
+    }
+
     // All private functions go here!
     fn calculate_cohorts(&self) -> Vec<Cohort> {
         // TODO: Implement the cohorts calculating function!
@@ -139,6 +157,7 @@ impl Braid {
         cohorts
     }
 
+    #[inline]
     fn contains_bead(&self, bead_hash: BeadHash) -> bool {
         self.beads.contains(&bead_hash)
     }

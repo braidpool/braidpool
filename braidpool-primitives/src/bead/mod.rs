@@ -1,7 +1,6 @@
 // Standard Imports
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
-use std::hash::{DefaultHasher, Hash, Hasher};
 
 // Bitcoin primitives
 use bitcoin::absolute::Time;
@@ -30,7 +29,7 @@ pub struct Bead {
     pub observed_time_at_node: Time,
 
     // Optimizations (not part of specification!)
-    pub(crate) children: RefCell<HashSet<BeadHash>>,
+    children: RefCell<HashSet<BeadHash>>,
 }
 
 impl Bead {
@@ -123,6 +122,8 @@ impl Bead {
     #[inline]
     pub(crate) fn add_child(&self, child_bead_hash: BeadHash) {
         self.children.borrow_mut().insert(child_bead_hash);
+
+        // TODO: While Implementing the DB, we also need to update the corresponding DB Entry!
     }
 }
 
