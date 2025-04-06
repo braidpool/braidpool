@@ -32,7 +32,7 @@ pub struct Braid {
     pub(crate) loaded_beads_in_memory: HashMap<BeadHash, Bead>,
 
     // Optimizations (not part of specification!)
-    pub(crate) genesis_beads: HashSet<BeadHash>
+    pub(crate) genesis_beads: HashSet<BeadHash>,
 }
 
 impl Braid {
@@ -44,7 +44,7 @@ impl Braid {
             cohorts: vec![Cohort(genesis_beads.clone())],
             orphan_beads: Vec::new(),
             loaded_beads_in_memory: HashMap::new(),
-            genesis_beads: genesis_beads
+            genesis_beads: genesis_beads,
         }
     }
 
@@ -63,7 +63,7 @@ impl Braid {
             cohorts,
             orphan_beads: Vec::new(),
             loaded_beads_in_memory: HashMap::new(),
-            genesis_beads: previous_dag_braid.tips
+            genesis_beads: previous_dag_braid.tips,
         }
     }
 

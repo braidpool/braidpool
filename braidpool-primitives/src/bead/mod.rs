@@ -1,7 +1,7 @@
 // Standard Imports
-use std::collections::{HashMap, HashSet};
-use std::hash::{Hash, DefaultHasher, Hasher};
 use std::cell::{Cell, RefCell};
+use std::collections::{HashMap, HashSet};
+use std::hash::{DefaultHasher, Hash, Hasher};
 
 // Bitcoin primitives
 use bitcoin::absolute::Time;
@@ -9,9 +9,9 @@ use bitcoin::transaction::TransactionExt;
 use bitcoin::{BlockHeader, CompactTarget, Transaction};
 
 // Custom Imports
-use crate::utils::{BeadHash, BeadLoadError, Children, Parents};
-use crate::utils::bitcoin::MerklePathProof;
 use crate::braid::Braid;
+use crate::utils::bitcoin::MerklePathProof;
+use crate::utils::{BeadHash, BeadLoadError, Children, Parents};
 
 // Type Aliases
 type TransactionWithMerklePath = (Transaction, MerklePathProof);
@@ -116,7 +116,6 @@ impl Bead {
     pub fn get_children(&self) -> Children {
         self.children.borrow().iter().cloned().collect()
     }
-
 }
 
 impl Bead {
