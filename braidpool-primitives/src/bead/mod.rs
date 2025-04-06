@@ -71,6 +71,4 @@ impl Bead {
 }
 
 #[cfg(test)]
-mod tests {
-    // Unit Tests for Private Functions
-}
+mod tests;

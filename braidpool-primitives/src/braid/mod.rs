@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 use bitcoin::CompactTarget;
 
 // Custom Imports
-use crate::beads::Bead;
+use crate::bead::Bead;
 use crate::utils::BeadHash;
 
 // Type Definitions
@@ -205,6 +205,4 @@ impl fmt::Display for BeadLoadError {
 impl std::error::Error for BeadLoadError {}
 
 #[cfg(test)]
-mod tests {
-    // Tests for private functions!
-}
+mod tests;
