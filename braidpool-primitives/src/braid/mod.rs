@@ -113,49 +113,6 @@ impl Braid {
 
 impl Braid {
     // All private functions go here!
-    fn get_parents(&self) -> HashMap<BeadHash, HashSet<BeadHash>> {
-        let mut parents = HashMap::new();
-        for beadhash in self.beads.iter() {
-            let bead = match self.loaded_beads_in_memory.get(beadhash) {
-                Some(bead) => bead,
-                None => continue, // TODO: Load from the database
-            };
-            let mut this_parents = HashSet::new();
-            for (parent_hash, _) in &bead.parents {
-                this_parents.insert(parent_hash.clone());
-            }
-            parents.insert(beadhash.clone(), this_parents);
-        }
-        parents
-    }
-
-    fn get_children(&self) -> HashMap<BeadHash, HashSet<BeadHash>> {
-        let mut children = HashMap::new();
-        for (beadhash, parents) in self.get_parents() {
-            for parent in parents {
-                children
-                    .entry(parent.clone())
-                    .or_insert_with(HashSet::new)
-                    .insert(beadhash.clone());
-            }
-            children
-                .entry(beadhash.clone())
-                .or_insert_with(HashSet::new);
-        }
-        children
-    }
-
-    fn get_tips(&self) -> HashSet<BeadHash> {
-        let mut tips = HashSet::new();
-        let children = self.get_children();
-        for (beadhash, children_set) in children {
-            if children_set.is_empty() {
-                tips.insert(beadhash.clone());
-            }
-        }
-        tips
-    }
-
     fn calculate_cohorts(&self) -> Vec<Cohort> {
         // TODO: Implement the cohorts calculating function!
         vec![Cohort(HashSet::new())]
