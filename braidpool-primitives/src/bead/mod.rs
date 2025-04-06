@@ -7,9 +7,8 @@ use bitcoin::absolute::Time;
 use bitcoin::transaction::TransactionExt;
 use bitcoin::{BlockHeader, CompactTarget, Transaction};
 
-use crate::braid::BeadLoadError;
 // Custom Imports
-use crate::utils::BeadHash;
+use crate::utils::{BeadHash, BeadLoadError};
 use crate::utils::bitcoin::MerklePathProof;
 use crate::braid::Braid;
 
@@ -74,6 +73,36 @@ impl Bead {
     #[inline]
     pub fn is_parent_of(&self, child_bead_hash: BeadHash) -> bool {
         self.children.borrow().contains(&child_bead_hash)
+    }
+
+    pub fn is_genesis_bead(&self, braid: &Braid) -> bool {
+        if self.parents.is_empty() {
+            return true;
+        };
+
+        // We need to check whether even one of the parent beads have been pruned from memory!
+        for (parent_bead_hash, _) in self.parents.iter() {
+            let parent_bead = braid.load_bead_from_hash(*parent_bead_hash);
+            if let Err(error_type) = parent_bead {
+                match error_type {
+                    BeadLoadError::BeadPruned => return true,
+                    _ => panic!("Fatal Error Detected!"),
+                };
+            }
+        }
+
+        false
+    }
+
+    #[inline]
+    pub fn is_orphaned(&self, braid: &Braid) -> bool {
+        for (parent, _) in self.parents.iter() {
+            if braid.beads.contains(parent) == false {
+                return true;
+            }
+        }
+
+        false
     }
 }
 
