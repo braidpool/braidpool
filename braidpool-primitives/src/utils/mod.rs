@@ -15,8 +15,8 @@ pub type Bytes = Vec<Byte>;
 pub(crate) type ParentBeadHash = BeadHash;
 pub(crate) type ChildrenBeadHash = BeadHash;
 pub(crate) type RelativeBeadHash = BeadHash;
-pub(crate) type Parents = HashSet<BeadHash>;
-pub(crate) type Children = HashSet<BeadHash>;
+pub(crate) type Parents = HashSet<ParentBeadHash>;
+pub(crate) type Children = HashSet<ChildrenBeadHash>;
 
 // Error Definitions
 use std::fmt;

@@ -30,6 +30,9 @@ pub struct Braid {
 
     // Database related functions!
     pub(crate) loaded_beads_in_memory: HashMap<BeadHash, Bead>,
+
+    // Optimizations (not part of specification!)
+    pub(crate) genesis_beads: HashSet<BeadHash>
 }
 
 impl Braid {
@@ -38,9 +41,10 @@ impl Braid {
         Braid {
             beads: genesis_beads.clone(),
             tips: genesis_beads.clone(),
-            cohorts: vec![Cohort(genesis_beads)],
+            cohorts: vec![Cohort(genesis_beads.clone())],
             orphan_beads: Vec::new(),
             loaded_beads_in_memory: HashMap::new(),
+            genesis_beads: genesis_beads
         }
     }
 
@@ -55,10 +59,11 @@ impl Braid {
         let cohorts = previous_dag_braid.generate_tip_cohorts();
         Braid {
             beads: previous_dag_braid.tips.clone(),
-            tips: previous_dag_braid.tips,
+            tips: previous_dag_braid.tips.clone(),
             cohorts,
             orphan_beads: Vec::new(),
             loaded_beads_in_memory: HashMap::new(),
+            genesis_beads: previous_dag_braid.tips
         }
     }
 
@@ -138,26 +143,6 @@ impl Braid {
                 .or_insert_with(HashSet::new);
         }
         children
-    }
-
-    fn get_geneses(&self) -> HashSet<BeadHash> {
-        let mut geneses = HashSet::new();
-        let parents = self.get_parents();
-        for (beadhash, parents_set) in parents {
-            if parents_set.is_empty() {
-                geneses.insert(beadhash.clone());
-            }
-            let mut is_genesis = false;
-            for parent in parents_set {
-                if self.loaded_beads_in_memory.get(&parent).is_none() {
-                    is_genesis = true;
-                }
-            }
-            if is_genesis {
-                geneses.insert(beadhash.clone());
-            }
-        }
-        geneses
     }
 
     fn get_tips(&self) -> HashSet<BeadHash> {
