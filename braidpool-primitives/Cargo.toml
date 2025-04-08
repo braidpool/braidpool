@@ -9,6 +9,7 @@ num-bigint = "0.4.6"
 ordered-float = "5.0.0"
 transitive = "1.1.0"
 bitcoin = { git = "https://github.com/braidpool/rust-bitcoin.git" }
+sha2 = "0.10.8"
 
 [lib]
 name = "braidpool_primitives"
