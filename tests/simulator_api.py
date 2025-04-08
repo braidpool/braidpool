@@ -19,7 +19,7 @@ class BraidSimulator:
         self.network = Network(nnodes=50, target=2**240 - 1, hashrate=800000)
         self.current_beads = 0
         self.max_beads = 10000 
-        self.bead_increment = 1 # increase or decrease for faster simulation
+        self.bead_increment = 1 # increase or decrease for faster or slower simulation
         self.update_interval = 0.5
 
     def run(self):
