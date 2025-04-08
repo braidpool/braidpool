@@ -393,6 +393,7 @@ dependencies = [
  "hex",
  "num-bigint",
  "ordered-float 5.0.0",
+ "sha2",
  "transitive",
 ]
 
