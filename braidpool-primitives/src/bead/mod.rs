@@ -11,8 +11,8 @@ use crate::utils::BeadHash;
 use crate::utils::bitcoin::MerklePathProof;
 
 // Type Aliases
-type TransactionWithMerklePath = (Transaction, MerklePathProof);
-
+pub type TransactionWithMerklePath = (Transaction, MerklePathProof);
+#[derive(Clone, Debug)]
 pub struct Bead {
     pub block_header: BlockHeader,
     pub bead_hash: BeadHash,
