@@ -12,12 +12,17 @@ interface GraphNode {
     work?: number;
 }
 
+interface NodeIdMapping {
+    [hash: string]: string; // maps hash to sequential ID
+}
+
 interface GraphData {
-    highest_work_path: string[] | number[];
-    parents: Record<string, string[] | number[]>;
-    children: Record<string, string[] | number[]>;
+    highest_work_path: string[];
+    parents: Record<string, string[]>;
+    children: Record<string, string[]>;
     work?: Record<string, number>;
-    cohorts: (string[] | number[])[];
+    cohorts: string[][];
+    bead_count: number;
 }
 
 interface Position {
@@ -33,6 +38,7 @@ const GraphVisualization: React.FC = () => {
     const width = window.innerWidth - 100;
     const height = window.innerHeight;
     const COLORS = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728'];
+    const [nodeIdMap, setNodeIdMap] = useState<NodeIdMapping>({});
 
     const nodeRadius = 15;
     const margin = { top: 0, right: 0, bottom: 0, left: 50 };
@@ -167,27 +173,30 @@ const GraphVisualization: React.FC = () => {
             setConnectionStatus(`Error: ${err.message}`);
         });
 
-        newSocket.on('braid_update', (data: { data: string }) => {
+        newSocket.on('braid_update', (parsedData: GraphData) => {  // Remove JSON.parse
             try {
-                const parsedData = JSON.parse(data.data) as GraphData;
+                // Build the sequential ID mapping
+                const newMapping: NodeIdMapping = {};
+                let nextId = 1;
+                Object.keys(parsedData.parents).forEach(hash => {
+                    if (!newMapping[hash]) {
+                        newMapping[hash] = nextId.toString();
+                        nextId++;
+                    }
+                });
+                setNodeIdMap(newMapping);
                 setGraphData(parsedData);
-                let beads = 0;
-                for (const _key in parsedData.work) {
-                    beads += 1;
-                }
-                setTotalBeads(beads);
+                setTotalBeads(parsedData.bead_count);  // Use direct value instead of counting
                 setTotalCohorts(parsedData.cohorts.length);
                 let maxSize = 0;
                 parsedData.cohorts.forEach(cohort => {
-                    if (cohort.length > maxSize) {
-                        maxSize = cohort.length;
-                    }
+                    if (cohort.length > maxSize) maxSize = cohort.length;
                 });
                 setMaxCohortSize(maxSize);
                 setHwpLength(parsedData.highest_work_path.length);
                 setLoading(false);
             } catch (err) {
-                setError('Error parsing graph data');
+                setError('Error processing graph data');
                 setLoading(false);
             }
         });
@@ -229,18 +238,6 @@ const GraphVisualization: React.FC = () => {
             .style('pointer-events', 'none')
             .style('z-index', '10');
 
-        const stringData = {
-            highest_work_path: graphData.highest_work_path.map(String),
-            parents: Object.fromEntries(
-                Object.entries(graphData.parents).map(([k, v]) => [k, v.map(String)])
-            ),
-            children: Object.fromEntries(
-                Object.entries(graphData.children).map(([k, v]) => [k, v.map(String)])
-            ),
-            work: graphData.work || {},
-            cohorts: graphData.cohorts.map(cohort => cohort.map(String)),
-        };
-
         const svg = d3.select(svgRef.current);
         svg.selectAll('*').remove();
 
@@ -254,15 +251,16 @@ const GraphVisualization: React.FC = () => {
 
         svg.call(zoomBehavior.current).call(zoomBehavior.current.transform, d3.zoomIdentity.scale(defaultZoom));
 
-        const allNodes = Object.keys(stringData.parents).map(id => ({
+        const allNodes = Object.keys(graphData.parents).map(id => ({
             id,
-            parents: stringData.parents[id],
-            children: stringData.children[id],
-            work: stringData.work[id] || 0,
+            parents: graphData.parents[id],
+            children: graphData.children[id],
+            work: graphData.work?.[id] || 0,
         }));
 
-        const hwPath = stringData.highest_work_path as string[];
-        const positions = layoutNodes(allNodes, hwPath, stringData.cohorts as string[][]);
+        const hwPath = graphData.highest_work_path;
+        const cohorts = graphData.cohorts;
+        const positions = layoutNodes(allNodes, hwPath, cohorts as string[][]);
         const hwPathSet = new Set(hwPath);
 
         const links: { source: string; target: string }[] = [];
@@ -308,7 +306,7 @@ const GraphVisualization: React.FC = () => {
             .attr('transform', d => `translate(${positions[d.id].x},${positions[d.id].y})`);
 
         const cohortMap = new Map<string, number>();
-        (stringData.cohorts as string[][]).forEach((cohort, index) => {
+        (cohorts as string[][]).forEach((cohort, index) => {
             cohort.forEach(nodeId => cohortMap.set(nodeId, index));
         });
 
@@ -329,13 +327,15 @@ const GraphVisualization: React.FC = () => {
                 const isHWP = hwPathSet.has(d.id);
 
                 const tooltipContent = `
-                    <div><strong>ID:</strong> ${d.id}</div>
-                    <div><strong>Work:</strong> ${d.work}</div>
-                    <div><strong>Cohort:</strong> ${cohortIndex !== undefined ? cohortIndex : 'N/A'}</div>
-                    <div><strong>Highest Work Path:</strong> ${isHWP ? 'Yes' : 'No'}</div>
-                    <div><strong>Parents:</strong> ${d.parents.length > 0 ? d.parents.join(', ') : 'None'}</div>
-                    <div><strong>Children:</strong> ${d.children.length > 0 ? d.children.join(', ') : 'None'}</div>
-                `;
+                <div><strong>ID:</strong> ${nodeIdMap[d.id] || '?'} (${d.id})</div>
+                <div><strong>Work:</strong> ${d.work}</div>
+                <div><strong>Cohort:</strong> ${cohortIndex !== undefined ? cohortIndex : 'N/A'}</div>
+                <div><strong>Highest Work Path:</strong> ${isHWP ? 'Yes' : 'No'}</div>
+                <div><strong>Parents:</strong> ${d.parents.length > 0 ?
+                        d.parents.map(p => `${nodeIdMap[p] || '?'}`).join(', ') : 'None'}(${d.id})</div>
+                <div><strong>Children:</strong> ${d.children.length > 0 ?
+                        d.children.map(c => `${nodeIdMap[c] || '?'}`).join(', ') : 'None'}(${d.id})</div>
+              `;
 
                 tooltip
                     .html(tooltipContent)
@@ -358,7 +358,7 @@ const GraphVisualization: React.FC = () => {
         nodes.append('text')
             .attr('dy', 4)
             .attr('text-anchor', 'middle')
-            .text(d => d.id)
+            .text(d => nodeIdMap[d.id] || '?') // Show sequential ID instead of hash
             .attr('fill', '#fff')
             .style('font-size', '10px');
 
