@@ -18,7 +18,7 @@ The Braidpool Monitoring Dashboard is a tool designed to provide real-time monit
     ```
 2. Navigate to the project directory:
     ```bash
-      cd .\braidppol\tests\dashboard\
+      cd .\braidpool\tests\dashboard\
     ```
 3. Install dependencies:
     ```bash
