@@ -39,6 +39,7 @@ const GraphVisualization: React.FC = () => {
     const height = window.innerHeight;
     const COLORS = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728'];
     const [nodeIdMap, setNodeIdMap] = useState<NodeIdMapping>({});
+    const [selectedCohorts, setSelectedCohorts] = useState<number>(100);
 
     const nodeRadius = 15;
     const margin = { top: 0, right: 0, bottom: 0, left: 50 };
@@ -151,7 +152,9 @@ const GraphVisualization: React.FC = () => {
     const zoomBehavior = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
 
     useEffect(() => {
-        const newSocket = io('http://localhost:65433', {
+        let url = 'http://IP:65433';
+        // let url = 'http://127.0.0.1:65433/';
+        const newSocket = io(url , {
             reconnection: true,
             reconnectionAttempts: Infinity,
             reconnectionDelay: 1000,
@@ -162,6 +165,7 @@ const GraphVisualization: React.FC = () => {
         setSocket(newSocket);
 
         newSocket.on('connect', () => {
+            console.log('Connected to Socket ', url);
             setConnectionStatus('Connected');
         });
 
@@ -195,6 +199,7 @@ const GraphVisualization: React.FC = () => {
                 setMaxCohortSize(maxSize);
                 setHwpLength(parsedData.highest_work_path.length);
                 setLoading(false);
+                console.log(parsedData)
             } catch (err) {
                 setError('Error processing graph data');
                 setLoading(false);
@@ -225,6 +230,8 @@ const GraphVisualization: React.FC = () => {
 
     useEffect(() => {
         if (!svgRef.current || !graphData) return;
+        const filteredCohorts = graphData.cohorts.slice(-selectedCohorts);
+        const filteredCohortNodes = new Set(filteredCohorts.flat());
 
         const tooltip = d3.select(tooltipRef.current)
             .style('position', 'absolute')
@@ -263,6 +270,15 @@ const GraphVisualization: React.FC = () => {
         const positions = layoutNodes(allNodes, hwPath, cohorts as string[][]);
         const hwPathSet = new Set(hwPath);
 
+        // making old nodes invisible
+        const visibleNodes = allNodes.filter(node => filteredCohortNodes.has(node.id));
+        let minVisibleX = Infinity;
+        visibleNodes.forEach(node => {
+            const x = positions[node.id]?.x || 0;
+            if (x < minVisibleX) minVisibleX = x;
+        });
+        const offsetX = margin.left - minVisibleX;
+
         const links: { source: string; target: string }[] = [];
         allNodes.forEach(node => {
             node.children.forEach(childId => {
@@ -290,20 +306,25 @@ const GraphVisualization: React.FC = () => {
             .enter()
             .append('line')
             .attr('class', 'link')
-            .attr('x1', d => positions[d.source]?.x || 0)
+            .attr('x1', d => (positions[d.source]?.x || 0) + offsetX) // Apply offset
             .attr('y1', d => positions[d.source]?.y || 0)
-            .attr('x2', d => positions[d.target]?.x || 0)
+            .attr('x2', d => (positions[d.target]?.x || 0) + offsetX) // Apply offset
             .attr('y2', d => positions[d.target]?.y || 0)
             .attr('stroke', '#48CAE4') // Light blue links
             .attr('stroke-width', 1.5)
-            .attr('marker-end', 'url(#arrow)');
+            .attr('marker-end', 'url(#arrow)')
+            .style('display', d =>
+                filteredCohortNodes.has(d.source) &&
+                    filteredCohortNodes.has(d.target) ? 'inline' : 'none'
+            );
 
         const nodes = container.selectAll('.node')
             .data(allNodes)
             .enter()
             .append('g')
             .attr('class', 'node')
-            .attr('transform', d => `translate(${positions[d.id].x},${positions[d.id].y})`);
+            .attr('transform', d => `translate(${(positions[d.id]?.x || 0) + offsetX},${positions[d.id]?.y || 0})`) // Apply offset
+            .style('display', d => filteredCohortNodes.has(d.id) ? 'inline' : 'none');
 
         const cohortMap = new Map<string, number>();
         (cohorts as string[][]).forEach((cohort, index) => {
@@ -367,7 +388,7 @@ const GraphVisualization: React.FC = () => {
             .attr('y', margin.top / 2)
             .attr('text-anchor', 'middle')
             .style('font-size', '16px')
-    }, [graphData, defaultZoom]);
+    }, [graphData, defaultZoom, selectedCohorts]);
 
     if (loading) {
         return (
@@ -412,6 +433,23 @@ const GraphVisualization: React.FC = () => {
     return (
         <div className="min-h-screen">
             <div className='pt-25' style={{ margin: '10px', position: 'relative', display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <select
+                    value={selectedCohorts}
+                    onChange={(e) => setSelectedCohorts(Number(e.target.value))}
+                    style={{
+                        padding: '5px',
+                        borderRadius: '4px',
+                        border: '1px solid #0077B6',
+                        backgroundColor: 'white',
+                        color: '#0077B6',
+                    }}
+                >
+                    {[10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map((value) => (
+                        <option key={value} value={value}>
+                            Show latest {value} cohorts
+                        </option>
+                    ))}
+                </select>
                 <Button
                     onClick={zoomOut}
                     style={{ backgroundColor: '#FF8500', color: 'white', border: '1px solid #E76F00' }}
