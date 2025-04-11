@@ -1,6 +1,7 @@
-from flask import Flask
+from flask import Flask, jsonify
 from flask_socketio import SocketIO
 from flask_cors import CORS
+from flasgger import Swagger, swag_from
 import threading
 import time
 from simulator import Network
@@ -13,10 +14,57 @@ app = Flask(__name__)
 CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
+swagger = Swagger(app)
+
 
 @app.route("/hello")
+@swag_from(
+    {
+        "responses": {
+            200: {
+                "description": "Returns a simple hello message",
+                "examples": {"text": "Hello Braidpool"},
+            }
+        }
+    }
+)
 def hello():
     return "Hello Braidpool"
+
+
+braid_data = {}
+
+
+@app.route("/test_data")
+@swag_from(
+    {
+        "responses": {
+            200: {
+                "description": "Returns simulated braid data",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "highest_work_path": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                        "parents": {"type": "object"},
+                        "children": {"type": "object"},
+                        "work": {"type": "object"},
+                        "cohorts": {
+                            "type": "array",
+                            "items": {"type": "array", "items": {"type": "string"}},
+                        },
+                        "bead_count": {"type": "integer"},
+                    },
+                },
+            }
+        }
+    }
+)
+def data():
+    logging.info(f"Returning braid_data on test_data endpoint")
+    return jsonify(braid_data)
 
 
 class BraidSimulator:
@@ -25,7 +73,7 @@ class BraidSimulator:
             nnodes=50, target=2**240 - 1, hashrate=800000, target_algo="exp"
         )
         self.current_beads = 0
-        self.bead_increment = 1  # increase or decrease for faster or slower simulation
+        self.bead_increment = 1
         self.update_interval = 0.5
 
     def run(self):
@@ -33,16 +81,15 @@ class BraidSimulator:
             new_beads = self.bead_increment
             self.network.simulate(nbeads=new_beads, mine=False)
             self.current_beads += new_beads
-            self.bead_increment = self.bead_increment + 1
+            self.bead_increment += 1
             self.emit_braid_update()
             time.sleep(self.update_interval)
 
     def emit_braid_update(self):
+        global braid_data
         try:
             braid = self.network.nodes[0].braid
-            hashed_parents = {
-                int(k): list(map(int, v)) for k, v in dict(braid).items()
-            }  # sets to lists (this is being done for easy parsing on frontend)
+            hashed_parents = {int(k): list(map(int, v)) for k, v in dict(braid).items()}
             parents = hashed_parents
 
             braid_data = {
@@ -59,7 +106,7 @@ class BraidSimulator:
             }
 
             socketio.emit("braid_update", braid_data)
-            print(braid_data)
+            logging.log(braid_data["bead_count"])
 
         except Exception as e:
             logging.error(f"Error in emit_braid_update: {str(e)}", exc_info=True)
