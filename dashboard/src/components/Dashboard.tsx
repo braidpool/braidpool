@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Divider,
@@ -8,8 +8,6 @@ import {
   ListItemIcon,
   ListItemText,
   Typography,
-  CircularProgress,
-  Alert,
 } from '@mui/material';
 import colors from '../theme/colors';
 
@@ -21,7 +19,6 @@ import MemoryIcon from '@mui/icons-material/Memory';
 import LayersIcon from '@mui/icons-material/Layers';
 
 // Components
-import BraidVisualization from './BraidVisualization';
 import TopStatsBar from './TopStatsBar';
 import Card from './common/Card';
 import Header from './Header';
@@ -30,6 +27,7 @@ import MineInventoryDashboard from './MineInventoryDashboard';
 import PoolHashrateChart from './PoolHashrateChart';
 import MempoolLatencyStats from './MempoolLatencyStats';
 import RecentBlocksTable from './RecentBlocksTable';
+import GraphVisualization from './BraidPoolDAG';
 
 // Utils
 import {
@@ -51,9 +49,9 @@ enum Page {
 
 const Dashboard = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [data, setData] = useState<any>(null);
+  const [_data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [_error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState<Page>(Page.DASHBOARD);
 
   // Fetch data when component mounts
@@ -305,27 +303,9 @@ const Dashboard = () => {
         return (
           <Box sx={{ p: 1 }}>
             <Card title='Braid Visualization'>
-              {loading ? (
-                <Box
-                  sx={{
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    py: 10,
-                  }}>
-                  <CircularProgress />
-                </Box>
-              ) : error ? (
-                <Alert severity='error' sx={{ my: 2 }}>
-                  {error}
-                </Alert>
-              ) : data ? (
-                <Box>
-                  <BraidVisualization data={data} width={900} height={500} />
-                </Box>
-              ) : (
-                <Typography>No data available</Typography>
-              )}
+              <Box>
+                <GraphVisualization />
+              </Box>
             </Card>
           </Box>
         );
