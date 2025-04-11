@@ -59,7 +59,7 @@ function App() {
       <BrowserRouter>
         <Box sx={{ display: 'flex' }}>
           {/* Test button for ShareDetails */}
-          <Button
+          {/* <Button
             variant='contained'
             color='primary'
             onClick={() => setShareDetailsOpen(true)}
@@ -70,13 +70,13 @@ function App() {
               zIndex: 9999,
             }}>
             Test Share Details
-          </Button>
+          </Button> */}
 
           {/* ShareDetails component */}
-          <ShareDetails
+          {/* <ShareDetails
             open={shareDetailsOpen}
             onClose={() => setShareDetailsOpen(false)}
-          />
+          /> */}
 
           <Box
             sx={{
