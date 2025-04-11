@@ -41,7 +41,13 @@ const GraphVisualization: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const width = window.innerWidth - 100;
     const height = window.innerHeight;
-    const COLORS = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728'];
+    const COLORS = [
+        `rgba(${217}, ${95}, ${2}, 1)`,
+        `rgba(${117}, ${112}, ${179}, 1)`,
+        `rgba(${102}, ${166}, ${30}, 1)`,
+        `rgba(${231}, ${41}, ${138}, 1)`
+    ];
+
     const [nodeIdMap, setNodeIdMap] = useState<NodeIdMapping>({});
     const [selectedCohorts, setSelectedCohorts] = useState<number>(10);
 
@@ -340,7 +346,10 @@ const GraphVisualization: React.FC = () => {
             .attr('r', nodeRadius)
             .attr("fill", d => {
                 const cohortIndex = cohortMap.get(d.id);
-                return COLORS[(cohortIndex !== undefined ? cohortIndex : 0) % COLORS.length];
+                if (cohortIndex === undefined) return COLORS[0];
+                const startingIndex = Math.max(0, totalCohorts - selectedCohorts);
+                const adjustedIndex = cohortIndex - startingIndex;
+                return COLORS[adjustedIndex % COLORS.length];
             })
             .attr('stroke', '#fff')
             .attr('stroke-width', 2)
