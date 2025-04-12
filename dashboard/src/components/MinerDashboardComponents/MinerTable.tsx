@@ -1,26 +1,63 @@
+import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { ChevronDown, Activity, Zap } from "lucide-react";
 
-import { useState } from "react"
-import { motion, AnimatePresence } from "framer-motion"
-import { ChevronDown, Activity, Zap } from "lucide-react"
+interface MinerTableProps {
+  isLoaded: boolean;
+}
 
-export default function MinerTable({ isLoaded }: { isLoaded: boolean }) {
-  const [expandedMiners, setExpandedMiners] = useState({
+interface MinerData {
+  id: string;
+  timestamp: string;
+  transactionCount: number;
+  transactions: {
+    hash: string;
+    timestamp: string;
+    count: number;
+  }[];
+}
+
+export default function MinerTable({ isLoaded }: MinerTableProps) {
+  const [expandedMiners, setExpandedMiners] = useState<Record<string, boolean>>({
     miner1: true,
     miner2: false,
-  })
-  const [activeMiner, setActiveMiner] = useState<string | null>(null)
+  });
+  const [activeMiner, setActiveMiner] = useState<string | null>(null);
 
-  const toggleMiner = (miner: string) => {
+  // Mock data - in a real app, this would come from props or API
+  const minersData: Record<string, MinerData> = {
+    miner1: {
+      id: "miner1",
+      timestamp: "2025-04-15 14:23",
+      transactionCount: 5,
+      transactions: [
+        { hash: "f68b21db...de3b0803", timestamp: "2025-04-15 14:23", count: 12 },
+        { hash: "964aebde...4813c0a6", timestamp: "2025-04-15 14:33", count: 7 },
+        { hash: "2c1a7f84...477aec04", timestamp: "2025-04-30 09:17", count: 12 },
+      ],
+    },
+    miner2: {
+      id: "miner2",
+      timestamp: "2025-04-30 09:17",
+      transactionCount: 9,
+      transactions: [
+        { hash: "a1b2c3d4...e5f6g7h8", timestamp: "2025-04-30 09:17", count: 8 },
+        { hash: "i9j0k1l2...m3n4o5p6", timestamp: "2025-04-30 10:45", count: 5 },
+      ],
+    },
+  };
+
+  const toggleMiner = (minerId: string) => {
     setExpandedMiners((prev) => ({
       ...prev,
-      [miner]: !prev[miner],
-    }))
-    setActiveMiner(miner)
+      [minerId]: !prev[minerId],
+    }));
+    setActiveMiner(minerId);
 
     setTimeout(() => {
-      setActiveMiner(null)
-    }, 1000)
-  }
+      setActiveMiner(null);
+    }, 1000);
+  };
 
   return (
     <motion.div
@@ -58,39 +95,37 @@ export default function MinerTable({ isLoaded }: { isLoaded: boolean }) {
       {/* Miner data */}
       {isLoaded && (
         <>
-          {/* Miner 1 */}
-          <div className="border-b border-gray-800/80">
-            <MinerRow
-              miner="miner1"
-              expanded={expandedMiners.miner1}
-              active={activeMiner === "miner1"}
-              timestamp="2021-08-15 14:23"
-              transactionCount={5}
-              onToggle={toggleMiner}
-            />
-            
-            <AnimatePresence>
-              {expandedMiners.miner1 && (
-                <ExpandedMinerContent miner="miner1" />
-              )}
-            </AnimatePresence>
-          </div>
-
-          {/* Miner 2 */}
-          <div>
-            <MinerRow
-              miner="miner2"
-              expanded={expandedMiners.miner2}
-              active={activeMiner === "miner2"}
-              timestamp="2021-08-30 09:17"
-              transactionCount={9}
-              onToggle={toggleMiner}
-            />
-          </div>
+          {Object.entries(minersData).map(([minerId, miner]) => (
+            <div key={minerId} className={minerId === "miner1" ? "border-b border-gray-800/80" : ""}>
+              <MinerRow
+                miner={minerId}
+                expanded={!!expandedMiners[minerId]}
+                active={activeMiner === minerId}
+                timestamp={miner.timestamp}
+                transactionCount={miner.transactionCount}
+                onToggle={toggleMiner}
+              />
+              
+              <AnimatePresence>
+                {expandedMiners[minerId] && (
+                  <ExpandedMinerContent transactions={miner.transactions} />
+                )}
+              </AnimatePresence>
+            </div>
+          ))}
         </>
       )}
     </motion.div>
-  )
+  );
+}
+
+interface MinerRowProps {
+  miner: string;
+  expanded: boolean;
+  active: boolean;
+  timestamp: string;
+  transactionCount: number;
+  onToggle: (miner: string) => void;
 }
 
 function MinerRow({
@@ -100,14 +135,7 @@ function MinerRow({
   timestamp,
   transactionCount,
   onToggle
-}: {
-  miner: string
-  expanded: boolean
-  active: boolean
-  timestamp: string
-  transactionCount: number
-  onToggle: (miner: string) => void
-}) {
+}: MinerRowProps) {
   return (
     <motion.div
       className={`grid grid-cols-3 p-4 cursor-pointer transition-colors duration-300 relative overflow-hidden ${
@@ -163,10 +191,18 @@ function MinerRow({
         </motion.div>
       </div>
     </motion.div>
-  )
+  );
 }
 
-function ExpandedMinerContent({ miner }: { miner: string }) {
+interface ExpandedMinerContentProps {
+  transactions: {
+    hash: string;
+    timestamp: string;
+    count: number;
+  }[];
+}
+
+function ExpandedMinerContent({ transactions }: ExpandedMinerContentProps) {
   return (
     <motion.div
       initial={{ height: 0, opacity: 0 }}
@@ -183,7 +219,7 @@ function ExpandedMinerContent({ miner }: { miner: string }) {
           transition={{ delay: 0.1 }}
         >
           <Activity className="h-4 w-4 mr-2" />
-          Included 7 Transactions
+          Included {transactions.length} Transactions
         </motion.div>
 
         <motion.div
@@ -199,41 +235,29 @@ function ExpandedMinerContent({ miner }: { miner: string }) {
           initial="hidden"
           animate="show"
         >
-          <TransactionRow
-            hash="f68b21db...de3b0803"
-            timestamp="2021-08-15 14:23"
-            count={12}
-            delay={0}
-          />
-          <TransactionRow
-            hash="964aebde...4813c0a6"
-            timestamp="2021-08-15 14:33"
-            count={7}
-            delay={0.5}
-          />
-          <TransactionRow
-            hash="2c1a7f84...477aec04"
-            timestamp="2021-08-30 09:17"
-            count={12}
-            delay={1}
-          />
+          {transactions.map((transaction, index) => (
+            <TransactionRow
+              key={transaction.hash}
+              hash={transaction.hash}
+              timestamp={transaction.timestamp}
+              count={transaction.count}
+              delay={index * 0.2}
+            />
+          ))}
         </motion.div>
       </div>
     </motion.div>
-  )
+  );
 }
 
-function TransactionRow({
-  hash,
-  timestamp,
-  count,
-  delay
-}: {
-  hash: string
-  timestamp: string
-  count: number
-  delay: number
-}) {
+interface TransactionRowProps {
+  hash: string;
+  timestamp: string;
+  count: number;
+  delay: number;
+}
+
+function TransactionRow({ hash, timestamp, count, delay }: TransactionRowProps) {
   return (
     <motion.div
       variants={{
@@ -262,5 +286,5 @@ function TransactionRow({
         </motion.span>
       </div>
     </motion.div>
-  )
+  );
 }
