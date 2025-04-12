@@ -103,7 +103,7 @@ export default function MinerTable({ isLoaded }: MinerTableProps) {
                 expanded={!!expandedMiners[minerId]}
                 active={activeMiner === minerId}
                 timestamp={miner.timestamp}
-                transactionCount={miner.transactionCount}
+                transactionCount={miner.transactions.reduce((acc, curr) => acc + curr.count, 0)}
                 onToggle={toggleMiner}
               />
               
