@@ -144,6 +144,7 @@ export default function MiningChart({ isLoaded }: { isLoaded: boolean }) {
           animate={chartControls}
         />
 
+
         {/* Data points */}
         {[
           { x: 150, y: 100, value: "128 BTC" },
