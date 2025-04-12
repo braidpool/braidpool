@@ -17,6 +17,7 @@ interface MinerData {
   }[];
 }
 
+
 export default function MinerTable({ isLoaded }: MinerTableProps) {
   const [expandedMiners, setExpandedMiners] = useState<Record<string, boolean>>({
     miner1: true,
