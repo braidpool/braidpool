@@ -212,6 +212,7 @@ dependencies = [
  "bitcoinconsensus",
  "hex-conservative 0.3.0",
  "secp256k1 0.30.0",
+ "serde",
 ]
 
 [[package]]
@@ -235,6 +236,7 @@ version = "0.4.0"
 source = "git+https://github.com/braidpool/rust-bitcoin.git#436de8ef12ab371aab6e9f6fbfb098238b42657d"
 dependencies = [
  "hex-conservative 0.3.0",
+ "serde",
 ]
 
 [[package]]
@@ -270,6 +272,7 @@ dependencies = [
  "bitcoin-units 0.2.0",
  "bitcoin_hashes 0.16.0 (git+https://github.com/braidpool/rust-bitcoin.git)",
  "hex-conservative 0.3.0",
+ "serde",
 ]
 
 [[package]]
@@ -319,6 +322,7 @@ source = "git+https://github.com/braidpool/rust-bitcoin.git#436de8ef12ab371aab6e
 dependencies = [
  "bitcoin-internals 0.4.0 (git+https://github.com/braidpool/rust-bitcoin.git)",
  "hex-conservative 0.3.0",
+ "serde",
 ]
 
 [[package]]
@@ -393,6 +397,9 @@ dependencies = [
  "hex",
  "num-bigint",
  "ordered-float 5.0.0",
+ "secp256k1 0.30.0",
+ "serde",
+ "serde_json",
  "transitive",
 ]
 
@@ -1468,6 +1475,7 @@ dependencies = [
  "bitcoin_hashes 0.14.0",
  "rand",
  "secp256k1-sys",
+ "serde",
 ]
 
 [[package]]

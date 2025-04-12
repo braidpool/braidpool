@@ -1,4 +1,5 @@
 // Standard Imports
+use ::serde::Serialize;
 use std::collections::{HashMap, HashSet};
 
 // Bitcoin Imports
@@ -9,6 +10,8 @@ use crate::bead::Bead;
 use crate::utils::BeadHash;
 
 // Type Definitions
+#[derive(Clone, Debug, Serialize)]
+
 struct Cohort(HashSet<BeadHash>);
 
 pub enum AddBeadStatus {
@@ -20,6 +23,7 @@ pub enum AddBeadStatus {
 
 // Type Aliases
 type NumberOfBeadsUnorphaned = usize;
+#[derive(Clone, Debug, Serialize)]
 
 pub struct Braid {
     beads: HashSet<BeadHash>,
@@ -60,22 +64,18 @@ impl Braid {
             return AddBeadStatus::InvalidBead;
         }
 
-        if bead.lesser_difficulty_target != self.calculate_valid_difficulty_for_bead(&bead) {
-            return AddBeadStatus::InvalidBead;
-        }
-
-        if self.contains_bead(bead.bead_hash) {
-            return AddBeadStatus::DagAlreadyContainsBead;
-        }
+        // if self.contains_bead(bead.bead_hash) {
+        //     return AddBeadStatus::DagAlreadyContainsBead;
+        // }
 
         if self.is_bead_orphaned(&bead) {
             self.orphan_beads.push(bead);
             return AddBeadStatus::ParentsNotYetReceived;
         }
 
-        self.beads.insert(bead.bead_hash);
+        // self.beads.insert(bead.bead_hash);
         self.remove_parent_beads_from_tips(&bead);
-        self.tips.insert(bead.bead_hash);
+        // self.tips.insert(bead.bead_hash);
 
         self.cohorts = self.calculate_cohorts();
         self.update_orphan_bead_set();
@@ -119,12 +119,12 @@ impl Braid {
     fn is_genesis_bead(&self, bead_hash: BeadHash) -> Result<bool, BeadLoadError> {
         let bead = self.load_bead_from_memory(bead_hash)?;
 
-        if bead.parents.is_empty() {
+        if bead.committed_metadata.parents.is_empty() {
             return Ok(true);
         };
 
         // We need to check whether even one of the parent beads have been pruned from memory!
-        for (parent_bead_hash, _) in &bead.parents {
+        for (parent_bead_hash, _) in &bead.committed_metadata.parents {
             let parent_bead = self.load_bead_from_memory(parent_bead_hash.clone());
             if let Err(error_type) = parent_bead {
                 match error_type {
@@ -151,14 +151,14 @@ impl Braid {
 
     #[inline]
     fn remove_parent_beads_from_tips(&mut self, bead: &Bead) {
-        for (parent_hash, _) in &bead.parents {
+        for (parent_hash, _) in &bead.committed_metadata.parents {
             self.tips.remove(parent_hash);
         }
     }
 
     #[inline]
     fn is_bead_orphaned(&self, bead: &Bead) -> bool {
-        for (parent, _) in &bead.parents {
+        for (parent, _) in &bead.committed_metadata.parents {
             if self.beads.contains(parent) == false {
                 return true;
             }
