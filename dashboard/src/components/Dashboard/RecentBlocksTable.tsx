@@ -9,8 +9,8 @@ import {
   Box,
   Typography,
 } from '@mui/material';
-import Card from './common/Card';
-import colors from '../theme/colors';
+import Card from '../common/Card';
+import colors from '../../theme/colors';
 
 // Mock data for recent blocks
 const recentBlocks = [

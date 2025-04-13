@@ -15,8 +15,8 @@ import {
   styled,
   Stack,
 } from '@mui/material';
-import { BeadDisplayData } from '../types/Bead';
-import { mockBeads } from '../data/mockBeads';
+import { BeadDisplayData } from '../../types/Bead';
+import { mockBeads } from '../../data/mockBeads';
 
 // Interface for component props
 interface ShareDetailsProps {
