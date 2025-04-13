@@ -162,7 +162,7 @@ const GraphVisualization: React.FC = () => {
     const zoomBehavior = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
 
     useEffect(() => {
-        let url = 'http://127.0.0.1:65433/';
+        let url = 'http://french.braidpool.net:65433/';
         const newSocket = io(url, {
             reconnection: true,
             reconnectionAttempts: Infinity,
