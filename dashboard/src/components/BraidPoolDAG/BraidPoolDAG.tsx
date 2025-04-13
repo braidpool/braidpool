@@ -5,7 +5,7 @@ import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import CardHeader from '@mui/material/CardHeader';
 import CardTitle from '@mui/material/Typography';
-import '../App.css'
+import '../../App.css'
 import Button from '@mui/material/Button';
 import { CircularProgress } from '@mui/material';
 

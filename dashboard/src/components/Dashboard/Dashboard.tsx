@@ -9,7 +9,7 @@ import {
   ListItemText,
   Typography,
 } from '@mui/material';
-import colors from '../theme/colors';
+import colors from '../../theme/colors';
 
 // Icons
 import DashboardIcon from '@mui/icons-material/Dashboard';
@@ -20,21 +20,21 @@ import LayersIcon from '@mui/icons-material/Layers';
 
 
 // Components
-import TopStatsBar from './TopStatsBar';
-import Card from './common/Card';
-import Header from './Header';
-import InstallationInstructions from './InstallationInstructions';
-import MineInventoryDashboard from './MineInventoryDashboard';
+import TopStatsBar from '../common/TopStatsBar';
+import Card from '../common/Card';
+import Header from '../common/Header';
+import InstallationInstructions from '../Installation/InstallationInstructions';
+import MineInventoryDashboard from '../MinerDashboard/MineInventoryDashboard';
 import PoolHashrateChart from './PoolHashrateChart';
 import MempoolLatencyStats from './MempoolLatencyStats';
 import RecentBlocksTable from './RecentBlocksTable';
-import GraphVisualization from './BraidPoolDAG';
-import MinedSharesExplorer from './MinerDashboard';
+import GraphVisualization from '../BraidPoolDAG/BraidPoolDAG';
+import MinedSharesExplorer from '../MinerDashboard/MinerDashboard';
 // Utils
 import {
   loadSampleBraidData,
   transformBraidData,
-} from '../utils/braidDataTransformer';
+} from '../../utils/braidDataTransformer';
 
 // Constants
 const drawerWidth = 240;

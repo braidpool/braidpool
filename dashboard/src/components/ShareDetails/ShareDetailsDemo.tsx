@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button, Box, Typography, Paper, styled } from '@mui/material';
-import ShareDetails from './ShareDetails';
+import ShareDetails from './ShareDetails/ShareDetails';
 import { mockBeads, printDebug } from '../data/mockBeads';
 
 // Styled components
