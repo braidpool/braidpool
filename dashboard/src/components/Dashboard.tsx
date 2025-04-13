@@ -18,6 +18,7 @@ import InventoryIcon from '@mui/icons-material/Inventory';
 import MemoryIcon from '@mui/icons-material/Memory';
 import LayersIcon from '@mui/icons-material/Layers';
 
+
 // Components
 import TopStatsBar from './TopStatsBar';
 import Card from './common/Card';
@@ -28,7 +29,7 @@ import PoolHashrateChart from './PoolHashrateChart';
 import MempoolLatencyStats from './MempoolLatencyStats';
 import RecentBlocksTable from './RecentBlocksTable';
 import GraphVisualization from './BraidPoolDAG';
-
+import MinedSharesExplorer from './MinerDashboard';
 // Utils
 import {
   loadSampleBraidData,
@@ -45,6 +46,7 @@ enum Page {
   MINING_INVENTORY = 'mining-inventory',
   MEMPOOL = 'mempool',
   DAG_VISUALIZATION = 'dag-visualization',
+  MINER_STATS = 'miner-stats'
 }
 
 const Dashboard = () => {
@@ -120,6 +122,7 @@ const Dashboard = () => {
               backgroundColor: 'rgba(57, 134, 232, 0.08)',
             },
           }}>
+            
           <ListItemIcon
             sx={{
               minWidth: 40,
@@ -165,6 +168,20 @@ const Dashboard = () => {
             primaryTypographyProps={{ fontSize: '0.875rem' }}
           />
         </ListItemButton>
+        <ListItemButton
+  onClick={() => setCurrentPage(Page.MINER_STATS)}
+  selected={currentPage === Page.MINER_STATS}
+  sx={{
+    pl: 2,
+    py: 1.5,
+    borderLeft: currentPage === Page.MINER_STATS ? `4px solid ${colors.primary}` : 'none',
+    '&.Mui-selected': { backgroundColor: 'rgba(57, 134, 232, 0.08)' },
+  }}>
+  <ListItemIcon sx={{ minWidth: 40, color: currentPage === Page.MINER_STATS ? colors.primary : colors.textSecondary }}>
+    <MemoryIcon fontSize='small' />
+  </ListItemIcon>
+  <ListItemText primary='Miner Stats' primaryTypographyProps={{ fontSize: '0.875rem' }} />
+</ListItemButton>
 
         <ListItemButton
           onClick={() => setCurrentPage(Page.MINING_INVENTORY)}
@@ -315,6 +332,8 @@ const Dashboard = () => {
             <Typography>Coming soon</Typography>
           </Box>
         );
+        case Page.MINER_STATS:
+      return <MinedSharesExplorer />;
     }
   };
 
