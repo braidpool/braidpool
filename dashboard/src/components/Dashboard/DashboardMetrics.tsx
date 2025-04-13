@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Typography } from '@mui/material';
-import KPICard from './KPICard';
+import KPICard from '../common/KPICard';
 import MemoryIcon from '@mui/icons-material/Memory';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import DeviceHubIcon from '@mui/icons-material/DeviceHub';

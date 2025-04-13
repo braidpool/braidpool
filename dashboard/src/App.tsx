@@ -3,8 +3,9 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { Box, Container, Link, Typography, Button } from '@mui/material';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import Dashboard from './components/Dashboard';
-import ShareDetails from './components/ShareDetails';
+import Dashboard from './components/Dashboard/Dashboard';
+import ShareDetails from './components/ShareDetails/ShareDetails';
+import MinedSharesExplorer from './components/MinerDashboard/MinerDashboard';
 
 // Create a dark theme
 const theme = createTheme({
@@ -88,6 +89,7 @@ function App() {
             }}>
             <Routes>
               <Route path='/' element={<Dashboard />} />
+              <Route path= '/minedsharesexplorer' element ={<MinedSharesExplorer />} />
               {/* Add more routes as needed */}
             </Routes>
             <Box
