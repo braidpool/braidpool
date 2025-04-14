@@ -1,10 +1,10 @@
 
 
 import { useState, useEffect } from "react"
-import Particles from "./MinerDashboardComponents/Particles"
-import Filters from "./MinerDashboardComponents/Filters"
-import MinerTable from "./MinerDashboardComponents/MinerTable"
-import MiningChart from "./MinerDashboardComponents/MinerChart"
+import Particles from "./Particles"
+import Filters from "./Filters"
+import MinerTable from "./MinerTable"
+import MiningChart from "./MinerChart"
 import {motion} from "framer-motion"
 
 export default function MinedSharesExplorer() {
