@@ -10,8 +10,8 @@ import {
   Divider,
   Button,
 } from '@mui/material';
-import Card from './common/Card';
-import colors from '../theme/colors';
+import Card from '../common/Card';
+import colors from '../../theme/colors';
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import CodeIcon from '@mui/icons-material/Code';
 import CloudDownloadIcon from '@mui/icons-material/CloudDownload';

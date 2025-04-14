@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Typography, Paper, Divider } from '@mui/material';
-import Card from './common/Card';
-import colors from '../theme/colors';
+import Card from '../common/Card';
+import colors from '../../theme/colors';
 import * as d3 from 'd3';
 
 // Mock data for latency stats
