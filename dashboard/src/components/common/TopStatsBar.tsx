@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Typography, Stack, Skeleton } from '@mui/material';
-import colors from '../theme/colors';
+import colors from '../../theme/colors';
 
 interface StatCardProps {
   title: string;

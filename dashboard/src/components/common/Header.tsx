@@ -5,8 +5,8 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import HomeIcon from '@mui/icons-material/Home';
-import ActionIconButton from './common/ActionIconButton';
-import colors from '../theme/colors';
+import ActionIconButton from './ActionIconButton';
+import colors from '../../theme/colors';
 
 interface HeaderProps {
   title?: string;

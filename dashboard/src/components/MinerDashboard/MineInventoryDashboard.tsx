@@ -8,8 +8,8 @@ import {
   Button,
   Tooltip,
 } from '@mui/material';
-import colors from '../theme/colors';
-import Card from './common/Card';
+import colors from '../../theme/colors';
+import Card from '../common/Card';
 import SpeedIcon from '@mui/icons-material/Speed';
 import ThunderstormIcon from '@mui/icons-material/Thunderstorm';
 import ThermostatIcon from '@mui/icons-material/Thermostat';
