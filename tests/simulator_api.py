@@ -106,7 +106,7 @@ class BraidSimulator:
             }
 
             socketio.emit("braid_update", braid_data)
-            logging.log(braid_data["bead_count"])
+            logging.info(braid_data["bead_count"])
 
         except Exception as e:
             logging.error(f"Error in emit_braid_update: {str(e)}", exc_info=True)
