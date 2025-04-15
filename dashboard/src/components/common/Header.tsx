@@ -51,7 +51,7 @@ const Header: React.FC<HeaderProps> = ({ title = 'BRAIDPOOL' }) => {
             height: '100%',
             my: 'auto',
           }}>
-          <Box
+          {/* <Box
             component='div'
             sx={{
               display: 'flex',
@@ -70,7 +70,38 @@ const Header: React.FC<HeaderProps> = ({ title = 'BRAIDPOOL' }) => {
               transform: 'translateY(-1px)', // Subtle adjustment to visually center
             }}>
             B
-          </Box>
+          </Box> */}
+          <Box
+  component="div"
+  sx={{
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: colors.textLight,
+    
+    borderRadius: '50%',
+    width: 36,
+    height: 36,
+    mr: 2,
+    fontSize: '1.1rem',
+    fontWeight: 'bold',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+    flexShrink: 0,
+    transform: 'translateY(-1px)',
+    overflow: 'hidden', // Ensure image doesn't overflow the circle
+  }}
+>
+  <img
+    src="/image.png" // Update this path to your actual icon path
+    alt="favicon"
+    style={{
+      width: '100%',
+      height: '100%',
+      objectFit: 'cover', // Adjust image fit
+    }}
+  />
+</Box>
+
           <Typography
             variant='body1'
             component='div'
@@ -84,7 +115,7 @@ const Header: React.FC<HeaderProps> = ({ title = 'BRAIDPOOL' }) => {
               whiteSpace: 'nowrap',
               transform: 'translateY(-1px)', // Subtle adjustment to visually center
             }}>
-            {title}
+            BRAIDPOOL
           </Typography>
           <Box
             sx={{
@@ -128,15 +159,15 @@ const Header: React.FC<HeaderProps> = ({ title = 'BRAIDPOOL' }) => {
               px: { xs: 1.5, sm: 2 },
               py: 0.75,
               height: 34,
-              backgroundColor: colors.accent,
-              color: '#000',
+              
+              color: 'white',
               fontWeight: 500,
               fontSize: '0.875rem',
               borderRadius: 1.5,
               minWidth: 'auto',
               boxShadow: '0 1px 2px rgba(0,0,0,0.3)',
               '&:hover': {
-                backgroundColor: colors.accentDark,
+                
                 boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
               },
             }}>
