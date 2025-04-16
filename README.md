@@ -1,4 +1,3 @@
-
 ![Build status](https://github.com/wholooks/braidpool/actions/workflows/rust-node.yml/badge.svg)
 
 # Proposal
@@ -20,6 +19,7 @@ The goals of the pool are:
 Braidpool nodes need to connect to a bitcoin RPC node. The bitcoin node also needs to have the `hashblock` [ZMQ notification](https://github.com/bitcoin/bitcoin/blob/master/doc/zmq.md) enabled.
 
 Let's assume there is a `bitcoind` running on `0.0.0.0:8332` with username `xxxx`, password `yyyy`, and `zmqpubhashblock` enabled on port `28332`:
+
 ```
 $ bitcoind -rpcport=8332 -rpcuser=xxxx -rpcpassword=yyyy -zmqpubhashblock=tcp://localhost:28332
 ```
@@ -37,15 +37,17 @@ cargo run -- --bind=localhost:8989 --bitcoin=0.0.0.0 --rpcport=8332 --rpcuser=xx
 # run other nodes pointing to the seeding node and specify their own port as 9899
 cargo run -- --bind=localhost:9899 --addnode=localhost:8989 --bitcoin=0.0.0.0 --rpcport=8332 --rpcuser=xxxx --rpcpass=yyyy --zmqhashblockport=28332
 ```
+
 # Running the CPUnet testing node using nix-script
 
-Setting up `nix` locally for utilizing it from the specific releases check - [Nix setup](https://github.com/DeterminateSystems/nix-installer/releases) 
+Setting up `nix` locally for utilizing it from the specific releases check - [Nix setup](https://github.com/DeterminateSystems/nix-installer/releases)
+
 ```
 curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | \
   sh -s -- install
 ```
 
-The `.nix` script present in the root directory `/braidpool/cpunet_node.nix` contains the CPUnet patched 
+The `.nix` script present in the root directory `/braidpool/cpunet_node.nix` contains the CPUnet patched
 bitcoin-node , can be set up locally as testnet for Braidpool.
 
 ```
@@ -55,24 +57,23 @@ cd /braidpool
 # Run the nix-script
 nix-build cpunet_node.nix
 
-# Path to the result directory created after successful build 
+# Path to the result directory created after successful build
 cd result
 
 # Running the CPUnet node
 ./bin/bitcoind -cpunet -zmqpubsequence=tcp://127.0.0.1:28338
 
-# Creating/loading a corresponding wallet 
+# Creating/loading a corresponding wallet
 ./bin/bitcoin-cli -cpunet createwallet cpunet
 
 # Load an  wallet created previously
 ./bin/bitcoin-cli -cpunet loadwallet cpunet
 
-# Generate blocks     
+# Generate blocks
 ./contrib/cpunet/miner --cli=./bin/bitcoin-cli --ongoing --address `./bin/bitcoin-cli -cpunet getnewaddress` --grind-cmd="./bin/bitcoin-util -cpunet -ntasks=1 grind"
 
 
 ```
-
 
 # Documentation
 
@@ -87,6 +88,39 @@ xdg-open http://localhost:8000
 ```
 
 Or you can just click on the docs directory in the code and Github will render the math in these markdown docs.
+
+# Braidpool Dashboard
+
+A visualization dashboard for the Braidpool decentralized mining pool, and Bitcoin related data.
+
+## How to Run
+
+```bash
+# Navigate to the dashboard directory 
+cd dashboard
+
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+```
+
+The dashboard will open automatically at [http://localhost:3000](http://localhost:3000).
+
+## Build for Production
+
+```bash
+# Navigate to the dashboard directory 
+cd dashboard
+
+# Create optimized build
+npm run build
+
+# Preview production build locally
+npm run preview
+```
+For more details on the Dashboard, [checkout its readme file](./dashboard/README.md).
 
 # Progress
 
@@ -103,6 +137,4 @@ A list with TODO's:
 - [ ] Single script installer (limited to Linux variants, potentially using
       docker).
 
-
 [Discord chat](https://discord.gg/pZYUDwkpPv)
-
