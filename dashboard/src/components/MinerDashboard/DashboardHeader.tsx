@@ -63,7 +63,7 @@ export default function DashboardHeader({
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.3 }}
-          className="flex gap-3 "
+          className="flex gap-3 justify-end absolute ml-[850px] mt-2"
         >
           <motion.button
             className="relative  px-4 py-2 rounded-lg text-white font-medium overflow-hidden bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500"

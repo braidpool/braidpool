@@ -1,11 +1,7 @@
-
-
-import { useState} from "react"
+import { useState } from "react"
 import { motion } from "framer-motion"
 import {
   ChevronDown,
-  
-  
   GitCompare,
 } from "lucide-react"
 import { MINERS } from "./constants"
@@ -15,7 +11,8 @@ import AdvancedChart from "./AdvancedChart"
 interface MinerCompareProps {
   timeRange: string
 }
-export default function MinerCompare({ timeRange }: { timeRange: string }) {
+
+export default function MinerCompare({ timeRange }: MinerCompareProps) {
   const [selectedMiner, setSelectedMiner] = useState<string | null>(null)
   const [chartHovered, setChartHovered] = useState(false)
 
