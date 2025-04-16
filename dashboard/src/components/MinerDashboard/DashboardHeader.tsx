@@ -3,12 +3,10 @@
 
 import { motion } from "framer-motion"
 import {
-  
   BarChart3,
   Layers,
   Cpu,
   Database,
-  
   GitCompare,
 } from "lucide-react"
 
@@ -65,10 +63,10 @@ export default function DashboardHeader({
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.3 }}
-          className="flex gap-3"
+          className="flex gap-3 "
         >
           <motion.button
-            className="relative px-4 py-2 rounded-lg text-white font-medium overflow-hidden bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500"
+            className="relative  px-4 py-2 rounded-lg text-white font-medium overflow-hidden bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.97 }}
           >
@@ -78,7 +76,7 @@ export default function DashboardHeader({
             </span>
           </motion.button>
           <motion.button
-            className="relative px-4 py-2 rounded-lg text-white font-medium overflow-hidden bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500"
+            className="relative px-4 py-2 rounded-lg text-white font-medium overflow-hidden bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.97 }}
           >
