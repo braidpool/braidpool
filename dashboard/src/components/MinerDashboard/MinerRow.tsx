@@ -50,18 +50,18 @@ export default function MinerRow({
           <motion.div
             className="absolute inset-0 bg-blue-500/20 rounded-full"
             initial={{ scale: 0, x: "50%", y: "50%" }}
-            animate={{ scale: 5, opacity: [1, 0] }}
-            transition={{ duration: 0.8 }}
+            animate={{ scale: 5, opacity: [2, 0] }}
+            transition={{ duration: 2 }}
           />
         )}
 
-        <div className="flex items-center relative z-10">
+        <div className="flex items-center  relative z-10">
           <motion.div
             animate={{ rotate: isExpanded ? 180 : 0 }}
             transition={{ duration: 0.4, type: "spring", stiffness: 200 }}
             className="mr-2"
           >
-            <ChevronDown className="h-5 w-5 text-blue-400" />
+            <ChevronDown className="h-5 w-5  text-blue-400" />
           </motion.div>
           <motion.span
             className="text-blue-100 font-medium"

@@ -49,7 +49,7 @@ export default function MinerCompare({ timeRange }: { timeRange: string }) {
       </div>
 
       <motion.div
-        className="relative border border-gray-800/50 rounded-xl p-6 h-80 bg-black/30 backdrop-blur-md overflow-hidden"
+        className="relative border border-gray-800/50 rounded-xl p-6 h-100 bg-black/30 backdrop-blur-md overflow-hidden"
         initial={{ opacity: 0, y: 30, rotateX: 5 }}
         animate={{ opacity: 1, y: 0, rotateX: 0 }}
         transition={{ duration: 0.7, delay: 0.3, type: "spring" }}
