@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react"
 import { useTransform, useScroll } from "framer-motion"
 import DashboardHeader from "./DashboardHeader"
-import {FilterBar} from "./FilterComponents"
+import FilterBar from "./FilterComponents"
 import MinerRow from "./MinerRow"
 import AnimatedStatCard from "./AnimatedStatCard"
 import MinerCompare from "./MinerCompare"
