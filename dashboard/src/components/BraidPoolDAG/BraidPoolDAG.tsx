@@ -51,7 +51,7 @@ const GraphVisualization: React.FC = () => {
     const [nodeIdMap, setNodeIdMap] = useState<NodeIdMapping>({});
     const [selectedCohorts, setSelectedCohorts] = useState<number>(10);
 
-    const nodeRadius = 15;
+    const nodeRadius = 30;
     const margin = { top: 0, right: 0, bottom: 0, left: 50 };
     const tooltipRef = useRef<HTMLDivElement>(null);
 
@@ -125,19 +125,17 @@ const GraphVisualization: React.FC = () => {
                 }
             }
 
-            let yPos = centerY;
-            const maxParentY = Math.max(...positionedParents.map(p => positions[p].y));
-            yPos = maxParentY + VERTICAL_SPACING;
-
             const colKey = Math.round((targetX - margin.left) / COLUMN_WIDTH);
-            if (columnOccupancy[colKey] === undefined) {
-                columnOccupancy[colKey] = 0;
-            } else {
-                yPos = maxParentY + VERTICAL_SPACING + (columnOccupancy[colKey] * VERTICAL_SPACING);
-            }
-            columnOccupancy[colKey] += 1;
 
-            positions[node.id] = { x: targetX, y: Math.min(yPos, Math.abs(height - yPos)) };
+            let count = columnOccupancy[colKey] || 0;
+            const direction = count % 2 !== 0 ? 1 : -1;
+            const level = Math.ceil((count + 1) / 2);
+            const yOffset = direction * level * VERTICAL_SPACING;
+            const yPos = centerY + yOffset;
+
+            columnOccupancy[colKey] = count + 1;
+
+            positions[node.id] = { x: targetX, y: yPos };
         });
 
         const maxColumnX = Math.max(...Object.values(positions).map(pos => pos.x));
@@ -162,7 +160,7 @@ const GraphVisualization: React.FC = () => {
     const zoomBehavior = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
 
     useEffect(() => {
-        let url = 'http://localhost:65433/';
+        let url = 'http://french.braidpool.net:65433/';
         const newSocket = io(url, {
             reconnection: true,
             reconnectionAttempts: Infinity,
@@ -293,24 +291,28 @@ const GraphVisualization: React.FC = () => {
         const links: { source: string; target: string }[] = [];
         allNodes.forEach(node => {
             node.children.forEach(childId => {
-                links.push({ source: node.id, target: childId });
+                links.push({ target: node.id, source: childId });
             });
         });
 
         container.append('defs').selectAll('marker')
-            .data(['end'])
+            .data([
+                { id: 'arrow-blue', color: '#48CAE4' },
+                { id: 'arrow-orange', color: '#FF8500' }
+            ])
             .enter()
             .append('marker')
-            .attr('id', 'arrow')
+            .attr('id', d => d.id)
             .attr('viewBox', '0 -5 10 10')
-            .attr('refX', nodeRadius + 2)
+            .attr('refX', nodeRadius - 3)
             .attr('refY', 0)
-            .attr('markerWidth', 6)
-            .attr('markerHeight', 6)
+            .attr('markerWidth', 15)
+            .attr('markerHeight', 12)
             .attr('orient', 'auto')
             .append('path')
             .attr('d', 'M0,-5L10,0L0,5')
-            .attr('fill', '#FF8500'); // Orange arrow
+            .attr('fill', d => d.color);
+
 
         container.selectAll('.link')
             .data(links)
@@ -321,10 +323,14 @@ const GraphVisualization: React.FC = () => {
             .attr('y1', d => positions[d.source]?.y || 0)
             .attr('x2', d => (positions[d.target]?.x || 0) + offsetX) // Apply offset
             .attr('y2', d => positions[d.target]?.y || 0)
-            .attr('stroke', '#48CAE4') // Light blue links
+            .attr('stroke', d =>
+                ((hwPathSet.has(d.source) && hwPathSet.has(d.target)) ? '#FF8500' : '#48CAE4'))
             .attr('stroke-width', 1.5)
-            .attr('marker-end', 'url(#arrow)')
-            .style('display', d =>
+            .attr('marker-end', d =>
+                (hwPathSet.has(d.source) && hwPathSet.has(d.target))
+                    ? 'url(#arrow-orange)'
+                    : 'url(#arrow-blue)'
+            ).style('display', d =>
                 filteredCohortNodes.has(d.source) &&
                     filteredCohortNodes.has(d.target) ? 'inline' : 'none'
             );
@@ -388,7 +394,7 @@ const GraphVisualization: React.FC = () => {
             .attr('text-anchor', 'middle')
             .text(d => nodeIdMap[d.id] || '?') // Show sequential ID instead of hash
             .attr('fill', '#fff')
-            .style('font-size', '10px')
+            .style('font-size', 20)
             .on('mouseover', function (event: MouseEvent, d: GraphNode) {
                 const cohortIndex = cohortMap.get(d.id);
                 const isHWP = hwPathSet.has(d.id);
