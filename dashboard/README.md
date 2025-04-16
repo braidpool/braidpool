@@ -1,8 +1,10 @@
 # Braidpool Dashboard
 
-A visualization dashboard for the Braidpool decentralized mining pool.
+A visualization dashboard for the Braidpool decentralized mining pool, and Bitcoin related data.
 
-## Quick Start
+## How to Run
+
+First and foremost, for the braid visualisation to work, either use the deployed API url http://french.braidpool.net:65433, or run it locally via the `simulator_api` located in the `tests` directory in the `main` directory.
 
 ```bash
 # Install dependencies
@@ -38,109 +40,12 @@ npm run preview
 3. **Mining Inventory**: Status of connected mining hardware.
 4. **Statistics**: Detailed performance metrics and history.
 
-## File Structure
-
-The project is organized as follows:
-
-```
-dashboard/
-├── .gitignore
-├── favicon.ico
-├── index.html
-├── manifest.json
-├── package.json
-├── postcss.config.cjs
-├── README.md
-├── tailwind.config.js
-├── tsconfig.json
-├── tsconfig.node.json
-├── vite.config.ts
-├── assets/
-│   ├── logo192.png
-│   ├── logo512.png
-├── public/
-│   ├── favicon.ico
-│   ├── logo192.png
-│   ├── logo512.png
-│   ├── manifest.json
-│   ├── robots.txt
-├── src/
-│   ├── App.css
-│   ├── App.test.tsx
-│   ├── App.tsx
-│   ├── env.d.ts
-│   ├── index.css
-│   ├── index.tsx
-│   ├── logo.svg
-│   ├── react-app-env.d.ts
-│   ├── reportWebVitals.ts
-│   ├── setupTests.ts
-│   ├── components/
-│   │   ├── BraidPoolDAG.tsx
-│   │   ├── BraidStats.tsx
-│   │   ├── Dashboard.tsx
-│   │   ├── DashboardMetrics.tsx
-│   │   ├── InstallationInstructions.tsx
-│   │   ├── MinerDashboardComponents/
-│   │   │   ├── Filters.tsx
-│   │   │   ├── MinerChart.tsx
-│   │   │   ├── MinerTable.tsx
-│   │   │   ├── Particles.tsx
-│   │   ├── common/
-│   │   │   ├── Card.tsx
-│   ├── data/
-│   │   ├── mockBeads.ts
-│   ├── theme/
-│   │   ├── colors.ts
-│   ├── types/
-│   │   ├── Bead.ts
-│   │   ├── braid.ts
-│   ├── utils/
-│       ├── braidDataTransformer.ts
-```
-
-## Dependencies
-
-The project uses the following dependencies:
-
-### Core Dependencies
-- **React**: `^19.1.0` - For building the user interface.
-- **React DOM**: `^19.1.0` - For rendering React components.
-- **TypeScript**: `^5.8.3` - For type safety and development.
-- **Vite**: `^6.2.6` - For fast development and build tooling.
-
-### UI and Styling
-- **Material UI**: `^7.0.1` - For prebuilt UI components.
-- **Tailwind CSS**: `^4.1.3` - For utility-first CSS styling.
-
-### Data Visualization
-- **D3.js**: `^7.9.0` - For creating data-driven visualizations.
-
-### Animations
-- **Framer Motion**: `^12.6.5` - For animations and transitions.
-
-### Utilities
-- **Axios**: `^1.8.4` - For making HTTP requests.
-- **Socket.IO Client**: `^4.8.1` - For real-time communication.
-
-### Testing
-- **Vitest**: `^3.1.1` - For unit testing.
-- **Testing Library**: For DOM testing utilities.
-
-## Development
-
-This dashboard is built with:
-
-- **React 19** with **TypeScript** for a modern, type-safe development experience.
-- **Vite** for fast development and optimized builds.
-- **Material UI** and **Tailwind CSS** for responsive and accessible UI components.
-- **D3.js** for interactive data visualizations.
-
 ## Troubleshooting
 
 - **Blank screen**: Check the browser console for errors.
 - **Loading issues**: Verify that data files are in the correct format.
 - **Visualization problems**: Ensure you are using a compatible browser (latest Chrome/Firefox recommended).
+- **Visualization graph keeps on loading**: Ping the API, check the url of the API at dashboard/src/component/BraidPoolDAG/BraidPoolDAG.tsx.
 
 ---
 
