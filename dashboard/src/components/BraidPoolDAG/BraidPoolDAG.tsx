@@ -49,7 +49,7 @@ const GraphVisualization: React.FC = () => {
     ];
 
     const [nodeIdMap, setNodeIdMap] = useState<NodeIdMapping>({});
-    const [selectedCohorts, setSelectedCohorts] = useState<number>(10);
+    const [selectedCohorts, setSelectedCohorts] = useState<number | "all">(10);
 
     const nodeRadius = 30;
     const margin = { top: 0, right: 0, bottom: 0, left: 50 };
@@ -160,7 +160,7 @@ const GraphVisualization: React.FC = () => {
     const zoomBehavior = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
 
     useEffect(() => {
-        let url = 'http://localhost:65433/';
+        let url = 'http://french.braidpool.net:65433/';
         const newSocket = io(url, {
             reconnection: true,
             reconnectionAttempts: Infinity,
@@ -353,7 +353,7 @@ const GraphVisualization: React.FC = () => {
             .attr("fill", d => {
                 const cohortIndex = cohortMap.get(d.id);
                 if (cohortIndex === undefined) return COLORS[0];
-                const startingIndex = Math.max(0, totalCohorts - selectedCohorts);
+                const startingIndex = Math.max(0, totalCohorts - (typeof selectedCohorts === 'number' ? selectedCohorts : totalCohorts));
                 const adjustedIndex = cohortIndex - startingIndex;
                 return COLORS[adjustedIndex % COLORS.length];
             })
@@ -466,7 +466,10 @@ const GraphVisualization: React.FC = () => {
             <div style={{ margin: '10px', position: 'relative', display: 'flex', gap: '10px', alignItems: 'center' }}>
                 <select
                     value={selectedCohorts}
-                    onChange={(e) => setSelectedCohorts(Number(e.target.value))}
+                    onChange={(e) => {
+                        const value = e.target.value;
+                        setSelectedCohorts(value === "all" ? "all" : Number(value));
+                    }}
                     style={{
                         padding: '5px',
                         borderRadius: '4px',
@@ -475,34 +478,15 @@ const GraphVisualization: React.FC = () => {
                         color: '#0077B6',
                     }}
                 >
+                    <option value="all">Show all cohorts</option>
                     {[5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map((value) => (
                         <option key={value} value={value}>
                             Show latest {value} cohorts
                         </option>
                     ))}
                 </select>
-                <Button
-                    onClick={zoomOut}
-                    style={{ backgroundColor: '#FF8500', color: 'white', border: '1px solid #E76F00' }}
-                    className="hover:bg-[#E76F00] transition-colors"
-                >
-                    -
-                </Button>
-                <Button
-                    onClick={zoomIn}
-                    style={{ backgroundColor: '#FF8500', color: 'white', border: '1px solid #E76F00' }}
-                    className="hover:bg-[#E76F00] transition-colors"
-                >
-                    +
-                </Button>
-                <Button
-                    onClick={resetZoom}
-                    style={{ backgroundColor: '#0077B6', color: 'white', border: '1px solid #023E8A' }}
-                    className="hover:bg-[#023E8A] transition-colors"
-                >
-                    Reset Zoom
-                </Button>
             </div>
+
             <div style={{ margin: '10px', position: 'relative' }}>
                 <Card style={{ borderColor: '#FF8500' }}>
                     <CardContent>
