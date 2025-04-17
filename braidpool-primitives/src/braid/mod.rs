@@ -124,7 +124,7 @@ impl Braid {
         };
 
         // We need to check whether even one of the parent beads have been pruned from memory!
-        for (parent_bead_hash, _) in &bead.committed_metadata.parents {
+        for parent_bead_hash in &bead.committed_metadata.parents {
             let parent_bead = self.load_bead_from_memory(parent_bead_hash.clone());
             if let Err(error_type) = parent_bead {
                 match error_type {
@@ -151,14 +151,14 @@ impl Braid {
 
     #[inline]
     fn remove_parent_beads_from_tips(&mut self, bead: &Bead) {
-        for (parent_hash, _) in &bead.committed_metadata.parents {
+        for parent_hash in &bead.committed_metadata.parents {
             self.tips.remove(parent_hash);
         }
     }
 
     #[inline]
     fn is_bead_orphaned(&self, bead: &Bead) -> bool {
-        for (parent, _) in &bead.committed_metadata.parents {
+        for parent in &bead.committed_metadata.parents {
             if self.beads.contains(parent) == false {
                 return true;
             }
