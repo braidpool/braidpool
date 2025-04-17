@@ -5,7 +5,7 @@ import { FilterBar } from "./FilterComponents"
 
 import BeadRow from "./MinerRow"
 
-import { MinerCompare } from "./MinerCompare"
+
 import { BEADS, TRANSACTIONS, BLOCKS } from "./constants"
 import { useChartData } from "./Hooks/useChartData"
 import { Layers } from "lucide-react"
@@ -160,7 +160,6 @@ export default function MinedSharesExplorer() {
             </div>
           )}
 
-          {activeTab === "compare" && <MinerCompare timeRange={timeRange} />}
         </div>
       </div>
     </div>
