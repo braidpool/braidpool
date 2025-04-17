@@ -21,7 +21,7 @@ const TABS = [
   { key: "miners", label: "Miners" },
   { key: "trends", label: "Trends" },
   { key: "blocks", label: "Blocks" },
-  { key: "compare", label: "Compare" },
+  
 ]
 export default function DashboardHeader({
   headerOpacity,
@@ -113,11 +113,7 @@ export default function DashboardHeader({
             label: "Blocks",
             icon: <Layers className="w-4 h-4" />,
           },
-          {
-            id: "compare",
-            label: "Compare",
-            icon: <GitCompare className="w-4 h-4" />,
-          },
+          
         ].map((tab) => (
           <motion.button
             key={tab.id}

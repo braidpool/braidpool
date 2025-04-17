@@ -58,7 +58,7 @@ export function TrendsTab({ timeRange }: { timeRange: string }) {
           </div>
 
           <div
-            className="relative border border-gray-800/50 rounded-xl p-6 h-80 bg-black/30 backdrop-blur-md overflow-hidden"
+            className="relative border w-full border-gray-800/50 rounded-xl p-6 h-110 bg-black/30 backdrop-blur-md overflow-hidden"
             onMouseEnter={() => setChartHovered(true)}
             onMouseLeave={() => setChartHovered(false)}
           >
@@ -114,7 +114,7 @@ export function TrendsTab({ timeRange }: { timeRange: string }) {
           </div>
 
           <div
-            className="relative border border-gray-800/50 rounded-xl p-6 h-80 bg-black/30 backdrop-blur-md overflow-hidden"
+            className="relative border border-gray-800/50 rounded-xl p-6 h-110 bg-black/30 backdrop-blur-md overflow-hidden"
             onMouseEnter={() => setChartHovered(true)}
             onMouseLeave={() => setChartHovered(false)}
           >
@@ -170,7 +170,7 @@ export function TrendsTab({ timeRange }: { timeRange: string }) {
           </div>
 
           <div
-            className="relative border border-gray-800/50 rounded-xl p-6 h-80 bg-black/30 backdrop-blur-md overflow-hidden"
+            className="relative border border-gray-800/50 rounded-xl p-6 h-110 bg-black/30 backdrop-blur-md overflow-hidden"
             onMouseEnter={() => setChartHovered(true)}
             onMouseLeave={() => setChartHovered(false)}
           >
