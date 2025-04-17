@@ -18,22 +18,24 @@ use crate::utils::BeadHash;
 
 pub struct CommittedMetadata {
     // Committed Braidpool Metadata,
-    pub parents: HashSet<(BeadHash, Time)>,
+    pub transaction_cnt: u32,
     pub transactions: Vec<Transaction>,
+    pub parents: HashSet<BeadHash>,
     pub payout_address: Address,
     //timestamp when the bead was created
     pub observed_time_at_node: Time,
     pub comm_pub_key: PublicKey,
     pub miner_ip: SocketAddr,
-    pub extra_nonce: i32,
 }
 #[derive(Clone, Debug, Serialize)]
 
 pub struct UnCommittedMetadata {
     //Uncomitted Metadata
     //timestamp when the bead was broadcasted
+    pub extra_nonce: i32,
     pub broadcast_timestamp: Time,
     pub signature: Signature,
+    pub parent_bead_timestamps: HashSet<Time>,
 }
 #[derive(Clone, Debug, Serialize)]
 
@@ -61,6 +63,12 @@ impl Bead {
 
 impl Bead {
     // All private function definitions go here
+    //TODO : To implement a reverse mapping since we will be including the
+    //consensus determining attribute in the committed portion and those which
+    //will be used afterward such as in retargeting algorithms such as the parentbead_timestamps they shall be
+    //included inside the uncommitted portion but the order must be same as that of the hashset of parents_bead_hashes present
+    //inside the committed metadata
+    pub fn reverse_mapping_parentbead_with_timestamp() {}
 }
 
 #[cfg(test)]
