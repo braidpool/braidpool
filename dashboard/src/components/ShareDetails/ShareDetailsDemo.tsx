@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Button, Box, Typography, Paper, styled } from '@mui/material';
-import ShareDetails from './ShareDetails/ShareDetails';
-import { mockBeads, printDebug } from '../data/mockBeads';
+import ShareDetails from './ShareDetails';
+import { mockBeads, printDebug } from '../../data/mockBeads';
 
 // Styled components
 const StyledPaper = styled(Paper)(({ theme }) => ({
