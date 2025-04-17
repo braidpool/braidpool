@@ -22,13 +22,14 @@ const TIME_RANGES = [
   { label: "Quarter", value: "quarter" },
   { label: "Year", value: "year" },
 ]
-export default function FilterBar({
+export function FilterBar({
   timeRange,
   setTimeRange,
-}: FilterBarProps) {
+}: {
+  timeRange: string
+  setTimeRange: (range: string) => void
+}) {
   const [showFilters, setShowFilters] = useState(false)
-  const startRef = useRef<HTMLInputElement>(null)
-  const endRef = useRef<HTMLInputElement>(null)
 
   return (
     <motion.div
@@ -106,42 +107,32 @@ export default function FilterBar({
                   </div>
                 </div>
 
-                <div>
-                  <label className="block mb-2 text-blue-300 font-medium">Start Date</label>
-                  <div className="relative w-full group">
-                    <input
-                      ref={startRef}
-                      type="date"
-                      defaultValue="2024-07-01"
-                      className="w-full bg-gray-900/80 border border-gray-700/80 rounded-lg p-2.5 pr-10 text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 transition-all duration-300 group-hover:border-blue-400/70
-                        [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:cursor-pointer"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => startRef.current?.showPicker()}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2"
-                    >
-                      <Calendar className="h-5 w-5 text-blue-400" />
-                    </button>
-                  </div>
-                </div>
+                <div className="flex flex-col">
+    <label className="text-blue-300 font-medium mb-2">Start Date</label>
+    <div className="relative group">
+      <input
+        type="date"
+        className="w-full bg-gray-900/80 border border-gray-700/80 rounded-lg px-3 py-2 pr-10 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 transition-all duration-300 group-hover:border-blue-400/70"
+        defaultValue="2021-08-01"
+      />
+      <div className="absolute inset-y-0 right-2 flex items-center">
+        <motion.div
+          whileHover={{ rotate: 15, scale: 1.1 }}
+          transition={{ type: "spring", stiffness: 300 }}
+        >
+          <Calendar className="h-4 w-4 text-blue-400" />
+        </motion.div>
+      </div>
+    </div>
+  </div>
                 <div>
                   <label className="block mb-2 text-blue-300 font-medium">End Date</label>
                   <div className="relative group">
                     <input
-                      ref={endRef}
                       type="date"
-                      defaultValue="2024-07-31"
-                      className="w-full bg-gray-900/80 border border-gray-700/80 rounded-lg p-2.5 pr-10 text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 transition-all duration-300 group-hover:border-blue-400/70
-                        [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                      className="w-full bg-gray-900/80 border border-gray-700/80 rounded-lg p-2.5 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 transition-all duration-300 group-hover:border-blue-400/70"
+                      defaultValue="2021-09-30"
                     />
-                    <button
-                      type="button"
-                      onClick={() => endRef.current?.showPicker()}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2"
-                    >
-                      <Calendar className="h-5 w-5 text-blue-400" />
-                    </button>
                   </div>
                 </div>
 
