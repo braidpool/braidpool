@@ -53,67 +53,127 @@ header, the coinbase transaction, and metadata:
 | Field      | Description |
 | ---------- | ----------- |
 | `blockheader` | `Version, Previous Block Hash, Merkle Root, Timestamp, Target, Nonce` |
-| `coinbase`    | `Coinbase Txn, Merkle Sibling, Merkle Sibling, ...` |
-| `payout`      | `Payout Update Txn, Merkle Sibling, Merkle Sibling, ...` |
-| `metadata`    | `Braidpool Metadata` (see below) |
-| `un_metadata` | `Uncommitted Metadata` (see below) |
+| `metadata`    | `BraidpoolMetadata` (see below) |
+| `un_metadata` | `UncommittedMetadata` (see below) |
 
-The first line is a standard Bitcoin block header.  The `Merkle Siblings` in the
-second and third line are the additional nodes in the transaction Merkle tree
-necessary to verify that the specified `Coinbase Transaction` and `Payout
-Commitment` transactions are included in the `Merkle Root`. This `Coinbase
-Transaction` commits to any additional data needed for the Braidpool's [braid
-consensus mechansim](#braid-consensus-mechanism), in an `OP_RETURN` output.
-While we could commit to this data in a more space-efficient manner (e.g. via a
-pubkey tweak), the coinbase is also the location of the `extranonce` 8-byte
-field used by some mining equipment.
+The `blockheader` is a standard Bitcoin block header. The metadata is serialized
+from the data above and communicated to peer nodes. The `metadata` field is
+committed to in an `OP_RETURN` output in the coinbase transaction, and the
+`un_metadata` field is not committed to, but is communicated to peers. The
+coinbase transaction itself is not communicated because it can be independently
+computed.
 
-The `Coinbase Transaction` is a standard transaction having no inputs, and
-must have the following outputs:
+The coinbase transaction is a standard transaction having no inputs, and must
+have an `OP_RETURN` and one output for each miner receiving rewards this round:
 
-    OutPoint(Value:0, scriptPubKey OP_RETURN "BP"+<Braidpool Commitment>+<extranonce>)
-    OutPoint(Value:<block reward>, scriptPubKey <P2TR pool_pubkey>)
+    OutPoint(Value:0, scriptPubKey OP_RETURN <BraidpoolCommitment>+<extranonce>)
+    OutPoint(Value:<miner_1_payout>, scriptPubKey <miner_1_address>)
+    OutPoint(Value:<miner_2_payout>, scriptPubKey <miner_2_address>)
+    ...
+    OutPoint(Value:<miner_N_payout>, scriptPubKey <miner_N_address>)
 
-The `<block reward>` is the sum of all fees and block reward for this halving
-epoch, and `pool_pubkey` is an address controlled collaboratively by the pool in
-such a way that the [braid consensus mechanism](#braid-consensus-mechanism) can
-only spend it in such a way as to pay all hashers in the manner described by its
-share accounting.
+This is a PPLNS payout mechanism, similar to the [TIDES mechanism](https://ocean.xyz/docs/tides)
+used by [OCEAN](https://ocean.xyz/).  Here is an [example of a block with such a
+payout](https://mempool.space/tx/32ecb706100c20bf00d07203970ebe96c230e55636bce3455515bba3d1eed784).
+The exact parameters of the PPLNS payout are yet to be determined and
+alternatives are under active research, as PPLNS has well known drawbacks. PPLNS
+doesn't reduce the variance very much, and wastes a lot of block space that
+could be used to process additional fee-paying transactions. However it is
+simple and widely used and V1 of Braidpool will use it while other alternatives
+are investigated.
 
 ## Metadata Commitments
 
-The `<Braidpool Commitment>` is a hash of `Braidpool Metadata` committing to
-additional data required for the operation of the pool. Validation of this share
-requires that the PoW hash of this bitcoin header be less than this weak
-difficulty target $x$.
+The `<BraidpoolCommitment>` is a hash of the serialized `BraidpoolMetadata`
+struct committing to additional data required for the operation of the pool. The
+hash of this serialized struct will be placed in the `OP_RETURN` output of the
+coinbase transaction, and then the transaction tree deterministically computed
+by each node. In order to be a valid share the resultant Merkle root must match
+the Merkle root in the block header.
 
-The `Braidpool Metadata` is:
+The `BraidpoolMetadata` struct is:
+
 | Field           | Description                                                     |
 | -----           | -----------                                                     |
-| `target`        | Miner-selected target difficulty $x_b < x < x_0$                |
-| `payout_pubkey` | P2TR pubkey for this miner's payout                             |
+| `parents`       | [[BeadHash, Timestamp], ... ]                                   |
+| `payout_address`| P2TR address for this miner's payout                            |
 | `comm_pubkey`   | secp256k1 pubkey for encrypted DH communication with this miner |
 | `miner IP`      | IP address of this miner                                        |
-| [[`parent`, `timestamp`], ...] | An array of block hashes of parent beads and timestamps when those parents were seen |
+| `timestamp`     | Timestamp when this bead was created                            |
+| `transactions`  | List of serialized transactions                                 |
+| `transaction_cnt`| Count of the transactions added for construction of bead       |
 
 The `Uncommitted Metadata` block is intentionally not committed to in the PoW
 mining process. It contains:
+
 | Field             | Description |
 | -----             | ----------- |
-| `timestamp`       | timestamp when this bead was broadcast |
-| `signature`       | Signature on the `Uncommitted Metadata` block using the `payout_pubkey` |
+| `timestamp`       | timestamp when this bead was broadcast                        |
+| `signature`       | Signature on the `Uncommitted Metadata` block using the `comm_pubkey` |
+| `extranonce`    | 64-bit extranonce field                                         |
 
-The purpose of this data is to gather higher resolution timestamps than are
-possible if the timestamp was committed. All Braidpool timestamps are 64-bit
-fields as milliseconds since the Unix epoch. When a block header is sent to
-mining devices, many manufacturers' mining devices do not return for quite some
-time (10-60 seconds) while they compute the hash, which causes PoW-mined
+The purpose of the timestamps is to gather higher resolution timestamps than are
+possible if the timestamp was committed, in order to measure (in a non-consensus
+manner) the behavior of latency in the network. All Braidpool timestamps are
+64-bit fields as milliseconds since the Unix epoch. When a block header is sent
+to mining devices, many manufacturers' mining devices do not return for quite
+some time (10-60 seconds) while they compute the hash, which causes PoW-mined
 timestamps to be delayed by this amount. Additionally some mining hardware rolls
 the timestamp field in addition to the nonce and extranonce fields. Adding
 timestamps when parents were seen by the node and a timestamp when the bead was
-broadcast allows the braid to compute bead times with much higher precision.
-Though the data is uncommitted in the PoW header, it is signed by a key that is
-committed in the PoW header, so third parties cannot falsify these timestamps.
+broadcast and started mining allows Braidpool to compute bead times with much
+higher precision.  Though the data is uncommitted in the PoW header, it is
+signed by a key that is committed in the PoW header, so third parties cannot
+falsify these timestamps.
+
+FIXME: The consensus mechanism now is completely independent of timestamps. I
+put a bunch of timestamps here, which should be used only in a non-consensus
+manner. We should reconsider how many of them are really necessary. We might
+consider moving all timestamps to `Uncommitted Metadata` to prevent them being
+used (and manipulated) by consensus changes in the future.
+
+## Committed Mempool
+
+Since a share is a full and valid bitcoin block with a lesser difficulty target,
+we have a problem in that the share can be up to 4Mb of data, published faster
+than once per second. This is a lot of bandwidth and a lot of computation to
+validate, but most shares will be carrying almost exactly the same transactions.
+To reduce bandwidth and computation, we propose a "committed mempool" where the
+miner commits to a list of transactions that the miner has chosen and generally
+will be taken from Bitcoin's mempool. This causes the block template to be
+deterministically computable, and allows shares to be only a few kilobytes in
+size.
+
+Each share will carry a list of 2-5 transactions that the miner has chosen and
+generally will be taken from Bitcoin's mempool. These transactions are added to
+a "committed mempool" which will be an instance of the Mempool object in
+bitcoind using IPC. Therefore we will leverage all of the mempool validation and
+transaction selection logic in bitcoind, while allowing every node to
+independently construct the block template for validation.
+
+The 2-5 transactions included in a bead are required to be included in the block
+template for that bead. If that bead does not become a bitcoin block, then those
+transactions are added to the committed mempool.
+
+When computing the block template, we begin at the *head* of a cohort (all beads
+at the head of a cohort have the same parents and ancestors by definition, and
+therefore the same committed mempool). Transactions from beads in the highest
+descendant work path are then added to the committed mempool, followed by
+transactions off the highest descendant work path, in order of work.
+
+Work is defined as the sum of descendant work of a bead. If two beads have the
+same work, then the bead with higher ancestor work is preferred. If that is also
+a tie, then the bead with the lowest hash is preferred. See the `bead_cmp`
+function in `tests/braid.py` for prototype code and discussion.
+
+Children MUST NOT have transactions which conflict with their parents, according
+to Bitcoin's `MempoolAccept`. However beads off the highest work path may
+contain duplicate transactions, double-spends, or other conflicts. When such
+transactions are present, we add them to the committed mempool, ignoring
+failures, in bead-work order. This creates the deterministic mempool for each
+bead, which can be computed independently by all nodes.
+
+------------------------ Everything below here is subject to revision -----------------------
 
 ## Share Value
 
