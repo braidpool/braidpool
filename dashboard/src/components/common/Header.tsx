@@ -159,7 +159,7 @@ const Header: React.FC<HeaderProps> = ({ title = 'BRAIDPOOL' }) => {
               px: { xs: 1.5, sm: 2 },
               py: 0.75,
               height: 34,
-              
+              backgroundColor:"	#36454F",
               color: 'white',
               fontWeight: 500,
               fontSize: '0.875rem',
@@ -167,7 +167,7 @@ const Header: React.FC<HeaderProps> = ({ title = 'BRAIDPOOL' }) => {
               minWidth: 'auto',
               boxShadow: '0 1px 2px rgba(0,0,0,0.3)',
               '&:hover': {
-                
+                backgroundColor:"#000",
                 boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
               },
             }}>

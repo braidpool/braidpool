@@ -22,13 +22,13 @@ const ActionIconButton: React.FC<ActionIconButtonProps> = ({
     onClick={onClick}
     sx={{
       color: 'white',
-      background: 'linear-gradient(135deg, #06b6d4)',
+      background: '	#36454F',
       p: 1,
       width: 34,
       height: 34,
       boxShadow: '0 1px 2px rgba(0,0,0,0.3)',
       '&:hover': {
-        background: 'linear-gradient(135deg, #facc15, #f472b6, #22d3ee)',
+      
         boxShadow: '0 2px 4px rgba(0,0,0,0.4)',
       },
       ...sx,

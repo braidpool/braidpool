@@ -46,7 +46,7 @@ export default function DashboardHeader({
           transition={{ duration: 0.8, type: "spring" }}
         >
           <h1 className="text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-purple-500 to-blue-500 drop-shadow-[0_0_15px_rgba(59,130,246,0.5)] tracking-tight">
-            Mined Shares Explorer
+            Beads Explorer
           </h1>
 
           {/* Animated underline */}
