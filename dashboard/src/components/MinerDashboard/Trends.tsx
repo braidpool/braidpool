@@ -141,7 +141,7 @@ export function TrendsTab({ timeRange }: { timeRange: string }) {
               value="210ms"
               change="+15%"
               icon={<ArrowUpRight />}
-              color="amber"
+              color="blue"
               delay={0.3}
             />
             <AnimatedStatCard
@@ -197,7 +197,7 @@ export function TrendsTab({ timeRange }: { timeRange: string }) {
               value="11.2 sats/vB"
               change="+2.1"
               icon={<TrendingUp />}
-              color="amber"
+              color="purple"
               delay={0.3}
             />
             <AnimatedStatCard

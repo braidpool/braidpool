@@ -66,7 +66,7 @@ export default function DashboardHeader({
           className="flex gap-3 justify-end absolute ml-[850px] mt-2"
         >
           <motion.button
-            className="relative  px-4 py-2 rounded-lg text-white font-medium overflow-hidden bg-blue-500 hover:bg-blue-900"
+            className="relative  px-4 py-2 rounded-lg text-white font-medium overflow-hidden bg-[#36454F] hover:bg-black"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.97 }}
           >
@@ -76,7 +76,7 @@ export default function DashboardHeader({
             </span>
           </motion.button>
           <motion.button
-            className="relative px-4 py-2 rounded-lg text-white font-medium overflow-hidden bg-blue-500 hover:bg-blue-900"
+            className="relative px-4 py-2 rounded-lg text-white font-medium overflow-hidden bg-[#36454F] hover:bg-black"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.97 }}
           >
