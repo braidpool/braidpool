@@ -295,46 +295,6 @@ const GraphVisualization: React.FC = () => {
             });
         });
 
-        container.append('defs').selectAll('marker')
-            .data([
-                { id: 'arrow-blue', color: '#48CAE4' },
-                { id: 'arrow-orange', color: '#FF8500' }
-            ])
-            .enter()
-            .append('marker')
-            .attr('id', d => d.id)
-            .attr('viewBox', '0 -5 10 10')
-            .attr('refX', nodeRadius - 3)
-            .attr('refY', 0)
-            .attr('markerWidth', 15)
-            .attr('markerHeight', 12)
-            .attr('orient', 'auto')
-            .append('path')
-            .attr('d', 'M0,-5L10,0L0,5')
-            .attr('fill', d => d.color);
-
-
-        container.selectAll('.link')
-            .data(links)
-            .enter()
-            .append('line')
-            .attr('class', 'link')
-            .attr('x1', d => (positions[d.source]?.x || 0) + offsetX) // Apply offset
-            .attr('y1', d => positions[d.source]?.y || 0)
-            .attr('x2', d => (positions[d.target]?.x || 0) + offsetX) // Apply offset
-            .attr('y2', d => positions[d.target]?.y || 0)
-            .attr('stroke', d =>
-                ((hwPathSet.has(d.source) && hwPathSet.has(d.target)) ? '#FF8500' : '#48CAE4'))
-            .attr('stroke-width', 1.5)
-            .attr('marker-end', d =>
-                (hwPathSet.has(d.source) && hwPathSet.has(d.target))
-                    ? 'url(#arrow-orange)'
-                    : 'url(#arrow-blue)'
-            ).style('display', d =>
-                filteredCohortNodes.has(d.source) &&
-                    filteredCohortNodes.has(d.target) ? 'inline' : 'none'
-            );
-
         const nodes = container.selectAll('.node')
             .data(allNodes)
             .enter()
@@ -421,6 +381,79 @@ const GraphVisualization: React.FC = () => {
             .attr('y', margin.top / 2)
             .attr('text-anchor', 'middle')
             .style('font-size', '16px')
+
+
+        container.append('defs').selectAll('marker')
+            .data([
+                { id: 'arrow-blue', color: '#48CAE4' },
+                { id: 'arrow-orange', color: '#FF8500' }
+            ])
+            .enter()
+            .append('marker')
+            .attr('id', d => d.id)
+            .attr('viewBox', '0 -5 10 10')
+            .attr('refX', 10)
+            .attr('refY', 0)
+            .attr('markerWidth', 15)
+            .attr('markerHeight', 12)
+            .attr('orient', 'auto')
+            .append('path')
+            .attr('d', 'M0,-5L10,0L0,5')
+            .attr('fill', d => d.color);
+
+        container.selectAll('.link')
+            .data(links)
+            .enter()
+            .append('line')
+            .attr('class', 'link')
+            .attr('x1', d => {
+                const src = { x: (positions[d.source]?.x || 0) + offsetX, y: positions[d.source]?.y || 0 };
+                const tgt = { x: (positions[d.target]?.x || 0) + offsetX, y: positions[d.target]?.y || 0 };
+                const dx = tgt.x - src.x;
+                const dy = tgt.y - src.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const ratio = nodeRadius / dist;
+                return src.x + dx * ratio;
+            })
+            .attr('y1', d => {
+                const src = { x: (positions[d.source]?.x || 0) + offsetX, y: positions[d.source]?.y || 0 };
+                const tgt = { x: (positions[d.target]?.x || 0) + offsetX, y: positions[d.target]?.y || 0 };
+                const dx = tgt.x - src.x;
+                const dy = tgt.y - src.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const ratio = nodeRadius / dist;
+                return src.y + dy * ratio;
+            })
+            .attr('x2', d => {
+                const src = { x: (positions[d.source]?.x || 0) + offsetX, y: positions[d.source]?.y || 0 };
+                const tgt = { x: (positions[d.target]?.x || 0) + offsetX, y: positions[d.target]?.y || 0 };
+                const dx = src.x - tgt.x;
+                const dy = src.y - tgt.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const ratio = nodeRadius / dist;
+                return tgt.x + dx * ratio;
+            })
+            .attr('y2', d => {
+                const src = { x: (positions[d.source]?.x || 0) + offsetX, y: positions[d.source]?.y || 0 };
+                const tgt = { x: (positions[d.target]?.x || 0) + offsetX, y: positions[d.target]?.y || 0 };
+                const dx = src.x - tgt.x;
+                const dy = src.y - tgt.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const ratio = nodeRadius / dist;
+                return tgt.y + dy * ratio;
+            })
+            .attr('stroke', d =>
+                ((hwPathSet.has(d.source) && hwPathSet.has(d.target)) ? '#FF8500' : '#48CAE4'))
+            .attr('stroke-width', 1.5)
+            .attr('marker-end', d =>
+                (hwPathSet.has(d.source) && hwPathSet.has(d.target))
+                    ? 'url(#arrow-orange)'
+                    : 'url(#arrow-blue)'
+            ).style('display', d =>
+                filteredCohortNodes.has(d.source) &&
+                    filteredCohortNodes.has(d.target) ? 'inline' : 'none'
+            );
+
     }, [graphData, defaultZoom, selectedCohorts]);
 
     if (loading) {
