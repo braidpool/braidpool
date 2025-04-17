@@ -63,10 +63,10 @@ export default function DashboardHeader({
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.3 }}
-          className="flex gap-3"
+          className="flex gap-3 justify-end absolute ml-[850px] mt-2"
         >
           <motion.button
-            className="relative px-4 py-2 rounded-lg text-white font-medium overflow-hidden bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500"
+            className="relative  px-4 py-2 rounded-lg text-white font-medium overflow-hidden bg-blue-500 hover:bg-blue-900"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.97 }}
           >
@@ -76,7 +76,7 @@ export default function DashboardHeader({
             </span>
           </motion.button>
           <motion.button
-            className="relative px-4 py-2 rounded-lg text-white font-medium overflow-hidden bg-blue-500"
+            className="relative px-4 py-2 rounded-lg text-white font-medium overflow-hidden bg-blue-500 hover:bg-blue-900"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.97 }}
           >
@@ -87,6 +87,8 @@ export default function DashboardHeader({
           </motion.button>
         </motion.div>
       </div>
+
+      
 
       {/* Tab navigation */}
       <motion.div

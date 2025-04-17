@@ -10,7 +10,7 @@ import {
 import { BEADS } from "./constants"
 import { useComparisonData } from "./Hooks/useComparisonData"
 import AdvancedChart from "./AdvancedChart"
-import DateRangePicker from "./DateRangePicker"
+
 
 interface MinerCompareProps {
   timeRange: string
