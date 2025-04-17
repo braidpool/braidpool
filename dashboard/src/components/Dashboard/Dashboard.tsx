@@ -180,7 +180,7 @@ const Dashboard = () => {
   <ListItemIcon sx={{ minWidth: 40, color: currentPage === Page.MINER_STATS ? colors.primary : colors.textSecondary }}>
     <MemoryIcon fontSize='small' />
   </ListItemIcon>
-  <ListItemText primary='Miner Stats' primaryTypographyProps={{ fontSize: '0.875rem' }} />
+  <ListItemText primary='Beads' primaryTypographyProps={{ fontSize: '0.875rem' }} />
 </ListItemButton>
 
         <ListItemButton

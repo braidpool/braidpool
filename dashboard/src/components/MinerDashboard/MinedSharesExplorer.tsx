@@ -17,7 +17,7 @@ export default function MinedSharesExplorer() {
     bead2: false,
   })
   const [isLoaded, setIsLoaded] = useState(false)
-  const [chartHovered, setChartHovered] = useState(false)
+ 
   const [activeBead, setActiveBead] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState("beads")
   const [timeRange, setTimeRange] = useState("month")
