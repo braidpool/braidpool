@@ -5,12 +5,12 @@ import { FilterBar } from "./FilterComponents"
 
 import BeadRow from "./MinerRow"
 
-
 import { BEADS, TRANSACTIONS, BLOCKS } from "./constants"
 import { useChartData } from "./Hooks/useChartData"
 import { Layers } from "lucide-react"
 
 import { TrendsTab } from "./Trends"
+
 export default function MinedSharesExplorer() {
   const [expandedBeads, setExpandedBeads] = useState({
     bead1: true,
@@ -21,9 +21,18 @@ export default function MinedSharesExplorer() {
   const [activeBead, setActiveBead] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState("beads")
   const [timeRange, setTimeRange] = useState("month")
+  const [error, setError] = useState<string | null>(null)
 
-  // Get chart data
-  const { data: chartData, isLoading: isChartLoading } = useChartData(timeRange)
+  // Get chart data with error handling
+  const { data: chartData, isLoading: isChartLoading, error: chartError, refetch } = useChartData(timeRange)
+
+  useEffect(() => {
+    if (chartError) {
+      setError("Failed to load mining data. Please check your connection and try again.")
+    } else {
+      setError(null)
+    }
+  }, [chartError])
 
   // Refs for scroll animations
   const containerRef = useRef(null)
@@ -61,6 +70,11 @@ export default function MinedSharesExplorer() {
     }
   }
 
+  const handleRetry = () => {
+    setError(null)
+    refetch?.()
+  }
+
   return (
     <div
       ref={containerRef}
@@ -79,9 +93,22 @@ export default function MinedSharesExplorer() {
         {/* Filters */}
         <FilterBar timeRange={timeRange} setTimeRange={setTimeRange} />
 
+        {/* Error state */}
+        {error && (
+          <div className="bg-red-900/70 border border-red-500/40 text-red-200 rounded-lg p-4 mb-6 flex items-center justify-between">
+            <span>{error}</span>
+            <button
+              onClick={handleRetry}
+              className="ml-4 px-4 py-2 bg-red-700 rounded hover:bg-red-600 transition"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
         {/* Main content based on active tab */}
         <div className="relative">
-          {activeTab === "beads" && (
+          {!error && activeTab === "beads" && (
             <div className="space-y-8">
               {/* Data Table */}
               <div className="relative border border-gray-800/50 rounded-xl mb-8 bg-black/30 backdrop-blur-md shadow-[0_0_25px_rgba(59,130,246,0.15)] overflow-hidden transform-gpu">
@@ -120,9 +147,9 @@ export default function MinedSharesExplorer() {
             </div>
           )}
 
-          {activeTab === "trends" && <TrendsTab timeRange={timeRange} />}
+          {!error && activeTab === "trends" && <TrendsTab timeRange={timeRange} />}
 
-          {activeTab === "blocks" && (
+          {!error && activeTab === "blocks" && (
             <div className="relative border border-gray-800/50 rounded-xl p-6 bg-black/30 backdrop-blur-md overflow-hidden">
               <div className="flex justify-between items-center mb-4">
                 <div>
