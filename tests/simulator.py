@@ -28,6 +28,9 @@ from scipy.special import lambertw as W
 from numpy import real
 import braid
 import matplotlib.pyplot as plt
+from decimal import Decimal, getcontext, ROUND_HALF_EVEN
+from mpmath  import lambertw, e                 # small‑number maths
+
 sys.setrecursionlimit(10000) # all_ancestors is recursive. If you generate large cohorts you'll blow
                              # out the maximum recursion depth.
 
@@ -251,7 +254,7 @@ class Node:
         self.nonce        = 0         # Will be increased in the mining process
         self.tremaining   = None      # Ticks remaining before this node produces a bead
         self.incoming     = set()     # Initialize incoming set
-        self.calc_target  = self.calc_target_simple # Default target calculation method
+        self.calc_target  = self.calc_target_pid # Default target calculation method
         # A braid of all beads for this node
         self.braid        = Braid([genesis_bead])
         self.braid.tips   = {list(self.braid.beads.values())[0]}
@@ -320,6 +323,9 @@ class Node:
                 nhashes = int(log(1 - r) / log(1 - p)) + 1
         except ValueError as e:
             print(f"{e}: p={p} r={r}")
+            raise
+        except ZeroDivisionError as e:
+            print(f"{e}: p={p} target={self.target}")
             raise
         return nhashes/self.hashrate
 
@@ -404,6 +410,10 @@ class Node:
         for (peer, delay) in zip(self.peers, self.latencies):
             self.network.broadcast(peer, bead, delay)
 
+    def calc_target_harmonic(self, parents):
+        """Geometric‑mean difficulty of the parents, expressed as a *target*."""
+        return len(parents)*MAX_HASH // sum(MAX_HASH // p.target for p in parents)
+
     def calc_target_fixed(self, parents):
         """ Use a fixed target (constant difficulty) """
         return self.target
@@ -471,8 +481,11 @@ class Node:
         Returns:
             Predicted Nb/Nc ratio
         """
-        print(f"model_nb_nc_ratio: x={x} a={a} lambda={lambda_val}")
-        return 1 + a * lambda_val * x * exp(a * lambda_val * x)
+        # Prevent overflow by capping the exponent
+        product = a * lambda_val * x
+        if product > 700:  # exp(709) is roughly the max value before overflow
+            return float('inf')  # Return infinity for extremely large values
+        return 1 + a * lambda_val * x * exp(product)
 
     # Inverse function to solve for x given a desired Nb/Nc ratio
     def solve_for_target(self, desired_ratio, a, lambda_val, x_initial=None):
@@ -495,29 +508,40 @@ class Node:
         if x_initial is None:
             x_initial = self.target
 
-        # Simple iterative solver using Newton's method
-        x = x_initial/MAX_HASH
-        max_iter = 10
+        # Normalize x to avoid numerical issues
+        x_scale = MAX_HASH
+        x = x_initial / x_scale
+
+        # Use binary search instead of Newton's method for better stability
+        # with potentially large values
+        x_min = 1e-10  # Very small positive value
+        x_max = 1.0    # Normalized maximum (MAX_HASH)
+        max_iter = 20
         tolerance = 1e-6
 
         for _ in range(max_iter):
-            # Current function value
-            f_x = self.model_nb_nc_ratio(x, a, lambda_val) - desired_ratio
+            try:
+                # Current function value
+                f_x = self.model_nb_nc_ratio(x * x_scale, a, lambda_val) - desired_ratio
 
-            # If we're close enough, return the result
-            if abs(f_x) < tolerance:
-                break
+                # If we're close enough or hit infinity, return the result
+                if abs(f_x) < tolerance or f_x == float('inf'):
+                    break
 
-            # Derivative of the function with respect to x
-            df_dx = a * lambda_val * exp(a * lambda_val * x) * (1 + a * lambda_val * x)
+                # Binary search update
+                if f_x > 0:  # Current ratio too high, increase difficulty (decrease x)
+                    x_max = x
+                    x = (x_min + x) / 2
+                else:  # Current ratio too low, decrease difficulty (increase x)
+                    x_min = x
+                    x = (x + x_max) / 2
 
-            # Newton's method update
-            x_new = x - f_x / df_dx
+            except (OverflowError, ValueError):
+                # If we encounter numerical issues, reduce x and try again
+                x_max = x
+                x = (x_min + x) / 2
 
-            # Ensure x stays positive
-            x = max(1, x_new)*MAX_HASH
-
-        return int(x)
+        return int(max(1, min(MAX_HASH, x * x_scale)))
 
     def estimate_model_parameters(self):
         """
@@ -531,24 +555,43 @@ class Node:
             # Return default values if we don't have enough data
             return 0.1, 0.01
 
-        # Extract x values (targets) and y values (Nb/Nc ratios)
-        x_data = np.array([t for t, _ in self.target_history])
-        y_data = np.array([r for _, r in self.target_history])
-
-        # Normalize x data to avoid numerical issues
-        x_scale = np.mean(x_data)
-        x_data_norm = x_data / x_scale
-
-        # Initial parameter guess
-        p0 = [0.1, 0.01]
-
         try:
-            # Define the model function for curve fitting
-            def fit_func(x, a, lambda_val):
-                return 1 + a * lambda_val * x * np.exp(a * lambda_val * x)
+            # Extract x values (targets) and y values (Nb/Nc ratios)
+            x_data = np.array([t for t, _ in self.target_history])
+            y_data = np.array([r for _, r in self.target_history])
 
-            # Fit the model to the data
-            popt, _ = curve_fit(fit_func, x_data_norm, y_data, p0=p0, bounds=([0, 0], [10, 10]))
+            # Filter out any extreme values
+            valid_indices = (y_data > 1.0) & (y_data < 10.0)
+            if np.sum(valid_indices) < 3:  # Need at least 3 valid points
+                return 0.1, 0.01
+
+            x_data = x_data[valid_indices]
+            y_data = y_data[valid_indices]
+
+            # Normalize x data to avoid numerical issues
+            x_scale = np.mean(x_data) if np.mean(x_data) > 0 else 1.0
+            x_data_norm = x_data / x_scale
+
+            # Initial parameter guess
+            p0 = [0.1, 0.01]
+
+            # Define the model function for curve fitting with safety checks
+            def safe_fit_func(x, a, lambda_val):
+                # Prevent overflow in the exponential
+                product = a * lambda_val * x
+                # Clip to avoid overflow
+                product = np.clip(product, -700, 700)
+                return 1 + a * lambda_val * x * np.exp(product)
+
+            # Fit the model to the data with tighter bounds
+            popt, _ = curve_fit(
+                safe_fit_func,
+                x_data_norm,
+                y_data,
+                p0=p0,
+                bounds=([0.001, 0.0001], [0.5, 0.1]),
+                maxfev=1000
+            )
 
             # Adjust lambda for the scaling we applied
             a_est, lambda_est = popt
@@ -556,8 +599,10 @@ class Node:
 
             return a_est, lambda_est
 
-        except (RuntimeError, ValueError):
+        except (RuntimeError, ValueError, OverflowError) as e:
             # If curve fitting fails, return default values
+            if self.log and self.nodeid == 0:
+                print(f"Parameter estimation failed: {str(e)}, using defaults")
             return 0.1, 0.01
 
     def calc_target_model(self, parents):
@@ -590,15 +635,30 @@ class Node:
         if len(self.target_history) > max_history:
             self.target_history = self.target_history[-max_history:]
 
-        # Estimate model parameters
-        a, lambda_val = self.estimate_model_parameters()
+        try:
+            # Estimate model parameters
+            a, lambda_val = self.estimate_model_parameters()
 
-        # Solve for the target that would give the desired ratio
-        new_target = self.solve_for_target(target_ratio, a, lambda_val, x_1)
+            # Constrain parameters to reasonable values to prevent overflow
+            a = min(0.5, max(0.001, a))
+            lambda_val = min(0.1, max(1e-6, lambda_val))
 
-        # Apply a damping factor to avoid large jumps
-        damping = 0.7
-        new_target = int(damping * new_target + (1 - damping) * x_1)
+            # Solve for the target that would give the desired ratio
+            new_target = self.solve_for_target(target_ratio, a, lambda_val, x_1)
+
+            # Apply a damping factor to avoid large jumps
+            damping = 0.7
+            new_target = int(damping * new_target + (1 - damping) * x_1)
+
+        except (OverflowError, ValueError, ZeroDivisionError) as e:
+            # Fallback to a simple adjustment if model calculation fails
+            if Nb_Nc > target_ratio:
+                new_target = int(x_1 * 0.9)  # Increase difficulty by 10%
+            else:
+                new_target = int(x_1 * 1.1)  # Decrease difficulty by 10%
+
+            if self.log and self.nodeid == 0:
+                print(f"MODEL: Error in calculation, using fallback adjustment: {str(e)}")
 
         # Ensure target stays within reasonable bounds
         new_target = max(1, min(MAX_HASH, new_target))
@@ -610,7 +670,7 @@ class Node:
 
         return new_target
 
-    def calc_target_pid(self, parents):
+    def calc_target_pid_old(self, parents):
         """ Calculate a target based on the number of cohorts using TARGET_NB and TARGET_NC where
             TARGET_NB/TARGET_NC =~ 2.42. Herein we use a Proportional Integral Derivative (PID)
             controller to adjust the difficulty up if there are too many cohorts, and down if
@@ -796,6 +856,468 @@ class Node:
                   f"x = {print_hash(x0)}... {print_hash(retval)}... ")
         return retval
 
+    # ----------------------------------------------------------------------
+    #  Linear‑variable PID  ( z = W(R−1) ) with gain rescale
+    #  – deterministic (braid‑history), integer‑safe difficulty math
+    # ----------------------------------------------------------------------
+    def calc_target_pid(self, parents,
+                        NC=7,            # beads‑per‑cohort window 17/7
+                        L =7,            # derivative lag (cohorts)
+                        SCALE=10**18):   # fixed‑point denominator
+        """
+        Difficulty retarget based on the linear variable z = W(R − 1)
+        (R = N_B/N_C on a 7‑cohort window).  Closed‑loop pole placement is
+        fixed at NC = 7; the gain is rescaled by z★/z_k so behaviour is
+        invariant even when the network is far from target.  All 256‑bit
+        difficulty arithmetic is integer.
+        """
+
+        Nb = sum(len(c) for c in self.braid.cohorts[-NC:])
+        if Nb <= TARGET_NC:
+            return self.calc_target_exponential_damping(parents)
+        # ---------------- imports & constants ------------------------------
+        from decimal import Decimal, getcontext, ROUND_HALF_EVEN
+        from mpmath  import lambertw
+
+        getcontext().prec = 120                      # plenty for 1e‑18 fp
+
+        # nominal (z‑domain) Z‑N PID gains
+        Kp0 = Decimal(1) / Decimal(NC)               # 1/7
+        Ki0 = Kp0 / Decimal(NC)                      # 1/49
+        Kd0 = Decimal(NC) * Kp0 / Decimal(4)         # 7/4
+
+        # constant target in z‑space
+        z_star = Decimal(str(lambertw(float(TARGET_NB / TARGET_NC - 1)).real))
+
+        # ---------------- helper: geometric mean difficulty ----------------
+        def geo_mean_target(pars):
+            if not pars:
+                return 1
+            recip = sum(MAX_HASH // p.target for p in pars)
+            return len(pars) * MAX_HASH // recip
+
+        # ---------------- obtain braid data --------------------------------
+        cohorts = self.braid.cohorts
+        if not cohorts:                              # genesis
+            return geo_mean_target(parents)
+
+        # current 7‑cohort R_k
+        if len(cohorts) < NC:
+            Nb = sum(len(c) for c in cohorts)
+            R_win = Decimal(Nb) / Decimal(len(cohorts))
+        else:
+            Nb = sum(len(c) for c in cohorts[-NC:])
+            R_win = Decimal(Nb) / Decimal(NC)
+
+        z_meas = Decimal(str(lambertw(float(R_win - 1)).real))
+        e_k    = z_meas - z_star                    # current error
+
+        # integral: running sum of all z‑errors (deterministic)
+        I_k = sum(
+            Decimal(str(lambertw(float(len(c) - 1)).real)) - z_star
+            for c in cohorts
+        )
+
+        # derivative: difference L cohorts back
+        if len(cohorts) > L:
+            z_prev = Decimal(str(lambertw(float(len(cohorts[-L-1]) - 1)).real))
+            D_k = e_k - (z_prev - z_star)
+        else:
+            D_k = Decimal(0)
+
+        # ---------------- gain rescale  (plant gain = z_k) -----------------
+        if z_meas <= 0:
+            z_meas = Decimal('0.01')                # floor to guard divide‑by‑0
+        scale = z_star / z_meas                     # >0
+        Kp = Kp0 * scale
+        Ki = Ki0 * scale
+        Kd = Kd0 * scale
+
+        # ---------------- control signal in log‑space ----------------------
+        u = -(Kp*e_k + Ki*I_k + Kd*D_k)             # minus sign → correct action
+        # optional safety clamp
+        #if u > Decimal(5):
+        #    u = Decimal(5)
+        #elif u < Decimal(-5):
+        #    u = Decimal(-5)
+
+        gain_dec = u.exp()                          # Decimal e^{u}
+        gain_q   = int((gain_dec * SCALE).to_integral_value(ROUND_HALF_EVEN))
+
+        # ---------------- integer difficulty update ------------------------
+        x_p   = geo_mean_target(parents)            # 256‑bit int
+        x_new = (x_p * gain_q) // SCALE
+        x_new = max(1, min(MAX_HASH, x_new))
+        if DEBUG:
+            print(f"gain_q = {gain_q}")
+            print(f"gain_dec = {gain_dec}")
+            print(f"R_win = {R_win}, x_p = {x_p}")
+            print(f"e_k = {e_k}, I_k = {I_k}, D_k = {D_k}")
+            print(f"Kp = {Kp}, Ki = {Ki}, Kd = {Kd}")
+            print(f"x_p/x_new = {x_p/x_new}")
+            print(f"x_new = {x_new}")
+        return x_new
+
+    # ----------------------------------------------------------------------
+    #  PID retarget in the *linear* z‑domain   (R  →  z = W(R‑1))
+    #  – order‑independent, integer‑safe
+    # ----------------------------------------------------------------------
+    def calc_target_pid_1_85_rescale(self, parents,
+                        NC=7,            # cohorts per R window
+                        M =21,           # cohorts in integral
+                        L =7,            # lag for derivative
+                        SCALE=10**18):   # fixed‑point scale
+        """
+        Difficulty retarget that linearises the plant with
+              z = W(R‑1),      R = N_B / N_C,
+        and applies a textbook PID in log‑difficulty space.
+        All arithmetic touching the 256‑bit difficulty is integer.
+        """
+
+        # ------------- libraries & precision --------------------------------
+        from decimal import Decimal, getcontext, ROUND_HALF_EVEN
+        from mpmath  import lambertw, e
+
+        getcontext().prec = 120                                  # 100+‑dp
+
+        Nb = sum(len(c) for c in self.braid.cohorts[-NC:])
+        if Nb <= TARGET_NC:
+            return self.calc_target_exponential_damping(parents)
+
+        # ------------- helper: geometric‑mean parent target -----------------
+        def geo_mean_target(pars):
+            if not pars:                                         # genesis seed
+                return 1
+            recip = sum(MAX_HASH // p.target for p in pars)
+            return len(pars) * MAX_HASH // recip
+
+        # ------------- braid history ---------------------------------------
+        cohorts = self.braid.cohorts
+        if not cohorts:
+            return geo_mean_target(parents)
+
+        # Current 7‑cohort ratio R_k
+        if len(cohorts) < NC:
+            Nb = sum(len(c) for c in cohorts)
+            R_win = Decimal(Nb) / Decimal(len(cohorts))
+        else:
+            Nb = sum(len(c) for c in cohorts[-NC:])
+            R_win = Decimal(Nb) / Decimal(NC)
+
+        # Convert to z‑domain
+        z = Decimal(str(lambertw(float(R_win - 1)).real))
+
+        # Target z⋆  (constant)
+        z_star = Decimal(str(lambertw(float(TARGET_NB / TARGET_NC - 1)).real))
+
+        # -------- error history (order‑independent) -------------------------
+        z_err_hist = [Decimal(str(lambertw(float(len(c) / Decimal(1) - 1)).real))
+                      - z_star for c in cohorts[-M:]]
+        e_k = z - z_star                   # current error
+        I_k = sum(z_err_hist) / Decimal(len(z_err_hist))
+        D_k = Decimal(0)
+        if len(z_err_hist) > L:
+            D_k = e_k - z_err_hist[-L-1]
+
+        # ------------- fixed analytic gains (linear plant) ------------------
+        Kp = Decimal(1) / Decimal(NC)     /(z/z_star)      # 1/7
+        Ki = Kp / Decimal(NC)             /(z/z_star)      # 1/49
+        Kd = Decimal(NC) * Kp / Decimal(4)/(z/z_star)      # 7/4
+
+        # ------------- control signal in *log* space ------------------------
+        u = Kp*e_k + Ki*I_k + Kd*D_k            # small, bounded
+        # optional clamp to ±2 for extreme cases
+        if u > Decimal(2):
+            u = Decimal(2)
+        elif u < Decimal(-2):
+            u = Decimal(-2)
+
+        # multiplicative gain g = exp(‑u)
+        gain_dec = (-u).exp()
+
+        # ------------- integer update ---------------------------------------
+        gain_q = int((gain_dec * SCALE).to_integral_value(ROUND_HALF_EVEN))
+
+        x_p   = geo_mean_target(parents)        # 256‑bit int
+        x_new = (x_p * gain_q) // SCALE
+        x_new = max(1, min(MAX_HASH, x_new))
+        return x_new
+
+    # ----------------------------------------------------------------------
+    #  Integer‑safe PID retarget (all 256‑bit arithmetic is integer)
+    # ----------------------------------------------------------------------
+    def calc_target_pid_exp_space(self, parents,
+                        NC=7,           # R‑window (17 / 7 rule)
+                        M =21,          # cohorts for integral
+                        L =7,           # lag for derivative
+                        SCALE=10**18):  # 60‑bit fixed‑point scale
+        """
+        Difficulty retarget whose only interaction with 256‑bit integers is
+        a single `//` and `*`.  All PID math is executed in Decimal(100‑dp).
+        """
+
+        Nb = sum(len(c) for c in self.braid.cohorts[-NC:])
+        if Nb/TARGET_NC < 1.8:
+            return self.calc_target_exponential_damping(parents)
+        # ----------------  current R -----------------
+        if len(self.braid.cohorts) < NC:
+            Nb = sum(len(c) for c in self.braid.cohorts)
+            R_win = Decimal(Nb) / Decimal(len(self.braid.cohorts))
+        else:
+            Nb = sum(len(c) for c in self.braid.cohorts[-NC:])
+            R_win = Decimal(Nb) / Decimal(NC)
+
+        if DEBUG:
+            print(f"Node {self.nodeid} computing difficulty with {len(parents)} parents N_B/N_C={Nb/TARGET_NC}")
+        getcontext().prec = 120                        # 100‑dp + safety
+
+        # ----------------  braid history -------------
+        cohorts = self.braid.cohorts
+        if not cohorts:
+            return self.calc_target_harmonic(parents)
+
+        R_star = TARGET_NB / TARGET_NC                 # 17 / 7
+        e_hist = [Decimal(len(c) - R_star) for c in cohorts[-M:]]
+        e_k    = e_hist[-1]
+        I_k    = sum(e_hist) / Decimal(len(e_hist))
+        D_k    = Decimal(0)
+        if len(e_hist) > L:
+            D_k = e_k - e_hist[-L-1]
+
+        # ----------------  plant gain G0 -------------
+        z  = Decimal(str(lambertw(float(R_win - 1)).real))     # tiny
+        Ez = (z.exp())                                         # e^z
+        one = Decimal(1)
+        x_p = Decimal(self.calc_target_harmonic(parents))                # 256‑bit int → Decimal
+        G0  = z * Ez * (one + z)
+
+        if G0 == 0:
+            return int(x_p)
+
+        # ----------------  PID gains -----------------
+        Kp = one / (Decimal(NC) * G0)
+        Ki = Kp / Decimal(NC)
+        Kd = Decimal(NC) * Kp / Decimal(4)
+
+        # ----------------  fixed‑point gain ----------
+        gain_dec = one + Kp*e_k + Ki*I_k + Kd*D_k
+        # clamp to [0,4] for safety
+        #if gain_dec < Decimal(0):
+        #    gain_dec = Decimal(0)
+        #elif gain_dec > Decimal(4):
+        #    gain_dec = Decimal(4)
+
+        gain_q = int((gain_dec * SCALE).to_integral_value(ROUND_HALF_EVEN))
+
+        # ----------------  integer difficulty --------
+        x_new = (int(x_p) * gain_q) // SCALE
+        #if x_new < 1:
+        #    x_new = 1
+        #elif x_new > MAX_HASH:
+        #    x_new = MAX_HASH
+        if DEBUG:
+            print(f"gain_q = {gain_q}")
+            print(f"gain_dec = {gain_dec}")
+            print(f"R_win = {R_win}, z = {z}, x_p = {x_p}, G0 = {G0}")
+            print(f"e_k = {e_k}, I_k = {I_k}, D_k = {D_k}")
+            print(f"Kp = {Kp}, Ki = {Ki}, Kd = {Kd}")
+            print(f"x_p/x_new = {x_p/x_new}")
+            print(f"x_new = {x_new}")
+        return x_new
+
+    # ----------------------------------------------------------------------
+    #  Order‑independent PID: state derived only from the immutable braid
+    # ----------------------------------------------------------------------
+    def calc_target_pid_float(self, parents,
+                        NC=7,        # window used for R‑measurement (17/7 rule)
+                        M =21,       # cohorts in the integral term  (≈3·NC)
+                        L =7):       # cohort spacing for the derivative term
+        """
+        Difficulty retarget that keeps *no node‑local memory*.
+
+        Integral I_k and derivative D_k are reconstructed directly from
+        the canonical braid history, so every honest node obtains
+        identical values regardless of message arrival order.
+
+        Parameters
+        ----------
+        parents : list[Bead]
+            Immediate parents of the bead being assembled.
+        NC : int
+            Cohorts per R‑measurement window (default 7).
+        M : int
+            Number of recent cohort errors used in the integral (default 21).
+        L : int
+            Lag (in cohorts) for the finite‑difference derivative (default 7).
+
+        Returns
+        -------
+        int
+            Target difficulty for the bead under construction.
+        """
+        Nb = sum(map(len,self.braid.cohorts[-TARGET_NC:]))
+        if Nb == TARGET_NC or len(self.braid.cohorts) < TARGET_NC:
+            return self.calc_target_exponential_damping(parents)
+        if self.nodeid == 0 and DEBUG:
+            print(f"Node 0 computing difficulty with {len(parents)} parents")
+
+        # ---- 1. instantaneous cohort error ---------------------------------
+        R_cohort_star = TARGET_NB / TARGET_NC         # 17 / 7  ≈ 2.428…
+        e_history = [len(c) - R_cohort_star
+                     for c in self.braid.cohorts[-M:]]# last M cohort errors
+        e_k = e_history[-1]                           # current error
+
+        # ---- 2. integral & derivative (order‑independent) ------------------
+        I_k = sum(e_history) / len(e_history)         # mean error over M cohorts
+        D_k = 0.0
+        if len(e_history) > L:
+            D_k = e_k - e_history[-L-1]
+
+        # ---- 3. R‑measurement on NC‑cohort window --------------------------
+        if len(self.braid.cohorts) < NC:
+            Nb = sum(len(c) for c in self.braid.cohorts)
+            R_win = Nb / len(self.braid.cohorts)      # shorter window at start‑up
+        else:
+            Nb = sum(len(c) for c in self.braid.cohorts[-NC:])
+            R_win = Nb / NC
+
+        # ---- 4. analytic plant gain G0 (Eq. 14) ----------------------------
+        z      = W(R_win - 1).real
+        x_p    = self.calc_target_harmonic(parents)
+        G0     = exp(z) * (1 + z) / x_p
+        if self.nodeid == 0 and DEBUG:
+            print(f"R_win = {R_win}, z = {z}, x_p = {x_p}, G0 = {G0}")
+
+        # ---- 5. closed‑form gains (Eq. 15, NC = 7) -------------------------
+        if G0 == 0:
+            return x_p
+        Kp = 1.0 / (NC * G0)             # = 1/(7 G0)
+        Ki = Kp / NC                     # = 1/(49 G0)
+        Kd = NC * Kp / 4.0               # = 7/(28 G0)
+
+        # ---- 6. controller output -----------------------------------------
+        gain   = 1.0 + Kp * e_k + Ki * I_k + Kd * D_k
+        gain   = max(gain, 1e-9)                         # positivity guard
+        x_new  = int(max(1, min(MAX_HASH, x_p * gain)))  # clamp to range
+        if self.nodeid == 0 and DEBUG:
+            print(f"e_k = {e_k}, I_k = {I_k}, D_k = {D_k}")
+            print(f"Kp = {Kp}, Ki = {Ki}, Kd = {Kd}")
+            print(f"gain = {gain}")
+            print(f"x_p/x_new = {x_p/x_new}")
+        return x_new
+
+    # ------------------------------------------------------------------
+    #  Parameter‑free analytic PID controller (see Eq. 15 of the analysis)
+    # ------------------------------------------------------------------
+    def calc_target_pid_order_dependent(self, parents):
+        """
+        PID without hand‑tuned constants.
+        Every call recomputes gains from the current Nb/Nc measurement,
+        so the controller adapts automatically when the product a*λ drifts.
+
+        Returns
+        -------
+        int : new target difficulty for the working bead
+        """
+        # --- 1.  current measurement R = Nb / Nc ------------------------
+        if len(self.braid.cohorts) < 2:                          # safety at start‑up
+            return harmonic_mean_target(parents)
+
+        Nc = min(TARGET_NC, len(self.braid.cohorts))
+        Nb = sum(len(c) for c in self.braid.cohorts[-Nc:])
+        R  = Nb / Nc                                             # beads‑per‑cohort
+        R_set = TARGET_NB / TARGET_NC                            # 17 / 7
+
+        # --- 2.  analytic plant gain G0 -------------------------------
+        z      = float(W(R - 1).real)                            # z = aλx            FIXME use integer table
+        x_p    = self.calc_target_harmonic(parents)              # parent difficulty
+        G0     = z*exp(z)*(1 + z) / x_p                          # ∂R/∂x at operating pt
+
+        if G0 == 0:                                              # numerical guard
+            return x_p
+
+        # --- 3.  closed‑form PID gains (Eq. 15) -----------------------
+        Kp = 1.0 / (Nc * G0)             # = 1/(7 G0)  for Nc = 7
+        Ki = Kp / Nc                     # = 1/(49 G0)
+        Kd = Nc * Kp / 4.0               # = 7/(28 G0)
+
+        # --- 4.  controller state -------------------------------------
+        # FIXME we need to compute the integral here over the braid
+        # I_k = \frac{1}{M}\sum_{j=0}^{M-1} (R_{k-j} - R_*)
+        if not hasattr(self, "_pid2_int"):
+            self._pid2_int  = 0.0
+            self._pid2_prev = 0.0                          # FIXME which bead is "prev"?
+
+        err   = R - R_set
+        self._pid2_int += err                              # dt = 1 cohort‑step
+        deriv = err - self._pid2_prev
+        self._pid2_prev = err
+
+        gain  = 1.0 + Kp*err + Ki*self._pid2_int + Kd*deriv
+        gain  = max(gain, 1e-9)                            # keep positive
+
+        x_new = int(min(MAX_HASH, x_p * gain))
+        return x_new
+
+    # ------------------------------------------------------------------
+    #  Analytic PID + rolling KS detector on inter‑bead gaps
+    # ------------------------------------------------------------------
+    def calc_target_pid_ks(self, parents, ks_m=128, alpha=1e-3):
+        """
+        Same controller as `calc_target_pid`, but if the Kolmogorov–Smirnov
+        statistic of the last `ks_m` inter‑bead gaps rejects the exponential
+        hypothesis at level `alpha`, the PID gains are halved on‑the‑fly to
+        damp any variance injected by bursty (pool‑hopping) hash‑rate.
+
+        Parameters
+        ----------
+        ks_m : int
+            Window length for the KS test (default 128).
+        alpha : float
+            False‑alarm probability (default 0.001).
+
+        Returns
+        -------
+        int : new target difficulty
+        """
+        # ---------- collect gap sample ---------------------------------
+        now = self.network.t
+        if not hasattr(self, "_ks_last"):
+            self._ks_last = now
+            self._ks_gaps = []
+        gap = now - self._ks_last
+        self._ks_last = now
+        if gap > 0:
+            self._ks_gaps.append(gap)
+            if len(self._ks_gaps) > ks_m:
+                self._ks_gaps.pop(0)
+
+        # ---------- run KS when buffer full ----------------------------
+        ks_alert = False
+        if len(self._ks_gaps) >= ks_m:
+            gaps_sorted = sorted(self._ks_gaps)
+            mean_gap    = sum(gaps_sorted) / ks_m
+            lam_hat     = 1.0 / mean_gap
+            D = max(abs((i+1)/ks_m - (1 - exp(-lam_hat*g)))       # F_empirical − F_exp
+                    for i, g in enumerate(gaps_sorted))
+            # KS critical value for two‑sided test
+            D_alpha = sqrt(-0.5*log(alpha/2.0)) / sqrt(ks_m)
+            ks_alert = D > D_alpha
+
+        # ---------- delegate to base PID -------------------------------
+        x_pid = self.calc_target_pid(parents)
+
+        if not ks_alert:
+            return x_pid
+
+        # ---------- KS alarm: soften gains by 2× -----------------------
+        # Re‑compute with halved proportional gain only (simpler):
+        if not hasattr(self, "_pid_ks_scale"):
+            self._pid_ks_scale = 1.0
+        self._pid_ks_scale *= 0.5                              # geometric decay
+        x_soft = self.target + int((x_pid - self.target) * self._pid_ks_scale)
+        return max(1, min(MAX_HASH, x_soft))
+
 class Bead:
     """ A Bead is a full bitcoin (weak) block that may miss Bitcoin's difficulty target.
     """
@@ -917,8 +1439,8 @@ class Braid:
                     break
             frozen_dangling = frozenset(dangling)
             if cohort_cache is not None and frozen_dangling in cohort_cache:
-                if DEBUG:
-                    print(f"    Using cached cohorts for dangling set {print_hash(frozen_dangling)}")
+                #if DEBUG:
+                #    print(f"    Using cached cohorts for dangling set {print_hash(frozen_dangling)}")
                 self.cohorts.extend(cohort_cache[frozen_dangling])
             else:
                 # Construct a sub-braid from dangling and compute any new cohorts
@@ -1010,6 +1532,136 @@ class Braid:
         else:
             plt.show()
 
+def run_stats(filename, nodes=25, beads=100, peers=4, target=239, log=False, random_seed=1):
+    """
+    Run statistics to evaluate different difficulty adjustment algorithms.
+
+    This function:
+    1. Runs simulations with different algorithms
+    2. Collects target variance data with constant hashrate
+    3. Tests adaptation by doubling hashrate mid-simulation
+    4. Writes results to a .dat file for analysis
+
+    Args:
+        filename: Base filename for output
+        nodes: Number of nodes to simulate
+        beads: Number of beads to simulate
+        peers: Number of peers per node
+        target: Target difficulty exponent
+        log: Whether to log simulation details
+        random_seed: Random seed for reproducibility
+    """
+    global NETWORK_HASHRATE
+
+    # Algorithms to test
+    algorithms = ["fixed", "exp", "pid", "model", "simple"]
+
+    # Set up output file
+    stats_file = f"{filename}_stats.dat"
+    with open(stats_file, "w") as f:
+        f.write("# Statistics for difficulty adjustment algorithms\n")
+        f.write("# Format: algorithm, phase, time, target, cohort_size, Nb/Nc\n")
+
+        # Run each algorithm
+        for algo in algorithms:
+            print(f"\n# Testing algorithm: {algo}")
+
+            # Phase 1: Constant hashrate
+            random.seed(random_seed)
+            target_val = 2**int(target)-1
+            n = Network(nodes, NETWORK_HASHRATE, target=target_val, target_algo=algo,
+                        npeers=peers, log=log)
+
+            # Collect data during simulation
+            phase1_beads = beads // 2
+            target_history = []
+            cohort_sizes = []
+            nb_nc_ratios = []
+            times = []
+
+            # Run simulation and collect data
+            initial_beads = len(n.nodes[0].braid.beads)
+            while len(n.nodes[0].braid.beads) < initial_beads + phase1_beads:
+                n.tick(mine=False)
+
+                # Sample data periodically
+                if len(n.nodes[0].braid.beads) % 5 == 0 and len(n.nodes[0].braid.beads) > initial_beads:
+                    node = n.nodes[0]
+                    if len(node.braid.cohorts) >= 2:
+                        target_history.append(node.target)
+                        cohort_size = len(node.braid.cohorts[-1])
+                        cohort_sizes.append(cohort_size)
+
+                        Nc = min(TARGET_NC, len(node.braid.cohorts))
+                        Nb = sum(len(c) for c in node.braid.cohorts[-Nc:])
+                        nb_nc_ratio = Nb/Nc
+                        nb_nc_ratios.append(nb_nc_ratio)
+                        times.append(n.t)
+
+                        # Write to file
+                        f.write(f"{algo},1,{n.t},{node.target},{cohort_size},{nb_nc_ratio}\n")
+
+            # Calculate variance for phase 1
+            if len(target_history) > 0:
+                target_variance = np.var(target_history)
+                mean_nb_nc = np.mean(nb_nc_ratios)
+                print(f"  Phase 1 - Constant hashrate:")
+                print(f"    Target variance: {target_variance}")
+                print(f"    Mean Nb/Nc ratio: {mean_nb_nc:.4f} (target: {TARGET_NB/TARGET_NC:.4f})")
+
+            # Phase 2: Double the hashrate
+            original_hashrate = NETWORK_HASHRATE
+            NETWORK_HASHRATE *= 2
+
+            # Update node hashrates
+            for node in n.nodes:
+                node.hashrate = NETWORK_HASHRATE/nodes/NETWORK_SIZE
+                node.tremaining = node.time_to_next_bead()
+
+            print(f"  Phase 2 - Doubled hashrate from {original_hashrate/1000:.2f} kH/s to {NETWORK_HASHRATE/1000:.2f} kH/s")
+
+            # Continue simulation with doubled hashrate
+            phase2_beads = beads - phase1_beads
+            target_history = []
+            cohort_sizes = []
+            nb_nc_ratios = []
+            times = []
+
+            initial_beads = len(n.nodes[0].braid.beads)
+            while len(n.nodes[0].braid.beads) < initial_beads + phase2_beads:
+                n.tick(mine=False)
+
+                # Sample data periodically
+                if len(n.nodes[0].braid.beads) % 5 == 0 and len(n.nodes[0].braid.beads) > initial_beads:
+                    node = n.nodes[0]
+                    if len(node.braid.cohorts) >= 2:
+                        target_history.append(node.target)
+                        cohort_size = len(node.braid.cohorts[-1])
+                        cohort_sizes.append(cohort_size)
+
+                        Nc = min(TARGET_NC, len(node.braid.cohorts))
+                        Nb = sum(len(c) for c in node.braid.cohorts[-Nc:])
+                        nb_nc_ratio = Nb/Nc
+                        nb_nc_ratios.append(nb_nc_ratio)
+                        times.append(n.t)
+
+                        # Write to file
+                        f.write(f"{algo},2,{n.t},{node.target},{cohort_size},{nb_nc_ratio}\n")
+
+            # Calculate variance and adaptation metrics for phase 2
+            if len(target_history) > 0:
+                target_variance = np.var(target_history)
+                mean_nb_nc = np.mean(nb_nc_ratios)
+                print(f"  Phase 2 - After hashrate doubling:")
+                print(f"    Target variance: {target_variance}")
+                print(f"    Mean Nb/Nc ratio: {mean_nb_nc:.4f} (target: {TARGET_NB/TARGET_NC:.4f})")
+
+            # Reset hashrate for next algorithm
+            NETWORK_HASHRATE = original_hashrate
+
+    print(f"\nStatistics written to {stats_file}")
+    return stats_file
+
 def main():
     """ Main function so it doesn't make a bunch of globals. """
     global NETWORK_HASHRATE, TARGET_NB, TARGET_NC, TARGET_DAMPING, DEBUG
@@ -1051,6 +1703,9 @@ def main():
         help="Select the Difficulty Algorithm ('fixed', 'exp', 'parents', 'simple', 'pid', 'model', 'simple_asym', "
              "'simple_asym_damped')",
         default="exp")
+    parser.add_argument("-S", "--stats", action=BooleanOptionalAction,
+        help="Run statistics to evaluate difficulty adjustment algorithms",
+        default=False)
     parser.add_argument("-l", "--log", action=BooleanOptionalAction,
         help="Log each bead as it is found to make plots.", default=False)
     parser.add_argument("--debug", action=BooleanOptionalAction,
@@ -1062,9 +1717,26 @@ def main():
     TARGET_DAMPING = int(args.damping_factor)
     random.seed(int(args.random_seed))
 
+    # If stats mode is enabled, run the statistics collection
+    if args.stats:
+        stats_file = run_stats(
+            filename=args.filename,
+            nodes=int(args.nodes),
+            beads=int(args.beads),
+            peers=int(args.peers),
+            target=int(args.target),
+            log=args.log,
+            random_seed=int(args.random_seed)
+        )
+        # Generate plots from the statistics
+        plot_file = plot_stats(stats_file)
+        print(f"# Statistics collection complete. Results in {stats_file}")
+        print(f"# Plots generated in {plot_file}")
+        return
+
     print(f"# Simulating a global network of {args.nodes} nodes having {args.peers} peers each,")
     print(f"# targeting N_B/N_C = {TARGET_NB}/{TARGET_NC} and damping factor {TARGET_DAMPING},")
-    print(f"# with hashrate {NETWORK_HASHRATE/args.nodes/NETWORK_SIZE/1000:5.4} kh/s per node, and target 2**{args.target}-1")
+    print(f"# with hashrate {NETWORK_HASHRATE/int(args.nodes)/NETWORK_SIZE/1000:5.4} kh/s per node, and target 2**{args.target}-1")
     print(f"# Using {args.algorithm} difficulty targeting algorithm")
     if args.mine:
         start = time.process_time()
@@ -1097,7 +1769,7 @@ def main():
         n.simulate(nbeads=int(args.beads), mine=False)
         bnomine = copy(n.nodes[0].braid)
         nomine_parents = {int(k): set(map(int, v)) for k,v in dict(bnomine).items()}
-        dag = braid.save_braid(parents, args.filename+"-no-mine.json", args.description)
+        dag = braid.save_braid(nomine_parents, args.filename+"-no-mine.json", args.description)
         Nc = len(dag['cohorts'])
         Ncerr = 1/sqrt(Nc)
         print(f"\nno-mined Nb/Nc = {len(dag['parents'])/len(dag['cohorts']):{8}.{4}} +/- {Ncerr:{5}.{4}}")
@@ -1111,6 +1783,120 @@ def main():
         Ncerr = 1/sqrt(Nc)
         print(f"\n# no-mined Nb/Nc = {len(dag['parents'])/len(dag['cohorts']):{8}.{4}} +/- {Ncerr:{5}.{4}}")
         print(f"# Wrote {len(b.beads)} beads to {args.filename}.json having {Nc} cohorts.")
+
+def plot_stats(stats_file):
+    """
+    Create plots from the statistics data file.
+
+    Args:
+        stats_file: Path to the statistics data file
+    """
+    import matplotlib.pyplot as plt
+
+    # Read data
+    data = {}
+    with open(stats_file, 'r') as f:
+        for line in f:
+            if line.startswith('#'):
+                continue
+            parts = line.strip().split(',')
+            if len(parts) < 6:
+                continue
+
+            algo = parts[0]
+            phase = int(parts[1])
+            time = float(parts[2])
+            target = int(parts[3])
+            cohort_size = int(parts[4])
+            nb_nc = float(parts[5])
+
+            if algo not in data:
+                data[algo] = {'phase1': {'time': [], 'target': [], 'cohort_size': [], 'nb_nc': []},
+                             'phase2': {'time': [], 'target': [], 'cohort_size': [], 'nb_nc': []}}
+
+            phase_key = 'phase1' if phase == 1 else 'phase2'
+            data[algo][phase_key]['time'].append(time)
+            data[algo][phase_key]['target'].append(target)
+            data[algo][phase_key]['cohort_size'].append(cohort_size)
+            data[algo][phase_key]['nb_nc'].append(nb_nc)
+
+    # Create plots
+    fig, axes = plt.subplots(3, 1, figsize=(12, 15), sharex=True)
+
+    # Plot target values
+    ax = axes[0]
+    for algo in data:
+        # Normalize targets for better visualization
+        phase1_targets = np.array(data[algo]['phase1']['target'])
+        phase2_targets = np.array(data[algo]['phase2']['target'])
+
+        # Normalize by the mean of phase1
+        if len(phase1_targets) > 0:
+            norm_factor = np.mean(phase1_targets)
+            phase1_targets = phase1_targets / norm_factor
+            phase2_targets = phase2_targets / norm_factor
+
+            # Combine phases with a marker at the transition
+            times = data[algo]['phase1']['time'] + data[algo]['phase2']['time']
+            targets = list(phase1_targets) + list(phase2_targets)
+
+            ax.plot(times, targets, label=algo)
+            # Mark the transition point
+            transition_time = data[algo]['phase2']['time'][0] if data[algo]['phase2']['time'] else 0
+            if transition_time > 0:
+                ax.axvline(x=transition_time, color='gray', linestyle='--', alpha=0.5)
+
+    ax.set_ylabel('Normalized Target')
+    ax.set_title('Target Adjustment Over Time (Normalized)')
+    ax.legend()
+    ax.grid(True)
+
+    # Plot cohort sizes
+    ax = axes[1]
+    for algo in data:
+        times = data[algo]['phase1']['time'] + data[algo]['phase2']['time']
+        cohort_sizes = data[algo]['phase1']['cohort_size'] + data[algo]['phase2']['cohort_size']
+        ax.plot(times, cohort_sizes, label=algo)
+
+        # Mark the transition point
+        transition_time = data[algo]['phase2']['time'][0] if data[algo]['phase2']['time'] else 0
+        if transition_time > 0:
+            ax.axvline(x=transition_time, color='gray', linestyle='--', alpha=0.5)
+
+    ax.set_ylabel('Cohort Size')
+    ax.set_title('Cohort Size Over Time')
+    ax.legend()
+    ax.grid(True)
+
+    # Plot Nb/Nc ratios
+    ax = axes[2]
+    target_ratio = TARGET_NB / TARGET_NC
+    for algo in data:
+        times = data[algo]['phase1']['time'] + data[algo]['phase2']['time']
+        nb_nc_ratios = data[algo]['phase1']['nb_nc'] + data[algo]['phase2']['nb_nc']
+        ax.plot(times, nb_nc_ratios, label=algo)
+
+        # Mark the transition point
+        transition_time = data[algo]['phase2']['time'][0] if data[algo]['phase2']['time'] else 0
+        if transition_time > 0:
+            ax.axvline(x=transition_time, color='gray', linestyle='--', alpha=0.5)
+
+    # Add horizontal line for target ratio
+    ax.axhline(y=target_ratio, color='black', linestyle='--', label=f'Target ({target_ratio:.2f})')
+
+    ax.set_xlabel('Time')
+    ax.set_ylabel('Nb/Nc Ratio')
+    ax.set_title('Nb/Nc Ratio Over Time')
+    ax.legend()
+    ax.grid(True)
+
+    plt.tight_layout()
+    plot_file = stats_file.replace('.dat', '.png')
+    plt.savefig(plot_file)
+    plt.close()
+
+    print(f"Plots saved to {plot_file}")
+    return plot_file
 
 if __name__ == "__main__":
     main()
