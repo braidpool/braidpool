@@ -72,6 +72,6 @@ export interface Bead {
 export interface BeadDisplayData extends Bead {
   formattedHash?: string;
   formattedTimestamp?: string;
-  validationStatus?: "valid" | "invalid" | "pending";
+  validationStatus?: 'valid' | 'invalid' | 'pending';
   childrenCount?: number;
 }

@@ -1,4 +1,4 @@
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function Particles() {
   return (
@@ -25,16 +25,16 @@ function Particle({ delay = 0 }: { delay?: number }) {
         height: `${randomSize}px`,
         opacity: 0,
       }}
-      initial={{ y: "110vh", opacity: 0 }}
+      initial={{ y: '110vh', opacity: 0 }}
       animate={{
-        y: "-10vh",
+        y: '-10vh',
         opacity: [0, randomOpacity, 0],
       }}
       transition={{
         duration: randomDuration,
         repeat: Number.POSITIVE_INFINITY,
         delay: delay,
-        ease: "linear",
+        ease: 'linear',
       }}
     />
   );

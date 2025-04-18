@@ -1,32 +1,32 @@
-import React from "react";
-import { Box, Typography } from "@mui/material";
-import KPICard from "../common/KPICard";
-import MemoryIcon from "@mui/icons-material/Memory";
-import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
-import DeviceHubIcon from "@mui/icons-material/DeviceHub";
-import PublicIcon from "@mui/icons-material/Public";
-import PercentIcon from "@mui/icons-material/Percent";
-import AttachmentIcon from "@mui/icons-material/Attachment";
-import BlurOnIcon from "@mui/icons-material/BlurOn";
-import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
+import React from 'react';
+import { Box, Typography } from '@mui/material';
+import KPICard from '../common/KPICard';
+import MemoryIcon from '@mui/icons-material/Memory';
+import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
+import DeviceHubIcon from '@mui/icons-material/DeviceHub';
+import PublicIcon from '@mui/icons-material/Public';
+import PercentIcon from '@mui/icons-material/Percent';
+import AttachmentIcon from '@mui/icons-material/Attachment';
+import BlurOnIcon from '@mui/icons-material/BlurOn';
+import PriorityHighIcon from '@mui/icons-material/PriorityHigh';
 
 // Mock data for the Braidpool dashboard with realistic values
 const mockData = {
   // Primary metrics
-  networkHashrate: "725.06",
-  difficultyTarget: "8.92e+12",
-  beadRate: "4.23",
-  estimatedEarnings: "137.20",
+  networkHashrate: '725.06',
+  difficultyTarget: '8.92e+12',
+  beadRate: '4.23',
+  estimatedEarnings: '137.20',
 
   // Secondary metrics
-  nbNcRatio: "1.765",
-  shareCount: "14,532",
-  tipsCount: "4",
-  relativeShareValue: "0.028",
+  nbNcRatio: '1.765',
+  shareCount: '14,532',
+  tipsCount: '4',
+  relativeShareValue: '0.028',
 
   // Other tracking data
-  cohortFormationRate: "1.2",
-  networkLatency: "215",
+  cohortFormationRate: '1.2',
+  networkLatency: '215',
 };
 
 interface DashboardMetricsProps {
@@ -41,8 +41,8 @@ export const PrimaryMetrics: React.FC<DashboardMetricsProps> = ({
       <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 500, px: 1 }}>
         Primary Metrics
       </Typography>
-      <Box sx={{ display: "flex", flexWrap: "wrap", mx: -1 }}>
-        <Box sx={{ width: { xs: "50%", sm: "25%" }, p: 1 }}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', mx: -1 }}>
+        <Box sx={{ width: { xs: '50%', sm: '25%' }, p: 1 }}>
           <KPICard
             title="NETWORK HASHRATE"
             value={mockData.networkHashrate}
@@ -53,7 +53,7 @@ export const PrimaryMetrics: React.FC<DashboardMetricsProps> = ({
             icon={<PublicIcon />}
           />
         </Box>
-        <Box sx={{ width: { xs: "50%", sm: "25%" }, p: 1 }}>
+        <Box sx={{ width: { xs: '50%', sm: '25%' }, p: 1 }}>
           <KPICard
             title="DIFFICULTY TARGET"
             value={mockData.difficultyTarget}
@@ -64,7 +64,7 @@ export const PrimaryMetrics: React.FC<DashboardMetricsProps> = ({
             change={-2.4}
           />
         </Box>
-        <Box sx={{ width: { xs: "50%", sm: "25%" }, p: 1 }}>
+        <Box sx={{ width: { xs: '50%', sm: '25%' }, p: 1 }}>
           <KPICard
             title="BEAD RATE"
             value={mockData.beadRate}
@@ -76,7 +76,7 @@ export const PrimaryMetrics: React.FC<DashboardMetricsProps> = ({
             change={1.7}
           />
         </Box>
-        <Box sx={{ width: { xs: "50%", sm: "25%" }, p: 1 }}>
+        <Box sx={{ width: { xs: '50%', sm: '25%' }, p: 1 }}>
           <KPICard
             title="USD / Day"
             value={mockData.estimatedEarnings}
@@ -99,8 +99,8 @@ export const SecondaryMetrics: React.FC<DashboardMetricsProps> = ({
       <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 500, px: 1 }}>
         Secondary Metrics
       </Typography>
-      <Box sx={{ display: "flex", flexWrap: "wrap", mx: -1 }}>
-        <Box sx={{ width: { xs: "50%", sm: "25%" }, p: 1 }}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', mx: -1 }}>
+        <Box sx={{ width: { xs: '50%', sm: '25%' }, p: 1 }}>
           <KPICard
             title="Nb/Nc RATIO"
             value={mockData.nbNcRatio}
@@ -111,7 +111,7 @@ export const SecondaryMetrics: React.FC<DashboardMetricsProps> = ({
             change={0.12}
           />
         </Box>
-        <Box sx={{ width: { xs: "50%", sm: "25%" }, p: 1 }}>
+        <Box sx={{ width: { xs: '50%', sm: '25%' }, p: 1 }}>
           <KPICard
             title="SHARE COUNT"
             value={mockData.shareCount}
@@ -122,7 +122,7 @@ export const SecondaryMetrics: React.FC<DashboardMetricsProps> = ({
             change={3.4}
           />
         </Box>
-        <Box sx={{ width: { xs: "50%", sm: "25%" }, p: 1 }}>
+        <Box sx={{ width: { xs: '50%', sm: '25%' }, p: 1 }}>
           <KPICard
             title="TIPS COUNT"
             value={mockData.tipsCount}
@@ -132,7 +132,7 @@ export const SecondaryMetrics: React.FC<DashboardMetricsProps> = ({
             icon={<MemoryIcon />}
           />
         </Box>
-        <Box sx={{ width: { xs: "50%", sm: "25%" }, p: 1 }}>
+        <Box sx={{ width: { xs: '50%', sm: '25%' }, p: 1 }}>
           <KPICard
             title="SHARE VALUE"
             value={mockData.relativeShareValue}

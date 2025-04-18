@@ -1,4 +1,4 @@
-import React from "react";
+import React from 'react';
 import {
   Box,
   Card,
@@ -6,10 +6,10 @@ import {
   CircularProgress,
   Tooltip,
   useTheme,
-} from "@mui/material";
-import TrendingUpIcon from "@mui/icons-material/TrendingUp";
-import TrendingDownIcon from "@mui/icons-material/TrendingDown";
-import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+} from '@mui/material';
+import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import TrendingDownIcon from '@mui/icons-material/TrendingDown';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 
 interface KPICardProps {
   title: string;
@@ -44,10 +44,10 @@ const KPICard: React.FC<KPICardProps> = ({
     const Icon = isPositive ? TrendingUpIcon : TrendingDownIcon;
 
     return (
-      <Box sx={{ display: "flex", alignItems: "center", color, mt: 0.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', color, mt: 0.5 }}>
         <Icon fontSize="small" sx={{ mr: 0.5 }} />
         <Typography variant="body2" component="span" sx={{ color }}>
-          {Math.abs(change)}% {isPositive ? "increase" : "decrease"}
+          {Math.abs(change)}% {isPositive ? 'increase' : 'decrease'}
         </Typography>
       </Box>
     );
@@ -57,14 +57,14 @@ const KPICard: React.FC<KPICardProps> = ({
     <Card
       sx={{
         p: 2,
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
         minHeight: 90,
-        boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
         borderRadius: 1,
-        border: "1px solid rgba(0,0,0,0.05)",
-        backgroundColor: "#fff",
+        border: '1px solid rgba(0,0,0,0.05)',
+        backgroundColor: '#fff',
       }}
     >
       {/* Subtitle first (if provided) - matches FOREMAN layout */}
@@ -73,9 +73,9 @@ const KPICard: React.FC<KPICardProps> = ({
           variant="caption"
           color="text.secondary"
           sx={{
-            fontSize: "0.7rem",
-            textTransform: "uppercase",
-            textAlign: "center",
+            fontSize: '0.7rem',
+            textTransform: 'uppercase',
+            textAlign: 'center',
             mb: 0.5,
           }}
         >
@@ -86,9 +86,9 @@ const KPICard: React.FC<KPICardProps> = ({
       {/* Value section with large font */}
       <Box
         sx={{
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "flex-end",
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'flex-end',
           mb: 0.5,
         }}
       >
@@ -100,7 +100,7 @@ const KPICard: React.FC<KPICardProps> = ({
               variant="h5"
               component="div"
               fontWeight="bold"
-              sx={{ textAlign: "center" }}
+              sx={{ textAlign: 'center' }}
             >
               {value}
             </Typography>
@@ -122,17 +122,17 @@ const KPICard: React.FC<KPICardProps> = ({
         variant="subtitle2"
         color="text.secondary"
         sx={{
-          textAlign: "center",
-          fontSize: "0.75rem",
-          fontWeight: "normal",
-          color: "#666",
+          textAlign: 'center',
+          fontSize: '0.75rem',
+          fontWeight: 'normal',
+          color: '#666',
         }}
       >
         {title}
       </Typography>
 
       {/* Trend indicator at bottom */}
-      <Box sx={{ display: "flex", justifyContent: "center", mt: "auto" }}>
+      <Box sx={{ display: 'flex', justifyContent: 'center', mt: 'auto' }}>
         {renderTrend()}
       </Box>
 
@@ -142,11 +142,11 @@ const KPICard: React.FC<KPICardProps> = ({
           <InfoOutlinedIcon
             fontSize="small"
             sx={{
-              position: "absolute",
+              position: 'absolute',
               top: 8,
               right: 8,
-              color: "text.secondary",
-              cursor: "help",
+              color: 'text.secondary',
+              cursor: 'help',
               opacity: 0.6,
             }}
           />

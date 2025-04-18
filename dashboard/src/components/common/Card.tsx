@@ -1,5 +1,5 @@
-import React, { ReactNode } from "react";
-import { Box, Paper, Typography } from "@mui/material";
+import React, { ReactNode } from 'react';
+import { Box, Paper, Typography } from '@mui/material';
 
 interface CardProps {
   title?: ReactNode;
@@ -17,7 +17,7 @@ const Card: React.FC<CardProps> = ({
   title,
   subtitle,
   children,
-  accentColor = "#1976d2",
+  accentColor = '#1976d2',
   headerExtra,
 }) => {
   return (
@@ -26,19 +26,19 @@ const Card: React.FC<CardProps> = ({
       sx={{
         p: 0,
         borderRadius: 1,
-        border: "1px solid rgba(0,0,0,0.05)",
-        boxShadow: "0 2px 4px rgba(0,0,0,0.03)",
-        overflow: "hidden",
-        height: "100%",
+        border: '1px solid rgba(0,0,0,0.05)',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.03)',
+        overflow: 'hidden',
+        height: '100%',
         ...(accentColor && {
-          position: "relative",
-          "&::after": {
+          position: 'relative',
+          '&::after': {
             content: '""',
-            position: "absolute",
+            position: 'absolute',
             top: 0,
             left: 0,
-            width: "4px",
-            height: "100%",
+            width: '4px',
+            height: '100%',
             backgroundColor: accentColor,
           },
         }),
@@ -49,18 +49,18 @@ const Card: React.FC<CardProps> = ({
           sx={{
             px: 2,
             py: 1.5,
-            borderBottom: "1px solid rgba(0,0,0,0.05)",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            bgcolor: "rgba(0,0,0,0.01)",
+            borderBottom: '1px solid rgba(0,0,0,0.05)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            bgcolor: 'rgba(0,0,0,0.01)',
           }}
         >
           <Box>
             {title && (
               <Typography
                 variant="subtitle1"
-                sx={{ fontWeight: 500, color: "text.primary" }}
+                sx={{ fontWeight: 500, color: 'text.primary' }}
               >
                 {title}
               </Typography>

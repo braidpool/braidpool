@@ -1,25 +1,25 @@
-import React, { useState } from "react";
-import { ThemeProvider, createTheme } from "@mui/material/styles";
-import CssBaseline from "@mui/material/CssBaseline";
-import { Box, Container, Link, Typography, Button } from "@mui/material";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Dashboard from "./components/Dashboard/Dashboard";
-import ShareDetails from "./components/ShareDetails/ShareDetails";
-import MinedSharesExplorer from "./components/MinerDashboard/MinerDashboard";
+import React, { useState } from 'react';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
+import CssBaseline from '@mui/material/CssBaseline';
+import { Box, Container, Link, Typography, Button } from '@mui/material';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import Dashboard from './components/Dashboard/Dashboard';
+import ShareDetails from './components/ShareDetails/ShareDetails';
+import MinedSharesExplorer from './components/MinerDashboard/MinerDashboard';
 
 // Create a dark theme
 const theme = createTheme({
   palette: {
-    mode: "dark",
+    mode: 'dark',
     primary: {
-      main: "#3986e8",
+      main: '#3986e8',
     },
     secondary: {
-      main: "#dc004e",
+      main: '#dc004e',
     },
     background: {
-      default: "#121212",
-      paper: "#1e1e1e",
+      default: '#121212',
+      paper: '#1e1e1e',
     },
   },
   components: {
@@ -28,7 +28,7 @@ const theme = createTheme({
         root: {
           paddingLeft: 16,
           paddingRight: 16,
-          "@media (min-width: 600px)": {
+          '@media (min-width: 600px)': {
             paddingLeft: 24,
             paddingRight: 24,
           },
@@ -41,12 +41,12 @@ const theme = createTheme({
 function Copyright() {
   return (
     <Typography variant="body2" color="text.secondary" align="center">
-      {"© "}
+      {'© '}
       <Link color="inherit" href="https://github.com/braidpool/braidpool">
         Braidpool
-      </Link>{" "}
+      </Link>{' '}
       {new Date().getFullYear()}
-      {" - Built with Vite 🚀"}
+      {' - Built with Vite 🚀'}
     </Typography>
   );
 }
@@ -58,7 +58,7 @@ function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <BrowserRouter>
-        <Box sx={{ display: "flex" }}>
+        <Box sx={{ display: 'flex' }}>
           {/* Test button for ShareDetails */}
           {/* <Button
             variant='contained'
@@ -81,11 +81,11 @@ function App() {
 
           <Box
             sx={{
-              display: "flex",
-              flexDirection: "column",
-              minHeight: "100vh",
-              backgroundColor: "#121212",
-              width: "100%",
+              display: 'flex',
+              flexDirection: 'column',
+              minHeight: '100vh',
+              backgroundColor: '#121212',
+              width: '100%',
             }}
           >
             <Routes>
@@ -100,9 +100,9 @@ function App() {
               component="footer"
               sx={{
                 py: 3,
-                mt: "auto",
-                bgcolor: "background.paper",
-                borderTop: "1px solid rgba(255,255,255,0.05)",
+                mt: 'auto',
+                bgcolor: 'background.paper',
+                borderTop: '1px solid rgba(255,255,255,0.05)',
               }}
             >
               <Container maxWidth="lg">

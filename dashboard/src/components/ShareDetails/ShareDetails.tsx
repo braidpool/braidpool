@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -14,9 +14,9 @@ import {
   Paper,
   styled,
   Stack,
-} from "@mui/material";
-import { BeadDisplayData } from "../../types/Bead";
-import { mockBeads } from "../../data/mockBeads";
+} from '@mui/material';
+import { BeadDisplayData } from '../../types/Bead';
+import { mockBeads } from '../../data/mockBeads';
 
 // Interface for component props
 interface ShareDetailsProps {
@@ -35,17 +35,17 @@ const StyledPaper = styled(Paper)(({ theme }) => ({
 }));
 
 const HashText = styled(Typography)(({ theme }) => ({
-  fontFamily: "monospace",
-  overflowWrap: "break-word",
+  fontFamily: 'monospace',
+  overflowWrap: 'break-word',
 }));
 
 const LabelText = styled(Typography)(({ theme }) => ({
-  fontWeight: "bold",
+  fontWeight: 'bold',
   color: theme.palette.text.secondary,
 }));
 
 const ValueText = styled(Typography)({
-  wordBreak: "break-word",
+  wordBreak: 'break-word',
 });
 
 // Tab panel component for tab content
@@ -105,7 +105,7 @@ export default function ShareDetails({
     if (onNavigateToBead) {
       onNavigateToBead(parentHash);
     }
-    console.log("📣 Navigate to parent bead:", parentHash);
+    console.log('📣 Navigate to parent bead:', parentHash);
   };
 
   return (
@@ -136,32 +136,32 @@ export default function ShareDetails({
 
           <Stack
             spacing={2}
-            direction={{ xs: "column", sm: "row" }}
+            direction={{ xs: 'column', sm: 'row' }}
             flexWrap="wrap"
           >
-            <Box sx={{ flex: "1 1 50%", minWidth: { xs: "100%", sm: "45%" } }}>
+            <Box sx={{ flex: '1 1 50%', minWidth: { xs: '100%', sm: '45%' } }}>
               <LabelText variant="subtitle2">Observation Time</LabelText>
               <ValueText variant="body2">{bead.formattedTimestamp}</ValueText>
             </Box>
-            <Box sx={{ flex: "1 1 50%", minWidth: { xs: "100%", sm: "45%" } }}>
+            <Box sx={{ flex: '1 1 50%', minWidth: { xs: '100%', sm: '45%' } }}>
               <LabelText variant="subtitle2">Cohort</LabelText>
               <ValueText variant="body2">{bead.cohortId}</ValueText>
             </Box>
-            <Box sx={{ flex: "1 1 50%", minWidth: { xs: "100%", sm: "45%" } }}>
+            <Box sx={{ flex: '1 1 50%', minWidth: { xs: '100%', sm: '45%' } }}>
               <LabelText variant="subtitle2">Validation Status</LabelText>
               <Chip
                 size="small"
                 label={bead.validationStatus}
                 color={
-                  bead.validationStatus === "valid"
-                    ? "success"
-                    : bead.validationStatus === "invalid"
-                      ? "error"
-                      : "warning"
+                  bead.validationStatus === 'valid'
+                    ? 'success'
+                    : bead.validationStatus === 'invalid'
+                      ? 'error'
+                      : 'warning'
                 }
               />
             </Box>
-            <Box sx={{ flex: "1 1 50%", minWidth: { xs: "100%", sm: "45%" } }}>
+            <Box sx={{ flex: '1 1 50%', minWidth: { xs: '100%', sm: '45%' } }}>
               <LabelText variant="subtitle2">
                 Lesser Difficulty Target
               </LabelText>
@@ -173,7 +173,7 @@ export default function ShareDetails({
         </StyledPaper>
 
         {/* Tabs for different sections */}
-        <Box sx={{ borderBottom: 1, borderColor: "divider", mt: 2 }}>
+        <Box sx={{ borderBottom: 1, borderColor: 'divider', mt: 2 }}>
           <Tabs
             value={tabValue}
             onChange={handleTabChange}
@@ -201,34 +201,34 @@ export default function ShareDetails({
         <TabPanel value={tabValue} index={0}>
           <Stack
             spacing={2}
-            direction={{ xs: "column", sm: "row" }}
+            direction={{ xs: 'column', sm: 'row' }}
             flexWrap="wrap"
           >
-            <Box sx={{ flex: "1 1 50%", minWidth: { xs: "100%", sm: "45%" } }}>
+            <Box sx={{ flex: '1 1 50%', minWidth: { xs: '100%', sm: '45%' } }}>
               <LabelText variant="subtitle2">Version</LabelText>
               <ValueText variant="body2">{bead.blockHeader.version}</ValueText>
             </Box>
-            <Box sx={{ flex: "1 1 50%", minWidth: { xs: "100%", sm: "45%" } }}>
+            <Box sx={{ flex: '1 1 50%', minWidth: { xs: '100%', sm: '45%' } }}>
               <LabelText variant="subtitle2">Timestamp</LabelText>
               <ValueText variant="body2">
                 {new Date(bead.blockHeader.timestamp).toLocaleString()}
               </ValueText>
             </Box>
-            <Box sx={{ flex: "1 1 100%" }}>
+            <Box sx={{ flex: '1 1 100%' }}>
               <LabelText variant="subtitle2">Previous Block Hash</LabelText>
               <HashText variant="body2">
                 {bead.blockHeader.prevBlockHash}
               </HashText>
             </Box>
-            <Box sx={{ flex: "1 1 100%" }}>
+            <Box sx={{ flex: '1 1 100%' }}>
               <LabelText variant="subtitle2">Merkle Root</LabelText>
               <HashText variant="body2">{bead.blockHeader.merkleRoot}</HashText>
             </Box>
-            <Box sx={{ flex: "1 1 50%", minWidth: { xs: "100%", sm: "45%" } }}>
+            <Box sx={{ flex: '1 1 50%', minWidth: { xs: '100%', sm: '45%' } }}>
               <LabelText variant="subtitle2">Bits</LabelText>
               <ValueText variant="body2">{bead.blockHeader.bits}</ValueText>
             </Box>
-            <Box sx={{ flex: "1 1 50%", minWidth: { xs: "100%", sm: "45%" } }}>
+            <Box sx={{ flex: '1 1 50%', minWidth: { xs: '100%', sm: '45%' } }}>
               <LabelText variant="subtitle2">Nonce</LabelText>
               <ValueText variant="body2">{bead.blockHeader.nonce}</ValueText>
             </Box>
@@ -280,14 +280,14 @@ export default function ShareDetails({
                     {bead.coinbaseTransaction.transaction.txid}
                   </HashText>
                 </Box>
-                <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-                  <Box sx={{ flex: "1 1 50%" }}>
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                  <Box sx={{ flex: '1 1 50%' }}>
                     <LabelText variant="subtitle2">Version</LabelText>
                     <ValueText variant="body2">
                       {bead.coinbaseTransaction.transaction.version}
                     </ValueText>
                   </Box>
-                  <Box sx={{ flex: "1 1 50%" }}>
+                  <Box sx={{ flex: '1 1 50%' }}>
                     <LabelText variant="subtitle2">Lock Time</LabelText>
                     <ValueText variant="body2">
                       {bead.coinbaseTransaction.transaction.lockTime}
@@ -308,14 +308,14 @@ export default function ShareDetails({
                     {bead.payoutUpdateTransaction.transaction.txid}
                   </HashText>
                 </Box>
-                <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-                  <Box sx={{ flex: "1 1 50%" }}>
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                  <Box sx={{ flex: '1 1 50%' }}>
                     <LabelText variant="subtitle2">Version</LabelText>
                     <ValueText variant="body2">
                       {bead.payoutUpdateTransaction.transaction.version}
                     </ValueText>
                   </Box>
-                  <Box sx={{ flex: "1 1 50%" }}>
+                  <Box sx={{ flex: '1 1 50%' }}>
                     <LabelText variant="subtitle2">Lock Time</LabelText>
                     <ValueText variant="body2">
                       {bead.payoutUpdateTransaction.transaction.lockTime}
@@ -337,12 +337,12 @@ export default function ShareDetails({
                     <LabelText variant="subtitle2">Transaction ID</LabelText>
                     <HashText variant="body2">{tx.txid}</HashText>
                   </Box>
-                  <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-                    <Box sx={{ flex: "1 1 50%" }}>
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                    <Box sx={{ flex: '1 1 50%' }}>
                       <LabelText variant="subtitle2">Size</LabelText>
                       <ValueText variant="body2">{tx.size} bytes</ValueText>
                     </Box>
-                    <Box sx={{ flex: "1 1 50%" }}>
+                    <Box sx={{ flex: '1 1 50%' }}>
                       <LabelText variant="subtitle2">Weight</LabelText>
                       <ValueText variant="body2">{tx.weight}</ValueText>
                     </Box>

@@ -1,14 +1,14 @@
-import React, { useState } from "react";
-import { Button, Box, Typography, Paper, styled } from "@mui/material";
-import ShareDetails from "./ShareDetails/ShareDetails";
-import { mockBeads, printDebug } from "../data/mockBeads";
+import React, { useState } from 'react';
+import { Button, Box, Typography, Paper, styled } from '@mui/material';
+import ShareDetails from './ShareDetails/ShareDetails';
+import { mockBeads, printDebug } from '../data/mockBeads';
 
 // Styled components
 const StyledPaper = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(3),
   margin: theme.spacing(2),
-  display: "flex",
-  flexDirection: "column",
+  display: 'flex',
+  flexDirection: 'column',
   gap: theme.spacing(2),
 }));
 
@@ -26,7 +26,7 @@ export default function ShareDetailsDemo() {
   const handleOpenBead = (beadType: string) => {
     setSelectedBead(beadType);
     setOpen(true);
-    console.log("🔍 Opening bead details for:", beadType);
+    console.log('🔍 Opening bead details for:', beadType);
     printDebug(); // Print debug information to console
   };
 
@@ -38,12 +38,12 @@ export default function ShareDetailsDemo() {
   // Handler for navigating to a different bead
   const handleNavigateToBead = (beadHash: string) => {
     const beadType = Object.entries(mockBeads).find(
-      ([_, bead]) => bead.beadHash === beadHash,
+      ([_, bead]) => bead.beadHash === beadHash
     )?.[0];
 
     if (beadType) {
       setSelectedBead(beadType);
-      console.log("🔄 Navigating to bead:", beadType);
+      console.log('🔄 Navigating to bead:', beadType);
     }
   };
 
@@ -63,7 +63,7 @@ export default function ShareDetailsDemo() {
           <Button
             variant="contained"
             color="primary"
-            onClick={() => handleOpenBead("genesis")}
+            onClick={() => handleOpenBead('genesis')}
           >
             Open Genesis Bead
           </Button>
@@ -71,7 +71,7 @@ export default function ShareDetailsDemo() {
           <Button
             variant="contained"
             color="secondary"
-            onClick={() => handleOpenBead("regular")}
+            onClick={() => handleOpenBead('regular')}
           >
             Open Regular Bead
           </Button>
@@ -79,7 +79,7 @@ export default function ShareDetailsDemo() {
           <Button
             variant="contained"
             color="info"
-            onClick={() => handleOpenBead("tip")}
+            onClick={() => handleOpenBead('tip')}
           >
             Open Tip Bead
           </Button>

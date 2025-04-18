@@ -1,13 +1,13 @@
-import React, { useRef, useEffect, useState } from "react";
-import * as d3 from "d3";
-import { io, Socket } from "socket.io-client";
-import Card from "@mui/material/Card";
-import CardContent from "@mui/material/CardContent";
-import CardHeader from "@mui/material/CardHeader";
-import CardTitle from "@mui/material/Typography";
-import "../../App.css";
-import Button from "@mui/material/Button";
-import { CircularProgress } from "@mui/material";
+import React, { useRef, useEffect, useState } from 'react';
+import * as d3 from 'd3';
+import { io, Socket } from 'socket.io-client';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import CardHeader from '@mui/material/CardHeader';
+import CardTitle from '@mui/material/Typography';
+import '../../App.css';
+import Button from '@mui/material/Button';
+import { CircularProgress } from '@mui/material';
 
 interface GraphNode {
   id: string;
@@ -61,7 +61,7 @@ const GraphVisualization: React.FC = () => {
   const layoutNodes = (
     allNodes: GraphNode[],
     hwPath: string[],
-    cohorts: string[][],
+    cohorts: string[][]
   ): Record<string, Position> => {
     const positions: Record<string, Position> = {};
     const columnOccupancy: Record<number, number> = {};
@@ -98,20 +98,20 @@ const GraphVisualization: React.FC = () => {
       const hwpParents = node.parents.filter((p) => hwPathSet.has(p));
       if (hwpParents.length > 0) {
         const minHWPIndex = Math.min(
-          ...hwpParents.map((p) => hwPath.indexOf(p)),
+          ...hwpParents.map((p) => hwPath.indexOf(p))
         );
         generations.set(node.id, minHWPIndex + 1);
       } else {
         const parentGens = node.parents.map((p) => generations.get(p) || 0);
         generations.set(
           node.id,
-          parentGens.length > 0 ? Math.max(...parentGens) + 1 : 0,
+          parentGens.length > 0 ? Math.max(...parentGens) + 1 : 0
         );
       }
     });
 
     remainingNodes.sort(
-      (a, b) => (generations.get(a.id) || 0) - (generations.get(b.id) || 0),
+      (a, b) => (generations.get(a.id) || 0) - (generations.get(b.id) || 0)
     );
 
     const tipNodes: string[] = [];
@@ -124,7 +124,7 @@ const GraphVisualization: React.FC = () => {
       if (positionedParents.length === 0) return;
 
       const maxParentX = Math.max(
-        ...positionedParents.map((p) => positions[p].x),
+        ...positionedParents.map((p) => positions[p].x)
       );
 
       let targetX = maxParentX + COLUMN_WIDTH;
@@ -132,7 +132,7 @@ const GraphVisualization: React.FC = () => {
       const hwpParents = positionedParents.filter((p) => hwPathSet.has(p));
       if (hwpParents.length > 0) {
         const rightmostHWPParentX = Math.max(
-          ...hwpParents.map((p) => positions[p].x),
+          ...hwpParents.map((p) => positions[p].x)
         );
         const parentIndex = hwPathColumns.indexOf(rightmostHWPParentX);
         if (parentIndex >= 0 && parentIndex < hwPathColumns.length - 1) {
@@ -142,7 +142,7 @@ const GraphVisualization: React.FC = () => {
 
       let yPos = centerY;
       const maxParentY = Math.max(
-        ...positionedParents.map((p) => positions[p].y),
+        ...positionedParents.map((p) => positions[p].y)
       );
       yPos = maxParentY + VERTICAL_SPACING;
 
@@ -164,7 +164,7 @@ const GraphVisualization: React.FC = () => {
     });
 
     const maxColumnX = Math.max(
-      ...Object.values(positions).map((pos) => pos.x),
+      ...Object.values(positions).map((pos) => pos.x)
     );
     tipNodes.forEach((tipId) => {
       if (positions[tipId]) {
@@ -176,7 +176,7 @@ const GraphVisualization: React.FC = () => {
   };
 
   const [_socket, setSocket] = useState<Socket | null>(null);
-  const [_connectionStatus, setConnectionStatus] = useState("Disconnected");
+  const [_connectionStatus, setConnectionStatus] = useState('Disconnected');
 
   const [totalBeads, setTotalBeads] = useState<number>(0);
   const [totalCohorts, setTotalCohorts] = useState<number>(0);
@@ -185,11 +185,11 @@ const GraphVisualization: React.FC = () => {
 
   const [defaultZoom, setDefaultZoom] = useState(0.5);
   const zoomBehavior = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(
-    null,
+    null
   );
 
   useEffect(() => {
-    let url = "http://localhost:65433/";
+    let url = 'http://localhost:65433/';
     const newSocket = io(url, {
       reconnection: true,
       reconnectionAttempts: Infinity,
@@ -200,20 +200,20 @@ const GraphVisualization: React.FC = () => {
 
     setSocket(newSocket);
 
-    newSocket.on("connect", () => {
-      console.log("Connected to Socket ", url);
-      setConnectionStatus("Connected");
+    newSocket.on('connect', () => {
+      console.log('Connected to Socket ', url);
+      setConnectionStatus('Connected');
     });
 
-    newSocket.on("disconnect", () => {
-      setConnectionStatus("Disconnected");
+    newSocket.on('disconnect', () => {
+      setConnectionStatus('Disconnected');
     });
 
-    newSocket.on("connect_error", (err) => {
+    newSocket.on('connect_error', (err) => {
       setConnectionStatus(`Error: ${err.message}`);
     });
 
-    newSocket.on("braid_update", (parsedData: GraphData) => {
+    newSocket.on('braid_update', (parsedData: GraphData) => {
       // Remove JSON.parse
       try {
         // Build the sequential ID mapping
@@ -238,7 +238,7 @@ const GraphVisualization: React.FC = () => {
         setLoading(false);
         console.log(parsedData);
       } catch (err) {
-        setError("Error processing graph data");
+        setError('Error processing graph data');
         setLoading(false);
       }
     });
@@ -255,7 +255,7 @@ const GraphVisualization: React.FC = () => {
         .duration(500)
         .call(
           zoomBehavior.current.transform,
-          d3.zoomIdentity.scale(defaultZoom),
+          d3.zoomIdentity.scale(defaultZoom)
         );
     }
   };
@@ -275,29 +275,29 @@ const GraphVisualization: React.FC = () => {
 
     const tooltip = d3
       .select(tooltipRef.current)
-      .style("position", "fixed") // Changed from 'absolute' to 'fixed'
-      .style("visibility", "hidden")
-      .style("background", "#0077B6")
-      .style("color", "white")
-      .style("border", "1px solid #FF8500")
-      .style("border-radius", "5px")
-      .style("padding", "10px")
-      .style("box-shadow", "2px 2px 5px rgba(0,0,0,0.2)")
-      .style("pointer-events", "none")
-      .style("z-index", "10")
-      .style("bottom", "20px") // Position from bottom
-      .style("right", "20px"); // Position from left
+      .style('position', 'fixed') // Changed from 'absolute' to 'fixed'
+      .style('visibility', 'hidden')
+      .style('background', '#0077B6')
+      .style('color', 'white')
+      .style('border', '1px solid #FF8500')
+      .style('border-radius', '5px')
+      .style('padding', '10px')
+      .style('box-shadow', '2px 2px 5px rgba(0,0,0,0.2)')
+      .style('pointer-events', 'none')
+      .style('z-index', '10')
+      .style('bottom', '20px') // Position from bottom
+      .style('right', '20px'); // Position from left
 
     const svg = d3.select(svgRef.current);
-    svg.selectAll("*").remove();
+    svg.selectAll('*').remove();
 
-    const container = svg.append("g");
+    const container = svg.append('g');
 
     zoomBehavior.current = d3
       .zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.5, 5])
-      .on("zoom", (event: d3.D3ZoomEvent<SVGSVGElement, unknown>) => {
-        container.attr("transform", event.transform.toString());
+      .on('zoom', (event: d3.D3ZoomEvent<SVGSVGElement, unknown>) => {
+        container.attr('transform', event.transform.toString());
       });
 
     svg
@@ -318,7 +318,7 @@ const GraphVisualization: React.FC = () => {
 
     // making old nodes invisible
     const visibleNodes = allNodes.filter((node) =>
-      filteredCohortNodes.has(node.id),
+      filteredCohortNodes.has(node.id)
     );
     let minVisibleX = Infinity;
     visibleNodes.forEach((node) => {
@@ -335,54 +335,54 @@ const GraphVisualization: React.FC = () => {
     });
 
     container
-      .append("defs")
-      .selectAll("marker")
-      .data(["end"])
+      .append('defs')
+      .selectAll('marker')
+      .data(['end'])
       .enter()
-      .append("marker")
-      .attr("id", "arrow")
-      .attr("viewBox", "0 -5 10 10")
-      .attr("refX", nodeRadius + 2)
-      .attr("refY", 0)
-      .attr("markerWidth", 6)
-      .attr("markerHeight", 6)
-      .attr("orient", "auto")
-      .append("path")
-      .attr("d", "M0,-5L10,0L0,5")
-      .attr("fill", "#FF8500"); // Orange arrow
+      .append('marker')
+      .attr('id', 'arrow')
+      .attr('viewBox', '0 -5 10 10')
+      .attr('refX', nodeRadius + 2)
+      .attr('refY', 0)
+      .attr('markerWidth', 6)
+      .attr('markerHeight', 6)
+      .attr('orient', 'auto')
+      .append('path')
+      .attr('d', 'M0,-5L10,0L0,5')
+      .attr('fill', '#FF8500'); // Orange arrow
 
     container
-      .selectAll(".link")
+      .selectAll('.link')
       .data(links)
       .enter()
-      .append("line")
-      .attr("class", "link")
-      .attr("x1", (d) => (positions[d.source]?.x || 0) + offsetX) // Apply offset
-      .attr("y1", (d) => positions[d.source]?.y || 0)
-      .attr("x2", (d) => (positions[d.target]?.x || 0) + offsetX) // Apply offset
-      .attr("y2", (d) => positions[d.target]?.y || 0)
-      .attr("stroke", "#48CAE4") // Light blue links
-      .attr("stroke-width", 1.5)
-      .attr("marker-end", "url(#arrow)")
-      .style("display", (d) =>
+      .append('line')
+      .attr('class', 'link')
+      .attr('x1', (d) => (positions[d.source]?.x || 0) + offsetX) // Apply offset
+      .attr('y1', (d) => positions[d.source]?.y || 0)
+      .attr('x2', (d) => (positions[d.target]?.x || 0) + offsetX) // Apply offset
+      .attr('y2', (d) => positions[d.target]?.y || 0)
+      .attr('stroke', '#48CAE4') // Light blue links
+      .attr('stroke-width', 1.5)
+      .attr('marker-end', 'url(#arrow)')
+      .style('display', (d) =>
         filteredCohortNodes.has(d.source) && filteredCohortNodes.has(d.target)
-          ? "inline"
-          : "none",
+          ? 'inline'
+          : 'none'
       );
 
     const nodes = container
-      .selectAll(".node")
+      .selectAll('.node')
       .data(allNodes)
       .enter()
-      .append("g")
-      .attr("class", "node")
+      .append('g')
+      .attr('class', 'node')
       .attr(
-        "transform",
+        'transform',
         (d) =>
-          `translate(${(positions[d.id]?.x || 0) + offsetX},${positions[d.id]?.y || 0})`,
+          `translate(${(positions[d.id]?.x || 0) + offsetX},${positions[d.id]?.y || 0})`
       ) // Apply offset
-      .style("display", (d) =>
-        filteredCohortNodes.has(d.id) ? "inline" : "none",
+      .style('display', (d) =>
+        filteredCohortNodes.has(d.id) ? 'inline' : 'none'
       );
 
     const cohortMap = new Map<string, number>();
@@ -391,85 +391,85 @@ const GraphVisualization: React.FC = () => {
     });
 
     nodes
-      .append("circle")
-      .attr("r", nodeRadius)
-      .attr("fill", (d) => {
+      .append('circle')
+      .attr('r', nodeRadius)
+      .attr('fill', (d) => {
         const cohortIndex = cohortMap.get(d.id);
         if (cohortIndex === undefined) return COLORS[0];
         const startingIndex = Math.max(0, totalCohorts - selectedCohorts);
         const adjustedIndex = cohortIndex - startingIndex;
         return COLORS[adjustedIndex % COLORS.length];
       })
-      .attr("stroke", "#fff")
-      .attr("stroke-width", 2)
-      .on("mouseover", function (event: MouseEvent, d: GraphNode) {
-        d3.select(this).attr("stroke", "#FF8500").attr("stroke-width", 3);
+      .attr('stroke', '#fff')
+      .attr('stroke-width', 2)
+      .on('mouseover', function (event: MouseEvent, d: GraphNode) {
+        d3.select(this).attr('stroke', '#FF8500').attr('stroke-width', 3);
 
         const cohortIndex = cohortMap.get(d.id);
         const isHWP = hwPathSet.has(d.id);
 
         const tooltipContent = `
-                <div><strong>ID:</strong> ${nodeIdMap[d.id] || "?"} (${d.id})</div>
+                <div><strong>ID:</strong> ${nodeIdMap[d.id] || '?'} (${d.id})</div>
                 <div><strong>Work:</strong> ${d.work}</div>
-                <div><strong>Cohort:</strong> ${cohortIndex !== undefined ? cohortIndex : "N/A"}</div>
-                <div><strong>Highest Work Path:</strong> ${isHWP ? "Yes" : "No"}</div>
+                <div><strong>Cohort:</strong> ${cohortIndex !== undefined ? cohortIndex : 'N/A'}</div>
+                <div><strong>Highest Work Path:</strong> ${isHWP ? 'Yes' : 'No'}</div>
                 <div><strong>Parents:</strong> ${
                   d.parents.length > 0
-                    ? d.parents.map((p) => `${nodeIdMap[p] || "?"}`).join(", ")
-                    : "None"
+                    ? d.parents.map((p) => `${nodeIdMap[p] || '?'}`).join(', ')
+                    : 'None'
                 }</div>
                 <div><strong>Children:</strong> ${
                   d.children.length > 0
-                    ? d.children.map((c) => `${nodeIdMap[c] || "?"}`).join(", ")
-                    : "None"
+                    ? d.children.map((c) => `${nodeIdMap[c] || '?'}`).join(', ')
+                    : 'None'
                 }</div>
                 `;
 
-        tooltip.html(tooltipContent).style("visibility", "visible");
+        tooltip.html(tooltipContent).style('visibility', 'visible');
       })
-      .on("mouseout", function () {
-        d3.select(this).attr("stroke", "#fff").attr("stroke-width", 2);
-        tooltip.style("visibility", "hidden");
+      .on('mouseout', function () {
+        d3.select(this).attr('stroke', '#fff').attr('stroke-width', 2);
+        tooltip.style('visibility', 'hidden');
       });
 
     nodes
-      .append("text")
-      .attr("dy", 4)
-      .attr("text-anchor", "middle")
-      .text((d) => nodeIdMap[d.id] || "?") // Show sequential ID instead of hash
-      .attr("fill", "#fff")
-      .style("font-size", "10px")
-      .on("mouseover", function (event: MouseEvent, d: GraphNode) {
+      .append('text')
+      .attr('dy', 4)
+      .attr('text-anchor', 'middle')
+      .text((d) => nodeIdMap[d.id] || '?') // Show sequential ID instead of hash
+      .attr('fill', '#fff')
+      .style('font-size', '10px')
+      .on('mouseover', function (event: MouseEvent, d: GraphNode) {
         const cohortIndex = cohortMap.get(d.id);
         const isHWP = hwPathSet.has(d.id);
         const tooltipContent = `
-                <div><strong>ID:</strong> ${nodeIdMap[d.id] || "?"} (${d.id})</div>
+                <div><strong>ID:</strong> ${nodeIdMap[d.id] || '?'} (${d.id})</div>
                 <div><strong>Work:</strong> ${d.work}</div>
-                <div><strong>Cohort:</strong> ${cohortIndex !== undefined ? cohortIndex : "N/A"}</div>
-                <div><strong>Highest Work Path:</strong> ${isHWP ? "Yes" : "No"}</div>
+                <div><strong>Cohort:</strong> ${cohortIndex !== undefined ? cohortIndex : 'N/A'}</div>
+                <div><strong>Highest Work Path:</strong> ${isHWP ? 'Yes' : 'No'}</div>
                 <div><strong>Parents:</strong> ${
                   d.parents.length > 0
-                    ? d.parents.map((p) => `${nodeIdMap[p] || "?"}`).join(", ")
-                    : "None"
+                    ? d.parents.map((p) => `${nodeIdMap[p] || '?'}`).join(', ')
+                    : 'None'
                 }</div>
                 <div><strong>Children:</strong> ${
                   d.children.length > 0
-                    ? d.children.map((c) => `${nodeIdMap[c] || "?"}`).join(", ")
-                    : "None"
+                    ? d.children.map((c) => `${nodeIdMap[c] || '?'}`).join(', ')
+                    : 'None'
                 }</div>
                 `;
 
-        tooltip.html(tooltipContent).style("visibility", "visible");
+        tooltip.html(tooltipContent).style('visibility', 'visible');
       })
-      .on("mouseout", function () {
-        tooltip.style("visibility", "hidden");
+      .on('mouseout', function () {
+        tooltip.style('visibility', 'hidden');
       });
     container
-      .append("text")
-      .attr("x", width / 2)
-      .attr("y", margin.top / 2)
-      .attr("text-anchor", "middle")
-      .style("font-size", "16px");
+      .append('text')
+      .attr('x', width / 2)
+      .attr('y', margin.top / 2)
+      .attr('text-anchor', 'middle')
+      .style('font-size', '16px');
   }, [graphData, defaultZoom, selectedCohorts]);
 
   if (loading) {
@@ -505,22 +505,22 @@ const GraphVisualization: React.FC = () => {
     <div className="min-h-screen">
       <div
         style={{
-          margin: "10px",
-          position: "relative",
-          display: "flex",
-          gap: "10px",
-          alignItems: "center",
+          margin: '10px',
+          position: 'relative',
+          display: 'flex',
+          gap: '10px',
+          alignItems: 'center',
         }}
       >
         <select
           value={selectedCohorts}
           onChange={(e) => setSelectedCohorts(Number(e.target.value))}
           style={{
-            padding: "5px",
-            borderRadius: "4px",
-            border: "1px solid #0077B6",
-            backgroundColor: "white",
-            color: "#0077B6",
+            padding: '5px',
+            borderRadius: '4px',
+            border: '1px solid #0077B6',
+            backgroundColor: 'white',
+            color: '#0077B6',
           }}
         >
           {[5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map((value) => (
@@ -532,9 +532,9 @@ const GraphVisualization: React.FC = () => {
         <Button
           onClick={zoomOut}
           style={{
-            backgroundColor: "#FF8500",
-            color: "white",
-            border: "1px solid #E76F00",
+            backgroundColor: '#FF8500',
+            color: 'white',
+            border: '1px solid #E76F00',
           }}
           className="hover:bg-[#E76F00] transition-colors"
         >
@@ -543,9 +543,9 @@ const GraphVisualization: React.FC = () => {
         <Button
           onClick={zoomIn}
           style={{
-            backgroundColor: "#FF8500",
-            color: "white",
-            border: "1px solid #E76F00",
+            backgroundColor: '#FF8500',
+            color: 'white',
+            border: '1px solid #E76F00',
           }}
           className="hover:bg-[#E76F00] transition-colors"
         >
@@ -554,17 +554,17 @@ const GraphVisualization: React.FC = () => {
         <Button
           onClick={resetZoom}
           style={{
-            backgroundColor: "#0077B6",
-            color: "white",
-            border: "1px solid #023E8A",
+            backgroundColor: '#0077B6',
+            color: 'white',
+            border: '1px solid #023E8A',
           }}
           className="hover:bg-[#023E8A] transition-colors"
         >
           Reset Zoom
         </Button>
       </div>
-      <div style={{ margin: "10px", position: "relative" }}>
-        <Card style={{ borderColor: "#FF8500" }}>
+      <div style={{ margin: '10px', position: 'relative' }}>
+        <Card style={{ borderColor: '#FF8500' }}>
           <CardContent>
             <svg ref={svgRef} width={width} height={height} />
           </CardContent>
@@ -572,35 +572,35 @@ const GraphVisualization: React.FC = () => {
         </Card>
       </div>
       <Card
-        style={{ margin: "10px", position: "relative", borderColor: "#0077B6" }}
+        style={{ margin: '10px', position: 'relative', borderColor: '#0077B6' }}
       >
         <CardHeader>
-          <CardTitle style={{ color: "#FF8500" }}>Metrics</CardTitle>
+          <CardTitle style={{ color: '#FF8500' }}>Metrics</CardTitle>
         </CardHeader>
         <CardContent
-          style={{ display: "flex", flexDirection: "column", gap: "8px" }}
+          style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}
         >
           <div className="font-medium text-[#0077B6]">
-            Total Beads:{" "}
-            <span style={{ fontWeight: "normal", color: "#FF8500" }}>
+            Total Beads:{' '}
+            <span style={{ fontWeight: 'normal', color: '#FF8500' }}>
               {totalBeads}
             </span>
           </div>
           <div className="font-medium text-[#0077B6]">
-            Total Cohorts:{" "}
-            <span style={{ fontWeight: "normal", color: "#FF8500" }}>
+            Total Cohorts:{' '}
+            <span style={{ fontWeight: 'normal', color: '#FF8500' }}>
               {totalCohorts}
             </span>
           </div>
           <div className="font-medium text-[#0077B6]">
-            Max Cohort Size:{" "}
-            <span style={{ fontWeight: "normal", color: "#FF8500" }}>
+            Max Cohort Size:{' '}
+            <span style={{ fontWeight: 'normal', color: '#FF8500' }}>
               {maxCohortSize}
             </span>
           </div>
           <div className="font-medium text-[#0077B6]">
-            HWP Length:{" "}
-            <span style={{ fontWeight: "normal", color: "#FF8500" }}>
+            HWP Length:{' '}
+            <span style={{ fontWeight: 'normal', color: '#FF8500' }}>
               {hwpLength}
             </span>
           </div>

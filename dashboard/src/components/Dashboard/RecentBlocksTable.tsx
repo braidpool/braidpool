@@ -1,4 +1,4 @@
-import React from "react";
+import React from 'react';
 import {
   Table,
   TableBody,
@@ -8,31 +8,31 @@ import {
   TableRow,
   Box,
   Typography,
-} from "@mui/material";
-import Card from "../common/Card";
-import colors from "../../theme/colors";
+} from '@mui/material';
+import Card from '../common/Card';
+import colors from '../../theme/colors';
 
 // Mock data for recent blocks
 const recentBlocks = [
   {
     height: 837192,
-    hash: "000000000000000000030f31e862f407bb97d0d299e6ae92b428b540f8d26237",
-    time: "4 hrs ago",
+    hash: '000000000000000000030f31e862f407bb97d0d299e6ae92b428b540f8d26237',
+    time: '4 hrs ago',
   },
   {
     height: 837192,
-    hash: "000000000000000000023a97e8c10a8ba61827f37b019871bf3aab48015d3273",
-    time: "5 hrs ago",
+    hash: '000000000000000000023a97e8c10a8ba61827f37b019871bf3aab48015d3273',
+    time: '5 hrs ago',
   },
   {
     height: 837192,
-    hash: "0000000000000000000b98c4d0ff2b7d48ab5aeadcfb94c53fef7b9e18982f34",
-    time: "6 hrs ago",
+    hash: '0000000000000000000b98c4d0ff2b7d48ab5aeadcfb94c53fef7b9e18982f34',
+    time: '6 hrs ago',
   },
   {
     height: 837192,
-    hash: "00000000000000000007f3e72173d22dd9fbd000b7acb328c5559346b5f6af89",
-    time: "7 hrs ago",
+    hash: '00000000000000000007f3e72173d22dd9fbd000b7acb328c5559346b5f6af89',
+    time: '7 hrs ago',
   },
 ];
 
@@ -45,7 +45,7 @@ const RecentBlocksTable: React.FC<RecentBlocksTableProps> = ({
 }) => {
   // Helper function to truncate hash
   const truncateHash = (hash: string) => {
-    return hash.substring(0, 10) + "..." + hash.substring(hash.length - 10);
+    return hash.substring(0, 10) + '...' + hash.substring(hash.length - 10);
   };
 
   return (
@@ -57,15 +57,15 @@ const RecentBlocksTable: React.FC<RecentBlocksTableProps> = ({
       <TableContainer
         sx={{
           maxHeight: maxHeight,
-          "&::-webkit-scrollbar": {
-            width: "8px",
+          '&::-webkit-scrollbar': {
+            width: '8px',
           },
-          "&::-webkit-scrollbar-track": {
+          '&::-webkit-scrollbar-track': {
             background: colors.paper,
           },
-          "&::-webkit-scrollbar-thumb": {
+          '&::-webkit-scrollbar-thumb': {
             background: colors.primary,
-            borderRadius: "4px",
+            borderRadius: '4px',
           },
         }}
       >
@@ -76,7 +76,7 @@ const RecentBlocksTable: React.FC<RecentBlocksTableProps> = ({
                 sx={{
                   backgroundColor: colors.paper,
                   color: colors.textPrimary,
-                  fontWeight: "bold",
+                  fontWeight: 'bold',
                 }}
               >
                 Height
@@ -85,7 +85,7 @@ const RecentBlocksTable: React.FC<RecentBlocksTableProps> = ({
                 sx={{
                   backgroundColor: colors.paper,
                   color: colors.textPrimary,
-                  fontWeight: "bold",
+                  fontWeight: 'bold',
                 }}
               >
                 Hash
@@ -94,7 +94,7 @@ const RecentBlocksTable: React.FC<RecentBlocksTableProps> = ({
                 sx={{
                   backgroundColor: colors.paper,
                   color: colors.textPrimary,
-                  fontWeight: "bold",
+                  fontWeight: 'bold',
                 }}
               >
                 Time
@@ -106,8 +106,8 @@ const RecentBlocksTable: React.FC<RecentBlocksTableProps> = ({
               <TableRow
                 key={index}
                 sx={{
-                  "&:hover": {
-                    backgroundColor: "rgba(255, 255, 255, 0.05)",
+                  '&:hover': {
+                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
                   },
                 }}
               >

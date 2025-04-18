@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState } from 'react';
 import {
   Box,
   Typography,
@@ -7,121 +7,121 @@ import {
   Chip,
   Button,
   Tooltip,
-} from "@mui/material";
-import colors from "../../theme/colors";
-import Card from "../common/Card";
-import SpeedIcon from "@mui/icons-material/Speed";
-import ThunderstormIcon from "@mui/icons-material/Thunderstorm";
-import ThermostatIcon from "@mui/icons-material/Thermostat";
-import WifiIcon from "@mui/icons-material/Wifi";
-import ErrorIcon from "@mui/icons-material/Error";
-import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import LightbulbIcon from "@mui/icons-material/Lightbulb";
+} from '@mui/material';
+import colors from '../../theme/colors';
+import Card from '../common/Card';
+import SpeedIcon from '@mui/icons-material/Speed';
+import ThunderstormIcon from '@mui/icons-material/Thunderstorm';
+import ThermostatIcon from '@mui/icons-material/Thermostat';
+import WifiIcon from '@mui/icons-material/Wifi';
+import ErrorIcon from '@mui/icons-material/Error';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import LightbulbIcon from '@mui/icons-material/Lightbulb';
 
 // Mock data for mining devices
 const mockMiners = [
   {
-    id: "miner-001",
-    name: "Antminer S19",
-    status: "online",
+    id: 'miner-001',
+    name: 'Antminer S19',
+    status: 'online',
     temp: 65,
-    hashrate: "95.2",
-    efficiency: "34.5",
-    powerDraw: "3250",
-    uptime: "99.7%",
-    location: "Rack A, Unit 3",
-    lastSeen: "2 mins ago",
+    hashrate: '95.2',
+    efficiency: '34.5',
+    powerDraw: '3250',
+    uptime: '99.7%',
+    location: 'Rack A, Unit 3',
+    lastSeen: '2 mins ago',
     alerts: 0,
   },
   {
-    id: "miner-002",
-    name: "Antminer S19",
-    status: "online",
+    id: 'miner-002',
+    name: 'Antminer S19',
+    status: 'online',
     temp: 68,
-    hashrate: "94.8",
-    efficiency: "33.9",
-    powerDraw: "3270",
-    uptime: "99.5%",
-    location: "Rack A, Unit 4",
-    lastSeen: "1 min ago",
+    hashrate: '94.8',
+    efficiency: '33.9',
+    powerDraw: '3270',
+    uptime: '99.5%',
+    location: 'Rack A, Unit 4',
+    lastSeen: '1 min ago',
     alerts: 0,
   },
   {
-    id: "miner-003",
-    name: "Whatsminer M30S",
-    status: "warning",
+    id: 'miner-003',
+    name: 'Whatsminer M30S',
+    status: 'warning',
     temp: 74,
-    hashrate: "82.5",
-    efficiency: "38.2",
-    powerDraw: "3420",
-    uptime: "97.2%",
-    location: "Rack B, Unit 1",
-    lastSeen: "5 mins ago",
+    hashrate: '82.5',
+    efficiency: '38.2',
+    powerDraw: '3420',
+    uptime: '97.2%',
+    location: 'Rack B, Unit 1',
+    lastSeen: '5 mins ago',
     alerts: 1,
   },
   {
-    id: "miner-004",
-    name: "Antminer S19",
-    status: "offline",
+    id: 'miner-004',
+    name: 'Antminer S19',
+    status: 'offline',
     temp: 0,
-    hashrate: "0",
-    efficiency: "0",
-    powerDraw: "0",
-    uptime: "85.3%",
-    location: "Rack B, Unit 2",
-    lastSeen: "2 hrs ago",
+    hashrate: '0',
+    efficiency: '0',
+    powerDraw: '0',
+    uptime: '85.3%',
+    location: 'Rack B, Unit 2',
+    lastSeen: '2 hrs ago',
     alerts: 2,
   },
   {
-    id: "miner-005",
-    name: "Whatsminer M30S",
-    status: "online",
+    id: 'miner-005',
+    name: 'Whatsminer M30S',
+    status: 'online',
     temp: 66,
-    hashrate: "93.1",
-    efficiency: "34.7",
-    powerDraw: "3290",
-    uptime: "99.8%",
-    location: "Rack B, Unit 3",
-    lastSeen: "3 mins ago",
+    hashrate: '93.1',
+    efficiency: '34.7',
+    powerDraw: '3290',
+    uptime: '99.8%',
+    location: 'Rack B, Unit 3',
+    lastSeen: '3 mins ago',
     alerts: 0,
   },
   {
-    id: "miner-006",
-    name: "Antminer S19 Pro",
-    status: "online",
+    id: 'miner-006',
+    name: 'Antminer S19 Pro',
+    status: 'online',
     temp: 63,
-    hashrate: "109.5",
-    efficiency: "32.1",
-    powerDraw: "3180",
-    uptime: "99.9%",
-    location: "Rack C, Unit 1",
-    lastSeen: "1 min ago",
+    hashrate: '109.5',
+    efficiency: '32.1',
+    powerDraw: '3180',
+    uptime: '99.9%',
+    location: 'Rack C, Unit 1',
+    lastSeen: '1 min ago',
     alerts: 0,
   },
   {
-    id: "miner-007",
-    name: "Antminer S19 Pro",
-    status: "online",
+    id: 'miner-007',
+    name: 'Antminer S19 Pro',
+    status: 'online',
     temp: 64,
-    hashrate: "108.7",
-    efficiency: "32.4",
-    powerDraw: "3200",
-    uptime: "99.8%",
-    location: "Rack C, Unit 2",
-    lastSeen: "2 mins ago",
+    hashrate: '108.7',
+    efficiency: '32.4',
+    powerDraw: '3200',
+    uptime: '99.8%',
+    location: 'Rack C, Unit 2',
+    lastSeen: '2 mins ago',
     alerts: 0,
   },
   {
-    id: "miner-008",
-    name: "Antminer S19",
-    status: "warning",
+    id: 'miner-008',
+    name: 'Antminer S19',
+    status: 'warning',
     temp: 72,
-    hashrate: "91.4",
-    efficiency: "35.8",
-    powerDraw: "3320",
-    uptime: "98.5%",
-    location: "Rack C, Unit 3",
-    lastSeen: "7 mins ago",
+    hashrate: '91.4',
+    efficiency: '35.8',
+    powerDraw: '3320',
+    uptime: '98.5%',
+    location: 'Rack C, Unit 3',
+    lastSeen: '7 mins ago',
     alerts: 1,
   },
 ];
@@ -135,14 +135,14 @@ const DeviceCard = ({
 }) => {
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "online":
-        return { bg: "rgba(76, 175, 80, 0.1)", color: colors.success };
-      case "warning":
-        return { bg: "rgba(255, 152, 0, 0.1)", color: colors.warning };
-      case "offline":
-        return { bg: "rgba(244, 67, 54, 0.1)", color: colors.error };
+      case 'online':
+        return { bg: 'rgba(76, 175, 80, 0.1)', color: colors.success };
+      case 'warning':
+        return { bg: 'rgba(255, 152, 0, 0.1)', color: colors.warning };
+      case 'offline':
+        return { bg: 'rgba(244, 67, 54, 0.1)', color: colors.error };
       default:
-        return { bg: "rgba(97, 97, 97, 0.1)", color: colors.textSecondary };
+        return { bg: 'rgba(97, 97, 97, 0.1)', color: colors.textSecondary };
     }
   };
 
@@ -156,10 +156,10 @@ const DeviceCard = ({
         borderRadius: 1,
         border: `1px solid ${colors.primary}20`,
         p: 2,
-        position: "relative",
-        transition: "transform 0.2s, box-shadow 0.2s",
-        "&:hover": {
-          transform: "translateY(-3px)",
+        position: 'relative',
+        transition: 'transform 0.2s, box-shadow 0.2s',
+        '&:hover': {
+          transform: 'translateY(-3px)',
           boxShadow: `0 8px 16px -8px ${colors.shadow}`,
           borderColor: colors.primary,
         },
@@ -168,12 +168,12 @@ const DeviceCard = ({
       {/* Status indicator */}
       <Box
         sx={{
-          position: "absolute",
+          position: 'absolute',
           top: 12,
           right: 12,
           width: 12,
           height: 12,
-          borderRadius: "50%",
+          borderRadius: '50%',
           backgroundColor: statusColors.color,
         }}
       />
@@ -186,11 +186,11 @@ const DeviceCard = ({
           size="small"
           color="error"
           sx={{
-            position: "absolute",
+            position: 'absolute',
             top: 10,
             right: 30,
             height: 20,
-            fontSize: "0.75rem",
+            fontSize: '0.75rem',
           }}
         />
       )}
@@ -204,57 +204,57 @@ const DeviceCard = ({
         <Typography
           variant="body2"
           color="textSecondary"
-          sx={{ fontSize: "0.75rem" }}
+          sx={{ fontSize: '0.75rem' }}
         >
           {miner.location}
         </Typography>
         <Typography
           variant="body2"
           color="textSecondary"
-          sx={{ fontSize: "0.75rem" }}
+          sx={{ fontSize: '0.75rem' }}
         >
           Last seen: {miner.lastSeen}
         </Typography>
       </Box>
 
       {/* Metrics */}
-      <Box sx={{ display: "flex", flexWrap: "wrap", mb: 2, mx: -0.5 }}>
-        <Box sx={{ width: "50%", p: 0.5 }}>
-          <Box sx={{ display: "flex", alignItems: "center" }}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', mb: 2, mx: -0.5 }}>
+        <Box sx={{ width: '50%', p: 0.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <SpeedIcon
-              sx={{ fontSize: "1rem", color: colors.primary, mr: 0.5 }}
+              sx={{ fontSize: '1rem', color: colors.primary, mr: 0.5 }}
             />
-            <Typography variant="body2" sx={{ fontSize: "0.8rem" }}>
-              {miner.status !== "offline" ? `${miner.hashrate} TH/s` : "—"}
+            <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
+              {miner.status !== 'offline' ? `${miner.hashrate} TH/s` : '—'}
             </Typography>
           </Box>
         </Box>
-        <Box sx={{ width: "50%", p: 0.5 }}>
-          <Box sx={{ display: "flex", alignItems: "center" }}>
+        <Box sx={{ width: '50%', p: 0.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <ThermostatIcon
-              sx={{ fontSize: "1rem", color: colors.primary, mr: 0.5 }}
+              sx={{ fontSize: '1rem', color: colors.primary, mr: 0.5 }}
             />
-            <Typography variant="body2" sx={{ fontSize: "0.8rem" }}>
-              {miner.status !== "offline" ? `${miner.temp}°C` : "—"}
+            <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
+              {miner.status !== 'offline' ? `${miner.temp}°C` : '—'}
             </Typography>
           </Box>
         </Box>
-        <Box sx={{ width: "50%", p: 0.5 }}>
-          <Box sx={{ display: "flex", alignItems: "center" }}>
+        <Box sx={{ width: '50%', p: 0.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <ThunderstormIcon
-              sx={{ fontSize: "1rem", color: colors.primary, mr: 0.5 }}
+              sx={{ fontSize: '1rem', color: colors.primary, mr: 0.5 }}
             />
-            <Typography variant="body2" sx={{ fontSize: "0.8rem" }}>
-              {miner.status !== "offline" ? `${miner.powerDraw}W` : "—"}
+            <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
+              {miner.status !== 'offline' ? `${miner.powerDraw}W` : '—'}
             </Typography>
           </Box>
         </Box>
-        <Box sx={{ width: "50%", p: 0.5 }}>
-          <Box sx={{ display: "flex", alignItems: "center" }}>
+        <Box sx={{ width: '50%', p: 0.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <WifiIcon
-              sx={{ fontSize: "1rem", color: colors.primary, mr: 0.5 }}
+              sx={{ fontSize: '1rem', color: colors.primary, mr: 0.5 }}
             />
-            <Typography variant="body2" sx={{ fontSize: "0.8rem" }}>
+            <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
               {miner.uptime}
             </Typography>
           </Box>
@@ -262,18 +262,18 @@ const DeviceCard = ({
       </Box>
 
       {/* Actions */}
-      <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
         <Button
           variant="outlined"
           size="small"
           sx={{
-            fontSize: "0.75rem",
-            textTransform: "none",
+            fontSize: '0.75rem',
+            textTransform: 'none',
             borderColor: colors.primary,
             color: colors.primary,
-            "&:hover": {
+            '&:hover': {
               borderColor: colors.primary,
-              backgroundColor: "rgba(57, 134, 232, 0.08)",
+              backgroundColor: 'rgba(57, 134, 232, 0.08)',
             },
           }}
           onClick={() => console.log(`📊 Details for ${miner.id}`)}
@@ -285,13 +285,13 @@ const DeviceCard = ({
             variant="outlined"
             size="small"
             sx={{
-              fontSize: "0.75rem",
-              textTransform: "none",
+              fontSize: '0.75rem',
+              textTransform: 'none',
               borderColor: colors.primary,
               color: colors.primary,
-              "&:hover": {
+              '&:hover': {
                 borderColor: colors.primary,
-                backgroundColor: "rgba(57, 134, 232, 0.08)",
+                backgroundColor: 'rgba(57, 134, 232, 0.08)',
               },
             }}
             onClick={() => onActivateLight(miner.id)}
@@ -321,9 +321,9 @@ const MineInventoryDashboard = () => {
 
   // Stats
   const totalMiners = mockMiners.length;
-  const onlineMiners = mockMiners.filter((m) => m.status === "online").length;
-  const warningMiners = mockMiners.filter((m) => m.status === "warning").length;
-  const offlineMiners = mockMiners.filter((m) => m.status === "offline").length;
+  const onlineMiners = mockMiners.filter((m) => m.status === 'online').length;
+  const warningMiners = mockMiners.filter((m) => m.status === 'warning').length;
+  const offlineMiners = mockMiners.filter((m) => m.status === 'offline').length;
 
   return (
     <Card
@@ -332,7 +332,7 @@ const MineInventoryDashboard = () => {
       accentColor={colors.cardAccentSuccess}
     >
       {/* Summary stats */}
-      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2, mb: 3 }}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 3 }}>
         <Chip
           icon={<CheckCircleIcon />}
           label={`${onlineMiners} Online`}
@@ -359,16 +359,16 @@ const MineInventoryDashboard = () => {
       </Box>
 
       {/* Graphics layout */}
-      <Box sx={{ display: "flex", flexWrap: "wrap", mx: -1 }}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', mx: -1 }}>
         {mockMiners.map((miner) => (
           <Box
             key={miner.id}
             sx={{
               width: {
-                xs: "100%",
-                sm: "50%",
-                md: "33.33%",
-                lg: "25%",
+                xs: '100%',
+                sm: '50%',
+                md: '33.33%',
+                lg: '25%',
               },
               p: 1,
             }}

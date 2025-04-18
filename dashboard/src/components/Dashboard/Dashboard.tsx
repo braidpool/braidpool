@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect } from 'react';
 import {
   Box,
   Divider,
@@ -8,44 +8,44 @@ import {
   ListItemIcon,
   ListItemText,
   Typography,
-} from "@mui/material";
-import colors from "../../theme/colors";
+} from '@mui/material';
+import colors from '../../theme/colors';
 
 // Icons
-import DashboardIcon from "@mui/icons-material/Dashboard";
-import ConstructionIcon from "@mui/icons-material/Construction";
-import InventoryIcon from "@mui/icons-material/Inventory";
-import MemoryIcon from "@mui/icons-material/Memory";
-import LayersIcon from "@mui/icons-material/Layers";
+import DashboardIcon from '@mui/icons-material/Dashboard';
+import ConstructionIcon from '@mui/icons-material/Construction';
+import InventoryIcon from '@mui/icons-material/Inventory';
+import MemoryIcon from '@mui/icons-material/Memory';
+import LayersIcon from '@mui/icons-material/Layers';
 
 // Components
-import TopStatsBar from "../common/TopStatsBar";
-import Card from "../common/Card";
-import Header from "../common/Header";
-import InstallationInstructions from "../Installation/InstallationInstructions";
-import MineInventoryDashboard from "../MinerDashboard/MineInventoryDashboard";
-import PoolHashrateChart from "./PoolHashrateChart";
-import MempoolLatencyStats from "./MempoolLatencyStats";
-import RecentBlocksTable from "./RecentBlocksTable";
-import GraphVisualization from "../BraidPoolDAG/BraidPoolDAG";
-import MinedSharesExplorer from "../MinerDashboard/MinerDashboard";
+import TopStatsBar from '../common/TopStatsBar';
+import Card from '../common/Card';
+import Header from '../common/Header';
+import InstallationInstructions from '../Installation/InstallationInstructions';
+import MineInventoryDashboard from '../MinerDashboard/MineInventoryDashboard';
+import PoolHashrateChart from './PoolHashrateChart';
+import MempoolLatencyStats from './MempoolLatencyStats';
+import RecentBlocksTable from './RecentBlocksTable';
+import GraphVisualization from '../BraidPoolDAG/BraidPoolDAG';
+import MinedSharesExplorer from '../MinerDashboard/MinerDashboard';
 // Utils
 import {
   loadSampleBraidData,
   transformBraidData,
-} from "../../utils/braidDataTransformer";
+} from '../../utils/braidDataTransformer';
 
 // Constants
 const drawerWidth = 240;
 
 // Define available pages as an enum
 enum Page {
-  INSTALLATION = "installation",
-  DASHBOARD = "dashboard",
-  MINING_INVENTORY = "mining-inventory",
-  MEMPOOL = "mempool",
-  DAG_VISUALIZATION = "dag-visualization",
-  MINER_STATS = "miner-stats",
+  INSTALLATION = 'installation',
+  DASHBOARD = 'dashboard',
+  MINING_INVENTORY = 'mining-inventory',
+  MEMPOOL = 'mempool',
+  DAG_VISUALIZATION = 'dag-visualization',
+  MINER_STATS = 'miner-stats',
 }
 
 const Dashboard = () => {
@@ -59,7 +59,7 @@ const Dashboard = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        console.log("🔄 Loading braid data...");
+        console.log('🔄 Loading braid data...');
         setLoading(true);
         setError(null);
 
@@ -70,10 +70,10 @@ const Dashboard = () => {
         const transformedData = transformBraidData(braidData);
 
         setData(transformedData);
-        console.log("✅ Data loaded successfully!");
+        console.log('✅ Data loaded successfully!');
       } catch (err) {
-        console.error("❌ Error loading data:", err);
-        setError("Failed to load data. Please try again later.");
+        console.error('❌ Error loading data:', err);
+        setError('Failed to load data. Please try again later.');
       } finally {
         setLoading(false);
       }
@@ -91,9 +91,9 @@ const Dashboard = () => {
     <Drawer
       variant="permanent"
       sx={{
-        display: { xs: "none", sm: "block" },
-        "& .MuiDrawer-paper": {
-          boxSizing: "border-box",
+        display: { xs: 'none', sm: 'block' },
+        '& .MuiDrawer-paper': {
+          boxSizing: 'border-box',
           width: drawerWidth,
           backgroundColor: colors.paper,
           borderRight: `1px solid ${colors.border}`,
@@ -117,9 +117,9 @@ const Dashboard = () => {
             borderLeft:
               currentPage === Page.INSTALLATION
                 ? `4px solid ${colors.primary}`
-                : "none",
-            "&.Mui-selected": {
-              backgroundColor: "rgba(57, 134, 232, 0.08)",
+                : 'none',
+            '&.Mui-selected': {
+              backgroundColor: 'rgba(57, 134, 232, 0.08)',
             },
           }}
         >
@@ -136,7 +136,7 @@ const Dashboard = () => {
           </ListItemIcon>
           <ListItemText
             primary="Installation"
-            primaryTypographyProps={{ fontSize: "0.875rem" }}
+            primaryTypographyProps={{ fontSize: '0.875rem' }}
           />
         </ListItemButton>
 
@@ -149,9 +149,9 @@ const Dashboard = () => {
             borderLeft:
               currentPage === Page.DASHBOARD
                 ? `4px solid ${colors.primary}`
-                : "none",
-            "&.Mui-selected": {
-              backgroundColor: "rgba(57, 134, 232, 0.08)",
+                : 'none',
+            '&.Mui-selected': {
+              backgroundColor: 'rgba(57, 134, 232, 0.08)',
             },
           }}
         >
@@ -168,7 +168,7 @@ const Dashboard = () => {
           </ListItemIcon>
           <ListItemText
             primary="Dashboard"
-            primaryTypographyProps={{ fontSize: "0.875rem" }}
+            primaryTypographyProps={{ fontSize: '0.875rem' }}
           />
         </ListItemButton>
         <ListItemButton
@@ -180,8 +180,8 @@ const Dashboard = () => {
             borderLeft:
               currentPage === Page.MINER_STATS
                 ? `4px solid ${colors.primary}`
-                : "none",
-            "&.Mui-selected": { backgroundColor: "rgba(57, 134, 232, 0.08)" },
+                : 'none',
+            '&.Mui-selected': { backgroundColor: 'rgba(57, 134, 232, 0.08)' },
           }}
         >
           <ListItemIcon
@@ -197,7 +197,7 @@ const Dashboard = () => {
           </ListItemIcon>
           <ListItemText
             primary="Miner Stats"
-            primaryTypographyProps={{ fontSize: "0.875rem" }}
+            primaryTypographyProps={{ fontSize: '0.875rem' }}
           />
         </ListItemButton>
 
@@ -210,9 +210,9 @@ const Dashboard = () => {
             borderLeft:
               currentPage === Page.MINING_INVENTORY
                 ? `4px solid ${colors.primary}`
-                : "none",
-            "&.Mui-selected": {
-              backgroundColor: "rgba(57, 134, 232, 0.08)",
+                : 'none',
+            '&.Mui-selected': {
+              backgroundColor: 'rgba(57, 134, 232, 0.08)',
             },
           }}
         >
@@ -229,7 +229,7 @@ const Dashboard = () => {
           </ListItemIcon>
           <ListItemText
             primary="Inventory"
-            primaryTypographyProps={{ fontSize: "0.875rem" }}
+            primaryTypographyProps={{ fontSize: '0.875rem' }}
           />
         </ListItemButton>
 
@@ -242,9 +242,9 @@ const Dashboard = () => {
             borderLeft:
               currentPage === Page.MEMPOOL
                 ? `4px solid ${colors.primary}`
-                : "none",
-            "&.Mui-selected": {
-              backgroundColor: "rgba(57, 134, 232, 0.08)",
+                : 'none',
+            '&.Mui-selected': {
+              backgroundColor: 'rgba(57, 134, 232, 0.08)',
             },
           }}
         >
@@ -261,7 +261,7 @@ const Dashboard = () => {
           </ListItemIcon>
           <ListItemText
             primary="Mempool"
-            primaryTypographyProps={{ fontSize: "0.875rem" }}
+            primaryTypographyProps={{ fontSize: '0.875rem' }}
           />
         </ListItemButton>
 
@@ -274,9 +274,9 @@ const Dashboard = () => {
             borderLeft:
               currentPage === Page.DAG_VISUALIZATION
                 ? `4px solid ${colors.primary}`
-                : "none",
-            "&.Mui-selected": {
-              backgroundColor: "rgba(57, 134, 232, 0.08)",
+                : 'none',
+            '&.Mui-selected': {
+              backgroundColor: 'rgba(57, 134, 232, 0.08)',
             },
           }}
         >
@@ -293,7 +293,7 @@ const Dashboard = () => {
           </ListItemIcon>
           <ListItemText
             primary="Visualize"
-            primaryTypographyProps={{ fontSize: "0.875rem" }}
+            primaryTypographyProps={{ fontSize: '0.875rem' }}
           />
         </ListItemButton>
       </List>
@@ -309,13 +309,13 @@ const Dashboard = () => {
         return (
           <>
             <TopStatsBar loading={loading} />
-            <Box sx={{ display: "flex", flexWrap: "wrap", mt: 2, mx: -1 }}>
-              <Box sx={{ width: { xs: "100%", md: "50%" }, p: 1 }}>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', mt: 2, mx: -1 }}>
+              <Box sx={{ width: { xs: '100%', md: '50%' }, p: 1 }}>
                 <Card title="Pool Hashrate">
                   <PoolHashrateChart loading={loading} />
                 </Card>
               </Box>
-              <Box sx={{ width: { xs: "100%", md: "50%" }, p: 1 }}>
+              <Box sx={{ width: { xs: '100%', md: '50%' }, p: 1 }}>
                 <Card title="Mempool Activity">
                   <MempoolLatencyStats />
                 </Card>
@@ -362,7 +362,7 @@ const Dashboard = () => {
   };
 
   return (
-    <Box sx={{ display: "flex", minHeight: "100vh" }}>
+    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
       <Header title="Braidpool" />
       {sidebar}
       <Box
@@ -372,7 +372,7 @@ const Dashboard = () => {
           p: 3,
           width: { sm: `calc(100% - ${drawerWidth}px)` },
           ml: { sm: `${drawerWidth}px` },
-          mt: "50px", // Adjust for header height
+          mt: '50px', // Adjust for header height
         }}
       >
         {renderPage()}

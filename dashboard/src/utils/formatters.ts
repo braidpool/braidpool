@@ -2,8 +2,8 @@
  * Formats a number with a specified number of decimal places
  */
 export const formatNumber = (value: number | string, decimals = 2): string => {
-  const num = typeof value === "string" ? parseFloat(value) : value;
-  return isNaN(num) ? "0" : num.toFixed(decimals);
+  const num = typeof value === 'string' ? parseFloat(value) : value;
+  return isNaN(num) ? '0' : num.toFixed(decimals);
 };
 
 /**
@@ -12,7 +12,7 @@ export const formatNumber = (value: number | string, decimals = 2): string => {
 export const formatWithUnit = (
   value: number | string,
   unit: string,
-  decimals = 2,
+  decimals = 2
 ): string => {
   return `${formatNumber(value, decimals)} ${unit}`;
 };
@@ -22,9 +22,9 @@ export const formatWithUnit = (
  */
 export const formatTime = (date: Date): string => {
   return date.toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
   });
 };
 
@@ -33,9 +33,9 @@ export const formatTime = (date: Date): string => {
  */
 export const formatDate = (date: Date): string => {
   return date.toLocaleDateString([], {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
   });
 };
 
@@ -43,7 +43,7 @@ export const formatDate = (date: Date): string => {
  * Formats a percentage value with a + or - sign
  */
 export const formatPercentage = (value: number): string => {
-  const sign = value > 0 ? "+" : "";
+  const sign = value > 0 ? '+' : '';
   return `${sign}${formatNumber(value * 100)}%`;
 };
 
@@ -51,11 +51,11 @@ export const formatPercentage = (value: number): string => {
  * Formats a dollar amount
  */
 export const formatCurrency = (value: number | string): string => {
-  const num = typeof value === "string" ? parseFloat(value) : value;
+  const num = typeof value === 'string' ? parseFloat(value) : value;
   return isNaN(num)
-    ? "$0.00"
-    : new Intl.NumberFormat("en-US", {
-        style: "currency",
-        currency: "USD",
+    ? '$0.00'
+    : new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
       }).format(num);
 };

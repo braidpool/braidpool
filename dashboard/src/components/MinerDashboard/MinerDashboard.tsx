@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
-import Particles from "./Particles";
-import Filters from "./Filters";
-import MinerTable from "./MinerTable";
-import MiningChart from "./MinerChart";
-import { motion } from "framer-motion";
+import { useState, useEffect } from 'react';
+import Particles from './Particles';
+import Filters from './Filters';
+import MinerTable from './MinerTable';
+import MiningChart from './MinerChart';
+import { motion } from 'framer-motion';
 
 export default function MinedSharesExplorer() {
   const [isLoaded, setIsLoaded] = useState(false);
@@ -36,7 +36,7 @@ export default function MinedSharesExplorer() {
       <motion.div
         initial={{ opacity: 0, y: -50, rotateX: -20 }}
         animate={{ opacity: 1, y: 0, rotateX: 0 }}
-        transition={{ duration: 0.8, type: "spring", bounce: 0.4 }}
+        transition={{ duration: 0.8, type: 'spring', bounce: 0.4 }}
         className="relative"
       >
         <h1 className="text-5xl font-bold mb-8 bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-purple-500 to-blue-500 drop-shadow-[0_0_15px_rgba(59,130,246,0.5)] tracking-tight">
@@ -45,7 +45,7 @@ export default function MinedSharesExplorer() {
         <motion.div
           className="h-1 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full"
           initial={{ width: 0, opacity: 0 }}
-          animate={{ width: "40%", opacity: 1 }}
+          animate={{ width: '40%', opacity: 1 }}
           transition={{ delay: 0.5, duration: 0.8 }}
         />
       </motion.div>
@@ -60,7 +60,7 @@ export default function MinedSharesExplorer() {
       <motion.div
         initial={{ opacity: 0, x: -30 }}
         animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.6, delay: 0.5, type: "spring" }}
+        transition={{ duration: 0.6, delay: 0.5, type: 'spring' }}
         className="relative"
       >
         <h2 className="text-3xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-purple-500 to-blue-500 drop-shadow-[0_0_10px_rgba(59,130,246,0.5)]">
@@ -68,7 +68,7 @@ export default function MinedSharesExplorer() {
         </h2>
         <motion.div
           className="h-1 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full w-0"
-          animate={{ width: "30%", opacity: [0, 1] }}
+          animate={{ width: '30%', opacity: [0, 1] }}
           transition={{ delay: 0.7, duration: 0.6 }}
         />
       </motion.div>
