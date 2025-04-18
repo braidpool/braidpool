@@ -34,7 +34,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest",
-    "prepare": "husky"
+    "prepare": "cd .. && husky dashboard/.husky"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.3",

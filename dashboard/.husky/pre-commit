@@ -1,1 +1,2 @@
+cd dashboard
 npx prettier --write .
