@@ -3,9 +3,9 @@ import {
   BraidNode,
   BraidLink,
   BraidVisualizationData,
-} from '../types/braid';
+} from "../types/braid";
 // Import the JSON data directly
-import sampleBraidDataRaw from '../data/my_test_braid.json';
+import sampleBraidDataRaw from "../data/my_test_braid.json";
 
 export const transformBraidData = (data: BraidData): BraidVisualizationData => {
   const nodes: BraidNode[] = [];
@@ -53,14 +53,14 @@ export const transformBraidData = (data: BraidData): BraidVisualizationData => {
   links.forEach((link) => {
     if (
       highWorkPath.some(
-        (pair) => pair[0] === link.target && pair[1] === link.source
+        (pair) => pair[0] === link.target && pair[1] === link.source,
       )
     ) {
       link.isHighWorkPath = true;
     }
   });
 
-  console.log('📊 Transformed data:', {
+  console.log("📊 Transformed data:", {
     nodes: nodes.length,
     links: links.length,
     cohorts: data.cohorts.length,
@@ -100,11 +100,11 @@ const calculateHighWorkPath = (data: BraidData): [number, number][] => {
 export const loadSampleBraidData = async (): Promise<BraidData> => {
   // Using the imported JSON file directly
   try {
-    console.log('🔄 Loading sample braid data...');
+    console.log("🔄 Loading sample braid data...");
 
     // Create a typed copy of the imported data
     const sampleData = JSON.parse(
-      JSON.stringify(sampleBraidDataRaw)
+      JSON.stringify(sampleBraidDataRaw),
     ) as BraidData;
 
     // Ensure we have cohorts and tips
@@ -120,7 +120,7 @@ export const loadSampleBraidData = async (): Promise<BraidData> => {
       sampleData.tips = findTips(sampleData.parents, sampleData.children);
     }
 
-    console.log('✅ Sample data loaded successfully!', {
+    console.log("✅ Sample data loaded successfully!", {
       beads: Object.keys(sampleData.parents).length,
       cohorts: sampleData.cohorts.length,
       tips: sampleData.tips.length,
@@ -128,15 +128,15 @@ export const loadSampleBraidData = async (): Promise<BraidData> => {
 
     return sampleData;
   } catch (error) {
-    console.error('❌ Error loading sample data:', error);
-    throw new Error('Failed to load sample braid data');
+    console.error("❌ Error loading sample data:", error);
+    throw new Error("Failed to load sample braid data");
   }
 };
 
 // Utility function to find tips (nodes with no children)
 const findTips = (
   parents: Record<string, number[]>,
-  children: Record<string, number[]>
+  children: Record<string, number[]>,
 ): number[] => {
   return Object.keys(parents)
     .filter((id) => !children[id] || children[id].length === 0)
@@ -162,7 +162,7 @@ const generateCohorts = (parents: Record<string, number[]>): number[][] => {
 
     // If all parents are processed, add to current cohort
     const allParentsProcessed = parentIds.every((parentId) =>
-      processed.has(parentId)
+      processed.has(parentId),
     );
 
     if (allParentsProcessed) {

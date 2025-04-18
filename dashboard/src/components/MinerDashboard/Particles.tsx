@@ -1,4 +1,4 @@
-import { motion, AnimatePresence } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function Particles() {
   return (
@@ -7,14 +7,14 @@ export default function Particles() {
         <Particle key={i} delay={i * 0.5} />
       ))}
     </>
-  )
+  );
 }
 
 function Particle({ delay = 0 }: { delay?: number }) {
-  const randomX = Math.random() * 100
-  const randomSize = Math.random() * 3 + 1
-  const randomDuration = Math.random() * 10 + 15
-  const randomOpacity = Math.random() * 0.5 + 0.1
+  const randomX = Math.random() * 100;
+  const randomSize = Math.random() * 3 + 1;
+  const randomDuration = Math.random() * 10 + 15;
+  const randomOpacity = Math.random() * 0.5 + 0.1;
 
   return (
     <motion.div
@@ -37,5 +37,5 @@ function Particle({ delay = 0 }: { delay?: number }) {
         ease: "linear",
       }}
     />
-  )
+  );
 }

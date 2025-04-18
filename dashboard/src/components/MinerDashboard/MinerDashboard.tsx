@@ -1,30 +1,28 @@
-
-
-import { useState, useEffect } from "react"
-import Particles from "./Particles"
-import Filters from "./Filters"
-import MinerTable from "./MinerTable"
-import MiningChart from "./MinerChart"
-import {motion} from "framer-motion"
+import { useState, useEffect } from "react";
+import Particles from "./Particles";
+import Filters from "./Filters";
+import MinerTable from "./MinerTable";
+import MiningChart from "./MinerChart";
+import { motion } from "framer-motion";
 
 export default function MinedSharesExplorer() {
-  const [isLoaded, setIsLoaded] = useState(false)
-  const [showParticles, setShowParticles] = useState(false)
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [showParticles, setShowParticles] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      setIsLoaded(true)
-    }, 800)
+      setIsLoaded(true);
+    }, 800);
 
     const particleTimer = setTimeout(() => {
-      setShowParticles(true)
-    }, 1500)
+      setShowParticles(true);
+    }, 1500);
 
     return () => {
-      clearTimeout(timer)
-      clearTimeout(particleTimer)
-    }
-  }, [])
+      clearTimeout(timer);
+      clearTimeout(particleTimer);
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-[#0a0b1e] to-black text-white p-6 overflow-hidden relative perspective-1000">
@@ -78,5 +76,5 @@ export default function MinedSharesExplorer() {
       {/* Chart section */}
       <MiningChart isLoaded={isLoaded} />
     </div>
-  )
+  );
 }

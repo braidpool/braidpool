@@ -17,12 +17,13 @@ interface MinerData {
   }[];
 }
 
-
 export default function MinerTable({ isLoaded }: MinerTableProps) {
-  const [expandedMiners, setExpandedMiners] = useState<Record<string, boolean>>({
-    miner1: true,
-    miner2: false,
-  });
+  const [expandedMiners, setExpandedMiners] = useState<Record<string, boolean>>(
+    {
+      miner1: true,
+      miner2: false,
+    },
+  );
   const [activeMiner, setActiveMiner] = useState<string | null>(null);
 
   // Mock data - in a real app, this would come from props or API
@@ -32,9 +33,21 @@ export default function MinerTable({ isLoaded }: MinerTableProps) {
       timestamp: "2025-04-15 14:23",
       transactionCount: 5,
       transactions: [
-        { hash: "f68b21db...de3b0803", timestamp: "2025-04-15 14:23", count: 12 },
-        { hash: "964aebde...4813c0a6", timestamp: "2025-04-15 14:33", count: 7 },
-        { hash: "2c1a7f84...477aec04", timestamp: "2025-04-30 09:17", count: 12 },
+        {
+          hash: "f68b21db...de3b0803",
+          timestamp: "2025-04-15 14:23",
+          count: 12,
+        },
+        {
+          hash: "964aebde...4813c0a6",
+          timestamp: "2025-04-15 14:33",
+          count: 7,
+        },
+        {
+          hash: "2c1a7f84...477aec04",
+          timestamp: "2025-04-30 09:17",
+          count: 12,
+        },
       ],
     },
     miner2: {
@@ -42,8 +55,16 @@ export default function MinerTable({ isLoaded }: MinerTableProps) {
       timestamp: "2025-04-30 09:17",
       transactionCount: 9,
       transactions: [
-        { hash: "a1b2c3d4...e5f6g7h8", timestamp: "2025-04-30 09:17", count: 8 },
-        { hash: "i9j0k1l2...m3n4o5p6", timestamp: "2025-04-30 10:45", count: 5 },
+        {
+          hash: "a1b2c3d4...e5f6g7h8",
+          timestamp: "2025-04-30 09:17",
+          count: 8,
+        },
+        {
+          hash: "i9j0k1l2...m3n4o5p6",
+          timestamp: "2025-04-30 10:45",
+          count: 5,
+        },
       ],
     },
   };
@@ -81,8 +102,12 @@ export default function MinerTable({ isLoaded }: MinerTableProps) {
           }}
         />
         <div className="text-blue-200 font-semibold relative z-10">Miner</div>
-        <div className="text-blue-200 font-semibold relative z-10">Timestamp</div>
-        <div className="text-blue-200 font-semibold relative z-10">Transactions</div>
+        <div className="text-blue-200 font-semibold relative z-10">
+          Timestamp
+        </div>
+        <div className="text-blue-200 font-semibold relative z-10">
+          Transactions
+        </div>
       </div>
 
       {/* Loading state */}
@@ -97,16 +122,24 @@ export default function MinerTable({ isLoaded }: MinerTableProps) {
       {isLoaded && (
         <>
           {Object.entries(minersData).map(([minerId, miner]) => (
-            <div key={minerId} className={minerId === "miner1" ? "border-b border-gray-800/80" : ""}>
+            <div
+              key={minerId}
+              className={
+                minerId === "miner1" ? "border-b border-gray-800/80" : ""
+              }
+            >
               <MinerRow
                 miner={minerId}
                 expanded={!!expandedMiners[minerId]}
                 active={activeMiner === minerId}
                 timestamp={miner.timestamp}
-                transactionCount={miner.transactions.reduce((acc, curr) => acc + curr.count, 0)}
+                transactionCount={miner.transactions.reduce(
+                  (acc, curr) => acc + curr.count,
+                  0,
+                )}
                 onToggle={toggleMiner}
               />
-              
+
               <AnimatePresence>
                 {expandedMiners[minerId] && (
                   <ExpandedMinerContent transactions={miner.transactions} />
@@ -135,7 +168,7 @@ function MinerRow({
   active,
   timestamp,
   transactionCount,
-  onToggle
+  onToggle,
 }: MinerRowProps) {
   return (
     <motion.div
@@ -177,7 +210,11 @@ function MinerRow({
         </motion.span>
 
         {expanded && (
-          <motion.div initial={{ opacity: 0, scale: 0 }} animate={{ opacity: 1, scale: 1 }} className="ml-2">
+          <motion.div
+            initial={{ opacity: 0, scale: 0 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="ml-2"
+          >
             <Zap className="h-4 w-4 text-yellow-400" />
           </motion.div>
         )}
@@ -209,7 +246,12 @@ function ExpandedMinerContent({ transactions }: ExpandedMinerContentProps) {
       initial={{ height: 0, opacity: 0 }}
       animate={{ height: "auto", opacity: 1 }}
       exit={{ height: 0, opacity: 0 }}
-      transition={{ duration: 0.5, type: "spring", stiffness: 100, damping: 15 }}
+      transition={{
+        duration: 0.5,
+        type: "spring",
+        stiffness: 100,
+        damping: 15,
+      }}
       className="overflow-hidden"
     >
       <div className="pl-10 pr-4 pb-3 bg-gradient-to-b from-blue-900/20 to-transparent">
@@ -258,7 +300,12 @@ interface TransactionRowProps {
   delay: number;
 }
 
-function TransactionRow({ hash, timestamp, count, delay }: TransactionRowProps) {
+function TransactionRow({
+  hash,
+  timestamp,
+  count,
+  delay,
+}: TransactionRowProps) {
   return (
     <motion.div
       variants={{
@@ -282,7 +329,10 @@ function TransactionRow({ hash, timestamp, count, delay }: TransactionRowProps) 
         {timestamp}
       </div>
       <div className="text-purple-300 font-medium relative z-10 group-hover:text-purple-200 transition-colors duration-300">
-        <motion.span whileHover={{ scale: 1.2 }} transition={{ type: "spring", stiffness: 400 }}>
+        <motion.span
+          whileHover={{ scale: 1.2 }}
+          transition={{ type: "spring", stiffness: 400 }}
+        >
           {count}
         </motion.span>
       </div>

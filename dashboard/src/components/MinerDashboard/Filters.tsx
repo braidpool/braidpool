@@ -1,12 +1,12 @@
-import { useState } from "react"
-import { motion } from "framer-motion"
-import { ChevronDown, Calendar, Search } from "lucide-react"
+import { useState } from "react";
+import { motion } from "framer-motion";
+import { ChevronDown, Calendar, Search } from "lucide-react";
 
 export default function Filters() {
-  const [miner, setMiner] = useState("")
-  const [timestamp, setTimestamp] = useState("2021-08-01")
-  const [transactions, setTransactions] = useState("2021-08-31")
-  const [search, setSearch] = useState("")
+  const [miner, setMiner] = useState("");
+  const [timestamp, setTimestamp] = useState("2021-08-01");
+  const [transactions, setTransactions] = useState("2021-08-31");
+  const [search, setSearch] = useState("");
 
   return (
     <motion.div
@@ -23,7 +23,12 @@ export default function Filters() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
         {/* Miner filter */}
         <div>
-          <label htmlFor="miner-select" className="block mb-2 text-blue-300 font-medium">Miner</label>
+          <label
+            htmlFor="miner-select"
+            className="block mb-2 text-blue-300 font-medium"
+          >
+            Miner
+          </label>
           <div className="relative group">
             <select
               id="miner-select"
@@ -39,7 +44,11 @@ export default function Filters() {
             <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
               <motion.div
                 animate={{ y: [0, 2, 0] }}
-                transition={{ duration: 1.5, repeat: Infinity, repeatType: "reverse" }}
+                transition={{
+                  duration: 1.5,
+                  repeat: Infinity,
+                  repeatType: "reverse",
+                }}
               >
                 <ChevronDown className="h-4 w-4 text-blue-400" />
               </motion.div>
@@ -55,7 +64,12 @@ export default function Filters() {
 
         {/* Timestamp filter */}
         <div>
-          <label htmlFor="timestamp" className="block mb-2 text-blue-300 font-medium">Timestamp</label>
+          <label
+            htmlFor="timestamp"
+            className="block mb-2 text-blue-300 font-medium"
+          >
+            Timestamp
+          </label>
           <div className="relative group">
             <input
               id="timestamp"
@@ -65,7 +79,10 @@ export default function Filters() {
               className="w-full bg-gray-900/80 border border-gray-700/80 rounded-lg p-2.5 pr-8 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 transition-all duration-300 group-hover:border-blue-400/70"
             />
             <div className="absolute inset-y-0 right-0 flex items-center pr-2">
-              <motion.div whileHover={{ rotate: 15, scale: 1.1 }} transition={{ type: "spring", stiffness: 300 }}>
+              <motion.div
+                whileHover={{ rotate: 15, scale: 1.1 }}
+                transition={{ type: "spring", stiffness: 300 }}
+              >
                 <Calendar className="h-4 w-4 text-blue-400" />
               </motion.div>
             </div>
@@ -80,7 +97,12 @@ export default function Filters() {
 
         {/* Transactions filter */}
         <div>
-          <label htmlFor="transactions" className="block mb-2 text-blue-300 font-medium">Transactions</label>
+          <label
+            htmlFor="transactions"
+            className="block mb-2 text-blue-300 font-medium"
+          >
+            Transactions
+          </label>
           <div className="relative group">
             <input
               id="transactions"
@@ -100,7 +122,12 @@ export default function Filters() {
 
         {/* Search filter */}
         <div>
-          <label htmlFor="search" className="block mb-2 text-blue-300 font-medium">Search...</label>
+          <label
+            htmlFor="search"
+            className="block mb-2 text-blue-300 font-medium"
+          >
+            Search...
+          </label>
           <div className="relative group">
             <input
               id="search"
@@ -113,7 +140,11 @@ export default function Filters() {
             <div className="absolute inset-y-0 left-0 flex items-center pl-2.5">
               <motion.div
                 animate={{ scale: [1, 1.1, 1] }}
-                transition={{ duration: 2, repeat: Infinity, repeatType: "reverse" }}
+                transition={{
+                  duration: 2,
+                  repeat: Infinity,
+                  repeatType: "reverse",
+                }}
               >
                 <Search className="h-4 w-4 text-blue-400" />
               </motion.div>
@@ -128,5 +159,5 @@ export default function Filters() {
         </div>
       </div>
     </motion.div>
-  )
+  );
 }
