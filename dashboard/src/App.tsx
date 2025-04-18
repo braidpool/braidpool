@@ -8,6 +8,7 @@ import ShareDetails from './components/ShareDetails/ShareDetails';
 import MinedSharesExplorer from './components/MinerDashboard/MinerDashboard';
 // Create a dark theme
 
+
 const theme = createTheme({
   palette: {
     mode: 'dark',
