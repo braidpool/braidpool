@@ -1,2 +1,2 @@
-# cd dashboard
-# npm run lint
+cd dashboard
+npm run lint
