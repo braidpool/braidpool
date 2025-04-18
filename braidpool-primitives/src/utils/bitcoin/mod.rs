@@ -15,9 +15,7 @@ pub struct MerklePathProof {
 }
 
 impl MerklePathProof {
-    // All public functions go here!
     pub fn calculate_corresponding_merkle_root(&self) -> MerkleRoot {
-        // Handle left and right leaf situations!
         let hashing_order = self.get_merkle_hashing_order();
         let mut concatenated_hashes: Vec<u8> = Vec::new();
         for hash in hashing_order.iter() {
