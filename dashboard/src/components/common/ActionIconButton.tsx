@@ -18,23 +18,26 @@ const ActionIconButton: React.FC<ActionIconButtonProps> = ({
 }) => {
   return (
     <IconButton
-      size='small'
-      onClick={onClick}
-      sx={{
-        color: '#000',
-        bgcolor: colors.accent,
-        p: 1,
-        width: 34,
-        height: 34,
-        boxShadow: '0 1px 2px rgba(0,0,0,0.3)',
-        '&:hover': {
-          bgcolor: colors.accentDark,
-          boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
-        },
-        ...sx,
-      }}>
-      {icon}
-    </IconButton>
+    size="small"
+    onClick={onClick}
+    sx={{
+      color: 'white',
+      background: '	#36454F',
+      p: 1,
+      width: 34,
+      height: 34,
+      boxShadow: '0 1px 2px rgba(0,0,0,0.3)',
+      '&:hover': {
+      
+        boxShadow: '0 2px 4px rgba(0,0,0,0.4)',
+      },
+      ...sx,
+    }}
+  >
+    {React.cloneElement(icon, { style: { color: 'inherit' } })}
+  </IconButton>
+  
+
   );
 };
 
