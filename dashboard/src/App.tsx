@@ -6,10 +6,8 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Dashboard from './components/Dashboard/Dashboard';
 import ShareDetails from './components/ShareDetails/ShareDetails';
 import MinedSharesExplorer from './components/MinerDashboard/MinerDashboard';
-
 // Create a dark theme
-const theme = createTheme({
-  palette: {
+const theme = createTheme({  palette: {
     mode: 'dark',
     primary: {
       main: '#3986e8',
