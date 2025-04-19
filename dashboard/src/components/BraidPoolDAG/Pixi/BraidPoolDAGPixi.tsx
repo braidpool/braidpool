@@ -202,9 +202,10 @@ const GraphVisualizationPixi: React.FC<{ debug?: boolean }> = ({
         console.log(
           '🔍 [PIXI-Debug] Container became visible, forcing PIXI render'
         );
-        setTimeout(() => {
+        if (pixi && pixi.renderer) {
+          console.log('🔄 Forcing render after container visibility change');
           pixi.render();
-        }, 100);
+        }
       }
     }
   }, [pixi]);

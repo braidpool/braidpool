@@ -296,38 +296,103 @@ const PixiRenderer: React.FC<PixiRendererProps> = ({
         handleNodeClick
       );
 
-      // Add this block: Position view to show the entire graph
-      if (nodeCount > 0 && (nodesContainerRef.current as any).graphBoundaries) {
-        const bounds = (nodesContainerRef.current as any).graphBoundaries;
-        const graphWidth = (nodesContainerRef.current as any).graphWidth;
-        const graphHeight = (nodesContainerRef.current as any).graphHeight;
+      // Calculate bounds of the entire graph to position camera
+      if (nodeCount > 0) {
+        console.log('🔍 Attempting to position viewport to show graph');
+
+        // Find the bounds of all nodes
+        let minX = Infinity,
+          minY = Infinity;
+        let maxX = -Infinity,
+          maxY = -Infinity;
+
+        Object.values(positions).forEach((pos) => {
+          minX = Math.min(minX, pos.x);
+          minY = Math.min(minY, pos.y);
+          maxX = Math.max(maxX, pos.x);
+          maxY = Math.max(maxY, pos.y);
+        });
+
+        console.log(
+          `📏 Original graph bounds: (${minX},${minY}) to (${maxX},${maxY})`
+        );
+
+        // IMPORTANT: Check if the graph is too wide (which causes extreme scaling)
+        const graphWidth = maxX - minX + 100;
+        const graphHeight = maxY - minY + 100;
+
+        // If width is extremely large compared to height, compress the layout
+        const compressionNeeded = graphWidth > 10000;
+        if (compressionNeeded) {
+          console.log(
+            `⚠️ Graph is extremely wide (${graphWidth}px), compressing x-coordinates`
+          );
+
+          // Compress all positions to a reasonable range
+          const targetWidth = 3000; // A more reasonable width
+          const compressionFactor = targetWidth / graphWidth;
+
+          Object.keys(positions).forEach((nodeId) => {
+            // Compress x coordinates only
+            positions[nodeId].x =
+              minX + (positions[nodeId].x - minX) * compressionFactor;
+          });
+
+          // Recalculate bounds after compression
+          minX = Infinity;
+          minY = Infinity;
+          maxX = -Infinity;
+          maxY = -Infinity;
+
+          Object.values(positions).forEach((pos) => {
+            minX = Math.min(minX, pos.x);
+            minY = Math.min(minY, pos.y);
+            maxX = Math.max(maxX, pos.x);
+            maxY = Math.max(maxY, pos.y);
+          });
+
+          console.log(
+            `📏 Compressed graph bounds: (${minX},${minY}) to (${maxX},${maxY})`
+          );
+        }
+
+        // Calculate dimensions with potentially compressed coordinates
+        const finalGraphWidth = maxX - minX + 100;
+        const finalGraphHeight = maxY - minY + 100;
 
         // Get the parent container
-        const mainContainer = nodesContainerRef.current.parent;
+        const mainContainer = nodesContainerRef.current?.parent;
 
         if (mainContainer) {
-          console.log(`🔍 [PIXI] Positioning viewport to show graph`);
+          // Reset position and scale first
+          mainContainer.position.set(0, 0);
+          mainContainer.scale.set(1);
 
-          // Calculate optimal scale to fit
-          const scaleX = (width * 0.8) / graphWidth;
-          const scaleY = (height * 0.8) / graphHeight;
-          const scale = Math.min(scaleX, scaleY, 1.0); // Limit max scale to 1.0
+          // Calculate optimal scale to fit within viewport
+          const scaleX = width / finalGraphWidth;
+          const scaleY = height / finalGraphHeight;
+          const scale = Math.min(scaleX, scaleY, 0.9); // Limit max scale to 0.9
 
           // Apply scale
           mainContainer.scale.set(scale);
 
           // Center graph in viewport
-          const centerX = bounds.minX + graphWidth / 2;
-          const centerY = bounds.minY + graphHeight / 2;
+          const centerX = minX + finalGraphWidth / 2;
+          const centerY = minY + finalGraphHeight / 2;
 
           // Set position (accounting for scale)
           mainContainer.position.x = width / 2 - centerX * scale;
           mainContainer.position.y = height / 2 - centerY * scale;
 
           console.log(
-            `🎯 [PIXI] Viewport positioned: scale=${scale}, pos=(${mainContainer.position.x}, ${mainContainer.position.y})`
+            `🎯 Positioned viewport: scale=${scale}, pos=(${mainContainer.position.x}, ${mainContainer.position.y})`
           );
         }
+      }
+
+      // Force a render ONLY if pixiApp exists
+      if (pixiApp && pixiApp.renderer) {
+        pixiApp.render();
       }
 
       // Update metrics
@@ -345,8 +410,6 @@ const PixiRenderer: React.FC<PixiRendererProps> = ({
         edgesRendered: edgeCount,
       }));
 
-      // Render scene
-      pixiApp.render();
       console.log(`✅ [PIXI] Graph rendered in ${renderTime.toFixed(2)}ms`);
     } catch (err) {
       console.error('❌ [PIXI] Error rendering graph:', err);
