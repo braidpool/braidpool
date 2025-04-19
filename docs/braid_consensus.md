@@ -82,7 +82,7 @@ difficulty $x$:
 $$\tag{1}
 \begin{align}
 P(t,k)
-%= \operatorname{Pois}(t\lambda x)
+%= {\rm Pois}(t\lambda x)
 = \frac{(t \lambda x)^k e^{-t \lambda x}}{k!}
 \end{align}
 $$
@@ -95,7 +95,7 @@ beads is thus a Poisson process
 
 $$\tag{2}
 \begin{align}
-N_B = \operatorname{Pois}(\mu_B) \qquad {\rm with} \qquad \mu_B = t\lambda x.
+N_B = {\rm Pois}(\mu_B) \qquad {\rm with} \qquad \mu_B = t\lambda x.
 \end{align}
 $$
 
@@ -108,7 +108,7 @@ time window $t$ is therefore
 
 $$\tag{3}
 \begin{align}
-N_C = \operatorname{Pois}(\mu_C)
+N_C = {\rm Pois}(\mu_C)
 \qquad {\rm with} \qquad \mu_C = t\lambda x p = e^{-a\lambda x} \mu_B.
 \end{align}
 $$
