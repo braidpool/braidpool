@@ -1,0 +1,31 @@
+.dashboard {
+  text-align: center;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-header {
+  background-color: #f8f9fa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.dashboard-logo {
+  margin-right: 1rem;
+}
+
+.dashboard-title {
+  font-size: 1.8rem;
+  color: #0077b6;
+  margin: 0;
+}
+
+.dashboard-content {
+  flex: 1;
+  padding: 1rem;
+  background-color: #ffffff;
+}

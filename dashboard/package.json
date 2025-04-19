@@ -23,6 +23,8 @@
     "d3": "^7.9.0",
     "framer-motion": "^12.6.5",
     "lucide-react": "^0.487.0",
+    "pixi-viewport": "^6.0.3",
+    "pixi.js": "^8.9.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.4.1",
