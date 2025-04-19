@@ -22,3 +22,4 @@ notes/
 venv
 *~
 .aider*
+.cursor/
