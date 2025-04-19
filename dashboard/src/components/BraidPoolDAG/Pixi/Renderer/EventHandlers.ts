@@ -15,134 +15,87 @@ interface InteractionState {
 /**
  * Sets up all mouse events for panning and zooming
  * @param canvas Canvas element for event binding
- * @param container PIXI container for transformations
+ * @param app PIXI application for transformations
  * @returns Cleanup function to remove event listeners
  */
-export const setupMouseEvents = (
+export function setupMouseEvents(
   canvas: HTMLCanvasElement,
-  container: PIXI.Container
-) => {
-  // Initialize interaction state
-  const state: InteractionState = {
-    dragging: false,
-    lastPosition: { x: 0, y: 0 },
-    scale: container.scale.x || 0.25,
-    minScale: 0.1,
-    maxScale: 5.0,
-    zoomSpeed: 1.1,
-  };
+  app: PIXI.Application
+) {
+  console.log('🖱️ Setting up mouse events on canvas');
 
-  // Event handlers optimized for performance
-  const handleWheel = (event: WheelEvent) => {
-    event.preventDefault();
+  let isDragging = false;
+  let lastPosition = { x: 0, y: 0 };
 
-    // Determine zoom direction
-    const delta = event.deltaY > 0 ? 1 / state.zoomSpeed : state.zoomSpeed;
+  // Zoom functionality
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
 
-    // Apply zoom with limits
-    state.scale *= delta;
-    state.scale = Math.max(
-      state.minScale,
-      Math.min(state.scale, state.maxScale)
+    // Get mouse position
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    // Get zoom direction
+    const zoomDirection = e.deltaY < 0 ? 1 : -1;
+    const zoomFactor = 1 + zoomDirection * 0.1;
+
+    // Get position before zoom
+    const worldPos = {
+      x: (mouseX - app.stage.position.x) / app.stage.scale.x,
+      y: (mouseY - app.stage.position.y) / app.stage.scale.y,
+    };
+
+    // Apply zoom (limit scale between 0.1 and 3.0)
+    const newScale = Math.max(
+      0.1,
+      Math.min(3.0, app.stage.scale.x * zoomFactor)
     );
+    app.stage.scale.set(newScale);
 
-    // Update container scale
-    container.scale.set(state.scale);
+    // Adjust position to zoom toward mouse
+    app.stage.position.x = mouseX - worldPos.x * newScale;
+    app.stage.position.y = mouseY - worldPos.y * newScale;
 
-    // Optional: Zoom toward mouse position
-    // This would require more complex calculations
-  };
+    // Render the changes
+    app.render();
+    console.log(`🔍 Zoom: ${newScale.toFixed(2)}`);
+  });
 
-  const handleMouseDown = (event: MouseEvent) => {
-    state.dragging = true;
-    state.lastPosition.x = event.clientX;
-    state.lastPosition.y = event.clientY;
+  // Pan functionality
+  canvas.addEventListener('mousedown', (e) => {
+    isDragging = true;
+    lastPosition = { x: e.clientX, y: e.clientY };
+    canvas.style.cursor = 'grabbing';
+  });
 
-    // Change cursor to indicate grabbing
-    if (canvas.style) {
-      canvas.style.cursor = 'grabbing';
+  canvas.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+
+    const dx = e.clientX - lastPosition.x;
+    const dy = e.clientY - lastPosition.y;
+
+    app.stage.position.x += dx;
+    app.stage.position.y += dy;
+
+    lastPosition = { x: e.clientX, y: e.clientY };
+
+    // Render the changes
+    app.render();
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (isDragging) {
+      isDragging = false;
+      canvas.style.cursor = 'grab';
     }
-  };
+  });
 
-  const handleMouseMove = (event: MouseEvent) => {
-    if (!state.dragging) return;
+  // Set initial cursor
+  canvas.style.cursor = 'grab';
 
-    // Calculate drag distance
-    const dx = event.clientX - state.lastPosition.x;
-    const dy = event.clientY - state.lastPosition.y;
-
-    // Apply movement, adjusted for scale
-    container.position.x += dx / state.scale;
-    container.position.y += dy / state.scale;
-
-    // Update last position for next move
-    state.lastPosition.x = event.clientX;
-    state.lastPosition.y = event.clientY;
-  };
-
-  const handleMouseEnd = () => {
-    state.dragging = false;
-
-    // Reset cursor
-    if (canvas.style) {
-      canvas.style.cursor = 'pointer';
-    }
-  };
-
-  // Add touch support
-  const handleTouchStart = (event: TouchEvent) => {
-    if (event.touches.length === 1) {
-      event.preventDefault();
-      state.dragging = true;
-      state.lastPosition.x = event.touches[0].clientX;
-      state.lastPosition.y = event.touches[0].clientY;
-    }
-  };
-
-  const handleTouchMove = (event: TouchEvent) => {
-    if (!state.dragging || event.touches.length !== 1) return;
-
-    const touch = event.touches[0];
-    const dx = touch.clientX - state.lastPosition.x;
-    const dy = touch.clientY - state.lastPosition.y;
-
-    container.position.x += dx / state.scale;
-    container.position.y += dy / state.scale;
-
-    state.lastPosition.x = touch.clientX;
-    state.lastPosition.y = touch.clientY;
-  };
-
-  const handleTouchEnd = () => {
-    state.dragging = false;
-  };
-
-  // Attach all event listeners
-  canvas.addEventListener('wheel', handleWheel, { passive: false });
-  canvas.addEventListener('mousedown', handleMouseDown);
-  canvas.addEventListener('mousemove', handleMouseMove);
-  canvas.addEventListener('mouseup', handleMouseEnd);
-  canvas.addEventListener('mouseleave', handleMouseEnd);
-
-  // Touch events
-  canvas.addEventListener('touchstart', handleTouchStart);
-  canvas.addEventListener('touchmove', handleTouchMove);
-  canvas.addEventListener('touchend', handleTouchEnd);
-
-  // Return cleanup function
-  return () => {
-    // Remove all event listeners when done
-    canvas.removeEventListener('wheel', handleWheel);
-    canvas.removeEventListener('mousedown', handleMouseDown);
-    canvas.removeEventListener('mousemove', handleMouseMove);
-    canvas.removeEventListener('mouseup', handleMouseEnd);
-    canvas.removeEventListener('mouseleave', handleMouseEnd);
-
-    canvas.removeEventListener('touchstart', handleTouchStart);
-    canvas.removeEventListener('touchmove', handleTouchMove);
-    canvas.removeEventListener('touchend', handleTouchEnd);
-  };
-};
+  console.log('✅ Mouse events setup complete');
+}
 
 /**
  * Sets up interactivity on PIXI nodes

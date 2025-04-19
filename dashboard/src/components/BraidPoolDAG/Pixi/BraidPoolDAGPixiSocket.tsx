@@ -346,38 +346,26 @@ const BraidPoolDAGPixiSocket: React.FC<BraidPoolDAGPixiSocketProps> = ({
 
   // Update the connection retry method to match the working implementation
   const trySocketConnection = () => {
-    const url = 'http://french.braidpool.net:65433/';
-    debugLog(`🔄 [PixiSocket] Trying direct websocket connection`);
+    debugLog(`🔄 [PixiSocket] Trying connection with polling`);
 
     // Show attempting status
     setConnectionStatus({
       connected: false,
       status: 'Retrying',
-      message: 'Attempting to reconnect via websocket...',
+      message: 'Attempting to connect via polling...',
     });
 
-    // First disconnect any existing socket
-    if (socketRef.current) {
-      try {
-        socketRef.current.disconnect();
-      } catch (e) {
-        console.error('Error disconnecting socket:', e);
-      }
-      socketRef.current = null;
-    }
-
-    // Create new socket with websocket transport ONLY
-    socketRef.current = io(url, {
-      transports: ['websocket'], // Force websocket only
-      forceNew: true,
+    // Force polling transport for reliability
+    socketRef.current = io(getSocketUrl(), {
+      transports: ['polling'], // Polling only - no WebSocket
+      forceNew: true, // Force a new connection
       reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
+      reconnectionAttempts: 8,
+      reconnectionDelay: 2000,
       timeout: 20000,
-      withCredentials: false, // Disable credentials
     });
 
-    console.log('🔌 Attempting connection with WEBSOCKET transport only');
+    console.log('🔌 Attempting connection with POLLING transport only');
 
     // Rest of your event handlers...
   };

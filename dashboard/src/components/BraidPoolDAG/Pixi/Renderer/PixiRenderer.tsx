@@ -102,244 +102,110 @@ const PixiRenderer: React.FC<PixiRendererProps> = ({
     canvas.style.height = `${canvas.height}px`;
     canvas.style.display = 'block';
 
-    // Add a visible test shape to verify rendering works
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      // Draw a visible test rectangle - should be overwritten by PIXI
-      ctx.fillStyle = 'rgba(255,0,0,0.5)';
-      ctx.fillRect(0, 0, 100, 100);
-      console.log(`🧪 [PIXI] Drew test shape on canvas before PIXI init`);
-    }
+    // Attach canvas to DOM
+    attachCanvasToContainer(canvas, containerElement);
 
-    // Test WebGL context
-    const glContext = debugWebGLContext(canvas);
-    if (!glContext) {
-      setDebugInfo((prev) => ({
-        ...prev,
-        lastError: 'WebGL context creation failed',
-      }));
-      console.error(
-        '❌ [PIXI] WebGL context creation failed, canvas may not render'
-      );
-    }
+    // Update debug info
+    setDebugInfo((prev) => ({
+      ...prev,
+      canvasAttached: true,
+    }));
 
-    // Attach canvas to container
-    const attached = attachCanvasToContainer(canvas, containerElement);
-    setDebugInfo((prev) => ({ ...prev, canvasAttached: attached }));
+    console.log('📌 Canvas attached to container');
 
-    // Ensure canvas is visible
-    ensureCanvasVisibility(canvas);
-
-    // Create an async initialization function with optimized flow
+    // Initialize PIXI
     const initPixi = async () => {
+      const startTime = performance.now();
       try {
-        console.log('⏳ [PIXI] Creating PIXI application...');
-        const startTime = performance.now();
-
-        // Create and initialize app
+        // Create application with proper settings
         const app = new PIXI.Application();
-
-        // Configure PIXI options with improved context settings
-        const pixiOptions = {
-          canvas: canvas,
-          resolution: Math.min(1.5, window.devicePixelRatio || 1),
+        await app.init({
+          canvas,
+          width,
+          height,
+          antialias: true,
+          resolution: window.devicePixelRatio || 1,
           autoDensity: true,
-          backgroundColor: 0xffffff,
-          antialias: false,
-          powerPreference: 'high-performance' as const,
-          // Force stencil buffer to avoid masking issues
-          stencil: true,
-          // Increase precision for better rendering
-          precision: 'mediump',
-          // Force context preservation
-          preserveDrawingBuffer: true,
-          // Prevent context loss optimization
-          failIfMajorPerformanceCaveat: false,
-        };
-
-        console.log('🔍 [DEBUG] Initializing PIXI with options:', pixiOptions);
-
-        // Initialize PIXI
-        try {
-          await app.init(pixiOptions);
-          console.log('🔍 [DEBUG] PIXI init completed successfully');
-
-          // Force a render immediately after initialization
-          app.render();
-          console.log('🔍 [DEBUG] Initial render completed');
-        } catch (initError) {
-          console.error('🔍 [DEBUG] PIXI init error:', initError);
-          setDebugInfo((prev) => ({
-            ...prev,
-            lastError: `PIXI init error: ${initError}`,
-          }));
-          throw initError;
-        }
-
-        console.log(
-          `✅ [PIXI] App initialized in ${(
-            performance.now() - startTime
-          ).toFixed(2)}ms`
-        );
-
-        // Validate canvas is properly attached
-        if (!app.canvas) {
-          console.error('🔍 [DEBUG] app.canvas is not available after init!');
-          throw new Error('Canvas not attached to PIXI app');
-        }
-
-        // Ensure canvas is visible
-        ensureCanvasVisibility(app.canvas);
-        console.log('🔍 [DEBUG] Canvas visibility ensured. Element details:', {
-          width: app.canvas.width,
-          height: app.canvas.height,
-          style: app.canvas.style,
-          parent: app.canvas.parentElement,
+          backgroundAlpha: 1,
         });
 
-        // Store app reference
-        appRef.current = app;
+        console.log('✅ [PIXI] Application initialized successfully');
 
-        // Create containers
+        // Set up main containers
         const mainContainer = new PIXI.Container();
-        const links = new PIXI.Container();
-        const nodes = new PIXI.Container();
-        const hidden = new PIXI.Container();
-        hidden.visible = false;
+        app.stage.addChild(mainContainer);
 
-        // Store refs for later use
-        nodesContainerRef.current = nodes;
-        linksContainerRef.current = links;
+        // Create nodes container
+        const nodesContainer = new PIXI.Container();
+        mainContainer.addChild(nodesContainer);
+        nodesContainerRef.current = nodesContainer;
 
-        // Setup container hierarchy
-        mainContainer.addChild(links, nodes);
-        app.stage.addChild(mainContainer, hidden);
+        // Create links container
+        const linksContainer = new PIXI.Container();
+        mainContainer.addChild(linksContainer);
+        linksContainerRef.current = linksContainer;
 
-        // Setup container interaction
-        setupMouseEvents(canvas, mainContainer);
+        // Create hidden hit area container
+        const hiddenContainer = new PIXI.Container();
+        mainContainer.addChild(hiddenContainer);
 
-        // Set initial view - position it in the center with a visible scale
-        mainContainer.scale.set(0.5); // Increased from 0.25 for better visibility
-        mainContainer.position.set(width / 2, height / 2);
-        console.log('🔍 [DEBUG] Set initial container position:', {
-          x: mainContainer.position.x,
-          y: mainContainer.position.y,
-          scale: mainContainer.scale.x,
-        });
+        // Set containers for parent component access
+        if (setNodeContainer) setNodeContainer(nodesContainer);
+        if (setLinkContainer) setLinkContainer(linksContainer);
+        if (setHiddenContainer) setHiddenContainer(hiddenContainer);
 
-        // Setup interactions on stage
-        app.renderer.events.cursorStyles.default = 'pointer';
-        app.stage.eventMode = 'static';
-        app.stage.cursor = 'pointer';
+        // Set interactive mode
+        mainContainer.eventMode = 'static';
 
-        // Setup context loss handlers
-        setupWebGLContextHandlers(
-          app.canvas,
-          (event) => {
-            console.error('🔍 [PIXI] WebGL context lost event!', event);
-            setDebugInfo((prev) => ({
-              ...prev,
-              lastError: 'WebGL context lost - attempting recovery...',
-            }));
+        // Add pan and zoom functionality
+        setupMouseEvents(canvas, app);
 
-            // Add explicit recovery attempt
-            setTimeout(() => {
-              try {
-                console.log('🔄 Attempting WebGL context recovery...');
-                if (app && app.renderer) {
-                  app.renderer.resize(width, height);
-                  app.render();
-                  console.log('✅ WebGL context recovered successfully');
-                }
-              } catch (e) {
-                console.error('❌ WebGL recovery failed:', e);
-              }
-            }, 500);
-          },
-          () => {
-            console.log('🔍 [PIXI] WebGL context restored!');
-            if (app) {
-              // Force resize and re-render after context restore
-              app.renderer.resize(width, height);
-              app.render();
-              console.log('🔍 [PIXI] Re-rendered after context restore');
-            }
-          }
-        );
-
-        // Force initial render
-        app.render();
-        console.log('🔍 [DEBUG] Forced renderer to draw initial frame');
-
-        // Store references
+        // Update refs and state
+        appRef.current = app;
         setPixiApp(app);
-        setNodeContainer(nodes);
-        setLinkContainer(links);
-        setHiddenContainer(hidden);
-        onPixiCreated(app);
-
         setDebugInfo((prev) => ({
           ...prev,
           hasInitialized: true,
-          renderTimestamp: new Date().toISOString(),
+          lastError: null,
         }));
 
         console.log(
-          `🎉 [PIXI] Total setup time: ${(
+          `🎮 [PIXI] Setup complete in ${(
             performance.now() - startTime
           ).toFixed(2)}ms`
         );
 
-        // Add a final render after a slight delay to ensure everything is set up
-        setTimeout(() => {
-          if (app) {
-            console.log('🔍 [DEBUG] Running delayed verification render');
-            app.render();
-          }
-        }, 500);
+        // Notify parent when PIXI is created
+        if (onPixiCreated) onPixiCreated(app);
+
+        // Initial render
+        app.render();
       } catch (err) {
-        console.error('❌ [PIXI] Error in PIXI initialization:', err);
+        console.error('❌ [PIXI] Initialization error:', err);
         setDebugInfo((prev) => ({
           ...prev,
-          lastError: `Initialization error: ${err}`,
+          hasInitialized: false,
+          lastError: `Init error: ${err}`,
         }));
-        cleanupResources();
       }
     };
 
-    // Clean up function to avoid code duplication
-    const cleanupResources = () => {
-      // First destroy PIXI app
-      if (appRef.current) {
-        try {
-          appRef.current.destroy(true);
-          appRef.current = null;
-        } catch (err) {
-          console.error('❌ [PIXI] Cleanup error:', err);
-        }
-      }
-
-      // Remove canvas from DOM if it exists
-      if (canvasRef.current && canvasRef.current.parentElement) {
-        console.log('🧹 [PIXI] Removing canvas from DOM during cleanup');
-        canvasRef.current.parentElement.removeChild(canvasRef.current);
-        canvasRef.current = null;
-      }
-
-      // Reset all refs and state
-      setNodeContainer(null);
-      setLinkContainer(null);
-      setHiddenContainer(null);
-      setPixiApp(null);
-      nodesContainerRef.current = null;
-      linksContainerRef.current = null;
-    };
-
-    // Start initialization
+    // Call initPixi
     initPixi();
 
-    // Cleanup on unmount
-    return cleanupResources;
+    // Cleanup function
+    return () => {
+      console.log('🧹 [PIXI] Cleaning up resources');
+      if (appRef.current) {
+        console.log('🛑 [PIXI] Destroying PIXI application');
+        appRef.current.destroy();
+        appRef.current = null;
+        setPixiApp(null);
+      }
+      if (canvasRef.current && containerElement.contains(canvasRef.current)) {
+        containerElement.removeChild(canvasRef.current);
+      }
+    };
   }, [
     containerElement,
     width,
