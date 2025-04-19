@@ -299,7 +299,7 @@ in the corresponding number of cohorts. We can choose integer ratios such as
 $N_B/N_C=17/7 \simeq 2.428571$ which closely approximate Eq.[14](#14). We will
 be using a PID (Proportional-Integral-Derivative) controller to adjust the
 difficulty, taking advantage of the analytic behavior of the Poisson mining
-proces as described in the previous section.
+process as described in the previous section.
 
 First let us define:
 <a id="16"></a>
@@ -325,22 +325,37 @@ z_* = W(R_*-1) \simeq 0.70347
 $$
 
 where in practice we will choose an integer ratio approximation for $R_*$ such
-as $R_* = 17/7$.
+as $R_* = 17/7$. We will work in terms of the variable $z$ instead of $R$
+because $R$ is a super-exponential function in $x$ while $z$ is linear in $x$.
+Because we will be using a PID controller we need the system to be linear.
 
-For any given bead (the "operating point") denoted by the subscript $0$, we have
-a measurement of $R_0$ and $z_0$ and can analytically calculate the gain
-function
+A PID controller can be described as deciding the new target $x^\prime$ based on
+an error term $e_0 = z_* - z_0$ and summing contributions proportional to the
+error ($K_p$), proportional to the integral of the error ($K_i$), and
+proportional to the derivative of the error ($K_d$):
 
-<a id="16"></a>
+<a id="18"></a>
 
-$$\tag{16}
+$$\tag{18}
 \begin{align}
-G_0 = \left.\frac{dR}{dx}\right|_{z_0} = \frac{z_0 e^{z_0} (1+z_0)}{x_0}
+x^\prime = K_p e_k(t) + K_i \int_0^t e_k(t) + K_d \frac{d e_k(t)}{dt}
 \end{align}
 $$
 
-where $x_0$ is the harmonic mean of parent targets. Note that the factors of
-$a\lambda$ have entirely cancelled out.
+For any given bead (the "operating point") denoted by the subscript $0$, we have
+a measurement of $R_0$ and $z_0$ and can analytically calculate the gain
+function at the operating point
+
+<a id="19"></a>
+
+$$\tag{19}
+\begin{align}
+G_0 = \left.\frac{dz}{dx}\right|_{z_0} = \frac{z_0}{x_0} = a\lambda
+\end{align}
+$$
+
+where $x_0$ is the harmonic mean of parent targets. The values $z_0$ and $x_0$
+are *measurable* for any bead.
 
 Let us define the windowing constant $\tau_C$ to be the number of cohorts we
 will examine. The $\tau_C$-cohort sliding window adds a pure descrete delay of
@@ -348,36 +363,93 @@ one step and an averaging pole at $p_w = 1-\frac{1}{\tau_C}$. This choice
 implements critical damping, ensuring no oscillations, minimal variance, and
 allows us to analytically compute all PID parameters
 
-<a id="17"></a>
+<a id="20"></a>
 
-$$\tag{17}
+$$\tag{20}
 \begin{align}
 K_p = \frac{1}{G_0} (1-p_w), \qquad K_i = \frac{K_p}{\tau_C}, \qquad K_d = \frac{K_p\tau_C}{4}
 \end{align}
 $$
+
+or in a form more appropriate to integer arithmetic where the possible values of $z_0$ can be collected in a table of 256-bit integers for the target computation:
+
+<a id="21"></a>
+
+$$\tag{21}
+\begin{align}
+K_p = x_0 \left(\frac{1-p_w}{z_0}\right),
+\qquad
+K_i = x_0 \left(\frac{1-p_w}{\tau_C z_0}\right),
+\qquad
+K_d = x_0 \left(\frac{(1-p_w)\tau_C}{4 z_0}\right)
+\end{align}
+$$
+
+Giving us a final form for the new difficulty $x^\prime$ for any bead
+
+<a id="22"></a>
+
+$$\tag{22}
+\begin{align}
+x^\prime = x_0 \left(
+  \frac{\tau_C-1}{\tau_C z_0} e_0
++ \frac{\tau_C-1}{\tau_C^2 z_0} I_k
++ \frac{\tau_C-1}{4 z_0} (e_0-e_1)
+\right)
+\end{align}
+$$
+
 
 A PID controller relies on an integral and derivative of the errors. It's
 critical in consensus code that all nodes compute this integral and derivative
 in exactly the same way and process ancestors in the same order. The integral is
 defined as
 
-<a id="17"></a>
+<a id="23"></a>
 
-$$\tag{17}
+$$\tag{23}
 \begin{align}
-I_k = \frac{1}{M}\sum_{j=0}^{M-1} (R_{k-j} - R_*), \qquad M \ge \tau_C
+I_k = \frac{1}{B}\sum_{j=0}^{B-1} (z_{k-j} - z_*).
 \end{align}
 $$
 
+This integral iterates through all $B$ beads that are ancestors of the current
+bead within the last $\tau_C$ ancestral cohorts. FIXME should the $1/B$ be here?
+The $1/B$ factor essentially computes the average error. There is no $dx$
+term...
+
+A common problem in PID controllers is integral saturation or "wind-up". This is
+where the error is so great that the integral term is very large. This happens
+when within the observation window $\tau_C$ the controller is unable to bring
+the observation $z$ back to the desired set point $z_*$. At this point the
+controller loses the ability to control the system. In the Braidpool system this
+would occur when the difficulty is too high such that there is a string of
+$\tau_C$ blockchain-like beads with no beads in the last $\tau_C$ beads having
+multiple parents.
+
+<span style="color:red">FIXME</span> It can also happen in the opposite scenario where the
+difficulty is too low such that the last cohort just grows larger and larger,
+accumulating more and more error.
+
+If the last $\tau_C$ cohorts are blockchain-like, we essentially no longer have
+any measurement of the latency, which fundamentally comes from seeing cohorts
+with multiple beads. In such a scenario, $z_0 = W(0) = 0$ and all the terms in
+Eq.[21](#21) blow up because they're proportional to $1/z_0$. In such a case we
+must expand the observation window so that $N_B > N_C$ for the PID controller to
+work at all. <span style="color:red">FIXME</span> Details
+
+<span style="color:red">FIXME</span> test whether integral saturation/wind-up
+occurs when the difficulty is too low, and whether expanding $\tau_C$ fixes it?
 
 The update step is then
 
-FIXME the chatgpt solution is highly nonlinear and behaves poorly way from the
+<span style="color:red">FIXME</span>the chatgpt solution is highly nonlinear and behaves poorly way from the
 target solution. We need to linearize the variable we're updating. By using $z$
 we operate in log-difficulty space. It doesn't seem to be hitting the target
 within 1000 beads though.
 
-FIXME the new solution in z space seems to work if TARGET_NB is raised.
+<span style="color:red">FIXME</span>
+the new solution in z space seems to work if TARGET_NB is raised.
 
 <a id="17"></a>
 
