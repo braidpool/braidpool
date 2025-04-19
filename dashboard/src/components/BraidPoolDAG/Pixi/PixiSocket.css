@@ -1,0 +1,189 @@
+.pixi-socket-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  width: 100%;
+}
+
+.pixi-socket-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+  border-radius: 8px;
+  background-color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  max-width: 450px;
+  width: 100%;
+}
+
+.pixi-socket-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+  border-radius: 8px;
+  background-color: rgba(255, 229, 229, 0.9);
+  border: 1px solid #ff8d8d;
+  color: #d93025;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  max-width: 450px;
+  width: 100%;
+}
+
+.pixi-socket-title {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #0077b6;
+  margin-bottom: 8px;
+}
+
+.pixi-socket-message {
+  font-size: 0.9rem;
+  color: #666;
+  margin-bottom: 16px;
+  max-width: 350px;
+  line-height: 1.4;
+}
+
+.pixi-socket-waiting {
+  display: flex;
+  align-items: center;
+  margin: 10px 0;
+  padding: 10px;
+  border-radius: 4px;
+  background-color: #f8f9fa;
+  border-left: 3px solid #0077b6;
+  width: 100%;
+}
+
+.pixi-socket-waiting-icon {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: #0077b6;
+  margin-right: 10px;
+  opacity: 0.8;
+  animation: pulse 1.5s infinite;
+}
+
+.pixi-socket-metrics {
+  font-size: 0.8rem;
+  color: #0077b6;
+  margin-top: 12px;
+  background-color: rgba(234, 244, 252, 0.8);
+  padding: 8px 16px;
+  border-radius: 4px;
+  border: 1px dashed #a3d0ea;
+  text-align: left;
+  width: 100%;
+}
+
+.pixi-socket-metrics p {
+  margin: 4px 0;
+  display: flex;
+  justify-content: space-between;
+}
+
+.pixi-socket-metrics p .metric-value {
+  font-weight: 500;
+  color: #00a8e8;
+}
+
+.pixi-socket-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(0, 119, 182, 0.2);
+  border-top-color: #0077b6;
+  border-radius: 50%;
+  animation: socket-spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+.pixi-socket-progress {
+  width: 100%;
+  height: 4px;
+  background-color: rgba(0, 119, 182, 0.1);
+  border-radius: 2px;
+  margin-top: 10px;
+  overflow: hidden;
+  position: relative;
+}
+
+.pixi-socket-progress-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background-color: #0077b6;
+  animation: progress-move 2.5s infinite ease-in-out;
+}
+
+.pixi-socket-retry-btn {
+  background-color: #0077b6;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  margin-top: 10px;
+}
+
+.pixi-socket-retry-btn:hover {
+  background-color: #005f8f;
+}
+
+.pixi-socket-info {
+  margin-top: 15px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  background-color: rgba(255, 245, 230, 0.7);
+  border-left: 3px solid #ff8500;
+  font-size: 0.8rem;
+  color: #664500;
+  width: 100%;
+  text-align: left;
+}
+
+@keyframes socket-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(0.95);
+    opacity: 0.5;
+  }
+}
+
+@keyframes progress-move {
+  0% {
+    width: 0;
+    left: 0;
+  }
+  50% {
+    width: 70%;
+  }
+  75% {
+    width: 100%;
+    left: 0;
+  }
+  100% {
+    width: 0;
+    left: 100%;
+  }
+}
