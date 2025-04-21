@@ -111,7 +111,7 @@ export const layoutNodesOptimized = (
   setCachedHwpLength: (length: number) => void
 ): Record<string, Position> => {
   console.log(
-    `🧩 Laying out ${allNodes.length} nodes - using optimized approach`
+    `🧩 Laying out ${allNodes.length} nodes - using optimized approach. Limiting to ${selectedCohorts} cohorts.`
   );
 
   // Fast layout mode for large graphs (> 1000 nodes)
@@ -120,11 +120,37 @@ export const layoutNodesOptimized = (
     console.log('⚡ Using simplified layout for large graph');
   }
 
-  // Use a cached layout if we have the same number of nodes
-  // This improves performance on subsequent rerenders
+  // Only process cohorts we need (based on selected number to display)
+  const visibleCohorts = cohorts.slice(-selectedCohorts);
+  console.log(
+    `📊 Showing latest ${selectedCohorts} cohorts out of ${cohorts.length} total cohorts`
+  );
+
+  // For performance, pre-calculate cohort map
+  const cohortMap = new Map<string, number>();
+
+  // Map all nodes to their cohorts
+  visibleCohorts.forEach((cohort, index) => {
+    cohort.forEach((nodeId) => cohortMap.set(nodeId, index));
+  });
+
+  // Create a set of all visible nodes to filter the graph
+  const visibleNodeSet = new Set(visibleCohorts.flat());
+  console.log(
+    `👁️ Visible nodes: ${visibleNodeSet.size} out of ${allNodes.length} total nodes`
+  );
+
+  // Filter nodes to only include those in visible cohorts
+  const visibleNodes = allNodes.filter((node) => visibleNodeSet.has(node.id));
+  console.log(`🔍 Using ${visibleNodes.length} nodes for layout`);
+
+  // Cache key should include selectedCohorts to ensure we regenerate when it changes
+  const cacheKey = `${visibleNodes.length}-${hwPath.length}-${selectedCohorts}`;
+
+  // Invalidate cache if number of cohorts changed
   if (
     cachedLayout &&
-    Object.keys(cachedLayout).length === allNodes.length &&
+    Object.keys(cachedLayout).length === visibleNodes.length &&
     cachedHwpLength === hwPath.length
   ) {
     console.log('📑 Using cached layout - instant positioning');
@@ -137,25 +163,19 @@ export const layoutNodesOptimized = (
   const hwPathSet = new Set(hwPath);
   const centerY = height / 3;
 
-  // For performance, pre-calculate cohort map
-  const cohortMap = new Map<string, number>();
-
-  // Only process cohorts we need (based on selected number to display)
-  const visibleCohorts = cohorts.slice(-selectedCohorts);
-  visibleCohorts.forEach((cohort, index) => {
-    cohort.forEach((nodeId) => cohortMap.set(nodeId, index));
-  });
-
-  // Identify which nodes are visible based on selected cohorts
-  const visibleNodeSet = new Set(visibleCohorts.flat());
-
   // We position the highest work path (HWP) first - this is the backbone
+  // Only include HWP nodes that are in visible cohorts
+  const visibleHwPath = hwPath.filter((id) => visibleNodeSet.has(id));
+  console.log(
+    `🔝 Visible HWP nodes: ${visibleHwPath.length} out of ${hwPath.length} total`
+  );
+
   let currentX = margin.left;
   let prevCohort: number | undefined;
   const hwPathColumns: number[] = [];
 
-  // Position HWP nodes - this stays largely the same as it's important for the structure
-  hwPath.forEach((nodeId, index) => {
+  // Position visible HWP nodes
+  visibleHwPath.forEach((nodeId, index) => {
     const currentCohort = cohortMap.get(nodeId);
 
     if (prevCohort !== undefined && currentCohort !== prevCohort) {
@@ -170,10 +190,8 @@ export const layoutNodesOptimized = (
     currentX += COLUMN_WIDTH;
   });
 
-  // Optimization: Only process visible non-HWP nodes
-  const remainingNodes = allNodes.filter(
-    (node) => !hwPathSet.has(node.id) && visibleNodeSet.has(node.id)
-  );
+  // Process remaining visible non-HWP nodes
+  const remainingNodes = visibleNodes.filter((node) => !hwPathSet.has(node.id));
 
   console.log(`⚙️ Processing ${remainingNodes.length} remaining visible nodes`);
 
@@ -187,7 +205,9 @@ export const layoutNodesOptimized = (
       // If already calculated, skip
       if (generations.has(node.id)) return;
 
-      const hwpParents = node.parents.filter((p) => hwPathSet.has(p));
+      const hwpParents = node.parents.filter(
+        (p) => hwPathSet.has(p) && visibleNodeSet.has(p)
+      );
       if (hwpParents.length > 0) {
         // If has HWP parent, directly compute generation from that
         generations.set(node.id, 1);
@@ -203,14 +223,14 @@ export const layoutNodesOptimized = (
     );
 
     // Position nodes with simple layout algorithm for speed
-    let rightmostX = Math.max(...hwPathColumns) + COLUMN_WIDTH;
+    let rightmostX = Math.max(...hwPathColumns, 0) + COLUMN_WIDTH;
     let row = 0;
     const FAST_VERTICAL_SPACING = VERTICAL_SPACING * 0.8; // Tighter spacing for large graphs
 
     remainingNodes.forEach((node) => {
       const generation = generations.get(node.id) || 0;
-      const column = generation + hwPath.length;
-      const colX = rightmostX + (column - hwPath.length) * COLUMN_WIDTH;
+      const column = generation + visibleHwPath.length;
+      const colX = rightmostX + (column - visibleHwPath.length) * COLUMN_WIDTH;
 
       // Position in a grid-like structure for speed
       positions[node.id] = {
@@ -225,14 +245,19 @@ export const layoutNodesOptimized = (
     const generations = new Map<string, number>();
 
     remainingNodes.forEach((node) => {
-      const hwpParents = node.parents.filter((p) => hwPathSet.has(p));
+      const hwpParents = node.parents.filter(
+        (p) => hwPathSet.has(p) && visibleNodeSet.has(p)
+      );
       if (hwpParents.length > 0) {
         const minHWPIndex = Math.min(
-          ...hwpParents.map((p) => hwPath.indexOf(p))
+          ...hwpParents.map((p) => visibleHwPath.indexOf(p))
         );
         generations.set(node.id, minHWPIndex + 1);
       } else {
-        const parentGens = node.parents.map((p) => generations.get(p) || 0);
+        const visibleParents = node.parents.filter((p) =>
+          visibleNodeSet.has(p)
+        );
+        const parentGens = visibleParents.map((p) => generations.get(p) || 0);
         generations.set(
           node.id,
           parentGens.length > 0 ? Math.max(...parentGens) + 1 : 0
@@ -250,7 +275,10 @@ export const layoutNodesOptimized = (
       if (node.parents.length === 1 && node.children.length === 0) {
         tipNodes.push(node.id);
       }
-      const positionedParents = node.parents.filter((p) => positions[p]);
+
+      const positionedParents = node.parents.filter(
+        (p) => positions[p] && visibleNodeSet.has(p)
+      );
       if (positionedParents.length === 0) return;
 
       const maxParentX = Math.max(
@@ -294,7 +322,8 @@ export const layoutNodesOptimized = (
     });
 
     const maxColumnX = Math.max(
-      ...Object.values(positions).map((pos) => pos.x)
+      ...Object.values(positions).map((pos) => pos.x),
+      0
     );
     tipNodes.forEach((tipId) => {
       if (positions[tipId]) {

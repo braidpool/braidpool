@@ -254,8 +254,8 @@ const PixiRenderer: React.FC<PixiRendererProps> = ({
         throw new Error('Canvas is null, WebGL context may be lost');
       }
 
-      // Process the graph data
-      const { nodeList, hwpSet } = processGraphData(graphData);
+      // Process the graph data with selectedCohorts parameter
+      const { nodeList, hwpSet } = processGraphData(graphData, selectedCohorts);
 
       if (nodeList.length === 0) {
         console.warn('⚠️ [PIXI] No nodes to render');
@@ -399,26 +399,39 @@ const PixiRenderer: React.FC<PixiRendererProps> = ({
       const renderTime = performance.now() - renderStartTime;
       setPerformanceMetrics({
         renderTime,
-        nodeCount,
-        edgeCount,
-        fps: 1000 / renderTime, // Simple FPS estimate
+        nodeCount: nodeCount,
+        edgeCount: edgeCount,
+        fps: parseFloat((1000 / renderTime).toFixed(2)),
       });
 
+      // Update debug info
       setDebugInfo((prev) => ({
         ...prev,
         nodesRendered: nodeCount,
         edgesRendered: edgeCount,
       }));
 
-      console.log(`✅ [PIXI] Graph rendered in ${renderTime.toFixed(2)}ms`);
+      console.log(
+        `✅ [PIXI] Graph render completed in ${renderTime.toFixed(2)}ms`
+      );
     } catch (err) {
       console.error('❌ [PIXI] Error rendering graph:', err);
       setDebugInfo((prev) => ({
         ...prev,
-        lastError: `Graph error: ${err}`,
+        lastError: `Render error: ${err}`,
       }));
     }
-  }, [pixiApp, graphData, selectedCohorts, width, height]);
+  }, [
+    pixiApp,
+    graphData,
+    width,
+    height,
+    cachedLayout,
+    cachedHwpLength,
+    selectedCohorts,
+    setCachedLayout,
+    setCachedHwpLength,
+  ]);
 
   return (
     <>

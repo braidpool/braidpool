@@ -298,20 +298,49 @@ export function renderNodes(
   return nodesDrawn;
 }
 
-export function processGraphData(graphData: any) {
+export function processGraphData(graphData: any, selectedCohorts: number) {
   console.log('🔄 [PIXI] Processing graph data...');
+  console.log(
+    `👁️ Limiting display to ${selectedCohorts} cohorts out of ${
+      graphData.cohorts?.length || 0
+    } total`
+  );
 
-  // Convert graphData to node list format
-  const nodeList: GraphNode[] = Object.keys(graphData.parents).map((id) => ({
-    id,
-    parents: graphData.parents[id] || [],
-    children: graphData.children[id] || [],
-    work: graphData.work?.[id] || 0,
-  }));
+  // Get only the selected number of cohorts (the latest ones)
+  const visibleCohorts = (graphData.cohorts || []).slice(-selectedCohorts);
+
+  // Create a set of visible nodes
+  const visibleNodeSet = new Set(visibleCohorts.flat());
+  console.log(
+    `👁️ Visible nodes: ${visibleNodeSet.size} out of ${
+      Object.keys(graphData.parents || {}).length
+    } total`
+  );
+
+  // Convert graphData to node list format, filtering by visible nodes
+  const nodeList: GraphNode[] = Object.keys(graphData.parents)
+    .filter((id: string) => visibleNodeSet.has(id))
+    .map((id: string) => ({
+      id,
+      parents: (graphData.parents[id] || []).filter((parentId: string) =>
+        visibleNodeSet.has(parentId)
+      ),
+      children: (graphData.children[id] || []).filter((childId: string) =>
+        visibleNodeSet.has(childId)
+      ),
+      work: graphData.work?.[id] || 0,
+    }));
+
+  // Create a filtered version of the highest work path
+  const filteredHwp = (graphData.highest_work_path || []).filter((id: string) =>
+    visibleNodeSet.has(id)
+  );
 
   // Explicitly type the Set as string
-  const hwpSet: Set<string> = new Set(graphData.highest_work_path || []);
+  const hwpSet: Set<string> = new Set(filteredHwp);
 
-  console.log(`✅ [PIXI] Processed ${nodeList.length} nodes`);
+  console.log(
+    `✅ [PIXI] Processed ${nodeList.length} nodes from selected cohorts`
+  );
   return { nodeList, hwpSet };
 }
