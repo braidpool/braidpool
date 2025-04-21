@@ -262,6 +262,12 @@ const PixiRenderer: React.FC<PixiRendererProps> = ({
         return;
       }
 
+      // Create cohort map for proper coloring
+      const cohortMap = new Map<string, number>();
+      (graphData.cohorts || []).forEach((cohort, index) => {
+        cohort.forEach((nodeId) => cohortMap.set(nodeId, index));
+      });
+
       // Calculate node positions
       const positions = layoutNodesOptimized(
         nodeList,
@@ -270,9 +276,9 @@ const PixiRenderer: React.FC<PixiRendererProps> = ({
         selectedCohorts,
         width,
         height,
-        { top: 50, right: 50, bottom: 50, left: 50 },
-        80, // Column width
-        30, // Vertical spacing
+        { top: 20, right: 30, bottom: 30, left: 50 },
+        120, // COLUMN_WIDTH
+        100, // VERTICAL_SPACING
         cachedLayout,
         cachedHwpLength,
         setCachedLayout,
@@ -293,7 +299,10 @@ const PixiRenderer: React.FC<PixiRendererProps> = ({
         positions,
         hwpSet,
         nodesContainerRef.current,
-        handleNodeClick
+        handleNodeClick,
+        cohortMap,
+        selectedCohorts,
+        graphData.cohorts?.length || 0
       );
 
       // Calculate bounds of the entire graph to position camera

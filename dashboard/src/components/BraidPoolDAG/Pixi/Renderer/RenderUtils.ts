@@ -115,10 +115,12 @@ export function renderEdges(
   // Clear previous edges
   container.removeChildren();
 
+  // Match colors from original implementation
   const regularEdgeColor = 0x48cae4; // Light blue
-  const hwpEdgeColor = 0xff8500; // Orange
-  const regularEdgeWidth = 1;
+  const hwpEdgeColor = 0xff8500; // Orange (match HWP node color)
+  const regularEdgeWidth = 1.5;
   const hwpEdgeWidth = 2;
+  const nodeRadius = 15; // Match the node radius
 
   let edgesDrawn = 0;
 
@@ -140,36 +142,31 @@ export function renderEdges(
 
       // Draw edge
       const line = new PIXI.Graphics();
-      line.lineStyle(edgeWidth, edgeColor, 0.7); // Line with partial transparency
+      line.lineStyle(edgeWidth, edgeColor, 0.8); // Line with partial transparency
       line.moveTo(sourcePos.x, sourcePos.y);
       line.lineTo(targetPos.x, targetPos.y);
 
-      // Add arrow
-      /*
+      // Add arrow like in the original implementation
       const dx = targetPos.x - sourcePos.x;
       const dy = targetPos.y - sourcePos.y;
       const angle = Math.atan2(dy, dx);
-      
-      // Arrow head
+
+      // Arrow head - position it just before the target node
       const arrowSize = 6;
-      const arrowX = targetPos.x - Math.cos(angle) * 12; // Back from the tip
-      const arrowY = targetPos.y - Math.sin(angle) * 12;
-      
+      const arrowX = targetPos.x - Math.cos(angle) * nodeRadius;
+      const arrowY = targetPos.y - Math.sin(angle) * nodeRadius;
+
       line.beginFill(edgeColor);
       line.moveTo(
-        arrowX - Math.cos(angle - Math.PI/6) * arrowSize,
-        arrowY - Math.sin(angle - Math.PI/6) * arrowSize
+        arrowX - Math.cos(angle - Math.PI / 6) * arrowSize,
+        arrowY - Math.sin(angle - Math.PI / 6) * arrowSize
       );
+      line.lineTo(arrowX, arrowY);
       line.lineTo(
-        arrowX + Math.cos(angle) * arrowSize,
-        arrowY + Math.sin(angle) * arrowSize
-      );
-      line.lineTo(
-        arrowX - Math.cos(angle + Math.PI/6) * arrowSize,
-        arrowY - Math.sin(angle + Math.PI/6) * arrowSize
+        arrowX - Math.cos(angle + Math.PI / 6) * arrowSize,
+        arrowY - Math.sin(angle + Math.PI / 6) * arrowSize
       );
       line.endFill();
-      */
 
       container.addChild(line);
       edgesDrawn++;
@@ -187,6 +184,9 @@ export function renderEdges(
  * @param hwpSet Set of node IDs in the highest work path
  * @param container Container to add nodes to
  * @param onNodeClick Callback when a node is clicked
+ * @param cohortMap Map of node IDs to cohort numbers
+ * @param selectedCohorts Number of selected cohorts
+ * @param totalCohorts Total number of cohorts
  * @returns Number of nodes drawn
  */
 export function renderNodes(
@@ -194,7 +194,10 @@ export function renderNodes(
   positions: Record<string, Position>,
   hwpSet: Set<string>,
   container: PIXI.Container,
-  onNodeClick: (nodeId: string, nodeData: GraphNode) => void
+  onNodeClick: (nodeId: string, nodeData: GraphNode) => void,
+  cohortMap?: Map<string, number>,
+  selectedCohorts?: number,
+  totalCohorts?: number
 ): number {
   console.log('🎨 [PIXI] Rendering nodes...');
 
@@ -214,10 +217,17 @@ export function renderNodes(
     maxY = -Infinity;
 
   // Precompute some values for performance
-  const regularNodeSize = 10;
-  const hwpNodeSize = 15;
-  const regularColor = 0x48cae4; // Light blue
-  const hwpColor = 0xff8500; // Orange
+  const regularNodeSize = 15; // Match original node radius size
+  const hwpNodeSize = 20; // Slightly larger for HWP nodes
+
+  // Use the same colors as BraidPoolDAG.tsx
+  const COLORS = [
+    0xd95f02, // Orange
+    0x7570b3, // Purple
+    0x66a61e, // Green
+    0xe7298a, // Pink
+  ];
+
   const textStyle = new PIXI.TextStyle({
     fill: 0xffffff,
     fontSize: 10,
@@ -240,7 +250,25 @@ export function renderNodes(
     // Create node graphics
     const isHwp = hwpSet.has(node.id);
     const nodeSize = isHwp ? hwpNodeSize : regularNodeSize;
-    const nodeColor = isHwp ? hwpColor : regularColor;
+
+    // Use correct color based on cohort if available
+    let nodeColor;
+    if (isHwp) {
+      nodeColor = 0xff8500; // HWP nodes are orange
+    } else if (cohortMap && cohortMap.has(node.id)) {
+      const cohortIndex = cohortMap.get(node.id)!;
+      // If we're filtering cohorts, calculate the adjusted color index
+      if (selectedCohorts && totalCohorts) {
+        const startingIndex = Math.max(0, totalCohorts - selectedCohorts);
+        const adjustedIndex = cohortIndex - startingIndex;
+        nodeColor = COLORS[adjustedIndex % COLORS.length];
+      } else {
+        nodeColor = COLORS[cohortIndex % COLORS.length];
+      }
+    } else {
+      // Fallback color
+      nodeColor = COLORS[nodesDrawn % COLORS.length];
+    }
 
     // Create node with graphics
     const graphics = new PIXI.Graphics();
