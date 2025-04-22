@@ -287,7 +287,7 @@ class Node:
         if target_algo is None or target_algo == "fixed":
             self.calc_target = self.calc_target_fixed
         elif target_algo == "exp":
-            self.calc_target = self.calc_target_exponential_damping
+            self.calc_target = self.calc_target_ema
         elif target_algo == "parents":
             self.calc_target = self.calc_target_parents
         elif target_algo == "simple":
@@ -735,8 +735,8 @@ class Node:
 
         return new_target
 
-    def calc_target_exponential_damping(self, parents, TARGET_NB=TARGET_NB,
-                                        TARGET_NC= TARGET_NC):
+    def calc_target_ema(self, parents, TARGET_NB=TARGET_NB,
+                                       TARGET_NC=TARGET_NC):
         """ Calculate a target based on the number of cohorts using TARGET_NB and TARGET_NC where
             TARGET_NB/TARGET_NC =~ 2.42, and we use an exponential correction factor to adjust the
             difficulty up if there are too many cohorts, and down if there are too few cohorts.
@@ -747,8 +747,7 @@ class Node:
         TAU = 4*TARGET_NB # 64 is underdamped
 
         # Harmonic average parent targets
-        # x = htarget*exp(-(N_B-TARGET_NB)/TAU)
-        htarget = len(parents)*MAX_HASH//sum(MAX_HASH//p.target for p in parents)
+        htarget = self.calc_target_harmonic(parents)
         retval = + htarget \
                  - htarget*Adev//TAU \
                  + htarget*Adev**2//TAU**2//2 \
@@ -757,6 +756,27 @@ class Node:
                  - htarget*Adev**5//TAU**5//120
         return retval
 
+    def calc_target_ema_z(self, parents, TARGET_NB=TARGET_NB,
+                                         TARGET_NC=TARGET_NC):
+        """ Calculate a target based on the number of cohorts using TARGET_NB and TARGET_NC where
+            TARGET_NB/TARGET_NC =~ 2.42, and we use an exponential correction factor to adjust the
+            difficulty up if there are too many cohorts, and down if there are too few cohorts.
+            This is intended to damp oscillations. This version operates in $z$ space instead of $x$
+            space.
+        """
+        Nb = sum(map(len,self.braid.cohorts[-TARGET_NC:]))
+        Adev = Nb-TARGET_NB
+        TAU = 4*TARGET_NB # 64 is underdamped
+
+        # Harmonic average parent targets
+        htarget = self.calc_target_harnomic(parents)
+        retval = + htarget \
+                 - htarget*Adev//TAU \
+                 + htarget*Adev**2//TAU**2//2 \
+                 - htarget*Adev**3//TAU**3//6 \
+                 + htarget*Adev**4//TAU**4//24 \
+                 - htarget*Adev**5//TAU**5//120
+        return retval
 
     def calc_target_simple_asym(self, parents):
         """ Calculate a target based on the number of cohorts using TARGET_NB and TARGET_NC where
@@ -871,7 +891,7 @@ class Node:
         """
         LOOKBACK = 1
         if len(self.braid.cohorts) <= LOOKBACK*TARGET_NC:
-            return self.calc_target_exponential_damping(parents, 17, 7)
+            return self.calc_target_ema(parents, 17, 7)
         Nb       = sum(len(c) for c in self.braid.cohorts[-TARGET_NC:])
         x_p      = self.calc_target_harmonic(parents)            # 256‑bit int
 
@@ -995,7 +1015,7 @@ class Node:
 
         Nb = sum(len(c) for c in self.braid.cohorts[-NC:])
         if Nb <= TARGET_NC:
-            return self.calc_target_exponential_damping(parents)
+            return self.calc_target_ema(parents)
 
         # ------------- helper: geometric‑mean parent target -----------------
         def geo_mean_target(pars):
@@ -1071,7 +1091,7 @@ class Node:
 
         Nb = sum(len(c) for c in self.braid.cohorts[-NC:])
         if Nb/TARGET_NC < 1.8:
-            return self.calc_target_exponential_damping(parents)
+            return self.calc_target_ema(parents)
         # ----------------  current R -----------------
         if len(self.braid.cohorts) < NC:
             Nb = sum(len(c) for c in self.braid.cohorts)
@@ -1170,7 +1190,7 @@ class Node:
         """
         Nb = sum(map(len,self.braid.cohorts[-TARGET_NC:]))
         if Nb == TARGET_NC or len(self.braid.cohorts) < TARGET_NC:
-            return self.calc_target_exponential_damping(parents)
+            return self.calc_target_ema(parents)
         if self.nodeid == 0 and DEBUG:
             print(f"Node 0 computing difficulty with {len(parents)} parents")
 
