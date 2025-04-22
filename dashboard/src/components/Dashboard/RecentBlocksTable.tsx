@@ -50,9 +50,10 @@ const RecentBlocksTable: React.FC<RecentBlocksTableProps> = ({
 
   return (
     <Card
-      title='Recent Blocks'
-      subtitle='Latest blocks found by the pool'
-      accentColor={colors.cardAccentSecondary}>
+      title="Recent Blocks"
+      subtitle="Latest blocks found by the pool"
+      accentColor={colors.cardAccentSecondary}
+    >
       <TableContainer
         sx={{
           maxHeight: maxHeight,
@@ -66,8 +67,9 @@ const RecentBlocksTable: React.FC<RecentBlocksTableProps> = ({
             background: colors.primary,
             borderRadius: '4px',
           },
-        }}>
-        <Table size='medium' stickyHeader>
+        }}
+      >
+        <Table size="medium" stickyHeader>
           <TableHead>
             <TableRow>
               <TableCell
@@ -75,7 +77,8 @@ const RecentBlocksTable: React.FC<RecentBlocksTableProps> = ({
                   backgroundColor: colors.paper,
                   color: colors.textPrimary,
                   fontWeight: 'bold',
-                }}>
+                }}
+              >
                 Height
               </TableCell>
               <TableCell
@@ -83,7 +86,8 @@ const RecentBlocksTable: React.FC<RecentBlocksTableProps> = ({
                   backgroundColor: colors.paper,
                   color: colors.textPrimary,
                   fontWeight: 'bold',
-                }}>
+                }}
+              >
                 Hash
               </TableCell>
               <TableCell
@@ -91,7 +95,8 @@ const RecentBlocksTable: React.FC<RecentBlocksTableProps> = ({
                   backgroundColor: colors.paper,
                   color: colors.textPrimary,
                   fontWeight: 'bold',
-                }}>
+                }}
+              >
                 Time
               </TableCell>
             </TableRow>
@@ -104,7 +109,8 @@ const RecentBlocksTable: React.FC<RecentBlocksTableProps> = ({
                   '&:hover': {
                     backgroundColor: 'rgba(255, 255, 255, 0.05)',
                   },
-                }}>
+                }}
+              >
                 <TableCell sx={{ color: colors.textPrimary }}>
                   {block.height}
                 </TableCell>

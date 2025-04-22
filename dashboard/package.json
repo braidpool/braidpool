@@ -31,6 +31,9 @@
   },
   "scripts": {
     "dev": "vite",
+    "lint": "npx prettier --write .",
+    "postinstall": "git config core.hooksPath ../.githooks",
+    "pre-commit": "npm run lint",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest"
