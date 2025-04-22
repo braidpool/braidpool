@@ -735,7 +735,8 @@ class Node:
 
         return new_target
 
-    def calc_target_exponential_damping(self, parents):
+    def calc_target_exponential_damping(self, parents, TARGET_NB=TARGET_NB,
+                                        TARGET_NC= TARGET_NC):
         """ Calculate a target based on the number of cohorts using TARGET_NB and TARGET_NC where
             TARGET_NB/TARGET_NC =~ 2.42, and we use an exponential correction factor to adjust the
             difficulty up if there are too many cohorts, and down if there are too few cohorts.
@@ -743,7 +744,7 @@ class Node:
         """
         Nb = sum(map(len,self.braid.cohorts[-TARGET_NC:]))
         Adev = Nb-TARGET_NB
-        TAU = TARGET_DAMPING # 64 is underdamped
+        TAU = 4*TARGET_NB # 64 is underdamped
 
         # Harmonic average parent targets
         # x = htarget*exp(-(N_B-TARGET_NB)/TAU)
@@ -860,10 +861,7 @@ class Node:
     #  Linear‑variable PID  ( z = W(R−1) ) with gain rescale
     #  – deterministic (braid‑history), integer‑safe difficulty math
     # ----------------------------------------------------------------------
-    def calc_target_pid(self, parents,
-                        NC=7,            # beads‑per‑cohort window 17/7
-                        L =7,            # derivative lag (cohorts)
-                        SCALE=10**18):   # fixed‑point denominator
+    def calc_target_pid(self, parents):
         """
         Difficulty retarget based on the linear variable z = W(R − 1)
         (R = N_B/N_C on a 7‑cohort window).  Closed‑loop pole placement is
@@ -871,91 +869,87 @@ class Node:
         invariant even when the network is far from target.  All 256‑bit
         difficulty arithmetic is integer.
         """
-
-        Nb = sum(len(c) for c in self.braid.cohorts[-NC:])
-        if Nb <= TARGET_NC:
-            return self.calc_target_exponential_damping(parents)
+        LOOKBACK = 1
+        if len(self.braid.cohorts) <= LOOKBACK*TARGET_NC:
+            return self.calc_target_exponential_damping(parents, 17, 7)
+        Nb       = sum(len(c) for c in self.braid.cohorts[-TARGET_NC:])
+        x_p      = self.calc_target_harmonic(parents)            # 256‑bit int
         # ---------------- imports & constants ------------------------------
-        from decimal import Decimal, getcontext, ROUND_HALF_EVEN
-        from mpmath  import lambertw
 
         getcontext().prec = 120                      # plenty for 1e‑18 fp
-
-        # nominal (z‑domain) Z‑N PID gains
-        Kp0 = Decimal(1) / Decimal(NC)               # 1/7
-        Ki0 = Kp0 / Decimal(NC)                      # 1/49
-        Kd0 = Decimal(NC) * Kp0 / Decimal(4)         # 7/4
 
         # constant target in z‑space
         z_star = Decimal(str(lambertw(float(TARGET_NB / TARGET_NC - 1)).real))
 
-        # ---------------- helper: geometric mean difficulty ----------------
-        def geo_mean_target(pars):
-            if not pars:
-                return 1
-            recip = sum(MAX_HASH // p.target for p in pars)
-            return len(pars) * MAX_HASH // recip
+        # current TARGET_NC‑cohort R
+        NC = TARGET_NC
+        while Nb == NC:
+            NC       = 2*NC;
+            Nb       = sum(len(c) for c in self.braid.cohorts[-NC:])
+        if self.log and NC != TARGET_NC:
+            print(f"Expanded NC to {NC}")
+        R            = Decimal(Nb) / Decimal(NC)
+        z_meas       = Decimal(str(lambertw(float(R - 1)).real))
+        alambda_inv_meas = x_p/z_meas                                   # very small
+        e_k          = z_meas - z_star                              # current error in z
 
-        # ---------------- obtain braid data --------------------------------
-        cohorts = self.braid.cohorts
-        if not cohorts:                              # genesis
-            return geo_mean_target(parents)
+        # nominal (z‑domain) Z‑N PID gains
+        #Kp0 = Decimal(1) / Decimal(NC)               # 1/7
+        #Ki0 = Kp0 / Decimal(NC) /LOOKBACK                   # 1/49
+        #Kd0 = Decimal(NC) * Kp0 / Decimal(4)         # 7/4
+        Kp0 = Decimal(1-1/NC)/z_meas
+        Ki0 = Decimal(1-1/NC)/NC/z_meas
+        Kd0 = Decimal(1-1/NC)*NC/4/z_meas
 
-        # current 7‑cohort R_k
-        if len(cohorts) < NC:
-            Nb = sum(len(c) for c in cohorts)
-            R_win = Decimal(Nb) / Decimal(len(cohorts))
-        else:
-            Nb = sum(len(c) for c in cohorts[-NC:])
-            R_win = Decimal(Nb) / Decimal(NC)
+        # integral: running sum of all z‑errors, iterating over a 3
+        # TARGET_NC-cohort windows going backwards, for statistical
+        # independence
+        #I_k = 0
+        #for i in range(len(self.braid.cohorts)-LOOKBACK*NC,
+        #               len(self.braid.cohorts), 7)[::-1]:
+        #    I_k += Decimal(str(W(sum(map(len, self.braid.cohorts[i:i+7]))/NC-1).real)) - z_star
 
-        z_meas = Decimal(str(lambertw(float(R_win - 1)).real))
-        e_k    = z_meas - z_star                    # current error
+        # Integral2: Compute W(N_B/1-1) - z_* for each cohort,
+        # FIXME what's the difference between doing this and doing W(R-1)-z_Star
+        # for a larger window? The Integral2 method will kkkkkkkkkkkkkkkk
+        I_k=0
+        for i in range(LOOKBACK*NC):
+            I_k += Decimal(str(W(len(self.braid.cohorts[-i])-1).real)) - z_star
+        #I_k /= NC
 
-        # integral: running sum of all z‑errors (deterministic)
-        I_k = sum(
-            Decimal(str(lambertw(float(len(c) - 1)).real)) - z_star
-            for c in cohorts
-        )
-
-        # derivative: difference L cohorts back
-        if len(cohorts) > L:
-            z_prev = Decimal(str(lambertw(float(len(cohorts[-L-1]) - 1)).real))
+        # Derivative: difference 1 self.braid.cohorts back
+        if len(self.braid.cohorts) > LOOKBACK*NC:
+            z_prev = Decimal(str(W(float(sum(map(len,self.braid.cohorts[2*NC:-NC]))/NC - 1)).real))
             D_k = e_k - (z_prev - z_star)
         else:
             D_k = Decimal(0)
 
         # ---------------- gain rescale  (plant gain = z_k) -----------------
-        if z_meas <= 0:
-            z_meas = Decimal('0.01')                # floor to guard divide‑by‑0
-        scale = z_star / z_meas                     # >0
-        Kp = Kp0 * scale
-        Ki = Ki0 * scale
-        Kd = Kd0 * scale
+        #scale = z_star / z_meas                     # >0
+        Kp = 0 #Kp0 #* scale
+        Ki = Ki0 #* scale
+        Kd = 0 #Kd0 #* scale
 
-        # ---------------- control signal in log‑space ----------------------
-        u = -(Kp*e_k + Ki*I_k + Kd*D_k)             # minus sign → correct action
-        # optional safety clamp
-        #if u > Decimal(5):
-        #    u = Decimal(5)
-        #elif u < Decimal(-5):
-        #    u = Decimal(-5)
-
-        gain_dec = u.exp()                          # Decimal e^{u}
-        gain_q   = int((gain_dec * SCALE).to_integral_value(ROUND_HALF_EVEN))
+        # ---------------- control signal -----------------------------------
+        z_new       = z_meas - Decimal(Kp*e_k + Ki*I_k + Kd*D_k)   # minus sign → correct action
+        alambda_inv = x_p/z_new
 
         # ---------------- integer difficulty update ------------------------
-        x_p   = geo_mean_target(parents)            # 256‑bit int
-        x_new = (x_p * gain_q) // SCALE
-        x_new = max(1, min(MAX_HASH, x_new))
-        if DEBUG:
-            print(f"gain_q = {gain_q}")
-            print(f"gain_dec = {gain_dec}")
-            print(f"R_win = {R_win}, x_p = {x_p}")
-            print(f"e_k = {e_k}, I_k = {I_k}, D_k = {D_k}")
-            print(f"Kp = {Kp}, Ki = {Ki}, Kd = {Kd}")
-            print(f"x_p/x_new = {x_p/x_new}")
+        #x_new = (x_p * gain_q) // SCALE
+        #x_new = max(1, min(MAX_HASH, x_new))
+        #x_new = int(z_new*alambda_inv_meas)
+        x_new = int(x_p*Decimal(-Kp*e_k - Ki*I_k - Kd*D_k))
+        if DEBUG : #and self.nodeid==0:
+            print(f"R = {float(R)}")
+            print(f"z_meas = {z_meas}")
+            print(f"z_new = {float(z_new)}")
+            print(f"alambda_inv_meas = {int(alambda_inv_meas)}")
+            print(f"x_p = {x_p}")
+            print(f"e_k = {e_k}, I_k = {float(I_k)}, D_k = {D_k}")
+            print(f"Kp = {float(Kp)}, Ki = {float(Ki)}, Kd = {float(Kd)}")
+            print(f"deltaz = {float(Kp)*float(e_k)} + {float(Ki)*float(I_k)} + {float(Kd)*float(D_k)}")
             print(f"x_new = {x_new}")
+            print(f"x_new/x_p = {x_new/x_p}")
         return x_new
 
     # ----------------------------------------------------------------------
