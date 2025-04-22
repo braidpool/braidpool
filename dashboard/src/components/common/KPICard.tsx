@@ -45,8 +45,8 @@ const KPICard: React.FC<KPICardProps> = ({
 
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', color, mt: 0.5 }}>
-        <Icon fontSize='small' sx={{ mr: 0.5 }} />
-        <Typography variant='body2' component='span' sx={{ color }}>
+        <Icon fontSize="small" sx={{ mr: 0.5 }} />
+        <Typography variant="body2" component="span" sx={{ color }}>
           {Math.abs(change)}% {isPositive ? 'increase' : 'decrease'}
         </Typography>
       </Box>
@@ -65,18 +65,20 @@ const KPICard: React.FC<KPICardProps> = ({
         borderRadius: 1,
         border: '1px solid rgba(0,0,0,0.05)',
         backgroundColor: '#fff',
-      }}>
+      }}
+    >
       {/* Subtitle first (if provided) - matches FOREMAN layout */}
       {subtitle && (
         <Typography
-          variant='caption'
-          color='text.secondary'
+          variant="caption"
+          color="text.secondary"
           sx={{
             fontSize: '0.7rem',
             textTransform: 'uppercase',
             textAlign: 'center',
             mb: 0.5,
-          }}>
+          }}
+        >
           {subtitle}
         </Typography>
       )}
@@ -88,23 +90,26 @@ const KPICard: React.FC<KPICardProps> = ({
           justifyContent: 'center',
           alignItems: 'flex-end',
           mb: 0.5,
-        }}>
+        }}
+      >
         {loading ? (
           <CircularProgress size={24} sx={{ my: 1 }} />
         ) : (
           <>
             <Typography
-              variant='h5'
-              component='div'
-              fontWeight='bold'
-              sx={{ textAlign: 'center' }}>
+              variant="h5"
+              component="div"
+              fontWeight="bold"
+              sx={{ textAlign: 'center' }}
+            >
               {value}
             </Typography>
             {unit && (
               <Typography
-                variant='body2'
-                color='text.secondary'
-                sx={{ ml: 0.5, mb: 0.2 }}>
+                variant="body2"
+                color="text.secondary"
+                sx={{ ml: 0.5, mb: 0.2 }}
+              >
                 {unit}
               </Typography>
             )}
@@ -114,14 +119,15 @@ const KPICard: React.FC<KPICardProps> = ({
 
       {/* Title below the value - matches FOREMAN layout */}
       <Typography
-        variant='subtitle2'
-        color='text.secondary'
+        variant="subtitle2"
+        color="text.secondary"
         sx={{
           textAlign: 'center',
           fontSize: '0.75rem',
           fontWeight: 'normal',
           color: '#666',
-        }}>
+        }}
+      >
         {title}
       </Typography>
 
@@ -132,9 +138,9 @@ const KPICard: React.FC<KPICardProps> = ({
 
       {/* Info icon if needed */}
       {info && (
-        <Tooltip title={info} arrow placement='top'>
+        <Tooltip title={info} arrow placement="top">
           <InfoOutlinedIcon
-            fontSize='small'
+            fontSize="small"
             sx={{
               position: 'absolute',
               top: 8,

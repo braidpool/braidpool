@@ -42,7 +42,8 @@ const Card: React.FC<CardProps> = ({
             backgroundColor: accentColor,
           },
         }),
-      }}>
+      }}
+    >
       {(title || subtitle || headerExtra) && (
         <Box
           sx={{
@@ -53,17 +54,19 @@ const Card: React.FC<CardProps> = ({
             justifyContent: 'space-between',
             alignItems: 'center',
             bgcolor: 'rgba(0,0,0,0.01)',
-          }}>
+          }}
+        >
           <Box>
             {title && (
               <Typography
-                variant='subtitle1'
-                sx={{ fontWeight: 500, color: 'text.primary' }}>
+                variant="subtitle1"
+                sx={{ fontWeight: 500, color: 'text.primary' }}
+              >
                 {title}
               </Typography>
             )}
             {subtitle && (
-              <Typography variant='caption' color='text.secondary'>
+              <Typography variant="caption" color="text.secondary">
                 {subtitle}
               </Typography>
             )}

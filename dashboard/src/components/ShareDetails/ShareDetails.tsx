@@ -60,11 +60,12 @@ function TabPanel(props: TabPanelProps) {
 
   return (
     <div
-      role='tabpanel'
+      role="tabpanel"
       hidden={value !== index}
       id={`bead-tabpanel-${index}`}
       aria-labelledby={`bead-tab-${index}`}
-      {...other}>
+      {...other}
+    >
       {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
     </div>
   );
@@ -111,16 +112,17 @@ export default function ShareDetails({
     <Dialog
       open={open}
       onClose={onClose}
-      maxWidth='md'
+      maxWidth="md"
       fullWidth
-      aria-labelledby='share-details-dialog-title'>
-      <DialogTitle id='share-details-dialog-title'>
+      aria-labelledby="share-details-dialog-title"
+    >
+      <DialogTitle id="share-details-dialog-title">
         Share Details
         {bead.isTip && (
-          <Chip size='small' label='Tip' color='secondary' sx={{ ml: 1 }} />
+          <Chip size="small" label="Tip" color="secondary" sx={{ ml: 1 }} />
         )}
         {bead.isGenesis && (
-          <Chip size='small' label='Genesis' color='primary' sx={{ ml: 1 }} />
+          <Chip size="small" label="Genesis" color="primary" sx={{ ml: 1 }} />
         )}
       </DialogTitle>
 
@@ -128,41 +130,42 @@ export default function ShareDetails({
         {/* Bead Hash and Basic Info */}
         <StyledPaper elevation={1}>
           <Box sx={{ mb: 2 }}>
-            <LabelText variant='subtitle2'>Bead Hash</LabelText>
-            <HashText variant='body2'>{bead.beadHash}</HashText>
+            <LabelText variant="subtitle2">Bead Hash</LabelText>
+            <HashText variant="body2">{bead.beadHash}</HashText>
           </Box>
 
           <Stack
             spacing={2}
             direction={{ xs: 'column', sm: 'row' }}
-            flexWrap='wrap'>
+            flexWrap="wrap"
+          >
             <Box sx={{ flex: '1 1 50%', minWidth: { xs: '100%', sm: '45%' } }}>
-              <LabelText variant='subtitle2'>Observation Time</LabelText>
-              <ValueText variant='body2'>{bead.formattedTimestamp}</ValueText>
+              <LabelText variant="subtitle2">Observation Time</LabelText>
+              <ValueText variant="body2">{bead.formattedTimestamp}</ValueText>
             </Box>
             <Box sx={{ flex: '1 1 50%', minWidth: { xs: '100%', sm: '45%' } }}>
-              <LabelText variant='subtitle2'>Cohort</LabelText>
-              <ValueText variant='body2'>{bead.cohortId}</ValueText>
+              <LabelText variant="subtitle2">Cohort</LabelText>
+              <ValueText variant="body2">{bead.cohortId}</ValueText>
             </Box>
             <Box sx={{ flex: '1 1 50%', minWidth: { xs: '100%', sm: '45%' } }}>
-              <LabelText variant='subtitle2'>Validation Status</LabelText>
+              <LabelText variant="subtitle2">Validation Status</LabelText>
               <Chip
-                size='small'
+                size="small"
                 label={bead.validationStatus}
                 color={
                   bead.validationStatus === 'valid'
                     ? 'success'
                     : bead.validationStatus === 'invalid'
-                    ? 'error'
-                    : 'warning'
+                      ? 'error'
+                      : 'warning'
                 }
               />
             </Box>
             <Box sx={{ flex: '1 1 50%', minWidth: { xs: '100%', sm: '45%' } }}>
-              <LabelText variant='subtitle2'>
+              <LabelText variant="subtitle2">
                 Lesser Difficulty Target
               </LabelText>
-              <ValueText variant='body2'>
+              <ValueText variant="body2">
                 {bead.lesserDifficultyTarget.toString(16)}
               </ValueText>
             </Box>
@@ -174,21 +177,22 @@ export default function ShareDetails({
           <Tabs
             value={tabValue}
             onChange={handleTabChange}
-            aria-label='bead details tabs'>
+            aria-label="bead details tabs"
+          >
             <Tab
-              label='Block Header'
-              id='bead-tab-0'
-              aria-controls='bead-tabpanel-0'
+              label="Block Header"
+              id="bead-tab-0"
+              aria-controls="bead-tabpanel-0"
             />
             <Tab
-              label='Parents'
-              id='bead-tab-1'
-              aria-controls='bead-tabpanel-1'
+              label="Parents"
+              id="bead-tab-1"
+              aria-controls="bead-tabpanel-1"
             />
             <Tab
-              label='Transactions'
-              id='bead-tab-2'
-              aria-controls='bead-tabpanel-2'
+              label="Transactions"
+              id="bead-tab-2"
+              aria-controls="bead-tabpanel-2"
             />
           </Tabs>
         </Box>
@@ -198,34 +202,35 @@ export default function ShareDetails({
           <Stack
             spacing={2}
             direction={{ xs: 'column', sm: 'row' }}
-            flexWrap='wrap'>
+            flexWrap="wrap"
+          >
             <Box sx={{ flex: '1 1 50%', minWidth: { xs: '100%', sm: '45%' } }}>
-              <LabelText variant='subtitle2'>Version</LabelText>
-              <ValueText variant='body2'>{bead.blockHeader.version}</ValueText>
+              <LabelText variant="subtitle2">Version</LabelText>
+              <ValueText variant="body2">{bead.blockHeader.version}</ValueText>
             </Box>
             <Box sx={{ flex: '1 1 50%', minWidth: { xs: '100%', sm: '45%' } }}>
-              <LabelText variant='subtitle2'>Timestamp</LabelText>
-              <ValueText variant='body2'>
+              <LabelText variant="subtitle2">Timestamp</LabelText>
+              <ValueText variant="body2">
                 {new Date(bead.blockHeader.timestamp).toLocaleString()}
               </ValueText>
             </Box>
             <Box sx={{ flex: '1 1 100%' }}>
-              <LabelText variant='subtitle2'>Previous Block Hash</LabelText>
-              <HashText variant='body2'>
+              <LabelText variant="subtitle2">Previous Block Hash</LabelText>
+              <HashText variant="body2">
                 {bead.blockHeader.prevBlockHash}
               </HashText>
             </Box>
             <Box sx={{ flex: '1 1 100%' }}>
-              <LabelText variant='subtitle2'>Merkle Root</LabelText>
-              <HashText variant='body2'>{bead.blockHeader.merkleRoot}</HashText>
+              <LabelText variant="subtitle2">Merkle Root</LabelText>
+              <HashText variant="body2">{bead.blockHeader.merkleRoot}</HashText>
             </Box>
             <Box sx={{ flex: '1 1 50%', minWidth: { xs: '100%', sm: '45%' } }}>
-              <LabelText variant='subtitle2'>Bits</LabelText>
-              <ValueText variant='body2'>{bead.blockHeader.bits}</ValueText>
+              <LabelText variant="subtitle2">Bits</LabelText>
+              <ValueText variant="body2">{bead.blockHeader.bits}</ValueText>
             </Box>
             <Box sx={{ flex: '1 1 50%', minWidth: { xs: '100%', sm: '45%' } }}>
-              <LabelText variant='subtitle2'>Nonce</LabelText>
-              <ValueText variant='body2'>{bead.blockHeader.nonce}</ValueText>
+              <LabelText variant="subtitle2">Nonce</LabelText>
+              <ValueText variant="body2">{bead.blockHeader.nonce}</ValueText>
             </Box>
           </Stack>
         </TabPanel>
@@ -233,26 +238,27 @@ export default function ShareDetails({
         {/* Parents Tab */}
         <TabPanel value={tabValue} index={1}>
           {bead.parents.length === 0 ? (
-            <Typography variant='body2'>Genesis bead has no parents</Typography>
+            <Typography variant="body2">Genesis bead has no parents</Typography>
           ) : (
             bead.parents.map((parent, index) => (
               <StyledPaper key={index} elevation={1}>
                 <Stack spacing={2}>
                   <Box>
-                    <LabelText variant='subtitle2'>Parent Hash</LabelText>
-                    <Box display='flex' alignItems='center'>
-                      <HashText variant='body2'>{parent.beadHash}</HashText>
+                    <LabelText variant="subtitle2">Parent Hash</LabelText>
+                    <Box display="flex" alignItems="center">
+                      <HashText variant="body2">{parent.beadHash}</HashText>
                       <Button
-                        size='small'
+                        size="small"
                         onClick={() => handleParentClick(parent.beadHash)}
-                        sx={{ ml: 1 }}>
+                        sx={{ ml: 1 }}
+                      >
                         View
                       </Button>
                     </Box>
                   </Box>
                   <Box>
-                    <LabelText variant='subtitle2'>Timestamp</LabelText>
-                    <ValueText variant='body2'>
+                    <LabelText variant="subtitle2">Timestamp</LabelText>
+                    <ValueText variant="body2">
                       {new Date(parent.timestamp).toLocaleString()}
                     </ValueText>
                   </Box>
@@ -265,25 +271,25 @@ export default function ShareDetails({
         {/* Transactions Tab */}
         <TabPanel value={tabValue} index={2}>
           <Box sx={{ mb: 3 }}>
-            <Typography variant='h6'>Coinbase Transaction</Typography>
+            <Typography variant="h6">Coinbase Transaction</Typography>
             <StyledPaper elevation={1}>
               <Stack spacing={2}>
                 <Box>
-                  <LabelText variant='subtitle2'>Transaction ID</LabelText>
-                  <HashText variant='body2'>
+                  <LabelText variant="subtitle2">Transaction ID</LabelText>
+                  <HashText variant="body2">
                     {bead.coinbaseTransaction.transaction.txid}
                   </HashText>
                 </Box>
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                   <Box sx={{ flex: '1 1 50%' }}>
-                    <LabelText variant='subtitle2'>Version</LabelText>
-                    <ValueText variant='body2'>
+                    <LabelText variant="subtitle2">Version</LabelText>
+                    <ValueText variant="body2">
                       {bead.coinbaseTransaction.transaction.version}
                     </ValueText>
                   </Box>
                   <Box sx={{ flex: '1 1 50%' }}>
-                    <LabelText variant='subtitle2'>Lock Time</LabelText>
-                    <ValueText variant='body2'>
+                    <LabelText variant="subtitle2">Lock Time</LabelText>
+                    <ValueText variant="body2">
                       {bead.coinbaseTransaction.transaction.lockTime}
                     </ValueText>
                   </Box>
@@ -293,25 +299,25 @@ export default function ShareDetails({
           </Box>
 
           <Box sx={{ mb: 3 }}>
-            <Typography variant='h6'>Payout Update Transaction</Typography>
+            <Typography variant="h6">Payout Update Transaction</Typography>
             <StyledPaper elevation={1}>
               <Stack spacing={2}>
                 <Box>
-                  <LabelText variant='subtitle2'>Transaction ID</LabelText>
-                  <HashText variant='body2'>
+                  <LabelText variant="subtitle2">Transaction ID</LabelText>
+                  <HashText variant="body2">
                     {bead.payoutUpdateTransaction.transaction.txid}
                   </HashText>
                 </Box>
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                   <Box sx={{ flex: '1 1 50%' }}>
-                    <LabelText variant='subtitle2'>Version</LabelText>
-                    <ValueText variant='body2'>
+                    <LabelText variant="subtitle2">Version</LabelText>
+                    <ValueText variant="body2">
                       {bead.payoutUpdateTransaction.transaction.version}
                     </ValueText>
                   </Box>
                   <Box sx={{ flex: '1 1 50%' }}>
-                    <LabelText variant='subtitle2'>Lock Time</LabelText>
-                    <ValueText variant='body2'>
+                    <LabelText variant="subtitle2">Lock Time</LabelText>
+                    <ValueText variant="body2">
                       {bead.payoutUpdateTransaction.transaction.lockTime}
                     </ValueText>
                   </Box>
@@ -321,24 +327,24 @@ export default function ShareDetails({
           </Box>
 
           <Box>
-            <Typography variant='h6'>
+            <Typography variant="h6">
               Other Transactions ({bead.transactions.length})
             </Typography>
             {bead.transactions.map((tx, index) => (
               <StyledPaper key={index} elevation={1}>
                 <Stack spacing={2}>
                   <Box>
-                    <LabelText variant='subtitle2'>Transaction ID</LabelText>
-                    <HashText variant='body2'>{tx.txid}</HashText>
+                    <LabelText variant="subtitle2">Transaction ID</LabelText>
+                    <HashText variant="body2">{tx.txid}</HashText>
                   </Box>
                   <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                     <Box sx={{ flex: '1 1 50%' }}>
-                      <LabelText variant='subtitle2'>Size</LabelText>
-                      <ValueText variant='body2'>{tx.size} bytes</ValueText>
+                      <LabelText variant="subtitle2">Size</LabelText>
+                      <ValueText variant="body2">{tx.size} bytes</ValueText>
                     </Box>
                     <Box sx={{ flex: '1 1 50%' }}>
-                      <LabelText variant='subtitle2'>Weight</LabelText>
-                      <ValueText variant='body2'>{tx.weight}</ValueText>
+                      <LabelText variant="subtitle2">Weight</LabelText>
+                      <ValueText variant="body2">{tx.weight}</ValueText>
                     </Box>
                   </Stack>
                 </Stack>

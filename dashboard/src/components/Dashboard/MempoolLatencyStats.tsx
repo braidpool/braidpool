@@ -50,18 +50,20 @@ const StatItem = ({
 }) => (
   <Box sx={{ mb: 2 }}>
     <Typography
-      variant='body2'
-      color='textSecondary'
-      sx={{ fontSize: '0.8rem', mb: 0.5 }}>
+      variant="body2"
+      color="textSecondary"
+      sx={{ fontSize: '0.8rem', mb: 0.5 }}
+    >
       {label}
     </Typography>
     <Typography
-      variant='h6'
+      variant="h6"
       sx={{
         fontWeight: 500,
         color: color || colors.textPrimary,
         fontSize: '1.1rem',
-      }}>
+      }}
+    >
       {value}
     </Typography>
   </Box>
@@ -88,25 +90,27 @@ const FeeRate = ({
             level === 'Fastest'
               ? colors.error
               : level === 'Fast'
-              ? colors.warning
-              : level === 'Standard'
-              ? colors.success
-              : colors.textSecondary,
+                ? colors.warning
+                : level === 'Standard'
+                  ? colors.success
+                  : colors.textSecondary,
           mr: 1.5,
         }}
       />
-      <Typography variant='body2' sx={{ fontSize: '0.85rem' }}>
+      <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>
         {level}
       </Typography>
     </Box>
     <Typography
-      variant='body2'
-      sx={{ fontSize: '0.85rem', color: colors.textSecondary }}>
+      variant="body2"
+      sx={{ fontSize: '0.85rem', color: colors.textSecondary }}
+    >
       {rate}
     </Typography>
     <Typography
-      variant='body2'
-      sx={{ fontSize: '0.85rem', color: colors.textSecondary }}>
+      variant="body2"
+      sx={{ fontSize: '0.85rem', color: colors.textSecondary }}
+    >
       {time}
     </Typography>
   </Box>
@@ -115,15 +119,17 @@ const FeeRate = ({
 const MempoolLatencyStats = () => {
   return (
     <Card
-      title='Network Performance'
-      subtitle='Mempool stats and latency metrics'
-      accentColor={colors.cardAccentPrimary}>
+      title="Network Performance"
+      subtitle="Mempool stats and latency metrics"
+      accentColor={colors.cardAccentPrimary}
+    >
       <Box
         sx={{
           display: 'flex',
           flexDirection: { xs: 'column', md: 'row' },
           gap: 3,
-        }}>
+        }}
+      >
         {/* Mempool Stats */}
         <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 50%' } }}>
           <Paper
@@ -134,28 +140,29 @@ const MempoolLatencyStats = () => {
               border: `1px solid ${colors.primary}20`,
               p: 2,
               height: '100%',
-            }}>
-            <Typography variant='h6' sx={{ mb: 2, fontWeight: 500 }}>
+            }}
+          >
+            <Typography variant="h6" sx={{ mb: 2, fontWeight: 500 }}>
               Mempool Status
             </Typography>
 
             <Box sx={{ display: 'flex', flexWrap: 'wrap', mx: -1, mb: 2 }}>
               <Box sx={{ width: { xs: '50%', sm: '50%' }, p: 1 }}>
-                <StatItem label='SIZE' value={mempoolData.size} />
+                <StatItem label="SIZE" value={mempoolData.size} />
               </Box>
               <Box sx={{ width: { xs: '50%', sm: '50%' }, p: 1 }}>
-                <StatItem label='TRANSACTIONS' value={mempoolData.txCount} />
+                <StatItem label="TRANSACTIONS" value={mempoolData.txCount} />
               </Box>
               <Box sx={{ width: { xs: '50%', sm: '50%' }, p: 1 }}>
                 <StatItem
-                  label='NEXT BLOCK FEES'
+                  label="NEXT BLOCK FEES"
                   value={mempoolData.nextBlockFees}
                   color={colors.secondary}
                 />
               </Box>
               <Box sx={{ width: { xs: '50%', sm: '50%' }, p: 1 }}>
                 <StatItem
-                  label='HIGH PRIORITY FEE'
+                  label="HIGH PRIORITY FEE"
                   value={mempoolData.feeRates.high}
                   color={colors.error}
                 />
@@ -164,27 +171,27 @@ const MempoolLatencyStats = () => {
 
             <Divider sx={{ my: 2 }} />
 
-            <Typography variant='subtitle2' sx={{ mb: 2, fontWeight: 500 }}>
+            <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 500 }}>
               Fee Estimates
             </Typography>
 
             <FeeRate
-              level='Fastest'
+              level="Fastest"
               rate={mempoolData.feeRates.high}
               time={mempoolData.feeEstimates.fastest}
             />
             <FeeRate
-              level='Fast'
+              level="Fast"
               rate={mempoolData.feeRates.medium}
               time={mempoolData.feeEstimates.fast}
             />
             <FeeRate
-              level='Standard'
+              level="Standard"
               rate={mempoolData.feeRates.medium}
               time={mempoolData.feeEstimates.standard}
             />
             <FeeRate
-              level='Economy'
+              level="Economy"
               rate={mempoolData.feeRates.low}
               time={mempoolData.feeEstimates.economy}
             />
@@ -201,35 +208,39 @@ const MempoolLatencyStats = () => {
               border: `1px solid ${colors.primary}20`,
               p: 2,
               height: '100%',
-            }}>
-            <Typography variant='h6' sx={{ mb: 2, fontWeight: 500 }}>
+            }}
+          >
+            <Typography variant="h6" sx={{ mb: 2, fontWeight: 500 }}>
               Network Latency
             </Typography>
 
             <Box sx={{ mb: 2 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                 <Typography
-                  variant='body2'
-                  color='textSecondary'
-                  sx={{ fontSize: '0.8rem' }}>
+                  variant="body2"
+                  color="textSecondary"
+                  sx={{ fontSize: '0.8rem' }}
+                >
                   Current:{' '}
                   <span style={{ color: colors.textPrimary, fontWeight: 500 }}>
                     203 ms
                   </span>
                 </Typography>
                 <Typography
-                  variant='body2'
-                  color='textSecondary'
-                  sx={{ fontSize: '0.8rem' }}>
+                  variant="body2"
+                  color="textSecondary"
+                  sx={{ fontSize: '0.8rem' }}
+                >
                   Avg (1h):{' '}
                   <span style={{ color: colors.textPrimary, fontWeight: 500 }}>
                     211 ms
                   </span>
                 </Typography>
                 <Typography
-                  variant='body2'
-                  color='textSecondary'
-                  sx={{ fontSize: '0.8rem' }}>
+                  variant="body2"
+                  color="textSecondary"
+                  sx={{ fontSize: '0.8rem' }}
+                >
                   Best:{' '}
                   <span style={{ color: colors.success, fontWeight: 500 }}>
                     197 ms
@@ -255,9 +266,10 @@ const MempoolLatencyStats = () => {
                   backgroundSize: '20% 25%',
                   opacity: 0.2,
                 },
-              }}>
+              }}
+            >
               {/* Line graph would be created with D3.js */}
-              <svg width='100%' height='100%'>
+              <svg width="100%" height="100%">
                 <path
                   d={`M 0,${
                     100 - ((latencyData[0].value - 190) / 50) * 100
@@ -268,9 +280,9 @@ const MempoolLatencyStats = () => {
                       return `L ${x},${y}`;
                     })
                     .join(' ')}`}
-                  fill='none'
+                  fill="none"
                   stroke={colors.primary}
-                  strokeWidth='2'
+                  strokeWidth="2"
                 />
                 {latencyData.map((point, i) => {
                   const x = i * (100 / (latencyData.length - 1));
@@ -280,10 +292,10 @@ const MempoolLatencyStats = () => {
                       key={i}
                       cx={`${x}%`}
                       cy={`${y}%`}
-                      r='3'
+                      r="3"
                       fill={colors.primary}
                       stroke={colors.chartBackground}
-                      strokeWidth='1'
+                      strokeWidth="1"
                     />
                   );
                 })}
@@ -300,20 +312,24 @@ const MempoolLatencyStats = () => {
                   flexDirection: 'column',
                   justifyContent: 'space-between',
                   pr: 1,
-                }}>
+                }}
+              >
                 <Typography
-                  variant='caption'
-                  sx={{ fontSize: '0.7rem', color: colors.textSecondary }}>
+                  variant="caption"
+                  sx={{ fontSize: '0.7rem', color: colors.textSecondary }}
+                >
                   240ms
                 </Typography>
                 <Typography
-                  variant='caption'
-                  sx={{ fontSize: '0.7rem', color: colors.textSecondary }}>
+                  variant="caption"
+                  sx={{ fontSize: '0.7rem', color: colors.textSecondary }}
+                >
                   215ms
                 </Typography>
                 <Typography
-                  variant='caption'
-                  sx={{ fontSize: '0.7rem', color: colors.textSecondary }}>
+                  variant="caption"
+                  sx={{ fontSize: '0.7rem', color: colors.textSecondary }}
+                >
                   190ms
                 </Typography>
               </Box>
@@ -327,20 +343,24 @@ const MempoolLatencyStats = () => {
                   bottom: -20,
                   display: 'flex',
                   justifyContent: 'space-between',
-                }}>
+                }}
+              >
                 <Typography
-                  variant='caption'
-                  sx={{ fontSize: '0.7rem', color: colors.textSecondary }}>
+                  variant="caption"
+                  sx={{ fontSize: '0.7rem', color: colors.textSecondary }}
+                >
                   60m
                 </Typography>
                 <Typography
-                  variant='caption'
-                  sx={{ fontSize: '0.7rem', color: colors.textSecondary }}>
+                  variant="caption"
+                  sx={{ fontSize: '0.7rem', color: colors.textSecondary }}
+                >
                   30m
                 </Typography>
                 <Typography
-                  variant='caption'
-                  sx={{ fontSize: '0.7rem', color: colors.textSecondary }}>
+                  variant="caption"
+                  sx={{ fontSize: '0.7rem', color: colors.textSecondary }}
+                >
                   5m
                 </Typography>
               </Box>
@@ -349,9 +369,9 @@ const MempoolLatencyStats = () => {
             <Divider sx={{ my: 2 }} />
 
             <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-              <StatItem label='SWITCHING TIME' value='1.8s' />
-              <StatItem label='LAMBDA' value='1.87' />
-              <StatItem label='A PARAMETER' value='3.2' />
+              <StatItem label="SWITCHING TIME" value="1.8s" />
+              <StatItem label="LAMBDA" value="1.87" />
+              <StatItem label="A PARAMETER" value="3.2" />
             </Box>
           </Paper>
         </Box>
