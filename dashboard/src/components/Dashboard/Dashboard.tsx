@@ -27,7 +27,7 @@ import MineInventoryDashboard from '../MinerDashboard/MineInventoryDashboard';
 import PoolHashrateChart from './PoolHashrateChart';
 import MempoolLatencyStats from './MempoolLatencyStats';
 import RecentBlocksTable from './RecentBlocksTable';
-import GraphVisualization from '../BraidPoolDAG/BraidPoolDAG';
+import BraidPoolDAGContainer from '../BraidPoolDAG/Pixi/BraidPoolDAGContainer';
 import MinedSharesExplorer from '../MinerDashboard/MinerDashboard';
 // Utils
 import {
@@ -345,7 +345,7 @@ const Dashboard = () => {
           <Box sx={{ p: 1 }}>
             <Card title="Braid Visualization">
               <Box>
-                <GraphVisualization />
+                <BraidPoolDAGContainer />
               </Box>
             </Card>
           </Box>

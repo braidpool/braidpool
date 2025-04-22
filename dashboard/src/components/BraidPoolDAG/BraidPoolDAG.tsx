@@ -189,62 +189,150 @@ const GraphVisualization: React.FC = () => {
   );
 
   useEffect(() => {
-    let url = 'http://localhost:65433/';
-    const newSocket = io(url, {
-      reconnection: true,
-      reconnectionAttempts: Infinity,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      timeout: 20000,
-    });
+    let url = 'http://french.braidpool.net:65433/';
+    console.log('🔌 Connecting to socket server at:', url);
+    let connectAttempts = 0;
+    const maxConnectAttempts = 3;
 
-    setSocket(newSocket);
-
-    newSocket.on('connect', () => {
-      console.log('Connected to Socket ', url);
-      setConnectionStatus('Connected');
-    });
-
-    newSocket.on('disconnect', () => {
-      setConnectionStatus('Disconnected');
-    });
-
-    newSocket.on('connect_error', (err) => {
-      setConnectionStatus(`Error: ${err.message}`);
-    });
-
-    newSocket.on('braid_update', (parsedData: GraphData) => {
-      // Remove JSON.parse
-      try {
-        // Build the sequential ID mapping
-        const newMapping: NodeIdMapping = {};
-        let nextId = 1;
-        Object.keys(parsedData.parents).forEach((hash) => {
-          if (!newMapping[hash]) {
-            newMapping[hash] = nextId.toString();
-            nextId++;
-          }
-        });
-        setNodeIdMap(newMapping);
-        setGraphData(parsedData);
-        setTotalBeads(parsedData.bead_count); // Use direct value instead of counting
-        setTotalCohorts(parsedData.cohorts.length);
-        let maxSize = 0;
-        parsedData.cohorts.forEach((cohort) => {
-          if (cohort.length > maxSize) maxSize = cohort.length;
-        });
-        setMaxCohortSize(maxSize);
-        setHwpLength(parsedData.highest_work_path.length);
+    const connectSocket = () => {
+      if (connectAttempts >= maxConnectAttempts) {
+        console.error(
+          `❌ Failed to connect after ${maxConnectAttempts} attempts`
+        );
+        setConnectionStatus(`Failed after ${maxConnectAttempts} attempts`);
+        setError(
+          `Unable to connect to the socket server after ${maxConnectAttempts} attempts. Please check your network and try again later.`
+        );
         setLoading(false);
-        console.log(parsedData);
-      } catch (err) {
-        setError('Error processing graph data');
-        setLoading(false);
+        return;
       }
-    });
+
+      connectAttempts++;
+      console.log(
+        `🔄 Connection attempt ${connectAttempts}/${maxConnectAttempts}`
+      );
+
+      const newSocket = io(url, {
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        timeout: 10000, // Reduced timeout for faster failure detection
+      });
+
+      setSocket(newSocket);
+
+      newSocket.on('connect', () => {
+        console.log('Connected to Socket ', url);
+        setConnectionStatus('Connected');
+      });
+      newSocket.on('connect', () => {
+        console.log('🟢 Connected to Socket ', url);
+        setConnectionStatus('Connected');
+        connectAttempts = 0; // Reset counter on successful connection
+      });
+
+      newSocket.on('disconnect', () => {
+        setConnectionStatus('Disconnected');
+      });
+      newSocket.on('disconnect', () => {
+        console.log('🔴 Disconnected from Socket');
+        setConnectionStatus('Disconnected');
+      });
+
+      newSocket.on('connect_error', (err) => {
+        setConnectionStatus(`Error: ${err.message}`);
+      });
+
+      newSocket.on('braid_update', (parsedData: GraphData) => {
+        // Remove JSON.parse
+        try {
+          // Build the sequential ID mapping
+          const newMapping: NodeIdMapping = {};
+          let nextId = 1;
+          Object.keys(parsedData.parents).forEach((hash) => {
+            if (!newMapping[hash]) {
+              newMapping[hash] = nextId.toString();
+              nextId++;
+            }
+          });
+          setNodeIdMap(newMapping);
+          setGraphData(parsedData);
+          setTotalBeads(parsedData.bead_count); // Use direct value instead of counting
+          setTotalCohorts(parsedData.cohorts.length);
+          let maxSize = 0;
+          parsedData.cohorts.forEach((cohort) => {
+            if (cohort.length > maxSize) maxSize = cohort.length;
+          });
+          setMaxCohortSize(maxSize);
+          setHwpLength(parsedData.highest_work_path.length);
+          setLoading(false);
+          console.log(parsedData);
+        } catch (err) {
+          setError('Error processing graph data');
+          setLoading(false);
+        }
+      });
+      newSocket.on('connect_error', (err) => {
+        console.log('❌ Socket connection error:', err.message);
+        setConnectionStatus(`Error: ${err.message}`);
+
+        // If we haven't reached max attempts, try again after a delay
+        if (connectAttempts < maxConnectAttempts) {
+          setTimeout(() => {
+            console.log('🔄 Retrying connection...');
+            newSocket.disconnect();
+            connectSocket();
+          }, 3000);
+        } else {
+          setError(
+            `Connection error: ${err.message}. Please verify the server is running.`
+          );
+          setLoading(false);
+        }
+      });
+
+      newSocket.on('braid_update', (parsedData: GraphData) => {
+        try {
+          console.log('📊 Received braid_update data!');
+          // Build the sequential ID mapping
+          const newMapping: NodeIdMapping = {};
+          let nextId = 1;
+          Object.keys(parsedData.parents).forEach((hash) => {
+            if (!newMapping[hash]) {
+              newMapping[hash] = nextId.toString();
+              nextId++;
+            }
+          });
+          setNodeIdMap(newMapping);
+          setGraphData(parsedData);
+          setTotalBeads(parsedData.bead_count);
+          setTotalCohorts(parsedData.cohorts.length);
+          let maxSize = 0;
+          parsedData.cohorts.forEach((cohort) => {
+            if (cohort.length > maxSize) maxSize = cohort.length;
+          });
+          setMaxCohortSize(maxSize);
+          setHwpLength(parsedData.highest_work_path.length);
+          setLoading(false);
+          console.log('✅ Data processed successfully');
+        } catch (err) {
+          console.error('🔥 Error processing graph data:', err);
+          setError('Error processing graph data');
+          setLoading(false);
+        }
+      });
+
+      return newSocket;
+    };
+
+    const socket = connectSocket();
 
     return () => {
-      newSocket.disconnect();
+      console.log('🔌 Disconnecting socket');
+      if (socket) {
+        socket.disconnect();
+      }
     };
   }, []);
 
@@ -379,7 +467,9 @@ const GraphVisualization: React.FC = () => {
       .attr(
         'transform',
         (d) =>
-          `translate(${(positions[d.id]?.x || 0) + offsetX},${positions[d.id]?.y || 0})`
+          `translate(${(positions[d.id]?.x || 0) + offsetX},${
+            positions[d.id]?.y || 0
+          })`
       ) // Apply offset
       .style('display', (d) =>
         filteredCohortNodes.has(d.id) ? 'inline' : 'none'
@@ -409,10 +499,16 @@ const GraphVisualization: React.FC = () => {
         const isHWP = hwPathSet.has(d.id);
 
         const tooltipContent = `
-                <div><strong>ID:</strong> ${nodeIdMap[d.id] || '?'} (${d.id})</div>
+                <div><strong>ID:</strong> ${nodeIdMap[d.id] || '?'} (${
+          d.id
+        })</div>
                 <div><strong>Work:</strong> ${d.work}</div>
-                <div><strong>Cohort:</strong> ${cohortIndex !== undefined ? cohortIndex : 'N/A'}</div>
-                <div><strong>Highest Work Path:</strong> ${isHWP ? 'Yes' : 'No'}</div>
+                <div><strong>Cohort:</strong> ${
+                  cohortIndex !== undefined ? cohortIndex : 'N/A'
+                }</div>
+                <div><strong>Highest Work Path:</strong> ${
+                  isHWP ? 'Yes' : 'No'
+                }</div>
                 <div><strong>Parents:</strong> ${
                   d.parents.length > 0
                     ? d.parents.map((p) => `${nodeIdMap[p] || '?'}`).join(', ')
@@ -443,10 +539,16 @@ const GraphVisualization: React.FC = () => {
         const cohortIndex = cohortMap.get(d.id);
         const isHWP = hwPathSet.has(d.id);
         const tooltipContent = `
-                <div><strong>ID:</strong> ${nodeIdMap[d.id] || '?'} (${d.id})</div>
+                <div><strong>ID:</strong> ${nodeIdMap[d.id] || '?'} (${
+          d.id
+        })</div>
                 <div><strong>Work:</strong> ${d.work}</div>
-                <div><strong>Cohort:</strong> ${cohortIndex !== undefined ? cohortIndex : 'N/A'}</div>
-                <div><strong>Highest Work Path:</strong> ${isHWP ? 'Yes' : 'No'}</div>
+                <div><strong>Cohort:</strong> ${
+                  cohortIndex !== undefined ? cohortIndex : 'N/A'
+                }</div>
+                <div><strong>Highest Work Path:</strong> ${
+                  isHWP ? 'Yes' : 'No'
+                }</div>
                 <div><strong>Parents:</strong> ${
                   d.parents.length > 0
                     ? d.parents.map((p) => `${nodeIdMap[p] || '?'}`).join(', ')
@@ -478,6 +580,12 @@ const GraphVisualization: React.FC = () => {
         <div className="flex flex-col items-center">
           <CircularProgress className="h-8 w-8 animate-spin text-[#FF8500]" />
           <p className="mt-4 text-[#0077B6]">Loading graph data...</p>
+          <p className="mt-2 text-sm text-gray-500">
+            Connecting to: french.braidpool.net:65433
+          </p>
+          <p className="mt-2 text-sm text-gray-500">
+            Status: {_connectionStatus}
+          </p>
         </div>
       </div>
     );
