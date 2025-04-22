@@ -874,7 +874,6 @@ class Node:
             return self.calc_target_exponential_damping(parents, 17, 7)
         Nb       = sum(len(c) for c in self.braid.cohorts[-TARGET_NC:])
         x_p      = self.calc_target_harmonic(parents)            # 256‑bit int
-        # ---------------- imports & constants ------------------------------
 
         getcontext().prec = 120                      # plenty for 1e‑18 fp
 
@@ -908,6 +907,26 @@ class Node:
         #for i in range(len(self.braid.cohorts)-LOOKBACK*NC,
         #               len(self.braid.cohorts), 7)[::-1]:
         #    I_k += Decimal(str(W(sum(map(len, self.braid.cohorts[i:i+7]))/NC-1).real)) - z_star
+        # Handle edge case with smooth transition
+
+        loops = 0
+        while Nb <= NC: # Keep expanding the Nc until we have Nb != Nc
+            loops += 1
+            NC *= 2
+            Nb = sum(map(len,self.braid.cohorts[-NC:]))
+        if loops > 0:
+            print(f"Ran {loops} loops expanding NC range.")
+
+        # Target z⋆ (constant)
+        z_star = Decimal(str(lambertw(float(TARGET_NB / TARGET_NC - 1)).real))
+
+        # Current R measurement over NC-cohort window
+        if len(self.braid.cohorts) < NC:
+            Nb = sum(len(c) for c in self.braid.cohorts)
+            R_win = Decimal(Nb) / Decimal(max(1, len(self.braid.cohorts)))
+        else:
+            Nb = sum(len(c) for c in self.braid.cohorts[-NC:])
+            R_win = Decimal(Nb) / Decimal(NC)
 
         # Integral2: Compute W(N_B/1-1) - z_* for each cohort,
         # FIXME what's the difference between doing this and doing W(R-1)-z_Star
