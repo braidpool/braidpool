@@ -2,7 +2,6 @@
 import asyncio
 import json
 import websockets
-import time
 from simulator import print_hash
 
 async def connect_to_server():

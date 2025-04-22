@@ -6,9 +6,6 @@ import websockets
 import time
 import subprocess
 import signal
-import os
-from unittest.mock import patch, MagicMock
-from simulator import print_hash
 
 class TestSimulatorAPI(unittest.TestCase):
     """Test the Simulator API websocket connection and message handling."""
