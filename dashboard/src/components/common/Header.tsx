@@ -23,7 +23,7 @@ const Header: React.FC<HeaderProps> = ({ title = 'BRAIDPOOL' }) => {
 
   return (
     <AppBar
-      position='fixed'
+      position="fixed"
       elevation={0}
       sx={{
         backgroundColor: '#1a1a1a',
@@ -31,7 +31,8 @@ const Header: React.FC<HeaderProps> = ({ title = 'BRAIDPOOL' }) => {
         height: 56,
         zIndex: (theme) => theme.zIndex.drawer + 1,
         borderBottom: '1px solid rgba(255,255,255,0.1)',
-      }}>
+      }}
+    >
       <Toolbar
         sx={{
           minHeight: 56,
@@ -42,7 +43,8 @@ const Header: React.FC<HeaderProps> = ({ title = 'BRAIDPOOL' }) => {
           alignItems: 'center',
           justifyContent: 'space-between',
           position: 'relative',
-        }}>
+        }}
+      >
         {/* Left side - Logo and Brand */}
         <Box
           sx={{
@@ -50,9 +52,10 @@ const Header: React.FC<HeaderProps> = ({ title = 'BRAIDPOOL' }) => {
             alignItems: 'center',
             height: '100%',
             my: 'auto',
-          }}>
+          }}
+        >
           <Box
-            component='div'
+            component="div"
             sx={{
               display: 'flex',
               alignItems: 'center',
@@ -68,12 +71,13 @@ const Header: React.FC<HeaderProps> = ({ title = 'BRAIDPOOL' }) => {
               boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
               flexShrink: 0,
               transform: 'translateY(-1px)', // Subtle adjustment to visually center
-            }}>
+            }}
+          >
             B
           </Box>
           <Typography
-            variant='body1'
-            component='div'
+            variant="body1"
+            component="div"
             sx={{
               fontWeight: 'bold',
               color: colors.textLight,
@@ -83,7 +87,8 @@ const Header: React.FC<HeaderProps> = ({ title = 'BRAIDPOOL' }) => {
               mr: 2,
               whiteSpace: 'nowrap',
               transform: 'translateY(-1px)', // Subtle adjustment to visually center
-            }}>
+            }}
+          >
             {title}
           </Typography>
           <Box
@@ -96,7 +101,7 @@ const Header: React.FC<HeaderProps> = ({ title = 'BRAIDPOOL' }) => {
             }}
           />
           <Box
-            component='span'
+            component="span"
             sx={{
               display: { xs: 'none', md: 'flex' },
               alignItems: 'center',
@@ -105,7 +110,8 @@ const Header: React.FC<HeaderProps> = ({ title = 'BRAIDPOOL' }) => {
               fontWeight: 500,
               ml: 0.5,
               transform: 'translateY(-1px)', // Subtle adjustment to visually center
-            }}>
+            }}
+          >
             <MenuIcon sx={{ fontSize: '1.2rem', mr: 1 }} />
           </Box>
         </Box>
@@ -118,10 +124,11 @@ const Header: React.FC<HeaderProps> = ({ title = 'BRAIDPOOL' }) => {
             gap: 1.5,
             height: '100%',
             transform: 'translateY(-1px)', // Subtle adjustment to visually center
-          }}>
+          }}
+        >
           <Button
-            variant='contained'
-            size='small'
+            variant="contained"
+            size="small"
             onClick={handleAddMiner}
             sx={{
               textTransform: 'none',
@@ -139,7 +146,8 @@ const Header: React.FC<HeaderProps> = ({ title = 'BRAIDPOOL' }) => {
                 backgroundColor: colors.accentDark,
                 boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
               },
-            }}>
+            }}
+          >
             Add Miner
           </Button>
 
@@ -149,7 +157,8 @@ const Header: React.FC<HeaderProps> = ({ title = 'BRAIDPOOL' }) => {
               alignItems: 'center',
               gap: 1,
               height: '100%',
-            }}>
+            }}
+          >
             <ActionIconButton icon={<HomeIcon sx={{ fontSize: '1.2rem' }} />} />
 
             <ActionIconButton
@@ -178,7 +187,8 @@ const Header: React.FC<HeaderProps> = ({ title = 'BRAIDPOOL' }) => {
                     justifyContent: 'center',
                     border: '1.5px solid #1a1a1a',
                     boxShadow: '0 1px 2px rgba(0,0,0,0.3)',
-                  }}>
+                  }}
+                >
                   {notificationCount}
                 </Box>
               )}

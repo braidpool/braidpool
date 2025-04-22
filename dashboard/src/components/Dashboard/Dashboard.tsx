@@ -18,7 +18,6 @@ import InventoryIcon from '@mui/icons-material/Inventory';
 import MemoryIcon from '@mui/icons-material/Memory';
 import LayersIcon from '@mui/icons-material/Layers';
 
-
 // Components
 import TopStatsBar from '../common/TopStatsBar';
 import Card from '../common/Card';
@@ -46,7 +45,7 @@ enum Page {
   MINING_INVENTORY = 'mining-inventory',
   MEMPOOL = 'mempool',
   DAG_VISUALIZATION = 'dag-visualization',
-  MINER_STATS = 'miner-stats'
+  MINER_STATS = 'miner-stats',
 }
 
 const Dashboard = () => {
@@ -90,7 +89,7 @@ const Dashboard = () => {
   // Sidebar drawer content
   const sidebar = (
     <Drawer
-      variant='permanent'
+      variant="permanent"
       sx={{
         display: { xs: 'none', sm: 'block' },
         '& .MuiDrawer-paper': {
@@ -100,9 +99,10 @@ const Dashboard = () => {
           borderRight: `1px solid ${colors.border}`,
         },
       }}
-      open>
+      open
+    >
       <Box sx={{ p: 2 }}>
-        <Typography variant='h6' color='primary' sx={{ fontWeight: 700 }}>
+        <Typography variant="h6" color="primary" sx={{ fontWeight: 700 }}>
           Braidpool
         </Typography>
       </Box>
@@ -121,8 +121,8 @@ const Dashboard = () => {
             '&.Mui-selected': {
               backgroundColor: 'rgba(57, 134, 232, 0.08)',
             },
-          }}>
-            
+          }}
+        >
           <ListItemIcon
             sx={{
               minWidth: 40,
@@ -130,11 +130,12 @@ const Dashboard = () => {
                 currentPage === Page.INSTALLATION
                   ? colors.primary
                   : colors.textSecondary,
-            }}>
-            <ConstructionIcon fontSize='small' />
+            }}
+          >
+            <ConstructionIcon fontSize="small" />
           </ListItemIcon>
           <ListItemText
-            primary='Installation'
+            primary="Installation"
             primaryTypographyProps={{ fontSize: '0.875rem' }}
           />
         </ListItemButton>
@@ -152,7 +153,8 @@ const Dashboard = () => {
             '&.Mui-selected': {
               backgroundColor: 'rgba(57, 134, 232, 0.08)',
             },
-          }}>
+          }}
+        >
           <ListItemIcon
             sx={{
               minWidth: 40,
@@ -160,28 +162,44 @@ const Dashboard = () => {
                 currentPage === Page.DASHBOARD
                   ? colors.primary
                   : colors.textSecondary,
-            }}>
-            <DashboardIcon fontSize='small' />
+            }}
+          >
+            <DashboardIcon fontSize="small" />
           </ListItemIcon>
           <ListItemText
-            primary='Dashboard'
+            primary="Dashboard"
             primaryTypographyProps={{ fontSize: '0.875rem' }}
           />
         </ListItemButton>
         <ListItemButton
-  onClick={() => setCurrentPage(Page.MINER_STATS)}
-  selected={currentPage === Page.MINER_STATS}
-  sx={{
-    pl: 2,
-    py: 1.5,
-    borderLeft: currentPage === Page.MINER_STATS ? `4px solid ${colors.primary}` : 'none',
-    '&.Mui-selected': { backgroundColor: 'rgba(57, 134, 232, 0.08)' },
-  }}>
-  <ListItemIcon sx={{ minWidth: 40, color: currentPage === Page.MINER_STATS ? colors.primary : colors.textSecondary }}>
-    <MemoryIcon fontSize='small' />
-  </ListItemIcon>
-  <ListItemText primary='Miner Stats' primaryTypographyProps={{ fontSize: '0.875rem' }} />
-</ListItemButton>
+          onClick={() => setCurrentPage(Page.MINER_STATS)}
+          selected={currentPage === Page.MINER_STATS}
+          sx={{
+            pl: 2,
+            py: 1.5,
+            borderLeft:
+              currentPage === Page.MINER_STATS
+                ? `4px solid ${colors.primary}`
+                : 'none',
+            '&.Mui-selected': { backgroundColor: 'rgba(57, 134, 232, 0.08)' },
+          }}
+        >
+          <ListItemIcon
+            sx={{
+              minWidth: 40,
+              color:
+                currentPage === Page.MINER_STATS
+                  ? colors.primary
+                  : colors.textSecondary,
+            }}
+          >
+            <MemoryIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText
+            primary="Miner Stats"
+            primaryTypographyProps={{ fontSize: '0.875rem' }}
+          />
+        </ListItemButton>
 
         <ListItemButton
           onClick={() => setCurrentPage(Page.MINING_INVENTORY)}
@@ -196,7 +214,8 @@ const Dashboard = () => {
             '&.Mui-selected': {
               backgroundColor: 'rgba(57, 134, 232, 0.08)',
             },
-          }}>
+          }}
+        >
           <ListItemIcon
             sx={{
               minWidth: 40,
@@ -204,11 +223,12 @@ const Dashboard = () => {
                 currentPage === Page.MINING_INVENTORY
                   ? colors.primary
                   : colors.textSecondary,
-            }}>
-            <InventoryIcon fontSize='small' />
+            }}
+          >
+            <InventoryIcon fontSize="small" />
           </ListItemIcon>
           <ListItemText
-            primary='Inventory'
+            primary="Inventory"
             primaryTypographyProps={{ fontSize: '0.875rem' }}
           />
         </ListItemButton>
@@ -226,7 +246,8 @@ const Dashboard = () => {
             '&.Mui-selected': {
               backgroundColor: 'rgba(57, 134, 232, 0.08)',
             },
-          }}>
+          }}
+        >
           <ListItemIcon
             sx={{
               minWidth: 40,
@@ -234,11 +255,12 @@ const Dashboard = () => {
                 currentPage === Page.MEMPOOL
                   ? colors.primary
                   : colors.textSecondary,
-            }}>
-            <MemoryIcon fontSize='small' />
+            }}
+          >
+            <MemoryIcon fontSize="small" />
           </ListItemIcon>
           <ListItemText
-            primary='Mempool'
+            primary="Mempool"
             primaryTypographyProps={{ fontSize: '0.875rem' }}
           />
         </ListItemButton>
@@ -256,7 +278,8 @@ const Dashboard = () => {
             '&.Mui-selected': {
               backgroundColor: 'rgba(57, 134, 232, 0.08)',
             },
-          }}>
+          }}
+        >
           <ListItemIcon
             sx={{
               minWidth: 40,
@@ -264,11 +287,12 @@ const Dashboard = () => {
                 currentPage === Page.DAG_VISUALIZATION
                   ? colors.primary
                   : colors.textSecondary,
-            }}>
-            <LayersIcon fontSize='small' />
+            }}
+          >
+            <LayersIcon fontSize="small" />
           </ListItemIcon>
           <ListItemText
-            primary='Visualize'
+            primary="Visualize"
             primaryTypographyProps={{ fontSize: '0.875rem' }}
           />
         </ListItemButton>
@@ -287,19 +311,19 @@ const Dashboard = () => {
             <TopStatsBar loading={loading} />
             <Box sx={{ display: 'flex', flexWrap: 'wrap', mt: 2, mx: -1 }}>
               <Box sx={{ width: { xs: '100%', md: '50%' }, p: 1 }}>
-                <Card title='Pool Hashrate'>
+                <Card title="Pool Hashrate">
                   <PoolHashrateChart loading={loading} />
                 </Card>
               </Box>
               <Box sx={{ width: { xs: '100%', md: '50%' }, p: 1 }}>
-                <Card title='Mempool Activity'>
+                <Card title="Mempool Activity">
                   <MempoolLatencyStats />
                 </Card>
               </Box>
             </Box>
             <Box sx={{ mt: 2, mx: -1 }}>
               <Box sx={{ p: 1 }}>
-                <Card title='Recent Blocks'>
+                <Card title="Recent Blocks">
                   <RecentBlocksTable />
                 </Card>
               </Box>
@@ -311,7 +335,7 @@ const Dashboard = () => {
       case Page.MEMPOOL:
         return (
           <Box sx={{ p: 1 }}>
-            <Card title='Mempool Statistics'>
+            <Card title="Mempool Statistics">
               <MempoolLatencyStats />
             </Card>
           </Box>
@@ -319,7 +343,7 @@ const Dashboard = () => {
       case Page.DAG_VISUALIZATION:
         return (
           <Box sx={{ p: 1 }}>
-            <Card title='Braid Visualization'>
+            <Card title="Braid Visualization">
               <Box>
                 <GraphVisualization />
               </Box>
@@ -332,24 +356,25 @@ const Dashboard = () => {
             <Typography>Coming soon</Typography>
           </Box>
         );
-        case Page.MINER_STATS:
-      return <MinedSharesExplorer />;
+      case Page.MINER_STATS:
+        return <MinedSharesExplorer />;
     }
   };
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-      <Header title='Braidpool' />
+      <Header title="Braidpool" />
       {sidebar}
       <Box
-        component='main'
+        component="main"
         sx={{
           flexGrow: 1,
           p: 3,
           width: { sm: `calc(100% - ${drawerWidth}px)` },
           ml: { sm: `${drawerWidth}px` },
           mt: '50px', // Adjust for header height
-        }}>
+        }}
+      >
         {renderPage()}
       </Box>
     </Box>

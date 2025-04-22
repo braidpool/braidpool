@@ -18,7 +18,7 @@ const ActionIconButton: React.FC<ActionIconButtonProps> = ({
 }) => {
   return (
     <IconButton
-      size='small'
+      size="small"
       onClick={onClick}
       sx={{
         color: '#000',
@@ -32,7 +32,8 @@ const ActionIconButton: React.FC<ActionIconButtonProps> = ({
           boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
         },
         ...sx,
-      }}>
+      }}
+    >
       {icon}
     </IconButton>
   );

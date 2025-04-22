@@ -188,9 +188,10 @@ const PoolHashrateChart: React.FC<PoolHashrateChartProps> = ({
             height: '100%',
             flexDirection: 'column',
             p: 3,
-          }}>
+          }}
+        >
           <CircularProgress size={40} sx={{ mb: 2 }} />
-          <Typography variant='body2' color='textSecondary'>
+          <Typography variant="body2" color="textSecondary">
             Loading hashrate data...
           </Typography>
         </Box>
@@ -206,9 +207,10 @@ const PoolHashrateChart: React.FC<PoolHashrateChartProps> = ({
             alignItems: 'center',
             height: '100%',
             p: 3,
-          }}>
+          }}
+        >
           <Alert
-            severity='info'
+            severity="info"
             sx={{
               width: '100%',
               display: 'flex',
@@ -218,9 +220,10 @@ const PoolHashrateChart: React.FC<PoolHashrateChartProps> = ({
               '& .MuiAlert-icon': {
                 color: colors.primary,
               },
-            }}>
+            }}
+          >
             {error}
-            <Box component='span' sx={{ ml: 1 }}>
+            <Box component="span" sx={{ ml: 1 }}>
               — Check your connection or try again later
             </Box>
           </Alert>
@@ -233,15 +236,17 @@ const PoolHashrateChart: React.FC<PoolHashrateChartProps> = ({
 
   return (
     <Card
-      title='Pool Hashrate'
-      subtitle='Live network performance over time'
-      accentColor={colors.cardAccentPrimary}>
+      title="Pool Hashrate"
+      subtitle="Live network performance over time"
+      accentColor={colors.cardAccentPrimary}
+    >
       <Box
         sx={{
           width: '100%',
           height: height,
           overflow: 'hidden',
-        }}>
+        }}
+      >
         {renderContent()}
       </Box>
     </Card>
