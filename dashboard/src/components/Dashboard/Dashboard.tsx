@@ -196,7 +196,7 @@ const Dashboard = () => {
             <MemoryIcon fontSize="small" />
           </ListItemIcon>
           <ListItemText
-            primary="Miner Stats"
+            primary="Beads"
             primaryTypographyProps={{ fontSize: '0.875rem' }}
           />
         </ListItemButton>

@@ -1,26 +1,25 @@
-import { useEffect, useState, useMemo } from "react"
-import { Layers } from "lucide-react"
-import { BlockGrid } from "./BlockGrid"
-import { BlockList } from "./BlockList"
-import { BlockTimeline } from "./BlockTimeline"
-import { BlockStats } from "./BlockStats"
-import { BlockViewToggle } from "./BlockViewToggle"
-
-export default function EnhancedBlocksTab({ timeRange }: { timeRange: string }) {
-  const [selectedBlock, setSelectedBlock] = useState<string | null>(null)
-  const [viewMode, setViewMode] = useState<"list" | "grid" | "timeline">("grid")
-  const [isLoaded, setIsLoaded] = useState(false)
-  const [animateBlocks, setAnimateBlocks] = useState(false)
+import { useEffect, useState, useMemo } from 'react';
+import { Layers } from 'lucide-react';
+import { BlockList } from './BlockList';
+import { BlockStats } from './BlockStats';
+export default function EnhancedBlocksTab({
+  timeRange,
+}: {
+  timeRange: string;
+}) {
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [animateBlocks, setAnimateBlocks] = useState(false);
+  const [viewMode, setViewMode] = useState('list');
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      setIsLoaded(true)
+      setIsLoaded(true);
       setTimeout(() => {
-        setAnimateBlocks(true)
-      }, 500)
-    }, 1000)
-    return () => clearTimeout(timer)
-  }, [])
+        setAnimateBlocks(true);
+      }, 500);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, []);
 
   const blockVisualizationData = useMemo(() => {
     return Array.from({ length: 24 }, (_, i) => ({
@@ -29,15 +28,17 @@ export default function EnhancedBlocksTab({ timeRange }: { timeRange: string }) 
       size: Math.floor(Math.random() * 900) + 300,
       transactions: Math.floor(Math.random() * 20) + 5,
       timestamp: new Date(Date.now() - (24 - i) * 3600000).toISOString(),
-      miner: [`miner1`, `miner2`, `miner3`, `miner4`][Math.floor(Math.random() * 4)],
+      miner: [`miner1`, `miner2`, `miner3`, `miner4`][
+        Math.floor(Math.random() * 4)
+      ],
       difficulty: (Math.random() * 5 + 8).toFixed(2),
       confirmations: 24 - i,
-      color: i % 2 === 0 ? "blue" : i % 3 === 0 ? "purple" : "emerald",
-    }))
-  }, [])
+      color: i % 2 === 0 ? 'blue' : i % 3 === 0 ? 'purple' : 'emerald',
+    }));
+  }, []);
 
   return (
-    <div className="space-y-6 animate-fade-in-up">
+    <div className="space-y-6 animate-fade-in-up ">
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
@@ -49,28 +50,21 @@ export default function EnhancedBlocksTab({ timeRange }: { timeRange: string }) 
             Explore the latest blocks in the network with detailed insights.
           </p>
         </div>
-        <BlockViewToggle viewMode={viewMode} setViewMode={setViewMode} />
       </div>
-
+      <div className="flex justify-between items-center mb-4">
+                <div>
+                  <h3 className="text-xl font-bold text-blue-300">Recent Blocks</h3>
+                  <p className="text-sm text-gray-400 mt-1">
+                    {timeRange === "week" && "Blocks mined in the last 7 days"}
+                    {timeRange === "month" && "Blocks mined in the last 30 days"}
+                    {timeRange === "quarter" && "Blocks mined in the last 90 days"}
+                    {timeRange === "year" && "Blocks mined in the last 365 days"}
+                  </p>
+                </div>
+              </div>
       {/* Views */}
       <div className="relative border border-blue-500/20 rounded-2xl p-6 bg-gradient-to-br from-black via-slate-900 to-black shadow-lg shadow-blue-500/10 backdrop-blur-md overflow-hidden transition-all duration-300 min-h-[400px]">
-        {viewMode === "grid" && (
-          <BlockGrid
-            blockVisualizationData={blockVisualizationData}
-            selectedBlock={selectedBlock}
-            setSelectedBlock={setSelectedBlock}
-            animateBlocks={animateBlocks}
-            isLoaded={isLoaded}
-          />
-        )}
-        {viewMode === "timeline" && (
-          <BlockTimeline
-            blockVisualizationData={blockVisualizationData}
-            animateBlocks={animateBlocks}
-            isLoaded={isLoaded}
-          />
-        )}
-        {viewMode === "list" && (
+        {viewMode === 'list' && (
           <BlockList
             blockVisualizationData={blockVisualizationData}
             animateBlocks={animateBlocks}
@@ -84,5 +78,5 @@ export default function EnhancedBlocksTab({ timeRange }: { timeRange: string }) 
         <BlockStats />
       </div>
     </div>
-  )
+  );
 }

@@ -151,17 +151,7 @@ export default function MinedSharesExplorer() {
 
           {!error && activeTab === "blocks" && (
             <div className="relative border border-gray-800/50 rounded-xl p-6 bg-black/30 backdrop-blur-md overflow-hidden">
-              <div className="flex justify-between items-center mb-4">
-                <div>
-                  <h3 className="text-xl font-bold text-blue-300">Recent Blocks</h3>
-                  <p className="text-sm text-gray-400 mt-1">
-                    {timeRange === "week" && "Blocks mined in the last 7 days"}
-                    {timeRange === "month" && "Blocks mined in the last 30 days"}
-                    {timeRange === "quarter" && "Blocks mined in the last 90 days"}
-                    {timeRange === "year" && "Blocks mined in the last 365 days"}
-                  </p>
-                </div>
-              </div>
+             
               {!error && activeTab === "blocks" && <EnhancedBlocksTab timeRange={timeRange} />}
             </div>
           )}
