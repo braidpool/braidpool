@@ -1,6 +1,6 @@
-import AdvancedChart from "../AdvancedChart"
-import AnimatedStatCard from "../AnimatedStatCard"
-import { Database, TrendingUp, Activity } from "lucide-react"
+import AdvancedChart from '../AdvancedChart';
+import AnimatedStatCard from '../AnimatedStatCard';
+import { Database, TrendingUp, Activity } from 'lucide-react';
 
 export default function TransactionsTab({
   chartData,
@@ -13,8 +13,12 @@ export default function TransactionsTab({
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h3 className="text-xl font-bold text-blue-300">Transaction Activity</h3>
-          <p className="text-sm text-gray-400 mt-1">Mempool transaction statistics</p>
+          <h3 className="text-xl font-bold text-blue-300">
+            Transaction Activity
+          </h3>
+          <p className="text-sm text-gray-400 mt-1">
+            Mempool transaction statistics
+          </p>
         </div>
         <div className="bg-emerald-900/30 px-3 py-1 rounded-md">
           <span className="text-emerald-300 font-mono">42 tx/min</span>
@@ -62,5 +66,5 @@ export default function TransactionsTab({
         />
       </div>
     </div>
-  )
+  );
 }

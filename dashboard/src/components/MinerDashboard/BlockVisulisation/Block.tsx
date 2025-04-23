@@ -61,8 +61,8 @@ export default function EnhancedBlocksTab({
                   </p>
                 </div>
               </div>*/}
-      </div> 
-     
+      </div>
+
       {/* Views */}
       <div className="relative border border-blue-500/20 rounded-2xl p-6 bg-gradient-to-br from-black via-slate-900 to-black shadow-lg shadow-blue-500/10 backdrop-blur-md overflow-hidden transition-all duration-300 min-h-[400px]">
         {viewMode === 'list' && (

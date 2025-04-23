@@ -1,89 +1,83 @@
-import type React from "react"
+import type React from 'react';
 
-import { useState,  useRef, } from "react"
-import { motion,  useInView, } from "framer-motion"
-import {
-  
-  TrendingUp,
-  
-  ArrowDownRight,
-  
-} from "lucide-react"
+import { useState, useRef } from 'react';
+import { motion, useInView } from 'framer-motion';
+import { TrendingUp, ArrowDownRight } from 'lucide-react';
 
 interface AnimatedStatCardProps {
-  title: string
-  value: string
-  change: string
-  icon: React.ReactNode
-  color?: "blue" | "purple" | "emerald"
-  delay?: number
+  title: string;
+  value: string;
+  change: string;
+  icon: React.ReactNode;
+  color?: 'blue' | 'purple' | 'emerald';
+  delay?: number;
 }
 
 const colorMap = {
-  blue: "text-blue-400 bg-blue-900/30",
-  purple: "text-purple-400 bg-purple-900/30",
-  emerald: "text-emerald-400 bg-emerald-900/30",
-}
+  blue: 'text-blue-400 bg-blue-900/30',
+  purple: 'text-purple-400 bg-purple-900/30',
+  emerald: 'text-emerald-400 bg-emerald-900/30',
+};
 
 export default function AnimatedStatCard({
   title,
   value,
   change,
   icon,
-  color = "blue",
+  color = 'blue',
   delay = 0,
 }: {
-  title: string
-  value: string
-  change: string
-  icon: React.ReactNode
-  color?: "blue" | "purple" | "emerald" | "amber"
-  delay?: number
+  title: string;
+  value: string;
+  change: string;
+  icon: React.ReactNode;
+  color?: 'blue' | 'purple' | 'emerald' | 'amber';
+  delay?: number;
 }) {
-  const cardRef = useRef(null)
-  const isInView = useInView(cardRef, { once: false, amount: 0.3 })
-  const [isHovered, setIsHovered] = useState(false)
+  const cardRef = useRef(null);
+  const isInView = useInView(cardRef, { once: false, amount: 0.3 });
+  const [isHovered, setIsHovered] = useState(false);
 
-  const isPositive = change?.startsWith("+")
+  const isPositive = change?.startsWith('+');
 
   // Get color based on trend
   const getTrendColor = () => {
-    if (isPositive) return "text-emerald-400"
-    if (!isPositive && change?.startsWith("-")) return "text-red-400"
-    return "text-gray-400"
-  }
+    if (isPositive) return 'text-emerald-400';
+    if (!isPositive && change?.startsWith('-')) return 'text-red-400';
+    return 'text-gray-400';
+  };
 
   // Get background color based on card color
   const getBackgroundColor = () => {
     switch (color) {
-      case "blue":
-        return "bg-blue-500/20"
-      case "purple":
-        return "bg-purple-500/20"
-      case "emerald":
-        return "bg-emerald-500/20"
-      case "amber":
-        return "bg-amber-500/20"
+      case 'blue':
+        return 'bg-blue-500/20';
+      case 'purple':
+        return 'bg-purple-500/20';
+      case 'emerald':
+        return 'bg-emerald-500/20';
+      case 'amber':
+        return 'bg-amber-500/20';
       default:
-        return "bg-blue-500/20"
+        return 'bg-blue-500/20';
     }
-  }
+  };
 
   // Get border gradient based on card color
   const getBorderGradient = () => {
     switch (color) {
-      case "blue":
-        return "from-blue-500/30 via-purple-500/30 to-blue-500/30"
-      case "purple":
-        return "from-purple-500/30 via-pink-500/30 to-purple-500/30"
-      case "emerald":
-        return "from-emerald-500/30 via-teal-500/30 to-emerald-500/30"
-      case "amber":
-        return "from-amber-500/30 via-orange-500/30 to-amber-500/30"
+      case 'blue':
+        return 'from-blue-500/30 via-purple-500/30 to-blue-500/30';
+      case 'purple':
+        return 'from-purple-500/30 via-pink-500/30 to-purple-500/30';
+      case 'emerald':
+        return 'from-emerald-500/30 via-teal-500/30 to-emerald-500/30';
+      case 'amber':
+        return 'from-amber-500/30 via-orange-500/30 to-amber-500/30';
       default:
-        return "from-blue-500/30 via-purple-500/30 to-blue-500/30"
+        return 'from-blue-500/30 via-purple-500/30 to-blue-500/30';
     }
-  }
+  };
 
   return (
     <motion.div
@@ -91,7 +85,7 @@ export default function AnimatedStatCard({
       className="relative border border-gray-800/50 rounded-xl bg-black/30 backdrop-blur-md overflow-hidden p-5"
       initial={{ opacity: 0, y: 30 }}
       animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 30 }}
-      transition={{ duration: 0.7, delay, type: "spring", stiffness: 100 }}
+      transition={{ duration: 0.7, delay, type: 'spring', stiffness: 100 }}
       onHoverStart={() => setIsHovered(true)}
       onHoverEnd={() => setIsHovered(false)}
     >
@@ -100,13 +94,13 @@ export default function AnimatedStatCard({
         <motion.div
           className={`absolute inset-0 bg-gradient-to-r ${getBorderGradient()}`}
           animate={{
-            backgroundPosition: ["0% 0%", "200% 0%"],
+            backgroundPosition: ['0% 0%', '200% 0%'],
           }}
           transition={{
             duration: 8,
             repeat: Number.POSITIVE_INFINITY,
-            repeatType: "loop",
-            ease: "linear",
+            repeatType: 'loop',
+            ease: 'linear',
           }}
         />
       </div>
@@ -136,7 +130,11 @@ export default function AnimatedStatCard({
             animate={{ opacity: 1 }}
             transition={{ delay: delay + 0.4, duration: 0.5 }}
           >
-            {isPositive ? <TrendingUp className="w-3 h-3 mr-1" /> : <ArrowDownRight className="w-3 h-3 mr-1" />}
+            {isPositive ? (
+              <TrendingUp className="w-3 h-3 mr-1" />
+            ) : (
+              <ArrowDownRight className="w-3 h-3 mr-1" />
+            )}
             {change} from last period
           </motion.p>
         </div>
@@ -144,11 +142,16 @@ export default function AnimatedStatCard({
           className={`${getBackgroundColor()} p-3 rounded-lg`}
           whileHover={{ scale: 1.1, rotate: 5 }}
           animate={{ scale: [1, 1.05, 1] }}
-          transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, repeatType: "reverse", delay: delay * 0.3 }}
+          transition={{
+            duration: 2,
+            repeat: Number.POSITIVE_INFINITY,
+            repeatType: 'reverse',
+            delay: delay * 0.3,
+          }}
         >
           {icon}
         </motion.div>
       </div>
     </motion.div>
-  )
+  );
 }

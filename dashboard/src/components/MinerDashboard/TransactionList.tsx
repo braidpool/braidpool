@@ -1,17 +1,20 @@
-import { useState } from "react"
-import { motion } from "framer-motion"
-import { Activity } from "lucide-react"
-import type { Transaction } from "./lib/types"
+import { useState } from 'react';
+import { motion } from 'framer-motion';
+import { Activity } from 'lucide-react';
+import type { Transaction } from './lib/types';
 
-
-import { shortenHash } from "./lib/utils/shortenHash"
+import { shortenHash } from './lib/utils/shortenHash';
 
 interface TransactionListProps {
-  transactions: Transaction[]
+  transactions: Transaction[];
 }
 
-export default function TransactionList({ transactions }: TransactionListProps) {
-  const [hoveredTransaction, setHoveredTransaction] = useState<string | null>(null)
+export default function TransactionList({
+  transactions,
+}: TransactionListProps) {
+  const [hoveredTransaction, setHoveredTransaction] = useState<string | null>(
+    null
+  );
 
   return (
     <div className="pl-10 pr-4 pb-3 bg-gradient-to-b from-blue-900/20 to-transparent">
@@ -57,7 +60,10 @@ export default function TransactionList({ transactions }: TransactionListProps) 
               show: { y: 0, opacity: 1 },
             }}
             className="grid grid-cols-6 py-2.5 rounded-lg transition-all duration-300 group relative"
-            whileHover={{ scale: 1.01, backgroundColor: "rgba(30, 58, 138, 0.2)" }}
+            whileHover={{
+              scale: 1.01,
+              backgroundColor: 'rgba(30, 58, 138, 0.2)',
+            }}
             onMouseEnter={() => setHoveredTransaction(transaction.id)}
             onMouseLeave={() => setHoveredTransaction(null)}
           >
@@ -67,9 +73,12 @@ export default function TransactionList({ transactions }: TransactionListProps) 
             <div className="text-cyan-400 font-mono relative z-10 group-hover:text-cyan-300 transition-colors duration-300">
               <motion.span
                 animate={{ opacity: [0.7, 1, 0.7] }}
-                transition={{ duration: 3, repeat: Number.POSITIVE_INFINITY, delay: index * 0.5 }}
+                transition={{
+                  duration: 3,
+                  repeat: Number.POSITIVE_INFINITY,
+                  delay: index * 0.5,
+                }}
               >
-                
                 {shortenHash(transaction.hash)}
               </motion.span>
               {/* Tooltip on hover */}
@@ -88,7 +97,10 @@ export default function TransactionList({ transactions }: TransactionListProps) 
               {transaction.size} vbytes
             </div>
             <div className="text-emerald-300 relative z-10 group-hover:text-emerald-200 transition-colors duration-300">
-              {transaction.fee !== undefined ? transaction.fee : transaction.feePaid} BTC
+              {transaction.fee !== undefined
+                ? transaction.fee
+                : transaction.feePaid}{' '}
+              BTC
             </div>
             <div className="text-amber-300 relative z-10 group-hover:text-amber-200 transition-colors duration-300">
               {transaction.feeRate} sats/vB
@@ -103,5 +115,5 @@ export default function TransactionList({ transactions }: TransactionListProps) 
         ))}
       </motion.div>
     </div>
-  )
+  );
 }

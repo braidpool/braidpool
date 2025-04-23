@@ -1,17 +1,17 @@
-import { motion } from "framer-motion"
-import { BEADS } from "../lib/constants"
-import { ChevronDown, Calendar, Search } from "lucide-react"
+import { motion } from 'framer-motion';
+import { BEADS } from '../lib/constants';
+import { ChevronDown, Calendar, Search } from 'lucide-react';
 
 interface FilterPanelProps {
-  startRef: React.RefObject<HTMLInputElement>
-  endRef: React.RefObject<HTMLInputElement>
+  startRef: React.RefObject<HTMLInputElement>;
+  endRef: React.RefObject<HTMLInputElement>;
 }
 
 export default function FilterPanel({ startRef, endRef }: FilterPanelProps) {
   return (
     <motion.div
       initial={{ height: 0, opacity: 0 }}
-      animate={{ height: "auto", opacity: 1 }}
+      animate={{ height: 'auto', opacity: 1 }}
       exit={{ height: 0, opacity: 0 }}
       transition={{ duration: 0.3 }}
       className="overflow-hidden"
@@ -19,9 +19,7 @@ export default function FilterPanel({ startRef, endRef }: FilterPanelProps) {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-5 pt-4">
         {/* Miner Select */}
         <div>
-          <label className="block mb-2 text-blue-300 font-medium">
-            Miner
-          </label>
+          <label className="block mb-2 text-blue-300 font-medium">Miner</label>
           <div className="relative group">
             <select className="w-full bg-gray-900/80 border border-gray-700/80 rounded-lg p-2.5 pr-8 appearance-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 transition-all duration-300 group-hover:border-blue-400/70">
               <option>(All)</option>
@@ -37,7 +35,7 @@ export default function FilterPanel({ startRef, endRef }: FilterPanelProps) {
                 transition={{
                   duration: 1.5,
                   repeat: Number.POSITIVE_INFINITY,
-                  repeatType: "reverse",
+                  repeatType: 'reverse',
                 }}
               >
                 <ChevronDown className="h-4 w-4 text-blue-400" />
@@ -48,7 +46,9 @@ export default function FilterPanel({ startRef, endRef }: FilterPanelProps) {
 
         {/* Start Date */}
         <div>
-          <label className="block mb-2 text-blue-300 font-medium">Start Date</label>
+          <label className="block mb-2 text-blue-300 font-medium">
+            Start Date
+          </label>
           <div className="relative group">
             <input
               ref={startRef}
@@ -92,9 +92,7 @@ export default function FilterPanel({ startRef, endRef }: FilterPanelProps) {
 
         {/* Search */}
         <div>
-          <label className="block mb-2 text-blue-300 font-medium">
-            Search
-          </label>
+          <label className="block mb-2 text-blue-300 font-medium">Search</label>
           <div className="relative group">
             <input
               type="text"
@@ -107,7 +105,7 @@ export default function FilterPanel({ startRef, endRef }: FilterPanelProps) {
                 transition={{
                   duration: 2,
                   repeat: Number.POSITIVE_INFINITY,
-                  repeatType: "reverse",
+                  repeatType: 'reverse',
                 }}
               >
                 <Search className="h-4 w-4 text-blue-400" />
@@ -117,5 +115,5 @@ export default function FilterPanel({ startRef, endRef }: FilterPanelProps) {
         </div>
       </div>
     </motion.div>
-  )
+  );
 }

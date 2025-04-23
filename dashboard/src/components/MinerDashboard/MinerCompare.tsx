@@ -1,26 +1,25 @@
-import { useState } from "react"
+import { useState } from 'react';
 
-import { motion, AnimatePresence } from "framer-motion"
+import { motion, AnimatePresence } from 'framer-motion';
 
-import {
-  ChevronDown,
-  GitCompare,
-} from "lucide-react"
+import { ChevronDown, GitCompare } from 'lucide-react';
 
-import { BEADS } from "./lib/constants"
-import { useComparisonData } from "./Hooks/useComparisonData"
-import AdvancedChart from "./AdvancedChart"
-
+import { BEADS } from './lib/constants';
+import { useComparisonData } from './Hooks/useComparisonData';
+import AdvancedChart from './AdvancedChart';
 
 interface MinerCompareProps {
-  timeRange: string
+  timeRange: string;
 }
 
 export function MinerCompare({ timeRange }: MinerCompareProps) {
-  const [selectedMiner, setSelectedMiner] = useState<string | null>(null)
-  const [chartHovered, setChartHovered] = useState(false)
+  const [selectedMiner, setSelectedMiner] = useState<string | null>(null);
+  const [chartHovered, setChartHovered] = useState(false);
 
-  const { baseData, comparisonData, isLoading } = useComparisonData(selectedMiner, timeRange)
+  const { baseData, comparisonData, isLoading } = useComparisonData(
+    selectedMiner,
+    timeRange
+  );
 
   return (
     <div className="space-y-6">
@@ -33,7 +32,7 @@ export function MinerCompare({ timeRange }: MinerCompareProps) {
         <div className="relative w-64">
           <select
             className="w-full bg-gray-900/80 border border-gray-700/80 rounded-lg p-2.5 pr-8 appearance-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 transition-all duration-300"
-            value={selectedMiner || ""}
+            value={selectedMiner || ''}
             onChange={(e) => setSelectedMiner(e.target.value || null)}
           >
             <option value="">Select a miner to compare</option>
@@ -53,14 +52,18 @@ export function MinerCompare({ timeRange }: MinerCompareProps) {
         className="relative border border-gray-800/50 rounded-xl p-6 h-80 bg-black/30 backdrop-blur-md overflow-hidden"
         initial={{ opacity: 0, y: 30, rotateX: 5 }}
         animate={{ opacity: 1, y: 0, rotateX: 0 }}
-        transition={{ duration: 0.7, delay: 0.3, type: "spring" }}
+        transition={{ duration: 0.7, delay: 0.3, type: 'spring' }}
         onMouseEnter={() => setChartHovered(true)}
         onMouseLeave={() => setChartHovered(false)}
       >
         <AdvancedChart
           data={baseData}
           comparisonData={selectedMiner ? comparisonData : undefined}
-          comparisonLabel={selectedMiner ? BEADS.find((m) => m.id === selectedMiner)?.name || "Comparison" : undefined}
+          comparisonLabel={
+            selectedMiner
+              ? BEADS.find((m) => m.id === selectedMiner)?.name || 'Comparison'
+              : undefined
+          }
           height={200}
           isHovered={chartHovered}
           isLoading={isLoading}
@@ -79,5 +82,5 @@ export function MinerCompare({ timeRange }: MinerCompareProps) {
         </motion.div>
       )}
     </div>
-  )
+  );
 }

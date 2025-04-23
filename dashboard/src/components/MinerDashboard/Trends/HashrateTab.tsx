@@ -1,6 +1,6 @@
-import AdvancedChart from "../AdvancedChart"
-import AnimatedStatCard from "../AnimatedStatCard"
-import { TrendingUp, Zap, Activity } from "lucide-react"
+import AdvancedChart from '../AdvancedChart';
+import AnimatedStatCard from '../AnimatedStatCard';
+import { TrendingUp, Zap, Activity } from 'lucide-react';
 
 export default function HashrateTab({
   chartData,
@@ -14,7 +14,9 @@ export default function HashrateTab({
       <div className="flex justify-between items-center">
         <div>
           <h3 className="text-xl font-bold text-blue-300">Hashrate (λ)</h3>
-          <p className="text-sm text-gray-400 mt-1">Real-time hashrate measurements</p>
+          <p className="text-sm text-gray-400 mt-1">
+            Real-time hashrate measurements
+          </p>
         </div>
         <div className="bg-blue-900/30 px-3 py-1 rounded-md">
           <span className="text-blue-300 font-mono">λ = 0.0024</span>
@@ -62,5 +64,5 @@ export default function HashrateTab({
         />
       </div>
     </div>
-  )
+  );
 }
