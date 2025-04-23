@@ -150,7 +150,7 @@ export default function MinedSharesExplorer() {
           {!error && activeTab === "trends" && <TrendsTab timeRange={timeRange} />}
 
           {!error && activeTab === "blocks" && (
-            <div className="relative border border-gray-800/50 rounded-xl p-6 bg-black/30 backdrop-blur-md overflow-hidden">
+            <div className=" border border-gray-800/50 rounded-xl p-6 bg-black/30 backdrop-blur-md overflow-hidden">
              
               {!error && activeTab === "blocks" && <EnhancedBlocksTab timeRange={timeRange} />}
             </div>

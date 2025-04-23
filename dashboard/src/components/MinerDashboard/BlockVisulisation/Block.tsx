@@ -50,7 +50,7 @@ export default function EnhancedBlocksTab({
             Explore the latest blocks in the network with detailed insights.
           </p>
         </div>
-        <div className="flex justify-between items-center mb-4">
+        {/* <div className="flex items-center mb-4">
                 <div>
                   <h3 className="text-xl font-bold text-blue-300">Recent Blocks</h3>
                   <p className="text-sm text-gray-400 mt-1">
@@ -60,8 +60,8 @@ export default function EnhancedBlocksTab({
                     {timeRange === "year" && "Blocks mined in the last 365 days"}
                   </p>
                 </div>
-              </div>
-      </div>
+              </div>*/}
+      </div> 
      
       {/* Views */}
       <div className="relative border border-blue-500/20 rounded-2xl p-6 bg-gradient-to-br from-black via-slate-900 to-black shadow-lg shadow-blue-500/10 backdrop-blur-md overflow-hidden transition-all duration-300 min-h-[400px]">
