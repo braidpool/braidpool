@@ -13,7 +13,6 @@ interface GraphNode {
   id: string;
   parents: string[];
   children: string[];
-  work?: number;
 }
 
 interface NodeIdMapping {
@@ -24,7 +23,6 @@ interface GraphData {
   highest_work_path: string[];
   parents: Record<string, string[]>;
   children: Record<string, string[]>;
-  work?: Record<string, number>;
   cohorts: string[][];
   bead_count: number;
 }
@@ -49,9 +47,9 @@ const GraphVisualization: React.FC = () => {
   ];
 
   const [nodeIdMap, setNodeIdMap] = useState<NodeIdMapping>({});
-  const [selectedCohorts, setSelectedCohorts] = useState<number>(10);
+  const [selectedCohorts, setSelectedCohorts] = useState<number | 'all'>(10);
 
-  const nodeRadius = 15;
+  const nodeRadius = 30;
   const margin = { top: 0, right: 0, bottom: 0, left: 50 };
   const tooltipRef = useRef<HTMLDivElement>(null);
 
@@ -117,50 +115,52 @@ const GraphVisualization: React.FC = () => {
     const tipNodes: string[] = [];
 
     remainingNodes.forEach((node) => {
-      if (node.parents.length === 1 && node.children.length === 0) {
+      if (node.parents.length === 1 && !node.children?.length) {
         tipNodes.push(node.id);
       }
       const positionedParents = node.parents.filter((p) => positions[p]);
-      if (positionedParents.length === 0) return;
 
-      const maxParentX = Math.max(
-        ...positionedParents.map((p) => positions[p].x)
-      );
+      let targetX: number;
+      let colKey: number;
 
-      let targetX = maxParentX + COLUMN_WIDTH;
-
-      const hwpParents = positionedParents.filter((p) => hwPathSet.has(p));
-      if (hwpParents.length > 0) {
-        const rightmostHWPParentX = Math.max(
-          ...hwpParents.map((p) => positions[p].x)
-        );
-        const parentIndex = hwPathColumns.indexOf(rightmostHWPParentX);
-        if (parentIndex >= 0 && parentIndex < hwPathColumns.length - 1) {
-          targetX = hwPathColumns[parentIndex + 1];
+      if (positionedParents.length === 0) {
+        colKey = 0;
+        while (
+          columnOccupancy[colKey] !== undefined &&
+          columnOccupancy[colKey] >= 10
+        ) {
+          colKey++;
         }
-      }
-
-      let yPos = centerY;
-      const maxParentY = Math.max(
-        ...positionedParents.map((p) => positions[p].y)
-      );
-      yPos = maxParentY + VERTICAL_SPACING;
-
-      const colKey = Math.round((targetX - margin.left) / COLUMN_WIDTH);
-      if (columnOccupancy[colKey] === undefined) {
-        columnOccupancy[colKey] = 0;
+        targetX = margin.left + colKey * COLUMN_WIDTH;
       } else {
-        yPos =
-          maxParentY +
-          VERTICAL_SPACING +
-          columnOccupancy[colKey] * VERTICAL_SPACING;
-      }
-      columnOccupancy[colKey] += 1;
+        const maxParentX = Math.max(
+          ...positionedParents.map((p) => positions[p].x)
+        );
+        targetX = maxParentX + COLUMN_WIDTH;
 
-      positions[node.id] = {
-        x: targetX,
-        y: Math.min(yPos, Math.abs(height - yPos)),
-      };
+        const hwpParents = positionedParents.filter((p) => hwPathSet.has(p));
+        if (hwpParents.length > 0) {
+          const rightmostHWPParentX = Math.max(
+            ...hwpParents.map((p) => positions[p].x)
+          );
+          const parentIndex = hwPathColumns.indexOf(rightmostHWPParentX);
+          if (parentIndex >= 0 && parentIndex < hwPathColumns.length - 1) {
+            targetX = hwPathColumns[parentIndex + 1];
+          }
+        }
+
+        colKey = Math.round((targetX - margin.left) / COLUMN_WIDTH);
+      }
+
+      let count = columnOccupancy[colKey] || 0;
+      const direction = count % 2 !== 0 ? 1 : -1;
+      const level = Math.ceil((count + 1) / 2);
+      const yOffset = direction * level * VERTICAL_SPACING;
+      const yPos = centerY + yOffset;
+
+      columnOccupancy[colKey] = count + 1;
+
+      positions[node.id] = { x: targetX, y: yPos };
     });
 
     const maxColumnX = Math.max(
@@ -189,34 +189,58 @@ const GraphVisualization: React.FC = () => {
   );
 
   useEffect(() => {
-    let url = 'http://localhost:65433/';
-    const newSocket = io(url, {
-      reconnection: true,
-      reconnectionAttempts: Infinity,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      timeout: 20000,
-    });
+    const url = 'ws://localhost:65433/';
+    const socket = new WebSocket(url);
 
-    setSocket(newSocket);
-
-    newSocket.on('connect', () => {
-      console.log('Connected to Socket ', url);
+    socket.onopen = () => {
+      console.log('Connected to WebSocket', url);
       setConnectionStatus('Connected');
-    });
+    };
 
-    newSocket.on('disconnect', () => {
+    socket.onclose = () => {
       setConnectionStatus('Disconnected');
-    });
+    };
 
-    newSocket.on('connect_error', (err) => {
-      setConnectionStatus(`Error: ${err.message}`);
-    });
+    socket.onerror = (err) => {
+      setConnectionStatus(`Error: ${err}`);
+    };
 
-    newSocket.on('braid_update', (parsedData: GraphData) => {
-      // Remove JSON.parse
+    socket.onmessage = (event) => {
       try {
-        // Build the sequential ID mapping
+        const parsed = JSON.parse(event.data);
+        // console.log('Received data:', parsed);
+        const parsedData = parsed.data;
+        // console.log('Parsed data:', parsedData.parents);
+        if (!parsedData?.parents || typeof parsedData.parents !== 'object') {
+          console.warn("Invalid 'parents' field in parsedData:", parsedData);
+          return;
+        }
+
+        const children: Record<string, string[]> = {};
+        if (parsedData?.parents && typeof parsedData.parents === 'object') {
+          Object.entries(parsedData.parents).forEach(([nodeId, parents]) => {
+            (parents as string[]).forEach((parentId) => {
+              if (!children[parentId]) {
+                children[parentId] = [];
+              }
+              children[parentId].push(nodeId);
+            });
+          });
+        }
+
+        const bead_count =
+          parsedData?.parents && typeof parsedData.parents === 'object'
+            ? Object.keys(parsedData.parents).length
+            : 0;
+
+        const graphData: GraphData = {
+          highest_work_path: parsedData.highest_work_path,
+          parents: parsedData.parents,
+          cohorts: parsedData.cohorts,
+          children,
+          bead_count,
+        };
+
         const newMapping: NodeIdMapping = {};
         let nextId = 1;
         Object.keys(parsedData.parents).forEach((hash) => {
@@ -225,27 +249,24 @@ const GraphVisualization: React.FC = () => {
             nextId++;
           }
         });
+
         setNodeIdMap(newMapping);
-        setGraphData(parsedData);
-        setTotalBeads(parsedData.bead_count); // Use direct value instead of counting
+        setGraphData(graphData);
+        setTotalBeads(bead_count);
         setTotalCohorts(parsedData.cohorts.length);
-        let maxSize = 0;
-        parsedData.cohorts.forEach((cohort) => {
-          if (cohort.length > maxSize) maxSize = cohort.length;
-        });
-        setMaxCohortSize(maxSize);
+        setMaxCohortSize(
+          Math.max(...parsedData.cohorts.map((c: string | any[]) => c.length))
+        );
         setHwpLength(parsedData.highest_work_path.length);
         setLoading(false);
-        console.log(parsedData);
       } catch (err) {
-        setError('Error processing graph data');
+        setError('Error processing graph data: ');
+        console.error('Error processing graph data:', err);
         setLoading(false);
       }
-    });
-
-    return () => {
-      newSocket.disconnect();
     };
+
+    return () => socket.close();
   }, []);
 
   const resetZoom = () => {
@@ -275,7 +296,7 @@ const GraphVisualization: React.FC = () => {
 
     const tooltip = d3
       .select(tooltipRef.current)
-      .style('position', 'fixed') // Changed from 'absolute' to 'fixed'
+      .style('position', 'fixed')
       .style('visibility', 'hidden')
       .style('background', '#0077B6')
       .style('color', 'white')
@@ -308,7 +329,6 @@ const GraphVisualization: React.FC = () => {
       id,
       parents: graphData.parents[id],
       children: graphData.children[id],
-      work: graphData.work?.[id] || 0,
     }));
 
     const hwPath = graphData.highest_work_path;
@@ -329,46 +349,13 @@ const GraphVisualization: React.FC = () => {
 
     const links: { source: string; target: string }[] = [];
     allNodes.forEach((node) => {
-      node.children.forEach((childId) => {
-        links.push({ source: node.id, target: childId });
-      });
+      if (Array.isArray(node.children)) {
+        // Check if children exists and is an array
+        node.children.forEach((childId) => {
+          links.push({ target: node.id, source: childId });
+        });
+      }
     });
-
-    container
-      .append('defs')
-      .selectAll('marker')
-      .data(['end'])
-      .enter()
-      .append('marker')
-      .attr('id', 'arrow')
-      .attr('viewBox', '0 -5 10 10')
-      .attr('refX', nodeRadius + 2)
-      .attr('refY', 0)
-      .attr('markerWidth', 6)
-      .attr('markerHeight', 6)
-      .attr('orient', 'auto')
-      .append('path')
-      .attr('d', 'M0,-5L10,0L0,5')
-      .attr('fill', '#FF8500'); // Orange arrow
-
-    container
-      .selectAll('.link')
-      .data(links)
-      .enter()
-      .append('line')
-      .attr('class', 'link')
-      .attr('x1', (d) => (positions[d.source]?.x || 0) + offsetX) // Apply offset
-      .attr('y1', (d) => positions[d.source]?.y || 0)
-      .attr('x2', (d) => (positions[d.target]?.x || 0) + offsetX) // Apply offset
-      .attr('y2', (d) => positions[d.target]?.y || 0)
-      .attr('stroke', '#48CAE4') // Light blue links
-      .attr('stroke-width', 1.5)
-      .attr('marker-end', 'url(#arrow)')
-      .style('display', (d) =>
-        filteredCohortNodes.has(d.source) && filteredCohortNodes.has(d.target)
-          ? 'inline'
-          : 'none'
-      );
 
     const nodes = container
       .selectAll('.node')
@@ -396,7 +383,13 @@ const GraphVisualization: React.FC = () => {
       .attr('fill', (d) => {
         const cohortIndex = cohortMap.get(d.id);
         if (cohortIndex === undefined) return COLORS[0];
-        const startingIndex = Math.max(0, totalCohorts - selectedCohorts);
+        const startingIndex = Math.max(
+          0,
+          totalCohorts -
+            (typeof selectedCohorts === 'number'
+              ? selectedCohorts
+              : totalCohorts)
+        );
         const adjustedIndex = cohortIndex - startingIndex;
         return COLORS[adjustedIndex % COLORS.length];
       })
@@ -410,7 +403,6 @@ const GraphVisualization: React.FC = () => {
 
         const tooltipContent = `
                 <div><strong>ID:</strong> ${nodeIdMap[d.id] || '?'} (${d.id})</div>
-                <div><strong>Work:</strong> ${d.work}</div>
                 <div><strong>Cohort:</strong> ${cohortIndex !== undefined ? cohortIndex : 'N/A'}</div>
                 <div><strong>Highest Work Path:</strong> ${isHWP ? 'Yes' : 'No'}</div>
                 <div><strong>Parents:</strong> ${
@@ -438,13 +430,12 @@ const GraphVisualization: React.FC = () => {
       .attr('text-anchor', 'middle')
       .text((d) => nodeIdMap[d.id] || '?') // Show sequential ID instead of hash
       .attr('fill', '#fff')
-      .style('font-size', '10px')
+      .style('font-size', 20)
       .on('mouseover', function (event: MouseEvent, d: GraphNode) {
         const cohortIndex = cohortMap.get(d.id);
         const isHWP = hwPathSet.has(d.id);
         const tooltipContent = `
                 <div><strong>ID:</strong> ${nodeIdMap[d.id] || '?'} (${d.id})</div>
-                <div><strong>Work:</strong> ${d.work}</div>
                 <div><strong>Cohort:</strong> ${cohortIndex !== undefined ? cohortIndex : 'N/A'}</div>
                 <div><strong>Highest Work Path:</strong> ${isHWP ? 'Yes' : 'No'}</div>
                 <div><strong>Parents:</strong> ${
@@ -470,6 +461,109 @@ const GraphVisualization: React.FC = () => {
       .attr('y', margin.top / 2)
       .attr('text-anchor', 'middle')
       .style('font-size', '16px');
+
+    container
+      .append('defs')
+      .selectAll('marker')
+      .data([
+        { id: 'arrow-blue', color: '#48CAE4' },
+        { id: 'arrow-orange', color: '#FF8500' },
+      ])
+      .enter()
+      .append('marker')
+      .attr('id', (d) => d.id)
+      .attr('viewBox', '0 -5 10 10')
+      .attr('refX', 10)
+      .attr('refY', 0)
+      .attr('markerWidth', 15)
+      .attr('markerHeight', 12)
+      .attr('orient', 'auto')
+      .append('path')
+      .attr('d', 'M0,-5L10,0L0,5')
+      .attr('fill', (d) => d.color);
+
+    container
+      .selectAll('.link')
+      .data(links)
+      .enter()
+      .append('line')
+      .attr('class', 'link')
+      .attr('x1', (d) => {
+        const src = {
+          x: (positions[d.source]?.x || 0) + offsetX,
+          y: positions[d.source]?.y || 0,
+        };
+        const tgt = {
+          x: (positions[d.target]?.x || 0) + offsetX,
+          y: positions[d.target]?.y || 0,
+        };
+        const dx = tgt.x - src.x;
+        const dy = tgt.y - src.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const ratio = nodeRadius / dist;
+        return src.x + dx * ratio;
+      })
+      .attr('y1', (d) => {
+        const src = {
+          x: (positions[d.source]?.x || 0) + offsetX,
+          y: positions[d.source]?.y || 0,
+        };
+        const tgt = {
+          x: (positions[d.target]?.x || 0) + offsetX,
+          y: positions[d.target]?.y || 0,
+        };
+        const dx = tgt.x - src.x;
+        const dy = tgt.y - src.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const ratio = nodeRadius / dist;
+        return src.y + dy * ratio;
+      })
+      .attr('x2', (d) => {
+        const src = {
+          x: (positions[d.source]?.x || 0) + offsetX,
+          y: positions[d.source]?.y || 0,
+        };
+        const tgt = {
+          x: (positions[d.target]?.x || 0) + offsetX,
+          y: positions[d.target]?.y || 0,
+        };
+        const dx = src.x - tgt.x;
+        const dy = src.y - tgt.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const ratio = nodeRadius / dist;
+        return tgt.x + dx * ratio;
+      })
+      .attr('y2', (d) => {
+        const src = {
+          x: (positions[d.source]?.x || 0) + offsetX,
+          y: positions[d.source]?.y || 0,
+        };
+        const tgt = {
+          x: (positions[d.target]?.x || 0) + offsetX,
+          y: positions[d.target]?.y || 0,
+        };
+        const dx = src.x - tgt.x;
+        const dy = src.y - tgt.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const ratio = nodeRadius / dist;
+        return tgt.y + dy * ratio;
+      })
+      .attr('stroke', (d) =>
+        hwPathSet.has(d.source) && hwPathSet.has(d.target)
+          ? '#FF8500'
+          : '#48CAE4'
+      )
+      .attr('stroke-width', 1.5)
+      .attr('marker-end', (d) =>
+        hwPathSet.has(d.source) && hwPathSet.has(d.target)
+          ? 'url(#arrow-orange)'
+          : 'url(#arrow-blue)'
+      )
+      .style('display', (d) =>
+        filteredCohortNodes.has(d.source) && filteredCohortNodes.has(d.target)
+          ? 'inline'
+          : 'none'
+      );
   }, [graphData, defaultZoom, selectedCohorts]);
 
   if (loading) {
@@ -514,7 +608,10 @@ const GraphVisualization: React.FC = () => {
       >
         <select
           value={selectedCohorts}
-          onChange={(e) => setSelectedCohorts(Number(e.target.value))}
+          onChange={(e) => {
+            const value = e.target.value;
+            setSelectedCohorts(value === 'all' ? 'all' : Number(value));
+          }}
           style={{
             padding: '5px',
             borderRadius: '4px',
@@ -523,46 +620,15 @@ const GraphVisualization: React.FC = () => {
             color: '#0077B6',
           }}
         >
-          {[5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map((value) => (
+          <option value="all">Show all cohorts</option>
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((value) => (
             <option key={value} value={value}>
               Show latest {value} cohorts
             </option>
           ))}
         </select>
-        <Button
-          onClick={zoomOut}
-          style={{
-            backgroundColor: '#FF8500',
-            color: 'white',
-            border: '1px solid #E76F00',
-          }}
-          className="hover:bg-[#E76F00] transition-colors"
-        >
-          -
-        </Button>
-        <Button
-          onClick={zoomIn}
-          style={{
-            backgroundColor: '#FF8500',
-            color: 'white',
-            border: '1px solid #E76F00',
-          }}
-          className="hover:bg-[#E76F00] transition-colors"
-        >
-          +
-        </Button>
-        <Button
-          onClick={resetZoom}
-          style={{
-            backgroundColor: '#0077B6',
-            color: 'white',
-            border: '1px solid #023E8A',
-          }}
-          className="hover:bg-[#023E8A] transition-colors"
-        >
-          Reset Zoom
-        </Button>
       </div>
+
       <div style={{ margin: '10px', position: 'relative' }}>
         <Card style={{ borderColor: '#FF8500' }}>
           <CardContent>
