@@ -92,7 +92,7 @@ const Header: React.FC<HeaderProps> = ({ title = 'BRAIDPOOL' }) => {
   }}
 >
   <img
-    src="/image.png" // Update this path to your actual icon path
+    src="/favicon.ico" // Update this path to your actual icon path
     alt="favicon"
     style={{
       width: '100%',

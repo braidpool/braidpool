@@ -1,43 +1,22 @@
-import React, { ReactNode } from 'react';
-import { IconButton, SxProps, Theme } from '@mui/material';
-import colors from '../../theme/colors';
+import React, { ReactNode, ReactElement } from 'react';
 
 interface ActionIconButtonProps {
-  icon: ReactNode;
+  icon: ReactElement;
   onClick?: () => void;
-  sx?: SxProps<Theme>;
+  className?: string;
 }
-
-/**
- * A consistent button style used in the header and throughout the app
- */
 const ActionIconButton: React.FC<ActionIconButtonProps> = ({
   icon,
   onClick,
-  sx = {},
+  className = '',
 }) => {
   return (
-    <IconButton
-    size="small"
-    onClick={onClick}
-    sx={{
-      color: 'white',
-      background: '#36454F',
-      p: 1,
-      width: 34,
-      height: 34,
-      boxShadow: '0 1px 2px rgba(0,0,0,0.3)',
-      '&:hover': {
-        background: '#000',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.4)',
-      },
-      ...sx,
-    }}
-  >
-    {React.cloneElement(icon, { style: { color: 'inherit' } })}
-  </IconButton>
-  
-
+    <button
+      onClick={onClick}
+      className={`w-[34px] h-[34px] p-1 text-white bg-[#36454F] shadow-sm hover:bg-black hover:shadow-md rounded-full ${className}`}
+    >
+      {React.cloneElement(icon, { className: 'text-inherit' })}
+    </button>
   );
 };
 
