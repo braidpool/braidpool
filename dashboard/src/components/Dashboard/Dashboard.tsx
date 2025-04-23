@@ -28,7 +28,7 @@ import PoolHashrateChart from './PoolHashrateChart';
 import MempoolLatencyStats from './MempoolLatencyStats';
 import RecentBlocksTable from './RecentBlocksTable';
 import GraphVisualization from '../BraidPoolDAG/BraidPoolDAG';
-import MinedSharesExplorer from '../MinerDashboard/MinerDashboard';
+import MinedSharesExplorer from '../MinerDashboard/MinedSharesExplorer';
 // Utils
 import {
   loadSampleBraidData,

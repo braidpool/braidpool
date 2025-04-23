@@ -163,8 +163,7 @@ const DeviceCard = ({
           boxShadow: `0 8px 16px -8px ${colors.shadow}`,
           borderColor: colors.primary,
         },
-      }}
-    >
+      }}>
       {/* Status indicator */}
       <Box
         sx={{
@@ -181,10 +180,10 @@ const DeviceCard = ({
       {/* Alert badge */}
       {miner.alerts > 0 && (
         <Chip
-          icon={<ErrorIcon fontSize="small" />}
+          icon={<ErrorIcon fontSize='small' />}
           label={miner.alerts}
-          size="small"
-          color="error"
+          size='small'
+          color='error'
           sx={{
             position: 'absolute',
             top: 10,
@@ -196,23 +195,21 @@ const DeviceCard = ({
       )}
 
       {/* Device name */}
-      <Typography variant="h6" sx={{ mb: 1, fontWeight: 500 }}>
+      <Typography variant='h6' sx={{ mb: 1, fontWeight: 500 }}>
         {miner.name}
       </Typography>
 
       <Box sx={{ mb: 2 }}>
         <Typography
-          variant="body2"
-          color="textSecondary"
-          sx={{ fontSize: '0.75rem' }}
-        >
+          variant='body2'
+          color='textSecondary'
+          sx={{ fontSize: '0.75rem' }}>
           {miner.location}
         </Typography>
         <Typography
-          variant="body2"
-          color="textSecondary"
-          sx={{ fontSize: '0.75rem' }}
-        >
+          variant='body2'
+          color='textSecondary'
+          sx={{ fontSize: '0.75rem' }}>
           Last seen: {miner.lastSeen}
         </Typography>
       </Box>
@@ -224,7 +221,7 @@ const DeviceCard = ({
             <SpeedIcon
               sx={{ fontSize: '1rem', color: colors.primary, mr: 0.5 }}
             />
-            <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
+            <Typography variant='body2' sx={{ fontSize: '0.8rem' }}>
               {miner.status !== 'offline' ? `${miner.hashrate} TH/s` : '—'}
             </Typography>
           </Box>
@@ -234,7 +231,7 @@ const DeviceCard = ({
             <ThermostatIcon
               sx={{ fontSize: '1rem', color: colors.primary, mr: 0.5 }}
             />
-            <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
+            <Typography variant='body2' sx={{ fontSize: '0.8rem' }}>
               {miner.status !== 'offline' ? `${miner.temp}°C` : '—'}
             </Typography>
           </Box>
@@ -244,7 +241,7 @@ const DeviceCard = ({
             <ThunderstormIcon
               sx={{ fontSize: '1rem', color: colors.primary, mr: 0.5 }}
             />
-            <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
+            <Typography variant='body2' sx={{ fontSize: '0.8rem' }}>
               {miner.status !== 'offline' ? `${miner.powerDraw}W` : '—'}
             </Typography>
           </Box>
@@ -254,7 +251,7 @@ const DeviceCard = ({
             <WifiIcon
               sx={{ fontSize: '1rem', color: colors.primary, mr: 0.5 }}
             />
-            <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
+            <Typography variant='body2' sx={{ fontSize: '0.8rem' }}>
               {miner.uptime}
             </Typography>
           </Box>
@@ -264,8 +261,8 @@ const DeviceCard = ({
       {/* Actions */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
         <Button
-          variant="outlined"
-          size="small"
+          variant='outlined'
+          size='small'
           sx={{
             fontSize: '0.75rem',
             textTransform: 'none',
@@ -276,14 +273,13 @@ const DeviceCard = ({
               backgroundColor: 'rgba(57, 134, 232, 0.08)',
             },
           }}
-          onClick={() => console.log(`📊 Details for ${miner.id}`)}
-        >
+          onClick={() => console.log(`📊 Details for ${miner.id}`)}>
           Details
         </Button>
-        <Tooltip title="Activate LED to locate this device">
+        <Tooltip title='Activate LED to locate this device'>
           <Button
-            variant="outlined"
-            size="small"
+            variant='outlined'
+            size='small'
             sx={{
               fontSize: '0.75rem',
               textTransform: 'none',
@@ -295,8 +291,7 @@ const DeviceCard = ({
               },
             }}
             onClick={() => onActivateLight(miner.id)}
-            startIcon={<LightbulbIcon fontSize="small" />}
-          >
+            startIcon={<LightbulbIcon fontSize='small' />}>
             Locate
           </Button>
         </Tooltip>
@@ -327,33 +322,32 @@ const MineInventoryDashboard = () => {
 
   return (
     <Card
-      title="Mine Inventory"
-      subtitle="Status of all mining devices"
-      accentColor={colors.cardAccentSuccess}
-    >
+      title='Mine Inventory'
+      subtitle='Status of all mining devices'
+      accentColor={colors.cardAccentSuccess}>
       {/* Summary stats */}
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 3 }}>
         <Chip
           icon={<CheckCircleIcon />}
           label={`${onlineMiners} Online`}
-          color="success"
-          variant="outlined"
+          color='success'
+          variant='outlined'
         />
         <Chip
           icon={<ErrorIcon />}
           label={`${warningMiners} Warning`}
-          color="warning"
-          variant="outlined"
+          color='warning'
+          variant='outlined'
         />
         <Chip
           icon={<ErrorIcon />}
           label={`${offlineMiners} Offline`}
-          color="error"
-          variant="outlined"
+          color='error'
+          variant='outlined'
         />
         <Chip
           label={`${totalMiners} Total Devices`}
-          variant="outlined"
+          variant='outlined'
           sx={{ borderColor: colors.primary, color: colors.primary }}
         />
       </Box>
@@ -371,8 +365,7 @@ const MineInventoryDashboard = () => {
                 lg: '25%',
               },
               p: 1,
-            }}
-          >
+            }}>
             <DeviceCard miner={miner} onActivateLight={handleActivateLight} />
           </Box>
         ))}
