@@ -16,6 +16,7 @@ from typing import Iterable
 import random
 import hashlib
 import re
+import string
 import struct
 import sys
 import time
@@ -92,16 +93,18 @@ def print_hash(h):
     Prints a string to the console with the color specified by the hash for easy visual
     identification.
     """
-    if type(h) == int:
-        hex_string = f"{h:064x}"
-        color = re.search(r'0*.([^0].{5})', hex_string).group(1)
+    if type(h) == str and len(h) == 64 and all(c in string.hexdigits for c in h):
+        color = re.search(r'0*.([^0].{5})', h).group(1)
         # Convert hex to RGB
         r, g, b = tuple(int(color[i:i+2], 16) for i in (0, 2, 4))
         # ANSI escape code for setting color
         color_code = f"\033[38;2;{r};{g};{b}m"
         reset_code = "\033[0m"  # Reset to default color
         # Print with color
-        return f"{color_code}{h>>(256-32):08x}{reset_code}"
+        return f"{color_code}{h[0:8]}{reset_code}"
+    elif type(h) == int:
+        hex_string = f"{h:064x}"
+        return print_hash(hex_string)
     elif isinstance(h, dict):
         retval = "{"
         for k,v in h.items():

@@ -1,123 +1,141 @@
-from flask import Flask, jsonify
-from flask_socketio import SocketIO
-from flask_cors import CORS
-from flasgger import Swagger, swag_from
-import threading
-import time
-from simulator import Network
-from braid import reverse, descendant_work, highest_work_path, cohorts
+import asyncio
+import json
 import logging
+import websockets
+from simulator import Network
+import braid
 
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
-CORS(app)
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
-
-swagger = Swagger(app)
-
-
-@app.route("/hello")
-@swag_from(
-    {
-        "responses": {
-            200: {
-                "description": "Returns a simple hello message",
-                "examples": {"text": "Hello Braidpool"},
-            }
-        }
-    }
-)
-def hello():
-    return "Hello Braidpool"
-
-
-braid_data = {}
-
-
-@app.route("/test_data")
-@swag_from(
-    {
-        "responses": {
-            200: {
-                "description": "Returns simulated braid data",
-                "schema": {
-                    "type": "object",
-                    "properties": {
-                        "highest_work_path": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                        },
-                        "parents": {"type": "object"},
-                        "children": {"type": "object"},
-                        "work": {"type": "object"},
-                        "cohorts": {
-                            "type": "array",
-                            "items": {"type": "array", "items": {"type": "string"}},
-                        },
-                        "bead_count": {"type": "integer"},
-                    },
-                },
-            }
-        }
-    }
-)
-def data():
-    logging.info(f"Returning braid_data on test_data endpoint")
-    return jsonify(braid_data)
-
+# Set of all connected websocket clients
+connected_clients = set()
 
 class BraidSimulator:
     def __init__(self):
         self.network = Network(
-            nnodes=50, target=2**240 - 1, hashrate=800000, target_algo="exp"
+            nnodes=25, target=2**240 - 1, hashrate=800000, target_algo="exp"
         )
         self.current_beads = 0
-        self.bead_increment = 1
-        self.update_interval = 0.5
+        self.update_interval = 0.5 # 500ms update interval
+        self.clients = set()
 
-    def run(self):
+    async def run(self):
         while True:
-            new_beads = self.bead_increment
-            self.network.simulate(nbeads=new_beads, mine=False)
-            self.current_beads += new_beads
-            self.bead_increment += 1
-            self.emit_braid_update()
-            time.sleep(self.update_interval)
+            self.current_beads += 1
+            self.network.simulate(nbeads=self.current_beads, mine=False)
+            await self.broadcast_braid_update()
+            await asyncio.sleep(self.update_interval)
 
-    def emit_braid_update(self):
-        global braid_data
+    async def broadcast_braid_update(self):
+        """ Broadcast the braid data for the last 10 cohorts to all connected clients. """
         try:
-            braid = self.network.nodes[0].braid
-            hashed_parents = {int(k): list(map(int, v)) for k, v in dict(braid).items()}
+            braid0 = self.network.nodes[0].braid
+            hashed_parents = {int(k): list(map(int, v)) for k, v in dict(braid0).items()}
             parents = hashed_parents
 
+            # Get beads from the last 10 cohorts
+            cohorts = braid0.cohorts[-10:] if len(braid0.cohorts) >= 10 else braid0.cohorts
+            bead_window = [b.hash for c in cohorts for b in c]
+
+            sub_parents = braid.sub_braid(bead_window, parents)
+            sub_children = braid.reverse(sub_parents)
+
             braid_data = {
-                "highest_work_path": list(
-                    map(str, highest_work_path(parents, reverse(parents)))
-                ),
-                "parents": {str(k): list(map(str, v)) for k, v in parents.items()},
-                "children": {
-                    str(k): list(map(str, v)) for k, v in reverse(parents).items()
-                },
-                "work": {str(k): v for k, v in descendant_work(parents).items()},
-                "cohorts": [list(map(str, cohort)) for cohort in cohorts(parents)],
-                "bead_count": len(braid.beads),
+                "type": "braid_update",
+                "data": {
+                    "parents": {f"{int(k):064x}": list(map(lambda x: f"{int(x):064x}", v)) for k, v in sub_parents.items()},
+                    "cohorts": [[f"{int(b):064x}" for b in c] for c in cohorts],
+                    "highest_work_path": list(f"{int(b):064x}" for b in braid.highest_work_path(sub_parents, sub_children))
+                }
             }
 
-            socketio.emit("braid_update", braid_data)
-            logging.info(braid_data["bead_count"])
+            # Convert to JSON and broadcast to all clients
+            message = json.dumps(braid_data)
+
+            # Create a copy of the set to avoid "set changed size during iteration" errors
+            clients_copy = connected_clients.copy()
+
+            for client in clients_copy:
+                try:
+                    await client.send(message)
+                except websockets.exceptions.ConnectionClosed:
+                    pass # Client is already disconnected, will be removed in the handler
+                except Exception as e:
+                    logger.error(f"Error sending to client: {e}")
 
         except Exception as e:
-            logging.error(f"Error in emit_braid_update: {str(e)}", exc_info=True)
-            raise
+            logger.error(f"Error in broadcast_braid_update: {str(e)}", exc_info=True)
+            # Don't raise the exception to prevent task termination
 
+async def websocket_handler(websocket):
+    """Handle a WebSocket connection from a client."""
 
-def start_simulator():
+    # Register the client
+    connected_clients.add(websocket)
+    logger.info(f"Client connected: {websocket.remote_address}")
+
+    try:
+        # Send welcome message
+        await websocket.send(json.dumps({
+            "type": "message",
+            "data": "Connected to braid simulator"
+        }))
+
+        # Keep connection alive
+        while True:
+            try:
+                message = await asyncio.wait_for(websocket.recv(), timeout=30)
+
+                try:
+                    data = json.loads(message)
+                    logger.debug(f"Received message: {data}")
+
+                except json.JSONDecodeError:
+                    logger.warning(f"Received invalid JSON: {message}")
+                    await websocket.send(json.dumps({
+                        "type": "error",
+                        "data": "Invalid JSON received"
+                    }))
+
+            # Send ping to keep connection alive
+            except asyncio.TimeoutError:
+                try:
+                    await websocket.ping()
+                except ConnectionError:
+                    break
+
+    except websockets.exceptions.ConnectionClosed as e:
+        logger.info(f"Connection closed: {e.code} - {e.reason}")
+    except Exception as e:
+        logger.error(f"WebSocket error: {str(e)}", exc_info=True)
+    finally:
+        # Unregister the client
+        connected_clients.discard(websocket)
+
+async def main():
+    # Create and start the simulator
     simulator = BraidSimulator()
-    simulator.run()
 
+    # Server configuration
+    host = "0.0.0.0"
+    port = 65433
+
+    # Create and start the server
+    async with websockets.serve(
+        websocket_handler,
+        host,
+        port,
+        ping_interval=20,
+        ping_timeout=30,
+        max_size=2**20  # 1MB max message size
+    ) as server:
+        await simulator.run() # Runs forever
 
 if __name__ == "__main__":
-    threading.Thread(target=start_simulator, daemon=True).start()
-    socketio.run(app, host="0.0.0.0", port=65433, debug=True)
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Server stopped by user")
+    finally:
+        logger.info("Server shutdown complete")
