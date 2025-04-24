@@ -299,7 +299,7 @@ const GraphVisualization: React.FC = () => {
     };
 
     return () => socket.close();
-  }, [graphData?.cohorts]);
+  }, []);
 
   const animateCohorts = (firstCohort: string[], lastCohort: string[]) => {
     if (!svgRef.current) return;
