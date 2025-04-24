@@ -183,7 +183,7 @@ const GraphVisualization: React.FC = () => {
   const [maxCohortSize, setMaxCohortSize] = useState<number>(0);
   const [hwpLength, setHwpLength] = useState<number>(0);
 
-  const [defaultZoom, setDefaultZoom] = useState(0.5);
+  const [defaultZoom, setDefaultZoom] = useState(0.3);
   const zoomBehavior = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(
     null
   );
@@ -243,12 +243,12 @@ const GraphVisualization: React.FC = () => {
         const firstCohortChanged =
           parsedData?.cohorts?.[0]?.length &&
           JSON.stringify(prevFirstCohortRef.current) !==
-            JSON.stringify(parsedData.cohorts[0]);
+          JSON.stringify(parsedData.cohorts[0]);
 
         const lastCohortChanged =
           parsedData?.cohorts?.length > 0 &&
           JSON.stringify(prevLastCohortRef.current) !==
-            JSON.stringify(parsedData.cohorts[parsedData.cohorts.length - 1]);
+          JSON.stringify(parsedData.cohorts[parsedData.cohorts.length - 1]);
 
         if (firstCohortChanged) {
           const top = COLORS.shift();
@@ -349,7 +349,7 @@ const GraphVisualization: React.FC = () => {
         .attr('stroke-width', 1.5)
         .attr('stroke', (d: any) =>
           graphData?.highest_work_path.includes(d.source) &&
-          graphData?.highest_work_path.includes(d.target)
+            graphData?.highest_work_path.includes(d.target)
             ? '#FF8500'
             : '#48CAE4'
         );
@@ -370,30 +370,22 @@ const GraphVisualization: React.FC = () => {
         .attr('stroke-width', 1.5)
         .attr('stroke', (d: any) =>
           graphData?.highest_work_path.includes(d.source) &&
-          graphData?.highest_work_path.includes(d.target)
+            graphData?.highest_work_path.includes(d.target)
             ? '#FF8500'
             : '#48CAE4'
         );
     }
   };
-  const resetZoom = () => {
-    if (svgRef.current && zoomBehavior.current) {
-      d3.select(svgRef.current)
-        .transition()
-        .duration(500)
-        .call(
-          zoomBehavior.current.transform,
-          d3.zoomIdentity.scale(defaultZoom)
-        );
-    }
+  const handleResetZoom = () => {
+    setDefaultZoom(0.3);
   };
 
-  const zoomIn = () => {
+  const handleZoomIn = () => {
     setDefaultZoom((prevZoom) => Math.min(prevZoom + 0.1, 5));
   };
 
-  const zoomOut = () => {
-    setDefaultZoom((prevZoom) => Math.max(prevZoom - 0.1, 0.5));
+  const handleZoomOut = () => {
+    setDefaultZoom((prevZoom) => Math.max(prevZoom - 0.1, 0.3));
   };
 
   useEffect(() => {
@@ -504,16 +496,14 @@ const GraphVisualization: React.FC = () => {
                 <div><strong>ID:</strong> ${nodeIdMap[d.id] || '?'} (${d.id})</div>
                 <div><strong>Cohort:</strong> ${cohortIndex !== undefined ? cohortIndex : 'N/A'}</div>
                 <div><strong>Highest Work Path:</strong> ${isHWP ? 'Yes' : 'No'}</div>
-                <div><strong>Parents:</strong> ${
-                  d.parents.length > 0
-                    ? d.parents.map((p) => `${nodeIdMap[p] || '?'}`).join(', ')
-                    : 'None'
-                }</div>
-                <div><strong>Children:</strong> ${
-                  d.children.length > 0
-                    ? d.children.map((c) => `${nodeIdMap[c] || '?'}`).join(', ')
-                    : 'None'
-                }</div>
+                <div><strong>Parents:</strong> ${d.parents.length > 0
+            ? d.parents.map((p) => `${nodeIdMap[p] || '?'}`).join(', ')
+            : 'None'
+          }</div>
+                <div><strong>Children:</strong> ${d.children.length > 0
+            ? d.children.map((c) => `${nodeIdMap[c] || '?'}`).join(', ')
+            : 'None'
+          }</div>
                 `;
 
         tooltip.html(tooltipContent).style('visibility', 'visible');
@@ -537,16 +527,14 @@ const GraphVisualization: React.FC = () => {
                 <div><strong>ID:</strong> ${nodeIdMap[d.id] || '?'} (${d.id})</div>
                 <div><strong>Cohort:</strong> ${cohortIndex !== undefined ? cohortIndex : 'N/A'}</div>
                 <div><strong>Highest Work Path:</strong> ${isHWP ? 'Yes' : 'No'}</div>
-                <div><strong>Parents:</strong> ${
-                  d.parents.length > 0
-                    ? d.parents.map((p) => `${nodeIdMap[p] || '?'}`).join(', ')
-                    : 'None'
-                }</div>
-                <div><strong>Children:</strong> ${
-                  d.children.length > 0
-                    ? d.children.map((c) => `${nodeIdMap[c] || '?'}`).join(', ')
-                    : 'None'
-                }</div>
+                <div><strong>Parents:</strong> ${d.parents.length > 0
+            ? d.parents.map((p) => `${nodeIdMap[p] || '?'}`).join(', ')
+            : 'None'
+          }</div>
+                <div><strong>Children:</strong> ${d.children.length > 0
+            ? d.children.map((c) => `${nodeIdMap[c] || '?'}`).join(', ')
+            : 'None'
+          }</div>
                 `;
 
         tooltip.html(tooltipContent).style('visibility', 'visible');
@@ -726,6 +714,42 @@ const GraphVisualization: React.FC = () => {
             </option>
           ))}
         </select>
+
+        {/* Zoom Controls */}
+        <div style={{ display: 'flex', gap: '5px', marginLeft: 'auto' }}>
+          <Button
+            variant="contained"
+            onClick={handleZoomIn}
+            style={{
+              backgroundColor: '#0077B6',
+              color: 'white',
+              minWidth: '30px',
+            }}
+          >
+            +
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleZoomOut}
+            style={{
+              backgroundColor: '#0077B6',
+              color: 'white',
+              minWidth: '30px',
+            }}
+          >
+            -
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleResetZoom}
+            style={{
+              backgroundColor: '#0077B6',
+              color: 'white',
+            }}
+          >
+            Reset Zoom
+          </Button>
+        </div>
       </div>
 
       <div style={{ margin: '10px', position: 'relative' }}>
