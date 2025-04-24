@@ -1,0 +1,22 @@
+{
+  "name": "braid",
+  "version": "1.0.0",
+  "description": "Braid handling functions",
+  "main": "braid.js",
+  "scripts": {
+    "test": "jest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/braidpool/braidpool.git"
+  },
+  "author": "Bob McElrath",
+  "license": "AGPL-3.0-or-later",
+  "bugs": {
+    "url": "https://github.com/braidpool/braidpool/issues"
+  },
+  "homepage": "https://github.com/braidpool/braidpool#readme",
+  "devDependencies": {
+    "jest": "^29.7.0"
+  }
+}
