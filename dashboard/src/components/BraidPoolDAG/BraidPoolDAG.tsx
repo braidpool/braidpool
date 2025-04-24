@@ -1,6 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
 import * as d3 from 'd3';
-import { io, Socket } from 'socket.io-client';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import CardHeader from '@mui/material/CardHeader';
@@ -45,7 +44,6 @@ const GraphVisualization: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const width = window.innerWidth - 100;
   const height = window.innerHeight;
-
 
   const [nodeIdMap, setNodeIdMap] = useState<NodeIdMapping>({});
   const [selectedCohorts, setSelectedCohorts] = useState<number | 'all'>(10);
@@ -176,9 +174,9 @@ const GraphVisualization: React.FC = () => {
     return positions;
   };
 
-  const [_socket, setSocket] = useState<Socket | null>(null);
   const [_connectionStatus, setConnectionStatus] = useState('Disconnected');
   const prevFirstCohortRef = useRef<string[]>([]);
+  const prevLastCohortRef = useRef<string[]>([]);
 
   const [totalBeads, setTotalBeads] = useState<number>(0);
   const [totalCohorts, setTotalCohorts] = useState<number>(0);
@@ -210,9 +208,8 @@ const GraphVisualization: React.FC = () => {
     socket.onmessage = (event) => {
       try {
         const parsed = JSON.parse(event.data);
-        // console.log('Received data:', parsed);
         const parsedData = parsed.data;
-        // console.log('Parsed data:', parsedData.parents);
+
         if (!parsedData?.parents || typeof parsedData.parents !== 'object') {
           console.warn("Invalid 'parents' field in parsedData:", parsedData);
           return;
@@ -245,12 +242,23 @@ const GraphVisualization: React.FC = () => {
 
         const firstCohortChanged =
           parsedData?.cohorts?.[0]?.length &&
-          JSON.stringify(prevFirstCohortRef.current) !== JSON.stringify(parsedData.cohorts[0]);
+          JSON.stringify(prevFirstCohortRef.current) !==
+            JSON.stringify(parsedData.cohorts[0]);
+
+        const lastCohortChanged =
+          parsedData?.cohorts?.length > 0 &&
+          JSON.stringify(prevLastCohortRef.current) !==
+            JSON.stringify(parsedData.cohorts[parsedData.cohorts.length - 1]);
 
         if (firstCohortChanged) {
           const top = COLORS.shift();
           COLORS.push(top ?? `rgba(${217}, ${95}, ${2}, 1)`);
           prevFirstCohortRef.current = parsedData.cohorts[0];
+        }
+
+        if (lastCohortChanged) {
+          prevLastCohortRef.current =
+            parsedData.cohorts[parsedData.cohorts.length - 1];
         }
 
         const newMapping: NodeIdMapping = {};
@@ -271,6 +279,18 @@ const GraphVisualization: React.FC = () => {
         );
         setHwpLength(parsedData.highest_work_path.length);
         setLoading(false);
+
+        // Trigger animation if cohorts changed
+        if (firstCohortChanged || lastCohortChanged) {
+          setTimeout(() => {
+            animateCohorts(
+              firstCohortChanged ? parsedData.cohorts[0] : [],
+              lastCohortChanged
+                ? parsedData.cohorts[parsedData.cohorts.length - 1]
+                : []
+            );
+          }, 100);
+        }
       } catch (err) {
         setError('Error processing graph data: ');
         console.error('Error processing graph data:', err);
@@ -279,8 +299,83 @@ const GraphVisualization: React.FC = () => {
     };
 
     return () => socket.close();
-  }, [graphData?.cohorts]); // Dependency on graphData.cohorts to detect changes
+  }, [graphData?.cohorts]);
 
+  const animateCohorts = (firstCohort: string[], lastCohort: string[]) => {
+    if (!svgRef.current) return;
+
+    const svg = d3.select(svgRef.current);
+
+    // Animate first cohort nodes
+    if (firstCohort.length > 0) {
+      svg
+        .selectAll('.node')
+        .filter((d: any) => firstCohort.includes(d.id))
+        .select('circle')
+        .attr('stroke', '#FF8500')
+        .attr('stroke-width', 3)
+        .transition()
+        .duration(1000)
+        .attr('stroke-width', 2)
+        .attr('stroke', '#fff');
+    }
+
+    // Animate last cohort nodes
+    if (lastCohort.length > 0) {
+      svg
+        .selectAll('.node')
+        .filter((d: any) => lastCohort.includes(d.id))
+        .select('circle')
+        .attr('stroke', '#FF8500')
+        .attr('stroke-width', 3)
+        .transition()
+        .duration(1000)
+        .attr('stroke-width', 2)
+        .attr('stroke', '#fff');
+    }
+
+    // Animate links connected to first cohort
+    if (firstCohort.length > 0) {
+      svg
+        .selectAll('.link')
+        .filter(
+          (d: any) =>
+            firstCohort.includes(d.source) || firstCohort.includes(d.target)
+        )
+        .attr('stroke-width', 3)
+        .attr('stroke', '#FF8500')
+        .transition()
+        .duration(1000)
+        .attr('stroke-width', 1.5)
+        .attr('stroke', (d: any) =>
+          graphData?.highest_work_path.includes(d.source) &&
+          graphData?.highest_work_path.includes(d.target)
+            ? '#FF8500'
+            : '#48CAE4'
+        );
+    }
+
+    // Animate links connected to last cohort
+    if (lastCohort.length > 0) {
+      svg
+        .selectAll('.link')
+        .filter(
+          (d: any) =>
+            lastCohort.includes(d.source) || lastCohort.includes(d.target)
+        )
+        .attr('stroke-width', 3)
+        .attr('stroke', '#FF8500')
+        .transition()
+        .duration(1000)
+        .attr('stroke-width', 1.5)
+        .attr('stroke', (d: any) =>
+          graphData?.highest_work_path.includes(d.source) &&
+          graphData?.highest_work_path.includes(d.target)
+            ? '#FF8500'
+            : '#48CAE4'
+        );
+    }
+  };
   const resetZoom = () => {
     if (svgRef.current && zoomBehavior.current) {
       d3.select(svgRef.current)
@@ -409,14 +504,16 @@ const GraphVisualization: React.FC = () => {
                 <div><strong>ID:</strong> ${nodeIdMap[d.id] || '?'} (${d.id})</div>
                 <div><strong>Cohort:</strong> ${cohortIndex !== undefined ? cohortIndex : 'N/A'}</div>
                 <div><strong>Highest Work Path:</strong> ${isHWP ? 'Yes' : 'No'}</div>
-                <div><strong>Parents:</strong> ${d.parents.length > 0
-            ? d.parents.map((p) => `${nodeIdMap[p] || '?'}`).join(', ')
-            : 'None'
-          }</div>
-                <div><strong>Children:</strong> ${d.children.length > 0
-            ? d.children.map((c) => `${nodeIdMap[c] || '?'}`).join(', ')
-            : 'None'
-          }</div>
+                <div><strong>Parents:</strong> ${
+                  d.parents.length > 0
+                    ? d.parents.map((p) => `${nodeIdMap[p] || '?'}`).join(', ')
+                    : 'None'
+                }</div>
+                <div><strong>Children:</strong> ${
+                  d.children.length > 0
+                    ? d.children.map((c) => `${nodeIdMap[c] || '?'}`).join(', ')
+                    : 'None'
+                }</div>
                 `;
 
         tooltip.html(tooltipContent).style('visibility', 'visible');
@@ -440,14 +537,16 @@ const GraphVisualization: React.FC = () => {
                 <div><strong>ID:</strong> ${nodeIdMap[d.id] || '?'} (${d.id})</div>
                 <div><strong>Cohort:</strong> ${cohortIndex !== undefined ? cohortIndex : 'N/A'}</div>
                 <div><strong>Highest Work Path:</strong> ${isHWP ? 'Yes' : 'No'}</div>
-                <div><strong>Parents:</strong> ${d.parents.length > 0
-            ? d.parents.map((p) => `${nodeIdMap[p] || '?'}`).join(', ')
-            : 'None'
-          }</div>
-                <div><strong>Children:</strong> ${d.children.length > 0
-            ? d.children.map((c) => `${nodeIdMap[c] || '?'}`).join(', ')
-            : 'None'
-          }</div>
+                <div><strong>Parents:</strong> ${
+                  d.parents.length > 0
+                    ? d.parents.map((p) => `${nodeIdMap[p] || '?'}`).join(', ')
+                    : 'None'
+                }</div>
+                <div><strong>Children:</strong> ${
+                  d.children.length > 0
+                    ? d.children.map((c) => `${nodeIdMap[c] || '?'}`).join(', ')
+                    : 'None'
+                }</div>
                 `;
 
         tooltip.html(tooltipContent).style('visibility', 'visible');
