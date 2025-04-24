@@ -1,41 +1,33 @@
-import React, { ReactNode } from 'react';
-import { IconButton, SxProps, Theme } from '@mui/material';
-import colors from '../../theme/colors';
+import React, { ReactNode, ReactElement } from 'react';
 
 interface ActionIconButtonProps {
-  icon: ReactNode;
+  icon: ReactElement;
   onClick?: () => void;
-  sx?: SxProps<Theme>;
+  className?: string;
 }
-
-/**
- * A consistent button style used in the header and throughout the app
- */
 const ActionIconButton: React.FC<ActionIconButtonProps> = ({
   icon,
   onClick,
-  sx = {},
+  className = '',
 }) => {
   return (
-    <IconButton
-      size="small"
+    <button
       onClick={onClick}
-      sx={{
-        color: '#000',
-        bgcolor: colors.accent,
-        p: 1,
-        width: 34,
-        height: 34,
-        boxShadow: '0 1px 2px rgba(0,0,0,0.3)',
-        '&:hover': {
-          bgcolor: colors.accentDark,
-          boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
-        },
-        ...sx,
-      }}
+      className={`
+        flex items-center justify-center
+        w-[34px] h-[34px] sm:w-[34px] sm:h-[34px] xs:w-[28px] xs:h-[28px]
+        p-1 rounded-full bg-[#36454F] text-white
+        shadow-md hover:shadow-lg hover:w-[48px] hover:h-[48px] hover:bg-black
+        transition-all duration-200 ease-in-out
+        hover:scale-105 active:scale-95
+        focus:outline-none focus:ring-2 focus:ring-white/70 focus:ring-offset-1
+        ${className}
+      `}
     >
-      {icon}
-    </IconButton>
+      {React.cloneElement(icon, {
+        className: 'w-[18px] h-[18px] text-inherit',
+      })}
+    </button>
   );
 };
 
