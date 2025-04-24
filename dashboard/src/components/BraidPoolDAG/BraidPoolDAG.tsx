@@ -19,6 +19,12 @@ interface NodeIdMapping {
   [hash: string]: string; // maps hash to sequential ID
 }
 
+var COLORS = [
+  `rgba(${217}, ${95}, ${2}, 1)`,
+  `rgba(${117}, ${112}, ${179}, 1)`,
+  `rgba(${102}, ${166}, ${30}, 1)`,
+  `rgba(${231}, ${41}, ${138}, 1)`,
+];
 interface GraphData {
   highest_work_path: string[];
   parents: Record<string, string[]>;
@@ -39,12 +45,7 @@ const GraphVisualization: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const width = window.innerWidth - 100;
   const height = window.innerHeight;
-  const COLORS = [
-    `rgba(${217}, ${95}, ${2}, 1)`,
-    `rgba(${117}, ${112}, ${179}, 1)`,
-    `rgba(${102}, ${166}, ${30}, 1)`,
-    `rgba(${231}, ${41}, ${138}, 1)`,
-  ];
+
 
   const [nodeIdMap, setNodeIdMap] = useState<NodeIdMapping>({});
   const [selectedCohorts, setSelectedCohorts] = useState<number | 'all'>(10);
@@ -177,6 +178,7 @@ const GraphVisualization: React.FC = () => {
 
   const [_socket, setSocket] = useState<Socket | null>(null);
   const [_connectionStatus, setConnectionStatus] = useState('Disconnected');
+  const prevFirstCohortRef = useRef<string[]>([]);
 
   const [totalBeads, setTotalBeads] = useState<number>(0);
   const [totalCohorts, setTotalCohorts] = useState<number>(0);
@@ -241,6 +243,16 @@ const GraphVisualization: React.FC = () => {
           bead_count,
         };
 
+        const firstCohortChanged =
+          parsedData?.cohorts?.[0]?.length &&
+          JSON.stringify(prevFirstCohortRef.current) !== JSON.stringify(parsedData.cohorts[0]);
+
+        if (firstCohortChanged) {
+          const top = COLORS.shift();
+          COLORS.push(top ?? `rgba(${217}, ${95}, ${2}, 1)`);
+          prevFirstCohortRef.current = parsedData.cohorts[0];
+        }
+
         const newMapping: NodeIdMapping = {};
         let nextId = 1;
         Object.keys(parsedData.parents).forEach((hash) => {
@@ -267,7 +279,7 @@ const GraphVisualization: React.FC = () => {
     };
 
     return () => socket.close();
-  }, []);
+  }, [graphData?.cohorts]); // Dependency on graphData.cohorts to detect changes
 
   const resetZoom = () => {
     if (svgRef.current && zoomBehavior.current) {
@@ -383,15 +395,7 @@ const GraphVisualization: React.FC = () => {
       .attr('fill', (d) => {
         const cohortIndex = cohortMap.get(d.id);
         if (cohortIndex === undefined) return COLORS[0];
-        const startingIndex = Math.max(
-          0,
-          totalCohorts -
-            (typeof selectedCohorts === 'number'
-              ? selectedCohorts
-              : totalCohorts)
-        );
-        const adjustedIndex = cohortIndex - startingIndex;
-        return COLORS[adjustedIndex % COLORS.length];
+        return COLORS[cohortIndex % COLORS.length];
       })
       .attr('stroke', '#fff')
       .attr('stroke-width', 2)
@@ -405,16 +409,14 @@ const GraphVisualization: React.FC = () => {
                 <div><strong>ID:</strong> ${nodeIdMap[d.id] || '?'} (${d.id})</div>
                 <div><strong>Cohort:</strong> ${cohortIndex !== undefined ? cohortIndex : 'N/A'}</div>
                 <div><strong>Highest Work Path:</strong> ${isHWP ? 'Yes' : 'No'}</div>
-                <div><strong>Parents:</strong> ${
-                  d.parents.length > 0
-                    ? d.parents.map((p) => `${nodeIdMap[p] || '?'}`).join(', ')
-                    : 'None'
-                }</div>
-                <div><strong>Children:</strong> ${
-                  d.children.length > 0
-                    ? d.children.map((c) => `${nodeIdMap[c] || '?'}`).join(', ')
-                    : 'None'
-                }</div>
+                <div><strong>Parents:</strong> ${d.parents.length > 0
+            ? d.parents.map((p) => `${nodeIdMap[p] || '?'}`).join(', ')
+            : 'None'
+          }</div>
+                <div><strong>Children:</strong> ${d.children.length > 0
+            ? d.children.map((c) => `${nodeIdMap[c] || '?'}`).join(', ')
+            : 'None'
+          }</div>
                 `;
 
         tooltip.html(tooltipContent).style('visibility', 'visible');
@@ -438,16 +440,14 @@ const GraphVisualization: React.FC = () => {
                 <div><strong>ID:</strong> ${nodeIdMap[d.id] || '?'} (${d.id})</div>
                 <div><strong>Cohort:</strong> ${cohortIndex !== undefined ? cohortIndex : 'N/A'}</div>
                 <div><strong>Highest Work Path:</strong> ${isHWP ? 'Yes' : 'No'}</div>
-                <div><strong>Parents:</strong> ${
-                  d.parents.length > 0
-                    ? d.parents.map((p) => `${nodeIdMap[p] || '?'}`).join(', ')
-                    : 'None'
-                }</div>
-                <div><strong>Children:</strong> ${
-                  d.children.length > 0
-                    ? d.children.map((c) => `${nodeIdMap[c] || '?'}`).join(', ')
-                    : 'None'
-                }</div>
+                <div><strong>Parents:</strong> ${d.parents.length > 0
+            ? d.parents.map((p) => `${nodeIdMap[p] || '?'}`).join(', ')
+            : 'None'
+          }</div>
+                <div><strong>Children:</strong> ${d.children.length > 0
+            ? d.children.map((c) => `${nodeIdMap[c] || '?'}`).join(', ')
+            : 'None'
+          }</div>
                 `;
 
         tooltip.html(tooltipContent).style('visibility', 'visible');
