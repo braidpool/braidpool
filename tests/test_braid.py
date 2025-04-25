@@ -128,7 +128,6 @@ class TestCohortMethods(unittest.TestCase):
                 with open("layouts/" + filename.split('.')[0] + f"_{i}_layout.json", 'w', encoding="utf8") as file:
                     file.write(json.dumps(layout(c, dag["parents"],
                                                  dag["bead_work"]), indent=4))
-                    file.close()
 
 if __name__ == "__main__":
     unittest.main()
