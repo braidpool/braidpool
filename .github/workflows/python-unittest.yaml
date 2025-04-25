@@ -31,6 +31,8 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: '23.x'
+
+    - name: Run npm tests
       run: |
         npm install
         npm test

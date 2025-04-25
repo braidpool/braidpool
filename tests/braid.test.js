@@ -381,8 +381,8 @@ describe('layout', () => {
                          [calculatedLayoutMap, calculatedTipsPos] = Braid.layout(
                             cohort,
                             dag.parents,
-                            dag.beadWork
-                            //previousCohortTipsPos // Pass tips from the previous iteration
+                            dag.beadWork,
+                            previousCohortTipsPos // Pass tips from the previous iteration
                         );
                     } catch (layoutError) {
                          console.error(`Error running layout for ${baseFilename}, cohort ${i}:`, layoutError);
