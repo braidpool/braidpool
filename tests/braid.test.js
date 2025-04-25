@@ -171,7 +171,7 @@ describe('Braid Utility Functions', () => {
 
                     const calculatedReversedCohorts = Array.from(cohorts(reversedParents)); // Calculate cohorts on reversed graph
 
-                    console.log(`File: ${filename} (Reversed), Expected:`, expectedReversedCohorts, "Calculated:", calculatedReversedCohorts); // Debugging
+                    //console.log(`File: ${filename} (Reversed), Expected:`, expectedReversedCohorts, "Calculated:", calculatedReversedCohorts); // Debugging
 
                     // Compare cohorts element by element if direct comparison fails due to Set ordering within arrays
                     expect(calculatedReversedCohorts.length).toEqual(expectedReversedCohorts.length);
