@@ -290,266 +290,84 @@ function allAncestors(b, parents, ancestors = new Map()) {
 
 
 /**
- * Generates cohorts (layers) of a DAG.
+ * Generates cohorts of a Braid.
  * @param {Map<number, Set<number>>} parents - The parent map {beadId: Set<parentId>}.
  * @param {Map<number, Set<number>>} [children] - Optional precomputed children map.
  * @param {Set<number>} [initialCohort] - Optional starting cohort (defaults to geneses).
  * @yields {Set<number>} The next cohort in the DAG.
  */
 function* cohorts(parents, children = null, initialCohort = null) {
-    if (!parents || parents.size === 0) return; // Handle empty or null graph
+    // How in the holy fuck does js not have a set equality operator?!?!
+    isEqual = (setA, setB) => setA.size === setB.size && setA.isSubsetOf(setB);
 
     children = children ? children : reverse(parents);
-    const dagTips = tips(parents, children);
-    const dagGeneses = geneses(parents);
+    const dag_tips = tips(parents, children);
+    let cohort = initialCohort ? initialCohort : geneses(parents);
+    let oldcohort = new Set();
+    let head = new Set(cohort);
+    let tail = new Set(cohort);
+    while (true) {
+        const ancestors = new Map();
+        for (const h of head) { ancestors.set(h, new Set()); }
+        cohort = new Set(head);
 
-    let head = initialCohort ? new Set(initialCohort) : new Set(dagGeneses);
-    let allYieldedBeads = new Set(); // Keep track of beads already part of a yielded cohort
-
-    // Filter head to ensure it only contains valid starting points (e.g., actual geneses if default)
-    head = new Set([...head].filter(h => parents.has(h)));
-
-    // --- Debugging ---
-    // console.log("Parents:", parents);
-    // console.log("Children:", children);
-    // console.log("Initial Head:", head);
-    // console.log("DAG Tips:", dagTips);
-    // console.log("DAG Geneses:", dagGeneses);
-    // --- End Debugging ---
-
-    while (true) { // Outer loop in Python is `while True:`
-        // --- Debugging ---
-        // console.log("\n--- Outer Loop Start ---");
-        // console.log("Current Head:", head);
-        // --- End Debugging ---
-
-        if (head.size === 0) {
-            // Check if all tips have been yielded.
-            const unyieldedNodes = [...parents.keys()].filter(b => !allYieldedBeads.has(b));
-            if (unyieldedNodes.length > 0) {
-                const unyieldedTips = [...dagTips].filter(t => !allYieldedBeads.has(t) && unyieldedNodes.includes(t));
-                if (unyieldedTips.length > 0 || unyieldedNodes.length > 0) { // Check if any node is unyielded
-                    console.warn(`Cohort generation finished, but unyielded nodes remain: ${unyieldedNodes}. Unyielded tips: ${unyieldedTips}. Graph might be disconnected or logic error.`);
-                     // Yield remaining unyielded nodes as final group
-                     const finalGroup = new Set(unyieldedNodes);
-                     // console.warn("Yielding remaining unyielded nodes as final group:", finalGroup);
-                     yield finalGroup;
-                 }
+        while (true) {
+            if (head.size === 0) { return; }
+            for (const b of cohort.difference(oldcohort)) {
+                 tail = tail.union(children.get(b));
             }
-            return; // StopIteration
-        }
-
-        const ancestors = new Map(); // Ancestor cache *scoped to this outer loop iteration*
-        // Initialize ancestors for head beads
-        for (const h of head) {
-            if (!ancestors.has(h)) ancestors.set(h, new Set()); // Ensure head beads have an entry (empty set)
-        }
-
-        let cohort = new Set(head); // Start current cohort search with the current head
-        let oldCohort = new Set(); // Stores cohort state from previous inner loop iteration
-
-        let innerLoopIterations = 0; // Safety counter for inner loop
-
-        while (true) { // Inner loop in Python is `while True:`
-            innerLoopIterations++;
-             if (innerLoopIterations > (parents.size * 2) + 5) { // Increased safety limit slightly
-                 console.error(`Cohort inner loop exceeded safety limit (${(parents.size * 2) + 5}). Graph size: ${parents.size}. Aborting.`);
-                 console.error("Current Head:", head);
-                 console.error("Current Cohort:", cohort);
-                 // Yield what we have (filtered) and exit to prevent complete hang
-                 const finalYield = new Set([...cohort].filter(b => !allYieldedBeads.has(b)));
-                  if (finalYield.size > 0) {
-                       yield finalYield;
-                  }
-                 return;
-            }
-
-            // --- Debugging ---
-            // console.log(`\n  --- Inner Loop Iteration ${innerLoopIterations} ---`);
-            // console.log("  Current Cohort:", cohort);
-            // --- End Debugging ---
-
-            oldCohort = new Set(cohort); // Store state before modification
-
-            // --- Calculate potential_tail ---
-            const potentialTail = new Set();
-            const nextLayerNodes = generation(cohort, children);
-            // console.log("  Next Layer Nodes:", nextLayerNodes);
-            for (const node of nextLayerNodes) {
-                if (!cohort.has(node)) {
-                    const nodeParents = parents.get(node) || new Set();
-                    if (nodeParents.size > 0 && [...nodeParents].every(p => cohort.has(p))) {
-                        potentialTail.add(node);
-                    }
-                }
-            }
-            // --- Debugging ---
-            // console.log("  Potential Tail (Parents in Cohort):", potentialTail);
-            // --- End Debugging ---
-
-
-            // --- Adjust tail based on tips (Python lines 142-145) ---
-            let tail = new Set(potentialTail);
-            let cohortContainsTips = false;
-            for (const tip of dagTips) { if (cohort.has(tip)) { cohortContainsTips = true; break; } }
-
-            if (cohortContainsTips) {
-                for(const tip of dagTips) {
-                    if (!cohort.has(tip)) tail.add(tip); // Add tips not already in cohort
-                }
-                // --- Debugging ---
-                // console.log("  Cohort contains tips. Tail after adding other tips:", tail);
-                // --- End Debugging ---
+            tail = tail.union(cohort.symmetricDifference(oldcohort));
+            if (cohort.intersection(dag_tips).size > 0) {
+                tail = tail.union(dag_tips.difference(cohort));
             } else {
-                 tail = new Set([...tail].filter(t => !cohort.has(t))); // Ensure no cohort members in tail
-                 // --- Debugging ---
-                 // console.log("  Cohort does not contain tips. Tail (should be same as potential):", tail);
-                 // --- End Debugging ---
+                tail = tail.difference(cohort);
             }
-            // --- Debugging ---
-            // console.log("  Tail:", tail);
-            // --- End Debugging ---
 
-            // --- Calculate ancestors for tail (Python lines 151-154) ---
+            oldcohort = new Set(cohort);
+
+            // Calculate ancestors
+            for (const t of tail.difference(new Set(ancestors.keys()))) {
+                allAncestors(t, parents, ancestors); // Modifies 'ancestors' Map
+            }
+
+            // Compute new cohort
+            cohort = new Set();
+            for(const v of ancestors.values()) {
+                cohort = cohort.union(v);
+            }
+
+            // Check termination cases
+            if (dag_tips.isSubsetOf(cohort)) {
+                break;
+            }
+
+            let standardCohortCondition = true;
             for (const t of tail) {
-                if (!ancestors.has(t)) {
-                    allAncestors(t, parents, ancestors);
-                     if (!ancestors.has(t)) {
-                         const nodeParents = parents.get(t) || new Set();
-                         if (nodeParents.size === 0) {
-                              if (!ancestors.has(t)) ancestors.set(t, new Set()); // Ensure entry for genesis
-                         } else {
-                              console.error(`Failed to calculate ancestors for tail bead ${t}, which has parents. Aborting cohort calculation.`);
-                              const finalYield = new Set([...cohort].filter(b => !allYieldedBeads.has(b)));
-                              if (finalYield.size > 0) yield finalYield;
-                              return;
-                         }
-                     }
-                }
-            }
-            // --- Debugging ---
-            // console.log("  Ancestor cache updated for tail.");
-            // --- End Debugging ---
-
-
-            // --- Calculate next_cohort_boundary (Union of ancestors[t] + t for t in tail) ---
-            const nextCohortBoundary = new Set();
-            for (const t of tail) {
-                 const tAncestors = ancestors.get(t);
-                 if (tAncestors) {
-                     for (const anc of tAncestors) {
-                         nextCohortBoundary.add(anc);
-                     }
-                 }
-                 //BOB nextCohortBoundary.add(t); // Include the tail bead itself
-            }
-             for(const h of head) { // Ensure original head members are included
-                 nextCohortBoundary.add(h);
-             }
-            // --- Debugging ---
-            // console.log("  Next Cohort Boundary (Union of tail ancestors + tail + head):", nextCohortBoundary);
-            // --- End Debugging ---
-
-
-            // --- Check Termination Conditions (Python lines 161-174) ---
-
-            // 1. Boundary contains all DAG tips
-            let containsAllTips = dagTips.size > 0;
-            for (const tip of dagTips) {
-                if (!nextCohortBoundary.has(tip)) {
-                    containsAllTips = false;
+                if (!cohort.size || !isEqual(ancestors.get(t), cohort)) {
+                    standardCohortCondition = false;
                     break;
                 }
             }
-            if (containsAllTips) {
-                // --- Debugging ---
-                // console.log("  Condition Met: Boundary contains all tips.");
-                // --- End Debugging ---
-                const finalCohort = new Set([...nextCohortBoundary].filter(b => !allYieldedBeads.has(b)));
-                 if (finalCohort.size > 0) {
-                     for(const b of finalCohort) allYieldedBeads.add(b);
-                     // console.log("  Yielding final cohort (all tips):", finalCohort)
-                     yield finalCohort;
-                 }
-                return; // StopIteration
-            }
-
-            // 2. Standard Cohort Found: Ancestors+self for each tail bead == nextCohortBoundary
-            let standardCohortCondition = tail.size > 0;
             if (standardCohortCondition) {
-                for (const t of tail) {
-                    const tAncestors = ancestors.get(t) || new Set();
-                    const tAncestorsPlusSelf = new Set(tAncestors);
-                    //BOB tAncestorsPlusSelf.add(t);
-                    // console.log("  Tail Ancestors + Self:", tAncestorsPlusSelf);
-
-                    if (tAncestorsPlusSelf.size !== nextCohortBoundary.size ||
-                        ![...tAncestorsPlusSelf].every(a => nextCohortBoundary.has(a))) {
-                        standardCohortCondition = false;
-                        break;
-                    }
-                }
+                head = new Set(tail);
+                break;
             }
 
-            if (standardCohortCondition) {
-                // --- Debugging ---
-                // console.log("  Condition Met: Standard cohort found.");
-                // --- End Debugging ---
-                const finalCohort = new Set([...nextCohortBoundary].filter(b => !allYieldedBeads.has(b)));
-                 if (finalCohort.size > 0) {
-                     for(const b of finalCohort) allYieldedBeads.add(b);
-                     // console.log("  Yielding standard cohort:", finalCohort);
-                     yield finalCohort;
-                 }
-                head = new Set(tail); // Head for next outer loop iteration is the current tail
-                head = new Set([...head].filter(b => !allYieldedBeads.has(b))); // Filter head immediately
-                // console.log("  Setting next head to tail (filtered):", head);
-                break; // Break inner loop, continue to next outer loop iteration
-            }
-
-            // 3. Stagnation Check: nextCohortBoundary == oldCohort
-            if (nextCohortBoundary.size === oldCohort.size && [...nextCohortBoundary].every(b => oldCohort.has(b))) {
-                // --- Debugging ---
-                // console.log("  Condition Met: Stagnation (Boundary == Old Cohort).");
-                // --- End Debugging ---
-                const remainingTips = [...dagTips].filter(t => !allYieldedBeads.has(t));
-                let tailContainsAllRemainingTips = remainingTips.length > 0;
-                for (const rt of remainingTips) {
-                    if (!tail.has(rt)) {
-                        tailContainsAllRemainingTips = false;
-                        break;
-                    }
+            if (isEqual(cohort, oldcohort)) {
+                if (dag_tips.isSubsetOf(tail)) {
+                    head = new Set();
+                    cohort = cohort.union(tail);
+                    tail = new Set();
+                    break;
                 }
-                // --- Debugging ---
-                // console.log("  Remaining Tips:", remainingTips);
-                // console.log("  Tail contains all remaining tips:", tailContainsAllRemainingTips);
-                // --- End Debugging ---
-
-                if (tailContainsAllRemainingTips) {
-                    const finalGroup = new Set([...nextCohortBoundary, ...tail]);
-                    const finalYield = new Set([...finalGroup].filter(b => !allYieldedBeads.has(b)));
-                     if (finalYield.size > 0) {
-                        for(const b of finalYield) allYieldedBeads.add(b);
-                        // console.log("  Yielding stagnated cohort + tail (all tips):", finalYield);
-                        yield finalYield;
-                     }
-                    return; // StopIteration
-                } else {
-                    // Python merges tail and continues inner loop: cohort.update(tail)
-                    // console.warn("  Cohort stagnated. Merging tail and retrying inner loop.");
-                    cohort = new Set([...nextCohortBoundary, ...tail]);
-                    // Continue inner loop with the updated cohort
-                }
-            } else {
-                 // Cohort boundary changed, update cohort for the next inner loop iteration
-                 // --- Debugging ---
-                 // console.log("  Boundary changed. Updating cohort for next inner iteration.");
-                 // --- End Debugging ---
-                 cohort = nextCohortBoundary;
-            }
-            // Loop continues (inner while)
+                cohort = cohort.union(tail);
+            } // End Inner Loop Body
         } // End inner while loop
-    } // End outer while loop
+
+        oldcohort = new Set();
+        yield cohort;
+
+    }
 }
 
 
