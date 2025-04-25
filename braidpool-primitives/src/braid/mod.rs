@@ -3,7 +3,7 @@ use ::serde::Serialize;
 use std::collections::{HashMap, HashSet};
 
 // Bitcoin Imports
-use bitcoin::CompactTarget;
+use bitcoin::{BlockHash, CompactTarget};
 
 // Custom Imports
 use crate::bead::Bead;
@@ -54,7 +54,19 @@ impl Braid {
 
     pub fn load_beads_in_memory(&mut self, beads: Vec<Bead>) {
         for bead in beads {
-            let bead_hash = bead.bead_hash;
+            let serialized_curr_bead_str_result = serde_json::to_string(&bead);
+            let serialized_curr_bead_str = match serialized_curr_bead_str_result {
+                Ok(serialized_str) => serialized_str,
+                Err(error) => {
+                    panic!(
+                        "An error occrrred while seralizing the bead string while loading beads in memory {:?} ",
+                        error
+                    );
+                }
+            };
+            let mut serialized_bytes = [0u8; 32];
+            hex::decode_to_slice(serialized_curr_bead_str, &mut serialized_bytes).unwrap();
+            let bead_hash = BlockHash::from_byte_array(serialized_bytes);
             self.loaded_beads_in_memory.insert(bead_hash, bead);
         }
     }
@@ -116,17 +128,28 @@ impl Braid {
     fn update_parents_of_bead(&self, child_bead: &Bead) {
         // For now, this function is expected to run synchronously, such that in case, the bead's
         // parent just got pruned, we'd still have to handle of this
-
+        let serialized_child_bead_str_result = serde_json::to_string(&child_bead.clone());
+        let serialized_child_bead_str = match serialized_child_bead_str_result {
+            Ok(serialized_str) => serialized_str,
+            Err(error) => {
+                panic!(
+                    "An error occrrred while seralizing the bead string while loading beads in memory {:?} ",
+                    error
+                );
+            }
+        };
+        let mut serialized_child_bead_bytes = [0u8; 32];
+        hex::decode_to_slice(serialized_child_bead_str, &mut serialized_child_bead_bytes).unwrap();
+        let child_bead_hash = BlockHash::from_byte_array(serialized_child_bead_bytes);
         // TODO: We have to make this code better for Async version in V2 for DB implementation.
-        for (parent_hash, _) in child_bead.parents.iter() {
+        for parent_hash in child_bead.committed_metadata.parents.iter() {
             let bead = {
                 match self.load_bead_from_hash(*parent_hash) {
                     Ok(bead) => bead,
                     Err(_) => panic!("This shouldn't be happening!"),
                 }
             };
-
-            bead.add_child(child_bead.bead_hash);
+            bead.add_child(child_bead_hash);
         }
     }
 
