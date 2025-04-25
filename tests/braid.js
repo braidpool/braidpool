@@ -701,25 +701,19 @@ function layout(cohort, allParents, beadWork = null, previousCohortTipsPos = nul
 
         // Handle constraint conflict: if min_x > max_x, shift children
         if (minX > maxX && maxX < Infinity) {
+            const beadChildren = localChildren.get(bead) || new Set();
             for (const child of beadChildren) {
-                if (proposedX.has(child) && proposedX.get(child) <= minX) {
+                if (proposedX.get(child) !== undefined && proposedX.get(child) <= minX) {
                     const shiftAmount = minX + 1 - proposedX.get(child);
-                    // Shift this child and all beads currently at or to its right
-                    // Need to iterate carefully - convert to array and sort by X?
-                    const beadsToShift = [];
-                    for (const [otherBead, otherX] of proposedX.entries()) {
-                        if (otherX >= proposedX.get(child)) {
-                            beadsToShift.push(otherBead);
+                    for (const other of proposedX.keys()) {
+                        if (proposedX.get(other) >= proposedX.get(child)) {
+                            proposedX.set(other, proposedX.get(other) + shiftAmount);
                         }
                     }
-                    for (const other of beadsToShift) {
-                        proposedX.set(other, proposedX.get(other) + shiftAmount);
-                    }
-                     // After shifting, the child's position might change, potentially affecting maxX,
-                     // but we prioritize the parent constraint (minX) here.
                 }
             }
         }
+        // Set the final X for the current bead after resolving conflicts
         proposedX.set(bead, minX);
     }
 

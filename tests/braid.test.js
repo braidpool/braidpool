@@ -396,16 +396,14 @@ describe('layout', () => {
                     if (!match) {
                         newCalculatedLayoutMap = new Map();
                         keys = Array.from(calculatedLayoutMap.keys()).sort((a,b) => a-b);
-                        console.log("keys:", keys);
                         keys.forEach((key) => {
                             newCalculatedLayoutMap.set(key, calculatedLayoutMap.get(key));
                         });
                         calculatedLayoutMap = newCalculatedLayoutMap;
-                         console.log(`Calculated Layout for ${baseFilename} cohort ${i}:`, calculatedLayoutMap);
-                         console.log(`Expected Layout from ${layoutFilename}:`, expectedLayoutMap);
+                        console.log(`Calculated Layout for ${baseFilename} cohort ${i}:`, calculatedLayoutMap);
+                        console.log(`Expected Layout from ${layoutFilename}:`, expectedLayoutMap);
                     }
-                    console.log("match:", match, " for cohort: ", cohort);
-                     expect(match).toBe(true); // Assert that the layouts match
+                    expect(match).toBe(true); // Assert that the layouts match
 
                     // Update previousCohortTipsPos for the next iteration
                     previousCohortTipsPos = calculatedTipsPos;

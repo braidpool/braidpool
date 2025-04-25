@@ -149,14 +149,11 @@ def cohorts(parents, children=None, initial_cohort=None):
                                              # new ancestors
 
             # Calculate ancestors
-            for t in tail:                   # Find all ancestors of all beads in the tail
-                if t not in ancestors:
-                    all_ancestors(t, parents, ancestors) # half the CPU time is here
+            for t in tail - set(ancestors.keys()):   # Find all ancestors of all beads in the tail
+                all_ancestors(t, parents, ancestors) # half the CPU time is here
 
             # Calculate cohort
-            cohort = set()
-            for a in ancestors:
-                cohort |= ancestors[a]       # Union all ancestors with the cohort
+            cohort = set.union(*ancestors.values()) # Union all ancestors with the cohort
 
             # Check termination cases
             if dag_tips <= cohort:           # Cohort contains all tips
@@ -215,9 +212,9 @@ def descendant_work(parents, children=None, bead_work=None, in_cohorts=None):
     children        = children if children else reverse(parents)
     bead_work       = bead_work if bead_work else {b: FIXED_BEAD_WORK for b in parents}
     previous_work   = 0
-    in_cohorts      = reversed(in_cohorts) if in_cohorts else cohorts(children)
+    rev_cohorts     = reversed(in_cohorts) if in_cohorts else cohorts(children)
     retval          = {} # The cumulative work for each bead
-    for c in in_cohorts:
+    for c in rev_cohorts:
         sub_children    = sub_braid(c, children)   # children dict within the cohort
         sub_descendants = {}                       # descendants within the cohort
         for b in c:
