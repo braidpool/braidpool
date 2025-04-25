@@ -153,7 +153,7 @@ def cohorts(parents, children=None, initial_cohort=None):
                 all_ancestors(t, parents, ancestors) # half the CPU time is here
 
             # Calculate cohort
-            cohort = set.union(*ancestors.values()) # Union all ancestors with the cohort
+            cohort = set.union(set(), *ancestors.values()) # Union all ancestors with the cohort
 
             # Check termination cases
             if dag_tips <= cohort:           # Cohort contains all tips
