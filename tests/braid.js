@@ -449,82 +449,45 @@ function subBraid(beads, parents) {
 
 
 /**
- * Find the cumulative work in descendants for each bead.
- * @param {Map<number, Set<number>>} parents - Parent map.
- * @param {Map<number, Set<number>>} [children] - Optional children map.
- * @param {Map<number, number>} [beadWork] - Work per bead map.
- * @param {Array<Set<number>>} [inCohorts] - Optional precomputed cohorts array (assumed ordered geneses to tips).
+ * Find the work in descendants.
+ * Work in ancestors can be found by reversing the order of parents and children.
+ * @param {Map<number, Set<number>>} parents - The parent map for the entire DAG.
+ * @param {Map<number, Set<number>>} [children] - Optional precomputed children map.
+ * @param {Map<number, number>} [beadWork] - Optional map of work per bead.
+ * @param {Array<Set<number>>} [inCohorts] - Optional precomputed cohorts array (ordered geneses to tips).
  * @returns {Map<number, number>} Map of {beadId: cumulativeDescendantWork}.
  */
 function descendantWork(parents, children = null, beadWork = null, inCohorts = null) {
+    if (!parents) return new Map(); // Handle null/undefined input
     children = children ? children : reverse(parents);
-    beadWork = beadWork ? beadWork : new Map([...parents.keys()].map(b => [b, FIXED_BEAD_WORK]));
-    // Process cohorts from tips to geneses (reverse order of generation)
-    const cohortsToProcess = inCohorts ? [...inCohorts].reverse() : Array.from(cohorts(parents, children)).reverse();
-
-    const cumulativeWork = new Map(); // { beadId: work }
-    let workFromLaterCohorts = 0; // Work accumulated from cohorts closer to the tips
-
-    for (const c of cohortsToProcess) {
-        if (!c || c.size === 0) continue; // Skip empty cohorts
-
-        const subChildren = subBraid(c, children); // Children within the current cohort 'c'
-        const subParents = reverse(subChildren);   // Parents within 'c'
-        const workCache = new Map(); // Cache work calculated *within* this cohort {beadId: work_in_cohort}
-
-        // Calculate work within the cohort using iteration until stabilization
-        let changed = true;
-        let iterations = 0;
-        const maxIterations = c.size * 2 + 2; // Safety limit
-
-        while (changed && iterations < maxIterations) {
-            changed = false;
-            iterations++;
-            for (const b of c) {
-                let currentBeadBaseWork = beadWork.get(b) || 0;
-                let workFromDescendantsInCohort = 0;
-                const descendantsInCohort = subChildren.get(b) || new Set(); // Direct children *within* cohort 'c'
-
-                for (const desc of descendantsInCohort) {
-                     // Work of a descendant *within* the cohort comes from workCache
-                     workFromDescendantsInCohort += workCache.get(desc) || 0;
-                }
-
-                // Total work *within* this cohort for bead 'b'
-                const newWorkInCohort = currentBeadBaseWork + workFromDescendantsInCohort;
-
-                if (newWorkInCohort !== workCache.get(b)) {
-                    workCache.set(b, newWorkInCohort);
-                    changed = true;
-                }
-            }
-        } // End while(changed) - workCache now holds cumulative work *within* the cohort
-
-        if (iterations >= maxIterations) {
-             console.error(`Descendant work calculation within cohort exceeded max iterations for cohort:`, c);
-        }
-
-        // Final calculation: work within cohort + work from later cohorts
-         let totalBaseWorkInThisCohort = 0;
-         for (const b of c) {
-            // Total descendant work = (work within cohort) + (work from all later cohorts)
-            cumulativeWork.set(b, (workCache.get(b) || 0) + workFromLaterCohorts);
-            totalBaseWorkInThisCohort += beadWork.get(b) || 0; // Sum base work for the next iteration
-         }
-
-        // Add the total base work of this cohort to the accumulator for the next (earlier) cohort
-        workFromLaterCohorts += totalBaseWorkInThisCohort;
+    if(!beadWork) {
+        beadWork = new Map([...allBeads].map(b => [b, FIXED_BEAD_WORK]));
     }
+    let previousWork = 0;
+    let revCohorts;
+    if (inCohorts) {
+        revCohorts = [...inCohorts].reverse();
+    } else {
+        revCohorts = Array.from(cohorts(children, parents));
+    }
+    const returnValue = new Map();
 
-     // Ensure all beads have a work value, even if isolated or missed
-     for(const beadId of parents.keys()){
-         if(!cumulativeWork.has(beadId)){
-             cumulativeWork.set(beadId, beadWork.get(beadId) || 0); // Assign base work if missing
-         }
-     }
-
-
-    return cumulativeWork;
+    for (const c of revCohorts) {
+        const subChildren = subBraid(c, children);
+        const subDescendants = new Map();
+        for (const b of c) {
+            allAncestors(b, subChildren, subDescendants);
+            let sumOfSubDescendantWork = 0;
+            for (const a of subDescendants.get(b)) {
+                sumOfSubDescendantWork += beadWork.get(a);
+            }
+            returnValue.set(b, previousWork + beadWork.get(b) + sumOfSubDescendantWork);
+        }
+        for (const b of c) {
+            previousWork += beadWork.get(b);
+        }
+    }
+    return returnValue;
 }
 
 
