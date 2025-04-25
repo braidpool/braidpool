@@ -338,6 +338,7 @@ function* cohorts(parents, children = null, initialCohort = null) {
 
             // Check termination cases
             if (dag_tips.isSubsetOf(cohort)) {
+                head = new Set();
                 break;
             }
 
@@ -598,373 +599,469 @@ function highestWorkPath(parents, children = null, beadWork = null, dWork = null
 // --- Layout Function ---
 
 /**
- * Check if point (x3, y3) lies on the line segment from (x1, y1) to (x2, y2),
- * excluding the endpoints themselves.
- */
-function isPointStrictlyOnSegment(x1, y1, x2, y2, x3, y3) {
-    // Exclude endpoints
-    if ((x1 === x3 && y1 === y3) || (x2 === x3 && y2 === y3)) return false;
-
-    const crossProduct = (y3 - y1) * (x2 - x1) - (x3 - x1) * (y2 - y1);
-    const tolerance = 1e-9; // Tolerance for floating point comparisons
-
-    // Check for collinearity
-    if (Math.abs(crossProduct) > tolerance) {
-        return false;
-    }
-
-    // Check if point is within the bounding box of the segment (strict inequality for endpoints)
-    const isWithinXStrict = (x1 < x2) ? (x3 > x1 && x3 < x2) : (x3 > x2 && x3 < x1);
-    const isWithinYStrict = (y1 < y2) ? (y3 > y1 && y3 < y2) : (y3 > y2 && y3 < y1);
-    const isWithinXEq = Math.min(x1, x2) <= x3 && x3 <= Math.max(x1, x2); // Check within bounds including endpoints
-    const isWithinYEq = Math.min(y1, y2) <= y3 && y3 <= Math.max(y1, y2); // Check within bounds including endpoints
-
-
-     // Handle horizontal/vertical lines where one dimension is equal
-     if (Math.abs(x1 - x2) < tolerance) { // Vertical line
-         return Math.abs(x1 - x3) < tolerance && isWithinYStrict; // y must be strictly between
-     }
-     if (Math.abs(y1 - y2) < tolerance) { // Horizontal line
-         return Math.abs(y1 - y3) < tolerance && isWithinXStrict; // x must be strictly between
-     }
-
-    // For diagonal lines, check if within bounding box (using Eq check as collinearity confirmed)
-    return isWithinXEq && isWithinYEq;
-}
-
-
-/**
  * Places beads on a grid based on DAG structure and highest work path for a single cohort.
+ * Mirrors the Python implementation structure.
  * @param {Set<number>} cohort - Set of beads in the cohort.
  * @param {Map<number, Set<number>>} allParents - Parent map for the entire DAG.
  * @param {Map<number, number>} [beadWork] - Optional work map for the entire DAG.
- * @param {Map<number, [number, number]>} [previousCohortTipsPos] - Optional map of {tipId: [x, y]} from the previous cohort.
- * @returns {[Map<number, [number, number]>, Map<number, [number, number]>]} [posMap, tipsPosMap]
+ * @param {Map<number, [number, number]>} [previousCohortTipsPos] - Optional map of {tipId: [x, y]} from the previous cohort's layout result (tipsPos).
+ * @returns {[Map<number, [number, number]>, Map<number, [number, number]>]} [posMap, tipsPosMap] Map of bead to [x, y] coordinates, and Map of cohort tips to [x,y] coordinates.
  */
 function layout(cohort, allParents, beadWork = null, previousCohortTipsPos = null) {
 
-    const allChildren = reverse(allParents);
-    const parents = subBraid(cohort, allParents); // Parents within the cohort
-    const children = reverse(parents);          // Children within the cohort
-    beadWork = beadWork ? beadWork : new Map([...allParents.keys()].map(b => [b, FIXED_BEAD_WORK])); // Use full beadWork if provided
-
-    // Filter beadWork for the current cohort if needed for HWP calculation within cohort
-    const cohortBeadWork = new Map([...cohort].map(b => [b, beadWork.get(b) || FIXED_BEAD_WORK]));
-
-    const hwPath = highestWorkPath(parents, children, cohortBeadWork);
-    const head = cohortHead(cohort, parents, children); // Head within the cohort
-    const cohortTips = tips(parents, children); // Tips within the cohort
-
-    // --- X-coordinate assignment ---
-    const proposedX = new Map(); // { beadId: xCoord }
-
-    // Assign x-coordinates to hwpath beads first
-    hwPath.forEach((bead, i) => proposedX.set(bead, i));
-
-    // Iteratively assign X based on parents, ensuring parents are placed first
-    const assignedX = new Set(hwPath);
-    let beadsToProcess = new Set([...cohort].filter(b => !assignedX.has(b)));
-    let iterations = 0; // Safety break
-    const maxIterations = cohort.size * 2;
-
-    while (beadsToProcess.size > 0 && iterations < maxIterations) {
-        let changed = false;
-        const newlyAssigned = new Set();
-        for (const bead of beadsToProcess) {
-            const beadParentsInCohort = parents.get(bead) || new Set();
-            const parentsPlaced = [...beadParentsInCohort].every(p => proposedX.has(p));
-
-            if (parentsPlaced) {
-                let minX = 0;
-                for (const parent of beadParentsInCohort) {
-                    minX = Math.max(minX, (proposedX.get(parent) || -1) + 1);
-                }
-                // Only set if not already set or if new minX is greater
-                if (!proposedX.has(bead) || minX > proposedX.get(bead)) {
-                     proposedX.set(bead, minX);
-                     assignedX.add(bead);
-                     newlyAssigned.add(bead);
-                     changed = true;
-                } else if (!proposedX.has(bead)) { // Place at 0 if no parents placed it and not set
-                     proposedX.set(bead, 0);
-                     assignedX.add(bead);
-                     newlyAssigned.add(bead);
-                     changed = true;
-                }
-            }
-        } // End for bead of beadsToProcess
-
-        // Update the set for the next iteration
-        beadsToProcess = new Set([...beadsToProcess].filter(b => !newlyAssigned.has(b)));
-
-        if (!changed && beadsToProcess.size > 0) {
-            // If no progress, place remaining arbitrarily to avoid infinite loop
-            // console.warn("Layout X assignment stalled. Placing remaining beads sequentially.");
-            let currentX = Math.max(0, ...Array.from(proposedX.values())) + 1;
-            for(const bead of beadsToProcess) {
-                 if (!proposedX.has(bead)) { // Avoid overwriting if somehow assigned
-                     proposedX.set(bead, currentX++);
-                 }
-            }
-            beadsToProcess.clear(); // Exit loop
+    // Python: def intersection(x1, y1, x2, y2, x3, y3):
+    // Python:     """ Check if the point (x3, y3) lies on the line segment from (x1, y1) to (x2, y2) """
+    // Python:     if [x1,y1] == [x3,y3] or [x2,y2] == [x3,y3]: return False # Ignore duplicate endpoints
+    // Python:     return ((x2 - x1) * (y3 - y1) == (y2 - y1) * (x3 - x1) and
+    // Python:             min(x1, x2) <= x3 <= max(x1, x2) and
+    // Python:             min(y1, y2) <= y3 <= max(y1, y2))
+    function intersection(x1, y1, x2, y2, x3, y3) {
+        // Check if the point (x3, y3) lies on the line segment from (x1, y1) to (x2, y2)
+        // Ignore duplicate endpoints
+        if ((x1 === x3 && y1 === y3) || (x2 === x3 && y2 === y3)) {
+            return false;
         }
-        iterations++;
-    } // End while beadsToProcess
-    if (iterations >= maxIterations && beadsToProcess.size > 0) {
-         console.error("Layout X assignment exceeded max iterations.");
+        // Check for collinearity using cross-product (or checking slopes)
+        const crossProduct = (x2 - x1) * (y3 - y1) - (y2 - y1) * (x3 - x1);
+        // Use a small tolerance for floating point comparison if necessary, though integer coords assumed here
+        if (Math.abs(crossProduct) > 1e-9) { // Check if not collinear
+            return false;
+        }
+        // Check if point lies within the bounding box of the segment
+        const withinX = Math.min(x1, x2) <= x3 && x3 <= Math.max(x1, x2);
+        const withinY = Math.min(y1, y2) <= y3 && y3 <= Math.max(y1, y2);
+        return withinX && withinY;
     }
 
+    // State needed for setXCoord (like Python's nonlocal)
+    const proposedX = new Map();
 
-    // Adjust X based on children (push children right if needed) - Simplified pass
-    // Run multiple passes to allow shifts to propagate
-    for (let pass = 0; pass < cohort.size; pass++) { // Heuristic number of passes
-        let shifted = false;
-        const beadsSortedByX = [...cohort].sort((a, b) => (proposedX.get(a) || 0) - (proposedX.get(b) || 0));
-        for (let i = 0; i < beadsSortedByX.length; ++i) {
-            const bead = beadsSortedByX[i];
-            const beadX = proposedX.get(bead);
-            const beadChildrenInCohort = children.get(bead) || new Set();
-            for (const child of beadChildrenInCohort) {
-                if (proposedX.has(child) && proposedX.get(child) <= beadX) {
-                    const neededX = beadX + 1;
-                    const currentChildX = proposedX.get(child);
-                    const shiftAmount = neededX - currentChildX;
+    // Python: def set_x_coord(bead):
+    // Python:     """ Set an x-coordinate for a bead based on being right of its parents
+    // Python:         and left of its children.
+    // Python:     """
+    // Python:     nonlocal proposed_x
+    // Python:     if bead in proposed_x:
+    // Python:         return
+    // Python:
+    // Python:     # Beads with no parents should be at x=0
+    // Python:     if bead in head:
+    // Python:         min_x = 0
+    // Python:     else: # Determine the minimum x-coordinate based on parents
+    // Python:         min_x = 0
+    // Python:         for parent in parents[bead]: # Handle parent-child relationship issues
+    // Python:             set_x_coord(parent)
+    // Python:             min_x = max(min_x, proposed_x[parent] + 1)
+    // Python:
+    // Python:     # Determine the maximum x-coordinate based on children
+    // Python:     # This is a soft constraint - we'll try to respect it but parent constraints take priority
+    // Python:     max_x = float('inf')
+    // Python:     for child in children[bead]:
+    // Python:         if child in proposed_x:
+    // Python:             max_x = min(max_x, proposed_x[child] - 1)
+    // Python:
+    // Python:     if min_x > max_x and max_x < float('inf'):
+    // Python:         # Constraint conflict - parent and child constraints can't both be satisfied
+    // Python:         for child in children[bead]:
+    // Python:             if child in proposed_x and proposed_x[child] <= min_x:
+    // Python:                 # Shift this child and all beads to its right
+    // Python:                 shift_amount = min_x + 1 - proposed_x[child]
+    // Python:                 for other in proposed_x:
+    // Python:                     if proposed_x[other] >= proposed_x[child]:
+    // Python:                         proposed_x[other] += shift_amount
+    // Python:     proposed_x[bead] = min_x
+    function setXCoord(bead, localParents, localChildren, localHead) {
+        // Set an x-coordinate for a bead based on being right of its parents
+        // and left of its children.
+        if (proposedX.has(bead)) {
+            return;
+        }
+
+        // Determine the minimum x-coordinate based on parents
+        let minX = 0;
+        if (localHead.has(bead)) {
+            minX = 0; // Beads in the head start at 0 if no other constraints
+        } else {
+            const beadParents = localParents.get(bead) || new Set();
+            for (const parent of beadParents) {
+                // Recursive call ensures parents are processed first
+                setXCoord(parent, localParents, localChildren, localHead);
+                minX = Math.max(minX, (proposedX.get(parent) ?? -1) + 1); // Use ?? -1 for safety
+            }
+        }
+
+        // Determine the maximum x-coordinate based on children (soft constraint)
+        let maxX = Infinity;
+        const beadChildren = localChildren.get(bead) || new Set();
+        for (const child of beadChildren) {
+            if (proposedX.has(child)) {
+                maxX = Math.min(maxX, proposedX.get(child) - 1);
+            }
+        }
+
+        // Handle constraint conflict: if min_x > max_x, shift children
+        if (minX > maxX && maxX < Infinity) {
+            for (const child of beadChildren) {
+                if (proposedX.has(child) && proposedX.get(child) <= minX) {
+                    const shiftAmount = minX + 1 - proposedX.get(child);
                     // Shift this child and all beads currently at or to its right
-                    for (let j = 0; j < beadsSortedByX.length; ++j) {
-                        const otherBead = beadsSortedByX[j];
-                        const otherBeadX = proposedX.get(otherBead);
-                        if (otherBeadX >= currentChildX) {
-                            proposedX.set(otherBead, otherBeadX + shiftAmount);
-                            shifted = true;
+                    // Need to iterate carefully - convert to array and sort by X?
+                    const beadsToShift = [];
+                    for (const [otherBead, otherX] of proposedX.entries()) {
+                        if (otherX >= proposedX.get(child)) {
+                            beadsToShift.push(otherBead);
                         }
                     }
-                     // Restart pass potentially? Or just continue adjusting. Let's continue.
+                    for (const other of beadsToShift) {
+                        proposedX.set(other, proposedX.get(other) + shiftAmount);
+                    }
+                     // After shifting, the child's position might change, potentially affecting maxX,
+                     // but we prioritize the parent constraint (minX) here.
                 }
             }
         }
-        if (!shifted) break; // Stop passes if no shifts occurred
+        proposedX.set(bead, minX);
     }
 
-
-    // Ensure HWP is strictly monotonic after adjustments
-     for (let pass = 0; pass < hwPath.length; pass++) { // Multiple passes for HWP
-        let shifted = false;
-        for (let i = 0; i < hwPath.length - 1; i++) {
-            const current = hwPath[i];
-            const next = hwPath[i + 1];
-            if (proposedX.has(current) && proposedX.has(next) && proposedX.get(current) >= proposedX.get(next)) {
-                const neededX = proposedX.get(current) + 1;
-                const currentNextX = proposedX.get(next);
-                const shiftAmount = neededX - currentNextX;
-                // Shift 'next' and everything currently at or to its right
-                for (const [b, x] of proposedX.entries()) {
-                    if (x >= currentNextX) {
-                        proposedX.set(b, x + shiftAmount);
-                        shifted = true;
-                    }
-                }
+    // Python: # Get the sub-DAG for this cohort.
+    // Python: all_children      = reverse(all_parents) # children dict of the whole braid
+    // Python: prev_cohort_edges = {k: v for k, v in all_children.items() if k in previous_cohort_tips} if previous_cohort_tips else {} # extract connectivity with the tips of previous cohort
+    // Python: parents           = dict(sub_braid(cohort, all_parents).items())
+    // Python: children          = reverse(parents)
+    // Python: hwpath            = highest_work_path(parents, children, bead_work=bead_work)
+    // Python: head              = cohort_head(cohort, parents, children)
+    // Python: tail              = cohort_tail(cohort, parents, children)
+    // Python: bead_work         = bead_work if bead_work else {b: FIXED_BEAD_WORK for b in parents}
+    const allChildren = reverse(allParents); // children map of the whole braid
+    // Connectivity from previous tips (Map<number, Set<number>>)
+    const prevCohortEdges = new Map();
+    if (previousCohortTipsPos) {
+        for (const tipId of previousCohortTipsPos.keys()) {
+            if (allChildren.has(tipId)) {
+                 // Get children of the previous tip that are in the current cohort
+                 const relevantChildren = new Set([...(allChildren.get(tipId) || new Set())].filter(c => cohort.has(c)));
+                 if (relevantChildren.size > 0) {
+                     prevCohortEdges.set(tipId, relevantChildren);
+                 }
             }
         }
-        if (!shifted) break;
+    }
+    const parents = subBraid(cohort, allParents); // Parents within the cohort
+    const children = reverse(parents);          // Children within the cohort
+    // Ensure beadWork covers all necessary beads, defaulting if needed
+    const effectiveBeadWork = new Map();
+    const allRelevantBeads = new Set([...cohort, ...(previousCohortTipsPos ? previousCohortTipsPos.keys() : [])]);
+     for (const bead of allRelevantBeads) {
+         let work = beadWork?.get(bead);
+         if (work === undefined || work === null) {
+              // If beadWork provided but missing entry, or beadWork null, use default
+              if (allParents.has(bead) || cohort.has(bead)) { // Check if it's a valid bead in the context
+                   work = FIXED_BEAD_WORK;
+              } else {
+                   // If it's a tip from previous and not in allParents (e.g., genesis of prev graph), default work?
+                   // Python version seems to assume bead_work covers all parents. Let's default to 0 or 1 for safety.
+                   work = FIXED_BEAD_WORK; // Defaulting to 1 for consistency
+              }
+         }
+         effectiveBeadWork.set(bead, work);
+     }
+
+    // Calculate HWP using only work values for beads *within* the current cohort
+    const cohortBeadWork = new Map([...cohort].map(b => [b, effectiveBeadWork.get(b)]));
+    const hwPath = highestWorkPath(parents, children, effectiveBeadWork);
+    const head = cohortHead(cohort, parents, children); // Head within the cohort
+    const tail = cohortTail(cohort, parents, children); // Tail within the cohort (tips of sub-braid)
+
+    // Python: # Assign x-coordinates to hwpath beads in order of decreasing work along the y=0 axis
+    // Python: proposed_x = {bead: i for i, bead in enumerate(hwpath)}
+    // Reset proposedX for this run, then populate HWP
+    proposedX.clear();
+    hwPath.forEach((bead, i) => proposedX.set(bead, i));
+
+    // Python: # Try to assign x coordinates to all beads based on being right of their parents and left of their children
+    // Python: for bead in set(parents) - set(hwpath):
+    // Python:     set_x_coord(bead)
+    const remainingX = new Set([...cohort].filter(b => !hwPath.includes(b)));
+    // Process beads ensuring parents are done first. This might require multiple passes or topological sort.
+    // Using the recursive setXCoord handles the dependency implicitly.
+    for (const bead of remainingX) {
+        setXCoord(bead, parents, children, head);
+    }
+
+    // Python: # find the maximum x-coordinate
+    // Python: max_x = max(proposed_x[bead] for bead in proposed_x)
+    let maxX = 0;
+    if (proposedX.size > 0) {
+        maxX = Math.max(...proposedX.values());
+    }
+
+    // Python: # Put beads with no children to be at the right edge
+    // Python: for bead in set(tail) - set(hwpath):
+    // Python:     proposed_x[bead] = max_x
+    for (const bead of tail) {
+        if (!hwPath.includes(bead)) {
+             proposedX.set(bead, maxX);
+        }
+    }
+    // Recalculate maxX after potentially moving tails
+     if (proposedX.size > 0) {
+        maxX = Math.max(...proposedX.values());
      }
 
 
-    // --- Y-coordinate assignment ---
-    const pos = new Map(); // { beadId: [x, y] }
+    // Python: # Ensure consistency for hwpath which may have moved due to parent-child relationships.
+    // Python: for i, bead in enumerate(hwpath[:-1]):
+    // Python:     if proposed_x[bead] >= proposed_x[hwpath[i+1]]:
+    // Python:         proposed_x[hwpath[i+1]] = proposed_x[bead] + 1
+    // This needs to be iterative or smarter, as shifting one can affect others.
+    // Let's do a simple pass like Python, but be aware it might not fully resolve complex cases.
+    for (let i = 0; i < hwPath.length - 1; i++) {
+        const currentBead = hwPath[i];
+        const nextBead = hwPath[i + 1];
+        const currentX = proposedX.get(currentBead);
+        const nextX = proposedX.get(nextBead);
 
-    // Place HWP on y=0
+        if (currentX !== undefined && nextX !== undefined && currentX >= nextX) {
+            proposedX.set(nextBead, currentX + 1);
+        }
+    }
+    // Recalculate maxX after HWP adjustments
+     if (proposedX.size > 0) {
+        maxX = Math.max(...proposedX.values());
+     }
+
+
+    // Python: pos = {bead: [proposed_x[bead], 0] for bead in hwpath}
+    const pos = new Map(); // { beadId: [x, y] }
     hwPath.forEach(bead => pos.set(bead, [proposedX.get(bead), 0]));
 
-    // Add positions from previous cohort's tips (shifted to x=-1)
-    const extendedParents = new Map(parents); // Parents within cohort + links from previous
-    const extendedChildren = new Map(children); // Children within cohort + links to next
-    const allNodesInLayout = new Set(cohort); // Nodes whose positions are being determined
+    // Python: lines = [] # A running tally of lines on the graph
+    const lines = []; // Array of { p: [x, y], c: [x, y] } coordinate pairs for existing lines
 
+    // Python: extended_children = copy(children)
+    // Python: for key, value in prev_cohort_edges.items():
+    // Python:     if key not in children:
+    // Python:         extended_children[key] = set()
+    // Python:     extended_children[key] = extended_children[key].union(value)
+    // Python: extended_parents = reverse(extended_children)
+    const extendedChildren = new Map(); // Includes children within cohort and to cohort from prev tips
+    const extendedParents = new Map(); // Inverse of extendedChildren
+    const allNodesInLayout = new Set(cohort); // Keep track of nodes involved in this layout step
+
+    // Initialize extendedChildren with cohort's children
+    for(const [p, cSet] of children.entries()) {
+        extendedChildren.set(p, new Set(cSet));
+    }
+     // Ensure all cohort nodes exist as keys even if they have no children in cohort
+     for (const b of cohort) {
+         if (!extendedChildren.has(b)) extendedChildren.set(b, new Set());
+     }
+
+
+    // Python: if previous_cohort_tips:
+    // Python:     for key, value in previous_cohort_tips.items():
+    // Python:         pos[key] = [-1, value[1]] # add the position of tips from the previous cohort as (-1, y_coord)
     if (previousCohortTipsPos) {
         for (const [tipId, tipPos] of previousCohortTipsPos.entries()) {
-            // Only add if it connects to the current cohort
-            const childrenOfTip = allChildren.get(tipId) || new Set();
-            let connects = false;
-            for(const child of childrenOfTip) {
-                if (cohort.has(child)) {
-                    connects = true;
-                    break;
-                }
-            }
-            if (connects) {
-                pos.set(tipId, [-1, tipPos[1]]); // Place at x = -1
-                allNodesInLayout.add(tipId); // Add to layout nodes for intersection checks
-                // Update connectivity for lines
+             // Check if this tip actually connects to the current cohort via prevCohortEdges
+             if (prevCohortEdges.has(tipId)) {
+                pos.set(tipId, [-1, tipPos[1]]); // Add previous tip position
+                allNodesInLayout.add(tipId); // Add to nodes involved in layout/intersection checks
+
+                // Add connections from prev tip to cohort beads in extendedChildren
+                const childrenInCohort = prevCohortEdges.get(tipId);
                 if (!extendedChildren.has(tipId)) extendedChildren.set(tipId, new Set());
-                for (const child of childrenOfTip) {
-                    if (cohort.has(child)) {
-                        if (!extendedParents.has(child)) extendedParents.set(child, new Set());
-                        extendedParents.get(child).add(tipId);
-                        extendedChildren.get(tipId).add(child);
-                    }
+                for (const child of childrenInCohort) {
+                    extendedChildren.get(tipId).add(child);
                 }
+             }
+        }
+    }
+
+    // Recalculate extendedParents based on the final extendedChildren
+    const tempParents = reverse(extendedChildren); // Calculate reverse including prev tips
+    // Filter extendedParents to only include nodes relevant to this layout step
+    for (const [bead, pSet] of tempParents.entries()) {
+        if (allNodesInLayout.has(bead)) {
+            const relevantParents = new Set([...pSet].filter(p => allNodesInLayout.has(p)));
+            if (relevantParents.size > 0 || cohort.has(bead)) { // Keep bead if in cohort, even w/o relevant parents yet
+                 extendedParents.set(bead, relevantParents);
+            }
+        }
+    }
+     // Ensure all nodes in layout exist as keys in extendedParents
+     for(const node of allNodesInLayout) {
+         if (!extendedParents.has(node)) extendedParents.set(node, new Set());
+     }
+
+
+    // Python: # Place remaining beads in work sorted order (lowest work at top)
+    // Python: for bead in sorted(set(parents) - set(hwpath),
+    // Python:                    key=work_sort_key(parents, children, bead_work), reverse=True):
+    const remainingY = [...cohort].filter(b => !hwPath.includes(b));
+    // Sort remaining beads: Python used work_sort_key(reverse=True), which means lowest work first.
+    // workSortComparator sorts highest work first (-1 if a > b). So we negate the result for lowest work first.
+    const comparator = workSortComparator(parents, children, cohortBeadWork);
+    remainingY.sort((a, b) => comparator(a, b)); // Sorts highest work first
+
+    // Before placing remainingY, add initial lines connecting HWP nodes and prev tips
+    for (const [parentBead, parentPos] of pos.entries()) { // Nodes already placed (HWP + prev tips)
+        const childrenOfParent = extendedChildren.get(parentBead) || new Set();
+        for (const childBead of childrenOfParent) {
+            if (pos.has(childBead)) { // If child is also already placed
+                lines.push({ p: parentPos, c: pos.get(childBead) });
             }
         }
     }
 
 
-    // Place remaining beads, sorted by work (lowest work placed first - tries higher Y first)
-    const remainingBeads = [...cohort].filter(b => !hwPath.includes(b));
-    const comparator = workSortComparator(parents, children, cohortBeadWork); // Use cohort work for sorting within cohort
-    remainingBeads.sort((a,b) => -comparator(a,b)); // Sort lowest work first (reverse of comparator)
-
-    const lines = []; // Keep track of drawn lines: { p: parentId, c: childId } referencing keys in pos map
-
-    // Add initial lines from HWP and previous tips
-     for(const bead of allNodesInLayout) { // Iterate over all nodes currently placed or being placed
-         if (pos.has(bead)) { // Check if it has a position (HWP or prev tip)
-             const beadExtChildren = extendedChildren.get(bead) || new Set();
-             for(const child of beadExtChildren) {
-                 if (pos.has(child)) { // If child also has position (must be on HWP or prev tip initially)
-                     lines.push({ p: bead, c: child });
-                 }
-             }
-         }
-     }
-
-
-    for (const bead of remainingBeads) {
+    for (const bead of remainingY) {
+        // Python: x = proposed_x[bead]
+        // Python: y = 0
+        // Python: dist = 0
         const x = proposedX.get(bead);
-        let y = 0;
         let dist = 0;
         let placed = false;
-        let yAttempts = 0; // Safety break for y placement
-        const maxYAttempts = cohort.size * 4 + 10; // Generous limit
+        let currentY = 0;
 
-        while (!placed && yAttempts < maxYAttempts) {
-            dist += 1;
-            // Try positive Y first, then negative Y, increasing distance
-            const yCandidates = [y + dist, y - dist];
+        // Python: while True:
+        while (!placed) {
+            // Python: dist += 1
+            // Python: if y <= 0:
+            // Python:     y += dist
+            // Python: else:
+            // Python:     y -= dist
+            // Try y+dist, then y-dist. More systematic: try +1, -1, +2, -2, ...
+            dist++;
+            // Python: if y <= 0: y += dist else: y -= dist
+            if (currentY <= 0) {
+                currentY += dist;
+            } else {
+                currentY -= dist;
+            }
 
-            for (const candidateY of yCandidates) {
-                yAttempts++;
-                const candidatePos = [x, candidateY];
+            let attemptY = 0; // Safety break for y search
+            const MAX_Y_ATTEMPTS = cohort.size * 4 + 20; // Generous limit
 
-                // Check if position is occupied
+            const candidateY = currentY;
+            {
+                // Python: if [x,y] in pos.values(): continue
                 let occupied = false;
                 for (const existingPos of pos.values()) {
-                    if (existingPos[0] === candidatePos[0] && existingPos[1] === candidatePos[1]) {
+                    if (existingPos[0] === x && existingPos[1] === candidateY) {
                         occupied = true;
                         break;
                     }
                 }
                 if (occupied) continue;
 
-                // Check for line intersections
+                // Python: # Create a list of all lines on the graph including the proposed <bead> position [x,y]
+                // Python: pos[bead] = [x, y]
+                pos.set(bead, [x, candidateY]); // Temporarily place the bead
+
+                // Python: new_lines = [(pos[parent], pos[child])
+                // Python:               for parent, child in
+                // Python:                   [(bead, c) for c in extended_children[bead] if c in pos] +
+                // Python:                   [(p, bead) for p in extended_parents[bead] if p in pos]
+                // Python:             ]
+                const newPotentialLinesCoords = []; // {p: [x,y], c: [x,y]}
+                const beadPos = pos.get(bead);
+
+                const parentsOfBead = extendedParents.get(bead) || new Set();
+                for (const p of parentsOfBead) {
+                    if (pos.has(p)) {
+                        newPotentialLinesCoords.push({ p: pos.get(p), c: beadPos });
+                    }
+                }
+                const childrenOfBead = extendedChildren.get(bead) || new Set();
+                for (const c of childrenOfBead) {
+                    if (pos.has(c)) {
+                        newPotentialLinesCoords.push({ p: beadPos, c: pos.get(c) });
+                    }
+                }
+
+                // Python: # If there are no intersections of a parent-child edge with any middle bead, break
+                // Python: if not any(intersection(*line[0], *line[1], *pos[middle]) for line in lines + new_lines
+                // Python:            for middle in pos):
+                // Python:     break
                 let intersects = false;
-                const newPotentialLines = []; // { p: parentId, c: childId } or { p: bead, c: childId }
+                const allLinesToCheck = [...lines, ...newPotentialLinesCoords];
 
-                // Potential lines from existing parents to this new bead position
-                const beadExtParents = extendedParents.get(bead) || new Set();
-                 for(const p of beadExtParents) {
-                     if(pos.has(p)) { // Only consider parents already placed
-                         newPotentialLines.push({ p: p, c: bead });
-                     }
-                 }
-                 // Potential lines from this new bead position to existing children
-                 const beadExtChildren = extendedChildren.get(bead) || new Set();
-                 for(const c of beadExtChildren) {
-                     if(pos.has(c)) { // Only consider children already placed
-                         newPotentialLines.push({ p: bead, c: c });
-                     }
-                 }
-
-                // Temporarily add the candidate position for intersection checks
-                pos.set(bead, candidatePos);
-
-                // Check if any new line passes *through* any existing node (excluding endpoints)
-                for (const newLine of newPotentialLines) {
-                    const pPos = pos.get(newLine.p);
-                    const cPos = pos.get(newLine.c);
-                    if (!pPos || !cPos) continue; // Should not happen if logic is correct
+                for (const line of allLinesToCheck) {
+                    const [x1, y1] = line.p;
+                    const [x2, y2] = line.c;
 
                     for (const [middleBead, middlePos] of pos.entries()) {
-                         // Check only against nodes that are NOT the endpoints of the newLine AND exist in the layout
-                         if (middleBead !== newLine.p && middleBead !== newLine.c && allNodesInLayout.has(middleBead)) {
-                             if (isPointStrictlyOnSegment(pPos[0], pPos[1], cPos[0], cPos[1], middlePos[0], middlePos[1])) {
-                                 intersects = true;
-                                 break;
+                        // Check intersection only if middle bead is not one of the endpoints of the line
+                        // And the middle bead is actually part of the layout nodes (cohort + prev tips)
+                         if (allNodesInLayout.has(middleBead)) {
+                             const [x3, y3] = middlePos;
+                              // Check if middlePos is not an endpoint of the current line segment
+                             const isEndpoint = (x1 === x3 && y1 === y3) || (x2 === x3 && y2 === y3);
+                             if (!isEndpoint) {
+                                 if (intersection(x1, y1, x2, y2, x3, y3)) {
+                                     intersects = true;
+                                     break;
+                                 }
                              }
                          }
                     }
                     if (intersects) break;
                 }
 
-                 // Check if any existing line passes *through* the new candidate position
-                 if (!intersects) {
-                     for (const existingLine of lines) {
-                         const pPos = pos.get(existingLine.p);
-                         const cPos = pos.get(existingLine.c);
-                         if (!pPos || !cPos) continue; // Skip if somehow endpoints aren't positioned
-
-                         // Check only if the candidate bead is NOT one of the endpoints
-                         if (existingLine.p !== bead && existingLine.c !== bead) {
-                             if (isPointStrictlyOnSegment(pPos[0], pPos[1], cPos[0], cPos[1], candidatePos[0], candidatePos[1])) {
-                                 intersects = true;
-                                 break;
-                             }
-                         }
-                     }
-                 }
-
 
                 if (!intersects) {
-                    // Position is valid, keep it in pos map
-                    lines.push(...newPotentialLines); // Add the new lines associated with this placed bead
+                    // Python: lines += new_lines
+                    lines.push(...newPotentialLinesCoords);
                     placed = true;
-                    break; // Exit yCandidates loop
+                    break; // Break from yCandidates loop
                 } else {
-                     // Position intersects, remove temporary position before trying next candidate
-                     pos.delete(bead);
+                    // Backtrack: remove temporary position
+                    pos.delete(bead);
                 }
+
+                 attemptY++;
+                 if (attemptY > MAX_Y_ATTEMPTS) break; // Safety break inner loop
+
             } // End yCandidates loop
 
-            // Safety break
-            if (!placed && yAttempts >= maxYAttempts) {
-                 console.warn(`Layout Y assignment struggling for bead ${bead}. Placing at default [${x}, ${y + dist}]. Intersections possible.`);
-                 if (!pos.has(bead)) { // Place if not already placed by a successful attempt
-                     pos.set(bead, [x, y + dist]); // Place arbitrarily high
-                     // Add lines even with potential intersections if stuck
-                      const finalPos = pos.get(bead);
-                      const beadExtParents = extendedParents.get(bead) || new Set();
-                      for(const p of beadExtParents) { if(pos.has(p)) lines.push({p: p, c: bead}); }
-                      const beadExtChildren = extendedChildren.get(bead) || new Set();
-                      for(const c of beadExtChildren) { if(pos.has(c)) lines.push({p: bead, c: c}); }
-                 }
-                 placed = true; // Force exit
-            }
-        } // End while(!placed)
-    } // End bead loop
+            if (placed) break; // Break from while(!placed) loop
 
-    // Extract final positions for cohort tips
+             // Safety break for overall Y search
+             if (!placed && dist > MAX_Y_ATTEMPTS) {
+                  console.warn(`Layout Y assignment struggling for bead ${bead}. Placing at default [${x}, ${dist}]. Intersections possible.`);
+                  // Force placement if stuck, even with potential intersections
+                  if (!pos.has(bead)) {
+                      pos.set(bead, [x, dist]); // Place arbitrarily high
+                      // Add lines for this forced placement
+                        const finalPos = pos.get(bead);
+                        const parentsOfBead = extendedParents.get(bead) || new Set();
+                        for (const p of parentsOfBead) { if (pos.has(p)) lines.push({ p: pos.get(p), c: finalPos }); }
+                        const childrenOfBead = extendedChildren.get(bead) || new Set();
+                        for (const c of childrenOfBead) { if (pos.has(c)) lines.push({ p: finalPos, c: pos.get(c) }); }
+                  }
+                  placed = true; // Force exit from while loop
+             }
+
+        } // End while(!placed)
+    } // End loop over remainingY beads
+
+    // Python: cohort_tips = tips(parents, children)
+    // Python: tips_pos = {tip: pos[tip] for tip in cohort_tips}
+    // Python: return pos, tips_pos
+    const cohortTips = tips(parents, children); // Tips within the cohort sub-braid
     const tipsPos = new Map();
     for (const tip of cohortTips) {
         if (pos.has(tip)) {
             tipsPos.set(tip, pos.get(tip));
         } else {
-            // This might happen if a tip wasn't on HWP and failed placement
-            // console.warn(`Cohort tip ${tip} has no calculated position.`);
+            // This could happen if a tip wasn't on HWP and failed Y placement loop
+             console.warn(`Cohort tip ${tip} has no calculated position in layout.`);
         }
     }
 
-    // Remove temporary positions of previous tips (x=-1) before returning final map
-    const finalPos = new Map();
-     for (const [nodeId, nodePos] of pos.entries()) {
-         // Only include nodes from the original cohort set
-         if (cohort.has(nodeId)) {
-             finalPos.set(nodeId, nodePos);
-         }
-     }
-
-
-    return [finalPos, tipsPos];
+    return [pos, tipsPos];
 }
-
 
 // --- Load / Save ---
 
