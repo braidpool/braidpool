@@ -14,10 +14,13 @@ const {
     cohortHead,
     cohortTail,
     loadBraid,
+    layout,
     allAncestors, // Assuming iterative version
     // checkCohort, // Skipped - Function not implemented in braid.js based on provided source
     TEST_CASE_DIR
 } = Braid;
+
+const LAYOUT_DIR = "layouts/";
 
 // Helper to convert simple object representation to Map<number, Set<number>>
 function createParentsMap(obj) {
@@ -283,6 +286,150 @@ describe('Braid Utility Functions', () => {
     //     // Test skipped: No recursive version available in JS to compare against.
     // });
 
+});
+
+
+// Helper to compare two Maps Map<number, [number, number]>
+function compareLayoutMaps(map1, map2) {
+    if (map1.size !== map2.size) {
+        console.error(`Map sizes differ: ${map1.size} vs ${map2.size}`);
+        return false;
+    }
+    for (const [key, value1] of map1) {
+        if (!map2.has(key)) {
+            console.error(`Map 2 missing key: ${key}`);
+            return false;
+        }
+        const value2 = map2.get(key);
+        if (!Array.isArray(value1) || !Array.isArray(value2) || value1.length !== 2 || value2.length !== 2) {
+            console.error(`Values for key ${key} are not arrays of length 2:`, value1, value2);
+            return false;
+        }
+        if (value1[0] !== value2[0] || value1[1] !== value2[1]) {
+            console.error(`Values differ for key ${key}: [${value1}] vs [${value2}]`);
+            return false;
+        }
+    }
+    return true;
+}
+
+// Helper to load layout JSON and convert to Map<number, [number, number]>
+function loadLayoutFile(filePath) {
+    try {
+        const jsonData = fs.readFileSync(filePath, 'utf8');
+        const layoutObj = JSON.parse(jsonData)[0];
+        const pos       = layoutObj[0];
+        const tipsPos   = layoutObj[1];
+        const layoutMap = new Map();
+        for (const key in layoutObj) {
+            const beadId = parseInt(key);
+            const coords = layoutObj[key];
+            layoutMap.set(beadId, coords);
+        }
+        return layoutMap;
+    } catch (err) {
+        if (err.code === 'ENOENT') {
+            // console.warn(`Layout file not found: ${filePath}`);
+            return null; // Return null if file doesn't exist
+        } else if (err instanceof SyntaxError) {
+            console.error(`Invalid JSON in layout file: ${filePath} - ${err.message}`);
+            throw err; // Re-throw JSON errors
+        } else {
+            console.error(`Error loading layout file ${filePath}:`, err);
+            throw err; // Re-throw other errors
+        }
+    }
+}
+
+
+// --- Layout Tests ---
+describe('layout', () => {
+    const braidFiles = fs.readdirSync(TEST_CASE_DIR).filter(f => f.endsWith(".json"));
+    expect(braidFiles.length).toBeGreaterThan(0); // Ensure braid files exist
+
+    for (const braidFilename of braidFiles.sort()) {
+        const baseFilename = path.basename(braidFilename, '.json');
+        const braidFilePath = path.join(TEST_CASE_DIR, braidFilename);
+
+        test(`should match layout files for ${baseFilename}`, () => {
+            let dag;
+            try {
+                dag = loadBraid(braidFilePath);
+            } catch (e) {
+                console.error(`Failed to load braid file ${braidFilePath} for layout test:`, e);
+                throw e; // Fail test if braid loading fails
+            }
+
+            expect(dag.cohorts.length).toBeGreaterThan(0); // Ensure cohorts exist
+
+            let previousCohortTipsPos = null; // Map<number, [number, number]> for tips of the previous cohort
+
+            for (let i = 0; i < dag.cohorts.length; i++) {
+                const cohort = dag.cohorts[i];
+
+                const layoutFilename = `${baseFilename}_${i}_layout.json`;
+                const layoutFilePath = path.join(LAYOUT_DIR, layoutFilename);
+
+                // Load the expected layout if the file exists
+                const expectedLayoutMap = loadLayoutFile(layoutFilePath);
+
+                if (expectedLayoutMap) {
+                    // Run the layout function for the current cohort
+                    let calculatedLayoutMap, calculatedTipsPos;
+                    try {
+                        //console.log(`Running layout for ${baseFilename}, cohort ${i}: `, cohort);
+                         [calculatedLayoutMap, calculatedTipsPos] = Braid.layout(
+                            cohort,
+                            dag.parents,
+                            dag.beadWork
+                            //previousCohortTipsPos // Pass tips from the previous iteration
+                        );
+                    } catch (layoutError) {
+                         console.error(`Error running layout for ${baseFilename}, cohort ${i}:`, layoutError);
+                         // Fail the test if layout function throws an error
+                         throw layoutError;
+                    }
+
+
+                    // Compare the calculated layout with the expected layout
+                    const match = compareLayoutMaps(calculatedLayoutMap, expectedLayoutMap);
+                    if (!match) {
+                        newCalculatedLayoutMap = new Map();
+                        keys = Array.from(calculatedLayoutMap.keys()).sort((a,b) => a-b);
+                        console.log("keys:", keys);
+                        keys.forEach((key) => {
+                            newCalculatedLayoutMap.set(key, calculatedLayoutMap.get(key));
+                        });
+                        calculatedLayoutMap = newCalculatedLayoutMap;
+                         console.log(`Calculated Layout for ${baseFilename} cohort ${i}:`, calculatedLayoutMap);
+                         console.log(`Expected Layout from ${layoutFilename}:`, expectedLayoutMap);
+                    }
+                    console.log("match:", match, " for cohort: ", cohort);
+                     expect(match).toBe(true); // Assert that the layouts match
+
+                    // Update previousCohortTipsPos for the next iteration
+                    previousCohortTipsPos = calculatedTipsPos;
+
+                } else {
+                    // If layout file doesn't exist, run layout anyway to get tips for next step, but don't assert
+                    console.warn(`Layout file ${layoutFilename} not found. Calculating layout for continuity but not testing.`);
+                     try {
+                         const [, calculatedTipsPos] = Braid.layout(
+                            cohort,
+                            dag.parents,
+                            dag.beadWork,
+                            previousCohortTipsPos
+                        );
+                         previousCohortTipsPos = calculatedTipsPos; // Update for next iteration
+                     } catch (layoutError) {
+                         console.error(`Error running layout (for continuity) for ${baseFilename}, cohort ${i}:`, layoutError);
+                         // Don't fail the test here, just log, but subsequent layouts might be affected
+                         previousCohortTipsPos = new Map(); // Reset on error?
+                     }
+                }
+            } // End cohort loop
+        }); // End test for braid file
+    } // End loop over braid files
 });
 
 // Add a simple check to ensure the TEST_CASE_DIR exists
