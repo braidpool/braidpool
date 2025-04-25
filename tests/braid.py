@@ -415,7 +415,7 @@ def layout(cohort, all_parents, bead_work=None, previous_cohort_tips=None):
     for key, value in prev_cohort_edges.items():
         if key not in children:
             extended_children[key] = set()
-        extended_children[key] = extended_children[key].union(value)
+        extended_children[key] |= value
     extended_parents = reverse(extended_children)
     if previous_cohort_tips:
         for key, value in previous_cohort_tips.items():

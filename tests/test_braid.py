@@ -124,10 +124,11 @@ class TestCohortMethods(unittest.TestCase):
             os.makedirs("layouts")
         for filename in sorted([filename for filename in os.listdir(TEST_CASE_DIR) if filename.endswith(".json")]):
             dag = load_braid(TEST_CASE_DIR+filename)
+            previous_cohort_tips = None
             for (c, i) in zip(dag["cohorts"], range(len(dag["cohorts"]))):
                 with open("layouts/" + filename.split('.')[0] + f"_{i}_layout.json", 'w', encoding="utf8") as file:
-                    file.write(json.dumps(layout(c, dag["parents"],
-                                                 dag["bead_work"]), indent=4))
+                    L, previous_cohort_tips = layout(c, dag["parents"], dag["bead_work"], previous_cohort_tips)
+                    file.write(json.dumps([L, previous_cohort_tips], indent=4))
 
 if __name__ == "__main__":
     unittest.main()
