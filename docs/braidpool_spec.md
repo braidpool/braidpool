@@ -111,6 +111,9 @@ mining process. It contains:
 | `timestamp`       | timestamp when this bead was broadcast                                |
 | `signature`       | Signature on the `Uncommitted Metadata` block using the `comm_pubkey` |
 | `extranonce`      | 64-bit extranonce field                                               |
+| `timestamp`       | timestamp when this bead was broadcast                        |
+| `signature`       | Signature on the `Uncommitted Metadata` block using the `comm_pubkey` |
+| `extranonce`    | 64-bit extranonce field                                         |
 
 The purpose of the timestamps is to gather higher resolution timestamps than are
 possible if the timestamp was committed, in order to measure (in a non-consensus
