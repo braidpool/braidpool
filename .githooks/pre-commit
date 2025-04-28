@@ -1,0 +1,5 @@
+#! /bin/sh 
+
+echo "This runs before the commit to test frontend linting!"
+cd dashboard
+npm run pre-commit
