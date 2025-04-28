@@ -108,6 +108,9 @@ mining process. It contains:
 
 | Field             | Description |
 | -----             | ----------- |
+| `timestamp`       | timestamp when this bead was broadcast                                |
+| `signature`       | Signature on the `Uncommitted Metadata` block using the `comm_pubkey` |
+| `extranonce`      | 64-bit extranonce field                                               |
 | `timestamp`       | timestamp when this bead was broadcast                        |
 | `signature`       | Signature on the `Uncommitted Metadata` block using the `comm_pubkey` |
 | `extranonce`    | 64-bit extranonce field                                         |
