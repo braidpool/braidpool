@@ -102,9 +102,6 @@ The `BraidpoolMetadata` struct is:
 | `timestamp`     | Timestamp when this bead was created                            |
 | `transactions`  | List of serialized transactions                                 |
 | `transaction_cnt`| Count of the transactions added for construction of bead       |
-| `timestamp`     | Timestamp when this bead was created                            |
-| `extranonce`    | 64-bit extranonce field                                         |
-| `transactions`  | List of serialized transactions                                 |
 
 The `Uncommitted Metadata` block is intentionally not committed to in the PoW
 mining process. It contains:
@@ -114,6 +111,9 @@ mining process. It contains:
 | `timestamp`       | timestamp when this bead was broadcast                                |
 | `signature`       | Signature on the `Uncommitted Metadata` block using the `comm_pubkey` |
 | `extranonce`      | 64-bit extranonce field                                               |
+| `timestamp`       | timestamp when this bead was broadcast                        |
+| `signature`       | Signature on the `Uncommitted Metadata` block using the `comm_pubkey` |
+| `extranonce`    | 64-bit extranonce field                                         |
 
 The purpose of the timestamps is to gather higher resolution timestamps than are
 possible if the timestamp was committed, in order to measure (in a non-consensus
