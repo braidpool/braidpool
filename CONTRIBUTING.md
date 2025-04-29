@@ -1,68 +1,57 @@
-# Welcome to BraidPool contributing guide
+# Contributing to Braidpool
 
-Thank you for investing your time in contributing to our project!
+Contributing to open source is one of the best things you can do. It not only benefits you but many others and projects like Braidpool, which aims to solve one of the critical problems in Bitcoin about centralisation; this becomes even more important. Braidpool is a pure open-source project, meaning anyone can run, modify and use this implementation in its own way. Braidpool is designed to remove centralisation of mining pools and provides a way to overcome this issue.
+<br/> <br>
+With this responsibility, we also want to put the right efforts into development so everything goes smoothly and in a collaborative way. For this, there are some guidelines designed that will help us to work together so we can read, write and understand each other's code in an efficient way.
 
-In this guide, you will get an overview of a contribution workflow from opening an issue, creating a PR, reviewing, and merging the PR.
+## Initials
 
-## New contributor guide
+We deeply value each and every contributions made to Braidpool, we take this as a huge step to make Bitcoin safer and sustainable in future. So, new contributors are always needed and appreciated. <br><br>
+Before moving further it's best to familiarize yourself with the Braidpool codebase structure for more information you can refer to 
 
-To get an overview of the project, read the [documentations of BraidPool](./docs/).
+[overview](https://github.com/braidpool/braidpool/blob/main/docs/overview.md), [specification](https://github.com/braidpool/braidpool/blob/main/docs/braidpool_spec.md), 
+and [consensus](https://github.com/braidpool/braidpool/blob/main/docs/braid_consensus.md). This will give you a brief idea about working and its implementation. Braidpool is implemented using Rust, so some familiarity with Rust is also required. The general idea to understand a project is looking into their `tests` directory; the same applies here.
 
-### Issues
+## Structuring a Pull Request
 
-#### Create a new issue
+This covers how you should approach a PR from creating to merging. 
 
-If you spot a problem with the project, [search if an issue already exists](https://github.com/braidpool/braidpool/issues). If a related issue doesn't exist, you can open a new issue using a relevant issue form.
++ Use a concise title that summarizes the change, prefixed by the affected area (e.g., `bead`, `dag`, `rpc`, `doc`, `test`, `feat`, `style`) <br>
+ ``` e.g., bead: Add dynamic difficulty validation. ```
++ Explain what the PR does and why it’s needed and reference related issues `(e.g., Fixes #123)` or discussions `(e.g., Discord thread)`.
++ Limit the PR to a single feature, bug fix, or refactor. Avoid combining unrelated changes. If ignored, this will lead to several other problems. e.g., hard to review, delay feedback, may block others work.
++ Ensure each commit represents a single logical change (e.g., one commit for adding a function, another for tests) to maintain a clean history, make code reviews easier, and allow for efficient debugging or reverting specific changes if needed.
++ Before merging, squash related commits into one; multiple commits for a single logical change seem irrelevant.
 
-#### Solve an issue
+  ```sh
+  git rebase -i HEAD~3
+  # Squash three commits into one with message:
+  bead: Add dynamic difficulty validation
 
-Scan through our [existing issues](https://github.com/braidpool/braidpool/issues) to find one that interests you. You can narrow down the search using `labels` as filters. If you find an issue to work on, and after discussion, it comes out to be a valid issue, you are welcome to open a PR with a fix.
+  Implement `validate_difficulty` in `src/bead.rs` to check bead hashes.
+  Add unit tests in `tests/bead_validation.rs`. Fixes #123.
+  ```
++ For significant changes open a GitHub issue or discuss on Discord (Braidpool [Discord](https://discord.gg/pZYUDwkpPv) ) to confirm alignment with maintainers.
++ Add labels in GitHub according to the PR changes. This will help to understand the current progress and type of the PR.
++ Be sure to run `npx prettier --write .` before commiting so as to cross-check that the commits adhere to the linting scheme of the project's frontend
 
-### Make Changes
+## PR Review Process
 
-1. Fork the repository.
+Reviewing is the most beneficial and needed part for any software; thus, we need to ensure thorough evaluation, clear feedback, and efficient collaboration. A reviewer can express their final decision by commenting on the PR discussion page by acknowledging or denying the changes, or the reviewer can also request some changes. Now it's in the author's hands to weigh the opinion of a reviewer by looking at their understanding of the codebase and in the community.  <br>
 
-   - Using GitHub Desktop:
+Here are few steps you can follow while reviewing PRs. 
 
-     - [Getting started with GitHub Desktop](https://docs.github.com/en/desktop/installing-and-configuring-github-desktop/getting-started-with-github-desktop) will guide you through setting up Desktop.
-     - Once Desktop is set up, you can use it to [fork the repo](https://docs.github.com/en/desktop/contributing-and-collaborating-using-github-desktop/cloning-and-forking-repositories-from-github-desktop)!
+1. Pull the PR with the respective branch and then build it.
 
-   - Using the command line:
-     - [Fork the repo](https://docs.github.com/en/github/getting-started-with-github/fork-a-repo#fork-an-example-repository) so that you can make your changes without affecting the original project until you're ready to merge them.
+  ```sh
+  git fetch origin pull/123/head:pr-123
+  git checkout pr-123
+  ```
+2. Run and see if the codebase is giving you the correct results according to the desired changes. For example, if a PR introduces a new test that will stop Braidpool node after passing a specific argument, then check if it's working in the same way as stated by the PR author. Or a change that introduces a new feature is giving the new results that correspond to that.
+3. If it's working fine, then manually review each line of code and think about why that particular line is removed or added in the codebase. And try to find out possible consequences that can occur with that change (always try to find a bug in the new or existing code; think like there is something wrong in the code).
+4. Now if you find anything wrong or you can't be able to understand much about that change, then you can ask that thing directly to the PR author via a simple comment. (First try to understand yourself and don't ask silly questions.)
+5. Finally, you can publish your official review in GitHub.
 
-2. Create a new working branch and start with your changes!
+## Communication Channels
 
-### Commit your updates
-
-Commit the changes once you are happy with them.
-
-- Note: The commits being made to dev branch [should be signed using a PGP key](https://docs.github.com/en/authentication/managing-commit-signature-verification/signing-commits)
-
-#### 1. For Dashboard Development:
-
-Please follow these rules or conventions while committing any new changes to the [Braidpool dashboard](./dashboard/):
-
-- `feat`: new feature for the user, not a new feature for build script
-- `fix`: bug fix for the user
-- `docs`: changes to the documentation
-- `style`: formatting, missing semi colons, etc
-- `refactor`: refactoring production code, eg. renaming a variable
-- `test`: adding missing tests, refactoring tests
-- `chore`: updating grunt tasks, etc., no production code change
-- Be sure to run `npx prettier --write .` before commiting so as to cross-check that the commits adhere to the linting scheme of the project's frontend
-
-#### 2. For Node Development:
-
-- TO-DO
-
-### Pull Request
-
-When you're finished with the changes, create a pull request, also known as a PR.
-
-- Don't forget to link PR to issue if you are solving one.
-- Enable the checkbox to [allow maintainer edits](https://docs.github.com/en/github/collaborating-with-issues-and-pull-requests/allowing-changes-to-a-pull-request-branch-created-from-a-fork) so the branch can be updated for a merge.
-- If you run into any merge issues, checkout this [git tutorial](https://github.com/skills/resolve-merge-conflicts) to help you resolve merge conflicts and other issues.
-
-### Your PR is merged!
-
-Congratulations! once your PR is merged, your contributions will be publicly visible in [closed PRs](https://github.com/braidpool/braidpool/pulls?q=is%3Apr+is%3Aclosed).
+  For all the other queries, or if you're stuck somewhere while working, or you want to communicate with the community, you can join the [Discord](https://discord.gg/pZYUDwkpPv) channel.
