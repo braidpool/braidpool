@@ -17,12 +17,24 @@ jobs:
       with:
         python-version: '3.x'
 
-    - name: Install dependencies
+    - name: Install python dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r tests/requirements.txt
 
-    - name: Run tests
+    - name: Run python tests
       run: |
         cd tests
         python -m pytest test_*.py -v
+
+    - name: Install npm
+      uses: actions/setup-node@v4
+      with:
+        node-version: '23.x'
+
+    - name: Run npm tests
+      run: |
+        npm install
+        npm test
+      working-directory: tests
+
