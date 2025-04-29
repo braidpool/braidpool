@@ -289,6 +289,20 @@ resulting in approximately 1000 beads (shares) per bitcoin block.
 
 ## Difficulty Adjustment Algorithm
 
+### Ideas:
+
+1. PID Controller
+2. KS Test (how do I extract something from this?)
+3. EMA (Exponential Moving Average on Adev)
+4. Compute the harmonic average $x_{\rm avg}$ over $N_C$ cohorts and
+    extract $a\lambda = \frac{W(R-1)}{x_{\rm avg}}$.
+5. Don't punish larger cohorts if a wider window indicates they are not unusual.
+
+### Plots:
+1. $N_B/N_C$ using different windows $N_C=1,3,7$.
+2. $a\lambda$ histogram
+3. cohorts algorithm complexity
+
 The difficulty adjustment algorithm is a function that takes as input the
 current Braid and outputs the expected difficulty required for the next bead. We
 want this algorithm to minimize the variance in the difficulty while still being
