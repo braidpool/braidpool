@@ -12,7 +12,7 @@ use crate::utils::{BeadHash, BeadLoadError};
 // Type Definitions
 #[derive(Clone, Debug, Serialize)]
 
-struct Cohort(HashSet<BeadHash>);
+pub(crate) struct Cohort(HashSet<BeadHash>);
 
 pub enum AddBeadStatus {
     DagAlreadyContainsBead,
