@@ -161,7 +161,12 @@ impl Braid {
             return false;
         }
         // Don't have all parents
-        if !bead.committed_metadata.parents.iter().all(|p| self.beads.contains(p)) {
+        if !bead
+            .committed_metadata
+            .parents
+            .iter()
+            .all(|p| self.beads.contains(p))
+        {
             return false;
         }
         // Already seen this bead
