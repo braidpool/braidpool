@@ -7,12 +7,12 @@ use std::net::SocketAddr;
 
 // Bitcoin primitives
 use crate::braid::Braid;
-use bitcoin::{Address, BlockHash};
 use bitcoin::absolute::Time;
 use bitcoin::ecdsa::Signature;
 use bitcoin::p2p::Address as P2P_Address;
 use bitcoin::secp256k1::PublicKey;
 use bitcoin::transaction::TransactionExt;
+use bitcoin::{Address, BlockHash};
 use bitcoin::{BlockHeader, Transaction};
 // Custom Imports
 use crate::utils::{BeadHash, BeadLoadError, Children, Parents};
