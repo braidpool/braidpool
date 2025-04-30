@@ -7,7 +7,7 @@ use std::net::SocketAddr;
 
 // Bitcoin primitives
 use crate::braid::Braid;
-use bitcoin::Address;
+use bitcoin::{Address, BlockHash};
 use bitcoin::absolute::Time;
 use bitcoin::ecdsa::Signature;
 use bitcoin::p2p::Address as P2P_Address;
@@ -116,6 +116,20 @@ impl Bead {
         // TODO: While Implementing the DB, we also need to update the corresponding DB Entry!
         // self.children.borrow_mut().insert(child_bead_hash);
         unimplemented!();
+    }
+
+    pub fn get_bead_hash(&self) -> BlockHash {
+        // Needs to be changed
+        // Ideally, the hash should be equivalent to the block hash
+        let serialized_bead_str = serde_json::to_string(self).unwrap_or_else(|error| {
+            panic!(
+                "An error occurred while serializing the bead string: {:?}",
+                error
+            )
+        });
+        let mut serialized_bytes = [0u8; 32];
+        hex::decode_to_slice(serialized_bead_str, &mut serialized_bytes).unwrap();
+        BlockHash::from_byte_array(serialized_bytes)
     }
 }
 
