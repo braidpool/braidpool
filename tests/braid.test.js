@@ -46,6 +46,7 @@ function createParentsMap(obj) {
 }
 
 // --- Test Data ---
+const parents0 = createParentsMap({0: []}); // single bead
 const parents1 = createParentsMap({0: [], 1: [0], 2: [1], 3: [2]}); // blockchain
 const parents2 = createParentsMap({0: [], 1: [], 2: [1], 3: [1]});
 const parents3 = createParentsMap({0: [], 1: [], 2: [], 3: [1], 4: [0]});
@@ -133,6 +134,11 @@ describe('Braid Utility Functions', () => {
 
     // --- Cohorts Tests ---
     describe('cohorts', () => {
+        test('should find correct cohort for a single bead', () => {
+            const expectedCohort = new Set([0]);
+            expect(Array.from(cohorts(parents0, reverse(parents0), new Set([0])))).toEqual([expectedCohort]);
+        });
+
         test('should find correct cohorts for blockchain', () => {
             const expectedCohorts = [new Set([0]), new Set([1]), new Set([2]), new Set([3])];
             expect(Array.from(cohorts(parents1))).toEqual(expectedCohorts);
