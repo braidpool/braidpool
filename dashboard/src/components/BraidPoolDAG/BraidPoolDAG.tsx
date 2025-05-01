@@ -7,6 +7,7 @@ import CardTitle from '@mui/material/Typography';
 import '../../App.css';
 import Button from '@mui/material/Button';
 import { CircularProgress } from '@mui/material';
+import { layout } from './braid';
 
 interface GraphNode {
   id: string;
@@ -55,120 +56,82 @@ const GraphVisualization: React.FC = () => {
   const COLUMN_WIDTH = 120;
   const VERTICAL_SPACING = 100;
 
+  // Utility functions to convert between data structures
+  function objectToMap(
+    obj: Record<string, string[]>
+  ): Map<string, Set<string>> {
+    const map = new Map();
+    Object.entries(obj).forEach(([key, values]) => {
+      map.set(key, new Set(values));
+    });
+    return map;
+  }
+
   const layoutNodes = (
     allNodes: GraphNode[],
     hwPath: string[],
     cohorts: string[][]
   ): Record<string, Position> => {
+    // Convert data structures to what the layout function expects
+    const allParents = objectToMap(graphData?.parents || {});
+    const allChildren = objectToMap(graphData?.children || {});
+
     const positions: Record<string, Position> = {};
-    const columnOccupancy: Record<number, number> = {};
-    const hwPathSet = new Set(hwPath);
-    const centerY = height / 2;
-    const cohortMap = new Map<string, number>();
-    cohorts.forEach((cohort, index) => {
-      cohort.forEach((nodeId) => cohortMap.set(nodeId, index));
-    });
+    let previousTipsPos: Map<string, [number, number]> | null = null;
 
-    let currentX = margin.left;
-    let prevCohort: number | undefined;
-    const hwPathColumns: number[] = [];
+    // Process each cohort sequentially
+    for (const cohort of cohorts) {
+      const cohortSet = new Set(cohort);
+      const [cohortPositions] = layout(
+        new Set(
+          Array.from(cohortSet).map((id) => parseInt(nodeIdMap[id] || '0', 10))
+        ),
+        new Map(
+          Array.from(allParents.entries()).map(([key, value]) => [
+            parseInt(key, 10),
+            new Set(Array.from(value).map((v) => parseInt(v, 10))),
+          ])
+        ),
+        undefined, // beadWork (undefined for default)
+        previousTipsPos
+          ? new Map(
+              Array.from(previousTipsPos.entries()).map(([key, value]) => [
+                parseInt(key, 10),
+                value,
+              ])
+            )
+          : undefined
+      );
 
-    hwPath.forEach((nodeId, index) => {
-      const currentCohort = cohortMap.get(nodeId);
+      // Convert positions to our format and merge
+      cohortPositions.forEach(([x, y], beadId) => {
+        positions[beadId] = { x: x * COLUMN_WIDTH, y: y * VERTICAL_SPACING };
+      });
 
-      if (prevCohort !== undefined && currentCohort !== prevCohort) {
-        currentX += COLUMN_WIDTH;
-      }
-
-      positions[nodeId] = { x: currentX, y: centerY };
-      hwPathColumns.push(currentX);
-      columnOccupancy[index] = 0;
-
-      prevCohort = currentCohort;
-      currentX += COLUMN_WIDTH;
-    });
-
-    const generations = new Map<string, number>();
-    const remainingNodes = allNodes.filter((node) => !hwPathSet.has(node.id));
-
-    remainingNodes.forEach((node) => {
-      const hwpParents = node.parents.filter((p) => hwPathSet.has(p));
-      if (hwpParents.length > 0) {
-        const minHWPIndex = Math.min(
-          ...hwpParents.map((p) => hwPath.indexOf(p))
-        );
-        generations.set(node.id, minHWPIndex + 1);
-      } else {
-        const parentGens = node.parents.map((p) => generations.get(p) || 0);
-        generations.set(
-          node.id,
-          parentGens.length > 0 ? Math.max(...parentGens) + 1 : 0
-        );
-      }
-    });
-
-    remainingNodes.sort(
-      (a, b) => (generations.get(a.id) || 0) - (generations.get(b.id) || 0)
-    );
-
-    const tipNodes: string[] = [];
-
-    remainingNodes.forEach((node) => {
-      if (node.parents.length === 1 && !node.children?.length) {
-        tipNodes.push(node.id);
-      }
-      const positionedParents = node.parents.filter((p) => positions[p]);
-
-      let targetX: number;
-      let colKey: number;
-
-      if (positionedParents.length === 0) {
-        colKey = 0;
-        while (
-          columnOccupancy[colKey] !== undefined &&
-          columnOccupancy[colKey] >= 10
-        ) {
-          colKey++;
-        }
-        targetX = margin.left + colKey * COLUMN_WIDTH;
-      } else {
-        const maxParentX = Math.max(
-          ...positionedParents.map((p) => positions[p].x)
-        );
-        targetX = maxParentX + COLUMN_WIDTH;
-
-        const hwpParents = positionedParents.filter((p) => hwPathSet.has(p));
-        if (hwpParents.length > 0) {
-          const rightmostHWPParentX = Math.max(
-            ...hwpParents.map((p) => positions[p].x)
-          );
-          const parentIndex = hwPathColumns.indexOf(rightmostHWPParentX);
-          if (parentIndex >= 0 && parentIndex < hwPathColumns.length - 1) {
-            targetX = hwPathColumns[parentIndex + 1];
+      // Update previous tips for next cohort
+      previousTipsPos = new Map();
+      cohortPositions.forEach((pos, beadId) => {
+        if (!allChildren.get(beadId.toString())?.size) {
+          // If no children, it's a tip
+          if (previousTipsPos) {
+            previousTipsPos.set(beadId.toString(), pos);
           }
         }
+      });
+    }
 
-        colKey = Math.round((targetX - margin.left) / COLUMN_WIDTH);
-      }
+    // Adjust positions to center the visualization
+    const minX = Math.min(...Object.values(positions).map((p) => p.x));
+    const minY = Math.min(...Object.values(positions).map((p) => p.y));
+    const maxY = Math.max(...Object.values(positions).map((p) => p.y));
 
-      let count = columnOccupancy[colKey] || 0;
-      const direction = count % 2 !== 0 ? 1 : -1;
-      const level = Math.ceil((count + 1) / 2);
-      const yOffset = direction * level * VERTICAL_SPACING;
-      const yPos = centerY + yOffset;
+    const centerY = height / 2;
+    const yOffset = centerY - (maxY + minY) / 2;
 
-      columnOccupancy[colKey] = count + 1;
-
-      positions[node.id] = { x: targetX, y: yPos };
-    });
-
-    const maxColumnX = Math.max(
-      ...Object.values(positions).map((pos) => pos.x)
-    );
-    tipNodes.forEach((tipId) => {
-      if (positions[tipId]) {
-        positions[tipId].x = maxColumnX;
-      }
+    // Apply offsets
+    Object.keys(positions).forEach((beadId) => {
+      positions[beadId].x += margin.left - minX;
+      positions[beadId].y += yOffset;
     });
 
     return positions;
