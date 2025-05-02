@@ -20,26 +20,23 @@ export default function BeadRow({
   onParentClick,
 }: MinerRowProps) {
   let work = bead.difficulty;
-let workUnit = 'GH';
+  let workUnit = 'GH';
 
-if (work >= 1e18) {
-  work = work / 1e18;
-  workUnit = 'EH';
-} else if (work >= 1e15) {
-  work = work / 1e15;
-  workUnit = 'PH';
-} else if (work >= 1e12) {
-  work = work / 1e12;
-  workUnit = 'TH';
-} else if (work >= 1e9) {
-  work = work / 1e9;
-  workUnit = 'GH';
-}
+  if (work >= 1e18) {
+    work = work / 1e18;
+    workUnit = 'EH';
+  } else if (work >= 1e15) {
+    work = work / 1e15;
+    workUnit = 'PH';
+  } else if (work >= 1e12) {
+    work = work / 1e12;
+    workUnit = 'TH';
+  } else if (work >= 1e9) {
+    work = work / 1e9;
+    workUnit = 'GH';
+  }
 
-const formattedWork =
-  work >= 1e21 ? work.toExponential(4) : work.toFixed(2);
-
-
+  const formattedWork = work >= 1e21 ? work.toExponential(4) : work.toFixed(2);
 
   return (
     <div className="border-b border-gray-800/80 ">
