@@ -66,16 +66,16 @@ const GraphVisualization: React.FC = () => {
     });
     return map;
   }
+  const cohortCache = useRef<Map<number, [number, number]>[]>([]);
+  const MAX_CACHED_COHORTS = 10;
 
   const layoutNodes = (
     allNodes: GraphNode[],
     hwPath: string[],
     cohorts: string[][]
   ): Record<string, Position> => {
-    // Convert data structures to what the layout function expects
     const allParents = objectToMap(graphData?.parents || {});
     const allChildren = objectToMap(graphData?.children || {});
-
     const positions: Record<string, Position> = {};
     let previousTipsPos: Map<string, [number, number]> | null = null;
 
@@ -95,17 +95,27 @@ const GraphVisualization: React.FC = () => {
         undefined, // beadWork (undefined for default)
         previousTipsPos
           ? new Map(
-              Array.from(previousTipsPos.entries()).map(([key, value]) => [
-                parseInt(key, 10),
-                value,
-              ])
-            )
+            Array.from(previousTipsPos.entries()).map(([key, value]) => [
+              parseInt(key, 10),
+              value,
+            ])
+          )
           : undefined
       );
 
-      // Convert positions to our format and merge
+      // Cache positions before scaling
+      cohortCache.current.push(new Map(cohortPositions));
+      if (cohortCache.current.length > MAX_CACHED_COHORTS) {
+        cohortCache.current.shift();
+      }
+
+      // Convert and scale positions (-1 to 1 => -100 to 100)
       cohortPositions.forEach(([x, y], beadId) => {
-        positions[beadId] = { x: x * COLUMN_WIDTH, y: y * VERTICAL_SPACING };
+        positions[beadId] = {
+          // increasing or decreasing this is having no effect on the Ui somehow?
+          x: x * 100,
+          y: y * 100
+        };
       });
 
       // Update previous tips for next cohort
@@ -133,6 +143,36 @@ const GraphVisualization: React.FC = () => {
       positions[beadId].x += margin.left - minX;
       positions[beadId].y += yOffset;
     });
+
+    // Calculate scaling and transformation
+    const allCoords = Object.values(positions);
+    const xExtent = d3.extent(allCoords, d => d.x) as [number, number];
+    const yExtent = d3.extent(allCoords, d => d.y) as [number, number];
+
+    const xScale = d3.scaleLinear()
+      .domain(xExtent)
+      .range([margin.left, width - margin.right]);
+
+    const yScale = d3.scaleLinear()
+      .domain(yExtent)
+      .range([margin.top, height - margin.bottom]);
+
+    // Center HWP nodes vertically --- this also does not work like the original code
+    const hwPathSet = new Set(hwPath);
+    const hwpNodes = Object.keys(positions).filter(id => hwPathSet.has(id));
+    const hwpYValues = hwpNodes.map(id => positions[id].y);
+    const hwpCenterY = hwpYValues.length > 0 ?
+      d3.mean(hwpYValues) || height / 2 :
+      height / 2;
+    // Apply final positions with HWP centering
+    Object.keys(positions).forEach(beadId => {
+      const isHWP = hwPathSet.has(beadId);
+      positions[beadId] = {
+        x: xScale(positions[beadId].x),
+        y: isHWP ? height / 2 : yScale(positions[beadId].y)
+      };
+    });
+
 
     return positions;
   };
@@ -206,12 +246,12 @@ const GraphVisualization: React.FC = () => {
         const firstCohortChanged =
           parsedData?.cohorts?.[0]?.length &&
           JSON.stringify(prevFirstCohortRef.current) !==
-            JSON.stringify(parsedData.cohorts[0]);
+          JSON.stringify(parsedData.cohorts[0]);
 
         const lastCohortChanged =
           parsedData?.cohorts?.length > 0 &&
           JSON.stringify(prevLastCohortRef.current) !==
-            JSON.stringify(parsedData.cohorts[parsedData.cohorts.length - 1]);
+          JSON.stringify(parsedData.cohorts[parsedData.cohorts.length - 1]);
 
         if (firstCohortChanged) {
           const top = COLORS.shift();
@@ -312,7 +352,7 @@ const GraphVisualization: React.FC = () => {
         .attr('stroke-width', 1.5)
         .attr('stroke', (d: any) =>
           graphData?.highest_work_path.includes(d.source) &&
-          graphData?.highest_work_path.includes(d.target)
+            graphData?.highest_work_path.includes(d.target)
             ? '#FF8500'
             : '#48CAE4'
         );
@@ -333,7 +373,7 @@ const GraphVisualization: React.FC = () => {
         .attr('stroke-width', 1.5)
         .attr('stroke', (d: any) =>
           graphData?.highest_work_path.includes(d.source) &&
-          graphData?.highest_work_path.includes(d.target)
+            graphData?.highest_work_path.includes(d.target)
             ? '#FF8500'
             : '#48CAE4'
         );
@@ -355,7 +395,7 @@ const GraphVisualization: React.FC = () => {
     if (!svgRef.current || !graphData) return;
     const filteredCohorts = graphData.cohorts.slice(-selectedCohorts);
     const filteredCohortNodes = new Set(filteredCohorts.flat());
-
+  
     const tooltip = d3
       .select(tooltipRef.current)
       .style('position', 'fixed')
@@ -368,36 +408,61 @@ const GraphVisualization: React.FC = () => {
       .style('box-shadow', '2px 2px 5px rgba(0,0,0,0.2)')
       .style('pointer-events', 'none')
       .style('z-index', '10')
-      .style('bottom', '20px') // Position from bottom
-      .style('right', '20px'); // Position from left
-
+      .style('bottom', '20px')
+      .style('right', '20px');
+  
     const svg = d3.select(svgRef.current);
     svg.selectAll('*').remove();
-
+  
     const container = svg.append('g');
-
+  
     zoomBehavior.current = d3
       .zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.5, 5])
       .on('zoom', (event: d3.D3ZoomEvent<SVGSVGElement, unknown>) => {
         container.attr('transform', event.transform.toString());
       });
-
+  
     svg
       .call(zoomBehavior.current)
       .call(zoomBehavior.current.transform, d3.zoomIdentity.scale(defaultZoom));
-
+  
     const allNodes = Object.keys(graphData.parents).map((id) => ({
       id,
       parents: graphData.parents[id],
       children: graphData.children[id],
     }));
-
+  
     const hwPath = graphData.highest_work_path;
     const cohorts = graphData.cohorts;
     const positions = layoutNodes(allNodes, hwPath, cohorts as string[][]);
     const hwPathSet = new Set(hwPath);
-
+  
+    // Draw inter-cohort links using cache ---- this is not working as expected
+    const drawInterCohortLinks = () => {
+      const currentCohort = new Set(graphData.cohorts.flat());
+      
+      cohortCache.current.slice(0, -1).forEach(cachedCohort => {
+        Array.from(cachedCohort.keys()).forEach(sourceId => {
+          const targetIds = graphData.children[sourceId] || [];
+          targetIds.filter(id => currentCohort.has(id)).forEach(targetId => {
+            if (filteredCohortNodes.has(sourceId.toString()) && filteredCohortNodes.has(targetId)) {
+              container.append('line')
+                .attr('class', 'inter-cohort-link')
+                .attr('x1', positions[sourceId]?.x || 0)
+                .attr('y1', positions[sourceId]?.y || 0)
+                .attr('x2', positions[targetId]?.x || 0)
+                .attr('y2', positions[targetId]?.y || 0)
+                .attr('stroke', '#888')
+                .attr('stroke-width', 1)
+                .attr('stroke-dasharray', '5,5')
+                .attr('marker-end', 'url(#arrow-blue)');
+            }
+          });
+        });
+      });
+    };
+  
     // making old nodes invisible
     const visibleNodes = allNodes.filter((node) =>
       filteredCohortNodes.has(node.id)
@@ -408,17 +473,19 @@ const GraphVisualization: React.FC = () => {
       if (x < minVisibleX) minVisibleX = x;
     });
     const offsetX = margin.left - minVisibleX;
-
+  
     const links: { source: string; target: string }[] = [];
     allNodes.forEach((node) => {
       if (Array.isArray(node.children)) {
-        // Check if children exists and is an array
         node.children.forEach((childId) => {
           links.push({ target: node.id, source: childId });
         });
       }
     });
-
+  
+    // Draw inter-cohort links
+    drawInterCohortLinks();
+  
     const nodes = container
       .selectAll('.node')
       .data(allNodes)
@@ -429,16 +496,16 @@ const GraphVisualization: React.FC = () => {
         'transform',
         (d) =>
           `translate(${(positions[d.id]?.x || 0) + offsetX},${positions[d.id]?.y || 0})`
-      ) // Apply offset
+      )
       .style('display', (d) =>
         filteredCohortNodes.has(d.id) ? 'inline' : 'none'
       );
-
+  
     const cohortMap = new Map<string, number>();
     (cohorts as string[][]).forEach((cohort, index) => {
       cohort.forEach((nodeId) => cohortMap.set(nodeId, index));
     });
-
+  
     nodes
       .append('circle')
       .attr('r', nodeRadius)
@@ -451,71 +518,39 @@ const GraphVisualization: React.FC = () => {
       .attr('stroke-width', 2)
       .on('mouseover', function (event: MouseEvent, d: GraphNode) {
         d3.select(this).attr('stroke', '#FF8500').attr('stroke-width', 3);
-
+  
         const cohortIndex = cohortMap.get(d.id);
         const isHWP = hwPathSet.has(d.id);
-
+  
         const tooltipContent = `
                 <div><strong>ID:</strong> ${nodeIdMap[d.id] || '?'} (${d.id})</div>
                 <div><strong>Cohort:</strong> ${cohortIndex !== undefined ? cohortIndex : 'N/A'}</div>
                 <div><strong>Highest Work Path:</strong> ${isHWP ? 'Yes' : 'No'}</div>
-                <div><strong>Parents:</strong> ${
-                  d.parents.length > 0
-                    ? d.parents.map((p) => `${nodeIdMap[p] || '?'}`).join(', ')
-                    : 'None'
-                }</div>
-                <div><strong>Children:</strong> ${
-                  d.children.length > 0
-                    ? d.children.map((c) => `${nodeIdMap[c] || '?'}`).join(', ')
-                    : 'None'
-                }</div>
+                <div><strong>Parents:</strong> ${d.parents.length > 0
+            ? d.parents.map((p) => `${nodeIdMap[p] || '?'}`).join(', ')
+            : 'None'
+          }</div>
+                <div><strong>Children:</strong> ${d.children.length > 0
+            ? d.children.map((c) => `${nodeIdMap[c] || '?'}`).join(', ')
+            : 'None'
+          }</div>
                 `;
-
+  
         tooltip.html(tooltipContent).style('visibility', 'visible');
       })
       .on('mouseout', function () {
         d3.select(this).attr('stroke', '#fff').attr('stroke-width', 2);
         tooltip.style('visibility', 'hidden');
       });
-
+  
     nodes
       .append('text')
       .attr('dy', 4)
       .attr('text-anchor', 'middle')
-      .text((d) => nodeIdMap[d.id] || '?') // Show sequential ID instead of hash
+      .text((d) => nodeIdMap[d.id] || '?')
       .attr('fill', '#fff')
-      .style('font-size', 20)
-      .on('mouseover', function (event: MouseEvent, d: GraphNode) {
-        const cohortIndex = cohortMap.get(d.id);
-        const isHWP = hwPathSet.has(d.id);
-        const tooltipContent = `
-                <div><strong>ID:</strong> ${nodeIdMap[d.id] || '?'} (${d.id})</div>
-                <div><strong>Cohort:</strong> ${cohortIndex !== undefined ? cohortIndex : 'N/A'}</div>
-                <div><strong>Highest Work Path:</strong> ${isHWP ? 'Yes' : 'No'}</div>
-                <div><strong>Parents:</strong> ${
-                  d.parents.length > 0
-                    ? d.parents.map((p) => `${nodeIdMap[p] || '?'}`).join(', ')
-                    : 'None'
-                }</div>
-                <div><strong>Children:</strong> ${
-                  d.children.length > 0
-                    ? d.children.map((c) => `${nodeIdMap[c] || '?'}`).join(', ')
-                    : 'None'
-                }</div>
-                `;
-
-        tooltip.html(tooltipContent).style('visibility', 'visible');
-      })
-      .on('mouseout', function () {
-        tooltip.style('visibility', 'hidden');
-      });
-    container
-      .append('text')
-      .attr('x', width / 2)
-      .attr('y', margin.top / 2)
-      .attr('text-anchor', 'middle')
-      .style('font-size', '16px');
-
+      .style('font-size', 20);
+  
     container
       .append('defs')
       .selectAll('marker')
@@ -535,7 +570,7 @@ const GraphVisualization: React.FC = () => {
       .append('path')
       .attr('d', 'M0,-5L10,0L0,5')
       .attr('fill', (d) => d.color);
-
+  
     container
       .selectAll('.link')
       .data(links)
@@ -554,6 +589,7 @@ const GraphVisualization: React.FC = () => {
         const dx = tgt.x - src.x;
         const dy = tgt.y - src.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist === 0) return src.x;
         const ratio = nodeRadius / dist;
         return src.x + dx * ratio;
       })
@@ -569,6 +605,7 @@ const GraphVisualization: React.FC = () => {
         const dx = tgt.x - src.x;
         const dy = tgt.y - src.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist === 0) return src.y;
         const ratio = nodeRadius / dist;
         return src.y + dy * ratio;
       })
@@ -584,6 +621,7 @@ const GraphVisualization: React.FC = () => {
         const dx = src.x - tgt.x;
         const dy = src.y - tgt.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist === 0) return tgt.x;
         const ratio = nodeRadius / dist;
         return tgt.x + dx * ratio;
       })
@@ -599,13 +637,12 @@ const GraphVisualization: React.FC = () => {
         const dx = src.x - tgt.x;
         const dy = src.y - tgt.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist === 0) return tgt.y;
         const ratio = nodeRadius / dist;
         return tgt.y + dy * ratio;
       })
       .attr('stroke', (d) =>
-        hwPathSet.has(d.source) && hwPathSet.has(d.target)
-          ? '#FF8500'
-          : '#48CAE4'
+        hwPathSet.has(d.source) && hwPathSet.has(d.target) ? '#FF8500' : '#48CAE4'
       )
       .attr('stroke-width', 1.5)
       .attr('marker-end', (d) =>
@@ -619,7 +656,6 @@ const GraphVisualization: React.FC = () => {
           : 'none'
       );
   }, [graphData, defaultZoom, selectedCohorts]);
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full w-full">

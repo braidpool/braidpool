@@ -291,7 +291,7 @@ function allAncestors(b, parents, ancestors = new Map()) {
 function* cohorts(parents, children = null, initialCohort = null) {
   // How in the holy fuck does js not have a set equality operator?!?!
   function isEqual(setA, setB) {
-    setA.size === setB.size && setA.isSubsetOf(setB);
+    return setA.size === setB.size && setA.isSubsetOf(setB);
   }
 
   children = children ? children : reverse(parents);
@@ -654,21 +654,23 @@ function layout(
   // setXCoord sets the values in proposedX
   const proposedX = new Map();
 
+  const inProgress = new Set(); // global or passed as an argument
+
   function setXCoord(bead, localParents, localChildren, localHead) {
-    // Set an x-coordinate for a bead based on being right of its parents
-    // and left of its children.
     if (proposedX.has(bead)) {
       return;
     }
-
-    // Determine the minimum x-coordinate based on parents
+  
+    if (inProgress.has(bead)) {
+      return;
+    }
+  
+    inProgress.add(bead);
+  
     let minX = 0;
-    if (localHead.has(bead)) {
-      minX = 0; // Beads in the head start at 0 if no other constraints
-    } else {
+    if (!localHead.has(bead)) {
       const beadParents = localParents.get(bead) || new Set();
       for (const parent of beadParents) {
-        // Recursive call ensures parents are processed first
         setXCoord(parent, localParents, localChildren, localHead);
         minX = Math.max(minX, proposedX.get(parent) + 1);
       }
@@ -685,7 +687,6 @@ function layout(
 
     // Handle constraint conflict: if min_x > max_x, shift children
     if (minX > maxX && maxX < Infinity) {
-      const beadChildren = localChildren.get(bead) || new Set();
       for (const child of beadChildren) {
         if (
           proposedX.get(child) !== undefined &&
@@ -702,7 +703,9 @@ function layout(
     }
     // Set the final X for the current bead after resolving conflicts
     proposedX.set(bead, minX);
+    inProgress.delete(bead);
   }
+  
 
   const allChildren = reverse(allParents);
   // Connectivity from previous tips (Map<number, Set<number>>)
@@ -776,7 +779,13 @@ function layout(
     if (!children.has(p)) {
       extendedChildren.set(p, new Set());
     }
-    extendedChildren.set(p, cSet.union(extendedChildren.get(p)));
+    const existingSet = extendedChildren.get(p) || new Set();
+
+    // Convert cSet to an array if it's not iterable
+    const cSetArray = Array.isArray(cSet) ? cSet : [cSet];
+
+    const unionSet = new Set([...cSetArray, ...existingSet]);
+    extendedChildren.set(p, unionSet);
   }
   const extendedParents = reverse(extendedChildren);
   if (previousCohortTipsPos) {
@@ -860,6 +869,7 @@ function layout(
     }
   }
 
+  console.log('braid.js', pos, tipsPos)
   return [pos, tipsPos];
 }
 
