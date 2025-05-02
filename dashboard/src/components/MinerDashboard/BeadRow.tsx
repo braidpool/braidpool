@@ -2,17 +2,15 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Zap } from 'lucide-react';
 import TransactionList from './TransactionList';
 import { shortenHash } from './lib/utils/shortenHash';
-
 import type { Bead, Transaction } from './lib/types';
-
 interface MinerRowProps {
   bead: Bead;
   isExpanded: boolean;
   onToggle: (beadId: string) => void;
   isActive: boolean;
   transactions: Transaction[];
+  onParentClick: (parentHash: string) => void;
 }
-
 export default function BeadRow({
   bead,
   isExpanded,
@@ -20,18 +18,33 @@ export default function BeadRow({
   isActive,
   transactions,
   onParentClick,
-}: {
-  bead: Bead;
-  isExpanded: boolean;
-  onToggle: (beadId: string) => void;
-  isActive: boolean;
-  transactions: Transaction[];
-  onParentClick: (parentHash: string) => void;
-}) {
+}: MinerRowProps) {
+  let work = bead.difficulty;
+let workUnit = 'GH';
+
+if (work >= 1e18) {
+  work = work / 1e18;
+  workUnit = 'EH';
+} else if (work >= 1e15) {
+  work = work / 1e15;
+  workUnit = 'PH';
+} else if (work >= 1e12) {
+  work = work / 1e12;
+  workUnit = 'TH';
+} else if (work >= 1e9) {
+  work = work / 1e9;
+  workUnit = 'GH';
+}
+
+const formattedWork =
+  work >= 1e21 ? work.toExponential(4) : work.toFixed(2);
+
+
+
   return (
-    <div className="border-b border-gray-800/80">
+    <div className="border-b border-gray-800/80 ">
       <motion.div
-        className={`grid grid-cols-4 p-4 cursor-pointer transition-colors duration-300 relative overflow-hidden ${
+        className={`grid grid-cols-5 p-4 cursor-pointer transition-colors duration-300 relative overflow-hidden ${
           isActive ? 'bg-blue-900/30' : ''
         }`}
         onClick={() => onToggle(bead.id)}
@@ -81,15 +94,23 @@ export default function BeadRow({
           )}
         </div>
         <div className="text-gray-300 relative z-10">{bead.timestamp}</div>
-        <div className="text-emerald-300 font-medium relative z-10">
-          {bead.difficulty}
+        <div className="text-emerald-300 font-medium relative z-10 mt-2 md:mt-0 md:col-span-1">
+          {formattedWork} {workUnit}
         </div>
-        <div className="text-purple-300 font-medium relative z-10">
+        <div className="text-purple-300 font-medium   relative z-10 ml-8">
           <motion.div
             animate={{ scale: isActive ? [1, 1.2, 1] : 1 }}
             transition={{ duration: 0.4 }}
           >
             {bead.transactions}
+          </motion.div>
+        </div>
+        <div className="text-amber-300 font-medium relative z-10 mt-2 md:mt-0 md:col-span-1">
+          <motion.div
+            animate={{ scale: isActive ? [1, 1.2, 1] : 1 }}
+            transition={{ duration: 0.4 }}
+          >
+            {Number(bead.reward).toFixed(4)} BTC
           </motion.div>
         </div>
       </motion.div>
@@ -99,9 +120,9 @@ export default function BeadRow({
         <div className="flex items-center gap-2">
           <span className="text-blue-300 font-medium">Parents:</span>
           <div className="flex flex-wrap gap-2">
-            {bead.parents.map((parent, index) => (
+            {bead.parents.map((parent) => (
               <button
-                key={index}
+                key={parent}
                 className="text-cyan-400 font-mono text-sm hover:text-cyan-300 hover:underline"
                 onClick={(e) => {
                   e.stopPropagation();

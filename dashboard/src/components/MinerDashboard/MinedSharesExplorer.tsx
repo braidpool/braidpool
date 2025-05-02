@@ -3,7 +3,7 @@ import { useTransform, useScroll } from 'framer-motion';
 import DashboardHeader from './DashboardHeader';
 import { FilterBar } from './FilterBar/FilterBar';
 import EnhancedBlocksTab from './BlockVisulisation/Block';
-import BeadRow from './MinerRow';
+import BeadRow from './BeadRow';
 
 import { BEADS, TRANSACTIONS, BLOCKS } from './lib/constants';
 import { useChartData } from './Hooks/useChartData';
@@ -120,7 +120,7 @@ export default function MinedSharesExplorer() {
               {/* Data Table */}
               <div className="relative border border-gray-800/50 rounded-xl mb-8 bg-black/30 backdrop-blur-md shadow-[0_0_25px_rgba(59,130,246,0.15)] overflow-hidden transform-gpu">
                 {/* Table header */}
-                <div className="grid grid-cols-4 p-4 border-b border-gray-800/80 font-medium relative overflow-hidden">
+                <div className="grid grid-cols-5 p-4 border-b border-gray-800/80 font-medium relative overflow-hidden">
                   <div className="text-blue-200 font-semibold relative z-10">
                     Bead Hash
                   </div>
@@ -128,10 +128,13 @@ export default function MinedSharesExplorer() {
                     Timestamp
                   </div>
                   <div className="text-blue-200 font-semibold relative z-10">
-                    Difficulty
+                    Work
                   </div>
                   <div className="text-blue-200 font-semibold relative z-10">
                     Transactions
+                  </div>
+                  <div className="text-blue-200 font-semibold relative z-10">
+                    Rewards
                   </div>
                 </div>
 

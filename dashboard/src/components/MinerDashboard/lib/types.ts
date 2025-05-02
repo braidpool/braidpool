@@ -14,6 +14,8 @@ export interface Bead {
   difficulty: number;
   parents: string[];
   details?: Transaction[];
+  reward:number,
+  
 }
 
 export interface ChartDataPoint {

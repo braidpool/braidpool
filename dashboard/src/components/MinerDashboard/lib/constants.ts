@@ -14,32 +14,36 @@ export const BEADS: Bead[] = [
     name: 'f68b21dbde3b0803',
     timestamp: '2021-08-15 14:23',
     transactions: 3,
-    difficulty: 12.5,
+    difficulty: 2e18,
     parents: ['a7c43e912f5d78c', '58d2f1a9e7b3d45'],
+    reward: 6.25, 
   },
   {
     id: 'bead2',
     name: 'a7c43e9b4e8f12f5d78c',
     timestamp: '2021-08-30 09:17',
     transactions: 2,
-    difficulty: 10.2,
+    difficulty: 5e15,
     parents: ['2c1a7f84477aec04'],
+    reward:6.25,
   },
   {
     id: 'bead3',
     name: 'b9e72d1c5a8f3e6b',
     timestamp: '2021-09-05 11:42',
     transactions: 2,
-    difficulty: 11.8,
+    difficulty: 56896,
     parents: ['964aebde4813c0a6', 'c5d8e7f61a2b3c4d'],
+    reward: 6.25, 
   },
   {
     id: 'bead4',
     name: 'c5d8e7f61a2b3c4d',
     timestamp: '2021-09-12 16:08',
     transactions: 1,
-    difficulty: 9.7,
+    difficulty: 4e9,
     parents: ['f68b21dbde3b0803'],
+    reward: 6.25, 
   },
 ];
 
@@ -56,6 +60,7 @@ export const TRANSACTIONS: Record<string, Transaction[]> = {
       feeRate: 9.6,
       inputs: 2,
       outputs: 3,
+     
     },
     {
       id: 'tx2',
@@ -68,6 +73,7 @@ export const TRANSACTIONS: Record<string, Transaction[]> = {
       feeRate: 9.4,
       inputs: 1,
       outputs: 2,
+      
     },
     {
       id: 'tx3',
@@ -80,6 +86,7 @@ export const TRANSACTIONS: Record<string, Transaction[]> = {
       feeRate: 13.6,
       inputs: 3,
       outputs: 2,
+      
     },
   ],
   bead2: [
@@ -94,6 +101,7 @@ export const TRANSACTIONS: Record<string, Transaction[]> = {
       feeRate: 10.9,
       inputs: 2,
       outputs: 1,
+   
     },
     {
       id: 'tx5',
@@ -106,6 +114,8 @@ export const TRANSACTIONS: Record<string, Transaction[]> = {
       feeRate: 9.3,
       inputs: 1,
       outputs: 2,
+      
+
     },
   ],
   bead3: [
@@ -120,6 +130,7 @@ export const TRANSACTIONS: Record<string, Transaction[]> = {
       feeRate: 13.3,
       inputs: 3,
       outputs: 4,
+     
     },
     {
       id: 'tx7',
@@ -132,6 +143,8 @@ export const TRANSACTIONS: Record<string, Transaction[]> = {
       feeRate: 11.2,
       inputs: 2,
       outputs: 3,
+     
+
     },
   ],
   bead4: [
@@ -146,6 +159,7 @@ export const TRANSACTIONS: Record<string, Transaction[]> = {
       feeRate: 11.0,
       inputs: 1,
       outputs: 2,
+     
     },
   ],
 };
