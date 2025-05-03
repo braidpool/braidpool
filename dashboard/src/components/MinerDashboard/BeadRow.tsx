@@ -80,7 +80,6 @@ export default function BeadRow({
             <ChevronDown className="h-5 w-5 text-blue-400" />
           </motion.div>
 
-         
           <motion.span
             className="text-blue-100 font-medium font-mono sm:text-[10px] md:text-[15px]"
             animate={{
@@ -90,7 +89,6 @@ export default function BeadRow({
           >
             {bead.name}
           </motion.span>
-
 
           {isExpanded && (
             <motion.div
