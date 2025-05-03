@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Dashboard from './components/Dashboard/Dashboard';
 import ShareDetails from './components/ShareDetails/ShareDetails';
 import MinedSharesExplorer from './components/MinerDashboard/MinedSharesExplorer';
+import Footer from './components/Footer';
 
 // Create a dark theme
 const theme = createTheme({
@@ -105,13 +106,14 @@ function App() {
                 borderTop: '1px solid rgba(255,255,255,0.05)',
               }}
             >
-              <Container maxWidth="lg">
+              {/* <Container maxWidth="lg">
                 <Typography variant="body1" align="center" gutterBottom>
                   A visualization dashboard for the Braidpool decentralized
                   mining pool
                 </Typography>
                 <Copyright />
-              </Container>
+              </Container> */}
+              <Footer></Footer>
             </Box>
           </Box>
         </Box>
