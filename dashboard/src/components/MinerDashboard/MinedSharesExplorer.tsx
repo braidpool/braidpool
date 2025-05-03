@@ -99,7 +99,7 @@ export default function MinedSharesExplorer() {
               <div className="space-y-8">
                 <div className="relative border border-gray-800/50 rounded-xl mb-8 bg-black/30 backdrop-blur-md shadow-[0_0_25px_rgba(59,130,246,0.15)] overflow-hidden transform-gpu">
                   {/* Table header */}
-                  <div className="grid grid-cols-5 md:grid-cols-5 sm:grid sm:flex-row sm:gap-1 sm:p-2 sm:text-[10px] md:text-2xl p-4 border-b border-gray-800/80 font-medium relative overflow-hidden">
+                  <div className="grid grid-cols-5 md:grid-cols-5 sm:grid sm:flex-row sm:gap-1 sm:p-2 sm:text-[10px] md:text-xl p-4 border-b border-gray-800/80 font-medium relative overflow-hidden">
                     {[
                       'Bead Hash',
                       'Timestamp',

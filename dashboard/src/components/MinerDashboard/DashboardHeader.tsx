@@ -35,7 +35,7 @@ export default function DashboardHeader({
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, type: 'spring' }}
         >
-          <h1 className="text-5xl sm:text-2xl md:text-7xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-purple-500 to-blue-500 drop-shadow-[0_0_15px_rgba(59,130,246,0.5)] tracking-tight">
+          <h1 className="text-5xl sm:text-2xl md:text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-purple-500 to-blue-500 drop-shadow-[0_0_15px_rgba(59,130,246,0.5)] tracking-tight">
             Beads Explorer
           </h1>
 
@@ -83,23 +83,23 @@ export default function DashboardHeader({
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.4 }}
-        className="flex border-b border-gray-800/70 mb-6 overflow-x-auto pb-1 scrollbar-hide"
+        className="flex border-b border-gray-800/70 mb-6 overflow-x-auto pb-1 s"
       >
         {[
           {
             id: 'beads',
             label: 'Beads',
-            icon: <Cpu className="w-4 h-4 sm:w-2 sm:h-2" />,
+            icon: <Cpu className="w-4 h-4 sm:w-2 sm:h-2 md:w-4 md:h-4" />,
           },
           {
             id: 'trends',
             label: 'Trends',
-            icon: <BarChart3 className="w-4 h-4 sm:w-2 sm:h-2" />,
+            icon: <BarChart3 className="w-4 h-4 sm:w-2 sm:h-2 md:w-4 md:h-4" />,
           },
           {
             id: 'blocks',
             label: 'Blocks',
-            icon: <Layers className="w-4 h-4 sm:w-2" />,
+            icon: <Layers className="w-4 h-4 sm:w-2 md:w-4 md:h-4" />,
           },
         ].map((tab) => (
           <motion.button
