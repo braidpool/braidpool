@@ -2,11 +2,12 @@
 use bitcoin::io::{self, Write};
 // Standard Imports
 use ::serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 
 // Bitcoin primitives
-use bitcoin::Address;
+use crate::braid::Braid;
 use bitcoin::absolute::Time;
 use bitcoin::consensus::encode::Decodable;
 use bitcoin::consensus::encode::Encodable;
@@ -15,9 +16,10 @@ use bitcoin::ecdsa::Signature;
 use bitcoin::p2p::Address as P2P_Address;
 use bitcoin::secp256k1::PublicKey;
 use bitcoin::transaction::TransactionExt;
+use bitcoin::{Address, BlockHash};
 use bitcoin::{BlockHeader, Transaction};
 // Custom Imports
-use crate::utils::BeadHash;
+use crate::utils::{BeadHash, BeadLoadError, Children, Parents};
 
 /// Wrapper type for HashSet<BeadHash> to allow custom trait implementations.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
