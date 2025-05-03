@@ -80,21 +80,17 @@ export default function BeadRow({
             <ChevronDown className="h-5 w-5 text-blue-400" />
           </motion.div>
 
+         
           <motion.span
-            className="hidden sm:inline text-blue-100 font-medium font-mono"
-            animate={{ color: isExpanded ? '#93c5fd' : '#e0e7ff' }}
+            className="text-blue-100 font-medium font-mono sm:text-[10px] md:text-[15px]"
+            animate={{
+              color: isExpanded ? '#93c5fd' : '#e0e7ff',
+            }}
             transition={{ duration: 0.3 }}
           >
             {bead.name}
           </motion.span>
 
-          <motion.span
-            className="inline sm:hidden text-blue-100 font-medium font-mono"
-            animate={{ color: isExpanded ? '#93c5fd' : '#e0e7ff' }}
-            transition={{ duration: 0.3 }}
-          >
-            {bead.name.slice(0, 6)}
-          </motion.span>
 
           {isExpanded && (
             <motion.div
