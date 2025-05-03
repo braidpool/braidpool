@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { BarChart3, Layers, Cpu, Database, GitCompare } from 'lucide-react';
+import { BarChart3, Layers, Cpu, Database } from 'lucide-react';
 
 interface DashboardHeaderProps {
   headerOpacity: any;
@@ -29,13 +29,13 @@ export default function DashboardHeader({
       style={{ opacity: headerOpacity, scale: headerScale }}
       className="sticky top-0 z-50 pt-4 pb-6 backdrop-blur-md bg-black/30"
     >
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+      <div className="flex flex-col md:flex-row sm:flex-row justify-between items-start md:items-center sm-items-center gap-4 mb-6">
         <motion.div
           initial={{ opacity: 0, y: -30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, type: 'spring' }}
         >
-          <h1 className="text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-purple-500 to-blue-500 drop-shadow-[0_0_15px_rgba(59,130,246,0.5)] tracking-tight">
+          <h1 className="text-5xl sm:text-2xl md:text-7xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-purple-500 to-blue-500 drop-shadow-[0_0_15px_rgba(59,130,246,0.5)] tracking-tight">
             Beads Explorer
           </h1>
 
@@ -83,23 +83,23 @@ export default function DashboardHeader({
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.4 }}
-        className="flex border-b border-gray-800/70 mb-6"
+        className="flex border-b border-gray-800/70 mb-6 overflow-x-auto pb-1 scrollbar-hide"
       >
         {[
           {
             id: 'beads',
             label: 'Beads',
-            icon: <Cpu className="w-4 h-4" />,
+            icon: <Cpu className="w-4 h-4 sm:w-2 sm:h-2" />,
           },
           {
             id: 'trends',
             label: 'Trends',
-            icon: <BarChart3 className="w-4 h-4" />,
+            icon: <BarChart3 className="w-4 h-4 sm:w-2 sm:h-2" />,
           },
           {
             id: 'blocks',
             label: 'Blocks',
-            icon: <Layers className="w-4 h-4" />,
+            icon: <Layers className="w-4 h-4 sm:w-2" />,
           },
         ].map((tab) => (
           <motion.button

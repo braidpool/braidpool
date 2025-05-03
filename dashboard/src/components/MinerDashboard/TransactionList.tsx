@@ -17,7 +17,8 @@ export default function TransactionList({
   );
 
   return (
-    <div className="pl-10 pr-4 pb-3 bg-gradient-to-b from-blue-900/20 to-transparent">
+    // Updated - Added responsive padding and overflow handling
+    <div className="pl-4 sm:pl-10 pr-4 pb-3 bg-gradient-to-b from-blue-900/20 to-transparent overflow-x-auto">
       <motion.div
         className="text-blue-400 mb-3 font-medium flex items-center"
         initial={{ x: -20, opacity: 0 }}
@@ -29,7 +30,7 @@ export default function TransactionList({
       </motion.div>
 
       {/* Table header for transaction details */}
-      <div className="grid grid-cols-6 text-xs text-blue-300 font-semibold mb-2 px-2">
+      <div className="grid sm:grid grid-cols-6 text-xs text-blue-300 font-semibold mb-2 px-2">
         <div>Hash</div>
         <div>Size (vbytes)</div>
         <div>Fee (BTC)</div>
@@ -51,6 +52,7 @@ export default function TransactionList({
         }}
         initial="hidden"
         animate="show"
+        className="min-w-[640px] sm:min-w-0"
       >
         {transactions.map((transaction, index) => (
           <motion.div
@@ -59,7 +61,7 @@ export default function TransactionList({
               hidden: { y: 20, opacity: 0 },
               show: { y: 0, opacity: 1 },
             }}
-            className="grid grid-cols-6 py-2.5 rounded-lg transition-all duration-300 group relative"
+            className="grid md:grid-cols-6 sm:grid-cols-1 gap-y-1 py-2.5 rounded-lg transition-all duration-300 group relative"
             whileHover={{
               scale: 1.01,
               backgroundColor: 'rgba(30, 58, 138, 0.2)',

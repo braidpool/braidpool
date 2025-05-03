@@ -3,7 +3,8 @@ import { ChevronDown, Zap } from 'lucide-react';
 import TransactionList from './TransactionList';
 import { shortenHash } from './lib/utils/shortenHash';
 import type { Bead, Transaction } from './lib/types';
-interface MinerRowProps {
+
+interface BeadRowProps {
   bead: Bead;
   isExpanded: boolean;
   onToggle: (beadId: string) => void;
@@ -11,6 +12,23 @@ interface MinerRowProps {
   transactions: Transaction[];
   onParentClick: (parentHash: string) => void;
 }
+
+function formatWork(difficulty: number): { value: string; unit: string } {
+  const units = ['GH', 'TH', 'PH', 'EH'];
+  let work = difficulty / 1e9;
+  let i = 0;
+
+  while (work >= 1000 && i < units.length - 1) {
+    work /= 1000;
+    i++;
+  }
+
+  return {
+    value: work >= 1e21 ? work.toExponential(4) : work.toFixed(2),
+    unit: units[i],
+  };
+}
+
 export default function BeadRow({
   bead,
   isExpanded,
@@ -18,40 +36,32 @@ export default function BeadRow({
   isActive,
   transactions,
   onParentClick,
-}: MinerRowProps) {
-  let work = bead.difficulty;
-  let workUnit = 'GH';
+}: BeadRowProps) {
+  const { value: formattedWork, unit: workUnit } = formatWork(bead.difficulty);
 
-  if (work >= 1e18) {
-    work = work / 1e18;
-    workUnit = 'EH';
-  } else if (work >= 1e15) {
-    work = work / 1e15;
-    workUnit = 'PH';
-  } else if (work >= 1e12) {
-    work = work / 1e12;
-    workUnit = 'TH';
-  } else if (work >= 1e9) {
-    work = work / 1e9;
-    workUnit = 'GH';
-  }
-
-  const formattedWork = work >= 1e21 ? work.toExponential(4) : work.toFixed(2);
+  const handleKeyToggle = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      onToggle(bead.id);
+    }
+  };
 
   return (
-    <div className="border-b border-gray-800/80 ">
+    <div className="border-b border-gray-800/80">
       <motion.div
-        className={`grid grid-cols-5 p-4 cursor-pointer transition-colors duration-300 relative overflow-hidden ${
+        className={`grid grid-cols-5 md:grid-cols-4 p-4 cursor-pointer transition-colors duration-300 relative overflow-hidden ${
           isActive ? 'bg-blue-900/30' : ''
         }`}
         onClick={() => onToggle(bead.id)}
+        onKeyDown={handleKeyToggle}
+        role="button"
+        tabIndex={0}
         whileHover={{
           backgroundColor: 'rgba(30, 58, 138, 0.2)',
           transition: { duration: 0.2 },
         }}
         whileTap={{ scale: 0.98 }}
+        layout
       >
-        {/* Ripple effect on click */}
         {isActive && (
           <motion.div
             className="absolute inset-0 bg-blue-500/20 rounded-full"
@@ -69,17 +79,23 @@ export default function BeadRow({
           >
             <ChevronDown className="h-5 w-5 text-blue-400" />
           </motion.div>
+
           <motion.span
-            className="text-blue-100 font-medium font-mono"
-            animate={{
-              color: isExpanded ? '#93c5fd' : '#e0e7ff',
-            }}
+            className="hidden sm:inline text-blue-100 font-medium font-mono"
+            animate={{ color: isExpanded ? '#93c5fd' : '#e0e7ff' }}
             transition={{ duration: 0.3 }}
           >
             {bead.name}
           </motion.span>
 
-          {/* Animated indicator */}
+          <motion.span
+            className="inline sm:hidden text-blue-100 font-medium font-mono"
+            animate={{ color: isExpanded ? '#93c5fd' : '#e0e7ff' }}
+            transition={{ duration: 0.3 }}
+          >
+            {bead.name.slice(0, 6)}
+          </motion.span>
+
           {isExpanded && (
             <motion.div
               initial={{ opacity: 0, scale: 0 }}
@@ -90,11 +106,14 @@ export default function BeadRow({
             </motion.div>
           )}
         </div>
+
         <div className="text-gray-300 relative z-10">{bead.timestamp}</div>
+
         <div className="text-emerald-300 font-medium relative z-10 mt-2 md:mt-0 md:col-span-1">
           {formattedWork} {workUnit}
         </div>
-        <div className="text-purple-300 font-medium   relative z-10 ml-8">
+
+        <div className="text-purple-300 font-medium relative z-10 ml-8">
           <motion.div
             animate={{ scale: isActive ? [1, 1.2, 1] : 1 }}
             transition={{ duration: 0.4 }}
@@ -102,6 +121,7 @@ export default function BeadRow({
             {bead.transactions}
           </motion.div>
         </div>
+
         <div className="text-amber-300 font-medium relative z-10 mt-2 md:mt-0 md:col-span-1">
           <motion.div
             animate={{ scale: isActive ? [1, 1.2, 1] : 1 }}
@@ -112,26 +132,27 @@ export default function BeadRow({
         </div>
       </motion.div>
 
-      {/* Parents row */}
-      <div className="pl-10 pr-4 py-2 bg-gray-900/20 border-t border-b border-gray-800/50">
-        <div className="flex items-center gap-2">
-          <span className="text-blue-300 font-medium">Parents:</span>
-          <div className="flex flex-wrap gap-2">
-            {bead.parents.map((parent) => (
-              <button
-                key={parent}
-                className="text-cyan-400 font-mono text-sm hover:text-cyan-300 hover:underline"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onParentClick(parent);
-                }}
-              >
-                {shortenHash(parent)}
-              </button>
-            ))}
+      {bead.parents?.length > 0 && (
+        <div className="pl-10 pr-4 py-2 bg-gray-900/20 border-t border-b border-gray-800/50">
+          <div className="flex items-center gap-2">
+            <span className="text-blue-300 font-medium">Parents:</span>
+            <div className="flex flex-wrap gap-2">
+              {bead.parents.map((parent) => (
+                <button
+                  key={parent}
+                  className="text-cyan-400 font-mono text-sm hover:text-cyan-300 hover:underline"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onParentClick(parent);
+                  }}
+                >
+                  {shortenHash(parent)}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       <AnimatePresence>
         {isExpanded && (
