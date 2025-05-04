@@ -1,10 +1,11 @@
 #![allow(unused)]
-use bitcoin::io::{self, Write};
+use bitcoin::consensus::Error;
+use bitcoin::io::{self, BufRead, Write};
+use bitcoin::p2p::address::AddrV2;
 // Standard Imports
 use ::serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
-use std::net::SocketAddr;
 
 // Bitcoin primitives
 use crate::braid::Braid;
@@ -18,28 +19,14 @@ use bitcoin::secp256k1::PublicKey;
 use bitcoin::transaction::TransactionExt;
 use bitcoin::{Address, BlockHash};
 use bitcoin::{BlockHeader, Transaction};
+use core::str::FromStr;
 // Custom Imports
 use crate::utils::{BeadHash, BeadLoadError, Children, Parents};
 
-/// Wrapper type for HashSet<BeadHash> to allow custom trait implementations.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
-pub struct BeadHashSet(pub HashSet<BeadHash>);
+pub struct TimeVec(pub Vec<Time>);
 
-impl Encodable for BeadHashSet {
-    fn consensus_encode<W: Write + ?Sized>(&self, w: &mut W) -> Result<usize, io::Error> {
-        let mut len = 0;
-        len += (self.0.len() as u64).consensus_encode(w)?;
-        for item in self.0.iter() {
-            len += item.consensus_encode(w)?;
-        }
-        Ok(len)
-    }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
-pub struct TimeHashSet(pub HashSet<Time>);
-
-impl Encodable for TimeHashSet {
+impl Encodable for TimeVec {
     fn consensus_encode<W: Write + ?Sized>(&self, w: &mut W) -> Result<usize, io::Error> {
         let mut len = 0;
         // Encode the length for deterministic encoding
@@ -51,20 +38,16 @@ impl Encodable for TimeHashSet {
     }
 }
 
-/// Wrapper type for SocketAddr to allow custom trait implementations.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
-pub struct SerializableSocketAddr(pub SocketAddr);
-
-impl Encodable for SerializableSocketAddr {
-    fn consensus_encode<W: Write + ?Sized>(&self, w: &mut W) -> Result<usize, io::Error> {
-        let (address, port) = match self.0 {
-            SocketAddr::V4(addr) => (addr.ip().to_ipv6_mapped().segments(), addr.port()),
-            SocketAddr::V6(addr) => (addr.ip().segments(), addr.port()),
-        };
-        let mut len = 0;
-        len += address.consensus_encode(w)?;
-        len += port.consensus_encode(w)?;
-        Ok(len)
+impl Decodable for TimeVec {
+    fn consensus_decode<R: BufRead + ?Sized>(r: &mut R) -> Result<Self, Error> {
+        let len = u64::consensus_decode(r)?;
+        let mut vec = Vec::with_capacity(len as usize);
+        for _ in 0..len {
+            let time_u32 = u32::consensus_decode(r)?;
+            let time = Time::from_consensus(time_u32).unwrap();
+            vec.push(time);
+        }
+        Ok(TimeVec(vec))
     }
 }
 
@@ -74,12 +57,12 @@ pub struct CommittedMetadata {
     // Committed Braidpool Metadata,
     pub transaction_cnt: u32,
     pub transactions: Vec<Transaction>,
-    pub parents: BeadHashSet,
+    pub parents: Vec<BeadHash>,
     pub payout_address: P2P_Address,
     //timestamp when the bead was created
     pub observed_time_at_node: Time,
     pub comm_pub_key: PublicKey,
-    pub miner_ip: SerializableSocketAddr,
+    pub miner_ip: AddrV2,
 }
 
 impl Encodable for CommittedMetadata {
@@ -100,6 +83,28 @@ impl Encodable for CommittedMetadata {
     }
 }
 
+impl Decodable for CommittedMetadata {
+    fn consensus_decode<R: BufRead + ?Sized>(r: &mut R) -> Result<Self, Error> {
+        let transaction_cnt = u32::consensus_decode(r)?;
+        let transactions = Vec::<Transaction>::consensus_decode(r)?;
+        let parents = Vec::<BeadHash>::consensus_decode(r)?;
+        let payout_address = P2P_Address::consensus_decode(r)?;
+        let observed_time_at_node =
+            Time::from_consensus(u32::consensus_decode(r).unwrap()).unwrap();
+        let comm_pub_key = PublicKey::from_slice(&Vec::<u8>::consensus_decode(r).unwrap()).unwrap();
+        let miner_ip = AddrV2::consensus_decode(r)?;
+        Ok(CommittedMetadata {
+            transaction_cnt,
+            transactions,
+            parents,
+            payout_address,
+            observed_time_at_node,
+            comm_pub_key,
+            miner_ip,
+        })
+    }
+}
+
 #[derive(Clone, Debug, Serialize)]
 
 pub struct UnCommittedMetadata {
@@ -108,7 +113,7 @@ pub struct UnCommittedMetadata {
     pub extra_nonce: i32,
     pub broadcast_timestamp: Time,
     pub signature: Signature,
-    pub parent_bead_timestamps: TimeHashSet,
+    pub parent_bead_timestamps: TimeVec,
 }
 
 impl Encodable for UnCommittedMetadata {
@@ -122,6 +127,21 @@ impl Encodable for UnCommittedMetadata {
         len += self.signature.to_string().consensus_encode(w)?;
         len += self.parent_bead_timestamps.consensus_encode(w)?;
         Ok(len)
+    }
+}
+
+impl Decodable for UnCommittedMetadata {
+    fn consensus_decode<R: BufRead + ?Sized>(r: &mut R) -> Result<Self, Error> {
+        let extra_nonce = i32::consensus_decode(r)?;
+        let broadcast_timestamp = Time::from_consensus(u32::consensus_decode(r).unwrap()).unwrap();
+        let signature = Signature::from_str(&String::consensus_decode(r).unwrap()).unwrap();
+        let parent_bead_timestamps = TimeVec::consensus_decode(r)?;
+        Ok(UnCommittedMetadata {
+            extra_nonce,
+            broadcast_timestamp,
+            signature,
+            parent_bead_timestamps,
+        })
     }
 }
 
@@ -140,6 +160,19 @@ impl Encodable for Bead {
         len += self.committed_metadata.consensus_encode(w)?;
         len += self.uncommitted_metadata.consensus_encode(w)?;
         Ok(len)
+    }
+}
+
+impl Decodable for Bead {
+    fn consensus_decode<R: BufRead + ?Sized>(r: &mut R) -> Result<Self, Error> {
+        let block_header = BlockHeader::consensus_decode(r)?;
+        let committed_metadata = CommittedMetadata::consensus_decode(r)?;
+        let uncommitted_metadata = UnCommittedMetadata::consensus_decode(r)?;
+        Ok(Bead {
+            block_header,
+            committed_metadata,
+            uncommitted_metadata,
+        })
     }
 }
 
@@ -164,12 +197,12 @@ impl Bead {
     // }
 
     pub fn is_genesis_bead(&self, braid: &Braid) -> bool {
-        if self.committed_metadata.parents.0.is_empty() {
+        if self.committed_metadata.parents.is_empty() {
             return true;
         };
 
         // We need to check whether even one of the parent beads have been pruned from memory!
-        for parent_bead_hash in self.committed_metadata.parents.0.iter() {
+        for parent_bead_hash in self.committed_metadata.parents.iter() {
             let parent_bead = braid.load_bead_from_hash(*parent_bead_hash);
             if let Err(error_type) = parent_bead {
                 match error_type {
@@ -184,7 +217,7 @@ impl Bead {
 
     #[inline]
     pub fn is_orphaned(&self, braid: &Braid) -> bool {
-        for parent in self.committed_metadata.parents.0.iter() {
+        for parent in self.committed_metadata.parents.iter() {
             if braid.beads.contains(parent) == false {
                 return true;
             }
@@ -196,7 +229,7 @@ impl Bead {
     #[inline]
     pub fn get_parents(&self) -> Parents {
         // The bead might get pruned later, so we can't give a shared reference!
-        self.committed_metadata.parents.0.clone()
+        self.committed_metadata.parents.clone()
     }
 
     // #[inline]

@@ -14,8 +14,8 @@ pub type Bytes = Vec<Byte>;
 // Internal Type Aliases
 pub(crate) type ParentBeadHash = BeadHash;
 pub(crate) type ChildrenBeadHash = BeadHash;
-pub(crate) type Parents = HashSet<ParentBeadHash>;
-pub(crate) type Children = HashSet<ChildrenBeadHash>;
+pub(crate) type Parents = Vec<ParentBeadHash>;
+pub(crate) type Children = Vec<ChildrenBeadHash>;
 
 // Error Definitions
 use std::fmt::{self};
