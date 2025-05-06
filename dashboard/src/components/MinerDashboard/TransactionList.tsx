@@ -20,12 +20,12 @@ export default function TransactionList({
     // Updated - Added responsive padding and overflow handling
     <div className="pl-4 sm:pl-10 pr-4 pb-3 bg-gradient-to-b from-blue-900/20 to-transparent overflow-x-auto">
       <motion.div
-        className="text-blue-400 mb-3 font-medium flex items-center"
+        className="text-blue-400 mb-3 font-medium flex items-center text-sm sm:text-base"
         initial={{ x: -20, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         transition={{ delay: 0.1 }}
       >
-        <Activity className="h-4 w-4 mr-2" />
+        <Activity className="h-4 w-4 mr-2 flex-shrink-0" />
         Included {transactions.length} Transactions
       </motion.div>
 
@@ -61,7 +61,7 @@ export default function TransactionList({
               hidden: { y: 20, opacity: 0 },
               show: { y: 0, opacity: 1 },
             }}
-            className="grid md:grid-cols-6 sm:grid-cols-1 gap-y-1 py-2.5 rounded-lg transition-all duration-300 group relative"
+             className="grid grid-cols-6 gap-2 py-2.5 rounded-lg transition-all duration-300 group relative text-xs sm:text-sm"
             whileHover={{
               scale: 1.01,
               backgroundColor: 'rgba(30, 58, 138, 0.2)',
@@ -72,7 +72,7 @@ export default function TransactionList({
             {/* Hover glow effect */}
             <div className="absolute inset-0 bg-blue-500/5 opacity-0 group-hover:opacity-100 rounded-lg transition-opacity duration-300"></div>
 
-            <div className="text-cyan-400 font-mono relative z-10 group-hover:text-cyan-300 transition-colors duration-300">
+            <div className="text-cyan-400 font-mono relative z-10 group-hover:text-cyan-300 transition-colors duration-300 truncate">
               <motion.span
                 animate={{ opacity: [0.7, 1, 0.7] }}
                 transition={{

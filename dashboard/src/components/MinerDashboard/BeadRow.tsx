@@ -48,7 +48,7 @@ export default function BeadRow({
   return (
     <div className="border-b border-gray-800/80">
       <motion.div
-        className={`grid grid-cols-5 md:grid-cols-4 p-4 cursor-pointer transition-colors duration-300 relative overflow-hidden ${
+        className={`grid  sm:grid-cols-2 md:grid-cols-5 gap-2 p-4 cursor-pointer transition-colors duration-300 relative overflow-hidden  ${
           isActive ? 'bg-blue-900/30' : ''
         }`}
         onClick={() => onToggle(bead.id)}
@@ -71,17 +71,17 @@ export default function BeadRow({
           />
         )}
 
-        <div className="flex items-center relative z-10">
+        <div className="flex items-center relative z-10 col-span-1 md:col-span-1">
           <motion.div
             animate={{ rotate: isExpanded ? 180 : 0 }}
             transition={{ duration: 0.4, type: 'spring', stiffness: 200 }}
-            className="mr-2"
+            className="mr-2 flex-shrink-0"
           >
             <ChevronDown className="h-5 w-5 text-blue-400" />
           </motion.div>
 
           <motion.span
-            className="text-blue-100 font-medium font-mono sm:text-[10px] md:text-[15px]"
+            className="text-blue-100 font-medium font-mono text-sm sm:text-base truncate md:truncate-0"
             animate={{
               color: isExpanded ? '#93c5fd' : '#e0e7ff',
             }}
@@ -101,13 +101,13 @@ export default function BeadRow({
           )}
         </div>
 
-        <div className="text-gray-300 relative z-10">{bead.timestamp}</div>
+        <div className="text-gray-300 relative z-10 text-sm sm:text-base">{bead.timestamp}</div>
 
-        <div className="text-emerald-300 font-medium relative z-10 mt-2 md:mt-0 md:col-span-1">
+        <div className="text-emerald-300 font-medium relative z-10 text-sm sm:text-base">
           {formattedWork} {workUnit}
         </div>
 
-        <div className="text-purple-300 font-medium relative z-10 ml-8">
+        <div className="text-purple-300 font-medium relative z-10 text-sm sm:text-base">
           <motion.div
             animate={{ scale: isActive ? [1, 1.2, 1] : 1 }}
             transition={{ duration: 0.4 }}
@@ -115,8 +115,8 @@ export default function BeadRow({
             {bead.transactions}
           </motion.div>
         </div>
-
-        <div className="text-amber-300 font-medium relative z-10 mt-2 md:mt-0 md:col-span-1">
+       
+        <div className="text-amber-300 font-medium relative z-10 text-sm sm:text-base">
           <motion.div
             animate={{ scale: isActive ? [1, 1.2, 1] : 1 }}
             transition={{ duration: 0.4 }}
@@ -125,16 +125,16 @@ export default function BeadRow({
           </motion.div>
         </div>
       </motion.div>
-
+       {/* Parent row  */}
       {bead.parents?.length > 0 && (
-        <div className="pl-10 pr-4 py-2 bg-gray-900/20 border-t border-b border-gray-800/50">
-          <div className="flex items-center gap-2">
-            <span className="text-blue-300 font-medium">Parents:</span>
-            <div className="flex flex-wrap gap-2">
+        <div className="pl-4 sm:pl-10 pr-4 py-2 bg-gray-900/20 border-t border-b border-gray-800/50 overflow-x-auto">
+          <div className="flex flex-wrap items-center gap-2 min-w-0">
+            <span className="text-blue-300 font-medium text-sm whitespace-nowrap">Parents:</span>
+            <div className="flex flex-wrap gap-2 overflow-x-auto">
               {bead.parents.map((parent) => (
                 <button
                   key={parent}
-                  className="text-cyan-400 font-mono text-sm hover:text-cyan-300 hover:underline"
+                  className="text-cyan-400 font-mono text-xs sm:text-sm hover:text-cyan-300 hover:underline truncate max-w-[150px] sm:max-w-[200px]"
                   onClick={(e) => {
                     e.stopPropagation();
                     onParentClick(parent);
