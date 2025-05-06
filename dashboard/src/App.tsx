@@ -5,7 +5,7 @@ import { Box, Container, Link, Typography, Button } from '@mui/material';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Dashboard from './components/Dashboard/Dashboard';
 import ShareDetails from './components/ShareDetails/ShareDetails';
-import MinedSharesExplorer from './components/MinerDashboard/MinedSharesExplorer';
+import MinedSharesExplorer from './components/BeadsTab/MinedSharesExplorer';
 import Footer from './components/Footer';
 
 // Create a dark theme
