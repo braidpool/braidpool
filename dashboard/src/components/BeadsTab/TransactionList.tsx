@@ -61,7 +61,7 @@ export default function TransactionList({
               hidden: { y: 20, opacity: 0 },
               show: { y: 0, opacity: 1 },
             }}
-             className="grid grid-cols-6 gap-2 py-2.5 rounded-lg transition-all duration-300 group relative text-xs sm:text-sm"
+            className="grid grid-cols-6 gap-2 py-2.5 rounded-lg transition-all duration-300 group relative text-xs sm:text-sm"
             whileHover={{
               scale: 1.01,
               backgroundColor: 'rgba(30, 58, 138, 0.2)',

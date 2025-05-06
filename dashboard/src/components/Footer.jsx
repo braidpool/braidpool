@@ -49,7 +49,9 @@ export default function Footer() {
             visible: { opacity: 1, y: 0 },
           }}
         >
-          <h2 className="text-base font-semibold text-white mb-2 mt-2">Project</h2>
+          <h2 className="text-base font-semibold text-white mb-2 mt-2">
+            Project
+          </h2>
           <ul className="space-y-1 text-sm">
             {['About', 'Documentation', 'Contribute', 'FAQs'].map((item) => (
               <li key={item}>
@@ -71,7 +73,9 @@ export default function Footer() {
             visible: { opacity: 1, y: 0 },
           }}
         >
-          <h2 className="text-base font-semibold text-white mb-2 mt-2">Community</h2>
+          <h2 className="text-base font-semibold text-white mb-2 mt-2">
+            Community
+          </h2>
           <ul className="space-y-2 text-sm">
             <li className="flex items-center gap-2 group">
               <FaGithub className="group-hover:rotate-[360deg] transition-transform duration-500" />
@@ -111,7 +115,9 @@ export default function Footer() {
             visible: { opacity: 1, y: 0 },
           }}
         >
-          <h2 className="text-base font-semibold text-white mb-2 mt-2">Legal</h2>
+          <h2 className="text-base font-semibold text-white mb-2 mt-2">
+            Legal
+          </h2>
           <ul className="space-y-1 text-sm">
             {[
               ['MIT License', '/license'],

@@ -101,7 +101,9 @@ export default function BeadRow({
           )}
         </div>
 
-        <div className="text-gray-300 relative z-10 text-sm sm:text-base">{bead.timestamp}</div>
+        <div className="text-gray-300 relative z-10 text-sm sm:text-base">
+          {bead.timestamp}
+        </div>
 
         <div className="text-emerald-300 font-medium relative z-10 text-sm sm:text-base">
           {formattedWork} {workUnit}
@@ -115,7 +117,7 @@ export default function BeadRow({
             {bead.transactions}
           </motion.div>
         </div>
-       
+
         <div className="text-amber-300 font-medium relative z-10 text-sm sm:text-base">
           <motion.div
             animate={{ scale: isActive ? [1, 1.2, 1] : 1 }}
@@ -125,11 +127,13 @@ export default function BeadRow({
           </motion.div>
         </div>
       </motion.div>
-       {/* Parent row  */}
+      {/* Parent row  */}
       {bead.parents?.length > 0 && (
         <div className="pl-4 sm:pl-10 pr-4 py-2 bg-gray-900/20 border-t border-b border-gray-800/50 overflow-x-auto">
           <div className="flex flex-wrap items-center gap-2 min-w-0">
-            <span className="text-blue-300 font-medium text-sm whitespace-nowrap">Parents:</span>
+            <span className="text-blue-300 font-medium text-sm whitespace-nowrap">
+              Parents:
+            </span>
             <div className="flex flex-wrap gap-2 overflow-x-auto">
               {bead.parents.map((parent) => (
                 <button
