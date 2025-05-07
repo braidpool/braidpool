@@ -43,131 +43,190 @@ const GraphVisualization: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const width = window.innerWidth - 100;
-  const height = window.innerHeight;
-
+  const margin = { top: 0, right: 0, bottom: 0, left: 50 };  // Changed top from 50 to 100
+  const height = window.innerHeight - margin.top - margin.bottom;
   const [nodeIdMap, setNodeIdMap] = useState<NodeIdMapping>({});
   const [selectedCohorts, setSelectedCohorts] = useState<number | 'all'>(10);
-
   const nodeRadius = 30;
-  const margin = { top: 0, right: 0, bottom: 0, left: 50 };
   const tooltipRef = useRef<HTMLDivElement>(null);
+  const COLUMN_WIDTH = 200;
+  const VERTICAL_SPACING = 150;
 
-  const COLUMN_WIDTH = 120;
-  const VERTICAL_SPACING = 100;
+  interface Position {
+    x: number;
+    y: number;
+  }
+
+  interface GraphNode {
+    id: string;
+    parents: string[];
+    children?: string[];
+    work?: number;
+  }
 
   const layoutNodes = (
     allNodes: GraphNode[],
     hwPath: string[],
-    cohorts: string[][]
+    beadWork: Record<string, number> = {},
+    previousCohortTips: Record<string, Position> = {}
   ): Record<string, Position> => {
     const positions: Record<string, Position> = {};
-    const columnOccupancy: Record<number, number> = {};
     const hwPathSet = new Set(hwPath);
-    const centerY = height / 2;
-    const cohortMap = new Map<string, number>();
-    cohorts.forEach((cohort, index) => {
-      cohort.forEach((nodeId) => cohortMap.set(nodeId, index));
+    const centerY = (height - margin.top) / 2 + margin.top + 50;
+    const allParents: Record<string, Set<string>> = {};
+    const allChildren: Record<string, Set<string>> = {};
+    const workValues: Record<string, number> = {};
+
+    allNodes.forEach(node => {
+      allParents[node.id] = new Set(node.parents);
+      workValues[node.id] = beadWork[node.id] || 1;
+      node.parents.forEach(parent => {
+        if (!allChildren[parent]) allChildren[parent] = new Set();
+        allChildren[parent].add(node.id);
+      });
     });
 
-    let currentX = margin.left;
-    let prevCohort: number | undefined;
-    const hwPathColumns: number[] = [];
+    // intersection logic
+    const doesIntersect = (
+      lineStart: Position,
+      lineEnd: Position,
+      point: Position
+    ): boolean => {
+      if ((lineStart.x === point.x && lineStart.y === point.y) ||
+        (lineEnd.x === point.x && lineEnd.y === point.y)) return false;
 
-    hwPath.forEach((nodeId, index) => {
-      const currentCohort = cohortMap.get(nodeId);
+      // Colinear check
+      const crossProduct = (point.y - lineStart.y) * (lineEnd.x - lineStart.x) -
+        (point.x - lineStart.x) * (lineEnd.y - lineStart.y);
+      if (Math.abs(crossProduct) > Number.EPSILON) return false;
 
-      if (prevCohort !== undefined && currentCohort !== prevCohort) {
-        currentX += COLUMN_WIDTH;
+      // Bounding box check
+      const isBetweenX = (point.x - lineStart.x) * (point.x - lineEnd.x) <= 0;
+      const isBetweenY = (point.y - lineStart.y) * (point.y - lineEnd.y) <= 0;
+
+      return isBetweenX && isBetweenY;
+    };
+
+    const proposedX: Record<string, number> = {};
+    hwPath.forEach((bead, i) => proposedX[bead] = i);
+
+    const setXCoord = (bead: string) => {
+      if (proposedX[bead] !== undefined) return;
+
+      const parents = Array.from(allParents[bead] || []);
+      const children = Array.from(allChildren[bead] || []);
+      let minX = 0;
+
+      if (!parents.length) {
+        proposedX[bead] = 0;
+        return;
       }
 
-      positions[nodeId] = { x: currentX, y: centerY };
-      hwPathColumns.push(currentX);
-      columnOccupancy[index] = 0;
+      parents.forEach(parent => {
+        setXCoord(parent);
+        minX = Math.max(minX, proposedX[parent] + 1);
+      });
 
-      prevCohort = currentCohort;
-      currentX += COLUMN_WIDTH;
-    });
+      let maxX = Infinity;
+      children.forEach(child => {
+        if (proposedX[child] !== undefined) maxX = Math.min(maxX, proposedX[child] - 1);
+      });
 
-    const generations = new Map<string, number>();
-    const remainingNodes = allNodes.filter((node) => !hwPathSet.has(node.id));
-
-    remainingNodes.forEach((node) => {
-      const hwpParents = node.parents.filter((p) => hwPathSet.has(p));
-      if (hwpParents.length > 0) {
-        const minHWPIndex = Math.min(
-          ...hwpParents.map((p) => hwPath.indexOf(p))
-        );
-        generations.set(node.id, minHWPIndex + 1);
-      } else {
-        const parentGens = node.parents.map((p) => generations.get(p) || 0);
-        generations.set(
-          node.id,
-          parentGens.length > 0 ? Math.max(...parentGens) + 1 : 0
-        );
-      }
-    });
-
-    remainingNodes.sort(
-      (a, b) => (generations.get(a.id) || 0) - (generations.get(b.id) || 0)
-    );
-
-    const tipNodes: string[] = [];
-
-    remainingNodes.forEach((node) => {
-      if (node.parents.length === 1 && !node.children?.length) {
-        tipNodes.push(node.id);
-      }
-      const positionedParents = node.parents.filter((p) => positions[p]);
-
-      let targetX: number;
-      let colKey: number;
-
-      if (positionedParents.length === 0) {
-        colKey = 0;
-        while (
-          columnOccupancy[colKey] !== undefined &&
-          columnOccupancy[colKey] >= 10
-        ) {
-          colKey++;
-        }
-        targetX = margin.left + colKey * COLUMN_WIDTH;
-      } else {
-        const maxParentX = Math.max(
-          ...positionedParents.map((p) => positions[p].x)
-        );
-        targetX = maxParentX + COLUMN_WIDTH;
-
-        const hwpParents = positionedParents.filter((p) => hwPathSet.has(p));
-        if (hwpParents.length > 0) {
-          const rightmostHWPParentX = Math.max(
-            ...hwpParents.map((p) => positions[p].x)
-          );
-          const parentIndex = hwPathColumns.indexOf(rightmostHWPParentX);
-          if (parentIndex >= 0 && parentIndex < hwPathColumns.length - 1) {
-            targetX = hwPathColumns[parentIndex + 1];
+      if (minX > maxX && maxX < Infinity) {
+        children.forEach(child => {
+          if (proposedX[child] !== undefined && proposedX[child] <= minX) {
+            const shift = minX + 1 - proposedX[child];
+            Object.keys(proposedX).forEach(k => {
+              if (proposedX[k] >= proposedX[child]) proposedX[k] += shift;
+            });
           }
-        }
-
-        colKey = Math.round((targetX - margin.left) / COLUMN_WIDTH);
+        });
       }
 
-      let count = columnOccupancy[colKey] || 0;
-      const direction = count % 2 !== 0 ? 1 : -1;
-      const level = Math.ceil((count + 1) / 2);
-      const yOffset = direction * level * VERTICAL_SPACING;
-      const yPos = centerY + yOffset;
+      proposedX[bead] = minX;
+    };
 
-      columnOccupancy[colKey] = count + 1;
+    // Process non-HW nodes
+    allNodes.filter(n => !hwPathSet.has(n.id)).forEach(n => setXCoord(n.id));
 
-      positions[node.id] = { x: targetX, y: yPos };
+    // Adjust tail nodes (no children)
+    const maxX = Math.max(...Object.values(proposedX));
+    allNodes.forEach(n => {
+      if ((!n.children || n.children.length === 0) && !hwPathSet.has(n.id)) {
+        proposedX[n.id] = maxX;
+      }
     });
 
-    const maxColumnX = Math.max(
-      ...Object.values(positions).map((pos) => pos.x)
-    );
-    tipNodes.forEach((tipId) => {
-      if (positions[tipId]) {
-        positions[tipId].x = maxColumnX;
+    // Ensure HW path order
+    for (let i = 0; i < hwPath.length - 1; i++) {
+      if (proposedX[hwPath[i]] >= proposedX[hwPath[i + 1]]) {
+        proposedX[hwPath[i + 1]] = proposedX[hwPath[i]] + 1;
+      }
+    }
+
+    // Position HW path nodes
+    hwPath.forEach(bead => {
+      positions[bead] = {
+        x: margin.left + proposedX[bead] * COLUMN_WIDTH,
+        y: centerY
+      };
+    });
+
+    // Add previous cohort tips
+    Object.entries(previousCohortTips).forEach(([id, pos]) => {
+      positions[id] = { x: margin.left - COLUMN_WIDTH, y: pos.y };
+    });
+
+    // Python-style spiral placement
+    const remainingNodes = allNodes
+      .filter(n => !hwPathSet.has(n.id))
+      .sort((a, b) => workValues[a.id] - workValues[b.id]) // Ascending sort
+      .reverse(); // Python's reverse=True
+
+    const lines: Array<[Position, Position]> = [];
+
+    remainingNodes.forEach(node => {
+      const bead = node.id;
+      const baseX = margin.left + proposedX[bead] * COLUMN_WIDTH;
+      let currentY = centerY;
+      let distance = 0;
+      let direction = 1;
+
+      while (true) {
+        currentY = centerY + (direction * distance * VERTICAL_SPACING);
+        direction *= -1;
+        if (direction === 1) distance++;
+
+        // Check collisions
+        const collides = Object.values(positions).some(pos =>
+          Math.abs(pos.x - baseX) < COLUMN_WIDTH / 2 &&
+          Math.abs(pos.y - currentY) < VERTICAL_SPACING / 2
+        );
+
+        if (collides) continue;
+
+        const tempPos = { x: baseX, y: currentY };
+        positions[bead] = tempPos;
+
+        // Generate connections
+        const connections: Array<[Position, Position]> = [];
+        (allParents[bead] || []).forEach(parent => {
+          if (positions[parent]) connections.push([positions[parent], tempPos]);
+        });
+        (allChildren[bead] || []).forEach(child => {
+          if (positions[child]) connections.push([tempPos, positions[child]]);
+        });
+
+        //  intersection check
+        const hasBadLine = connections.some(([start, end]) =>
+          Object.entries(positions).some(([otherId, pos]) =>
+            otherId !== bead && doesIntersect(start, end, pos)
+          ));
+
+        if (!hasBadLine) {
+          lines.push(...connections);
+          break;
+        }
       }
     });
 
@@ -243,12 +302,12 @@ const GraphVisualization: React.FC = () => {
         const firstCohortChanged =
           parsedData?.cohorts?.[0]?.length &&
           JSON.stringify(prevFirstCohortRef.current) !==
-            JSON.stringify(parsedData.cohorts[0]);
+          JSON.stringify(parsedData.cohorts[0]);
 
         const lastCohortChanged =
           parsedData?.cohorts?.length > 0 &&
           JSON.stringify(prevLastCohortRef.current) !==
-            JSON.stringify(parsedData.cohorts[parsedData.cohorts.length - 1]);
+          JSON.stringify(parsedData.cohorts[parsedData.cohorts.length - 1]);
 
         if (firstCohortChanged) {
           const top = COLORS.shift();
@@ -349,7 +408,7 @@ const GraphVisualization: React.FC = () => {
         .attr('stroke-width', 1.5)
         .attr('stroke', (d: any) =>
           graphData?.highest_work_path.includes(d.source) &&
-          graphData?.highest_work_path.includes(d.target)
+            graphData?.highest_work_path.includes(d.target)
             ? '#FF8500'
             : '#48CAE4'
         );
@@ -370,7 +429,7 @@ const GraphVisualization: React.FC = () => {
         .attr('stroke-width', 1.5)
         .attr('stroke', (d: any) =>
           graphData?.highest_work_path.includes(d.source) &&
-          graphData?.highest_work_path.includes(d.target)
+            graphData?.highest_work_path.includes(d.target)
             ? '#FF8500'
             : '#48CAE4'
         );
@@ -387,6 +446,8 @@ const GraphVisualization: React.FC = () => {
   const handleZoomOut = () => {
     setDefaultZoom((prevZoom) => Math.max(prevZoom - 0.1, 0.3));
   };
+
+  const [svgHeight, setSvgHeight] = useState(height);
 
   useEffect(() => {
     if (!svgRef.current || !graphData) return;
@@ -432,8 +493,16 @@ const GraphVisualization: React.FC = () => {
 
     const hwPath = graphData.highest_work_path;
     const cohorts = graphData.cohorts;
-    const positions = layoutNodes(allNodes, hwPath, cohorts as string[][]);
+    const positions = layoutNodes(allNodes, hwPath);
     const hwPathSet = new Set(hwPath);
+
+    // Calculate required height based on node positions
+    const allY = Object.values(positions).map(pos => pos.y);
+    const minY = Math.min(...allY);
+    const maxY = Math.max(...allY);
+    const padding = 100; // Additional padding
+    const dynamicHeight = maxY - minY + margin.top + margin.bottom + padding;
+    setSvgHeight(dynamicHeight);
 
     // making old nodes invisible
     const visibleNodes = allNodes.filter((node) =>
@@ -475,103 +544,6 @@ const GraphVisualization: React.FC = () => {
     (cohorts as string[][]).forEach((cohort, index) => {
       cohort.forEach((nodeId) => cohortMap.set(nodeId, index));
     });
-
-    nodes
-      .append('circle')
-      .attr('r', nodeRadius)
-      .attr('fill', (d) => {
-        const cohortIndex = cohortMap.get(d.id);
-        if (cohortIndex === undefined) return COLORS[0];
-        return COLORS[cohortIndex % COLORS.length];
-      })
-      .attr('stroke', '#fff')
-      .attr('stroke-width', 2)
-      .on('mouseover', function (event: MouseEvent, d: GraphNode) {
-        d3.select(this).attr('stroke', '#FF8500').attr('stroke-width', 3);
-
-        const cohortIndex = cohortMap.get(d.id);
-        const isHWP = hwPathSet.has(d.id);
-
-        const tooltipContent = `
-                <div><strong>ID:</strong> ${nodeIdMap[d.id] || '?'} (${d.id})</div>
-                <div><strong>Cohort:</strong> ${cohortIndex !== undefined ? cohortIndex : 'N/A'}</div>
-                <div><strong>Highest Work Path:</strong> ${isHWP ? 'Yes' : 'No'}</div>
-                <div><strong>Parents:</strong> ${
-                  d.parents.length > 0
-                    ? d.parents.map((p) => `${nodeIdMap[p] || '?'}`).join(', ')
-                    : 'None'
-                }</div>
-                <div><strong>Children:</strong> ${
-                  d.children.length > 0
-                    ? d.children.map((c) => `${nodeIdMap[c] || '?'}`).join(', ')
-                    : 'None'
-                }</div>
-                `;
-
-        tooltip.html(tooltipContent).style('visibility', 'visible');
-      })
-      .on('mouseout', function () {
-        d3.select(this).attr('stroke', '#fff').attr('stroke-width', 2);
-        tooltip.style('visibility', 'hidden');
-      });
-
-    nodes
-      .append('text')
-      .attr('dy', 4)
-      .attr('text-anchor', 'middle')
-      .text((d) => nodeIdMap[d.id] || '?') // Show sequential ID instead of hash
-      .attr('fill', '#fff')
-      .style('font-size', 20)
-      .on('mouseover', function (event: MouseEvent, d: GraphNode) {
-        const cohortIndex = cohortMap.get(d.id);
-        const isHWP = hwPathSet.has(d.id);
-        const tooltipContent = `
-                <div><strong>ID:</strong> ${nodeIdMap[d.id] || '?'} (${d.id})</div>
-                <div><strong>Cohort:</strong> ${cohortIndex !== undefined ? cohortIndex : 'N/A'}</div>
-                <div><strong>Highest Work Path:</strong> ${isHWP ? 'Yes' : 'No'}</div>
-                <div><strong>Parents:</strong> ${
-                  d.parents.length > 0
-                    ? d.parents.map((p) => `${nodeIdMap[p] || '?'}`).join(', ')
-                    : 'None'
-                }</div>
-                <div><strong>Children:</strong> ${
-                  d.children.length > 0
-                    ? d.children.map((c) => `${nodeIdMap[c] || '?'}`).join(', ')
-                    : 'None'
-                }</div>
-                `;
-
-        tooltip.html(tooltipContent).style('visibility', 'visible');
-      })
-      .on('mouseout', function () {
-        tooltip.style('visibility', 'hidden');
-      });
-    container
-      .append('text')
-      .attr('x', width / 2)
-      .attr('y', margin.top / 2)
-      .attr('text-anchor', 'middle')
-      .style('font-size', '16px');
-
-    container
-      .append('defs')
-      .selectAll('marker')
-      .data([
-        { id: 'arrow-blue', color: '#48CAE4' },
-        { id: 'arrow-orange', color: '#FF8500' },
-      ])
-      .enter()
-      .append('marker')
-      .attr('id', (d) => d.id)
-      .attr('viewBox', '0 -5 10 10')
-      .attr('refX', 10)
-      .attr('refY', 0)
-      .attr('markerWidth', 15)
-      .attr('markerHeight', 12)
-      .attr('orient', 'auto')
-      .append('path')
-      .attr('d', 'M0,-5L10,0L0,5')
-      .attr('fill', (d) => d.color);
 
     container
       .selectAll('.link')
@@ -655,6 +627,92 @@ const GraphVisualization: React.FC = () => {
           ? 'inline'
           : 'none'
       );
+
+    nodes
+      .append('circle')
+      .attr('r', nodeRadius)
+      .attr('fill', (d) => {
+        const cohortIndex = cohortMap.get(d.id);
+        if (cohortIndex === undefined) return COLORS[0];
+        return COLORS[cohortIndex % COLORS.length];
+      })
+      .attr('stroke', '#fff')
+      .attr('stroke-width', 2)
+      .on('mouseover', function (event: MouseEvent, d: GraphNode) {
+        d3.select(this).attr('stroke', '#FF8500').attr('stroke-width', 3);
+
+        const cohortIndex = cohortMap.get(d.id);
+        const isHWP = hwPathSet.has(d.id);
+
+        const tooltipContent = `
+                <div><strong>ID:</strong> ${nodeIdMap[d.id] || '?'} (${d.id})</div>
+                <div><strong>Cohort:</strong> ${cohortIndex !== undefined ? cohortIndex : 'N/A'}</div>
+                <div><strong>Highest Work Path:</strong> ${isHWP ? 'Yes' : 'No'}</div>
+                <div><strong>Parents:</strong> ${d.parents.length > 0
+            ? d.parents.map((p) => `${nodeIdMap[p] || '?'}`).join(', ')
+            : 'None'
+          }
+                `;
+
+        tooltip.html(tooltipContent).style('visibility', 'visible');
+      })
+      .on('mouseout', function () {
+        d3.select(this).attr('stroke', '#fff').attr('stroke-width', 2);
+        tooltip.style('visibility', 'hidden');
+      });
+
+    nodes
+      .append('text')
+      .attr('dy', 4)
+      .attr('text-anchor', 'middle')
+      .text((d) => nodeIdMap[d.id] || '?') // Show sequential ID instead of hash
+      .attr('fill', '#fff')
+      .style('font-size', 20)
+      .on('mouseover', function (event: MouseEvent, d: GraphNode) {
+        const cohortIndex = cohortMap.get(d.id);
+        const isHWP = hwPathSet.has(d.id);
+        const tooltipContent = `
+                <div><strong>ID:</strong> ${nodeIdMap[d.id] || '?'} (${d.id})</div>
+                <div><strong>Cohort:</strong> ${cohortIndex !== undefined ? cohortIndex : 'N/A'}</div>
+                <div><strong>Highest Work Path:</strong> ${isHWP ? 'Yes' : 'No'}</div>
+                <div><strong>Parents:</strong> ${d.parents.length > 0
+            ? d.parents.map((p) => `${nodeIdMap[p] || '?'}`).join(', ')
+            : 'None'
+          }
+            
+                `;
+
+        tooltip.html(tooltipContent).style('visibility', 'visible');
+      })
+      .on('mouseout', function () {
+        tooltip.style('visibility', 'hidden');
+      });
+    container
+      .append('text')
+      .attr('x', width / 2)
+      .attr('y', margin.top / 2)
+      .attr('text-anchor', 'middle')
+      .style('font-size', '16px');
+
+    container
+      .append('defs')
+      .selectAll('marker')
+      .data([
+        { id: 'arrow-blue', color: '#48CAE4' },
+        { id: 'arrow-orange', color: '#FF8500' },
+      ])
+      .enter()
+      .append('marker')
+      .attr('id', (d) => d.id)
+      .attr('viewBox', '0 -5 10 10')
+      .attr('refX', 10)
+      .attr('refY', 0)
+      .attr('markerWidth', 15)
+      .attr('markerHeight', 12)
+      .attr('orient', 'auto')
+      .append('path')
+      .attr('d', 'M0,-5L10,0L0,5')
+      .attr('fill', (d) => d.color);
   }, [graphData, defaultZoom, selectedCohorts]);
 
   if (loading) {
@@ -758,8 +816,8 @@ const GraphVisualization: React.FC = () => {
 
       <div style={{ margin: '10px', position: 'relative' }}>
         <Card style={{ borderColor: '#FF8500' }}>
-          <CardContent>
-            <svg ref={svgRef} width={width} height={height} />
+          <CardContent >
+            <svg ref={svgRef} width={width} height={svgHeight} />
           </CardContent>
           <div ref={tooltipRef}></div>
         </Card>
