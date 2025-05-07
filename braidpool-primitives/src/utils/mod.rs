@@ -2,9 +2,9 @@
 use ::bitcoin::BlockHash;
 
 // Standard Imports
-use std::collections::HashSet;
 
 pub mod bitcoin;
+pub mod test_utils;
 
 // External Type Aliases
 pub type BeadHash = BlockHash;
@@ -13,9 +13,7 @@ pub type Bytes = Vec<Byte>;
 
 // Internal Type Aliases
 pub(crate) type ParentBeadHash = BeadHash;
-pub(crate) type ChildrenBeadHash = BeadHash;
 pub(crate) type Parents = Vec<ParentBeadHash>;
-pub(crate) type Children = Vec<ChildrenBeadHash>;
 
 // Error Definitions
 use std::fmt::{self};
