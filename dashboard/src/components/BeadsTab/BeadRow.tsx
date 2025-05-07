@@ -1,8 +1,10 @@
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Zap } from 'lucide-react';
 import TransactionList from './TransactionList';
 import { shortenHash } from './lib/utils/shortenHash';
 import type { Bead, Transaction } from './lib/types';
+import { BeadRewardTooltip } from './BeadRewardTooltip';
 
 interface BeadRowProps {
   bead: Bead;
@@ -38,6 +40,7 @@ export default function BeadRow({
   onParentClick,
 }: BeadRowProps) {
   const { value: formattedWork, unit: workUnit } = formatWork(bead.difficulty);
+  const [isRewardOpen, setIsRewardOpen] = useState(false);
 
   const handleKeyToggle = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -48,7 +51,7 @@ export default function BeadRow({
   return (
     <div className="border-b border-gray-800/80">
       <motion.div
-        className={`grid  sm:grid-cols-2 md:grid-cols-5 gap-2 p-4 cursor-pointer transition-colors duration-300 relative overflow-hidden  ${
+        className={`grid sm:grid-cols-2 md:grid-cols-5 gap-2 p-4 cursor-pointer transition-colors duration-300  relative overflow-hidden ${
           isActive ? 'bg-blue-900/30' : ''
         }`}
         onClick={() => onToggle(bead.id)}
@@ -58,6 +61,7 @@ export default function BeadRow({
         whileHover={{
           backgroundColor: 'rgba(30, 58, 138, 0.2)',
           transition: { duration: 0.2 },
+          height: 140,
         }}
         whileTap={{ scale: 0.98 }}
         layout
@@ -71,7 +75,8 @@ export default function BeadRow({
           />
         )}
 
-        <div className="flex items-center relative z-10 col-span-1 md:col-span-1">
+        {/* Bead Name */}
+        <div className="flex items-center relative z-10 col-span-1 md:col-span-1 ">
           <motion.div
             animate={{ rotate: isExpanded ? 180 : 0 }}
             transition={{ duration: 0.4, type: 'spring', stiffness: 200 }}
@@ -101,14 +106,17 @@ export default function BeadRow({
           )}
         </div>
 
+        {/* Timestamp */}
         <div className="text-gray-300 relative z-10 text-sm sm:text-base">
           {bead.timestamp}
         </div>
 
+        {/* Work */}
         <div className="text-emerald-300 font-medium relative z-10 text-sm sm:text-base">
           {formattedWork} {workUnit}
         </div>
 
+        {/* Transactions */}
         <div className="text-purple-300 font-medium relative z-10 text-sm sm:text-base">
           <motion.div
             animate={{ scale: isActive ? [1, 1.2, 1] : 1 }}
@@ -118,16 +126,27 @@ export default function BeadRow({
           </motion.div>
         </div>
 
-        <div className="text-amber-300 font-medium relative z-10 text-sm sm:text-base">
+        {/* Reward with Expand */}
+        <div
+          className={`text-amber-300 font-medium relative z-10 text-sm sm:text-base transition-all duration-300 ${
+            isRewardOpen ? 'pb-6' : ''
+          }`}
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsRewardOpen(!isRewardOpen);
+          }}
+        >
           <motion.div
             animate={{ scale: isActive ? [1, 1.2, 1] : 1 }}
             transition={{ duration: 0.4 }}
+            className="cursor-pointer"
           >
-            {Number(bead.reward).toFixed(4)} BTC
+            <BeadRewardTooltip reward={bead.reward} isOpen={isRewardOpen} />
           </motion.div>
         </div>
       </motion.div>
-      {/* Parent row  */}
+
+      {/* Parents */}
       {bead.parents?.length > 0 && (
         <div className="pl-4 sm:pl-10 pr-4 py-2 bg-gray-900/20 border-t border-b border-gray-800/50 overflow-x-auto">
           <div className="flex flex-wrap items-center gap-2 min-w-0">
@@ -152,6 +171,7 @@ export default function BeadRow({
         </div>
       )}
 
+      {/* Expand Transaction List */}
       <AnimatePresence>
         {isExpanded && (
           <motion.div

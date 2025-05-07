@@ -16,7 +16,7 @@ export const BEADS: Bead[] = [
     transactions: 3,
     difficulty: 2e18,
     parents: ['a7c43e912f5d78c', '58d2f1a9e7b3d45'],
-    reward: 6.25,
+    reward: 0.00278,
   },
   {
     id: 'bead2',
@@ -25,7 +25,7 @@ export const BEADS: Bead[] = [
     transactions: 2,
     difficulty: 5e15,
     parents: ['2c1a7f84477aec04'],
-    reward: 6.25,
+    reward: 0.00192,
   },
   {
     id: 'bead3',
@@ -34,7 +34,7 @@ export const BEADS: Bead[] = [
     transactions: 2,
     difficulty: 56896,
     parents: ['964aebde4813c0a6', 'c5d8e7f61a2b3c4d'],
-    reward: 6.25,
+    reward: 0.00245,
   },
   {
     id: 'bead4',
@@ -43,7 +43,7 @@ export const BEADS: Bead[] = [
     transactions: 1,
     difficulty: 4e9,
     parents: ['f68b21dbde3b0803'],
-    reward: 6.25,
+    reward: 0.00163,
   },
 ];
 

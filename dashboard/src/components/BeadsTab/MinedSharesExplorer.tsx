@@ -8,6 +8,7 @@ import BeadRow from './BeadRow';
 import { BEADS, TRANSACTIONS } from './lib/constants';
 import { useChartData } from './Hooks/useChartData';
 import { TrendsTab } from './Trends/TrendsTab';
+import { RewardsDashboard } from './Reward/RewardsSection';
 
 export default function MinedSharesExplorer() {
   // UI and state management
@@ -144,6 +145,7 @@ export default function MinedSharesExplorer() {
                 <EnhancedBlocksTab timeRange={timeRange} />
               </div>
             )}
+            {activeTab === 'rewards' && <RewardsDashboard />}
           </div>
         )}
       </div>

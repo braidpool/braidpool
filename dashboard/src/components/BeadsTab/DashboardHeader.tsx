@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { BarChart3, Layers, Cpu, Database } from 'lucide-react';
+import { BarChart3, Layers, Cpu, Database, Bitcoin } from 'lucide-react';
 
 interface DashboardHeaderProps {
   headerOpacity: any;
@@ -12,6 +12,7 @@ const TABS = [
   { key: 'miners', label: 'Miners' },
   { key: 'trends', label: 'Trends' },
   { key: 'blocks', label: 'Blocks' },
+  { key: 'rewards', label: 'Rewards' },
 ];
 export default function DashboardHeader({
   headerOpacity,
@@ -100,6 +101,11 @@ export default function DashboardHeader({
             id: 'blocks',
             label: 'Blocks',
             icon: <Layers className="w-4 h-4" />,
+          },
+          {
+            id: 'rewards',
+            label: 'Rewards',
+            icon: <Bitcoin className="w-4 h-4" />,
           },
         ].map((tab) => (
           <motion.button
