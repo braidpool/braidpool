@@ -13,10 +13,13 @@ pub type Bytes = Vec<Byte>;
 
 // Internal Type Aliases
 pub(crate) type ParentBeadHash = BeadHash;
-pub(crate) type Parents = Vec<ParentBeadHash>;
+pub(crate) type Parents = HashSet<ParentBeadHash>;
 
 // Error Definitions
-use std::fmt::{self};
+use std::{
+    collections::HashSet,
+    fmt::{self},
+};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BeadLoadError {
     BeadPruned,
@@ -37,3 +40,13 @@ impl fmt::Display for BeadLoadError {
 }
 
 impl std::error::Error for BeadLoadError {}
+
+pub(crate) fn hashset_to_vec_deterministic(hashset: &HashSet<BeadHash>) -> Vec<BeadHash> {
+    let mut vec: Vec<BeadHash> = hashset.iter().cloned().collect();
+    vec.sort();
+    vec
+}
+
+pub(crate) fn vec_to_hashset(vec: Vec<BeadHash>) -> HashSet<BeadHash> {
+    vec.iter().cloned().collect()
+}

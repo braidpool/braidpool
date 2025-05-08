@@ -1,5 +1,7 @@
 use crate::braid::Braid;
-use crate::utils::{BeadHash, BeadLoadError, Parents};
+use crate::utils::{
+    BeadHash, BeadLoadError, Parents, hashset_to_vec_deterministic, vec_to_hashset,
+};
 use ::serde::{Deserialize, Serialize};
 use bitcoin::BlockHash;
 use bitcoin::PublicKey;
@@ -13,6 +15,7 @@ use bitcoin::p2p::Address as P2P_Address;
 use bitcoin::p2p::address::AddrV2;
 use bitcoin::{BlockHeader, Transaction};
 use core::str::FromStr;
+use std::collections::HashSet;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct TimeVec(pub Vec<Time>);
@@ -47,7 +50,7 @@ impl Decodable for TimeVec {
 pub struct CommittedMetadata {
     pub transaction_cnt: u32,
     pub transactions: Vec<Transaction>,
-    pub parents: Vec<BeadHash>,
+    pub parents: HashSet<BeadHash>,
     pub payout_address: P2P_Address,
     pub start_timestamp: Time,
     pub comm_pub_key: PublicKey,
@@ -59,7 +62,7 @@ impl Encodable for CommittedMetadata {
         let mut len = 0;
         len += self.transaction_cnt.consensus_encode(w)?;
         len += self.transactions.consensus_encode(w)?;
-        len += self.parents.consensus_encode(w)?;
+        len += hashset_to_vec_deterministic(&self.parents).consensus_encode(w)?;
         len += self.payout_address.consensus_encode(w)?;
         len += self
             .start_timestamp
@@ -76,7 +79,7 @@ impl Decodable for CommittedMetadata {
     fn consensus_decode<R: BufRead + ?Sized>(r: &mut R) -> Result<Self, Error> {
         let transaction_cnt = u32::consensus_decode(r)?;
         let transactions = Vec::<Transaction>::consensus_decode(r)?;
-        let parents = Vec::<BeadHash>::consensus_decode(r)?;
+        let parents = vec_to_hashset(Vec::<BeadHash>::consensus_decode(r)?);
         let payout_address = P2P_Address::consensus_decode(r)?;
         let start_timestamp = Time::from_consensus(u32::consensus_decode(r).unwrap()).unwrap();
         let comm_pub_key = PublicKey::from_slice(&Vec::<u8>::consensus_decode(r).unwrap()).unwrap();
