@@ -8,12 +8,6 @@ import '../../App.css';
 import Button from '@mui/material/Button';
 import { CircularProgress } from '@mui/material';
 
-interface GraphNode {
-  id: string;
-  parents: string[];
-  children: string[];
-}
-
 interface NodeIdMapping {
   [hash: string]: string; // maps hash to sequential ID
 }
@@ -72,7 +66,7 @@ const GraphVisualization: React.FC = () => {
   ): Record<string, Position> => {
     const positions: Record<string, Position> = {};
     const hwPathSet = new Set(hwPath);
-    const centerY = (height - margin.top) / 2 + margin.top + 50;
+    const centerY = (height - margin.top) / 2 + margin.top + 300;
     const allParents: Record<string, Set<string>> = {};
     const allChildren: Record<string, Set<string>> = {};
     const workValues: Record<string, number> = {};
@@ -501,7 +495,7 @@ const GraphVisualization: React.FC = () => {
     const minY = Math.min(...allY);
     const maxY = Math.max(...allY);
     const padding = 100; // Additional padding
-    const dynamicHeight = maxY - minY + margin.top + margin.bottom + padding;
+    const dynamicHeight = height/2 + margin.top + margin.bottom + padding;
     setSvgHeight(dynamicHeight);
 
     // making old nodes invisible
