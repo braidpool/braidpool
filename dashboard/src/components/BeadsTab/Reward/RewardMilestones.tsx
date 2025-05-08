@@ -20,7 +20,7 @@ export function RewardMilestones({ achievements = [] }: RewardMilestonesProps) {
       title: 'First Reward',
       description: 'Earned your first mining reward',
       icon: <Gift className="h-5 w-5 text-pink-400" />,
-      color: 'from-pink-500/20 to-purple-500/20',
+
       borderColor: 'from-pink-500/30 to-purple-500/30',
       date: 'Aug 15, 2023',
     },
@@ -29,7 +29,7 @@ export function RewardMilestones({ achievements = [] }: RewardMilestonesProps) {
       title: 'Week Streak',
       description: 'Mined consistently for 7 days in a row',
       icon: <Zap className="h-5 w-5 text-yellow-400" />,
-      color: 'from-yellow-500/20 to-orange-500/20',
+
       borderColor: 'from-yellow-500/30 to-orange-500/30',
       date: 'Aug 22, 2023',
     },
@@ -38,7 +38,7 @@ export function RewardMilestones({ achievements = [] }: RewardMilestonesProps) {
       title: '10 Beads Mined',
       description: 'Successfully mined 10 beads',
       icon: <Trophy className="h-5 w-5 text-blue-400" />,
-      color: 'from-blue-500/20 to-cyan-500/20',
+
       borderColor: 'from-blue-500/30 to-cyan-500/30',
       date: 'Sep 5, 2023',
     },
@@ -47,7 +47,7 @@ export function RewardMilestones({ achievements = [] }: RewardMilestonesProps) {
       title: '0.01 BTC Earned',
       description: 'Accumulated 0.01 BTC in mining rewards',
       icon: <Medal className="h-5 w-5 text-amber-400" />,
-      color: 'from-amber-500/20 to-yellow-500/20',
+
       borderColor: 'from-amber-500/30 to-yellow-500/30',
       date: 'Sep 18, 2023',
     },
@@ -56,7 +56,7 @@ export function RewardMilestones({ achievements = [] }: RewardMilestonesProps) {
       title: 'High Difficulty',
       description: 'Mined a bead with difficulty over 15',
       icon: <Star className="h-5 w-5 text-purple-400" />,
-      color: 'from-purple-500/20 to-indigo-500/20',
+
       borderColor: 'from-purple-500/30 to-indigo-500/30',
       date: 'Not achieved yet',
       locked: true,
@@ -66,7 +66,7 @@ export function RewardMilestones({ achievements = [] }: RewardMilestonesProps) {
       title: 'Month Streak',
       description: 'Mined consistently for 30 days in a row',
       icon: <Award className="h-5 w-5 text-cyan-400" />,
-      color: 'from-cyan-500/20 to-blue-500/20',
+
       borderColor: 'from-cyan-500/30 to-blue-500/30',
       date: 'Not achieved yet',
       locked: true,
@@ -82,7 +82,7 @@ export function RewardMilestones({ achievements = [] }: RewardMilestonesProps) {
   );
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 bg-black w-full rounded-xl p-6">
       {/* Earned achievements */}
       <div>
         <h3 className="text-xl font-bold text-white mb-4 flex items-center">
@@ -94,7 +94,7 @@ export function RewardMilestones({ achievements = [] }: RewardMilestonesProps) {
           {earnedAchievements.map((achievement, index) => (
             <motion.div
               key={achievement.id}
-              className={`relative border border-gray-800/50 rounded-xl p-4 bg-black backdrop-blur-md overflow-hidden cursor-pointer`}
+              className={`relative border border-gray-800/50 rounded-xl p-4 bg-black  overflow-hidden cursor-pointer`}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: index * 0.1 }}
@@ -108,7 +108,7 @@ export function RewardMilestones({ achievements = [] }: RewardMilestonesProps) {
               {/* Animated border gradient */}
               <div className="absolute inset-0 p-[1px] rounded-xl overflow-hidden pointer-events-none">
                 <motion.div
-                  className={`absolute inset-0 bg-gradient-to-r ${achievement.borderColor}`}
+                  className={`absolute inset-0 `}
                   animate={{
                     backgroundPosition: ['0% 0%', '200% 0%'],
                   }}
