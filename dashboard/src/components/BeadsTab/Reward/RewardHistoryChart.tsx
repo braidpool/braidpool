@@ -1,7 +1,6 @@
 'use client';
 
 import type React from 'react';
-
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
@@ -18,10 +17,12 @@ interface RewardDataPoint {
   transactions: number;
 }
 
+import { TIME_RANGES } from '../lib/constants';
+
 export function RewardHistoryChart() {
   const [data, setData] = useState<RewardDataPoint[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [timeRange, setTimeRange] = useState('month');
+  const [timeRange, setTimeRange] = useState<TIME_RANGES>('month');
   const [showTooltip, setShowTooltip] = useState(false);
   const [tooltipData, setTooltipData] = useState<{
     x: number;
@@ -35,14 +36,14 @@ export function RewardHistoryChart() {
 
   const chartRef = useRef<HTMLDivElement>(null);
 
-  // Generate random reward history data
+  // Generate random reward history data based on selected time range
   useEffect(() => {
     setIsLoading(true);
 
-    // Determine date range based on selected time range
     const endDate = new Date();
     const startDate = new Date();
 
+    // Set the start date based on the selected time range
     if (timeRange === 'week') {
       startDate.setDate(endDate.getDate() - 7);
     } else if (timeRange === 'month') {
@@ -51,28 +52,23 @@ export function RewardHistoryChart() {
       startDate.setDate(endDate.getDate() - 365);
     }
 
-    // Generate data points
+    // Generate data points with a trend and volatility
     const dataPoints: RewardDataPoint[] = [];
     const currentDate = new Date(startDate);
 
-    // Base value and trend factors for more realistic data
     let baseValue = 0.002 + Math.random() * 0.001;
     let trendDirection = Math.random() > 0.5 ? 1 : -1;
     const volatility = 0.2;
 
     while (currentDate <= endDate) {
-      // Create more realistic data with trends and volatility
       baseValue += trendDirection * (Math.random() * volatility * baseValue);
 
-      // Occasionally change trend direction
       if (Math.random() < 0.1) {
         trendDirection *= -1;
       }
 
-      // Ensure value stays within reasonable bounds
       baseValue = Math.max(0.0005, Math.min(0.004, baseValue));
 
-      // Add some randomness to transactions
       const transactions = Math.floor(Math.random() * 5) + 1;
 
       dataPoints.push({
@@ -81,7 +77,6 @@ export function RewardHistoryChart() {
         transactions,
       });
 
-      // Increment date
       currentDate.setDate(currentDate.getDate() + 1);
     }
 
@@ -100,7 +95,6 @@ export function RewardHistoryChart() {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    // Calculate which data point is closest to the mouse
     const chartWidth = rect.width;
     const dataIndex = Math.min(
       Math.floor((x / chartWidth) * data.length),
@@ -151,7 +145,7 @@ export function RewardHistoryChart() {
                     ? 'bg-blue-600/30 text-blue-200'
                     : 'text-gray-400 hover:text-white'
                 }`}
-                onClick={() => setTimeRange(range)}
+                onClick={() => setTimeRange(range as Time_Ranges)} // Ensure correct type
               >
                 {range.charAt(0).toUpperCase() + range.slice(1)}
               </button>
