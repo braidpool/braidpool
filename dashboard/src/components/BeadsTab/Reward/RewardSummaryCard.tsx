@@ -44,7 +44,7 @@ export function RewardSummaryCard() {
       {/* Animated border gradient */}
       <div className="absolute inset-0 p-[1px] rounded-xl overflow-hidden pointer-events-none">
         <motion.div
-          className="absolute inset-0 bg-gradient-to-r from-amber-500/30 via-yellow-500/30 to-amber-500/30"
+          className="absolute inset-0 "
           animate={{
             backgroundPosition: ['0% 0%', '200% 0%'],
           }}

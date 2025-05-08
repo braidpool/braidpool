@@ -94,7 +94,7 @@ export function RewardMilestones({ achievements = [] }: RewardMilestonesProps) {
           {earnedAchievements.map((achievement, index) => (
             <motion.div
               key={achievement.id}
-              className={`relative border border-gray-800/50 rounded-xl p-4 bg-gradient-to-br ${achievement.color} backdrop-blur-md overflow-hidden cursor-pointer`}
+              className={`relative border border-gray-800/50 rounded-xl p-4 bg-black backdrop-blur-md overflow-hidden cursor-pointer`}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: index * 0.1 }}

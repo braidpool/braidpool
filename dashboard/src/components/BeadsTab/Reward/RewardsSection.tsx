@@ -125,7 +125,7 @@ export function RewardsDashboard() {
                 >
                   <div className="absolute inset-0 p-[1px] rounded-xl overflow-hidden pointer-events-none">
                     <motion.div
-                      className="absolute inset-0 bg-gradient-to-r from-blue-500/30 via-purple-500/30 to-blue-500/30"
+                      className="absolute inset-0 "
                       animate={{
                         backgroundPosition: ['0% 0%', '200% 0%'],
                       }}
@@ -212,7 +212,7 @@ export function RewardsDashboard() {
                 >
                   <div className="absolute inset-0 p-[1px] rounded-xl overflow-hidden pointer-events-none">
                     <motion.div
-                      className="absolute inset-0 bg-gradient-to-r from-pink-500/30 via-purple-500/30 to-pink-500/30"
+                      className="absolute inset-0 "
                       animate={{
                         backgroundPosition: ['0% 0%', '200% 0%'],
                       }}
@@ -309,7 +309,7 @@ export function RewardsDashboard() {
                 >
                   <div className="absolute inset-0 p-[1px] rounded-xl overflow-hidden pointer-events-none">
                     <motion.div
-                      className="absolute inset-0 bg-gradient-to-r from-cyan-500/30 via-blue-500/30 to-cyan-500/30"
+                      className="absolute inset-0 "
                       animate={{
                         backgroundPosition: ['0% 0%', '200% 0%'],
                       }}
