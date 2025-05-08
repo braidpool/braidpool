@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 
 export default function Footer() {
   return (
-    <footer className=" text-gray-300 px-6 sm:px-10 md:px-20 py-8 ml-42 overflow-x-hidden">
+    <footer className=" text-gray-300 px-8 sm:px-10 md:px-20 py-8 sm:ml-[30%] md:ml-[10%] ">
       <motion.div
         initial="hidden"
         whileInView="visible"
@@ -14,7 +14,9 @@ export default function Footer() {
           hidden: {},
           visible: {},
         }}
-        className="max-w-6xl mx-auto grid grid-cols-5 sm:grid-cols-2 md:grid-cols-4 gap-10"
+        className="max-w-6xl mx-auto grid 
+  sm:grid-cols-1 md:grid-cols-3 lg:grid-cols-5 
+  gap-10 "
       >
         {/* Logo & Description */}
         <motion.div
@@ -147,7 +149,7 @@ export default function Footer() {
             </li>
           </ul>
         </motion.div>
-        <div>
+        <div className="flex-col sm:flex-row">
           <h3 className="text-white font-bold mb-4 text-lg">Stay Updated</h3>
           <p className="text-gray-400 mb-4 text-sm">
             Subscribe to our newsletter for the latest updates and insights.
