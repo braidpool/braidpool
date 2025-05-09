@@ -18,6 +18,7 @@ use bitcoin::ecdsa::Signature;
 use bitcoin::p2p::Address as P2P_Address;
 use bitcoin::p2p::ServiceFlags;
 use core::net::SocketAddr;
+use std::collections::HashSet;
 use std::net::{IpAddr, Ipv4Addr};
 use std::str::FromStr;
 #[test]
@@ -30,7 +31,7 @@ fn test_serialized_committed_metadata() {
         .unwrap();
     let socket = bitcoin::p2p::address::AddrV2::Ipv4(Ipv4Addr::new(127, 0, 0, 1));
     let time_val = Time::from_consensus(1653195600).unwrap();
-    let parent_hash_set = Vec::new();
+    let parent_hash_set: HashSet<BlockHash> = HashSet::new();
     let test_committed_metadata = TestCommittedMetadataBuilder::new()
         .comm_pub_key(public_key)
         .miner_ip(socket)
@@ -96,7 +97,8 @@ fn test_serialized_bead() {
         .unwrap();
     let socket = bitcoin::p2p::address::AddrV2::Ipv4(Ipv4Addr::new(127, 0, 0, 1));
     let time_hash_set = TimeVec(Vec::new());
-    let parent_hash_set = Vec::new();
+    let parent_hash_set: HashSet<BlockHash> = HashSet::new();
+
     let time_val = Time::from_consensus(1653195600).unwrap();
     let test_committed_metadata = TestCommittedMetadataBuilder::new()
         .comm_pub_key(public_key)

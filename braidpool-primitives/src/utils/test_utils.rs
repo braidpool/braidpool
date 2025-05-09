@@ -14,6 +14,8 @@ use bitcoin::p2p::Address as P2P_Address;
 use bitcoin::{PublicKey, Transaction, absolute::Time, p2p::address::AddrV2};
 #[cfg(test)]
 pub mod test_utility_functions {
+    use std::collections::HashSet;
+
     use super::*;
     pub struct TestUnCommittedMetadataBuilder {
         extra_nonce: i32,
@@ -70,7 +72,7 @@ pub mod test_utility_functions {
     pub struct TestCommittedMetadataBuilder {
         transaction_cnt: u32,
         transactions: Vec<Transaction>,
-        parents: Vec<BeadHash>,
+        parents: std::collections::HashSet<BeadHash>,
         payout_address: Option<P2P_Address>,
         start_timestamp: Option<Time>,
         comm_pub_key: Option<PublicKey>,
@@ -83,7 +85,7 @@ pub mod test_utility_functions {
             Self {
                 transaction_cnt: 0,
                 transactions: Vec::new(),
-                parents: Vec::new(),
+                parents: HashSet::new(),
                 payout_address: None,
                 start_timestamp: None,
                 comm_pub_key: None,
@@ -101,7 +103,7 @@ pub mod test_utility_functions {
             self
         }
 
-        pub fn parents(mut self, parents: Vec<BeadHash>) -> Self {
+        pub fn parents(mut self, parents: HashSet<BeadHash>) -> Self {
             self.parents = parents;
             self
         }
