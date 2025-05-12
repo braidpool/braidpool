@@ -1,3 +1,7 @@
+---
+title: Overview
+---
+
 # What is Braidpool?
 
 Braidpool is a decentralized mining pool for bitcoin. It is a short-lived Directed Acyclic Graph (DAG)-based layer-1 blockchain solely for the purpose of producing bitcoin blocks. It decentralizes *share accounting* and *payout*, in addition to transaction selection.
