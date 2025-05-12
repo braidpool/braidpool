@@ -1,0 +1,23 @@
+{
+  "name": "braid",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vocs dev",
+    "build": "vocs build",
+    "preview": "vocs preview"
+  },
+  "dependencies": {
+    "katex": "^0.16.22",
+    "react": "latest",
+    "react-dom": "latest",
+    "rehype-katex": "^7.0.1",
+    "remark-math": "^6.0.0",
+    "vocs": "latest"
+  },
+  "devDependencies": {
+    "@types/react": "latest",
+    "typescript": "latest"
+  }
+}

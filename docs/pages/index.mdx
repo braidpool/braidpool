@@ -1,0 +1,71 @@
+---
+layout: landing
+---
+
+import { HomePage } from 'vocs/components'
+
+<HomePage.Root>
+  <HomePage.Logo />
+  <HomePage.Description>
+    Braidpool is a decentralized mining pool for Bitcoin. It is a short-lived Directed Acyclic Graph (DAG)-based layer-1 blockchain solely for the purpose of producing Bitcoin blocks.
+  </HomePage.Description>
+  <HomePage.Buttons>
+    <HomePage.Button href="/overview" variant="accent">Overview</HomePage.Button>
+    <HomePage.Button href="/braidpool_spec" variant="accent">Specification</HomePage.Button>
+    <HomePage.Button href="https://github.com/braidpool/braidpool">GitHub</HomePage.Button>
+  </HomePage.Buttons>
+</HomePage.Root>
+
+## Documentation Pages
+
+* [Overview](/overview) is a high-level overview of the braidpool project
+* [General Considerations](/general_considerations) discusses some of the design decisions for any
+  decentarlized mining pool
+* [Braidpool Specification](/braidpool_spec) is the main specification for braidpool
+* [Bitcoin Hashrate Derivatives Trading](/derivatives) describes how we can replace FPPS with a
+  marketplace of hashrate forwards or options
+* [Roadmap](/roadmap) is the roadmap for braidpool
+
+## Works in Progress
+
+* [Braidpool Consensus](/braid_consensus) is a draft specification for the consensus rules
+  of braidpool.
+
+## Tests
+
+* We have an extensive test suite for the Braid consensus algorithm written in Python. To run these
+  tests:
+
+```sh
+cd tests
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python braid.py
+```
+
+* We also have a test suite for the Braidpool protocol written in Rust. To run these tests:
+
+```sh
+cargo test
+```
+
+* We have a network simulator written in python that simulates a global network of miners
+  distributed on the surface of the earth and using realistic latencies. To run this simulation:
+
+```sh
+cd tests
+python simulator.py
+```
+
+* Finally you can use both these python test suites in an iPython notebook with some nice graphing
+  of braids and cohorts:
+
+```sh
+cd tests
+jupyter notebook "Braid Example.ipynb"
+```
+
+## License
+
+Braidpool is licensed under the AGPL license.
