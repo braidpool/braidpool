@@ -6,6 +6,7 @@ export default defineConfig({
   title: 'Braidpool Documentation',
   rootDir: '.',
   basePath: '/',
+  aiCta: true,
   markdown: {
     remarkPlugins: [ 
       remarkMath 
