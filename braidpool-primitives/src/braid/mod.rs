@@ -1,15 +1,9 @@
-// Standard Imports
-use ::serde::Serialize;
-use std::collections::{HashMap, HashSet};
-
-// Bitcoin Imports
-use bitcoin::{BlockHash, CompactTarget};
-
-// Custom Imports
 use crate::bead::Bead;
 use crate::utils::{BeadHash, BeadLoadError};
+use ::serde::Serialize;
+use bitcoin::CompactTarget;
+use std::collections::{HashMap, HashSet};
 
-// Type Definitions
 #[derive(Clone, Debug, Serialize)]
 
 pub(crate) struct Cohort(HashSet<BeadHash>);
@@ -23,19 +17,14 @@ pub enum AddBeadStatus {
 
 // Type Aliases
 type NumberOfBeadsUnorphaned = usize;
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug)]
 
 pub struct Braid {
     pub(crate) beads: HashSet<BeadHash>,
     pub(crate) tips: HashSet<BeadHash>,
     pub(crate) cohorts: Vec<Cohort>,
-
     pub(crate) orphan_beads: Vec<Bead>,
-
-    // Database related functions!
     pub(crate) loaded_beads_in_memory: HashMap<BeadHash, Bead>,
-
-    // Optimizations (not part of specification!)
     pub(crate) genesis_beads: HashSet<BeadHash>,
 }
 
@@ -54,19 +43,7 @@ impl Braid {
 
     pub fn load_beads_in_memory(&mut self, beads: Vec<Bead>) {
         for bead in beads {
-            let serialized_curr_bead_str_result = serde_json::to_string(&bead);
-            let serialized_curr_bead_str = match serialized_curr_bead_str_result {
-                Ok(serialized_str) => serialized_str,
-                Err(error) => {
-                    panic!(
-                        "An error occrrred while seralizing the bead string while loading beads in memory {:?} ",
-                        error
-                    );
-                }
-            };
-            let mut serialized_bytes = [0u8; 32];
-            hex::decode_to_slice(serialized_curr_bead_str, &mut serialized_bytes).unwrap();
-            let bead_hash = BlockHash::from_byte_array(serialized_bytes);
+            let bead_hash = bead.block_header.block_hash();
             self.loaded_beads_in_memory.insert(bead_hash, bead);
         }
     }
@@ -88,9 +65,9 @@ impl Braid {
             return AddBeadStatus::InvalidBead;
         }
 
-        // if self.contains_bead(bead.bead_hash) {
-        //     return AddBeadStatus::DagAlreadyContainsBead;
-        // }
+        if self.contains_bead(bead.get_bead_hash()) {
+            return AddBeadStatus::DagAlreadyContainsBead;
+        }
 
         if bead.is_orphaned(self) {
             self.orphan_beads.push(bead);
@@ -100,7 +77,6 @@ impl Braid {
         // self.beads.insert(bead.bead_hash);
         self.remove_parent_beads_from_tips(&bead);
         // self.tips.insert(bead.bead_hash);
-        self.update_parents_of_bead(&bead);
 
         self.cohorts = self.calculate_cohorts();
         self.update_orphan_bead_set();
@@ -110,13 +86,8 @@ impl Braid {
 }
 
 impl Braid {
-    // All pub(crate) functions go here!
     #[inline]
     pub(crate) fn load_bead_from_hash(&self, bead_hash: BeadHash) -> Result<&Bead, BeadLoadError> {
-        // This functions returns a bead from memory! Future DB work goes in here!
-
-        // TODO: Add in a check for whether a bead_hash is valid!
-
         match self.loaded_beads_in_memory.get(&bead_hash) {
             Some(bead) => Ok(bead),
             None => Err(BeadLoadError::BeadPruned),
@@ -125,34 +96,6 @@ impl Braid {
 }
 
 impl Braid {
-    fn update_parents_of_bead(&self, child_bead: &Bead) {
-        // For now, this function is expected to run synchronously, such that in case, the bead's
-        // parent just got pruned, we'd still have to handle of this
-        let serialized_child_bead_str_result = serde_json::to_string(&child_bead.clone());
-        let serialized_child_bead_str = match serialized_child_bead_str_result {
-            Ok(serialized_str) => serialized_str,
-            Err(error) => {
-                panic!(
-                    "An error occrrred while seralizing the bead string while loading beads in memory {:?} ",
-                    error
-                );
-            }
-        };
-        let mut serialized_child_bead_bytes = [0u8; 32];
-        hex::decode_to_slice(serialized_child_bead_str, &mut serialized_child_bead_bytes).unwrap();
-        let child_bead_hash = BlockHash::from_byte_array(serialized_child_bead_bytes);
-        // TODO: We have to make this code better for Async version in V2 for DB implementation.
-        for parent_hash in child_bead.committed_metadata.parents.iter() {
-            let bead = {
-                match self.load_bead_from_hash(*parent_hash) {
-                    Ok(bead) => bead,
-                    Err(_) => panic!("This shouldn't be happening!"),
-                }
-            };
-            bead.add_child(child_bead_hash);
-        }
-    }
-
     /// Attempts to extend the braid with the given bead.
     /// Returns true if the bead successfully extended the braid, false otherwise.
     fn extend(&mut self, bead: &Bead) -> bool {
