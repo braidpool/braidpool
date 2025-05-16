@@ -1,79 +1,155 @@
+use super::Bead;
+use super::CommittedMetadata;
+use super::UnCommittedMetadata;
+use crate::bead::TimeVec;
+use crate::utils::test_utils::test_utility_functions::*;
 use ::bitcoin::BlockHash;
-use ::bitcoin::Network;
+use bitcoin::BlockHeader;
 use bitcoin::BlockTime;
 use bitcoin::BlockVersion;
 use bitcoin::CompactTarget;
 use bitcoin::EcdsaSighashType;
+use bitcoin::TxMerkleNode;
 use bitcoin::absolute::Time;
-use bitcoin::address::NetworkChecked;
-use bitcoin::base58::Error;
+use bitcoin::consensus::DeserializeError;
+use bitcoin::consensus::encode::deserialize;
+use bitcoin::consensus::serialize;
 use bitcoin::ecdsa::Signature;
-use bitcoin::hashes::sha256t::Hash;
-use bitcoin::secp256k1::PublicKey;
-use bitcoin::transaction::TransactionExt;
-use bitcoin::{Address, Block, TxMerkleNode};
-use bitcoin::{BlockHeader, Transaction};
+use bitcoin::p2p::Address as P2P_Address;
+use bitcoin::p2p::ServiceFlags;
 use core::net::SocketAddr;
-use secp256k1::Message;
-use secp256k1::{Secp256k1, SecretKey};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde_json::json;
 use std::collections::HashSet;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr};
 use std::str::FromStr;
-
-use super::Bead;
-use super::CommittedMetadata;
-use super::UnCommittedMetadata;
 #[test]
 
-fn test_serialized_bead() {
-    let _address: Address = Address::from_str("32iVBEu4dxkUQk9dJbZUiBiQdmypcEyJRf")
-        .unwrap()
-        .require_network(Network::Bitcoin)
+fn test_serialized_committed_metadata() {
+    let test_sock_add = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8888);
+    let _address = P2P_Address::new(&test_sock_add.clone(), ServiceFlags::NONE);
+    let public_key = "020202020202020202020202020202020202020202020202020202020202020202"
+        .parse::<bitcoin::PublicKey>()
         .unwrap();
-    let secp = Secp256k1::new();
-    let secret_key = SecretKey::from_byte_array(&[0xcd; 32]).expect("32 bytes, within curve order");
-    let public_key = PublicKey::from_secret_key(&secp, &secret_key);
-    let socket = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
-
-    let test_committed_metadata = CommittedMetadata {
-        transaction_cnt: 0,
-        parents: HashSet::new(),
-        transactions: vec![],
-        payout_address: _address,
-        comm_pub_key: public_key,
-        observed_time_at_node: Time::from_consensus(1653195600).unwrap(),
-        miner_ip: socket,
+    let socket = bitcoin::p2p::address::AddrV2::Ipv4(Ipv4Addr::new(127, 0, 0, 1));
+    let time_val = Time::from_consensus(1653195600).unwrap();
+    let parent_hash_set: HashSet<BlockHash> = HashSet::new();
+    let weak_target = CompactTarget::from_consensus(32);
+    let min_target = CompactTarget::from_consensus(1);
+    let test_committed_metadata = TestCommittedMetadataBuilder::new()
+        .comm_pub_key(public_key)
+        .miner_ip(socket)
+        .start_timestamp(time_val)
+        .parents(parent_hash_set)
+        .payout_address(_address)
+        .transaction_cnt(0)
+        .transactions(vec![])
+        .min_target(min_target)
+        .weak_target(weak_target)
+        .build();
+    let serialized_val = serialize(&test_committed_metadata);
+    let deserialized_result: Result<CommittedMetadata, DeserializeError> =
+        deserialize(&serialized_val);
+    let deserialized_test = match deserialized_result {
+        Ok(val) => val,
+        Err(error) => {
+            panic!(
+                "An error occurred while deserializaing committed metadata {:?}",
+                error
+            );
+        }
     };
+    assert_eq!(deserialized_test, test_committed_metadata);
+}
+#[test]
+
+fn test_serialized_uncommitted_metadata() {
     let hex = "3046022100839c1fbc5304de944f697c9f4b1d01d1faeba32d751c0f7acb21ac8a0f436a72022100e89bd46bb3a5a62adc679f659b7ce876d83ee297c7a5587b2011c4fcc72eab45";
     let sig = Signature {
         signature: secp256k1::ecdsa::Signature::from_str(hex).unwrap(),
         sighash_type: EcdsaSighashType::All,
     };
+    let time_val = Time::from_consensus(1653195600).unwrap();
+    let time_hash_set = TimeVec(Vec::new());
+    let extra_nonce = 42;
+    let test_uncommitted_metadata = TestUnCommittedMetadataBuilder::new()
+        .broadcast_timestamp(time_val)
+        .extra_nonce(extra_nonce)
+        .parent_bead_timestamps(time_hash_set)
+        .signature(sig)
+        .build();
+    let serialized_val = serialize(&test_uncommitted_metadata);
 
-    let test_uncommittedmetadata: UnCommittedMetadata = UnCommittedMetadata {
-        extra_nonce: 12,
-        broadcast_timestamp: Time::from_consensus(1653195600).unwrap(),
-        signature: sig,
-        parent_bead_timestamps: HashSet::new(),
+    let deserialized_result: Result<UnCommittedMetadata, DeserializeError> =
+        deserialize(&serialized_val);
+    let deserialized_test = match deserialized_result {
+        Ok(val) => val,
+        Err(error) => {
+            panic!(
+                "An error occurred while deserializaing uncommitted metadata {:?}",
+                error
+            );
+        }
     };
-    let test_bytes = [0u8; 32];
-    let test_bead = Bead {
-        block_header: BlockHeader {
-            version: BlockVersion::TWO,
-            prev_blockhash: BlockHash::from_byte_array(test_bytes),
-            bits: CompactTarget::from_consensus(32),
-            nonce: 1,
-            time: BlockTime::from_u32(8328429),
-            merkle_root: TxMerkleNode::from_byte_array(test_bytes),
-        },
-        committed_metadata: test_committed_metadata,
-        uncommitted_metadata: test_uncommittedmetadata,
+    assert_eq!(deserialized_test, test_uncommitted_metadata);
+}
+#[test]
+
+fn test_serialized_bead() {
+    let test_sock_add = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8888);
+    let _address = P2P_Address::new(&test_sock_add.clone(), ServiceFlags::NONE);
+    let public_key = "020202020202020202020202020202020202020202020202020202020202020202"
+        .parse::<bitcoin::PublicKey>()
+        .unwrap();
+    let socket = bitcoin::p2p::address::AddrV2::Ipv4(Ipv4Addr::new(127, 0, 0, 1));
+    let time_hash_set = TimeVec(Vec::new());
+    let parent_hash_set: HashSet<BlockHash> = HashSet::new();
+    let weak_target = CompactTarget::from_consensus(32);
+    let min_target = CompactTarget::from_consensus(1);
+    let time_val = Time::from_consensus(1653195600).unwrap();
+    let test_committed_metadata = TestCommittedMetadataBuilder::new()
+        .comm_pub_key(public_key)
+        .miner_ip(socket)
+        .start_timestamp(time_val)
+        .parents(parent_hash_set)
+        .payout_address(_address)
+        .transaction_cnt(0)
+        .min_target(min_target)
+        .weak_target(weak_target)
+        .transactions(vec![])
+        .build();
+    let extra_nonce = 42;
+    let hex = "3046022100839c1fbc5304de944f697c9f4b1d01d1faeba32d751c0f7acb21ac8a0f436a72022100e89bd46bb3a5a62adc679f659b7ce876d83ee297c7a5587b2011c4fcc72eab45";
+    let sig = Signature {
+        signature: secp256k1::ecdsa::Signature::from_str(hex).unwrap(),
+        sighash_type: EcdsaSighashType::All,
     };
-    let serialized_str = serde_json::to_string(&test_bead).unwrap();
-    assert_eq!(
-        serialized_str,
-        r#"{"block_header":{"version":2,"prev_blockhash":"0000000000000000000000000000000000000000000000000000000000000000","merkle_root":"0000000000000000000000000000000000000000000000000000000000000000","time":8328429,"bits":32,"nonce":1},"committed_metadata":{"transaction_cnt":0,"transactions":[],"parents":[],"payout_address":"32iVBEu4dxkUQk9dJbZUiBiQdmypcEyJRf","observed_time_at_node":1653195600,"comm_pub_key":"02b98a7fb8cc007048625b6446ad49a1b3a722df8c1ca975b87160023e14d19097","miner_ip":"127.0.0.1:8080"},"uncommitted_metadata":{"extra_nonce":12,"broadcast_timestamp":1653195600,"signature":{"signature":"3046022100839c1fbc5304de944f697c9f4b1d01d1faeba32d751c0f7acb21ac8a0f436a72022100e89bd46bb3a5a62adc679f659b7ce876d83ee297c7a5587b2011c4fcc72eab45","sighash_type":"SIGHASH_ALL"},"parent_bead_timestamps":[]}}"#
-    );
+    let test_uncommitted_metadata = TestUnCommittedMetadataBuilder::new()
+        .broadcast_timestamp(time_val)
+        .extra_nonce(extra_nonce)
+        .parent_bead_timestamps(time_hash_set)
+        .signature(sig)
+        .build();
+    let test_bytes: [u8; 32] = [0u8; 32];
+    let test_block_header = BlockHeader {
+        version: BlockVersion::TWO,
+        prev_blockhash: BlockHash::from_byte_array(test_bytes),
+        bits: CompactTarget::from_consensus(32),
+        nonce: 1,
+        time: BlockTime::from_u32(8328429),
+        merkle_root: TxMerkleNode::from_byte_array(test_bytes),
+    };
+    let test_bead = TestBeadBuilder::new()
+        .block_header(test_block_header)
+        .committed_metadata(test_committed_metadata)
+        .uncommitted_metadata(test_uncommitted_metadata)
+        .build();
+    let serialized_val = serialize(&test_bead);
+    let deserialized_result: Result<Bead, DeserializeError> = deserialize(&serialized_val);
+    let deserialized_bead = match deserialized_result {
+        Ok(val) => val,
+        Err(error) => {
+            panic!("An error occurred while deserializaing bead {:?}", error);
+        }
+    };
+    println!("{:?}  ", deserialized_bead);
+    assert_eq!(deserialized_bead, test_bead);
 }
