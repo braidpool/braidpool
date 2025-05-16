@@ -17,7 +17,7 @@ export function BlockList({
     );
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-7 gap-4 px-4 py-2 border-b border-gray-800/80 text-sm font-medium text-gray-400">
+      <div className="grid grid-cols-7 gap-4 px-4 py-2 border-b border-gray-800/80 text-sm font-medium text-gray-400 sm:grid sm:grid-cols-3 sm-grid-rows-2">
         <div>Height</div>
         <div>Time</div>
         <div>Miner</div>
@@ -29,7 +29,7 @@ export function BlockList({
       {blockVisualizationData.map((block, index) => (
         <motion.div
           key={block.id}
-          className="grid grid-cols-7 gap-4 px-4 py-3 rounded-lg items-center hover:bg-gray-800/30 transition-colors"
+          className="grid grid-cols-7 gap-4 px-4 py-3 rounded-lg items-center sm:grid sm:grid-rows-3 hover:bg-gray-800/30 transition-colors h-15"
           initial={{ opacity: 0, y: 20 }}
           animate={{
             opacity: animateBlocks ? 1 : 0,
