@@ -34,6 +34,8 @@ import {
   loadSampleBraidData,
   transformBraidData,
 } from '../../utils/braidDataTransformer';
+import BitcoinStats from '../BitcoinStats/BitcoinStats';
+import { BitcoinIcon } from 'lucide-react';
 
 // Constants
 const drawerWidth = 240;
@@ -46,6 +48,7 @@ enum Page {
   MEMPOOL = 'mempool',
   DAG_VISUALIZATION = 'dag-visualization',
   MINER_STATS = 'miner-stats',
+  BITCOIN_STATS = 'bitcoin-stats',
 }
 
 const Dashboard = () => {
@@ -296,6 +299,35 @@ const Dashboard = () => {
             primaryTypographyProps={{ fontSize: '0.875rem' }}
           />
         </ListItemButton>
+        <ListItemButton
+          onClick={() => setCurrentPage(Page.BITCOIN_STATS)}
+          selected={currentPage === Page.BITCOIN_STATS}
+          sx={{
+            pl: 2,
+            py: 1.5,
+            borderLeft:
+              currentPage === Page.BITCOIN_STATS
+                ? `4px solid ${colors.primary}`
+                : 'none',
+            '&.Mui-selected': { backgroundColor: 'rgba(57, 134, 232, 0.08)' },
+          }}
+        >
+          <ListItemIcon
+            sx={{
+              minWidth: 40,
+              color:
+                currentPage === Page.BITCOIN_STATS
+                  ? colors.primary
+                  : colors.textSecondary,
+            }}
+          >
+            <BitcoinIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText
+            primary="Bitcoin Statistics"
+            primaryTypographyProps={{ fontSize: '0.875rem' }}
+          />
+        </ListItemButton>
       </List>
     </Drawer>
   );
@@ -346,6 +378,16 @@ const Dashboard = () => {
             <Card title="Braid Visualization">
               <Box>
                 <GraphVisualization />
+              </Box>
+            </Card>
+          </Box>
+        );
+      case Page.BITCOIN_STATS:
+        return (
+          <Box sx={{ p: 1 }}>
+            <Card title="Bitcoin Statistics">
+              <Box>
+                <BitcoinStats />
               </Box>
             </Card>
           </Box>

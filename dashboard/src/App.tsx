@@ -96,23 +96,6 @@ function App() {
               />
               {/* Add more routes as needed */}
             </Routes>
-            <Box
-              component="footer"
-              sx={{
-                py: 3,
-                mt: 'auto',
-                bgcolor: 'background.paper',
-                borderTop: '1px solid rgba(255,255,255,0.05)',
-              }}
-            >
-              <Container maxWidth="lg">
-                <Typography variant="body1" align="center" gutterBottom>
-                  A visualization dashboard for the Braidpool decentralized
-                  mining pool
-                </Typography>
-                <Copyright />
-              </Container>
-            </Box>
           </Box>
         </Box>
       </BrowserRouter>
