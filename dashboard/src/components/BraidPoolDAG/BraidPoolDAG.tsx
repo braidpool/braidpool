@@ -37,14 +37,20 @@ const GraphVisualization: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const width = window.innerWidth - 100;
-  const margin = { top: 0, right: 0, bottom: 0, left: 50 };  // Changed top from 50 to 100
+  const margin = { top: 0, right: 0, bottom: 0, left: 50 }; // Changed top from 50 to 100
   const height = window.innerHeight - margin.top - margin.bottom;
   const [nodeIdMap, setNodeIdMap] = useState<NodeIdMapping>({});
   const [selectedCohorts, setSelectedCohorts] = useState<number | 'all'>(10);
   const nodeRadius = 30;
   const tooltipRef = useRef<HTMLDivElement>(null);
-  const COLUMN_WIDTH = 200;
+  var COLUMN_WIDTH = 200;
   const VERTICAL_SPACING = 150;
+
+  // New state for the counter and the highlighted bead hash
+  const [graphUpdateCounter, setGraphUpdateCounter] = useState(0);
+  const [latestBeadHashForHighlight, setLatestBeadHashForHighlight] = useState<
+    string | null
+  >(null);
 
   interface Position {
     x: number;
@@ -71,10 +77,10 @@ const GraphVisualization: React.FC = () => {
     const allChildren: Record<string, Set<string>> = {};
     const workValues: Record<string, number> = {};
 
-    allNodes.forEach(node => {
+    allNodes.forEach((node) => {
       allParents[node.id] = new Set(node.parents);
       workValues[node.id] = beadWork[node.id] || 1;
-      node.parents.forEach(parent => {
+      node.parents.forEach((parent) => {
         if (!allChildren[parent]) allChildren[parent] = new Set();
         allChildren[parent].add(node.id);
       });
@@ -86,11 +92,15 @@ const GraphVisualization: React.FC = () => {
       lineEnd: Position,
       point: Position
     ): boolean => {
-      if ((lineStart.x === point.x && lineStart.y === point.y) ||
-        (lineEnd.x === point.x && lineEnd.y === point.y)) return false;
+      if (
+        (lineStart.x === point.x && lineStart.y === point.y) ||
+        (lineEnd.x === point.x && lineEnd.y === point.y)
+      )
+        return false;
 
       // Colinear check
-      const crossProduct = (point.y - lineStart.y) * (lineEnd.x - lineStart.x) -
+      const crossProduct =
+        (point.y - lineStart.y) * (lineEnd.x - lineStart.x) -
         (point.x - lineStart.x) * (lineEnd.y - lineStart.y);
       if (Math.abs(crossProduct) > Number.EPSILON) return false;
 
@@ -102,7 +112,7 @@ const GraphVisualization: React.FC = () => {
     };
 
     const proposedX: Record<string, number> = {};
-    hwPath.forEach((bead, i) => proposedX[bead] = i);
+    hwPath.forEach((bead, i) => (proposedX[bead] = i));
 
     const setXCoord = (bead: string) => {
       if (proposedX[bead] !== undefined) return;
@@ -116,21 +126,22 @@ const GraphVisualization: React.FC = () => {
         return;
       }
 
-      parents.forEach(parent => {
+      parents.forEach((parent) => {
         setXCoord(parent);
         minX = Math.max(minX, proposedX[parent] + 1);
       });
 
       let maxX = Infinity;
-      children.forEach(child => {
-        if (proposedX[child] !== undefined) maxX = Math.min(maxX, proposedX[child] - 1);
+      children.forEach((child) => {
+        if (proposedX[child] !== undefined)
+          maxX = Math.min(maxX, proposedX[child] - 1);
       });
 
       if (minX > maxX && maxX < Infinity) {
-        children.forEach(child => {
+        children.forEach((child) => {
           if (proposedX[child] !== undefined && proposedX[child] <= minX) {
             const shift = minX + 1 - proposedX[child];
-            Object.keys(proposedX).forEach(k => {
+            Object.keys(proposedX).forEach((k) => {
               if (proposedX[k] >= proposedX[child]) proposedX[k] += shift;
             });
           }
@@ -141,11 +152,13 @@ const GraphVisualization: React.FC = () => {
     };
 
     // Process non-HW nodes
-    allNodes.filter(n => !hwPathSet.has(n.id)).forEach(n => setXCoord(n.id));
+    allNodes
+      .filter((n) => !hwPathSet.has(n.id))
+      .forEach((n) => setXCoord(n.id));
 
     // Adjust tail nodes (no children)
     const maxX = Math.max(...Object.values(proposedX));
-    allNodes.forEach(n => {
+    allNodes.forEach((n) => {
       if ((!n.children || n.children.length === 0) && !hwPathSet.has(n.id)) {
         proposedX[n.id] = maxX;
       }
@@ -159,10 +172,10 @@ const GraphVisualization: React.FC = () => {
     }
 
     // Position HW path nodes
-    hwPath.forEach(bead => {
+    hwPath.forEach((bead) => {
       positions[bead] = {
         x: margin.left + proposedX[bead] * COLUMN_WIDTH,
-        y: centerY
+        y: centerY,
       };
     });
 
@@ -173,13 +186,13 @@ const GraphVisualization: React.FC = () => {
 
     // Python-style spiral placement
     const remainingNodes = allNodes
-      .filter(n => !hwPathSet.has(n.id))
+      .filter((n) => !hwPathSet.has(n.id))
       .sort((a, b) => workValues[a.id] - workValues[b.id]) // Ascending sort
       .reverse(); // Python's reverse=True
 
     const lines: Array<[Position, Position]> = [];
 
-    remainingNodes.forEach(node => {
+    remainingNodes.forEach((node) => {
       const bead = node.id;
       const baseX = margin.left + proposedX[bead] * COLUMN_WIDTH;
       let currentY = centerY;
@@ -187,14 +200,15 @@ const GraphVisualization: React.FC = () => {
       let direction = 1;
 
       while (true) {
-        currentY = centerY + (direction * distance * VERTICAL_SPACING);
+        currentY = centerY + direction * distance * VERTICAL_SPACING;
         direction *= -1;
         if (direction === 1) distance++;
 
         // Check collisions
-        const collides = Object.values(positions).some(pos =>
-          Math.abs(pos.x - baseX) < COLUMN_WIDTH / 2 &&
-          Math.abs(pos.y - currentY) < VERTICAL_SPACING / 2
+        const collides = Object.values(positions).some(
+          (pos) =>
+            Math.abs(pos.x - baseX) < COLUMN_WIDTH / 2 &&
+            Math.abs(pos.y - currentY) < VERTICAL_SPACING / 2
         );
 
         if (collides) continue;
@@ -204,18 +218,20 @@ const GraphVisualization: React.FC = () => {
 
         // Generate connections
         const connections: Array<[Position, Position]> = [];
-        (allParents[bead] || []).forEach(parent => {
+        (allParents[bead] || []).forEach((parent) => {
           if (positions[parent]) connections.push([positions[parent], tempPos]);
         });
-        (allChildren[bead] || []).forEach(child => {
+        (allChildren[bead] || []).forEach((child) => {
           if (positions[child]) connections.push([tempPos, positions[child]]);
         });
 
-        //  intersection check
+        // intersection check
         const hasBadLine = connections.some(([start, end]) =>
-          Object.entries(positions).some(([otherId, pos]) =>
-            otherId !== bead && doesIntersect(start, end, pos)
-          ));
+          Object.entries(positions).some(
+            ([otherId, pos]) =>
+              otherId !== bead && doesIntersect(start, end, pos)
+          )
+        );
 
         if (!hasBadLine) {
           lines.push(...connections);
@@ -296,12 +312,12 @@ const GraphVisualization: React.FC = () => {
         const firstCohortChanged =
           parsedData?.cohorts?.[0]?.length &&
           JSON.stringify(prevFirstCohortRef.current) !==
-          JSON.stringify(parsedData.cohorts[0]);
+            JSON.stringify(parsedData.cohorts[0]);
 
         const lastCohortChanged =
           parsedData?.cohorts?.length > 0 &&
           JSON.stringify(prevLastCohortRef.current) !==
-          JSON.stringify(parsedData.cohorts[parsedData.cohorts.length - 1]);
+            JSON.stringify(parsedData.cohorts[parsedData.cohorts.length - 1]);
 
         if (firstCohortChanged) {
           const top = COLORS.shift();
@@ -325,6 +341,25 @@ const GraphVisualization: React.FC = () => {
 
         setNodeIdMap(newMapping);
         setGraphData(graphData);
+
+        // Increment the counter and update the highlighted bead hash
+        setGraphUpdateCounter((prevCounter) => {
+          const newCounter = prevCounter + 1;
+          // If the counter is divisible by 100, set the latest bead's hash
+          if (
+            newCounter % 100 === 0 &&
+            parsedData.highest_work_path.length > 0
+          ) {
+            const latestBeadHash =
+              parsedData.highest_work_path[
+                parsedData.highest_work_path.length - 1
+              ];
+            setLatestBeadHashForHighlight(latestBeadHash);
+          }
+          // The `latestBeadHashForHighlight` will remain set until the next time the condition is met.
+          return newCounter;
+        });
+
         setTotalBeads(bead_count);
         setTotalCohorts(parsedData.cohorts.length);
         setMaxCohortSize(
@@ -354,6 +389,26 @@ const GraphVisualization: React.FC = () => {
     return () => socket.close();
   }, []);
 
+  // Helper function to animate link direction from target to source
+  function animateLinkDirection(selection: any) {
+    selection
+      .attr('stroke-dasharray', '5,5') // dashed stroke
+      .attr('stroke-dashoffset', 10) // initial offset
+      .transition()
+      .duration(1000)
+      .ease(d3.easeLinear)
+      .attr('stroke-dashoffset', 0) // animate offset to 0
+      .on('end', function repeat(this: any) {
+        d3.select(this)
+          .attr('stroke-dashoffset', 10)
+          .transition()
+          .duration(1000)
+          .ease(d3.easeLinear)
+          .attr('stroke-dashoffset', 0)
+          .on('end', repeat); // loop animation
+      });
+  }
+
   const animateCohorts = (firstCohort: string[], lastCohort: string[]) => {
     if (!svgRef.current) return;
 
@@ -364,7 +419,7 @@ const GraphVisualization: React.FC = () => {
       svg
         .selectAll('.node')
         .filter((d: any) => firstCohort.includes(d.id))
-        .select('circle')
+        .select('ellipse')
         .attr('stroke', '#FF8500')
         .attr('stroke-width', 3)
         .transition()
@@ -378,7 +433,7 @@ const GraphVisualization: React.FC = () => {
       svg
         .selectAll('.node')
         .filter((d: any) => lastCohort.includes(d.id))
-        .select('circle')
+        .select('ellipse')
         .attr('stroke', '#FF8500')
         .attr('stroke-width', 3)
         .transition()
@@ -387,46 +442,31 @@ const GraphVisualization: React.FC = () => {
         .attr('stroke', '#fff');
     }
 
-    // Animate links connected to first cohort
     if (firstCohort.length > 0) {
-      svg
+      const selectedLinks = svg
         .selectAll('.link')
         .filter(
           (d: any) =>
             firstCohort.includes(d.source) || firstCohort.includes(d.target)
         )
-        .attr('stroke-width', 3)
-        .attr('stroke', '#FF8500')
-        .transition()
-        .duration(1000)
-        .attr('stroke-width', 1.5)
-        .attr('stroke', (d: any) =>
-          graphData?.highest_work_path.includes(d.source) &&
-            graphData?.highest_work_path.includes(d.target)
-            ? '#FF8500'
-            : '#48CAE4'
-        );
+        .attr('stroke-width', 2)
+        .attr('stroke', '#FF8500');
+
+      animateLinkDirection(selectedLinks);
     }
 
     // Animate links connected to last cohort
     if (lastCohort.length > 0) {
-      svg
+      const selectedLinks = svg
         .selectAll('.link')
         .filter(
           (d: any) =>
             lastCohort.includes(d.source) || lastCohort.includes(d.target)
         )
-        .attr('stroke-width', 3)
-        .attr('stroke', '#FF8500')
-        .transition()
-        .duration(1000)
-        .attr('stroke-width', 1.5)
-        .attr('stroke', (d: any) =>
-          graphData?.highest_work_path.includes(d.source) &&
-            graphData?.highest_work_path.includes(d.target)
-            ? '#FF8500'
-            : '#48CAE4'
-        );
+        .attr('stroke-width', 2)
+        .attr('stroke', '#FF8500');
+
+      animateLinkDirection(selectedLinks);
     }
   };
   const handleResetZoom = () => {
@@ -491,11 +531,11 @@ const GraphVisualization: React.FC = () => {
     const hwPathSet = new Set(hwPath);
 
     // Calculate required height based on node positions
-    const allY = Object.values(positions).map(pos => pos.y);
+    const allY = Object.values(positions).map((pos) => pos.y);
     const minY = Math.min(...allY);
     const maxY = Math.max(...allY);
     const padding = 100; // Additional padding
-    const dynamicHeight = height/2 + margin.top + margin.bottom + padding;
+    const dynamicHeight = height / 2 + margin.top + margin.bottom + padding;
     setSvgHeight(dynamicHeight);
 
     // making old nodes invisible
@@ -539,6 +579,30 @@ const GraphVisualization: React.FC = () => {
       cohort.forEach((nodeId) => cohortMap.set(nodeId, index));
     });
 
+    function getEllipseEdgePoint(
+      src: Position,
+      tgt: Position,
+      rx: number,
+      ry: number
+    ): Position {
+      const dx = tgt.x - src.x;
+      const dy = tgt.y - src.y;
+      const len = Math.sqrt(dx * dx + dy * dy);
+
+      // Normalize the direction vector
+      const nx = dx / len;
+      const ny = dy / len;
+
+      // Scale using ellipse radii
+      const scale =
+        1 / Math.sqrt((nx * nx) / (rx * rx) + (ny * ny) / (ry * ry));
+
+      return {
+        x: src.x + nx * scale,
+        y: src.y + ny * scale,
+      };
+    }
+
     container
       .selectAll('.link')
       .data(links)
@@ -554,11 +618,13 @@ const GraphVisualization: React.FC = () => {
           x: (positions[d.target]?.x || 0) + offsetX,
           y: positions[d.target]?.y || 0,
         };
-        const dx = tgt.x - src.x;
-        const dy = tgt.y - src.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const ratio = nodeRadius / dist;
-        return src.x + dx * ratio;
+        const point = getEllipseEdgePoint(
+          src,
+          tgt,
+          nodeRadius + 10,
+          nodeRadius
+        ); // rx, ry
+        return point.x;
       })
       .attr('y1', (d) => {
         const src = {
@@ -569,11 +635,13 @@ const GraphVisualization: React.FC = () => {
           x: (positions[d.target]?.x || 0) + offsetX,
           y: positions[d.target]?.y || 0,
         };
-        const dx = tgt.x - src.x;
-        const dy = tgt.y - src.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const ratio = nodeRadius / dist;
-        return src.y + dy * ratio;
+        const point = getEllipseEdgePoint(
+          src,
+          tgt,
+          nodeRadius + 10,
+          nodeRadius
+        );
+        return point.y;
       })
       .attr('x2', (d) => {
         const src = {
@@ -584,11 +652,13 @@ const GraphVisualization: React.FC = () => {
           x: (positions[d.target]?.x || 0) + offsetX,
           y: positions[d.target]?.y || 0,
         };
-        const dx = src.x - tgt.x;
-        const dy = src.y - tgt.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const ratio = nodeRadius / dist;
-        return tgt.x + dx * ratio;
+        const point = getEllipseEdgePoint(
+          tgt,
+          src,
+          nodeRadius + 10,
+          nodeRadius
+        ); // reverse direction
+        return point.x;
       })
       .attr('y2', (d) => {
         const src = {
@@ -599,11 +669,13 @@ const GraphVisualization: React.FC = () => {
           x: (positions[d.target]?.x || 0) + offsetX,
           y: positions[d.target]?.y || 0,
         };
-        const dx = src.x - tgt.x;
-        const dy = src.y - tgt.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const ratio = nodeRadius / dist;
-        return tgt.y + dy * ratio;
+        const point = getEllipseEdgePoint(
+          tgt,
+          src,
+          nodeRadius + 10,
+          nodeRadius
+        );
+        return point.y;
       })
       .attr('stroke', (d) =>
         hwPathSet.has(d.source) && hwPathSet.has(d.target)
@@ -623,17 +695,46 @@ const GraphVisualization: React.FC = () => {
       );
 
     nodes
-      .append('circle')
-      .attr('r', nodeRadius)
-      .attr('fill', (d) => {
-        const cohortIndex = cohortMap.get(d.id);
-        if (cohortIndex === undefined) return COLORS[0];
-        return COLORS[cohortIndex % COLORS.length];
+      .each(function (d: GraphNode) {
+        const nodeSelection = d3.select(this);
+        nodeSelection.selectAll('ellipse, rect').remove(); // Remove existing shape
+
+        // Conditional rendering: rectangle or ellipse
+        if (
+          d.id === latestBeadHashForHighlight &&
+          filteredCohortNodes.has(d.id)
+        ) {
+          nodeSelection
+            .append('rect')
+            .attr('x', -(nodeRadius + 10)) // half width
+            .attr('y', -nodeRadius) // half height
+            .attr('width', (nodeRadius + 10) * 2)
+            .attr('height', nodeRadius * 2)
+            .attr('rx', 5) // rounded corners
+            .attr('ry', 5)
+            .attr('fill', 'red') // Red for the highlighted bead
+            .attr('stroke', '#fff')
+            .attr('stroke-width', 2);
+        } else {
+          nodeSelection
+            .append('ellipse')
+            .attr('rx', nodeRadius + 10) // horizontal radius
+            .attr('ry', nodeRadius) // vertical radius
+            .attr('r', nodeRadius)
+            .attr('fill', () => {
+              const cohortIndex = cohortMap.get(d.id);
+              if (cohortIndex === undefined) return COLORS[0];
+              return COLORS[cohortIndex % COLORS.length];
+            })
+            .attr('stroke', '#fff')
+            .attr('stroke-width', 2);
+        }
       })
-      .attr('stroke', '#fff')
-      .attr('stroke-width', 2)
       .on('mouseover', function (event: MouseEvent, d: GraphNode) {
-        d3.select(this).attr('stroke', '#FF8500').attr('stroke-width', 3);
+        d3.select(this)
+          .select('ellipse, rect')
+          .attr('stroke', '#FF8500')
+          .attr('stroke-width', 3);
 
         const cohortIndex = cohortMap.get(d.id);
         const isHWP = hwPathSet.has(d.id);
@@ -642,26 +743,30 @@ const GraphVisualization: React.FC = () => {
                 <div><strong>ID:</strong> ${nodeIdMap[d.id] || '?'} (${d.id})</div>
                 <div><strong>Cohort:</strong> ${cohortIndex !== undefined ? cohortIndex : 'N/A'}</div>
                 <div><strong>Highest Work Path:</strong> ${isHWP ? 'Yes' : 'No'}</div>
-                <div><strong>Parents:</strong> ${d.parents.length > 0
-            ? d.parents.map((p) => `${nodeIdMap[p] || '?'}`).join(', ')
-            : 'None'
-          }
+                <div><strong>Parents:</strong> ${
+                  d.parents.length > 0
+                    ? d.parents.map((p) => `${nodeIdMap[p] || '?'}`).join(', ')
+                    : 'None'
+                }
                 `;
 
         tooltip.html(tooltipContent).style('visibility', 'visible');
       })
       .on('mouseout', function () {
-        d3.select(this).attr('stroke', '#fff').attr('stroke-width', 2);
+        d3.select(this)
+          .select('ellipse, rect')
+          .attr('stroke', '#fff')
+          .attr('stroke-width', 2);
         tooltip.style('visibility', 'hidden');
       });
 
     nodes
       .append('text')
-      .attr('dy', 4)
+      .attr('dy', 5)
       .attr('text-anchor', 'middle')
-      .text((d) => nodeIdMap[d.id] || '?') // Show sequential ID instead of hash
+      .text((d) => `${d.id.slice(-4)}`)
       .attr('fill', '#fff')
-      .style('font-size', 20)
+      .style('font-size', 25)
       .on('mouseover', function (event: MouseEvent, d: GraphNode) {
         const cohortIndex = cohortMap.get(d.id);
         const isHWP = hwPathSet.has(d.id);
@@ -669,12 +774,12 @@ const GraphVisualization: React.FC = () => {
                 <div><strong>ID:</strong> ${nodeIdMap[d.id] || '?'} (${d.id})</div>
                 <div><strong>Cohort:</strong> ${cohortIndex !== undefined ? cohortIndex : 'N/A'}</div>
                 <div><strong>Highest Work Path:</strong> ${isHWP ? 'Yes' : 'No'}</div>
-                <div><strong>Parents:</strong> ${d.parents.length > 0
-            ? d.parents.map((p) => `${nodeIdMap[p] || '?'}`).join(', ')
-            : 'None'
-          }
-            
-                `;
+                <div><strong>Parents:</strong> ${
+                  d.parents.length > 0
+                    ? d.parents.map((p) => `${nodeIdMap[p] || '?'}`).join(', ')
+                    : 'None'
+                }
+                  `;
 
         tooltip.html(tooltipContent).style('visibility', 'visible');
       })
@@ -707,7 +812,13 @@ const GraphVisualization: React.FC = () => {
       .append('path')
       .attr('d', 'M0,-5L10,0L0,5')
       .attr('fill', (d) => d.color);
-  }, [graphData, defaultZoom, selectedCohorts]);
+  }, [
+    graphData,
+    defaultZoom,
+    selectedCohorts,
+    graphUpdateCounter,
+    latestBeadHashForHighlight,
+  ]);
 
   if (loading) {
     return (
@@ -810,7 +921,7 @@ const GraphVisualization: React.FC = () => {
 
       <div style={{ margin: '10px', position: 'relative' }}>
         <Card style={{ borderColor: '#FF8500' }}>
-          <CardContent >
+          <CardContent>
             <svg ref={svgRef} width={width} height={svgHeight} />
           </CardContent>
           <div ref={tooltipRef}></div>
@@ -849,6 +960,21 @@ const GraphVisualization: React.FC = () => {
               {hwpLength}
             </span>
           </div>
+          <div className="font-medium text-[#0077B6]">
+            Graph Updates:{' '}
+            <span style={{ fontWeight: 'normal', color: '#FF8500' }}>
+              {graphUpdateCounter}
+            </span>
+          </div>
+          {latestBeadHashForHighlight && (
+            <div className="font-medium text-[#0077B6]">
+              Highlighted Bead (Counter % 100 === 0):{' '}
+              <span style={{ fontWeight: 'normal', color: 'red' }}>
+                {nodeIdMap[latestBeadHashForHighlight] ||
+                  latestBeadHashForHighlight.slice(-4)}
+              </span>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
