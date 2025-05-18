@@ -439,7 +439,7 @@ direction.
 
 ## Covenants
 
-One might take the UHPO set transaction and convtert it to a tree structure,
+One might take the UHPO set transaction and convert it to a tree structure,
 using covenants to enforce the structure of the tree in descendant transactions.
 This is often done in the context of covenant-based soft fork proposals so that
 one party can execute his withdrawal while not having to force everyone else to
