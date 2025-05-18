@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import * as d3 from 'd3';
 import '../../App.css';
+import { Loader } from "lucide-react";
 
 interface NodeIdMapping {
   [hash: string]: string; // maps hash to sequential ID
@@ -809,16 +810,18 @@ const GraphVisualization: React.FC = () => {
     latestBeadHashForHighlight,
   ]);
 
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full w-full">
         <div className="flex flex-col items-center">
-          <div className="h-8 w-8 border-4 border-[#0077B6] border-t-[#FF8500] animate-spin rounded-full" />
+          <Loader className="h-8 w-8 text-[#0077B6] animate-spin" />
           <p className="mt-4 text-[#0077B6]">Loading graph data...</p>
         </div>
       </div>
     );
   }
+
 
   if (error) {
     return (
