@@ -1,12 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import * as d3 from 'd3';
-import Card from '@mui/material/Card';
-import CardContent from '@mui/material/CardContent';
-import CardHeader from '@mui/material/CardHeader';
-import CardTitle from '@mui/material/Typography';
 import '../../App.css';
-import Button from '@mui/material/Button';
-import { CircularProgress } from '@mui/material';
 
 interface NodeIdMapping {
   [hash: string]: string; // maps hash to sequential ID
@@ -18,17 +12,13 @@ var COLORS = [
   `rgba(${102}, ${166}, ${30}, 1)`,
   `rgba(${231}, ${41}, ${138}, 1)`,
 ];
+
 interface GraphData {
   highest_work_path: string[];
   parents: Record<string, string[]>;
   children: Record<string, string[]>;
   cohorts: string[][];
   bead_count: number;
-}
-
-interface Position {
-  x: number;
-  y: number;
 }
 
 const GraphVisualization: React.FC = () => {
@@ -72,7 +62,7 @@ const GraphVisualization: React.FC = () => {
   ): Record<string, Position> => {
     const positions: Record<string, Position> = {};
     const hwPathSet = new Set(hwPath);
-    const centerY = (height - margin.top) / 2 + margin.top + 300;
+    const centerY = (height - margin.top) / 2 + margin.top + 500;
     const allParents: Record<string, Set<string>> = {};
     const allChildren: Record<string, Set<string>> = {};
     const workValues: Record<string, number> = {};
@@ -312,12 +302,12 @@ const GraphVisualization: React.FC = () => {
         const firstCohortChanged =
           parsedData?.cohorts?.[0]?.length &&
           JSON.stringify(prevFirstCohortRef.current) !==
-            JSON.stringify(parsedData.cohorts[0]);
+          JSON.stringify(parsedData.cohorts[0]);
 
         const lastCohortChanged =
           parsedData?.cohorts?.length > 0 &&
           JSON.stringify(prevLastCohortRef.current) !==
-            JSON.stringify(parsedData.cohorts[parsedData.cohorts.length - 1]);
+          JSON.stringify(parsedData.cohorts[parsedData.cohorts.length - 1]);
 
         if (firstCohortChanged) {
           const top = COLORS.shift();
@@ -352,7 +342,7 @@ const GraphVisualization: React.FC = () => {
           ) {
             const latestBeadHash =
               parsedData.highest_work_path[
-                parsedData.highest_work_path.length - 1
+              parsedData.highest_work_path.length - 1
               ];
             setLatestBeadHashForHighlight(latestBeadHash);
           }
@@ -481,7 +471,8 @@ const GraphVisualization: React.FC = () => {
     setDefaultZoom((prevZoom) => Math.max(prevZoom - 0.1, 0.3));
   };
 
-  const [svgHeight, setSvgHeight] = useState(height);
+  // have not used it YET.. might come in handy in the future
+  const [_svgHeight, setSvgHeight] = useState(height);
 
   useEffect(() => {
     if (!svgRef.current || !graphData) return;
@@ -532,8 +523,8 @@ const GraphVisualization: React.FC = () => {
 
     // Calculate required height based on node positions
     const allY = Object.values(positions).map((pos) => pos.y);
-    const minY = Math.min(...allY);
-    const maxY = Math.max(...allY);
+    // const minY = Math.min(...allY);
+    // const maxY = Math.max(...allY);
     const padding = 100; // Additional padding
     const dynamicHeight = height / 2 + margin.top + margin.bottom + padding;
     setSvgHeight(dynamicHeight);
@@ -743,11 +734,10 @@ const GraphVisualization: React.FC = () => {
                 <div><strong>ID:</strong> ${nodeIdMap[d.id] || '?'} (${d.id})</div>
                 <div><strong>Cohort:</strong> ${cohortIndex !== undefined ? cohortIndex : 'N/A'}</div>
                 <div><strong>Highest Work Path:</strong> ${isHWP ? 'Yes' : 'No'}</div>
-                <div><strong>Parents:</strong> ${
-                  d.parents.length > 0
-                    ? d.parents.map((p) => `${nodeIdMap[p] || '?'}`).join(', ')
-                    : 'None'
-                }
+                <div><strong>Parents:</strong> ${d.parents.length > 0
+            ? d.parents.map((p) => `${nodeIdMap[p] || '?'}`).join(', ')
+            : 'None'
+          }
                 `;
 
         tooltip.html(tooltipContent).style('visibility', 'visible');
@@ -774,11 +764,10 @@ const GraphVisualization: React.FC = () => {
                 <div><strong>ID:</strong> ${nodeIdMap[d.id] || '?'} (${d.id})</div>
                 <div><strong>Cohort:</strong> ${cohortIndex !== undefined ? cohortIndex : 'N/A'}</div>
                 <div><strong>Highest Work Path:</strong> ${isHWP ? 'Yes' : 'No'}</div>
-                <div><strong>Parents:</strong> ${
-                  d.parents.length > 0
-                    ? d.parents.map((p) => `${nodeIdMap[p] || '?'}`).join(', ')
-                    : 'None'
-                }
+                <div><strong>Parents:</strong> ${d.parents.length > 0
+            ? d.parents.map((p) => `${nodeIdMap[p] || '?'}`).join(', ')
+            : 'None'
+          }
                   `;
 
         tooltip.html(tooltipContent).style('visibility', 'visible');
@@ -824,7 +813,7 @@ const GraphVisualization: React.FC = () => {
     return (
       <div className="flex items-center justify-center h-full w-full">
         <div className="flex flex-col items-center">
-          <CircularProgress className="h-8 w-8 animate-spin text-[#FF8500]" />
+          <div className="h-8 w-8 border-4 border-[#0077B6] border-t-[#FF8500] animate-spin rounded-full" />
           <p className="mt-4 text-[#0077B6]">Loading graph data...</p>
         </div>
       </div>
@@ -835,7 +824,12 @@ const GraphVisualization: React.FC = () => {
     return (
       <div className="flex flex-col items-center justify-center h-screen">
         <div className="text-red-500 mb-4">Error: {error}</div>
-        <Button onClick={() => window.location.reload()}>Retry</Button>
+        <button
+          onClick={() => window.location.reload()}
+          className="bg-[#0077B6] text-white px-4 py-2 rounded hover:bg-[#005691] transition-colors"
+        >
+          Retry
+        </button>
       </div>
     );
   }
@@ -844,35 +838,26 @@ const GraphVisualization: React.FC = () => {
     return (
       <div className="flex flex-col items-center justify-center h-screen">
         <div className="text-[#0077B6] mb-4">No graph data available</div>
-        <Button onClick={() => window.location.reload()}>Refresh</Button>
+        <button
+          onClick={() => window.location.reload()}
+          className="bg-[#0077B6] text-white px-4 py-2 rounded hover:bg-[#005691] transition-colors"
+        >
+          Refresh
+        </button>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen">
-      <div
-        style={{
-          margin: '10px',
-          position: 'relative',
-          display: 'flex',
-          gap: '10px',
-          alignItems: 'center',
-        }}
-      >
+    <div className="min-h-screen p-2 bg-gray">
+      <div className="m-2 relative flex gap-2 items-center">
         <select
           value={selectedCohorts}
           onChange={(e) => {
             const value = e.target.value;
             setSelectedCohorts(value === 'all' ? 'all' : Number(value));
           }}
-          style={{
-            padding: '5px',
-            borderRadius: '4px',
-            border: '1px solid #0077B6',
-            backgroundColor: 'white',
-            color: '#0077B6',
-          }}
+          className="px-2 py-1 rounded border border-[#0077B6] bg-gray text-[#0077B6]"
         >
           <option value="all">Show all cohorts</option>
           {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((value) => (
@@ -882,101 +867,55 @@ const GraphVisualization: React.FC = () => {
           ))}
         </select>
 
-        {/* Zoom Controls */}
-        <div style={{ display: 'flex', gap: '5px', marginLeft: 'auto' }}>
-          <Button
-            variant="contained"
+        <div className="flex gap-1 ml-auto">
+          <button
             onClick={handleZoomIn}
-            style={{
-              backgroundColor: '#0077B6',
-              color: 'white',
-              minWidth: '30px',
-            }}
+            className="bg-[#0077B6] text-white px-3 py-1 rounded hover:bg-[#005691] transition-colors min-w-[30px]"
           >
             +
-          </Button>
-          <Button
-            variant="contained"
+          </button>
+          <button
             onClick={handleZoomOut}
-            style={{
-              backgroundColor: '#0077B6',
-              color: 'white',
-              minWidth: '30px',
-            }}
+            className="bg-[#0077B6] text-white px-3 py-1 rounded hover:bg-[#005691] transition-colors min-w-[30px]"
           >
             -
-          </Button>
-          <Button
-            variant="contained"
+          </button>
+          <button
             onClick={handleResetZoom}
-            style={{
-              backgroundColor: '#0077B6',
-              color: 'white',
-            }}
+            className="bg-[#0077B6] text-white px-3 py-1 rounded hover:bg-[#005691] transition-colors"
           >
             Reset Zoom
-          </Button>
+          </button>
         </div>
       </div>
 
-      <div style={{ margin: '10px', position: 'relative' }}>
-        <Card style={{ borderColor: '#FF8500' }}>
-          <CardContent>
-            <svg ref={svgRef} width={width} height={svgHeight} />
-          </CardContent>
-          <div ref={tooltipRef}></div>
-        </Card>
+      <div className="m-2 relative">
+        <div className="border border-[#FF8500] rounded-lg bg-gray shadow-lg">
+          <svg ref={svgRef} width={width} height={height} />
+          <div
+            ref={tooltipRef}
+            className="fixed bg-[#0077B6] text-white border border-[#FF8500] rounded p-2 shadow-lg pointer-events-none z-10 bottom-5 right-5"
+          ></div>
+        </div>
       </div>
-      <Card
-        style={{ margin: '10px', position: 'relative', borderColor: '#0077B6' }}
-      >
-        <CardHeader>
-          <CardTitle style={{ color: '#FF8500' }}>Metrics</CardTitle>
-        </CardHeader>
-        <CardContent
-          style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}
-        >
+
+      <div className="m-2 border border-[#0077B6] rounded-lg bg-gray shadow-lg p-4">
+        <h3 className="text-xl font-semibold text-[#FF8500] mb-4">Metrics</h3>
+        <div className="flex flex-col gap-2">
           <div className="font-medium text-[#0077B6]">
-            Total Beads:{' '}
-            <span style={{ fontWeight: 'normal', color: '#FF8500' }}>
-              {totalBeads}
-            </span>
+            Total Beads: <span className="font-normal text-[#FF8500]">{totalBeads}</span>
           </div>
           <div className="font-medium text-[#0077B6]">
-            Total Cohorts:{' '}
-            <span style={{ fontWeight: 'normal', color: '#FF8500' }}>
-              {totalCohorts}
-            </span>
+            Total Cohorts: <span className="font-normal text-[#FF8500]">{totalCohorts}</span>
           </div>
           <div className="font-medium text-[#0077B6]">
-            Max Cohort Size:{' '}
-            <span style={{ fontWeight: 'normal', color: '#FF8500' }}>
-              {maxCohortSize}
-            </span>
+            Max Cohort Size: <span className="font-normal text-[#FF8500]">{maxCohortSize}</span>
           </div>
           <div className="font-medium text-[#0077B6]">
-            HWP Length:{' '}
-            <span style={{ fontWeight: 'normal', color: '#FF8500' }}>
-              {hwpLength}
-            </span>
+            HWP Length: <span className="font-normal text-[#FF8500]">{hwpLength}</span>
           </div>
-          <div className="font-medium text-[#0077B6]">
-            Graph Updates:{' '}
-            <span style={{ fontWeight: 'normal', color: '#FF8500' }}>
-              {graphUpdateCounter}
-            </span>
-          </div>
-          {latestBeadHashForHighlight && (
-            <div className="font-medium text-[#0077B6]">
-              Highlighted Bead (Counter % 100 === 0):{' '}
-              <span style={{ fontWeight: 'normal', color: 'red' }}>
-                {nodeIdMap[latestBeadHashForHighlight] ||
-                  latestBeadHashForHighlight.slice(-4)}
-              </span>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 };
