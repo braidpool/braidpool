@@ -2,12 +2,12 @@ use crate::braid::Braid;
 use crate::committed_metadata::CommittedMetadata;
 use crate::uncommitted_metadata::UnCommittedMetadata;
 use crate::utils::{BeadLoadError, Parents};
-use bitcoin::BlockHash;
-use bitcoin::BlockHeader;
-use bitcoin::consensus::Error;
 use bitcoin::consensus::encode::Decodable;
 use bitcoin::consensus::encode::Encodable;
+use bitcoin::consensus::Error;
 use bitcoin::io::{self, BufRead, Write};
+use bitcoin::BlockHash;
+use bitcoin::BlockHeader;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Bead {
