@@ -21,7 +21,7 @@ flexbuffers = { version = "25.2", features = ["deserialize_human_readable", "ser
 serde_json = "1.0.140"
 sqlite = { version = "0.36" }
 clap = { version = "4.4.2", features = ["derive", "string"] }
-bitcoin = { git = "https://github.com/braidpool/rust-bitcoin.git", branch = "cpunet" }
+bitcoin = { git = "https://github.com/braidpool/rust-bitcoin.git", features = ["serde"] }
 bitcoin_hashes = { version = "0.16" }
 bitcoincore-rpc = { version = "0.19.0-cpunet", git = "https://github.com/braidpool/rust-bitcoincore-rpc.git", branch = "cpunet" }
 bitcoincore-rpc-json = { version = "0.19.0-cpunet", git = "https://github.com/braidpool/rust-bitcoincore-rpc.git", branch = "cpunet" }
@@ -40,7 +40,5 @@ lazy_static = "1.4.0"
 regex = "1.11.1"
 hex = "0.4.3"
 num-bigint = "0.4.6"
-ordered-float = "5.0.0"
 transitive = "1.1.0"
-bitcoin = { git = "https://github.com/braidpool/rust-bitcoin.git" ,features=["serde"]}
 secp256k1 = "0.30.0"

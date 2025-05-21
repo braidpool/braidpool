@@ -3,7 +3,6 @@ use ::bitcoin::BlockHash;
 
 // Standard Imports
 
-pub mod bitcoin;
 pub mod test_utils;
 
 // External Type Aliases

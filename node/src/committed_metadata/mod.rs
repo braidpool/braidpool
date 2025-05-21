@@ -1,14 +1,14 @@
-use crate::utils::{BeadHash, hashset_to_vec_deterministic, vec_to_hashset};
+use crate::utils::{hashset_to_vec_deterministic, vec_to_hashset, BeadHash};
+use bitcoin::absolute::Time;
+use bitcoin::consensus::encode::Decodable;
+use bitcoin::consensus::encode::Encodable;
+use bitcoin::consensus::Error;
+use bitcoin::io::{self, BufRead, Write};
+use bitcoin::p2p::address::AddrV2;
+use bitcoin::p2p::Address as P2P_Address;
 use bitcoin::CompactTarget;
 use bitcoin::PublicKey;
 use bitcoin::Transaction;
-use bitcoin::absolute::Time;
-use bitcoin::consensus::Error;
-use bitcoin::consensus::encode::Decodable;
-use bitcoin::consensus::encode::Encodable;
-use bitcoin::io::{self, BufRead, Write};
-use bitcoin::p2p::Address as P2P_Address;
-use bitcoin::p2p::address::AddrV2;
 use std::collections::HashSet;
 
 #[derive(Clone, Debug, PartialEq)]
