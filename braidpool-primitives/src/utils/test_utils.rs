@@ -1,9 +1,13 @@
 #[cfg(test)]
 use super::BeadHash;
 #[cfg(test)]
-use crate::bead::TimeVec;
+use crate::bead::Bead;
 #[cfg(test)]
-use crate::bead::{Bead, CommittedMetadata, UnCommittedMetadata};
+use crate::committed_metadata::CommittedMetadata;
+#[cfg(test)]
+use crate::uncommitted_metadata::TimeVec;
+#[cfg(test)]
+use crate::uncommitted_metadata::UnCommittedMetadata;
 #[cfg(test)]
 use bitcoin::BlockHeader;
 #[cfg(test)]

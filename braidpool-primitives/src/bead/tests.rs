@@ -1,7 +1,7 @@
 use super::Bead;
 use super::CommittedMetadata;
 use super::UnCommittedMetadata;
-use crate::bead::TimeVec;
+use crate::uncommitted_metadata::TimeVec;
 use crate::utils::test_utils::test_utility_functions::*;
 use ::bitcoin::BlockHash;
 use bitcoin::BlockHeader;
