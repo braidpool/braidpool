@@ -1,8 +1,8 @@
 use ::serde::{Deserialize, Serialize};
 use bitcoin::absolute::Time;
-use bitcoin::consensus::Error;
 use bitcoin::consensus::encode::Decodable;
 use bitcoin::consensus::encode::Encodable;
+use bitcoin::consensus::Error;
 use bitcoin::ecdsa::Signature;
 use bitcoin::io::{self, BufRead, Write};
 use core::str::FromStr;
