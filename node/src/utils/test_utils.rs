@@ -66,7 +66,6 @@ pub mod test_utility_functions {
     }
     #[cfg(test)]
     pub struct TestCommittedMetadataBuilder {
-        transaction_cnt: u32,
         transactions: Vec<Transaction>,
         parents: std::collections::HashSet<BeadHash>,
         parent_bead_timestamps: Option<TimeVec>,
@@ -82,7 +81,6 @@ pub mod test_utility_functions {
     impl TestCommittedMetadataBuilder {
         pub fn new() -> Self {
             Self {
-                transaction_cnt: 0,
                 transactions: Vec::new(),
                 parents: HashSet::new(),
                 parent_bead_timestamps: None,
@@ -93,11 +91,6 @@ pub mod test_utility_functions {
                 weak_target: None,
                 miner_ip: None,
             }
-        }
-
-        pub fn transaction_cnt(mut self, count: u32) -> Self {
-            self.transaction_cnt = count;
-            self
         }
 
         pub fn transactions(mut self, txs: Vec<Transaction>) -> Self {
@@ -144,7 +137,6 @@ pub mod test_utility_functions {
         }
         pub fn build(self) -> CommittedMetadata {
             CommittedMetadata {
-                transaction_cnt: self.transaction_cnt,
                 transactions: self.transactions,
                 parents: self.parents,
                 parent_bead_timestamps: self

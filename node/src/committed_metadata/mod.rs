@@ -43,7 +43,6 @@ impl Decodable for TimeVec {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct CommittedMetadata {
-    pub transaction_cnt: u32,
     pub transactions: Vec<Transaction>,
     pub parents: HashSet<BeadHash>,
     pub parent_bead_timestamps: TimeVec,
@@ -61,7 +60,6 @@ pub struct CommittedMetadata {
 impl Encodable for CommittedMetadata {
     fn consensus_encode<W: Write + ?Sized>(&self, w: &mut W) -> Result<usize, io::Error> {
         let mut len = 0;
-        len += self.transaction_cnt.consensus_encode(w)?;
         len += self.transactions.consensus_encode(w)?;
         len += hashset_to_vec_deterministic(&self.parents).consensus_encode(w)?;
         len += self.parent_bead_timestamps.consensus_encode(w)?;
@@ -81,7 +79,6 @@ impl Encodable for CommittedMetadata {
 
 impl Decodable for CommittedMetadata {
     fn consensus_decode<R: BufRead + ?Sized>(r: &mut R) -> Result<Self, Error> {
-        let transaction_cnt = u32::consensus_decode(r)?;
         let transactions = Vec::<Transaction>::consensus_decode(r)?;
         let parents = vec_to_hashset(Vec::<BeadHash>::consensus_decode(r)?);
         let parent_bead_timestamps = TimeVec::consensus_decode(r)?;
@@ -92,7 +89,6 @@ impl Decodable for CommittedMetadata {
         let weak_target = CompactTarget::consensus_decode(r).unwrap();
         let miner_ip = AddrV2::consensus_decode(r)?;
         Ok(CommittedMetadata {
-            transaction_cnt,
             transactions,
             parents,
             parent_bead_timestamps,
