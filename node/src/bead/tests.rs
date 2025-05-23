@@ -1,22 +1,22 @@
 use super::Bead;
 use super::CommittedMetadata;
 use super::UnCommittedMetadata;
-use crate::bead::TimeVec;
+use crate::committed_metadata::TimeVec;
 use crate::utils::test_utils::test_utility_functions::*;
-use ::bitcoin::BlockHash;
+use bitcoin::absolute::Time;
+use bitcoin::consensus::encode::deserialize;
+use bitcoin::consensus::serialize;
+use bitcoin::consensus::DeserializeError;
+use bitcoin::ecdsa::Signature;
+use bitcoin::p2p::Address as P2P_Address;
+use bitcoin::p2p::ServiceFlags;
+use bitcoin::BlockHash;
 use bitcoin::BlockHeader;
 use bitcoin::BlockTime;
 use bitcoin::BlockVersion;
 use bitcoin::CompactTarget;
 use bitcoin::EcdsaSighashType;
 use bitcoin::TxMerkleNode;
-use bitcoin::absolute::Time;
-use bitcoin::consensus::DeserializeError;
-use bitcoin::consensus::encode::deserialize;
-use bitcoin::consensus::serialize;
-use bitcoin::ecdsa::Signature;
-use bitcoin::p2p::Address as P2P_Address;
-use bitcoin::p2p::ServiceFlags;
 use core::net::SocketAddr;
 use std::collections::HashSet;
 use std::net::{IpAddr, Ipv4Addr};
@@ -32,6 +32,7 @@ fn test_serialized_committed_metadata() {
     let socket = bitcoin::p2p::address::AddrV2::Ipv4(Ipv4Addr::new(127, 0, 0, 1));
     let time_val = Time::from_consensus(1653195600).unwrap();
     let parent_hash_set: HashSet<BlockHash> = HashSet::new();
+    let time_hash_set = TimeVec(Vec::new());
     let weak_target = CompactTarget::from_consensus(32);
     let min_target = CompactTarget::from_consensus(1);
     let test_committed_metadata = TestCommittedMetadataBuilder::new()
@@ -39,8 +40,8 @@ fn test_serialized_committed_metadata() {
         .miner_ip(socket)
         .start_timestamp(time_val)
         .parents(parent_hash_set)
+        .parent_bead_timestamps(time_hash_set)
         .payout_address(_address)
-        .transaction_cnt(0)
         .transactions(vec![])
         .min_target(min_target)
         .weak_target(weak_target)
@@ -68,12 +69,10 @@ fn test_serialized_uncommitted_metadata() {
         sighash_type: EcdsaSighashType::All,
     };
     let time_val = Time::from_consensus(1653195600).unwrap();
-    let time_hash_set = TimeVec(Vec::new());
     let extra_nonce = 42;
     let test_uncommitted_metadata = TestUnCommittedMetadataBuilder::new()
         .broadcast_timestamp(time_val)
         .extra_nonce(extra_nonce)
-        .parent_bead_timestamps(time_hash_set)
         .signature(sig)
         .build();
     let serialized_val = serialize(&test_uncommitted_metadata);
@@ -110,8 +109,8 @@ fn test_serialized_bead() {
         .miner_ip(socket)
         .start_timestamp(time_val)
         .parents(parent_hash_set)
+        .parent_bead_timestamps(time_hash_set)
         .payout_address(_address)
-        .transaction_cnt(0)
         .min_target(min_target)
         .weak_target(weak_target)
         .transactions(vec![])
@@ -125,7 +124,6 @@ fn test_serialized_bead() {
     let test_uncommitted_metadata = TestUnCommittedMetadataBuilder::new()
         .broadcast_timestamp(time_val)
         .extra_nonce(extra_nonce)
-        .parent_bead_timestamps(time_hash_set)
         .signature(sig)
         .build();
     let test_bytes: [u8; 32] = [0u8; 32];

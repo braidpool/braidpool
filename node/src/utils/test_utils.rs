@@ -1,17 +1,21 @@
 #[cfg(test)]
 use super::BeadHash;
 #[cfg(test)]
-use crate::bead::TimeVec;
+use crate::bead::Bead;
 #[cfg(test)]
-use crate::bead::{Bead, CommittedMetadata, UnCommittedMetadata};
+use crate::committed_metadata::CommittedMetadata;
 #[cfg(test)]
-use bitcoin::BlockHeader;
+use crate::committed_metadata::TimeVec;
+#[cfg(test)]
+use crate::uncommitted_metadata::UnCommittedMetadata;
 #[cfg(test)]
 use bitcoin::ecdsa::Signature;
 #[cfg(test)]
 use bitcoin::p2p::Address as P2P_Address;
 #[cfg(test)]
-use bitcoin::{PublicKey, Transaction, absolute::Time, p2p::address::AddrV2};
+use bitcoin::BlockHeader;
+#[cfg(test)]
+use bitcoin::{absolute::Time, p2p::address::AddrV2, PublicKey, Transaction};
 #[cfg(test)]
 pub mod test_utility_functions {
     use std::collections::HashSet;
@@ -23,7 +27,6 @@ pub mod test_utility_functions {
         extra_nonce: i32,
         broadcast_timestamp: Option<Time>,
         signature: Option<Signature>,
-        parent_bead_timestamps: Option<TimeVec>,
     }
 
     #[cfg(test)]
@@ -33,7 +36,6 @@ pub mod test_utility_functions {
                 extra_nonce: 0,
                 broadcast_timestamp: None,
                 signature: None,
-                parent_bead_timestamps: None,
             }
         }
 
@@ -52,11 +54,6 @@ pub mod test_utility_functions {
             self
         }
 
-        pub fn parent_bead_timestamps(mut self, times: TimeVec) -> Self {
-            self.parent_bead_timestamps = Some(times);
-            self
-        }
-
         pub fn build(self) -> UnCommittedMetadata {
             UnCommittedMetadata {
                 extra_nonce: self.extra_nonce,
@@ -64,17 +61,14 @@ pub mod test_utility_functions {
                     .broadcast_timestamp
                     .expect("broadcast_timestamp is required"),
                 signature: self.signature.expect("signature is required"),
-                parent_bead_timestamps: self
-                    .parent_bead_timestamps
-                    .expect("parent_bead_timestamps is required"),
             }
         }
     }
     #[cfg(test)]
     pub struct TestCommittedMetadataBuilder {
-        transaction_cnt: u32,
         transactions: Vec<Transaction>,
         parents: std::collections::HashSet<BeadHash>,
+        parent_bead_timestamps: Option<TimeVec>,
         payout_address: Option<P2P_Address>,
         start_timestamp: Option<Time>,
         comm_pub_key: Option<PublicKey>,
@@ -87,9 +81,9 @@ pub mod test_utility_functions {
     impl TestCommittedMetadataBuilder {
         pub fn new() -> Self {
             Self {
-                transaction_cnt: 0,
                 transactions: Vec::new(),
                 parents: HashSet::new(),
+                parent_bead_timestamps: None,
                 payout_address: None,
                 start_timestamp: None,
                 comm_pub_key: None,
@@ -99,11 +93,6 @@ pub mod test_utility_functions {
             }
         }
 
-        pub fn transaction_cnt(mut self, count: u32) -> Self {
-            self.transaction_cnt = count;
-            self
-        }
-
         pub fn transactions(mut self, txs: Vec<Transaction>) -> Self {
             self.transactions = txs;
             self
@@ -111,6 +100,11 @@ pub mod test_utility_functions {
 
         pub fn parents(mut self, parents: HashSet<BeadHash>) -> Self {
             self.parents = parents;
+            self
+        }
+
+        pub fn parent_bead_timestamps(mut self, times: TimeVec) -> Self {
+            self.parent_bead_timestamps = Some(times);
             self
         }
 
@@ -143,9 +137,11 @@ pub mod test_utility_functions {
         }
         pub fn build(self) -> CommittedMetadata {
             CommittedMetadata {
-                transaction_cnt: self.transaction_cnt,
                 transactions: self.transactions,
                 parents: self.parents,
+                parent_bead_timestamps: self
+                    .parent_bead_timestamps
+                    .expect("parent_bead_timestamps is required"),
                 payout_address: self.payout_address.expect("payout_address is required"),
                 start_timestamp: self
                     .start_timestamp

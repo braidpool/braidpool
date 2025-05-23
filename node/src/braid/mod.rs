@@ -261,10 +261,6 @@ impl Braid {
 
         return old_orphan_set_length - self.orphan_beads.len();
     }
-
-    fn calculate_valid_difficulty_for_bead(&self, bead: &Bead) -> CompactTarget {
-        unimplemented!()
-    }
 }
 
 #[cfg(test)]

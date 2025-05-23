@@ -7,7 +7,6 @@ use tokio::sync::mpsc;
 use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 
 mod block_template;
-mod braid;
 mod cli;
 mod connection;
 mod protocol;
