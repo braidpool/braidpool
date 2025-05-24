@@ -8,7 +8,7 @@ name = "braid_tests"
 path = "../tests/braid_tests.rs"
 
 [dependencies]
-tokio = { version = "1", features = ["rt", "net", "macros", "rt-multi-thread", "tracing", "io-util"] }
+tokio = { version = "1", features = ["signal","rt", "net", "macros", "rt-multi-thread", "tracing", "io-util"] }
 serde = { version = "^1.0", features = ["derive"] }
 bincode = "1.3"
 tokio-util = { version = "0.7.0", features = ["full"] }
