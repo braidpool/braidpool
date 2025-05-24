@@ -11,6 +11,9 @@ pub struct Cli {
     #[arg(long, default_value = "0.0.0.0:25188")]
     pub bind: String,
 
+    /// Multiaddress string for libp2p
+    #[arg(long)]
+    pub multiaddr: String,
     /// Add a node to connect to and attempt to keep the connection open. This option can be
     /// specified multiple times
     #[arg(long)]
