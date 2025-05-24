@@ -73,10 +73,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let node_multiaddr: Multiaddr = node.parse().expect("Failed to parse to multiaddr");
             let dial_result = swarm.dial(node_multiaddr.clone());
             if let Some(err) = dial_result.err() {
-                log::error!("Failed to dial node: {node_multiaddr} with error: {err}");
+                log::error!(
+                    "Failed to dial node: {} with error: {}",
+                    node_multiaddr,
+                    err
+                );
                 continue;
             }
-            log::info!("Dialed : {node_multiaddr}");
+            log::info!("Dialed : {}", node_multiaddr);
         }
     };
     // Spawn a tokio task to handle the swarm events
@@ -86,28 +90,40 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {address:?}"),
                 // Prints peer id identify info is being sent to.
                 SwarmEvent::Behaviour(identify::Event::Sent { peer_id, .. }) => {
-                    log::info!("Sent identify info to {peer_id:?}")
+                    log::info!("Sent identify info to {:?}", peer_id);
                 }
                 // Prints out the info received via the identify event
                 SwarmEvent::Behaviour(identify::Event::Received { info, .. }) => {
-                    log::info!("Received {info:?}")
+                    log::info!("Received {:?}", info);
                 }
-                SwarmEvent::ConnectionEstablished { peer_id, endpoint, .. } => {
-                    log::info!("Connection established to peer: {peer_id} via {}", endpoint.get_remote_address());
+                SwarmEvent::ConnectionEstablished {
+                    peer_id, endpoint, ..
+                } => {
+                    log::info!(
+                        "Connection established to peer: {} via {}",
+                        peer_id,
+                        endpoint.get_remote_address()
+                    );
                 }
-                SwarmEvent::ConnectionClosed { peer_id, connection_id, endpoint, num_established, cause } => {
-                    log::info!("Connection closed to peer: {peer_id} with connection id: {connection_id} via {}. Number of established connections: {num_established}. Cause: {:?}", endpoint.get_remote_address(), cause);
+                SwarmEvent::ConnectionClosed {
+                    peer_id,
+                    connection_id,
+                    endpoint,
+                    num_established,
+                    cause,
+                } => {
+                    log::info!("Connection closed to peer: {} with connection id: {} via {}. Number of established connections: {}. Cause: {:?}", peer_id,connection_id,endpoint.get_remote_address(), num_established,cause);
                 }
                 _ => {}
             }
         }
     });
-    
+
     tokio::signal::ctrl_c().await?;
     println!("Shutting down...");
-    
+
     swarm_handle.abort();
-    
+
     Ok(())
 }
 
