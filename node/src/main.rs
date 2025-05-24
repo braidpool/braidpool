@@ -87,7 +87,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let swarm_handle = tokio::spawn(async move {
         loop {
             match swarm.select_next_some().await {
-                SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {address:?}"),
+                SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {:?}", address),
                 // Prints peer id identify info is being sent to.
                 SwarmEvent::Behaviour(identify::Event::Sent { peer_id, .. }) => {
                     log::info!("Sent identify info to {:?}", peer_id);
