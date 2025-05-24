@@ -1,4 +1,6 @@
 use clap::Parser;
+use futures::StreamExt;
+use libp2p::{core::multiaddr::Multiaddr, identify, identity, quic, swarm::SwarmEvent, PeerId};
 use std::error::Error;
 use std::fs;
 use std::net::ToSocketAddrs;
@@ -48,49 +50,85 @@ async fn main() -> Result<(), Box<dyn Error>> {
     tokio::spawn(zmq::zmq_hashblock_listener(zmq_url, rpc, block_template_tx));
     tokio::spawn(block_template::consumer(block_template_rx));
 
+    let mut swarm = libp2p::SwarmBuilder::with_new_identity()
+        .with_tokio()
+        .with_quic()
+        .with_behaviour(|key| {
+            identify::Behaviour::new(identify::Config::new(
+                "/ipfs/id/1.0.0".to_string(),
+                key.public(),
+            ))
+        })?
+        .build();
+    println!("Local Peerid: {}", swarm.local_peer_id());
+    let multi_addr: Multiaddr = args
+        .multiaddr
+        .parse()
+        .expect("failed to parse to multiaddress");
+
+    swarm.listen_on(multi_addr.clone())?;
+    println!("listening on multiaddress: {}", multi_addr);
     if let Some(addnode) = args.addnode {
         for node in addnode.iter() {
+            let node_multiaddr: Multiaddr = node.parse().expect("Failed to parse to multiaddr");
             //log::info!("Connecting to node: {:?}", node);
-            let stream = TcpStream::connect(node).await.expect("Error connecting");
-            let (r, w) = stream.into_split();
-            let framed_reader = FramedRead::new(r, LengthDelimitedCodec::new());
-            let framed_writer = FramedWrite::new(w, LengthDelimitedCodec::new());
-            let mut conn = connection::Connection::new(framed_reader, framed_writer);
-            if let Ok(addr_iter) = node.to_socket_addrs() {
-                if let Some(addr) = addr_iter.into_iter().next() {
-                    tokio::spawn(async move {
-                        if conn.start_from_connect(&addr).await.is_err() {
-                            log::warn!("Peer {} closed connection", addr)
-                        }
-                    });
-                }
-            }
+            swarm.dial(node_multiaddr.clone())?;
+            println!("Dialed : {node_multiaddr}");
+            //let stream = TcpStream::connect(node).await.expect("Error connecting");
+            //let (r, w) = stream.into_split();
+            //let framed_reader = FramedRead::new(r, LengthDelimitedCodec::new());
+            //let framed_writer = FramedWrite::new(w, LengthDelimitedCodec::new());
+            //let mut conn = connection::Connection::new(framed_reader, framed_writer);
+            //if let Ok(addr_iter) = node.to_socket_addrs() {
+            //    if let Some(addr) = addr_iter.into_iter().next() {
+            //        tokio::spawn(async move {
+            //            if conn.start_from_connect(&addr).await.is_err() {
+            //                log::warn!("Peer {} closed connection", addr)
+            //            }
+            //        });
+            //    }
+            //}
         }
-    }
-
-    log::info!("Binding to {}", args.bind);
-    let listener = TcpListener::bind(&args.bind).await?;
+    };
     loop {
-        // Asynchronously wait for an inbound TcpStream.
-        log::info!("Starting accept");
-        match listener.accept().await {
-            Ok((stream, _)) => {
-                let addr = stream.peer_addr()?;
-                log::info!("Accepted connection from {}", addr);
-                let (r, w) = stream.into_split();
-                let framed_reader = FramedRead::new(r, LengthDelimitedCodec::new());
-                let framed_writer = FramedWrite::new(w, LengthDelimitedCodec::new());
-                let mut conn = connection::Connection::new(framed_reader, framed_writer);
-
-                tokio::spawn(async move {
-                    if conn.start_from_accept().await.is_err() {
-                        log::warn!("Peer {} closed connection", addr)
-                    }
-                });
+        match swarm.select_next_some().await {
+            SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {address:?}"),
+            // Prints peer id identify info is being sent to.
+            SwarmEvent::Behaviour(identify::Event::Sent { peer_id, .. }) => {
+                println!("Sent identify info to {peer_id:?}")
             }
-            Err(e) => log::error!("couldn't get client: {:?}", e),
+            // Prints out the info received via the identify event
+            SwarmEvent::Behaviour(identify::Event::Received { info, .. }) => {
+                println!("Received {info:?}")
+            }
+            _ => {}
         }
     }
+
+    Ok(())
+    //log::info!("Binding to {}", args.bind);
+    //let listener = TcpListener::bind(&args.bind).await?;
+    //    loop {
+    //        // Asynchronously wait for an inbound TcpSt   ream.
+    //        log::info!("Starting accept");
+    //        match listener.accept().await {
+    //            Ok((stream, _)) => {
+    //                let addr = stream.peer_addr()?;
+    //                log::info!("Accepted connection from {}", addr);
+    //                let (r, w) = stream.into_split();
+    //                let framed_reader = FramedRead::new(r, LengthDelimitedCodec::new());
+    //                let framed_writer = FramedWrite::new(w, LengthDelimitedCodec::new());
+    //                let mut conn = connection::Connection::new(framed_reader, framed_writer);
+    //
+    //                tokio::spawn(async move {
+    //                    if conn.start_from_accept().await.is_err() {
+    //                        log::warn!("Peer {} closed connection", addr)
+    //                    }
+    //                });
+    //            }
+    //            Err(e) => log::error!("couldn't get client: {:?}", e),
+    //        }
+    //    }
 }
 
 fn setup_logging() {
