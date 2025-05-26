@@ -1,13 +1,14 @@
 use clap::Parser;
 use futures::StreamExt;
-use libp2p::{core::multiaddr::Multiaddr, identify, identity, quic, swarm::SwarmEvent, PeerId};
+use libp2p::{
+    core::multiaddr::Multiaddr,
+    identify, ping,
+    swarm::{self, NetworkBehaviour, SwarmEvent},
+};
 use std::error::Error;
 use std::fs;
-use std::net::ToSocketAddrs;
-use tokio::net::{TcpListener, TcpStream};
+use std::time::Duration;
 use tokio::sync::mpsc;
-use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
-
 mod block_template;
 mod braid;
 mod cli;
@@ -16,6 +17,11 @@ mod protocol;
 mod rpc;
 mod zmq;
 
+#[derive(NetworkBehaviour)]
+struct NodeBehaviour {
+    identify: libp2p::identify::Behaviour,
+    ping: libp2p::ping::Behaviour,
+}
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = cli::Cli::parse();
@@ -53,12 +59,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
         .with_tokio()
         .with_quic()
-        .with_behaviour(|key| {
-            identify::Behaviour::new(identify::Config::new(
+        .with_behaviour(|key| NodeBehaviour {
+            identify: identify::Behaviour::new(identify::Config::new(
                 "/ipfs/id/1.0.0".to_string(),
                 key.public(),
-            ))
+            )),
+            ping: ping::Behaviour::default(),
         })?
+        .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX)))
         .build();
     println!("Local Peerid: {}", swarm.local_peer_id());
     let multi_addr: Multiaddr = args
@@ -89,12 +97,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
             match swarm.select_next_some().await {
                 SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {:?}", address),
                 // Prints peer id identify info is being sent to.
-                SwarmEvent::Behaviour(identify::Event::Sent { peer_id, .. }) => {
+                SwarmEvent::Behaviour(NodeBehaviourEvent::Identify(identify::Event::Sent{peer_id,.. })) => {
                     log::info!("Sent identify info to {:?}", peer_id);
                 }
-                // Prints out the info received via the identify event
-                SwarmEvent::Behaviour(identify::Event::Received { info, .. }) => {
-                    log::info!("Received {:?}", info);
+                SwarmEvent::Behaviour(NodeBehaviourEvent::Identify(identify::Event::Received{peer_id,info,..})) => {
+                    log::info!("Received identify info from peer: {:?}", peer_id);
+                    log::info!("Info: {:?}", info);
+                }
+                SwarmEvent::Behaviour(NodeBehaviourEvent::Identify(identify::Event::Error{peer_id, error,connection_id })) => {
+                    log::error!("Error in identify event for peer {}: {:?}", peer_id, error);
+                }
+                SwarmEvent::Behaviour(NodeBehaviourEvent::Ping(ping::Event{peer,result,..})) => {
+                    log::info!("Response from peer: {} with result: {:?}", peer, result);
                 }
                 SwarmEvent::ConnectionEstablished {
                     peer_id, endpoint, ..
