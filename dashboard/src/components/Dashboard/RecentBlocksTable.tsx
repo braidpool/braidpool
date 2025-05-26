@@ -1,14 +1,4 @@
 import React from 'react';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Box,
-  Typography,
-} from '@mui/material';
 import Card from '../common/Card';
 import colors from '../../theme/colors';
 
@@ -43,88 +33,63 @@ interface RecentBlocksTableProps {
 const RecentBlocksTable: React.FC<RecentBlocksTableProps> = ({
   maxHeight = 400,
 }) => {
-  // Helper function to truncate hash
   const truncateHash = (hash: string) => {
     return hash.substring(0, 10) + '...' + hash.substring(hash.length - 10);
   };
 
   return (
     <Card
-      title="Recent Blocks"
       subtitle="Latest blocks found by the pool"
       accentColor={colors.cardAccentSecondary}
     >
-      <TableContainer
-        sx={{
-          maxHeight: maxHeight,
-          '&::-webkit-scrollbar': {
-            width: '8px',
-          },
-          '&::-webkit-scrollbar-track': {
-            background: colors.paper,
-          },
-          '&::-webkit-scrollbar-thumb': {
-            background: colors.primary,
-            borderRadius: '4px',
-          },
+      <div
+        className="overflow-auto"
+        style={{
+          maxHeight: `${maxHeight}px`,
+          scrollbarWidth: 'thin',
+          scrollbarColor: `${colors.primary} ${colors.paper}`,
         }}
       >
-        <Table size="medium" stickyHeader>
-          <TableHead>
-            <TableRow>
-              <TableCell
-                sx={{
-                  backgroundColor: colors.paper,
-                  color: colors.textPrimary,
-                  fontWeight: 'bold',
-                }}
+        <table className="w-full">
+          <thead className="sticky top-0">
+            <tr style={{ backgroundColor: colors.paper }}>
+              <th
+                className="text-left p-4 font-bold"
+                style={{ color: colors.textPrimary }}
               >
                 Height
-              </TableCell>
-              <TableCell
-                sx={{
-                  backgroundColor: colors.paper,
-                  color: colors.textPrimary,
-                  fontWeight: 'bold',
-                }}
+              </th>
+              <th
+                className="text-left p-4 font-bold"
+                style={{ color: colors.textPrimary }}
               >
                 Hash
-              </TableCell>
-              <TableCell
-                sx={{
-                  backgroundColor: colors.paper,
-                  color: colors.textPrimary,
-                  fontWeight: 'bold',
-                }}
+              </th>
+              <th
+                className="text-left p-4 font-bold"
+                style={{ color: colors.textPrimary }}
               >
                 Time
-              </TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
             {recentBlocks.map((block, index) => (
-              <TableRow
-                key={index}
-                sx={{
-                  '&:hover': {
-                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                  },
-                }}
-              >
-                <TableCell sx={{ color: colors.textPrimary }}>
+              <tr key={index} className="hover:bg-white/5 transition-colors">
+                <td className="p-4" style={{ color: colors.textPrimary }}>
                   {block.height}
-                </TableCell>
-                <TableCell sx={{ color: colors.accent }}>
+                </td>
+                <td className="p-4" style={{ color: colors.accent }}>
                   {truncateHash(block.hash)}
-                </TableCell>
-                <TableCell sx={{ color: colors.textSecondary }}>
+                </td>
+                <td className="p-4" style={{ color: colors.textSecondary }}>
                   {block.time}
-                </TableCell>
-              </TableRow>
+                </td>
+              </tr>
             ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
+          </tbody>
+        </table>
+      </div>
     </Card>
   );
 };

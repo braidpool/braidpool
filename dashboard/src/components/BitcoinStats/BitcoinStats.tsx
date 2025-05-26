@@ -1,11 +1,11 @@
-import Prices from './Prices'
+import Prices from './Prices';
 
 const BitcoinStats = () => {
-    return (
-        <div>
-            <Prices />
-        </div>
-    )
-}
+  return (
+    <div>
+      <Prices />
+    </div>
+  );
+};
 
-export default BitcoinStats
+export default BitcoinStats;

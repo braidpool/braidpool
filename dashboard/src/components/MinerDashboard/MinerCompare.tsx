@@ -1,9 +1,6 @@
 import { useState } from 'react';
-
-import { motion, AnimatePresence } from 'framer-motion';
-
+import { motion } from 'framer-motion';
 import { ChevronDown, GitCompare } from 'lucide-react';
-
 import { BEADS } from './lib/constants';
 import { useComparisonData } from './Hooks/useComparisonData';
 import AdvancedChart from './AdvancedChart';

@@ -1,18 +1,6 @@
 import { motion } from 'framer-motion';
-import { BarChart3, Layers, Cpu, Database, GitCompare } from 'lucide-react';
+import { BarChart3, Layers, Cpu, Database } from 'lucide-react';
 
-interface DashboardHeaderProps {
-  headerOpacity: any;
-  headerScale: any;
-  activeTab: string;
-  setActiveTab: (tab: string) => void;
-}
-
-const TABS = [
-  { key: 'miners', label: 'Miners' },
-  { key: 'trends', label: 'Trends' },
-  { key: 'blocks', label: 'Blocks' },
-];
 export default function DashboardHeader({
   headerOpacity,
   headerScale,

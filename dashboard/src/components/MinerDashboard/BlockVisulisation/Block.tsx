@@ -2,11 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { Layers } from 'lucide-react';
 import { BlockList } from './BlockList';
 import { BlockStats } from './BlockStats';
-export default function EnhancedBlocksTab({
-  timeRange,
-}: {
-  timeRange: string;
-}) {
+export default function EnhancedBlocksTab() {
   const [isLoaded, setIsLoaded] = useState(false);
   const [animateBlocks, setAnimateBlocks] = useState(false);
   const [viewMode, setViewMode] = useState('list');
