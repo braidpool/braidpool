@@ -97,17 +97,30 @@ async fn main() -> Result<(), Box<dyn Error>> {
             match swarm.select_next_some().await {
                 SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {:?}", address),
                 // Prints peer id identify info is being sent to.
-                SwarmEvent::Behaviour(NodeBehaviourEvent::Identify(identify::Event::Sent{peer_id,.. })) => {
+                SwarmEvent::Behaviour(NodeBehaviourEvent::Identify(identify::Event::Sent {
+                    peer_id,
+                    ..
+                })) => {
                     log::info!("Sent identify info to {:?}", peer_id);
                 }
-                SwarmEvent::Behaviour(NodeBehaviourEvent::Identify(identify::Event::Received{peer_id,info,..})) => {
+                SwarmEvent::Behaviour(NodeBehaviourEvent::Identify(
+                    identify::Event::Received { peer_id, info, .. },
+                )) => {
                     log::info!("Received identify info from peer: {:?}", peer_id);
                     log::info!("Info: {:?}", info);
                 }
-                SwarmEvent::Behaviour(NodeBehaviourEvent::Identify(identify::Event::Error{peer_id, error,connection_id })) => {
+                SwarmEvent::Behaviour(NodeBehaviourEvent::Identify(identify::Event::Error {
+                    peer_id,
+                    error,
+                    connection_id,
+                })) => {
                     log::error!("Error in identify event for peer {}: {:?}", peer_id, error);
                 }
-                SwarmEvent::Behaviour(NodeBehaviourEvent::Ping(ping::Event{peer,result,..})) => {
+                SwarmEvent::Behaviour(NodeBehaviourEvent::Ping(ping::Event {
+                    peer,
+                    result,
+                    ..
+                })) => {
                     log::info!("Response from peer: {} with result: {:?}", peer, result);
                 }
                 SwarmEvent::ConnectionEstablished {
