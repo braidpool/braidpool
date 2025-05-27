@@ -31,7 +31,7 @@ const GraphVisualization: React.FC = () => {
   const margin = { top: 0, right: 0, bottom: 0, left: 50 }; // Changed top from 50 to 100
   const height = window.innerHeight - margin.top - margin.bottom;
   const [nodeIdMap, setNodeIdMap] = useState<NodeIdMapping>({});
-  const [selectedCohorts, setSelectedCohorts] = useState<number | 'all'>(10);
+  const [selectedCohorts, setSelectedCohorts] = useState<number | 'all'>(5);
   const nodeRadius = 30;
   const tooltipRef = useRef<HTMLDivElement>(null);
   var COLUMN_WIDTH = 200;
@@ -863,7 +863,7 @@ const GraphVisualization: React.FC = () => {
           className="px-2 py-1 rounded border border-[#0077B6] bg-gray text-[#0077B6]"
         >
           <option value="all">Show all cohorts</option>
-          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((value) => (
+          {[1, 2, 3, 4, 5].map((value) => (
             <option key={value} value={value}>
               Show latest {value} cohorts
             </option>
