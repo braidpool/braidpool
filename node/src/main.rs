@@ -3,7 +3,7 @@ use futures::StreamExt;
 use libp2p::{
     core::multiaddr::Multiaddr,
     identify, ping,
-    swarm::{self, NetworkBehaviour, SwarmEvent},
+    swarm::{NetworkBehaviour, SwarmEvent},
 };
 use std::error::Error;
 use std::fs;
@@ -61,7 +61,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_quic()
         .with_behaviour(|key| NodeBehaviour {
             identify: identify::Behaviour::new(identify::Config::new(
-                "/ipfs/id/1.0.0".to_string(),
+                "/braidpool/id/1.0.0".to_string(),
                 key.public(),
             )),
             ping: ping::Behaviour::default(),
@@ -88,7 +88,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 );
                 continue;
             }
-            log::info!("Dialed : {}", node_multiaddr);
+            log::info!("Dialed: {}", node_multiaddr);
         }
     };
     // Spawn a tokio task to handle the swarm events
@@ -112,7 +112,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 SwarmEvent::Behaviour(NodeBehaviourEvent::Identify(identify::Event::Error {
                     peer_id,
                     error,
-                    connection_id,
+                    connection_id: _,
                 })) => {
                     log::error!("Error in identify event for peer {}: {:?}", peer_id, error);
                 }
