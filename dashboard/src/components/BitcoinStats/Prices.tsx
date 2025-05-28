@@ -1,13 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import Select from '@mui/material/Select';
-import MenuItem from '@mui/material/MenuItem';
-import InputLabel from '@mui/material/InputLabel';
-import FormControl from '@mui/material/FormControl';
-import Skeleton from '@mui/material/Skeleton';
-import Alert from '@mui/material/Alert';
-import Typography from '@mui/material/Typography';
-import ArrowUpward from '@mui/icons-material/ArrowUpward';
-import ArrowDownward from '@mui/icons-material/ArrowDownward';
 import {
   BarChart,
   Bar,
@@ -39,21 +30,15 @@ interface GlobalStats {
 }
 
 const BitcoinPriceTracker: React.FC = () => {
-  const [currency, setCurrency] = useState<'USD' | 'EUR' | 'GBP' | 'JPY'>(
-    'USD'
-  );
+  const [currency, setCurrency] = useState<'USD' | 'EUR' | 'GBP' | 'JPY'>('USD');
   const [priceData, setPriceData] = useState<PriceData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [globalStats, setGlobalStats] = useState<GlobalStats | null>(null);
-  const [priceDirection, setPriceDirection] = useState<'up' | 'down' | null>(
-    null
-  );
+  const [priceDirection, setPriceDirection] = useState<'up' | 'down' | null>(null);
   const [isConnected, setIsConnected] = useState(false);
-  const [priceHistory, setPriceHistory] = useState<
-    { price: number; time: string }[]
-  >([]);
-  const MAX_HISTORY_ITEMS = 30; // Keep last 30 data points
+  const [priceHistory, setPriceHistory] = useState<{ price: number; time: string }[]>([]);
+  const MAX_HISTORY_ITEMS = 30;
 
   useEffect(() => {
     const websocket = new WebSocket('ws://localhost:5000');
@@ -67,23 +52,19 @@ const BitcoinPriceTracker: React.FC = () => {
     websocket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        console.log('Received data:', data);
         if (data.type === 'bitcoin_update') {
           const currentPrice = data.data.price?.[currency];
           const currencySymbol = getCurrencySymbol(currency);
 
           setPriceData((prev) => {
             const previousPrice = prev?.current ?? currentPrice;
-            const priceChange =
-              ((currentPrice - previousPrice) / previousPrice) * 100;
+            const priceChange = ((currentPrice - previousPrice) / previousPrice) * 100;
             if (previousPrice !== currentPrice) {
               setPriceDirection(currentPrice > previousPrice ? 'up' : 'down');
             }
             return {
               current: currentPrice,
-              high24h: prev
-                ? Math.max(prev.high24h, currentPrice)
-                : currentPrice,
+              high24h: prev ? Math.max(prev.high24h, currentPrice) : currentPrice,
               low24h: prev ? Math.min(prev.low24h, currentPrice) : currentPrice,
               priceChange24h: isFinite(priceChange) ? priceChange : 0,
               currencySymbol,
@@ -97,21 +78,15 @@ const BitcoinPriceTracker: React.FC = () => {
             setGlobalStats({
               marketCap: formatLargeNumber(data.data.global_stats.market_cap),
               marketCapChange: data.data.global_stats.market_cap_change,
-              activeCryptocurrencies:
-                data.data.global_stats.active_cryptocurrencies,
+              activeCryptocurrencies: data.data.global_stats.active_cryptocurrencies,
               activeMarkets: data.data.global_stats.active_markets,
               bitcoinDominance: data.data.global_stats.bitcoin_dominance * 100,
               lastUpdated: new Date(now).toLocaleString(),
             });
           }
 
-          // Update price history
           setPriceHistory((prev) => {
-            const newHistory = [
-              ...prev,
-              { price: currentPrice, time: timeString },
-            ];
-            // Keep only the last MAX_HISTORY_ITEMS entries
+            const newHistory = [...prev, { price: currentPrice, time: timeString }];
             return newHistory.slice(-MAX_HISTORY_ITEMS);
           });
         }
@@ -120,12 +95,6 @@ const BitcoinPriceTracker: React.FC = () => {
         setError('Invalid data format received');
       }
     };
-
-    // websocket.onerror = (error) => {
-    //   console.error('WebSocket error:', error);
-    //   setError('Connection error');
-    //   setLoading(false);
-    // };
 
     websocket.onclose = () => {
       console.log('WebSocket disconnected');
@@ -140,21 +109,16 @@ const BitcoinPriceTracker: React.FC = () => {
 
   const getCurrencySymbol = (curr: string) => {
     switch (curr) {
-      case 'EUR':
-        return '€';
-      case 'GBP':
-        return '£';
-      case 'JPY':
-        return '¥';
-      default:
-        return '$';
+      case 'EUR': return '€';
+      case 'GBP': return '£';
+      case 'JPY': return '¥';
+      default: return '$';
     }
   };
 
   const formatPrice = (value: number): string => {
     if (!value) return '--';
     return new Intl.NumberFormat('en-US', {
-      style: 'decimal',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(value);
@@ -168,42 +132,39 @@ const BitcoinPriceTracker: React.FC = () => {
     return new Intl.NumberFormat('en-US').format(value);
   };
 
-  // Show skeletons if:
-  // 1. Still loading (initial state)
-  // 2. Not connected to WebSocket yet
-  // 3. No data received yet
   const showSkeletons = loading || !isConnected || (!priceData && !globalStats);
 
   return (
     <div className="p-4">
-      <div className="w-full flex flex-wrap justify-center items-center gap-4 md:gap-20 p-4 md:p-6 rounded-lg shadow-sm mb-6">
-        <FormControl size="small" className="min-w-[100px]">
-          <InputLabel id="currency-select-label">Currency</InputLabel>
-          {
-            <Select
-              labelId="currency-select-label"
-              value={currency}
-              label="Currency"
-              onChange={(e) => setCurrency(e.target.value as typeof currency)}
-            >
-              <MenuItem value="USD">USD</MenuItem>
-              <MenuItem value="EUR">EUR</MenuItem>
-              <MenuItem value="GBP">GBP</MenuItem>
-              <MenuItem value="JPY">JPY</MenuItem>
-            </Select>
-          }
-        </FormControl>
+      {/* Currency Selector */}
+      <div className="flex flew-row justify-center mb-6 min-w-[100px]">
+        <label className="block text-lg font-medium text-white mb-1">
+          Currency
+        </label>
+        <select
+          value={currency}
+          onChange={(e) => setCurrency(e.target.value as typeof currency)}
+          className="block py-2 px-4 ml-5 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+        >
+          <option className='bg-gray-500' value="USD">USD</option>
+          <option className='bg-gray-500' value="EUR">EUR</option>
+          <option className='bg-gray-500' value="GBP">GBP</option>
+          <option className='bg-gray-500' value="JPY">JPY</option>
+        </select>
+      </div>
 
+      {/* Price Display */}
+      <div className="w-full flex flex-wrap justify-center items-center gap-4 md:gap-20 p-4 md:p-6 rounded-lg shadow-sm mb-6">
         {error ? (
-          <Alert severity="error" className="w-full">
+          <div className="w-full p-3 bg-red-100 text-red-700 rounded-md">
             {error}
-          </Alert>
+          </div>
         ) : showSkeletons ? (
           <div className="flex gap-6">
             {[...Array(3)].map((_, i) => (
               <div key={i} className="flex flex-col gap-1">
-                <Skeleton variant="text" width={80} height={30} />
-                <Skeleton variant="text" width={60} height={20} />
+                <div className="animate-pulse bg-gray-200 rounded h-7 w-20"></div>
+                <div className="animate-pulse bg-gray-200 rounded h-5 w-16"></div>
               </div>
             ))}
           </div>
@@ -211,110 +172,97 @@ const BitcoinPriceTracker: React.FC = () => {
           <>
             <div className="flex flex-col">
               <div className="flex items-center gap-2">
-                <Typography
-                  variant="h6"
-                  className={`font-bold ${priceDirection === 'up' ? 'text-green-500' : priceDirection === 'down' ? 'text-red-500' : ''}`}
-                >
+                <h6 className={`font-bold text-lg ${priceDirection === 'up' ? 'text-green-500' : priceDirection === 'down' ? 'text-red-500' : ''}`}>
                   {priceData.currencySymbol}
                   {formatPrice(priceData.current)}
-                </Typography>
+                </h6>
                 {priceDirection === 'up' && (
-                  <ArrowUpward className="text-green-500" fontSize="small" />
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-500" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />
+                  </svg>
                 )}
                 {priceDirection === 'down' && (
-                  <ArrowDownward className="text-red-500" fontSize="small" />
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
                 )}
               </div>
-              <Typography variant="caption" className="text-gray-500">
+              <span className="text-sm text-gray-500">
                 Current Price in {currency}
-              </Typography>
+              </span>
             </div>
 
             <div className="flex flex-col">
-              <Typography variant="body1">
+              <p className="text-base">
                 {priceData.currencySymbol}
                 {formatPrice(priceData.high24h)}
-              </Typography>
-              <Typography variant="caption" className="text-gray-500">
+              </p>
+              <span className="text-sm text-gray-500">
                 24H High
-              </Typography>
+              </span>
             </div>
 
             <div className="flex flex-col">
-              <Typography variant="body1">
+              <p className="text-base">
                 {priceData.currencySymbol}
                 {formatPrice(priceData.low24h)}
-              </Typography>
-              <Typography variant="caption" className="text-gray-500">
+              </p>
+              <span className="text-sm text-gray-500">
                 24H Low
-              </Typography>
+              </span>
             </div>
           </>
         ) : null}
       </div>
 
+      {/* Global Stats */}
       {showSkeletons ? (
         <div className="flex flex-wrap justify-center items-center gap-4 md:gap-20 p-4">
           {[...Array(5)].map((_, i) => (
             <div key={i} className="flex flex-col gap-1">
-              <Skeleton variant="text" width={80} height={30} />
-              <Skeleton variant="text" width={60} height={20} />
+              <div className="animate-pulse bg-gray-200 rounded h-6 w-20"></div>
+              <div className="animate-pulse bg-gray-200 rounded h-4 w-16"></div>
             </div>
           ))}
         </div>
       ) : globalStats ? (
         <div className="flex flex-wrap justify-center items-center gap-4 md:gap-20 p-4">
           <div className="flex flex-col">
-            <Typography variant="body1">{globalStats.marketCap}</Typography>
-            <Typography variant="caption" className="text-gray-500">
-              Market Cap
-            </Typography>
-          </div>
-          <div className="flex flex-col">
-            <Typography variant="body1">
-              {globalStats.activeCryptocurrencies}
-            </Typography>
-            <Typography variant="caption" className="text-gray-500">
-              Active Cryptocurrencies
-            </Typography>
+            <p className="text-base">{globalStats.marketCap}</p>
+            <span className="text-sm text-gray-500">Market Cap</span>
           </div>
 
           <div className="flex flex-col">
-            <Typography variant="body1">{globalStats.activeMarkets}</Typography>
-            <Typography variant="caption" className="text-gray-500">
-              Active Markets
-            </Typography>
+            <p className="text-base">{globalStats.activeCryptocurrencies}</p>
+            <span className="text-sm text-gray-500">Active Cryptocurrencies</span>
           </div>
 
           <div className="flex flex-col">
-            <Typography variant="body1">
-              {globalStats.bitcoinDominance.toFixed(2)}%
-            </Typography>
-            <Typography variant="caption" className="text-gray-500">
-              BTC Dominance
-            </Typography>
+            <p className="text-base">{globalStats.activeMarkets}</p>
+            <span className="text-sm text-gray-500">Active Markets</span>
           </div>
 
           <div className="flex flex-col">
-            <Typography variant="body1">{globalStats.lastUpdated}</Typography>
-            <Typography variant="caption" className="text-gray-500">
-              Last Updated
-            </Typography>
+            <p className="text-base">{globalStats.bitcoinDominance.toFixed(2)}%</p>
+            <span className="text-sm text-gray-500">BTC Dominance</span>
+          </div>
+
+          <div className="flex flex-col">
+            <p className="text-base">{globalStats.lastUpdated}</p>
+            <span className="text-sm text-gray-500">Last Updated</span>
           </div>
         </div>
       ) : null}
 
+      {/* Charts Section */}
       <div className="w-full flex flex-wrap justify-center items-center gap-4 md:gap-20 p-4 md:p-6 rounded-lg mb-6">
         <div className="grid sm:grid-cols-1 md:grid-cols-2 gap-4 md:gap-20 p-4">
-          {/* Graph 1: Bitcoin Dominance */}
+          {/* Price Range Bar Chart */}
           <div className="flex flex-col w-full h-72">
-            <Typography variant="body1" className="font-semibold">
-              Bitcoin 24H Price Range
-            </Typography>
-            <Typography variant="caption" className="text-gray-500 mb-2">
-              Displays the low, current, and high prices of Bitcoin in the
-              selected currency over the past 24 hours.
-            </Typography>
+            <p className="font-semibold text-base">Bitcoin 24H Price Range</p>
+            <span className="text-sm text-gray-500 mb-2">
+              Displays the low, current, and high prices in {currency}
+            </span>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={[
@@ -331,14 +279,13 @@ const BitcoinPriceTracker: React.FC = () => {
               </BarChart>
             </ResponsiveContainer>
           </div>
-          {/* Graph 2: Bitcoin Price LineChart */}
+
+          {/* Price History Line Chart */}
           <div className="flex flex-col w-full h-72">
-            <Typography variant="body1" className="font-semibold">
-              Bitcoin Price History (Live)
-            </Typography>
-            <Typography variant="caption" className="text-gray-500 mb-2">
-              Live updates of Bitcoin price in {currency}
-            </Typography>
+            <p className="font-semibold text-base">Bitcoin Price History (Live)</p>
+            <span className="text-sm text-gray-500 mb-2">
+              Live updates in {currency}
+            </span>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart
                 data={priceHistory}
@@ -348,7 +295,7 @@ const BitcoinPriceTracker: React.FC = () => {
                 <XAxis
                   dataKey="time"
                   tick={{ fontSize: 10 }}
-                  interval={Math.floor(MAX_HISTORY_ITEMS / 5)} // Show fewer ticks
+                  interval={Math.floor(MAX_HISTORY_ITEMS / 5)}
                 />
                 <YAxis
                   domain={['auto', 'auto']}
@@ -372,7 +319,7 @@ const BitcoinPriceTracker: React.FC = () => {
                   dataKey="price"
                   stroke="#8884d8"
                   dot={false}
-                  isAnimationActive={false} // Disable animation for better performance with live data
+                  isAnimationActive={false}
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -380,41 +327,35 @@ const BitcoinPriceTracker: React.FC = () => {
         </div>
       </div>
 
+      {/* Additional Charts Section */}
       <div className="w-full flex flex-wrap justify-center items-center gap-4 md:gap-20 p-4 md:p-6 rounded-lg mb-6">
         <div className="grid sm:grid-cols-1 md:grid-cols-2 gap-4 md:gap-20 p-4">
-          {/* Graph 2: Fear-Greed Meter */}
+          {/* Fear-Greed Meter */}
           <div className="flex flex-col w-full h-72">
-            <Typography variant="body1" className="font-semibold">
-              Fear & Greed Index
-            </Typography>
-            <Typography variant="caption" className="text-gray-500 mb-2">
-              The crypto market behaviour is very emotional. People tend to get
-              greedy when the market is rising which results in FOMO (Fear of
-              missing out). Also, people often sell their coins in irrational
-              reaction of seeing red numbers. With our Fear and Greed Index, we
-              try to save you from your own emotional overreactions.
-            </Typography>
+            <p className="font-semibold text-base">Fear & Greed Index</p>
+            <span className="text-sm text-gray-500 mb-2">
+              Market sentiment indicator
+            </span>
             <div className="w-full flex flex-wrap justify-center items-center">
               <ResponsiveContainer width="50%" height="100%">
                 <img
-                  className="bg-blend-multiply"
                   src="https://alternative.me/crypto/fear-and-greed-index.png"
                   alt="Latest Crypto Fear & Greed Index"
+                  className="w-full h-auto"
                 />
               </ResponsiveContainer>
             </div>
           </div>
-          {/* Graph 2: Bitcoin Price LineChart */}
+
+          {/* Placeholder */}
           <div className="flex flex-col w-full h-72">
-            <Typography variant="body1" className="font-semibold">
-              Something
-            </Typography>
-            <Typography variant="caption" className="text-gray-500 mb-2">
-              Something
-            </Typography>
-            <ResponsiveContainer width="100%" height="100%">
-              <div>Something</div>
-            </ResponsiveContainer>
+            <p className="font-semibold text-base">Market Trends</p>
+            <span className="text-sm text-gray-500 mb-2">
+              Coming soon...
+            </span>
+            <div className="w-full h-full flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg">
+              <p className="text-gray-500">Additional visualization</p>
+            </div>
           </div>
         </div>
       </div>
