@@ -2,13 +2,13 @@
 
 cd node
 cargo build
-cargo run -- --bind=localhost:25188 --network=cpunet --rpccookie=~/.bitcoin/cpunet/.cookie --rpcport=28332 &
+cargo run -- --bind=localhost:8989 --bitcoin=0.0.0.0 --rpcport=8332 --rpcuser=xxxx --rpcpass=yyyy --zmqhashblockport=28332 --multiaddr=/ip4/127.0.0.1/udp/8000/quic-v1 &
 sleep 1
-cargo run -- --bind=localhost:25189 --network=cpunet --rpccookie=~/.bitcoin/cpunet/.cookie --rpcport=28332 --addnode=localhost:25188 &
+cargo run -- --bind=localhost:9899 --addnode=/ip4/127.0.0.1/udp/8000/quic-v1 --bitcoin=0.0.0.0 --rpcport=8332 --rpcuser=xxxx --rpcpass=yyyy --zmqhashblockport=28332 --multiaddr=/ip4/127.0.0.1/udp/9000/quic-v1 &
 sleep 1
 
 echo
 echo ">>> Press any key to exit"
 read
 
-killall braidpool-node
+killall node
