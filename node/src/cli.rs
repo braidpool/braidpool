@@ -8,8 +8,8 @@ pub struct Cli {
     pub datadir: PathBuf,
 
     /// Multiaddress string for libp2p
-    #[arg(long)]
-    pub multiaddr: String,
+    #[arg(long, default_value = "0.0.0.0:6680")]
+    pub bind: String,
     /// Add a node to connect to and attempt to keep the connection open. This option can be
     /// specified multiple times
     #[arg(long)]

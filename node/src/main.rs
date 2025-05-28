@@ -58,10 +58,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
         })?
         .build();
     println!("Local Peerid: {}", swarm.local_peer_id());
-    let multi_addr: Multiaddr = args
-        .multiaddr
-        .parse()
-        .expect("failed to parse to multiaddress");
+    let socket_addr: std::net::SocketAddr =
+        args.bind.parse().expect("Failed to parse bind address");
+    let multi_addr: Multiaddr = format!(
+        "/ip4/{}/udp/{}/quic-v1",
+        socket_addr.ip(),
+        socket_addr.port()
+    )
+    .parse()
+    .expect("Failed to create multiaddress");
+    print!("Multiaddress: {multi_addr}\n");
 
     swarm.listen_on(multi_addr.clone())?;
     println!("listening on multiaddress: {}", multi_addr);
