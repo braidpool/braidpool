@@ -7,10 +7,6 @@ pub struct Cli {
     #[arg(long, default_value = "~/.braidpool/")]
     pub datadir: PathBuf,
 
-    /// Bind to a given address and always listen on it
-    #[arg(long, default_value = "0.0.0.0:25188")]
-    pub bind: String,
-
     /// Multiaddress string for libp2p
     #[arg(long)]
     pub multiaddr: String,

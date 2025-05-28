@@ -1,12 +1,9 @@
 use clap::Parser;
 use futures::StreamExt;
-use libp2p::{core::multiaddr::Multiaddr, identify, identity, quic, swarm::SwarmEvent, PeerId};
+use libp2p::{core::multiaddr::Multiaddr, identify, swarm::SwarmEvent};
 use std::error::Error;
 use std::fs;
-use std::net::ToSocketAddrs;
-use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc;
-use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 
 mod block_template;
 mod braid;
@@ -55,7 +52,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_quic()
         .with_behaviour(|key| {
             identify::Behaviour::new(identify::Config::new(
-                "/ipfs/id/1.0.0".to_string(),
+                "/braidpool/id/1.0.0".to_string(),
                 key.public(),
             ))
         })?
