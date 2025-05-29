@@ -11,30 +11,15 @@ import {
   Line,
   CartesianGrid,
 } from 'recharts';
-
-interface PriceData {
-  current: number;
-  high24h: number;
-  low24h: number;
-  priceChange24h: number;
-  currencySymbol: string;
-}
-
-interface GlobalStats {
-  marketCap: string;
-  marketCapChange: number;
-  activeCryptocurrencies: number;
-  activeMarkets: number;
-  bitcoinDominance: number;
-  lastUpdated: string;
-}
+import { GlobalStats, PriceData } from './Types';
+import { formatLargeNumber, formatPrice, getCurrencySymbol } from './Utils';
 
 const BitcoinPriceTracker: React.FC = () => {
   const [currency, setCurrency] = useState<'USD' | 'EUR' | 'GBP' | 'JPY'>('USD');
   const [priceData, setPriceData] = useState<PriceData | null>(null);
+  const [globalStats, setGlobalStats] = useState<GlobalStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [globalStats, setGlobalStats] = useState<GlobalStats | null>(null);
   const [priceDirection, setPriceDirection] = useState<'up' | 'down' | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [priceHistory, setPriceHistory] = useState<{ price: number; time: string }[]>([]);
@@ -106,31 +91,6 @@ const BitcoinPriceTracker: React.FC = () => {
       websocket.close();
     };
   }, [currency]);
-
-  const getCurrencySymbol = (curr: string) => {
-    switch (curr) {
-      case 'EUR': return '€';
-      case 'GBP': return '£';
-      case 'JPY': return '¥';
-      default: return '$';
-    }
-  };
-
-  const formatPrice = (value: number): string => {
-    if (!value) return '--';
-    return new Intl.NumberFormat('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(value);
-  };
-
-  const formatLargeNumber = (value: number): string => {
-    if (!value) return '--';
-    if (value >= 1e12) return `${(value / 1e12).toFixed(2)}T`;
-    if (value >= 1e9) return `${(value / 1e9).toFixed(2)}B`;
-    if (value >= 1e6) return `${(value / 1e6).toFixed(2)}M`;
-    return new Intl.NumberFormat('en-US').format(value);
-  };
 
   const showSkeletons = loading || !isConnected || (!priceData && !globalStats);
 
