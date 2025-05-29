@@ -1,8 +1,7 @@
 use crate::bead::Bead;
 use crate::utils::BeadHash;
 use ::serde::Serialize;
-use bitcoin::CompactTarget;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 #[derive(Clone, Debug, Serialize)]
 
@@ -15,8 +14,6 @@ pub enum AddBeadStatus {
     ParentsNotYetReceived,
 }
 
-// Type Aliases
-type NumberOfBeadsUnorphaned = usize;
 #[derive(Clone, Debug)]
 
 pub struct Braid {
