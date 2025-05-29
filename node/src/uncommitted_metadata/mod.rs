@@ -1,4 +1,3 @@
-use ::serde::Serialize;
 use bitcoin::absolute::Time;
 use bitcoin::consensus::encode::Decodable;
 use bitcoin::consensus::encode::Encodable;

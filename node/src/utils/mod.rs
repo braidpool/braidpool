@@ -1,6 +1,6 @@
 // Bitcoin Imports
+use crate::bead::Bead;
 use ::bitcoin::BlockHash;
-
 // Standard Imports
 
 pub mod test_utils;
@@ -11,34 +11,10 @@ pub type Byte = u8;
 pub type Bytes = Vec<Byte>;
 
 // Internal Type Aliases
-pub(crate) type ParentBeadHash = BeadHash;
-pub(crate) type Parents = HashSet<ParentBeadHash>;
+pub(crate) type Relatives = HashSet<BeadHash>;
 
 // Error Definitions
-use std::{
-    collections::HashSet,
-    fmt::{self},
-};
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum BeadLoadError {
-    BeadPruned,
-    InvalidBeadHash,
-    DatabaseError,
-    BeadNotFound,
-}
-
-impl fmt::Display for BeadLoadError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            BeadLoadError::BeadPruned => write!(f, "Bead has been pruned"),
-            BeadLoadError::InvalidBeadHash => write!(f, "Invalid bead hash"),
-            BeadLoadError::DatabaseError => write!(f, "Database error occurred"),
-            BeadLoadError::BeadNotFound => write!(f, "Bead not found"),
-        }
-    }
-}
-
-impl std::error::Error for BeadLoadError {}
+use std::collections::HashSet;
 
 pub(crate) fn hashset_to_vec_deterministic(hashset: &HashSet<BeadHash>) -> Vec<BeadHash> {
     let mut vec: Vec<BeadHash> = hashset.iter().cloned().collect();
