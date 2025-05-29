@@ -1,6 +1,7 @@
 import React from 'react';
 import Card from '../common/Card';
 import colors from '../../theme/colors';
+import { RecentBlocksTableProps } from './Types';
 
 // Mock data for recent blocks
 const recentBlocks = [
@@ -25,10 +26,6 @@ const recentBlocks = [
     time: '7 hrs ago',
   },
 ];
-
-interface RecentBlocksTableProps {
-  maxHeight?: number;
-}
 
 const RecentBlocksTable: React.FC<RecentBlocksTableProps> = ({
   maxHeight = 400,

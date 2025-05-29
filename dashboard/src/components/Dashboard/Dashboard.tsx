@@ -36,20 +36,10 @@ import {
 } from '../../utils/braidDataTransformer';
 import BitcoinStats from '../BitcoinStats/BitcoinStats';
 import { BitcoinIcon } from 'lucide-react';
+import { Page } from './Types';
 
 // Constants
 const drawerWidth = 240;
-
-// Define available pages as an enum
-enum Page {
-  INSTALLATION = 'installation',
-  DASHBOARD = 'dashboard',
-  MINING_INVENTORY = 'mining-inventory',
-  MEMPOOL = 'mempool',
-  DAG_VISUALIZATION = 'dag-visualization',
-  MINER_STATS = 'miner-stats',
-  BITCOIN_STATS = 'bitcoin-stats',
-}
 
 const Dashboard = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
