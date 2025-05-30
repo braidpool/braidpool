@@ -15,14 +15,20 @@ import { GlobalStats, PriceData } from './Types';
 import { formatLargeNumber, formatPrice, getCurrencySymbol } from './Utils';
 
 const BitcoinPriceTracker: React.FC = () => {
-  const [currency, setCurrency] = useState<'USD' | 'EUR' | 'GBP' | 'JPY'>('USD');
+  const [currency, setCurrency] = useState<'USD' | 'EUR' | 'GBP' | 'JPY'>(
+    'USD'
+  );
   const [priceData, setPriceData] = useState<PriceData | null>(null);
   const [globalStats, setGlobalStats] = useState<GlobalStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [priceDirection, setPriceDirection] = useState<'up' | 'down' | null>(null);
+  const [priceDirection, setPriceDirection] = useState<'up' | 'down' | null>(
+    null
+  );
   const [isConnected, setIsConnected] = useState(false);
-  const [priceHistory, setPriceHistory] = useState<{ price: number; time: string }[]>([]);
+  const [priceHistory, setPriceHistory] = useState<
+    { price: number; time: string }[]
+  >([]);
   const MAX_HISTORY_ITEMS = 30;
 
   useEffect(() => {
@@ -43,13 +49,16 @@ const BitcoinPriceTracker: React.FC = () => {
 
           setPriceData((prev) => {
             const previousPrice = prev?.current ?? currentPrice;
-            const priceChange = ((currentPrice - previousPrice) / previousPrice) * 100;
+            const priceChange =
+              ((currentPrice - previousPrice) / previousPrice) * 100;
             if (previousPrice !== currentPrice) {
               setPriceDirection(currentPrice > previousPrice ? 'up' : 'down');
             }
             return {
               current: currentPrice,
-              high24h: prev ? Math.max(prev.high24h, currentPrice) : currentPrice,
+              high24h: prev
+                ? Math.max(prev.high24h, currentPrice)
+                : currentPrice,
               low24h: prev ? Math.min(prev.low24h, currentPrice) : currentPrice,
               priceChange24h: isFinite(priceChange) ? priceChange : 0,
               currencySymbol,
@@ -63,7 +72,8 @@ const BitcoinPriceTracker: React.FC = () => {
             setGlobalStats({
               marketCap: formatLargeNumber(data.data.global_stats.market_cap),
               marketCapChange: data.data.global_stats.market_cap_change,
-              activeCryptocurrencies: data.data.global_stats.active_cryptocurrencies,
+              activeCryptocurrencies:
+                data.data.global_stats.active_cryptocurrencies,
               activeMarkets: data.data.global_stats.active_markets,
               bitcoinDominance: data.data.global_stats.bitcoin_dominance * 100,
               lastUpdated: new Date(now).toLocaleString(),
@@ -71,7 +81,10 @@ const BitcoinPriceTracker: React.FC = () => {
           }
 
           setPriceHistory((prev) => {
-            const newHistory = [...prev, { price: currentPrice, time: timeString }];
+            const newHistory = [
+              ...prev,
+              { price: currentPrice, time: timeString },
+            ];
             return newHistory.slice(-MAX_HISTORY_ITEMS);
           });
         }
@@ -106,10 +119,18 @@ const BitcoinPriceTracker: React.FC = () => {
           onChange={(e) => setCurrency(e.target.value as typeof currency)}
           className="block py-2 px-4 ml-5 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
         >
-          <option className='bg-gray-500' value="USD">USD</option>
-          <option className='bg-gray-500' value="EUR">EUR</option>
-          <option className='bg-gray-500' value="GBP">GBP</option>
-          <option className='bg-gray-500' value="JPY">JPY</option>
+          <option className="bg-gray-500" value="USD">
+            USD
+          </option>
+          <option className="bg-gray-500" value="EUR">
+            EUR
+          </option>
+          <option className="bg-gray-500" value="GBP">
+            GBP
+          </option>
+          <option className="bg-gray-500" value="JPY">
+            JPY
+          </option>
         </select>
       </div>
 
@@ -132,18 +153,38 @@ const BitcoinPriceTracker: React.FC = () => {
           <>
             <div className="flex flex-col">
               <div className="flex items-center gap-2">
-                <h6 className={`font-bold text-lg ${priceDirection === 'up' ? 'text-green-500' : priceDirection === 'down' ? 'text-red-500' : ''}`}>
+                <h6
+                  className={`font-bold text-lg ${priceDirection === 'up' ? 'text-green-500' : priceDirection === 'down' ? 'text-red-500' : ''}`}
+                >
                   {priceData.currencySymbol}
                   {formatPrice(priceData.current)}
                 </h6>
                 {priceDirection === 'up' && (
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-500" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-5 w-5 text-green-500"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z"
+                      clipRule="evenodd"
+                    />
                   </svg>
                 )}
                 {priceDirection === 'down' && (
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-5 w-5 text-red-500"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                      clipRule="evenodd"
+                    />
                   </svg>
                 )}
               </div>
@@ -157,9 +198,7 @@ const BitcoinPriceTracker: React.FC = () => {
                 {priceData.currencySymbol}
                 {formatPrice(priceData.high24h)}
               </p>
-              <span className="text-sm text-gray-500">
-                24H High
-              </span>
+              <span className="text-sm text-gray-500">24H High</span>
             </div>
 
             <div className="flex flex-col">
@@ -167,9 +206,7 @@ const BitcoinPriceTracker: React.FC = () => {
                 {priceData.currencySymbol}
                 {formatPrice(priceData.low24h)}
               </p>
-              <span className="text-sm text-gray-500">
-                24H Low
-              </span>
+              <span className="text-sm text-gray-500">24H Low</span>
             </div>
           </>
         ) : null}
@@ -194,7 +231,9 @@ const BitcoinPriceTracker: React.FC = () => {
 
           <div className="flex flex-col">
             <p className="text-base">{globalStats.activeCryptocurrencies}</p>
-            <span className="text-sm text-gray-500">Active Cryptocurrencies</span>
+            <span className="text-sm text-gray-500">
+              Active Cryptocurrencies
+            </span>
           </div>
 
           <div className="flex flex-col">
@@ -203,7 +242,9 @@ const BitcoinPriceTracker: React.FC = () => {
           </div>
 
           <div className="flex flex-col">
-            <p className="text-base">{globalStats.bitcoinDominance.toFixed(2)}%</p>
+            <p className="text-base">
+              {globalStats.bitcoinDominance.toFixed(2)}%
+            </p>
             <span className="text-sm text-gray-500">BTC Dominance</span>
           </div>
 
@@ -242,7 +283,9 @@ const BitcoinPriceTracker: React.FC = () => {
 
           {/* Price History Line Chart */}
           <div className="flex flex-col w-full h-72">
-            <p className="font-semibold text-base">Bitcoin Price History (Live)</p>
+            <p className="font-semibold text-base">
+              Bitcoin Price History (Live)
+            </p>
             <span className="text-sm text-gray-500 mb-2">
               Live updates in {currency}
             </span>
@@ -310,9 +353,7 @@ const BitcoinPriceTracker: React.FC = () => {
           {/* Placeholder */}
           <div className="flex flex-col w-full h-72">
             <p className="font-semibold text-base">Market Trends</p>
-            <span className="text-sm text-gray-500 mb-2">
-              Coming soon...
-            </span>
+            <span className="text-sm text-gray-500 mb-2">Coming soon...</span>
             <div className="w-full h-full flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg">
               <p className="text-gray-500">Additional visualization</p>
             </div>

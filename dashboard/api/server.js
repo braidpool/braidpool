@@ -1,6 +1,6 @@
 import { WebSocketServer } from 'ws';
 import dotenv from 'dotenv';
-import fetchBitcoinPrices from "./utils/fetchBitcoinPrices.js";
+import fetchBitcoinPrices from './utils/fetchBitcoinPrices.js';
 import fetchGlobalCryptoData from './utils/fetchGlobalData.js';
 
 dotenv.config();
@@ -15,13 +15,12 @@ const CRYPTO_URL = process.env.CRYPTO_URL;
 async function sendDataToClients() {
   const [bitcoinPrice, globalCryptoData] = await Promise.all([
     fetchBitcoinPrices(BITCOIN_PRICE_URL, BITCOIN_PRICE_URL_SUFFIX),
-    fetchGlobalCryptoData(CRYPTO_URL, 'USD')
+    fetchGlobalCryptoData(CRYPTO_URL, 'USD'),
   ]);
-
 
   if (bitcoinPrice && globalCryptoData) {
     const data = {
-      type: "bitcoin_update",
+      type: 'bitcoin_update',
       data: {
         price: bitcoinPrice,
         global_stats: {
@@ -30,13 +29,13 @@ async function sendDataToClients() {
           active_cryptocurrencies: globalCryptoData.activeCryptocurrencies,
           active_markets: globalCryptoData.activeMarkets,
           bitcoin_dominance: globalCryptoData.bitcoinDominance,
-          last_updated: globalCryptoData.lastUpdated
+          last_updated: globalCryptoData.lastUpdated,
         },
         time: new Date().toLocaleString(),
       },
     };
 
-    console.log("Broadcasting update:", data);
+    console.log('Broadcasting update:', data);
 
     wss.clients.forEach((client) => {
       if (client.readyState === client.OPEN) {
@@ -50,9 +49,9 @@ async function sendDataToClients() {
 setInterval(sendDataToClients, 1000);
 
 // WebSocket connection handler
-wss.on("connection", (ws) => {
-  console.log("Client connected");
-  ws.send(JSON.stringify({ type: "connection", status: "connected" }));
+wss.on('connection', (ws) => {
+  console.log('Client connected');
+  ws.send(JSON.stringify({ type: 'connection', status: 'connected' }));
 });
 
-console.log("WebSocket server running on ws://localhost:5000");
+console.log('WebSocket server running on ws://localhost:5000');
