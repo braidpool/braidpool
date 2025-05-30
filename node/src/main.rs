@@ -8,8 +8,6 @@ use tokio::sync::mpsc;
 mod block_template;
 mod braid;
 mod cli;
-mod connection;
-mod protocol;
 mod rpc;
 mod zmq;
 
