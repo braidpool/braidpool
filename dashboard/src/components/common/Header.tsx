@@ -7,10 +7,7 @@ import FilterListIcon from '@mui/icons-material/FilterList';
 import HomeIcon from '@mui/icons-material/Home';
 import ActionIconButton from './ActionIconButton';
 import colors from '../../theme/colors';
-
-interface HeaderProps {
-  title?: string;
-}
+import { HeaderProps } from './Types';
 
 const Header: React.FC<HeaderProps> = ({ title = 'BRAIDPOOL' }) => {
   const [notificationCount] = useState<number>(3); // Mock notification count

@@ -7,16 +7,7 @@ import CardTitle from '@mui/material/Typography';
 import '../../App.css';
 import Button from '@mui/material/Button';
 import { CircularProgress } from '@mui/material';
-
-interface GraphNode {
-  id: string;
-  parents: string[];
-  children: string[];
-}
-
-interface NodeIdMapping {
-  [hash: string]: string; // maps hash to sequential ID
-}
+import { GraphData, GraphNode, NodeIdMapping, Position } from './Types';
 
 var COLORS = [
   `rgba(${217}, ${95}, ${2}, 1)`,
@@ -24,18 +15,6 @@ var COLORS = [
   `rgba(${102}, ${166}, ${30}, 1)`,
   `rgba(${231}, ${41}, ${138}, 1)`,
 ];
-interface GraphData {
-  highest_work_path: string[];
-  parents: Record<string, string[]>;
-  children: Record<string, string[]>;
-  cohorts: string[][];
-  bead_count: number;
-}
-
-interface Position {
-  x: number;
-  y: number;
-}
 
 const GraphVisualization: React.FC = () => {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -44,14 +23,11 @@ const GraphVisualization: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const width = window.innerWidth - 100;
   const height = window.innerHeight;
-
   const [nodeIdMap, setNodeIdMap] = useState<NodeIdMapping>({});
   const [selectedCohorts, setSelectedCohorts] = useState<number | 'all'>(10);
-
   const nodeRadius = 30;
   const margin = { top: 0, right: 0, bottom: 0, left: 50 };
   const tooltipRef = useRef<HTMLDivElement>(null);
-
   const COLUMN_WIDTH = 120;
   const VERTICAL_SPACING = 100;
 
@@ -376,6 +352,7 @@ const GraphVisualization: React.FC = () => {
         );
     }
   };
+
   const handleResetZoom = () => {
     setDefaultZoom(0.3);
   };

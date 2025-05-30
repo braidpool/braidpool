@@ -9,6 +9,7 @@ import PercentIcon from '@mui/icons-material/Percent';
 import AttachmentIcon from '@mui/icons-material/Attachment';
 import BlurOnIcon from '@mui/icons-material/BlurOn';
 import PriorityHighIcon from '@mui/icons-material/PriorityHigh';
+import { DashboardMetricsProps } from './Types';
 
 // Mock data for the Braidpool dashboard with realistic values
 const mockData = {
@@ -28,10 +29,6 @@ const mockData = {
   cohortFormationRate: '1.2',
   networkLatency: '215',
 };
-
-interface DashboardMetricsProps {
-  loading?: boolean;
-}
 
 export const PrimaryMetrics: React.FC<DashboardMetricsProps> = ({
   loading = false,
