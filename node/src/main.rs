@@ -6,7 +6,6 @@ use std::fs;
 use tokio::sync::mpsc;
 
 mod block_template;
-mod braid;
 mod cli;
 mod connection;
 mod protocol;

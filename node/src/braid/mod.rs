@@ -1,8 +1,7 @@
 use crate::bead::Bead;
-use crate::utils::{BeadHash, BeadLoadError};
+use crate::utils::BeadHash;
 use ::serde::Serialize;
-use bitcoin::CompactTarget;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 #[derive(Clone, Debug, Serialize)]
 
@@ -15,8 +14,6 @@ pub enum AddBeadStatus {
     ParentsNotYetReceived,
 }
 
-// Type Aliases
-type NumberOfBeadsUnorphaned = usize;
 #[derive(Clone, Debug)]
 
 pub struct Braid {
@@ -24,7 +21,6 @@ pub struct Braid {
     pub(crate) tips: HashSet<BeadHash>,
     pub(crate) cohorts: Vec<Cohort>,
     pub(crate) orphan_beads: Vec<Bead>,
-    pub(crate) loaded_beads_in_memory: HashMap<BeadHash, Bead>,
     pub(crate) genesis_beads: HashSet<BeadHash>,
 }
 
@@ -36,62 +32,18 @@ impl Braid {
             tips: genesis_beads.clone(),
             cohorts: vec![Cohort(genesis_beads.clone())],
             orphan_beads: Vec::new(),
-            loaded_beads_in_memory: HashMap::new(),
             genesis_beads: genesis_beads,
         }
     }
 
-    pub fn load_beads_in_memory(&mut self, beads: Vec<Bead>) {
-        for bead in beads {
-            let bead_hash = bead.block_header.block_hash();
-            self.loaded_beads_in_memory.insert(bead_hash, bead);
-        }
-    }
-
-    pub fn generate_from_previous_dag(previous_dag_braid: Braid) -> Self {
-        let cohorts = previous_dag_braid.generate_tip_cohorts();
-        Braid {
-            beads: previous_dag_braid.tips.clone(),
-            tips: previous_dag_braid.tips.clone(),
-            cohorts,
-            orphan_beads: Vec::new(),
-            loaded_beads_in_memory: HashMap::new(),
-            genesis_beads: previous_dag_braid.tips,
-        }
-    }
-
     pub fn add_bead(&mut self, bead: Bead) -> AddBeadStatus {
-        if bead.is_valid_bead() == false {
-            return AddBeadStatus::InvalidBead;
-        }
-
-        if self.contains_bead(bead.get_bead_hash()) {
+        if self.beads.contains(&bead.block_header.block_hash()) {
             return AddBeadStatus::DagAlreadyContainsBead;
         }
 
-        if bead.is_orphaned(self) {
-            self.orphan_beads.push(bead);
-            return AddBeadStatus::ParentsNotYetReceived;
-        }
-
-        // self.beads.insert(bead.bead_hash);
-        self.remove_parent_beads_from_tips(&bead);
-        // self.tips.insert(bead.bead_hash);
-
         self.cohorts = self.calculate_cohorts();
-        self.update_orphan_bead_set();
 
         AddBeadStatus::BeadAdded
-    }
-}
-
-impl Braid {
-    #[inline]
-    pub(crate) fn load_bead_from_hash(&self, bead_hash: BeadHash) -> Result<&Bead, BeadLoadError> {
-        match self.loaded_beads_in_memory.get(&bead_hash) {
-            Some(bead) => Ok(bead),
-            None => Err(BeadLoadError::BeadPruned),
-        }
     }
 }
 
@@ -113,7 +65,7 @@ impl Braid {
             return false;
         }
         // Already seen this bead
-        let bead_hash = bead.get_bead_hash();
+        let bead_hash = bead.block_header.block_hash();
         if self.beads.contains(&bead_hash) {
             return false;
         }
@@ -192,78 +144,6 @@ impl Braid {
         }
 
         cohorts
-    }
-
-    #[inline]
-    fn contains_bead(&self, bead_hash: BeadHash) -> bool {
-        self.beads.contains(&bead_hash)
-    }
-
-    fn is_genesis_bead(&self, bead_hash: BeadHash) -> Result<bool, BeadLoadError> {
-        let bead = self.load_bead_from_memory(bead_hash)?;
-
-        if bead.committed_metadata.parents.is_empty() {
-            return Ok(true);
-        };
-
-        // We need to check whether even one of the parent beads have been pruned from memory!
-        for parent_bead_hash in &bead.committed_metadata.parents {
-            let parent_bead = self.load_bead_from_memory(parent_bead_hash.clone());
-            if let Err(error_type) = parent_bead {
-                match error_type {
-                    BeadLoadError::BeadNotFound => return Ok(true),
-                    _ => return Err(error_type),
-                };
-            }
-        }
-
-        Ok(false)
-    }
-
-    #[inline]
-    fn load_bead_from_memory(&self, bead_hash: BeadHash) -> Result<&Bead, BeadLoadError> {
-        // This functions returns a bead from memory! Future DB work goes in here!
-
-        // TODO: Add in a check for whether a bead_hash is valid!
-
-        match self.loaded_beads_in_memory.get(&bead_hash) {
-            Some(bead) => Ok(bead),
-            None => Err(BeadLoadError::BeadNotFound),
-        }
-    }
-
-    #[inline]
-    fn remove_parent_beads_from_tips(&mut self, bead: &Bead) {
-        for parent_hash in &bead.committed_metadata.parents {
-            self.tips.remove(parent_hash);
-        }
-    }
-
-    #[inline]
-    fn is_bead_orphaned(&self, bead: &Bead) -> bool {
-        for parent in &bead.committed_metadata.parents {
-            if self.beads.contains(parent) == false {
-                return true;
-            }
-        }
-
-        false
-    }
-
-    fn update_orphan_bead_set(&mut self) -> NumberOfBeadsUnorphaned {
-        let old_orphan_set_length = self.orphan_beads.len();
-        let old_orphan_set = std::mem::replace(&mut self.orphan_beads, Vec::new());
-        for orphan_bead in old_orphan_set {
-            if orphan_bead.is_genesis_bead(self) {
-                self.orphan_beads.push(orphan_bead)
-            }
-        }
-
-        return old_orphan_set_length - self.orphan_beads.len();
-    }
-
-    fn calculate_valid_difficulty_for_bead(&self, bead: &Bead) -> CompactTarget {
-        unimplemented!()
     }
 }
 
