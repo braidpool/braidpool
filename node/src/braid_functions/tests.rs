@@ -1,17 +1,11 @@
-use std::{
-    collections::{HashMap, HashSet},
-    fs,
-};
+use std::fs;
 
-use node::braid::io_json::{check_cohort, load_braid, save_braid};
-use node::braid::{self, *};
+use crate::braid_functions::{io_json::*, *};
 
-// Cargo runs tests from the node/Cargo.toml file so the cwd is set to node/
-// when this is run, even though the docs say the cwd will be the project root.
-// Therefore we have to use this relative path here.
 const TEST_CASE_DIR: &str = "../tests/braids/";
 
 #[test]
+
 fn test_geneses1() {
     let parents1: Relatives = [
         (BeadHash::from(0u64), HashSet::new()),
@@ -33,7 +27,7 @@ fn test_geneses1() {
     .collect();
 
     assert_eq!(
-        braid::geneses(&parents1),
+        geneses(&parents1),
         [BeadHash::from(0u64)]
             .iter()
             .cloned()
@@ -60,7 +54,7 @@ fn test_geneses2() {
     .collect();
 
     assert_eq!(
-        braid::geneses(&parents2),
+        geneses(&parents2),
         [BeadHash::from(0u64), BeadHash::from(1u64)]
             .iter()
             .cloned()
@@ -88,7 +82,7 @@ fn test_geneses3() {
     .collect();
 
     assert_eq!(
-        braid::geneses(&parents3),
+        geneses(&parents3),
         [
             BeadHash::from(0u64),
             BeadHash::from(1u64),
@@ -110,7 +104,7 @@ fn test_geneses_files() {
             let path_str = path.to_string_lossy();
             let dag = load_braid(&path).unwrap();
             assert_eq!(
-                braid::geneses(&dag.parents),
+                geneses(&dag.parents),
                 [BeadHash::from(0u64)]
                     .iter()
                     .cloned()
@@ -144,7 +138,7 @@ fn test_tips1() {
     .collect();
 
     assert_eq!(
-        braid::tips(&parents1, None),
+        tips(&parents1, None),
         [BeadHash::from(3u64)]
             .iter()
             .cloned()
@@ -174,7 +168,7 @@ fn test_tips2() {
     .collect();
 
     assert_eq!(
-        braid::tips(&parents2, None),
+        tips(&parents2, None),
         [BeadHash::from(2u64), BeadHash::from(3u64)]
             .iter()
             .cloned()
@@ -227,7 +221,7 @@ fn test_tips3() {
     .collect();
 
     assert_eq!(
-        braid::tips(&parents3, None),
+        tips(&parents3, None),
         [
             BeadHash::from(3u64),
             BeadHash::from(4u64),
@@ -325,7 +319,7 @@ fn test_reverse() {
     .cloned()
     .collect();
 
-    assert_eq!(braid::reverse(&parents), expected);
+    assert_eq!(reverse(&parents), expected);
 }
 
 #[test]
@@ -368,7 +362,7 @@ fn test_cohorts() {
             .collect::<HashSet<_>>(),
     ];
 
-    assert_eq!(braid::cohorts(&parents1, None, None), expected);
+    assert_eq!(cohorts(&parents1, None, None), expected);
 }
 
 #[test]
@@ -381,7 +375,7 @@ fn test_cohorts_files() {
             let path_str = path.to_string_lossy();
             let dag = load_braid(&path).unwrap();
             assert_eq!(
-                braid::cohorts(&dag.parents, None, None),
+                cohorts(&dag.parents, None, None),
                 dag.cohorts,
                 "Failed on file: {}",
                 path_str
@@ -399,15 +393,10 @@ fn test_cohorts_reversed_files() {
         if path.extension().map_or(false, |ext| ext == "json") {
             let path_str = path.to_string_lossy();
             let dag = load_braid(&path).unwrap();
-            let p = braid::reverse(&dag.parents);
+            let p = reverse(&dag.parents);
             let mut c = dag.cohorts.clone();
             c.reverse();
-            assert_eq!(
-                braid::cohorts(&p, None, None),
-                c,
-                "Failed on file: {}",
-                path_str
-            );
+            assert_eq!(cohorts(&p, None, None), c, "Failed on file: {}", path_str);
         }
     }
 }
@@ -433,7 +422,7 @@ fn test_highest_work_path() {
     .cloned()
     .collect();
 
-    let children1 = braid::reverse(&parents1);
+    let children1 = reverse(&parents1);
 
     let expected = vec![
         BeadHash::from(0u64),
@@ -447,7 +436,7 @@ fn test_highest_work_path() {
         .map(|b| (b.clone(), Work::from(1u32)))
         .collect();
     assert_eq!(
-        braid::highest_work_path(&parents1, Some(&children1), &bead_work),
+        highest_work_path(&parents1, Some(&children1), &bead_work),
         expected
     );
 }
@@ -462,7 +451,7 @@ fn test_highest_work_path_files() {
             let path_str = path.to_string_lossy();
             let dag = load_braid(&path).unwrap();
             assert_eq!(
-                braid::highest_work_path(&dag.parents, Some(&dag.children), &dag.bead_work),
+                highest_work_path(&dag.parents, Some(&dag.children), &dag.bead_work),
                 dag.highest_work_path,
                 "Failed on file: {}",
                 path_str
@@ -507,7 +496,7 @@ fn test_check_work_files() {
             let dag = load_braid(&path).unwrap();
             assert_eq!(
                 dag.work,
-                braid::descendant_work(&dag.parents, Some(&dag.children), &dag.bead_work, None),
+                descendant_work(&dag.parents, Some(&dag.children), &dag.bead_work, None),
                 "Failed on file: {}",
                 path_str
             );
@@ -526,23 +515,23 @@ fn test_sub_braid_files() {
             let dag = load_braid(&path).unwrap();
             for (i, c) in dag.cohorts.iter().enumerate() {
                 assert_eq!(
-                    braid::geneses(&braid::sub_braid(c, &dag.parents)),
-                    braid::cohort_head(c, &dag.parents, Some(&dag.children)),
+                    geneses(&sub_braid(c, &dag.parents)),
+                    cohort_head(c, &dag.parents, Some(&dag.children)),
                     "Failed on file: {}, cohort index: {}, geneses check",
                     path_str,
                     i
                 );
 
                 assert_eq!(
-                    braid::tips(&braid::sub_braid(c, &dag.parents), None),
-                    braid::cohort_tail(c, &dag.parents, Some(&dag.children)),
+                    tips(&sub_braid(c, &dag.parents), None),
+                    cohort_tail(c, &dag.parents, Some(&dag.children)),
                     "Failed on file: {}, cohort index: {}, tips check",
                     path_str,
                     i
                 );
 
                 assert_eq!(
-                    braid::cohorts(&braid::sub_braid(c, &dag.parents), None, None),
+                    cohorts(&sub_braid(c, &dag.parents), None, None),
                     vec![c.clone()],
                     "Failed on file: {}, cohort index: {}, cohorts check",
                     path_str,
@@ -564,16 +553,16 @@ fn test_head_tail_files() {
             let dag = load_braid(&path).unwrap();
             for (i, c) in dag.cohorts.iter().enumerate() {
                 assert_eq!(
-                    braid::cohort_head(c, &dag.parents, Some(&dag.children)),
-                    braid::geneses(&braid::sub_braid(c, &dag.parents)),
+                    cohort_head(c, &dag.parents, Some(&dag.children)),
+                    geneses(&sub_braid(c, &dag.parents)),
                     "Failed on file: {}, cohort index: {}, head check",
                     path_str,
                     i
                 );
 
                 assert_eq!(
-                    braid::cohort_tail(c, &dag.parents, Some(&dag.children)),
-                    braid::tips(&braid::sub_braid(c, &dag.parents), None),
+                    cohort_tail(c, &dag.parents, Some(&dag.children)),
+                    tips(&sub_braid(c, &dag.parents), None),
                     "Failed on file: {}, cohort index: {}, tail check",
                     path_str,
                     i
@@ -605,7 +594,7 @@ fn test_all_ancestors() {
     .collect();
 
     let mut ancestors = std::collections::HashMap::new();
-    braid::all_ancestors(&BeadHash::from(3u64), &parents, &mut ancestors);
+    all_ancestors(&BeadHash::from(3u64), &parents, &mut ancestors);
 
     let expected_ancestors = [
         (

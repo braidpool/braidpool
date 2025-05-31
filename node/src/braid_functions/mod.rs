@@ -545,3 +545,6 @@ pub fn number_beads(hashed_parents: &Relatives) -> Relatives {
 
     parents
 }
+
+#[cfg(test)]
+mod tests;
