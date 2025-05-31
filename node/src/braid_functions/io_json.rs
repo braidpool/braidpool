@@ -1,3 +1,6 @@
+use super::*;
+use num::BigUint;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
     error::Error,
@@ -5,11 +8,6 @@ use std::{
     io::{Read, Write},
     path::Path,
 };
-
-use num::BigUint;
-use serde::{Deserialize, Serialize};
-
-use crate::braid::*;
 
 /// The work per bead if work is not passed
 fn fixed_bead_work() -> Work {
@@ -459,6 +457,5 @@ pub fn check_cohort_ancestors(
             return false;
         }
     }
-
     true
 }

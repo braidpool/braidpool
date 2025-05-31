@@ -1,4 +1,4 @@
-// TypeScript representation of a Bead/Share from the braidpool-primitives crate
+// TypeScript representation of a Bead/Share from the node crate
 
 export interface BlockHeader {
   version: number;

@@ -547,35 +547,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "braidpool-primitives"
-version = "0.1.0"
-dependencies = [
- "bitcoin 0.33.0-alpha.0",
- "hex",
- "num-bigint",
- "ordered-float 5.0.0",
- "secp256k1 0.30.0",
- "serde",
- "serde_json",
- "transitive",
-]
-
-[[package]]
-name = "bs58"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf88ba1141d185c399bee5288d850d63b8369520c1eafc32a0430b5b6c287bf4"
-dependencies = [
- "tinyvec",
-]
-
-[[package]]
-name = "bumpalo"
-version = "3.17.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1628fb46dfa0b37568d12e5edd512553eccf6a22a78e8bde00bb4aed84d5bdbf"
-
-[[package]]
 name = "byteorder"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2387,7 +2358,7 @@ version = "0.1.0"
 dependencies = [
  "bimap",
  "bincode",
- "bitcoin 0.32.4-cpunet",
+ "bitcoin 0.33.0-alpha.0",
  "bitcoin_hashes 0.16.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "bitcoincore-rpc",
  "bitcoincore-rpc-json",
@@ -2397,15 +2368,18 @@ dependencies = [
  "env_logger",
  "flexbuffers",
  "futures",
+ "hex",
  "lazy_static",
  "libp2p",
  "log",
  "num",
+ "num-bigint",
  "num-traits",
  "once_cell",
- "ordered-float 3.9.2",
- "rand 0.8.5",
+ "ordered-float",
+ "rand",
  "regex",
+ "secp256k1 0.30.0",
  "serde",
  "serde_json",
  "sha2",
@@ -2416,6 +2390,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "tracing-subscriber",
+ "transitive",
 ]
 
 [[package]]
@@ -2588,15 +2563,6 @@ name = "ordered-float"
 version = "3.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1e1c390732d15f1d48471625cd92d154e66db2c56645e29a9cd26f4699f72dc"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
-name = "ordered-float"
-version = "5.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2c1f9f56e534ac6a9b8a4600bdf0f530fb393b5f393e7b4d03489c3cf0c3f01"
 dependencies = [
  "num-traits",
 ]
