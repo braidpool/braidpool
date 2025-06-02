@@ -1831,6 +1831,7 @@ dependencies = [
  "libp2p-identity",
  "libp2p-mdns",
  "libp2p-metrics",
+ "libp2p-ping",
  "libp2p-quic",
  "libp2p-swarm",
  "libp2p-tcp",
@@ -1973,9 +1974,26 @@ dependencies = [
  "libp2p-core",
  "libp2p-identify",
  "libp2p-identity",
+ "libp2p-ping",
  "libp2p-swarm",
  "pin-project",
  "prometheus-client",
+ "web-time",
+]
+
+[[package]]
+name = "libp2p-ping"
+version = "0.46.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b2529993ff22deb2504c0130a58b60fb77f036be555053922db1a0490b5798b"
+dependencies = [
+ "futures",
+ "futures-timer",
+ "libp2p-core",
+ "libp2p-identity",
+ "libp2p-swarm",
+ "rand 0.8.5",
+ "tracing",
  "web-time",
 ]
 
@@ -2013,6 +2031,7 @@ dependencies = [
  "futures-timer",
  "libp2p-core",
  "libp2p-identity",
+ "libp2p-swarm-derive",
  "lru",
  "multistream-select",
  "once_cell",
@@ -2021,6 +2040,18 @@ dependencies = [
  "tokio",
  "tracing",
  "web-time",
+]
+
+[[package]]
+name = "libp2p-swarm-derive"
+version = "0.35.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "206e0aa0ebe004d778d79fb0966aa0de996c19894e2c0605ba2f8524dd4443d8"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.100",
 ]
 
 [[package]]

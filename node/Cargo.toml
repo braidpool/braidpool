@@ -38,4 +38,4 @@ bimap = "0.6.3"
 ordered-float = "3.7.0"
 lazy_static = "1.4.0"
 regex = "1.11.1"
-libp2p = { version = "0.55.0", features = ["identify", "quic", "tokio"] }
+libp2p = { version = "0.55.0", features = ["identify", "quic", "tokio","ping","macros"] }
