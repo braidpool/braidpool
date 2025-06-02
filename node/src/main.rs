@@ -11,7 +11,6 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 
 mod block_template;
-mod braid;
 mod cli;
 mod rpc;
 mod zmq;
