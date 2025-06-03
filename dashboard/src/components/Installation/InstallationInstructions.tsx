@@ -77,17 +77,21 @@ const InstallationInstructions = () => {
             </ul>
 
             <div className="mt-6 flex justify-center">
-              <button
-                className="flex items-center gap-2 px-4 py-2 rounded normal-case"
-                style={{
-                  backgroundColor: colors.primary,
-                  color: 'white',
-                }}
-                onClick={() => console.log('📝 Opening full documentation...')}
-              >
-                <CodeIcon fontSize="small" />
-                View Full Documentation
-              </button>
+              <a href="https://github.com/braidpool/braidpool?tab=readme-ov-file#running-the-node">
+                <button
+                  className="flex items-center gap-2 px-4 py-2 rounded normal-case"
+                  style={{
+                    backgroundColor: colors.primary,
+                    color: 'white',
+                  }}
+                  onClick={() =>
+                    console.log('📝 Opening full documentation...')
+                  }
+                >
+                  <CodeIcon fontSize="small" />
+                  View Full Documentation
+                </button>
+              </a>
             </div>
           </div>
         </div>
