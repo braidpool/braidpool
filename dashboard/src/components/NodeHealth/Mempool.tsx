@@ -2,18 +2,9 @@ import RawJsonViewer from './Rawdatajson';
 
 import { Mempool } from './__tests__/types';
 
-const formatBytes = (bytes: number) => {
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-  if (bytes === 0) return '0 B';
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  return Math.round((bytes / Math.pow(1024, i)) * 100) / 100 + ' ' + sizes[i];
-};
+import { formatBytes } from './__tests__/utils';
 
-interface MempoolPanelProps {
-  mempool: Mempool;
-}
-
-export default function MempoolPanel({ mempool }: MempoolPanelProps) {
+export default function MempoolPanel({ mempool }: { mempool: Mempool }) {
   const mempoolUsage = (mempool.usage / mempool.maxmempool) * 100;
 
   return (

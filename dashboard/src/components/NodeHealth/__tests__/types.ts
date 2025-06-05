@@ -1,4 +1,3 @@
-// src/components/NodeHealth/api/types.ts
 export interface BlockchainInfo {
   chain: string;
   blocks: number;
@@ -61,4 +60,8 @@ export interface NetTotals {
     bytes_left_in_cycle: number;
     time_left_in_cycle: number;
   };
+}
+export interface RawJsonViewerProps {
+  data: object;
+  title?: string;
 }

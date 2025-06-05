@@ -1,4 +1,3 @@
-// src/components/NodeHealth/NodeHealth.tsx
 import React, { useState, useEffect } from 'react';
 import {
   getBlockchainInfo,
@@ -7,19 +6,13 @@ import {
   getMempoolInfo,
   getNetTotals,
 } from './__tests__/nodeApi';
-import { BlockchainInfo } from './__tests__/types';
+
 import Peers from './Peers';
 import NetworkPanel from './Network';
 import MempoolPanel from './Mempool';
 import BandwidthPanel from './Bandwidth';
 import RawJsonViewer from './Rawdatajson';
-const TABS = [
-  { label: 'Blockchain', value: 'blockchain' },
-  { label: 'Peers', value: 'peers' },
-  { label: 'Network', value: 'network' },
-  { label: 'Mempool', value: 'mempool' },
-  { label: 'Bandwidth', value: 'bandwidth' },
-];
+import { TABS } from './__tests__/utils';
 const NodeHealth: React.FC = () => {
   const [activeTab, setActiveTab] = useState('blockchain');
   const [blockchainInfo, setBlockchainInfo] = useState<any>(null);
@@ -32,7 +25,6 @@ const NodeHealth: React.FC = () => {
   );
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [blockInfo, setBlockInfo] = useState<BlockchainInfo | null>(null);
 
   const fetchAllData = async () => {
     try {

@@ -1,31 +1,14 @@
 import { Wifi } from 'lucide-react';
 import RawJsonViewer from './Rawdatajson';
 import { NetTotals } from './__tests__/types';
+import { formatBytes } from './__tests__/utils';
+import { formatDuration } from './__tests__/utils';
 
-const formatBytes = (bytes: number) => {
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-  if (bytes === 0) return '0 B';
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  return Math.round((bytes / Math.pow(1024, i)) * 100) / 100 + ' ' + sizes[i];
-};
-
-const formatDuration = (ms: number) => {
-  const seconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
-
-  if (days > 0) return `${days}d ${hours % 24}h`;
-  if (hours > 0) return `${hours}h ${minutes % 60}m`;
-  if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
-  return `${seconds}s`;
-};
-
-interface BandwidthPanelProps {
+export default function BandwidthPanel({
+  nettotals,
+}: {
   nettotals: NetTotals;
-}
-
-export default function BandwidthPanel({ nettotals }: BandwidthPanelProps) {
+}) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Traffic Card */}

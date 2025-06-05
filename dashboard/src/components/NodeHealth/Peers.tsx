@@ -1,17 +1,7 @@
 import { PeerInfo } from './__tests__/types';
+import { formatBytes } from './__tests__/utils';
 
-const formatBytes = (bytes: number) => {
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-  if (bytes === 0) return '0 B';
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  return Math.round((bytes / Math.pow(1024, i)) * 100) / 100 + ' ' + sizes[i];
-};
-
-interface PeersPanelProps {
-  peers: PeerInfo[];
-}
-
-export default function Peers({ peers }: PeersPanelProps) {
+export default function Peers({ peers }: { peers: PeerInfo[] }) {
   return (
     <div className="bg-[#1c1c1c] border border-gray-700 rounded-xl backdrop-blur-sm shadow-md">
       <div className="px-6 py-4 border-b border-gray-700">

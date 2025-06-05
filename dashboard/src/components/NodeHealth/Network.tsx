@@ -6,8 +6,6 @@ interface NetworkPanelProps {
   network: NetworkInfo;
 }
 export default function NetworkPanel({ network }: NetworkPanelProps) {
-  const [showJson, setShowJson] = useState(false);
-
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div className="bg-[#1c1c1c] border border-gray-700 rounded-xl backdrop-blur-sm p-6">
