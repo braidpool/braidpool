@@ -1,15 +1,18 @@
-"use client"
+'use client';
 
-import { useState } from "react"
-import { ChevronDown } from "lucide-react"
+import { useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 
 interface RawJsonViewerProps {
-  data: object
-  title?: string
+  data: object;
+  title?: string;
 }
 
-export default function RawJsonViewer({ data, title = "Raw Data" }: RawJsonViewerProps) {
-  const [showJson, setShowJson] = useState(false)
+export default function RawJsonViewer({
+  data,
+  title = 'Raw Data',
+}: RawJsonViewerProps) {
+  const [showJson, setShowJson] = useState(false);
 
   return (
     <div className="bg-[#1c1c1c] mt-10 border border-gray-700 rounded-lg p-6 backdrop-blur-sm">
@@ -22,7 +25,9 @@ export default function RawJsonViewer({ data, title = "Raw Data" }: RawJsonViewe
         className="w-full flex items-center justify-between px-4 py-2 border border-gray-600 text-gray-300 rounded hover:bg-gray-700 transition"
       >
         View JSON
-        <ChevronDown className={`w-4 h-4 transition-transform ${showJson ? "rotate-180" : ""}`} />
+        <ChevronDown
+          className={`w-4 h-4 transition-transform ${showJson ? 'rotate-180' : ''}`}
+        />
       </button>
 
       {showJson && (
@@ -31,5 +36,5 @@ export default function RawJsonViewer({ data, title = "Raw Data" }: RawJsonViewe
         </pre>
       )}
     </div>
-  )
+  );
 }

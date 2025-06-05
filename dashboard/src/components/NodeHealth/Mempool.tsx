@@ -1,27 +1,29 @@
-import RawJsonViewer from "./Rawdatajson"
+import RawJsonViewer from './Rawdatajson';
 
-import { Mempool } from "./__tests__/types"
+import { Mempool } from './__tests__/types';
 
 const formatBytes = (bytes: number) => {
-  const sizes = ["B", "KB", "MB", "GB", "TB"]
-  if (bytes === 0) return "0 B"
-  const i = Math.floor(Math.log(bytes) / Math.log(1024))
-  return Math.round((bytes / Math.pow(1024, i)) * 100) / 100 + " " + sizes[i]
-}
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  if (bytes === 0) return '0 B';
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return Math.round((bytes / Math.pow(1024, i)) * 100) / 100 + ' ' + sizes[i];
+};
 
 interface MempoolPanelProps {
-  mempool: Mempool
+  mempool: Mempool;
 }
 
 export default function MempoolPanel({ mempool }: MempoolPanelProps) {
-  const mempoolUsage = (mempool.usage / mempool.maxmempool) * 100
+  const mempoolUsage = (mempool.usage / mempool.maxmempool) * 100;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Stats Card */}
       <div className="bg-[#1c1c1c] border border-gray-700 rounded-lg p-6 backdrop-blur-sm">
         <div className="mb-4">
-          <h2 className="text-xl font-semibold text-white">Mempool Statistics</h2>
+          <h2 className="text-xl font-semibold text-white">
+            Mempool Statistics
+          </h2>
         </div>
         <div className="space-y-6">
           <div>
@@ -42,7 +44,9 @@ export default function MempoolPanel({ mempool }: MempoolPanelProps) {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <p className="text-sm font-medium text-gray-300">Transactions</p>
-              <p className="text-2xl font-bold text-white">{mempool.size.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-white">
+                {mempool.size.toLocaleString()}
+              </p>
             </div>
             <div>
               <p className="text-sm font-medium text-gray-300">Min Fee Rate</p>
@@ -54,8 +58,7 @@ export default function MempoolPanel({ mempool }: MempoolPanelProps) {
         </div>
       </div>
 
-    
       <RawJsonViewer data={mempool} />
     </div>
-  )
+  );
 }

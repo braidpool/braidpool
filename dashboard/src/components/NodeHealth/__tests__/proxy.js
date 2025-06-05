@@ -1,19 +1,21 @@
-import 'dotenv/config'
+import 'dotenv/config';
 import express from 'express';
 import axios from 'axios';
 import cors from 'cors';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const BRAIDPOOL_URL = process.env.BRAIDPOOL_URL;; 
+const BRAIDPOOL_URL = process.env.BRAIDPOOL_URL;
 
 const RPC_USER = process.env.RPC_USER;
 const RPC_PASS = process.env.RPC_PASS;
 
-app.use(cors({
-  origin: 'http://localhost:3000',
-  credentials: true
-}));
+app.use(
+  cors({
+    origin: 'http://localhost:3000',
+    credentials: true,
+  })
+);
 
 app.use(express.json());
 
@@ -25,19 +27,19 @@ app.use('/api/node/:endpoint', async (req, res) => {
     const response = await axios.post(
       BRAIDPOOL_URL,
       {
-        jsonrpc: "1.0",
-        id: "proxy",
+        jsonrpc: '1.0',
+        id: 'proxy',
         method: endpoint,
-        params: []
+        params: [],
       },
       {
         auth: {
           username: RPC_USER,
-          password: RPC_PASS
+          password: RPC_PASS,
         },
         headers: {
-          'Content-Type': 'text/plain'
-        }
+          'Content-Type': 'text/plain',
+        },
       }
     );
 
@@ -45,7 +47,10 @@ app.use('/api/node/:endpoint', async (req, res) => {
     res.json(response.data);
   } catch (error) {
     if (error?.response?.data) {
-      console.error('[Proxy] Proxy error (response.data):', error.response.data);
+      console.error(
+        '[Proxy] Proxy error (response.data):',
+        error.response.data
+      );
     } else {
       console.error('[Proxy] Proxy error:', error);
     }

@@ -47,7 +47,7 @@ enum Page {
   MEMPOOL = 'mempool',
   DAG_VISUALIZATION = 'dag-visualization',
   MINER_STATS = 'miner-stats',
-  NODE_HEALTH= 'node-health',
+  NODE_HEALTH = 'node-health',
 }
 
 const Dashboard = () => {
@@ -282,7 +282,7 @@ const Dashboard = () => {
             },
           }}
         >
-           <ListItemIcon
+          <ListItemIcon
             sx={{
               minWidth: 40,
               color:
@@ -329,7 +329,6 @@ const Dashboard = () => {
             primary="Visualize"
             primaryTypographyProps={{ fontSize: '0.875rem' }}
           />
-          
         </ListItemButton>
       </List>
     </Drawer>
@@ -394,7 +393,7 @@ const Dashboard = () => {
       case Page.MINER_STATS:
         return <MinedSharesExplorer />;
       case Page.NODE_HEALTH:
-        return <NodeHealth/>;
+        return <NodeHealth />;
     }
   };
 
