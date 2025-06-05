@@ -54,14 +54,11 @@ function Copyright() {
 }
 
 function App() {
-
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <BrowserRouter>
         <Box sx={{ display: 'flex' }}>
-          
-
           <Box
             sx={{
               display: 'flex',
@@ -77,14 +74,11 @@ function App() {
                 path="/minedsharesexplorer"
                 element={<MinedSharesExplorer />}
               />
-               <Route
-                path="/nodehealth"
-                element={<NodeHealthDashboard/>}
-              />
+              <Route path="/nodehealth" element={<NodeHealthDashboard />} />
 
               {/* Add more routes as needed */}
             </Routes>
-            
+
             <Box
               component="footer"
               sx={{
@@ -94,7 +88,6 @@ function App() {
                 borderTop: '1px solid rgba(255,255,255,0.05)',
               }}
             >
-          
               <Footer></Footer>
             </Box>
           </Box>
