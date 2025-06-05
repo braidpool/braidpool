@@ -29,6 +29,7 @@ import MempoolLatencyStats from './MempoolLatencyStats';
 import RecentBlocksTable from './RecentBlocksTable';
 import GraphVisualization from '../BraidPoolDAG/BraidPoolDAG';
 import MinedSharesExplorer from '../BeadsTab/MinedSharesExplorer';
+import NodeHealth from '../NodeHealth/NodeHealth';
 // Utils
 import {
   loadSampleBraidData,
@@ -46,6 +47,7 @@ enum Page {
   MEMPOOL = 'mempool',
   DAG_VISUALIZATION = 'dag-visualization',
   MINER_STATS = 'miner-stats',
+  NODE_HEALTH= 'node-health',
 }
 
 const Dashboard = () => {
@@ -266,6 +268,38 @@ const Dashboard = () => {
         </ListItemButton>
 
         <ListItemButton
+          onClick={() => setCurrentPage(Page.NODE_HEALTH)}
+          selected={currentPage === Page.NODE_HEALTH}
+          sx={{
+            pl: 2,
+            py: 1.5,
+            borderLeft:
+              currentPage === Page.NODE_HEALTH
+                ? `4px solid ${colors.primary}`
+                : 'none',
+            '&.Mui-selected': {
+              backgroundColor: 'rgba(57, 134, 232, 0.08)',
+            },
+          }}
+        >
+           <ListItemIcon
+            sx={{
+              minWidth: 40,
+              color:
+                currentPage === Page.MEMPOOL
+                  ? colors.primary
+                  : colors.textSecondary,
+            }}
+          >
+            <MemoryIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText
+            primary="NodeHealth"
+            primaryTypographyProps={{ fontSize: '0.875rem' }}
+          />
+        </ListItemButton>
+
+        <ListItemButton
           onClick={() => setCurrentPage(Page.DAG_VISUALIZATION)}
           selected={currentPage === Page.DAG_VISUALIZATION}
           sx={{
@@ -295,6 +329,7 @@ const Dashboard = () => {
             primary="Visualize"
             primaryTypographyProps={{ fontSize: '0.875rem' }}
           />
+          
         </ListItemButton>
       </List>
     </Drawer>
@@ -358,6 +393,8 @@ const Dashboard = () => {
         );
       case Page.MINER_STATS:
         return <MinedSharesExplorer />;
+      case Page.NODE_HEALTH:
+        return <NodeHealth/>;
     }
   };
 

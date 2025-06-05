@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Dashboard from './components/Dashboard/Dashboard';
 import ShareDetails from './components/ShareDetails/ShareDetails';
 import MinedSharesExplorer from './components/BeadsTab/MinedSharesExplorer';
+import NodeHealthDashboard from './components/NodeHealth/NodeHealth';
 import Footer from './components/Footer';
 
 // Create a dark theme
@@ -53,32 +54,13 @@ function Copyright() {
 }
 
 function App() {
-  const [shareDetailsOpen, setShareDetailsOpen] = useState(false);
 
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <BrowserRouter>
         <Box sx={{ display: 'flex' }}>
-          {/* Test button for ShareDetails */}
-          {/* <Button
-            variant='contained'
-            color='primary'
-            onClick={() => setShareDetailsOpen(true)}
-            sx={{
-              position: 'fixed',
-              top: '20px',
-              right: '20px',
-              zIndex: 9999,
-            }}>
-            Test Share Details
-          </Button> */}
-
-          {/* ShareDetails component */}
-          {/* <ShareDetails
-            open={shareDetailsOpen}
-            onClose={() => setShareDetailsOpen(false)}
-          /> */}
+          
 
           <Box
             sx={{
@@ -95,8 +77,14 @@ function App() {
                 path="/minedsharesexplorer"
                 element={<MinedSharesExplorer />}
               />
+               <Route
+                path="/nodehealth"
+                element={<NodeHealthDashboard/>}
+              />
+
               {/* Add more routes as needed */}
             </Routes>
+            
             <Box
               component="footer"
               sx={{
@@ -106,13 +94,7 @@ function App() {
                 borderTop: '1px solid rgba(255,255,255,0.05)',
               }}
             >
-              {/* <Container maxWidth="lg">
-                <Typography variant="body1" align="center" gutterBottom>
-                  A visualization dashboard for the Braidpool decentralized
-                  mining pool
-                </Typography>
-                <Copyright />
-              </Container> */}
+          
               <Footer></Footer>
             </Box>
           </Box>
