@@ -1,8 +1,5 @@
-import React from 'react';
-import { Box, Typography, Paper, Divider } from '@mui/material';
 import Card from '../common/Card';
 import colors from '../../theme/colors';
-import * as d3 from 'd3';
 
 // Mock data for latency stats
 const latencyData = [
@@ -38,7 +35,6 @@ const mempoolData = {
   },
 };
 
-// StatItem component for displaying a statistic with label
 const StatItem = ({
   label,
   value,
@@ -48,28 +44,19 @@ const StatItem = ({
   value: string;
   color?: string;
 }) => (
-  <Box sx={{ mb: 2 }}>
-    <Typography
-      variant="body2"
-      color="textSecondary"
-      sx={{ fontSize: '0.8rem', mb: 0.5 }}
-    >
+  <div className="mb-4">
+    <p className="text-xs mb-1" style={{ color: colors.textSecondary }}>
       {label}
-    </Typography>
-    <Typography
-      variant="h6"
-      sx={{
-        fontWeight: 500,
-        color: color || colors.textPrimary,
-        fontSize: '1.1rem',
-      }}
+    </p>
+    <p
+      className="text-lg font-medium"
+      style={{ color: color || colors.textPrimary }}
     >
       {value}
-    </Typography>
-  </Box>
+    </p>
+  </div>
 );
 
-// Fee rate component for displaying fee levels
 const FeeRate = ({
   level,
   rate,
@@ -79,13 +66,11 @@ const FeeRate = ({
   rate: string;
   time: string;
 }) => (
-  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1.5 }}>
-    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-      <Box
-        sx={{
-          width: 8,
-          height: 8,
-          borderRadius: '50%',
+  <div className="flex justify-between mb-3">
+    <div className="flex items-center">
+      <div
+        className="w-2 h-2 rounded-full mr-3"
+        style={{
           backgroundColor:
             level === 'Fastest'
               ? colors.error
@@ -94,26 +79,17 @@ const FeeRate = ({
                 : level === 'Standard'
                   ? colors.success
                   : colors.textSecondary,
-          mr: 1.5,
         }}
       />
-      <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>
-        {level}
-      </Typography>
-    </Box>
-    <Typography
-      variant="body2"
-      sx={{ fontSize: '0.85rem', color: colors.textSecondary }}
-    >
+      <span className="text-sm">{level}</span>
+    </div>
+    <span className="text-sm" style={{ color: colors.textSecondary }}>
       {rate}
-    </Typography>
-    <Typography
-      variant="body2"
-      sx={{ fontSize: '0.85rem', color: colors.textSecondary }}
-    >
+    </span>
+    <span className="text-sm" style={{ color: colors.textSecondary }}>
       {time}
-    </Typography>
-  </Box>
+    </span>
+  </div>
 );
 
 const MempoolLatencyStats = () => {
@@ -123,57 +99,36 @@ const MempoolLatencyStats = () => {
       subtitle="Mempool stats and latency metrics"
       accentColor={colors.cardAccentPrimary}
     >
-      <Box
-        sx={{
-          display: 'flex',
-          flexDirection: { xs: 'column', md: 'row' },
-          gap: 3,
-        }}
-      >
+      <div className="flex flex-col md:flex-row gap-6">
         {/* Mempool Stats */}
-        <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 50%' } }}>
-          <Paper
-            elevation={0}
-            sx={{
+        <div className="flex-1">
+          <div
+            className="p-4 rounded h-full"
+            style={{
               backgroundColor: colors.paper,
-              borderRadius: 1,
               border: `1px solid ${colors.primary}20`,
-              p: 2,
-              height: '100%',
             }}
           >
-            <Typography variant="h6" sx={{ mb: 2, fontWeight: 500 }}>
-              Mempool Status
-            </Typography>
+            <h6 className="mb-4 font-medium text-lg">Mempool Status</h6>
 
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', mx: -1, mb: 2 }}>
-              <Box sx={{ width: { xs: '50%', sm: '50%' }, p: 1 }}>
-                <StatItem label="SIZE" value={mempoolData.size} />
-              </Box>
-              <Box sx={{ width: { xs: '50%', sm: '50%' }, p: 1 }}>
-                <StatItem label="TRANSACTIONS" value={mempoolData.txCount} />
-              </Box>
-              <Box sx={{ width: { xs: '50%', sm: '50%' }, p: 1 }}>
-                <StatItem
-                  label="NEXT BLOCK FEES"
-                  value={mempoolData.nextBlockFees}
-                  color={colors.secondary}
-                />
-              </Box>
-              <Box sx={{ width: { xs: '50%', sm: '50%' }, p: 1 }}>
-                <StatItem
-                  label="HIGH PRIORITY FEE"
-                  value={mempoolData.feeRates.high}
-                  color={colors.error}
-                />
-              </Box>
-            </Box>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <StatItem label="SIZE" value={mempoolData.size} />
+              <StatItem label="TRANSACTIONS" value={mempoolData.txCount} />
+              <StatItem
+                label="NEXT BLOCK FEES"
+                value={mempoolData.nextBlockFees}
+                color={colors.secondary}
+              />
+              <StatItem
+                label="HIGH PRIORITY FEE"
+                value={mempoolData.feeRates.high}
+                color={colors.error}
+              />
+            </div>
 
-            <Divider sx={{ my: 2 }} />
+            <hr className="my-4" style={{ borderColor: colors.primary }} />
 
-            <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 500 }}>
-              Fee Estimates
-            </Typography>
+            <h6 className="mb-4 font-medium text-sm">Fee Estimates</h6>
 
             <FeeRate
               level="Fastest"
@@ -195,91 +150,83 @@ const MempoolLatencyStats = () => {
               rate={mempoolData.feeRates.low}
               time={mempoolData.feeEstimates.economy}
             />
-          </Paper>
-        </Box>
+          </div>
+        </div>
 
         {/* Latency Stats */}
-        <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 50%' } }}>
-          <Paper
-            elevation={0}
-            sx={{
+        <div className="flex-1">
+          <div
+            className="p-4 rounded h-full"
+            style={{
               backgroundColor: colors.paper,
-              borderRadius: 1,
               border: `1px solid ${colors.primary}20`,
-              p: 2,
-              height: '100%',
             }}
           >
-            <Typography variant="h6" sx={{ mb: 2, fontWeight: 500 }}>
-              Network Latency
-            </Typography>
+            <h6 className="mb-4 font-medium text-lg">Network Latency</h6>
 
-            <Box sx={{ mb: 2 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                <Typography
-                  variant="body2"
-                  color="textSecondary"
-                  sx={{ fontSize: '0.8rem' }}
+            <div className="mb-4">
+              <div className="flex justify-between">
+                <span
+                  className="text-xs"
+                  style={{ color: colors.textSecondary }}
                 >
                   Current:{' '}
-                  <span style={{ color: colors.textPrimary, fontWeight: 500 }}>
+                  <span
+                    className="font-medium"
+                    style={{ color: colors.textPrimary }}
+                  >
                     203 ms
                   </span>
-                </Typography>
-                <Typography
-                  variant="body2"
-                  color="textSecondary"
-                  sx={{ fontSize: '0.8rem' }}
+                </span>
+                <span
+                  className="text-xs"
+                  style={{ color: colors.textSecondary }}
                 >
                   Avg (1h):{' '}
-                  <span style={{ color: colors.textPrimary, fontWeight: 500 }}>
+                  <span
+                    className="font-medium"
+                    style={{ color: colors.textPrimary }}
+                  >
                     211 ms
                   </span>
-                </Typography>
-                <Typography
-                  variant="body2"
-                  color="textSecondary"
-                  sx={{ fontSize: '0.8rem' }}
+                </span>
+                <span
+                  className="text-xs"
+                  style={{ color: colors.textSecondary }}
                 >
                   Best:{' '}
-                  <span style={{ color: colors.success, fontWeight: 500 }}>
+                  <span
+                    className="font-medium"
+                    style={{ color: colors.success }}
+                  >
                     197 ms
                   </span>
-                </Typography>
-              </Box>
-            </Box>
+                </span>
+              </div>
+            </div>
 
-            {/* Latency Chart (simplified) */}
-            <Box
-              sx={{
-                height: 200,
-                mt: 3,
-                position: 'relative',
-                '&::before': {
-                  content: '""',
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  backgroundImage: `linear-gradient(to right, ${colors.chartGrid} 1px, transparent 1px), linear-gradient(to bottom, ${colors.chartGrid} 1px, transparent 1px)`,
+            {/* Latency Chart */}
+            <div className="relative h-48 mt-6">
+              <div
+                className="absolute inset-0"
+                style={{
+                  backgroundImage: `linear-gradient(to right, ${colors.chartGrid} 1px, transparent 1px), 
+                                  linear-gradient(to bottom, ${colors.chartGrid} 1px, transparent 1px)`,
                   backgroundSize: '20% 25%',
                   opacity: 0.2,
-                },
-              }}
-            >
-              {/* Line graph would be created with D3.js */}
-              <svg width="100%" height="100%">
+                }}
+              />
+
+              <svg className="w-full h-full">
                 <path
-                  d={`M 0,${
-                    100 - ((latencyData[0].value - 190) / 50) * 100
-                  } ${latencyData
-                    .map((point, i) => {
-                      const x = i * (100 / (latencyData.length - 1));
-                      const y = 100 - ((point.value - 190) / 50) * 100;
-                      return `L ${x},${y}`;
-                    })
-                    .join(' ')}`}
+                  d={`M 0,${100 - ((latencyData[0].value - 190) / 50) * 100} 
+                    ${latencyData
+                      .map((point, i) => {
+                        const x = i * (100 / (latencyData.length - 1));
+                        const y = 100 - ((point.value - 190) / 50) * 100;
+                        return `L ${x},${y}`;
+                      })
+                      .join(' ')}`}
                   fill="none"
                   stroke={colors.primary}
                   strokeWidth="2"
@@ -302,80 +249,60 @@ const MempoolLatencyStats = () => {
               </svg>
 
               {/* Y-axis labels */}
-              <Box
-                sx={{
-                  position: 'absolute',
-                  left: 0,
-                  top: 0,
-                  bottom: 0,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between',
-                  pr: 1,
-                }}
-              >
-                <Typography
-                  variant="caption"
-                  sx={{ fontSize: '0.7rem', color: colors.textSecondary }}
+              <div className="absolute top-0 bottom-0 left-0 flex flex-col justify-between pr-2">
+                <span
+                  className="text-[0.7rem]"
+                  style={{ color: colors.textSecondary }}
                 >
                   240ms
-                </Typography>
-                <Typography
-                  variant="caption"
-                  sx={{ fontSize: '0.7rem', color: colors.textSecondary }}
+                </span>
+                <span
+                  className="text-[0.7rem]"
+                  style={{ color: colors.textSecondary }}
                 >
                   215ms
-                </Typography>
-                <Typography
-                  variant="caption"
-                  sx={{ fontSize: '0.7rem', color: colors.textSecondary }}
+                </span>
+                <span
+                  className="text-[0.7rem]"
+                  style={{ color: colors.textSecondary }}
                 >
                   190ms
-                </Typography>
-              </Box>
+                </span>
+              </div>
 
               {/* X-axis labels */}
-              <Box
-                sx={{
-                  position: 'absolute',
-                  left: 0,
-                  right: 0,
-                  bottom: -20,
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                }}
-              >
-                <Typography
-                  variant="caption"
-                  sx={{ fontSize: '0.7rem', color: colors.textSecondary }}
+              <div className="absolute bottom-[-20px] left-0 right-0 flex justify-between">
+                <span
+                  className="text-[0.7rem]"
+                  style={{ color: colors.textSecondary }}
                 >
                   60m
-                </Typography>
-                <Typography
-                  variant="caption"
-                  sx={{ fontSize: '0.7rem', color: colors.textSecondary }}
+                </span>
+                <span
+                  className="text-[0.7rem]"
+                  style={{ color: colors.textSecondary }}
                 >
                   30m
-                </Typography>
-                <Typography
-                  variant="caption"
-                  sx={{ fontSize: '0.7rem', color: colors.textSecondary }}
+                </span>
+                <span
+                  className="text-[0.7rem]"
+                  style={{ color: colors.textSecondary }}
                 >
                   5m
-                </Typography>
-              </Box>
-            </Box>
+                </span>
+              </div>
+            </div>
 
-            <Divider sx={{ my: 2 }} />
+            <hr className="my-4" style={{ borderColor: colors.primary }} />
 
-            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+            <div className="flex justify-between">
               <StatItem label="SWITCHING TIME" value="1.8s" />
               <StatItem label="LAMBDA" value="1.87" />
               <StatItem label="A PARAMETER" value="3.2" />
-            </Box>
-          </Paper>
-        </Box>
-      </Box>
+            </div>
+          </div>
+        </div>
+      </div>
     </Card>
   );
 };
