@@ -11,7 +11,7 @@ export default function HashrateTab({
 }: any) {
   const [stats, setStats] = useState<any>(null);
   const [chartData, setChartData] = useState<any>([]);
-
+ 
   useEffect(() => {
     const fetchStats = async () => {
       try {
@@ -47,7 +47,7 @@ export default function HashrateTab({
           </p>
         </div>
         <div className="bg-blue-900/30 px-3 py-1 rounded-md">
-          <span className="text-blue-300 font-mono">λ = 0.0024</span>
+          <span className="text-blue-300 font-mono">  λ = {stats ? `${(stats.chartData.at(-1)?.value / 1e12).toFixed(4)}` : '...'}</span>
         </div>
       </div>
 
@@ -68,7 +68,7 @@ export default function HashrateTab({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <AnimatedStatCard
           title="Average Hashrate"
-          value="0.0022 λ"
+          value={stats ? `${(stats.averageHashrate / 1e12).toFixed(2)} λ` : 'Loading...'}
           change="+8%"
           icon={<Zap />}
           
@@ -76,7 +76,8 @@ export default function HashrateTab({
         />
         <AnimatedStatCard
           title="Peak Hashrate"
-          value="0.0031 λ"
+              value={stats ? `${(stats.peakHashrate / 1e12).toFixed(4)} λ` : 'Loading...'}
+
           change="+12%"
           icon={<TrendingUp />}
           
@@ -84,7 +85,8 @@ export default function HashrateTab({
         />
         <AnimatedStatCard
           title="Network Difficulty"
-          value="11.4"
+            value={stats ? `${parseFloat(stats.networkDifficulty).toFixed(2)}` : 'Loading...'}
+
           change="+5%"
           icon={<Activity />}
        

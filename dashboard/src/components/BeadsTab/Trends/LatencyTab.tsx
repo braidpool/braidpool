@@ -10,7 +10,9 @@ export default function LatencyTab({
   timeRange,
 }: any) {
   const [chartData, setChartData] = useState<any[]>([]);
-
+ const [averageLatency, setAverageLatency] = useState<string>('0ms');
+const [peakLatency, setPeakLatency] = useState<string>('0ms');
+const [peerCount, setPeerCount] = useState<number>(0);
   useEffect(() => {
     const fetchLatency = async () => {
       try {
@@ -22,6 +24,9 @@ export default function LatencyTab({
           label: new Date(d.date).toLocaleString(),
         }));
         setChartData(latencyData);
+         setAverageLatency(`${parseFloat(data.averageLatency).toFixed(0)}ms`);
+      setPeakLatency(`${parseFloat(data.peakLatency).toFixed(0)}ms`);
+      setPeerCount(data.peerCount);
       } catch (err) {
         setChartData([]);
       }
@@ -36,13 +41,16 @@ export default function LatencyTab({
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
+          
           <h3 className="text-xl font-bold text-blue-300">Network Latency</h3>
+     
           <p className="text-sm text-gray-400 mt-1">
             Real-time latency measurements
           </p>
+        
         </div>
         <div className="bg-purple-900/30 px-3 py-1 rounded-md">
-          <span className="text-purple-300 font-mono">120ms</span>
+          <span className="text-purple-300 font-mono">AvgLatency : {averageLatency}</span>
         </div>
       </div>
 
@@ -63,15 +71,14 @@ export default function LatencyTab({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <AnimatedStatCard
           title="Average Latency"
-          value="118ms"
+          value={averageLatency}
           change="-3%"
           icon={<Activity />}
-          
           delay={0.2}
         />
         <AnimatedStatCard
           title="Peak Latency"
-          value="210ms"
+          value={peakLatency}
           change="+15%"
           icon={<ArrowUpRight />}
           
@@ -79,7 +86,7 @@ export default function LatencyTab({
         />
         <AnimatedStatCard
           title="Nodes Reporting"
-          value="24"
+          value={peerCount.toString()}
           change="+2"
           icon={<Cpu />}
           

@@ -93,7 +93,7 @@ export default function AdvancedChart({
           </motion.button>
           <motion.button
             className="bg-gray-800/70 p-1.5 rounded-md text-gray-300 hover:text-white"
-            whileHover={{ scale: 1.1 }}
+            whileHover={{ scale: 2.1 }}
             whileTap={{ scale: 0.95 }}
             onClick={handleRefresh}
             disabled={isRefreshing}
@@ -121,10 +121,7 @@ export default function AdvancedChart({
                 <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8} />
                 <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
               </linearGradient>
-              <linearGradient id="colorComparison" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#10b981" stopOpacity={0.6} />
-                <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-              </linearGradient>
+              
             </defs>
 
             <CartesianGrid strokeDasharray="3 3" stroke="#4b5563" />
