@@ -72,7 +72,7 @@ export default function MinedSharesExplorer() {
   return (
     <div
       ref={containerRef}
-      className="min-h-screen bg-gradient-to-br from-gray-900 via-[#0a0b1e] to-black text-white overflow-hidden relative perspective-1000"
+      className="min-h-screen bg-black text-white overflow-hidden relative perspective-1000"
     >
       <div className="relative z-10 container mx-auto px-4 py-8">
         <DashboardHeader

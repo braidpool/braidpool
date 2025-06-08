@@ -13,7 +13,7 @@ export function RewardMilestones({ achievements = [] }: RewardMilestonesProps) {
     null
   );
 
-  // Define all possible achievements with their details
+  
   const allAchievements = [
     {
       id: 'First Reward',
@@ -90,7 +90,7 @@ export function RewardMilestones({ achievements = [] }: RewardMilestonesProps) {
           Earned Achievements
         </h3>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-4 sm:grid-cols-2 md:grid-cols-3 gap-4">
           {earnedAchievements.map((achievement, index) => (
             <motion.div
               key={achievement.id}
@@ -176,7 +176,7 @@ export function RewardMilestones({ achievements = [] }: RewardMilestonesProps) {
           Upcoming Achievements
         </h3>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-4">
           {lockedAchievements.map((achievement, index) => (
             <motion.div
               key={achievement.id}

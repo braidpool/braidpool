@@ -15,7 +15,7 @@ export function TrendsTab({ timeRange }: { timeRange: string }) {
   return (
     <div className="space-y-8">
       {/* Subtabs */}
-      <div className="flex border-b border-gray-800/70 mb-6">
+      <div className="flex border-b mb-6">
         {[
           {
             id: 'hashrate',

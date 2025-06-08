@@ -8,7 +8,7 @@ export function BlockStats() {
         value="8,901"
         change="+15%"
         icon={<Layers />}
-        color="blue"
+       
         delay={0.2}
       />
       <AnimatedStatCard
@@ -16,7 +16,7 @@ export function BlockStats() {
         value="1.2 MB"
         change="+0.2 MB"
         icon={<Database />}
-        color="purple"
+        
         delay={0.3}
       />
       <AnimatedStatCard
@@ -24,7 +24,7 @@ export function BlockStats() {
         value="9.8 min"
         change="-0.3 min"
         icon={<Clock className="h-5 w-5" />}
-        color="emerald"
+       
         delay={0.4}
       />
       <AnimatedStatCard
@@ -32,7 +32,7 @@ export function BlockStats() {
         value="11.4 T"
         change="+5%"
         icon={<Activity />}
-        color="amber"
+        
         delay={0.5}
       />
     </div>
