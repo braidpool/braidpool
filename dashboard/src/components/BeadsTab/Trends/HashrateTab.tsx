@@ -24,7 +24,7 @@ export default function HashrateTab({
       </div>
 
       <div
-        className="relative border w-full border-gray-800/50 rounded-xl p-6 h-110 bg-black/30 backdrop-blur-md overflow-hidden"
+        className="relative border w-full  border-gray-800/50 rounded-xl p-6 h-110backdrop-blur-md overflow-hidden"
         onMouseEnter={() => setChartHovered(true)}
         onMouseLeave={() => setChartHovered(false)}
       >
@@ -43,7 +43,7 @@ export default function HashrateTab({
           value="0.0022 λ"
           change="+8%"
           icon={<Zap />}
-          color="blue"
+         
           delay={0.2}
         />
         <AnimatedStatCard
@@ -51,7 +51,7 @@ export default function HashrateTab({
           value="0.0031 λ"
           change="+12%"
           icon={<TrendingUp />}
-          color="emerald"
+          
           delay={0.3}
         />
         <AnimatedStatCard
@@ -59,7 +59,7 @@ export default function HashrateTab({
           value="11.4"
           change="+5%"
           icon={<Activity />}
-          color="purple"
+         
           delay={0.4}
         />
       </div>
