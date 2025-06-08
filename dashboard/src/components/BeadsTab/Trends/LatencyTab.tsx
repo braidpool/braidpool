@@ -43,7 +43,7 @@ export default function LatencyTab({
           value="118ms"
           change="-3%"
           icon={<Activity />}
-          color="purple"
+          
           delay={0.2}
         />
         <AnimatedStatCard
@@ -51,7 +51,7 @@ export default function LatencyTab({
           value="210ms"
           change="+15%"
           icon={<ArrowUpRight />}
-          color="blue"
+          
           delay={0.3}
         />
         <AnimatedStatCard
@@ -59,7 +59,7 @@ export default function LatencyTab({
           value="24"
           change="+2"
           icon={<Cpu />}
-          color="blue"
+          
           delay={0.4}
         />
       </div>

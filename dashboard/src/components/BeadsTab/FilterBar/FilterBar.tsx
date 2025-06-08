@@ -16,7 +16,7 @@ export function FilterBar({ timeRange, setTimeRange }: FilterBarProps) {
 
   return (
     <motion.div
-      className="relative border border-gray-800/50 rounded-xl p-5 mb-8 bg-black/30 backdrop-blur-md shadow-[0_0_25px_rgba(59,130,246,0.15)] overflow-hidden"
+      className="relative border border-gray-800/50 rounded-xl p-5 mb-8 bg-black overflow-hidden"
       initial={{ opacity: 0, y: 50, scale: 0.9 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.6, delay: 0.2, type: 'spring' }}
@@ -24,7 +24,7 @@ export function FilterBar({ timeRange, setTimeRange }: FilterBarProps) {
       {/* Animated border gradient */}
       <div className="absolute inset-0 p-[1px] rounded-xl overflow-hidden pointer-events-none">
         <motion.div
-          className="absolute inset-0 bg-gradient-to-r from-blue-500/30 via-purple-500/30 to-blue-500/30"
+          className="absolute inset-0 "
           animate={{
             backgroundPosition: ['0% 0%', '200% 0%'],
           }}

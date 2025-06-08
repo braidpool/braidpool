@@ -10,7 +10,7 @@ export default function EnhancedBlocksTab({
 }) {
   const [isLoaded, setIsLoaded] = useState(false);
   const [animateBlocks, setAnimateBlocks] = useState(false);
-  const [viewMode, setViewMode] = useState('list');
+  const [viewMode] = useState('list');
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -40,7 +40,7 @@ export default function EnhancedBlocksTab({
 
   return (
     <div className="space-y-6 animate-fade-in-up px-4 sm:px-6 md:px-8 lg:px-6 ">
-      {/* Header */}
+     
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-blue-400 flex items-center gap-2 drop-shadow-md">
@@ -65,7 +65,7 @@ export default function EnhancedBlocksTab({
       </div>
 
       {/* Stats section */}
-      <div className="rounded-xl bg-gradient-to-r from-slate-900/70 to-black border border-gray-800/40 p-4 sm:p-6 shadow-inner shadow-black/20">
+      <div className="rounded-xl border border-gray-800/40 p-4 sm:p-6 shadow-inner shadow-black/20">
         <BlockStats />
       </div>
     </div>

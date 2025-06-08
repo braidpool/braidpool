@@ -1,19 +1,5 @@
 import { motion } from 'framer-motion';
 import { BarChart3, Layers, Cpu, Database, Bitcoin } from 'lucide-react';
-
-interface DashboardHeaderProps {
-  headerOpacity: any;
-  headerScale: any;
-  activeTab: string;
-  setActiveTab: (tab: string) => void;
-}
-
-const TABS = [
-  { key: 'miners', label: 'Miners' },
-  { key: 'trends', label: 'Trends' },
-  { key: 'blocks', label: 'Blocks' },
-  { key: 'rewards', label: 'Rewards' },
-];
 export default function DashboardHeader({
   headerOpacity,
   headerScale,
@@ -37,15 +23,15 @@ export default function DashboardHeader({
           transition={{ duration: 0.8, type: 'spring' }}
           className="w-full md:w-auto"
         >
-          <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-purple-500 to-blue-500 drop-shadow-[0_0_15px_rgba(59,130,246,0.5)] tracking-tight">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold bg-clip-text  text-white tracking-tight">
             Beads Explorer
           </h1>
 
           {/* Animated underline */}
           <motion.div
-            className="h-1 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full"
+            className="h-1 bg-white rounded-full"
             initial={{ width: 0, opacity: 0 }}
-            animate={{ width: '30%', opacity: 1 }}
+            animate={{ width: '20%', opacity: 1 }}
             transition={{ delay: 0.5, duration: 0.8 }}
           />
         </motion.div>
@@ -58,7 +44,7 @@ export default function DashboardHeader({
           className="flex gap-3 w-full md:w-auto justify-end "
         >
           <motion.button
-            className="relative px-3 sm:px-4 py-2 rounded-lg text-white text-sm sm:text-base font-medium overflow-hidden  bg-[#1D2B53] hover:bg-black "
+            className="relative px-3 sm:px-4 py-2 rounded-lg text-white text-sm sm:text-base font-medium overflow-hidden  bg-gray-700 hover:bg-black "
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.97 }}
           >
@@ -68,7 +54,7 @@ export default function DashboardHeader({
             </span>
           </motion.button>
           <motion.button
-            className="relative px-3 sm:px-4 py-2 rounded-lg text-white text-sm sm:text-base font-medium overflow-hidden   bg-[#1D2B53] hover:bg-black"
+            className="relative px-3 sm:px-4 py-2 rounded-lg text-white text-sm sm:text-base font-medium overflow-hidden   bg-gray-700 hover:bg-black"
             whileTap={{ scale: 0.97 }}
           >
             <span className="relative z-10 flex items-center justify-center gap-2">
