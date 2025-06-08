@@ -1,11 +1,11 @@
 use crate::bead::Bead;
-use crate::utils::BeadHash;
+use crate::utils::retrieve_bead;
 use ::serde::Serialize;
 use std::collections::HashSet;
 
 #[derive(Clone, Debug, Serialize)]
 
-pub(crate) struct Cohort(HashSet<BeadHash>);
+pub(crate) struct Cohort(HashSet<usize>);
 
 pub enum AddBeadStatus {
     DagAlreadyContainsBead,
@@ -17,33 +17,31 @@ pub enum AddBeadStatus {
 #[derive(Clone, Debug)]
 
 pub struct Braid {
-    pub(crate) beads: HashSet<BeadHash>,
-    pub(crate) tips: HashSet<BeadHash>,
+    pub(crate) beads: Vec<Bead>,
+    pub(crate) tips: HashSet<usize>,
     pub(crate) cohorts: Vec<Cohort>,
-    pub(crate) orphan_beads: Vec<Bead>,
-    pub(crate) genesis_beads: HashSet<BeadHash>,
+    pub(crate) orphan_beads: Vec<usize>,
+    pub(crate) genesis_beads: HashSet<usize>,
 }
 
 impl Braid {
     // All public funtions go here!
-    pub fn new(genesis_beads: HashSet<BeadHash>) -> Self {
+    pub fn new(genesis_beads: HashSet<Bead>) -> Self {
+        let mut beads = Vec::new();
+        let mut bead_indices = HashSet::new();
+
+        for (index, bead) in genesis_beads.into_iter().enumerate() {
+            beads.push(bead);
+            bead_indices.insert(index);
+        }
+
         Braid {
-            beads: genesis_beads.clone(),
-            tips: genesis_beads.clone(),
-            cohorts: vec![Cohort(genesis_beads.clone())],
+            beads,
+            tips: bead_indices.clone(),
+            cohorts: vec![Cohort(bead_indices.clone())],
             orphan_beads: Vec::new(),
-            genesis_beads: genesis_beads,
+            genesis_beads: bead_indices,
         }
-    }
-
-    pub fn add_bead(&mut self, bead: Bead) -> AddBeadStatus {
-        if self.beads.contains(&bead.block_header.block_hash()) {
-            return AddBeadStatus::DagAlreadyContainsBead;
-        }
-
-        self.cohorts = self.calculate_cohorts();
-
-        AddBeadStatus::BeadAdded
     }
 }
 
@@ -56,49 +54,77 @@ impl Braid {
             return false;
         }
         // Don't have all parents
-        if !bead
-            .committed_metadata
-            .parents
-            .iter()
-            .all(|p| self.beads.contains(p))
-        {
-            return false;
+        for parent_hash in &bead.committed_metadata.parents {
+            // Check if we already have this parent in our beads
+            let parent_exists = self
+                .beads
+                .iter()
+                .any(|b| b.block_header.block_hash() == *parent_hash);
+
+            if !parent_exists {
+                // Try to retrieve the parent using magic_retrieve
+                if let Some(retrieved_bead) = retrieve_bead(*parent_hash) {
+                    self.beads.push(retrieved_bead);
+                } else {
+                    // Parent not found and can't be retrieved
+                    return false;
+                }
+            }
         }
         // Already seen this bead
         let bead_hash = bead.block_header.block_hash();
-        if self.beads.contains(&bead_hash) {
+        if self
+            .beads
+            .iter()
+            .any(|b| b.block_header.block_hash() == bead_hash)
+        {
             return false;
         }
 
-        // Insert bead hash into beads set
-        self.beads.insert(bead_hash);
+        // Insert bead into beads vector
+        self.beads.push(bead.clone());
 
         // Remove parents from tips if present
-        for parent in &bead.committed_metadata.parents {
-            self.tips.remove(parent);
+        for parent_hash in &bead.committed_metadata.parents {
+            // Find the index of the parent bead
+            if let Some(parent_index) = self
+                .beads
+                .iter()
+                .position(|b| b.block_header.block_hash() == *parent_hash)
+            {
+                self.tips.remove(&parent_index);
+            }
         }
-        // Add bead hash to tips
-        self.tips.insert(bead_hash);
+
+        // Add the new bead's index to tips
+        let new_bead_index = self.beads.len() - 1;
+        self.tips.insert(new_bead_index);
 
         // Find earliest parent of bead in cohorts and nuke all cohorts after that
-        let mut found_parents = HashSet::new();
+        let mut found_parent_indices = HashSet::new();
         let mut dangling = HashSet::new();
-        dangling.insert(bead_hash);
+        dangling.insert(new_bead_index);
 
         // We'll collect the indices to remove from cohorts
         let mut remove_after = None;
         for (i, cohort) in self.cohorts.iter().enumerate().rev() {
-            // Find which parents are in this cohort
-            for parent in &bead.committed_metadata.parents {
-                if cohort.0.contains(parent) {
-                    found_parents.insert(*parent);
+            // Find which parent indices are in this cohort
+            for parent_hash in &bead.committed_metadata.parents {
+                if let Some(parent_index) = self
+                    .beads
+                    .iter()
+                    .position(|b| b.block_header.block_hash() == *parent_hash)
+                {
+                    if cohort.0.contains(&parent_index) {
+                        found_parent_indices.insert(parent_index);
+                    }
                 }
             }
-            // Add all bead hashes in this cohort to dangling
-            for h in &cohort.0 {
-                dangling.insert(*h);
+            // Add all bead indices in this cohort to dangling
+            for idx in &cohort.0 {
+                dangling.insert(*idx);
             }
-            if found_parents.len() == bead.committed_metadata.parents.len() {
+            if found_parent_indices.len() == bead.committed_metadata.parents.len() {
                 remove_after = Some(i + 1);
                 break;
             }
@@ -117,33 +143,6 @@ impl Braid {
         }
 
         true
-    }
-
-    // All private functions go here!
-    fn calculate_cohorts(&self) -> Vec<Cohort> {
-        // TODO: Implement the cohorts calculating function!
-        vec![Cohort(HashSet::new())]
-    }
-
-    fn generate_tip_cohorts(&self) -> Vec<Cohort> {
-        let mut cohorts = Vec::new();
-        let tips = self.tips.clone();
-
-        let mut temporary_cohort = HashSet::new();
-        for cohort in self.cohorts.iter().rev() {
-            temporary_cohort.clear();
-            for tip in tips.iter() {
-                if cohort.0.contains(tip) {
-                    temporary_cohort.insert(tip.clone());
-                }
-            }
-
-            if temporary_cohort.len() != 0 {
-                cohorts.push(Cohort(temporary_cohort.clone()))
-            }
-        }
-
-        cohorts
     }
 }
 
