@@ -96,7 +96,10 @@ app.get('/api/stats', async (req, res) => {
   const startTime = Date.now();
 
   try {
-    const hashrate = await callRpc('getnetworkhashps');
+    const [hashrate, difficulty] = await Promise.all([
+      callRpc('getnetworkhashps'),
+      callRpc('getdifficulty'),
+    ]);
     const endTime = Date.now();
     const latency = endTime - startTime;
     const timestamp = new Date().toISOString();
@@ -111,10 +114,17 @@ app.get('/api/stats', async (req, res) => {
 
     
     if (statsHistory.length > 100) statsHistory.shift();
-
+     const values = statsHistory.map((entry) => entry.value);
+    const avgHashrate = values.reduce((a, b) => a + b, 0) / values.length;
+    const peakHashrate = Math.max(...values);
     
-    res.json({ chartData: statsHistory });
-  } catch (err) {
+   res.json({
+  chartData: statsHistory,
+  averageHashrate: avgHashrate,
+  peakHashrate: peakHashrate,
+  networkDifficulty: difficulty,
+}) ;
+}catch (err) {
     console.error('[Stats] Error fetching hashrate/latency:', err.message);
     res.status(500).json({ error: 'Failed to fetch stats' });
   }
@@ -130,6 +140,10 @@ app.get('/api/latency', async (req, res) => {
     const avgPing = pings.length
       ? pings.reduce((a, b) => a + b, 0) / pings.length
       : 0;
+    const peakLatency = pings.length
+      ? Math.max(...pings) * 1000
+      : 0;
+    const peerCount = pings.length;
 
     const latency = Math.round(avgPing * 1000); 
     const timestamp = new Date().toISOString();
@@ -141,9 +155,20 @@ app.get('/api/latency', async (req, res) => {
     });
 
     if (latencyHistory.length > 100) latencyHistory.shift();
-    console.log('[API /api/latency] Response:', { chartData: latencyHistory });
+    console.log(
+      '[API /api/latency] Response:',
+      { chartData: latencyHistory },
+      'avgLatency(ms):', (avgPing * 1000).toFixed(2),
+      'peakLatency(ms):', peakLatency.toFixed(2),
+      'peerCount:', peerCount
+    );
 
-    res.json({ chartData: latencyHistory });
+    res.json({
+      chartData: latencyHistory,
+      averageLatency: (avgPing * 1000).toFixed(2), 
+      peakLatency: peakLatency.toFixed(2),         
+      peerCount,
+    });
   } catch (err) {
     console.error('[Latency] Error:', err.message);
     res.status(500).json({ error: 'Failed to fetch latency' });
