@@ -1,14 +1,37 @@
+import React, { useEffect, useState } from 'react';
 import AdvancedChart from '../AdvancedChart';
 import AnimatedStatCard from '../AnimatedStatCard';
 import { Activity, ArrowUpRight, Cpu } from 'lucide-react';
 
 export default function LatencyTab({
-  chartData,
   isChartLoading,
   chartHovered,
   setChartHovered,
   timeRange,
 }: any) {
+  const [chartData, setChartData] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchLatency = async () => {
+      try {
+        const res = await fetch('http://localhost:3001/api/latency');
+        const data = await res.json();
+        const latencyData = (data.chartData || []).map((d: any) => ({
+          ...d,
+          date: new Date(d.date),
+          label: new Date(d.date).toLocaleString(),
+        }));
+        setChartData(latencyData);
+      } catch (err) {
+        setChartData([]);
+      }
+    };
+
+    fetchLatency();
+    const interval = setInterval(fetchLatency, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -29,7 +52,7 @@ export default function LatencyTab({
         onMouseLeave={() => setChartHovered(false)}
       >
         <AdvancedChart
-          data={chartData.map((d: any) => ({ ...d, value: d.value / 2 }))}
+          data={chartData}
           height={200}
           isHovered={chartHovered}
           isLoading={isChartLoading}

@@ -1,17 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useTransform, useScroll } from 'framer-motion';
-
 import DashboardHeader from './DashboardHeader';
 import { FilterBar } from './FilterBar/FilterBar';
 import EnhancedBlocksTab from './BlockVisulisation/Block';
 import BeadRow from './BeadRow';
 import { BEADS, TRANSACTIONS } from './lib/constants';
-import { useChartData } from './Hooks/useChartData';
 import { TrendsTab } from './Trends/TrendsTab';
 import { RewardsDashboard } from './Reward/RewardsSection';
-
+import { getNodeStats } from "./__tests__/nodeApi"
 export default function MinedSharesExplorer() {
-  // UI and state management
+
   const [expandedBeads, setExpandedBeads] = useState({
     bead1: true,
     bead2: false,
@@ -22,13 +20,7 @@ export default function MinedSharesExplorer() {
   const [timeRange, setTimeRange] = useState('month');
   const [error, setError] = useState<string | null>(null);
 
-  // Data fetching
-  const {
-    data: chartData,
-    isLoading: isChartLoading,
-    error: chartError,
-    refetch,
-  } = useChartData(timeRange);
+ 
 
   // Scroll animations
   const containerRef = useRef(null);
@@ -36,14 +28,9 @@ export default function MinedSharesExplorer() {
   const headerOpacity = useTransform(scrollYProgress, [0, 0.1], [1, 0.8]);
   const headerScale = useTransform(scrollYProgress, [0, 0.1], [1, 0.95]);
 
-  // Handle errors
-  useEffect(() => {
-    setError(
-      chartError
-        ? 'Failed to load mining data. Please check your connection and try again.'
-        : null
-    );
-  }, [chartError]);
+
+
+
 
   // Simulate loading effect
   useEffect(() => {
@@ -64,11 +51,9 @@ export default function MinedSharesExplorer() {
     if (bead) toggleBead(bead.id);
   };
 
-  const handleRetry = () => {
-    setError(null);
-    refetch();
-  };
 
+
+ 
   return (
     <div
       ref={containerRef}
@@ -88,7 +73,7 @@ export default function MinedSharesExplorer() {
           <div className="bg-red-900/70 border border-red-500/40 text-red-200 rounded-lg p-4 mb-6 flex items-center justify-between">
             <span>{error}</span>
             <button
-              onClick={handleRetry}
+              
               className="ml-4 px-4 py-2 bg-red-700 rounded hover:bg-red-600 transition"
             >
               Retry

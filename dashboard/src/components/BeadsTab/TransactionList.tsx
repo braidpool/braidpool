@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Activity } from 'lucide-react';
 import type { Transaction } from './lib/types';
-
 import { shortenHash } from './lib/utils/shortenHash';
 
 interface TransactionListProps {
@@ -17,7 +16,6 @@ export default function TransactionList({
   );
 
   return (
-    // Updated - Added responsive padding and overflow handling
     <div className="pl-4 sm:pl-10 pr-4 pb-3 bg-gradient-to-b from-blue-900/20 to-transparent overflow-x-auto">
       <motion.div
         className="text-blue-400 mb-3 font-medium flex items-center text-sm sm:text-base"

@@ -1,14 +1,42 @@
 import AdvancedChart from '../AdvancedChart';
 import AnimatedStatCard from '../AnimatedStatCard';
 import { TrendingUp, Zap, Activity } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
 
 export default function HashrateTab({
-  chartData,
   isChartLoading,
   chartHovered,
   setChartHovered,
   timeRange,
 }: any) {
+  const [stats, setStats] = useState<any>(null);
+  const [chartData, setChartData] = useState<any>([]);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const res = await fetch('http://localhost:3001/api/stats');
+        const data = await res.json();
+        setStats(data);
+        // Ensure date is a Date object
+        const chartData = (data.chartData || []).map((d: any) => ({
+          ...d,
+          date: new Date(d.date),
+           label: new Date(d.date).toLocaleString(),
+        }));
+        setChartData(chartData);
+      } catch (err) {
+        setStats(null);
+        setChartData([]);
+      }
+    };
+
+    fetchStats();
+    const interval = setInterval(fetchStats, 60000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -24,7 +52,7 @@ export default function HashrateTab({
       </div>
 
       <div
-        className="relative border w-full  border-gray-800/50 rounded-xl p-6 h-110backdrop-blur-md overflow-hidden"
+        className="relative border w-full border-gray-800/50 rounded-xl p-6 h-110 bg-black/30 backdrop-blur-md overflow-hidden"
         onMouseEnter={() => setChartHovered(true)}
         onMouseLeave={() => setChartHovered(false)}
       >
@@ -43,7 +71,7 @@ export default function HashrateTab({
           value="0.0022 λ"
           change="+8%"
           icon={<Zap />}
-         
+          
           delay={0.2}
         />
         <AnimatedStatCard
@@ -59,7 +87,7 @@ export default function HashrateTab({
           value="11.4"
           change="+5%"
           icon={<Activity />}
-         
+       
           delay={0.4}
         />
       </div>
