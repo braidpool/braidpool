@@ -46,7 +46,7 @@ export default function AdvancedChart({
   const [isZoomed, setIsZoomed] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Generate path from data with safe defaults
+  
   const path = useMemo(() => {
     if (!data || data.length === 0) {
       return 'M0,150 C50,100 100,200 150,150 C200,100 250,200 300,120 C350,60 400,180 450,150 C500,120 550,60 600,120 C650,180 700,120 750,150 C800,180';
