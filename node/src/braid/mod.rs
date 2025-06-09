@@ -3,7 +3,7 @@ use crate::utils::retrieve_bead;
 use ::serde::Serialize;
 use std::collections::HashSet;
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, PartialEq)]
 
 pub(crate) struct Cohort(HashSet<usize>);
 
@@ -120,13 +120,13 @@ impl Braid {
                     }
                 }
             }
-            // Add all bead indices in this cohort to dangling
-            for idx in &cohort.0 {
-                dangling.insert(*idx);
-            }
             if found_parent_indices.len() == bead.committed_metadata.parents.len() {
                 remove_after = Some(i + 1);
                 break;
+            }
+            // Add all bead indices in this cohort to dangling
+            for idx in &cohort.0 {
+                dangling.insert(*idx);
             }
         }
         // Remove all cohorts after the found index
