@@ -101,7 +101,9 @@ const BitcoinPriceTracker: React.FC = () => {
     };
 
     return () => {
-      websocket.close();
+      if (websocket.readyState === WebSocket.OPEN) {
+        websocket.close();
+      }
     };
   }, [currency]);
 
