@@ -13,7 +13,7 @@
 4. Run
 
    ```
-   nodemon server
+   node server
    ```
 
 5. Analyse the Outputs
