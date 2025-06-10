@@ -64,7 +64,7 @@ impl Braid {
             if !parent_exists {
                 // Try to retrieve the parent
                 if let Some(retrieved_bead) = retrieve_bead(*parent_hash) {
-                    self.beads.push(retrieved_bead);
+                    self.extend(&retrieved_bead);
                 } else {
                     // Parent not found and can't be retrieved
                     return false;
