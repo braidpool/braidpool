@@ -62,7 +62,7 @@ impl Braid {
                 .any(|b| b.block_header.block_hash() == *parent_hash);
 
             if !parent_exists {
-                // Try to retrieve the parent using magic_retrieve
+                // Try to retrieve the parent
                 if let Some(retrieved_bead) = retrieve_bead(*parent_hash) {
                     self.beads.push(retrieved_bead);
                 } else {
@@ -84,21 +84,7 @@ impl Braid {
         // Insert bead into beads vector
         self.beads.push(bead.clone());
 
-        // Remove parents from tips if present
-        for parent_hash in &bead.committed_metadata.parents {
-            // Find the index of the parent bead
-            if let Some(parent_index) = self
-                .beads
-                .iter()
-                .position(|b| b.block_header.block_hash() == *parent_hash)
-            {
-                self.tips.remove(&parent_index);
-            }
-        }
-
-        // Add the new bead's index to tips
         let new_bead_index = self.beads.len() - 1;
-        self.tips.insert(new_bead_index);
 
         // Find earliest parent of bead in cohorts and nuke all cohorts after that
         let mut found_parent_indices = HashSet::new();
@@ -120,21 +106,50 @@ impl Braid {
                     }
                 }
             }
-            if found_parent_indices.len() == bead.committed_metadata.parents.len() {
+            // If this cohort contains exactly all parent beads or all the tips
+            // and nothing else, we've found the right cohort - no need to look
+            // further back
+            if !found_parent_indices.is_empty()
+                && found_parent_indices.len() == bead.committed_metadata.parents.len()
+                && (self.tips.len() == found_parent_indices.len()
+                    || cohort.0.len() == found_parent_indices.len())
+            {
                 remove_after = Some(i + 1);
+                dangling.insert(new_bead_index);
                 break;
-            }
-            // Add all bead indices in this cohort to dangling
-            for idx in &cohort.0 {
-                dangling.insert(*idx);
+            } else {
+                // Add all bead indices in this cohort to dangling
+                for idx in &cohort.0 {
+                    dangling.insert(*idx);
+                }
+                if found_parent_indices.len() == bead.committed_metadata.parents.len() {
+                    remove_after = Some(i);
+                    break;
+                }
             }
         }
+
         // Remove all cohorts after the found index
         if let Some(idx) = remove_after {
             self.cohorts.truncate(idx);
         } else {
             self.cohorts.clear();
         }
+
+        // Remove parents from tips if present
+        for parent_hash in &bead.committed_metadata.parents {
+            // Find the index of the parent bead
+            if let Some(parent_index) = self
+                .beads
+                .iter()
+                .position(|b| b.block_header.block_hash() == *parent_hash)
+            {
+                self.tips.remove(&parent_index);
+            }
+        }
+
+        // Add the new bead's index to tips
+        self.tips.insert(new_bead_index);
 
         // Construct a sub-braid from dangling and compute any new cohorts
         // Here, we just create a new cohort with dangling beads

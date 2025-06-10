@@ -160,23 +160,18 @@ pub fn test_extend_functionality() {
         "After adding the third bead, there should be three cohorts"
     );
 
-    // Let's add 12 more beads to create a more complex braid structure
+    // Let's add a few more beads to create a more complex braid structure
 
     // Structure will be:
     // - Bead(s) 3-5 will branch from bead 2
     // - Bead(s) 6-8 will branch from bead 4
     // - Bead(s) 9-11 will branch from bead 5
-    // - Bead(s) 12-14 will merge multiple parents (beads 8 and 11)
-    // - Bead(s) 15 will shorten the cohort by declaring 3 and 14 as parents.
-    // - Bead(s) 16 will unify the cohort by declaring 0 and 12 as parents.
+    // - Bead(s) 12 will merge all the tips.
 
     // This will create a structure like:
-    //           /-- 3 ---------------------------
-    // 0 -- 1 -- 2 -- 4 -- 6 -- 7 -- 8 --\        \
-    //  \        \-- 5 -- 9 -- 10 -- 11 -- 14 -- 15
-    //   \                            \-- 13
-    //    \                            \-- 12 -- 16
-    //     -------------------------------------/
+    //           /-- 3 --------------------\
+    // 0 -- 1 -- 2 -- 4 -- 6 -- 7 -- 8 --  12 -- 13
+    //           \-- 5 -- 9 -- 10 -- 11 -- /
 
     // Create bead 3 with parent 2
     let mut test_bead_3 = emit_bead();
@@ -241,101 +236,84 @@ pub fn test_extend_functionality() {
             Cohort(HashSet::from([0])),
             Cohort(HashSet::from([1])),
             Cohort(HashSet::from([2])),
-            Cohort(HashSet::from([3, 4, 5])),
-            Cohort(HashSet::from([6])),
-            Cohort(HashSet::from([7])),
-            Cohort(HashSet::from([8])),
+            Cohort(HashSet::from([3, 4, 5, 6, 7, 8])),
         ]
     );
 
-    // // Create beads 9-11 with chain from bead 5
-    // let mut test_bead_9 = emit_bead();
-    // test_bead_9
-    //     .committed_metadata
-    //     .parents
-    //     .insert(test_bead_5.block_header.block_hash());
-    // test_braid.extend(&test_bead_9);
-    // println!("Final cohorts: {:?}", test_braid.cohorts);
+    // Create beads 9-11 with chain from bead 5
+    let mut test_bead_9 = emit_bead();
+    test_bead_9
+        .committed_metadata
+        .parents
+        .insert(test_bead_5.block_header.block_hash());
+    test_braid.extend(&test_bead_9);
 
-    // let mut test_bead_10 = emit_bead();
-    // test_bead_10
-    //     .committed_metadata
-    //     .parents
-    //     .insert(test_bead_9.block_header.block_hash());
-    // test_braid.extend(&test_bead_10);
-    // println!("Final cohorts: {:?}", test_braid.cohorts);
+    let mut test_bead_10 = emit_bead();
+    test_bead_10
+        .committed_metadata
+        .parents
+        .insert(test_bead_9.block_header.block_hash());
+    test_braid.extend(&test_bead_10);
 
-    // let mut test_bead_11 = emit_bead();
-    // test_bead_11
-    //     .committed_metadata
-    //     .parents
-    //     .insert(test_bead_10.block_header.block_hash());
-    // test_braid.extend(&test_bead_11);
+    let mut test_bead_11 = emit_bead();
+    test_bead_11
+        .committed_metadata
+        .parents
+        .insert(test_bead_10.block_header.block_hash());
+    test_braid.extend(&test_bead_11);
 
-    // assert_eq!(
-    //     test_braid.cohorts,
-    //     vec![
-    //         Cohort(HashSet::from([0])),
-    //         Cohort(HashSet::from([1])),
-    //         Cohort(HashSet::from([2])),
-    //         Cohort(HashSet::from([3, 4, 5])),
-    //         Cohort(HashSet::from([6])),
-    //         Cohort(HashSet::from([7])),
-    //         Cohort(HashSet::from([8])),
-    //     ]
-    // );
+    assert_eq!(
+        test_braid.cohorts,
+        vec![
+            Cohort(HashSet::from([0])),
+            Cohort(HashSet::from([1])),
+            Cohort(HashSet::from([2])),
+            Cohort(HashSet::from([3, 4, 5, 6, 7, 8, 9, 10, 11])),
+        ]
+    );
 
-    // // Create beads 13-15 with multiple parents (merging branches)
-    // let mut test_bead_13 = emit_bead();
-    // test_bead_13
-    //     .committed_metadata
-    //     .parents
-    //     .insert(test_bead_9.block_header.block_hash());
-    // test_bead_13
-    //     .committed_metadata
-    //     .parents
-    //     .insert(test_bead_12.block_header.block_hash());
-    // test_braid.extend(&test_bead_13);
+    let mut test_bead_12 = emit_bead();
+    test_bead_12
+        .committed_metadata
+        .parents
+        .insert(test_bead_8.block_header.block_hash());
+    test_bead_12
+        .committed_metadata
+        .parents
+        .insert(test_bead_11.block_header.block_hash());
+    test_bead_12
+        .committed_metadata
+        .parents
+        .insert(test_bead_3.block_header.block_hash());
+    test_braid.extend(&test_bead_12);
 
-    // let mut test_bead_14 = emit_bead();
-    // test_bead_14
-    //     .committed_metadata
-    //     .parents
-    //     .insert(test_bead_12.block_header.block_hash());
-    // test_braid.extend(&test_bead_14);
+    assert_eq!(
+        test_braid.cohorts,
+        vec![
+            Cohort(HashSet::from([0])),
+            Cohort(HashSet::from([1])),
+            Cohort(HashSet::from([2])),
+            Cohort(HashSet::from([3, 4, 5, 6, 7, 8, 9, 10, 11])),
+            Cohort(HashSet::from([12])),
+        ]
+    );
 
-    // let mut test_bead_15 = emit_bead();
-    // test_bead_15
-    //     .committed_metadata
-    //     .parents
-    //     .insert(test_bead_9.block_header.block_hash());
-    // test_bead_15
-    //     .committed_metadata
-    //     .parents
-    //     .insert(test_bead_12.block_header.block_hash());
-    // test_braid.extend(&test_bead_15);
+    let mut test_bead_13 = emit_bead();
+    test_bead_13
+        .committed_metadata
+        .parents
+        .insert(test_bead_12.block_header.block_hash());
+    test_braid.extend(&test_bead_13);
 
-    // let mut test_bead_16 = emit_bead();
-    // test_bead_16
-    //     .committed_metadata
-    //     .parents
-    //     .insert(test_bead_4.block_header.block_hash());
-    // test_bead_16
-    //     .committed_metadata
-    //     .parents
-    //     .insert(test_bead_15.block_header.block_hash());
-    // test_braid.extend(&test_bead_16);
-
-    // let mut test_bead_17 = emit_bead();
-    // test_bead_17
-    //     .committed_metadata
-    //     .parents
-    //     .insert(test_bead_1.block_header.block_hash());
-    // test_bead_17
-    //     .committed_metadata
-    //     .parents
-    //     .insert(test_bead_13.block_header.block_hash());
-    // test_braid.extend(&test_bead_17);
-
-    // println!("Final cohorts: {:?}", test_braid.cohorts);
+    assert_eq!(
+        test_braid.cohorts,
+        vec![
+            Cohort(HashSet::from([0])),
+            Cohort(HashSet::from([1])),
+            Cohort(HashSet::from([2])),
+            Cohort(HashSet::from([3, 4, 5, 6, 7, 8, 9, 10, 11])),
+            Cohort(HashSet::from([12])),
+            Cohort(HashSet::from([13])),
+        ]
+    );
 }
