@@ -18,7 +18,6 @@ export default function HashrateTab({
         const res = await fetch('http://localhost:3001/api/stats');
         const data = await res.json();
         setStats(data);
-        // Ensure date is a Date object
         const chartData = (data.chartData || []).map((d: any) => ({
           ...d,
           date: new Date(d.date),
@@ -30,7 +29,6 @@ export default function HashrateTab({
         setChartData([]);
       }
     };
-
     fetchStats();
     const interval = setInterval(fetchStats, 60000);
 
