@@ -7,12 +7,10 @@ import {
   Tooltip,
   ResponsiveContainer,
   Area,
-  
 } from 'recharts';
 import { Maximize2, RefreshCw, Download } from 'lucide-react';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-
 type TrendType = 'up' | 'down' | 'neutral';
 
 interface ChartDataPoint {
@@ -50,7 +48,6 @@ export default function AdvancedChart({
     setIsRefreshing(true);
     setTimeout(() => {
       setIsRefreshing(false);
-      
     }, 1500);
   };
 
@@ -99,7 +96,10 @@ export default function AdvancedChart({
             disabled={isRefreshing}
             title="Refresh chart"
           >
-            <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
+            <RefreshCw
+              size={16}
+              className={isRefreshing ? 'animate-spin' : ''}
+            />
           </motion.button>
           <motion.button
             className="bg-gray-800/70 p-1.5 rounded-md text-gray-300 hover:text-white"
@@ -121,11 +121,24 @@ export default function AdvancedChart({
                 <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8} />
                 <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
               </linearGradient>
-              
             </defs>
 
             <CartesianGrid strokeDasharray="3 3" stroke="#4b5563" />
-            <XAxis dataKey="label" stroke="#ffffff" />
+            <XAxis
+              dataKey="label"
+              stroke="#ffffff"
+              tickFormatter={(_, index) => {
+                const dataPoint = data[index];
+                if (dataPoint && dataPoint.date) {
+                  const d = new Date(dataPoint.date);
+                  return d.toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                  });
+                }
+                return '';
+              }}
+            />
             <YAxis stroke="#ffffff" />
             <Tooltip
               contentStyle={{
@@ -152,7 +165,6 @@ export default function AdvancedChart({
                   type="monotone"
                   dataKey="value"
                   data={comparisonData}
-                  
                   fillOpacity={1}
                   fill="url(#colorComparison)"
                 />
@@ -170,7 +182,6 @@ export default function AdvancedChart({
             <Area
               type="monotone"
               dataKey="value"
-              
               fillOpacity={0.7}
               fill="url(#colorValue)"
             />

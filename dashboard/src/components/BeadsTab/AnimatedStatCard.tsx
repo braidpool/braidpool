@@ -24,8 +24,8 @@ export default function AnimatedStatCard({
   const trendColor = isPositive
     ? 'text-emerald-400'
     : change.startsWith('-')
-    ? 'text-red-400'
-    : 'text-gray-400';
+      ? 'text-red-400'
+      : 'text-gray-400';
 
   return (
     <motion.div

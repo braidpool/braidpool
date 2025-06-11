@@ -8,17 +8,22 @@ const fetchNodeData = async (method: string) => {
 };
 
 export const getBlockTransactions = async (blockHash: string) => {
-  const res = await axios.get(`http://localhost:3001/api/beads/${blockHash}/transactions`);
-  return res.data; // Should be an array of transactions
+  const res = await axios.get(
+    `http://localhost:3001/api/beads/${blockHash}/transactions`
+  );
+  return res.data;
 };
 
-// ✅ Add this to fetch hashrate and latency
 export const getNodeStats = async () => {
   const res = await axios.get('http://localhost:3001/api/stats');
-  return res.data; // { hashrate, latency, timestamp }
+  return res.data;
 };
 
 export const getLatencyChartData = async () => {
   const res = await axios.get('http://localhost:3001/api/latency');
-  return res.data.chartData; // Array of { value, label, date }
+  return res.data.chartData;
+};
+export const getBlockReward = async () => {
+  const res = await axios.get('http://localhost:3001/api/rewards');
+  return res.data;
 };
