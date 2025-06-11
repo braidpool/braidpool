@@ -59,12 +59,16 @@ export default function BeadRow({
       >
         {/* Bead Name */}
         <div className="flex items-center col-span-1 md:col-span-1">
-          <div className={`mr-2 flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`}>
+          <div
+            className={`mr-2 flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`}
+          >
             <ChevronDown className="h-5 w-5 text-blue-400" />
           </div>
-          <span className={`text-sm sm:text-base truncate md:truncate-0 ${
-            isExpanded ? 'text-blue-300' : 'text-blue-100'
-          } font-medium font-mono`}>
+          <span
+            className={`text-sm sm:text-base truncate md:truncate-0 ${
+              isExpanded ? 'text-blue-300' : 'text-blue-100'
+            } font-medium font-mono`}
+          >
             {bead.name}
           </span>
           {isExpanded && (
