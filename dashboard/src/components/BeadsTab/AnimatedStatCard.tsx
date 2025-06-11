@@ -4,21 +4,6 @@ import { useState, useRef } from 'react';
 import { motion, useInView } from 'framer-motion';
 import { TrendingUp, ArrowDownRight } from 'lucide-react';
 
-interface AnimatedStatCardProps {
-  title: string;
-  value: string;
-  change: string;
-  icon: React.ReactNode;
-  color?: 'blue' | 'purple' | 'emerald';
-  delay?: number;
-}
-
-const colorMap = {
-  blue: 'text-blue-400 bg-blue-900/30',
-  purple: 'text-purple-400 bg-purple-900/30',
-  emerald: 'text-emerald-400 bg-emerald-900/30',
-};
-
 export default function AnimatedStatCard({
   title,
   value,
