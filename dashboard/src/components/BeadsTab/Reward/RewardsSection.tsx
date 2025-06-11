@@ -1,5 +1,11 @@
 import { useState, useEffect } from 'react';
-import {Bitcoin,Clock,Sparkles,TrendingUp,ArrowUpRight} from 'lucide-react';
+import {
+  Bitcoin,
+  Clock,
+  Sparkles,
+  TrendingUp,
+  ArrowUpRight,
+} from 'lucide-react';
 import RewardHistoryChart from './RewardHistoryChart';
 
 import { getBlockReward } from '../api/nodeApi';
@@ -14,7 +20,7 @@ interface RewardData {
   streak: number;
   nextMilestone: number;
   achievements: string[];
-  rewardHistory: { height: number; reward: number; label: string }[]; 
+  rewardHistory: { height: number; reward: number; label: string }[];
 }
 
 export function RewardsDashboard() {
@@ -41,7 +47,7 @@ export function RewardsDashboard() {
           streak: data.streak ?? 0,
           nextMilestone: data.nextMilestone ?? 0.05,
           achievements: data.achievements ?? [],
-          rewardHistory: data.rewardHistory ?? [], 
+          rewardHistory: data.rewardHistory ?? [],
         });
         setError(null);
       } catch (err) {
@@ -204,8 +210,6 @@ export function RewardsDashboard() {
             </div>
           </div>
         </div>
-
-        
       </div>
     </div>
   );

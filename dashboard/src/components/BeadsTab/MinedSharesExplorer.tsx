@@ -24,9 +24,9 @@ export default function MinedSharesExplorer() {
   }, []);
 
   const toggleBead = (beadId: BeadId) => {
-    setExpandedBeads(prev => ({
+    setExpandedBeads((prev) => ({
       ...prev,
-      [beadId]: !prev[beadId]
+      [beadId]: !prev[beadId],
     }));
     setActiveBead(beadId);
   };
@@ -45,14 +45,20 @@ export default function MinedSharesExplorer() {
           activeTab={activeTab}
           setActiveTab={setActiveTab}
         />
-        
+
         <div className="relative">
           {activeTab === 'beads' && (
             <div className="space-y-8">
               <div className="border border-gray-800/50 rounded-xl mb-8 bg-black/30 overflow-hidden">
                 {/* Table header */}
                 <div className="grid grid-cols-5 p-4 border-b border-gray-800/80 font-medium">
-                  {['Bead Hash', 'Timestamp', 'Work', 'Transactions', 'Rewards'].map((label) => (
+                  {[
+                    'Bead Hash',
+                    'Timestamp',
+                    'Work',
+                    'Transactions',
+                    'Rewards',
+                  ].map((label) => (
                     <div key={label} className="text-blue-200 font-semibold">
                       {label}
                     </div>
