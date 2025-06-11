@@ -119,6 +119,10 @@ pub fn test_extend_functionality() {
         tips: HashSet::from([0]),
         orphan_beads: Vec::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
+        bead_index_mapping: std::collections::HashMap::from([(
+            test_bead_0.block_header.block_hash(),
+            0,
+        )]),
     };
     assert_eq!(
         test_braid.cohorts,
