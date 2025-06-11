@@ -4,6 +4,13 @@ export interface Transaction {
   timestamp: string;
   count: number;
   blockId: string;
+  fee:number;
+  size:number;
+  feePaid:string;
+  feeRate:number;
+  inputs :number;
+  outputs:number;
+
 }
 
 export interface Bead {

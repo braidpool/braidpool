@@ -1,14 +1,8 @@
 import { useState, useEffect } from 'react';
-import {
-  Bitcoin,
-  Clock,
-  Sparkles,
-  TrendingUp,
-  ArrowUpRight,
-} from 'lucide-react';
+import {Bitcoin,Clock,Sparkles,TrendingUp,ArrowUpRight} from 'lucide-react';
 import RewardHistoryChart from './RewardHistoryChart';
 
-import { getBlockReward } from '../__tests__/nodeApi';
+import { getBlockReward } from '../api/nodeApi';
 
 interface RewardData {
   totalRewards: number;
@@ -20,7 +14,7 @@ interface RewardData {
   streak: number;
   nextMilestone: number;
   achievements: string[];
-  rewardHistory: { height: number; reward: number; label: string }[]; // <-- add this
+  rewardHistory: { height: number; reward: number; label: string }[]; 
 }
 
 export function RewardsDashboard() {
@@ -47,7 +41,7 @@ export function RewardsDashboard() {
           streak: data.streak ?? 0,
           nextMilestone: data.nextMilestone ?? 0.05,
           achievements: data.achievements ?? [],
-          rewardHistory: data.rewardHistory ?? [], // <-- add this
+          rewardHistory: data.rewardHistory ?? [], 
         });
         setError(null);
       } catch (err) {
@@ -211,44 +205,7 @@ export function RewardsDashboard() {
           </div>
         </div>
 
-        {/* Next Milestone */}
-        <div className="border border-gray-800/50 rounded-xl bg-black/30 p-5">
-          <div className="flex justify-between mb-4">
-            <h3 className="text-lg font-bold text-white flex items-center">
-              <Sparkles className="h-5 w-5 text-cyan-400 mr-2" /> Next Milestone
-            </h3>
-          </div>
-          <div className="mb-2 text-gray-400 text-sm">
-            Progress to {formatMBTC(rewardData.nextMilestone)} mBTC
-          </div>
-          <div className="h-3 bg-gray-800 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-cyan-600 to-blue-600"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-          <div className="mt-4 pt-4 border-t border-gray-800/50">
-            <div className="flex justify-between">
-              <div className="text-gray-400 text-sm">Remaining:</div>
-              <div className="text-cyan-300 font-medium">
-                {formatMBTC(rewardData.nextMilestone - rewardData.totalRewards)}{' '}
-                mBTC
-              </div>
-            </div>
-            <div className="flex justify-between mt-2">
-              <div className="text-gray-400 text-sm">Estimated time:</div>
-              <div className="text-cyan-300 font-medium">
-                {rewardData.dailyAverage > 0
-                  ? Math.ceil(
-                      (rewardData.nextMilestone - rewardData.totalRewards) /
-                        rewardData.dailyAverage
-                    )
-                  : '-'}{' '}
-                days
-              </div>
-            </div>
-          </div>
-        </div>
+        
       </div>
     </div>
   );

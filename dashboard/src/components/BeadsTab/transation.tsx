@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Activity } from 'lucide-react';
 import type { Transaction } from './lib/types';
-import { shortenHash } from './lib/utils/shortenHash';
+import { shortenHash } from './lib/utils/utils';
 
 interface TransactionListProps {
   transactions: Transaction[];
