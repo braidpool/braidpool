@@ -10,9 +10,9 @@ export default function LatencyTab({
   timeRange,
 }: any) {
   const [chartData, setChartData] = useState<any[]>([]);
- const [averageLatency, setAverageLatency] = useState<string>('0ms');
-const [peakLatency, setPeakLatency] = useState<string>('0ms');
-const [peerCount, setPeerCount] = useState<number>(0);
+  const [averageLatency, setAverageLatency] = useState<string>('0ms');
+  const [peakLatency, setPeakLatency] = useState<string>('0ms');
+  const [peerCount, setPeerCount] = useState<number>(0);
   useEffect(() => {
     const fetchLatency = async () => {
       try {
@@ -24,9 +24,9 @@ const [peerCount, setPeerCount] = useState<number>(0);
           label: new Date(d.date).toLocaleString(),
         }));
         setChartData(latencyData);
-         setAverageLatency(`${parseFloat(data.averageLatency).toFixed(0)}ms`);
-      setPeakLatency(`${parseFloat(data.peakLatency).toFixed(0)}ms`);
-      setPeerCount(data.peerCount);
+        setAverageLatency(`${parseFloat(data.averageLatency).toFixed(0)}ms`);
+        setPeakLatency(`${parseFloat(data.peakLatency).toFixed(0)}ms`);
+        setPeerCount(data.peerCount);
       } catch (err) {
         setChartData([]);
       }
@@ -41,21 +41,21 @@ const [peerCount, setPeerCount] = useState<number>(0);
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          
           <h3 className="text-xl font-bold text-blue-300">Network Latency</h3>
-     
+
           <p className="text-sm text-gray-400 mt-1">
             Real-time latency measurements
           </p>
-        
         </div>
         <div className="bg-purple-900/30 px-3 py-1 rounded-md">
-          <span className="text-purple-300 font-mono">AvgLatency : {averageLatency}</span>
+          <span className="text-purple-300 font-mono">
+            AvgLatency : {averageLatency}
+          </span>
         </div>
       </div>
 
       <div
-        className="relative border border-gray-800/50 rounded-xl p-6 h-110 bg-black/30 backdrop-blur-md overflow-hidden"
+        className="relative border border-gray-800/50 rounded-xl p-6 h-130 bg-black/30 backdrop-blur-md overflow-hidden"
         onMouseEnter={() => setChartHovered(true)}
         onMouseLeave={() => setChartHovered(false)}
       >
@@ -81,7 +81,6 @@ const [peerCount, setPeerCount] = useState<number>(0);
           value={peakLatency}
           change="+15%"
           icon={<ArrowUpRight />}
-          
           delay={0.3}
         />
         <AnimatedStatCard
@@ -89,7 +88,6 @@ const [peerCount, setPeerCount] = useState<number>(0);
           value={peerCount.toString()}
           change="+2"
           icon={<Cpu />}
-          
           delay={0.4}
         />
       </div>

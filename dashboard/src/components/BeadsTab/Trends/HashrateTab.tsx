@@ -11,7 +11,7 @@ export default function HashrateTab({
 }: any) {
   const [stats, setStats] = useState<any>(null);
   const [chartData, setChartData] = useState<any>([]);
- 
+
   useEffect(() => {
     const fetchStats = async () => {
       try {
@@ -22,7 +22,7 @@ export default function HashrateTab({
         const chartData = (data.chartData || []).map((d: any) => ({
           ...d,
           date: new Date(d.date),
-           label: new Date(d.date).toLocaleString(),
+          label: new Date(d.date).toLocaleString(),
         }));
         setChartData(chartData);
       } catch (err) {
@@ -47,7 +47,13 @@ export default function HashrateTab({
           </p>
         </div>
         <div className="bg-blue-900/30 px-3 py-1 rounded-md">
-          <span className="text-blue-300 font-mono">  λ = {stats ? `${(stats.chartData.at(-1)?.value / 1e12).toFixed(4)}` : '...'}</span>
+          <span className="text-blue-300 font-mono">
+            {' '}
+            λ ={' '}
+            {stats
+              ? `${(stats.chartData.at(-1)?.value / 1e12).toFixed(4)}`
+              : '...'}
+          </span>
         </div>
       </div>
 
@@ -68,28 +74,33 @@ export default function HashrateTab({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <AnimatedStatCard
           title="Average Hashrate"
-          value={stats ? `${(stats.averageHashrate / 1e12).toFixed(2)} λ` : 'Loading...'}
+          value={
+            stats
+              ? `${(stats.averageHashrate / 1e12).toFixed(2)} λ`
+              : 'Loading...'
+          }
           change="+8%"
           icon={<Zap />}
-          
           delay={0.2}
         />
         <AnimatedStatCard
           title="Peak Hashrate"
-              value={stats ? `${(stats.peakHashrate / 1e12).toFixed(4)} λ` : 'Loading...'}
-
+          value={
+            stats ? `${(stats.peakHashrate / 1e12).toFixed(4)} λ` : 'Loading...'
+          }
           change="+12%"
           icon={<TrendingUp />}
-          
           delay={0.3}
         />
         <AnimatedStatCard
           title="Network Difficulty"
-            value={stats ? `${parseFloat(stats.networkDifficulty).toFixed(2)}` : 'Loading...'}
-
+          value={
+            stats
+              ? `${parseFloat(stats.networkDifficulty).toFixed(2)}`
+              : 'Loading...'
+          }
           change="+5%"
           icon={<Activity />}
-       
           delay={0.4}
         />
       </div>

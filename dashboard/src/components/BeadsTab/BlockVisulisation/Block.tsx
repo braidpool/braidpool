@@ -40,7 +40,6 @@ export default function EnhancedBlocksTab({
 
   return (
     <div className="space-y-6 animate-fade-in-up px-4 sm:px-6 md:px-8 lg:px-6 ">
-     
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-blue-400 flex items-center gap-2 drop-shadow-md">
