@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { ChevronDown, Zap } from 'lucide-react';
 import TransactionList from './TransactionList';
 import { shortenHash } from './lib/utils/utils';
-import type {BeadRowProps } from './lib/types';
+import type { BeadRowProps } from './lib/types';
 import { BeadRewardTooltip } from './BeadRewardTooltip';
 import { formatWork } from './lib/utils/utils';
 
@@ -56,9 +56,7 @@ export default function BeadRow({
         </div>
 
         {/* Timestamp */}
-        <div className="text-white text-sm sm:text-base">
-          {bead.timestamp}
-        </div>
+        <div className="text-white text-sm sm:text-base">{bead.timestamp}</div>
 
         {/* Work */}
         <div className="text-white font-medium text-sm sm:text-base">

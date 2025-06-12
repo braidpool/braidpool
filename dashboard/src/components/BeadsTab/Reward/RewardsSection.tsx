@@ -73,35 +73,32 @@ export function RewardsDashboard() {
 
   if (!rewardData) return null;
 
-  
-
   return (
     <div className="space-y-6">
-       <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center">
         <div className="flex items-center gap-2">
           <Bitcoin className="h-6 w-6 text-amber-400" />
           <h2 className="text-2xl font-bold text-white">Rewards Dashboard</h2>
         </div>
-      <div className="flex space-x-4 mb-4">
-        {['overview', 'history'].map((tab) => (
-          <button
-            key={tab}
-            className={`px-4 py-2 rounded-lg ${
-              activeTab === tab
-                ? 'bg-gray-700 text-white'
-                : 'bg-black text-gray-300'
-            }`}
-            onClick={() => setActiveTab(tab)}
-          >
-            {tab.charAt(0).toUpperCase() + tab.slice(1)}
-          </button>
-        ))}
+        <div className="flex space-x-4 mb-4">
+          {['overview', 'history'].map((tab) => (
+            <button
+              key={tab}
+              className={`px-4 py-2 rounded-lg ${
+                activeTab === tab
+                  ? 'bg-gray-700 text-white'
+                  : 'bg-black text-gray-300'
+              }`}
+              onClick={() => setActiveTab(tab)}
+            >
+              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            </button>
+          ))}
+        </div>
       </div>
-</div>
       {activeTab === 'history' && rewardData && (
         <RewardHistoryChart rewardHistory={rewardData.rewardHistory} />
       )}
-     
 
       <div className="grid grid-cols-2 md:grid-cols-2 xl:grid-cols-4 gap-6 ">
         {/* Reward Summary */}
@@ -191,5 +188,5 @@ export function RewardsDashboard() {
         </div>
       </div>
     </div>
-  )
+  );
 }

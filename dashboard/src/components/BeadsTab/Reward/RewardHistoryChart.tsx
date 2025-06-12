@@ -2,7 +2,6 @@ import React from 'react';
 import AdvancedChart from '../AdvancedChart';
 import { RewardHistoryChartProps } from '../lib/types';
 
-
 const RewardHistoryChart: React.FC<RewardHistoryChartProps> = ({
   rewardHistory,
 }) => {

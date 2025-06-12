@@ -21,7 +21,10 @@ export const TIME_RANGES = [
     label: `${dayjs().subtract(364, 'day').format('MMM D, YYYY')} - ${dayjs().format('MMM D, YYYY')}`,
   },
 ];
-export function formatWork(difficulty: number): { value: string; unit: string } {
+export function formatWork(difficulty: number): {
+  value: string;
+  unit: string;
+} {
   const units = ['GH', 'TH', 'PH', 'EH'];
   let work = difficulty / 1e9;
   let i = 0;
