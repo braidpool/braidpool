@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Bitcoin, Clock, TrendingUp, ArrowUpRight } from 'lucide-react';
 import RewardHistoryChart from './RewardHistoryChart';
 
-import { getBlockReward } from '../api/nodeApi';
+import { getBlockReward } from '../../../../api/nodeApi';
 
 interface RewardData {
   totalRewards: number;
