@@ -59,7 +59,6 @@ export default function TransactionList({
             className="grid grid-cols-6 gap-2  py-2.5 rounded-lg transition-all duration-300 group relative text-xs sm:text-sm"
             whileHover={{
               scale: 1.01,
-              
             }}
             onMouseEnter={() => setHoveredTransaction(transaction.id)}
             onMouseLeave={() => setHoveredTransaction(null)}

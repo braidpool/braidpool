@@ -78,11 +78,10 @@ export interface AnimatedStatCardProps {
   icon: React.ReactNode;
   delay?: number;
   color?: string;
-  
 }
- export interface BeadRewardTooltipProps {
+export interface BeadRewardTooltipProps {
   reward: number; // in BTC
-  isOpen?: boolean; 
+  isOpen?: boolean;
 }
 export interface TransactionListProps {
   transactions: Transaction[];

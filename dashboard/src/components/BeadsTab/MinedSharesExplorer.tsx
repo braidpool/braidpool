@@ -32,14 +32,14 @@ export default function MinedSharesExplorer() {
   };
 
   const handleParentClick = (parentHash: string) => {
-     navigator.clipboard.writeText(parentHash)
-    .then(() => {
-      console.log(`Parent hash copied to clipboard:\n${parentHash}`);
-    })
-    .catch(() => {
-      console.log('Failed to copy parent hash.');
-    });
-    
+    navigator.clipboard
+      .writeText(parentHash)
+      .then(() => {
+        console.log(`Parent hash copied to clipboard:\n${parentHash}`);
+      })
+      .catch(() => {
+        console.log('Failed to copy parent hash.');
+      });
   };
 
   return (
