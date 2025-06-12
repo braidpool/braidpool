@@ -29,7 +29,6 @@ export function formatWork(difficulty: number): { value: string; unit: string } 
     work /= 1000;
     i++;
   }
-
   return {
     value: work >= 1e21 ? work.toExponential(4) : work.toFixed(2),
     unit: units[i],
