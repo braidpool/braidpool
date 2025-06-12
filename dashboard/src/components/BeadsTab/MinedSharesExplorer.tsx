@@ -32,8 +32,14 @@ export default function MinedSharesExplorer() {
   };
 
   const handleParentClick = (parentHash: string) => {
-    // Handle parent click logic here
-    console.log('Parent clicked:', parentHash);
+     navigator.clipboard.writeText(parentHash)
+    .then(() => {
+      console.log(`Parent hash copied to clipboard:\n${parentHash}`);
+    })
+    .catch(() => {
+      console.log('Failed to copy parent hash.');
+    });
+    
   };
 
   return (
