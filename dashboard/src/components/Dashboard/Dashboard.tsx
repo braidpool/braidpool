@@ -24,9 +24,7 @@ import Card from '../common/Card';
 import Header from '../common/Header';
 import InstallationInstructions from '../Installation/InstallationInstructions';
 import MineInventoryDashboard from '../BeadsTab/MineInventoryDashboard';
-import PoolHashrateChart from './PoolHashrateChart';
 import MempoolLatencyStats from './MempoolLatencyStats';
-import RecentBlocksTable from './RecentBlocksTable';
 import GraphVisualization from '../BraidPoolDAG/BraidPoolDAG';
 import MinedSharesExplorer from '../BeadsTab/MinedSharesExplorer';
 // Utils
@@ -37,6 +35,7 @@ import {
 import BitcoinStats from '../BitcoinStats/BitcoinStats';
 import { BitcoinIcon } from 'lucide-react';
 import { Page } from './Types';
+import BlockViewer from './BlockViewer';
 
 // Constants
 const drawerWidth = 240;
@@ -74,12 +73,6 @@ const Dashboard = () => {
 
     fetchData();
   }, []);
-
-  const handleDrawerToggle = () => {
-    setMobileOpen(!mobileOpen);
-  };
-
-  // Sidebar drawer content
   const sidebar = (
     <Drawer
       variant="permanent"
@@ -331,25 +324,7 @@ const Dashboard = () => {
         return (
           <>
             <TopStatsBar loading={loading} />
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', mt: 2, mx: -1 }}>
-              <Box sx={{ width: { xs: '100%', md: '50%' }, p: 1 }}>
-                <Card title="Pool Hashrate">
-                  <PoolHashrateChart loading={loading} />
-                </Card>
-              </Box>
-              <Box sx={{ width: { xs: '100%', md: '50%' }, p: 1 }}>
-                <Card title="Mempool Activity">
-                  <MempoolLatencyStats />
-                </Card>
-              </Box>
-            </Box>
-            <Box sx={{ mt: 2, mx: -1 }}>
-              <Box sx={{ p: 1 }}>
-                <Card title="Recent Blocks">
-                  <RecentBlocksTable />
-                </Card>
-              </Box>
-            </Box>
+            <BlockViewer />
           </>
         );
       case Page.MINING_INVENTORY:

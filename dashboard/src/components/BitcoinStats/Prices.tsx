@@ -12,12 +12,19 @@ import {
   CartesianGrid,
 } from 'recharts';
 import { GlobalStats, PriceData } from './Types';
-import { formatLargeNumber, formatPrice, getCurrencySymbol } from './Utils';
+import {
+  formatLargeNumber,
+  formatPrice,
+  getCurrencySymbol,
+  getLatestTransactions,
+} from './Utils';
+import TransactionTable from './TransactionTable';
 
 const BitcoinPriceTracker: React.FC = () => {
   const [currency, setCurrency] = useState<'USD' | 'EUR' | 'GBP' | 'JPY'>(
     'USD'
   );
+  const [transactions, setTransactions] = useState<any[]>([]);
   const [priceData, setPriceData] = useState<PriceData | null>(null);
   const [globalStats, setGlobalStats] = useState<GlobalStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -30,9 +37,23 @@ const BitcoinPriceTracker: React.FC = () => {
     { price: number; time: string }[]
   >([]);
   const MAX_HISTORY_ITEMS = 30;
+  const showSkeletons = loading || !isConnected || (!priceData && !globalStats);
+  const [selectedTx, setSelectedTx] = useState<string | null>(null);
 
   useEffect(() => {
-    const websocket = new WebSocket('ws://localhost:5000');
+    const fetchTransactions = async () => {
+      const data = await getLatestTransactions();
+      setTransactions(data as any[]);
+    };
+    fetchTransactions();
+    const intervalId = setInterval(() => {
+      fetchTransactions();
+    }, 5000);
+    return () => clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
+    const websocket = new WebSocket('ws://localhost:5000/');
 
     websocket.onopen = () => {
       console.log('Connected to WebSocket server');
@@ -43,10 +64,10 @@ const BitcoinPriceTracker: React.FC = () => {
     websocket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
+        console.log('WebSocket message received:', data);
         if (data.type === 'bitcoin_update') {
           const currentPrice = data.data.price?.[currency];
           const currencySymbol = getCurrencySymbol(currency);
-
           setPriceData((prev) => {
             const previousPrice = prev?.current ?? currentPrice;
             const priceChange =
@@ -100,14 +121,13 @@ const BitcoinPriceTracker: React.FC = () => {
       setLoading(false);
     };
 
+    // Handle Race Conditions
     return () => {
       if (websocket.readyState === WebSocket.OPEN) {
         websocket.close();
       }
     };
   }, [currency]);
-
-  const showSkeletons = loading || !isConnected || (!priceData && !globalStats);
 
   return (
     <div className="p-4">
@@ -362,6 +382,15 @@ const BitcoinPriceTracker: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Transactions Table */}
+      {transactions.length >= 0 && (
+        <TransactionTable
+          transactions={transactions}
+          selectedTx={selectedTx}
+          setSelectedTx={setSelectedTx}
+        />
+      )}
     </div>
   );
 };

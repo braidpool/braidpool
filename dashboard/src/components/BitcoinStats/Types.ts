@@ -14,3 +14,9 @@ export interface GlobalStats {
   bitcoinDominance: number;
   lastUpdated: string;
 }
+
+export interface TransactionTableProps {
+  transactions: any[];
+  selectedTx: string | null;
+  setSelectedTx: (txid: string | null) => void;
+}

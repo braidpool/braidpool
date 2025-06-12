@@ -1,3 +1,5 @@
+import axios from 'axios';
+
 export const getCurrencySymbol = (curr: string) => {
   switch (curr) {
     case 'EUR':
@@ -25,4 +27,32 @@ export const formatLargeNumber = (value: number): string => {
   if (value >= 1e9) return `${(value / 1e9).toFixed(2)}B`;
   if (value >= 1e6) return `${(value / 1e6).toFixed(2)}M`;
   return new Intl.NumberFormat('en-US').format(value);
+};
+
+export const shortenAddress = (value: string): string => {
+  return value.slice(0, 7) + '....' + value.slice(-7);
+};
+
+// via esplora
+export const getLatestTransactions = async (): Promise<any> => {
+  try {
+    const response = await axios.get('http://localhost:3002/mempool/recent');
+    console.log(response.data);
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching transactions:', error);
+    throw error;
+  }
+};
+
+// via esplora
+export const getTxInfo = async (txid: string): Promise<any> => {
+  try {
+    const response = await axios.get(`http://localhost:3002/tx/${txid}`);
+    console.log(response.data);
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching transactions:', error);
+    throw error;
+  }
 };
