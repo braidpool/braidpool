@@ -5,7 +5,6 @@ import RewardHistoryChart from './RewardHistoryChart';
 import { getBlockReward } from '../../../../api/nodeApi';
 import { RewardData } from '../lib/types';
 
-
 export function RewardsDashboard() {
   const [rewardData, setRewardData] = useState<RewardData | null>(null);
   const [activeTab, setActiveTab] = useState('overview');
@@ -14,7 +13,6 @@ export function RewardsDashboard() {
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
-
     const fetchData = async () => {
       try {
         const data = await getBlockReward();
