@@ -1,13 +1,8 @@
-'use client';
-
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Bitcoin } from 'lucide-react';
 
-interface BeadRewardTooltipProps {
-  reward: number; // in BTC
-  isOpen?: boolean; // <- Add this line
-}
+import { BeadRewardTooltipProps } from './lib/types';
 
 export function BeadRewardTooltip({ reward }: BeadRewardTooltipProps) {
   const [showTooltip, setShowTooltip] = useState(false);

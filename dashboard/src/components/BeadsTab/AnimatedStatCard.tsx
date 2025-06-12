@@ -1,16 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { motion, useInView } from 'framer-motion';
 import { TrendingUp, ArrowDownRight } from 'lucide-react';
-
-interface AnimatedStatCardProps {
-  title: string;
-  value: string;
-  change: string;
-  icon: React.ReactNode;
-  delay?: number;
-  color?: string;
-  
-}
+import { AnimatedStatCardProps } from './lib/types';
 
 export default function AnimatedStatCard({
   title,

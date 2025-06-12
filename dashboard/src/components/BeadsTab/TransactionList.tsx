@@ -4,10 +4,7 @@ import { Activity } from 'lucide-react';
 import type { Transaction } from './lib/types';
 import { shortenHash } from './lib/utils/utils';
 
-interface TransactionListProps {
-  transactions: Transaction[];
-}
-
+import { TransactionListProps } from './lib/types';
 export default function TransactionList({
   transactions,
 }: TransactionListProps) {
@@ -16,7 +13,7 @@ export default function TransactionList({
   );
 
   return (
-    <div className="pl-4 sm:pl-10 pr-4 pb-3 bg-gradient-to-b from-blue-900/20 to-transparent overflow-x-auto">
+    <div className="pl-4 sm:pl-10 pr-4 pb-3 overflow-x-auto">
       <motion.div
         className="text-blue-400 mb-3 font-medium flex items-center text-sm sm:text-base"
         initial={{ x: -20, opacity: 0 }}
@@ -59,10 +56,10 @@ export default function TransactionList({
               hidden: { y: 20, opacity: 0 },
               show: { y: 0, opacity: 1 },
             }}
-            className="grid grid-cols-6 gap-2 py-2.5 rounded-lg transition-all duration-300 group relative text-xs sm:text-sm"
+            className="grid grid-cols-6 gap-2  py-2.5 rounded-lg transition-all duration-300 group relative text-xs sm:text-sm"
             whileHover={{
               scale: 1.01,
-              backgroundColor: 'rgba(30, 58, 138, 0.2)',
+              
             }}
             onMouseEnter={() => setHoveredTransaction(transaction.id)}
             onMouseLeave={() => setHoveredTransaction(null)}

@@ -3,19 +3,8 @@ import { Bitcoin, Clock, TrendingUp, ArrowUpRight } from 'lucide-react';
 import RewardHistoryChart from './RewardHistoryChart';
 
 import { getBlockReward } from '../../../../api/nodeApi';
+import { RewardData } from '../lib/types';
 
-interface RewardData {
-  totalRewards: number;
-  dailyAverage: number;
-  weeklyProjection: number;
-  monthlyProjection: number;
-  lastReward: number;
-  lastRewardTime: string;
-  streak: number;
-  nextMilestone: number;
-  achievements: string[];
-  rewardHistory: { height: number; reward: number; label: string }[];
-}
 
 export function RewardsDashboard() {
   const [rewardData, setRewardData] = useState<RewardData | null>(null);
@@ -87,21 +76,23 @@ export function RewardsDashboard() {
 
   if (!rewardData) return null;
 
-  const progress = Math.min(
-    (rewardData.totalRewards / rewardData.nextMilestone) * 100,
-    100
-  );
+  
 
   return (
     <div className="space-y-6">
+       <div className="flex justify-between items-center">
+        <div className="flex items-center gap-2">
+          <Bitcoin className="h-6 w-6 text-amber-400" />
+          <h2 className="text-2xl font-bold text-white">Rewards Dashboard</h2>
+        </div>
       <div className="flex space-x-4 mb-4">
-        {['overview', 'history', 'achievements'].map((tab) => (
+        {['overview', 'history'].map((tab) => (
           <button
             key={tab}
-            className={`px-4 py-2 rounded ${
+            className={`px-4 py-2 rounded-lg ${
               activeTab === tab
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-800 text-gray-300'
+                ? 'bg-gray-700 text-white'
+                : 'bg-black text-gray-300'
             }`}
             onClick={() => setActiveTab(tab)}
           >
@@ -109,14 +100,15 @@ export function RewardsDashboard() {
           </button>
         ))}
       </div>
-
+</div>
       {activeTab === 'history' && rewardData && (
         <RewardHistoryChart rewardHistory={rewardData.rewardHistory} />
       )}
+     
 
-      <div className="grid grid-cols-3 md:grid-cols-2 xl:grid-cols-4 gap-6">
+      <div className="grid grid-cols-2 md:grid-cols-2 xl:grid-cols-4 gap-6 ">
         {/* Reward Summary */}
-        <div className="border border-gray-800/50 rounded-xl bg-black/30 p-5">
+        <div className="bg-[#1c1c1c] border border-gray-700 rounded-xl backdrop-blur-sm p-5">
           <div className="flex justify-between items-start mb-4">
             <div>
               <h3 className="text-lg font-bold text-white flex items-center">
@@ -161,7 +153,7 @@ export function RewardsDashboard() {
           </div>
         </div>
         {/* Live Reward Counter */}
-        <div className="border border-gray-800/50 rounded-xl bg-black/30 p-5">
+        <div className=" bg-[#1c1c1c] border border-gray-700 rounded-xl backdrop-blur-sm p-5">
           <div className="flex justify-between mb-4">
             <h3 className="text-lg font-bold text-white flex items-center">
               <Clock className="h-5 w-5 text-blue-400 mr-2" /> Live Reward

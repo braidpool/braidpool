@@ -2,32 +2,9 @@ import React, { useState } from 'react';
 import { ChevronDown, Zap } from 'lucide-react';
 import TransactionList from './TransactionList';
 import { shortenHash } from './lib/utils/utils';
-import type { Bead, Transaction } from './lib/types';
+import type {BeadRowProps } from './lib/types';
 import { BeadRewardTooltip } from './BeadRewardTooltip';
-
-interface BeadRowProps {
-  bead: Bead;
-  isExpanded: boolean;
-  onToggle: (beadId: string) => void;
-  isActive: boolean;
-  transactions: Transaction[];
-  onParentClick: (parentHash: string) => void;
-}
-
-function formatWork(difficulty: number): { value: string; unit: string } {
-  const units = ['GH', 'TH', 'PH', 'EH'];
-  let work = difficulty / 1e9;
-  let i = 0;
-  while (work >= 1000 && i < units.length - 1) {
-    work /= 1000;
-    i++;
-  }
-
-  return {
-    value: work >= 1e21 ? work.toExponential(4) : work.toFixed(2),
-    unit: units[i],
-  };
-}
+import { formatWork } from './lib/utils/utils';
 
 export default function BeadRow({
   bead,
@@ -47,7 +24,7 @@ export default function BeadRow({
   };
 
   return (
-    <div className="border-b border-gray-800/80">
+    <div className="border-b border-gray-800/80 ">
       <div
         className={`grid sm:grid-cols-2 md:grid-cols-5 gap-2 p-4 cursor-pointer ${
           isActive ? 'bg-blue-900/30' : ''
@@ -66,7 +43,7 @@ export default function BeadRow({
           </div>
           <span
             className={`text-sm sm:text-base truncate md:truncate-0 ${
-              isExpanded ? 'text-blue-300' : 'text-blue-100'
+              isExpanded ? 'text-white' : 'text-blue-200'
             } font-medium font-mono`}
           >
             {bead.name}
