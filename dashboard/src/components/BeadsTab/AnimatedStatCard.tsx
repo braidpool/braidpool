@@ -9,6 +9,7 @@ interface AnimatedStatCardProps {
   icon: React.ReactNode;
   delay?: number;
   color?: string;
+  
 }
 
 export default function AnimatedStatCard({

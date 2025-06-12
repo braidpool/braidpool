@@ -2,7 +2,6 @@ import 'dotenv/config';
 import express from 'express';
 import axios from 'axios';
 import cors from 'cors';
-
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -175,7 +174,6 @@ app.get('/api/rewards', async (req, res) => {
       height += 210000;
     }
     console.log('[API /api/rewards] Sent reward stats');
-    console.log('[API /api/rewards] rewardHistory:', rewardHistory);
     console.log(
       '[API /api/rewards] blockCount:',
       blockCount,
