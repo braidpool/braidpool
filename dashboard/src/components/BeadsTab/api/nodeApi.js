@@ -2,12 +2,12 @@ import axios from 'axios';
 
 const BASE_URL = 'http://localhost:3001/api/node';
 
-const fetchNodeData = async (method: string) => {
+const fetchNodeData = async (method) => {
   const res = await axios.post(`${BASE_URL}/${method}`);
   return res.data.result;
 };
 
-export const getBlockTransactions = async (blockHash: string) => {
+export const getBlockTransactions = async (blockHash) => {
   const res = await axios.get(
     `http://localhost:3001/api/beads/${blockHash}/transactions`
   );

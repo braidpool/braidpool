@@ -1,3 +1,4 @@
+
 export interface Transaction {
   id: string;
   hash: string;
@@ -35,4 +36,17 @@ export interface TimeRange {
   label: string;
   value: string;
   days: number;
+}
+
+
+
+export interface Props {
+  data: ChartDataPoint[];
+  height?: number;
+  isHovered?: boolean;
+  showControls?: boolean;
+  isLoading?: boolean;
+  comparisonData?: ChartDataPoint[];
+  comparisonLabel?: string;
+  timeRange: string;
 }

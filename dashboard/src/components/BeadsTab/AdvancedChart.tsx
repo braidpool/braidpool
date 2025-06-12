@@ -11,26 +11,9 @@ import {
 import { Maximize2, RefreshCw, Download } from 'lucide-react';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-type TrendType = 'up' | 'down' | 'neutral';
+import { Props} from './lib/types';
 
-interface ChartDataPoint {
-  value: number;
-  label: string;
-  date: Date;
-  formattedDate?: string;
-  trend?: TrendType;
-}
 
-interface Props {
-  data: ChartDataPoint[];
-  height?: number;
-  isHovered?: boolean;
-  showControls?: boolean;
-  isLoading?: boolean;
-  comparisonData?: ChartDataPoint[];
-  comparisonLabel?: string;
-  timeRange: string;
-}
 
 export default function AdvancedChart({
   data,
