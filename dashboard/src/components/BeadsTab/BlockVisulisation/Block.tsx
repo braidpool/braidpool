@@ -10,7 +10,7 @@ export default function EnhancedBlocksTab({
 }) {
   const [isLoaded, setIsLoaded] = useState(false);
   const [animateBlocks, setAnimateBlocks] = useState(false);
-  const [viewMode] = useState('list');
+  const viewMode = 'list';
 
   useEffect(() => {
     const timer = setTimeout(() => {

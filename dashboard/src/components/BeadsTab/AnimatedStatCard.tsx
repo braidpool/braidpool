@@ -31,14 +31,7 @@ export default function AnimatedStatCard({
   return (
     <motion.div
       ref={cardRef}
-      className="rounded-xl p-5 overflow-hidden shadow-lg"
-      style={{
-        backgroundColor: '#1c1c1c',
-        boxShadow: isHovered
-          ? '0 8px 20px rgba(0, 0, 0, 0.4)'
-          : '0 4px 12px rgba(0, 0, 0, 0.2)',
-        transition: 'box-shadow 0.3s ease',
-      }}
+      className={`rounded-xl p-5 overflow-hidden bg-[#1c1c1c] shadow-lg hover:shadow-2xl transition-shadow`}
       initial={{ opacity: 0, y: 30 }}
       animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 30 }}
       transition={{ duration: 0.6, delay }}

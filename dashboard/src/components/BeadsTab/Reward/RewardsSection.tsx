@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   Bitcoin,
   Clock,
-  Sparkles,
+ 
   TrendingUp,
   ArrowUpRight,
 } from 'lucide-react';
@@ -30,12 +30,10 @@ export function RewardsDashboard() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let firstLoad = true;
     let interval: NodeJS.Timeout;
 
     const fetchData = async () => {
       try {
-        if (firstLoad) setIsLoading(true);
         const data = await getBlockReward();
         setRewardData({
           totalRewards: data.totalRewards ?? 0,
@@ -53,13 +51,11 @@ export function RewardsDashboard() {
       } catch (err) {
         setError('Failed to load rewards data');
       } finally {
-        if (firstLoad) {
-          setIsLoading(false);
-          firstLoad = false;
-        }
+        setIsLoading(false);
       }
     };
 
+    setIsLoading(true); 
     fetchData();
     interval = setInterval(fetchData, 1000);
 
