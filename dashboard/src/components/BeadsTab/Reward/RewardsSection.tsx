@@ -1,11 +1,5 @@
 import { useState, useEffect } from 'react';
-import {
-  Bitcoin,
-  Clock,
- 
-  TrendingUp,
-  ArrowUpRight,
-} from 'lucide-react';
+import { Bitcoin, Clock, TrendingUp, ArrowUpRight } from 'lucide-react';
 import RewardHistoryChart from './RewardHistoryChart';
 
 import { getBlockReward } from '../api/nodeApi';
@@ -55,7 +49,7 @@ export function RewardsDashboard() {
       }
     };
 
-    setIsLoading(true); 
+    setIsLoading(true);
     fetchData();
     interval = setInterval(fetchData, 1000);
 

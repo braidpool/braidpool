@@ -11,9 +11,7 @@ import {
 import { Maximize2, RefreshCw, Download } from 'lucide-react';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Props} from './lib/types';
-
-
+import { Props } from './lib/types';
 
 export default function AdvancedChart({
   data,

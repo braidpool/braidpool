@@ -1,4 +1,3 @@
-
 export interface Transaction {
   id: string;
   hash: string;
@@ -37,8 +36,6 @@ export interface TimeRange {
   value: string;
   days: number;
 }
-
-
 
 export interface Props {
   data: ChartDataPoint[];
