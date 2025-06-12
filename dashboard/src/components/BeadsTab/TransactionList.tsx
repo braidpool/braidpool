@@ -15,7 +15,7 @@ export default function TransactionList({
   return (
     <div className="pl-4 sm:pl-10 pr-4 pb-3 overflow-x-auto">
       <motion.div
-        className="text-blue-400 mb-3 font-medium flex items-center text-sm sm:text-base"
+        className="text-white mb-3 font-medium flex items-center text-sm sm:text-base"
         initial={{ x: -20, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         transition={{ delay: 0.1 }}
