@@ -55,9 +55,9 @@ export default function MinedSharesExplorer() {
         <div className="relative">
           {activeTab === 'beads' && (
             <div className="space-y-8">
-              <div className="border border-gray-800/50 rounded-xl mb-8 bg-black/30 overflow-hidden">
+              <div className=" mb-8 bg-[#1c1c1c] border border-gray-700 rounded-xl backdrop-blur-sm overflow-hidden">
                 {/* Table header */}
-                <div className="grid grid-cols-5 p-4 border-b border-gray-800/80 font-medium">
+                <div className="grid grid-cols-5 p-4 border-b  border-gray-800/80 font-medium">
                   {[
                     'Bead Hash',
                     'Timestamp',

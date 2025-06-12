@@ -1,9 +1,7 @@
 import React from 'react';
 import AdvancedChart from '../AdvancedChart';
+import { RewardHistoryChartProps } from '../lib/types';
 
-interface RewardHistoryChartProps {
-  rewardHistory: { height: number; reward: number; label: string }[];
-}
 
 const RewardHistoryChart: React.FC<RewardHistoryChartProps> = ({
   rewardHistory,

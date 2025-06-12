@@ -47,3 +47,43 @@ export interface Props {
   comparisonLabel?: string;
   timeRange: string;
 }
+export interface BeadRowProps {
+  bead: Bead;
+  isExpanded: boolean;
+  onToggle: (beadId: string) => void;
+  isActive: boolean;
+  transactions: Transaction[];
+  onParentClick: (parentHash: string) => void;
+}
+export interface RewardHistoryChartProps {
+  rewardHistory: { height: number; reward: number; label: string }[];
+}
+export interface RewardData {
+  totalRewards: number;
+  dailyAverage: number;
+  weeklyProjection: number;
+  monthlyProjection: number;
+  lastReward: number;
+  lastRewardTime: string;
+  streak: number;
+  nextMilestone: number;
+  achievements: string[];
+  rewardHistory: { height: number; reward: number; label: string }[];
+}
+
+export interface AnimatedStatCardProps {
+  title: string;
+  value: string;
+  change: string;
+  icon: React.ReactNode;
+  delay?: number;
+  color?: string;
+  
+}
+ export interface BeadRewardTooltipProps {
+  reward: number; // in BTC
+  isOpen?: boolean; 
+}
+export interface TransactionListProps {
+  transactions: Transaction[];
+}
