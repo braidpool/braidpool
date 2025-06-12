@@ -56,23 +56,23 @@ export default function BeadRow({
         </div>
 
         {/* Timestamp */}
-        <div className="text-gray-300 text-sm sm:text-base">
+        <div className="text-white text-sm sm:text-base">
           {bead.timestamp}
         </div>
 
         {/* Work */}
-        <div className="text-emerald-300 font-medium text-sm sm:text-base">
+        <div className="text-white font-medium text-sm sm:text-base">
           {formattedWork} {workUnit}
         </div>
 
         {/* Transactions */}
-        <div className="text-purple-300 font-medium text-sm sm:text-base">
+        <div className="text-white font-medium text-sm sm:text-base">
           {bead.transactions}
         </div>
 
         {/* Reward */}
         <div
-          className={`text-amber-300 font-medium text-sm sm:text-base ${
+          className={`text-white font-medium text-sm sm:text-base ${
             isRewardOpen ? 'pb-6' : ''
           }`}
           onClick={(e) => {
@@ -97,7 +97,7 @@ export default function BeadRow({
               {bead.parents.map((parent) => (
                 <button
                   key={parent}
-                  className="text-cyan-400 font-mono text-xs sm:text-sm hover:text-cyan-300 hover:underline truncate max-w-[150px] sm:max-w-[200px]"
+                  className="text-white font-mono text-xs sm:text-sm hover:text-cyan-300 hover:underline truncate max-w-[150px] sm:max-w-[200px]"
                   onClick={(e) => {
                     e.stopPropagation();
                     onParentClick(parent);

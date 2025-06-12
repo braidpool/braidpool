@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Bitcoin, Clock, TrendingUp, ArrowUpRight } from 'lucide-react';
 import RewardHistoryChart from './RewardHistoryChart';
-
 import { getBlockReward } from '../../../../api/nodeApi';
 import { RewardData } from '../lib/types';
 
@@ -185,12 +184,12 @@ export function RewardsDashboard() {
             <div className="text-blue-300 font-medium">
               {formatMBTC(rewardData.lastReward)} mBTC
               <span className="text-gray-500 text-xs ml-2">
-                ({timeAgo(rewardData.lastRewardTime)})
+                {timeAgo(rewardData.lastRewardTime)}
               </span>
             </div>
           </div>
         </div>
       </div>
     </div>
-  );
+  )
 }
