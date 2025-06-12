@@ -10,17 +10,7 @@ import {
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-
-interface KPICardProps {
-  title: string;
-  value: string | number;
-  unit?: string;
-  change?: number;
-  subtitle?: string;
-  loading?: boolean;
-  info?: string;
-  icon?: React.ReactNode;
-}
+import { KPICardProps } from './Types';
 
 const KPICard: React.FC<KPICardProps> = ({
   title,

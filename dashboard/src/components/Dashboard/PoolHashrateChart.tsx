@@ -9,6 +9,7 @@ import {
 import * as d3 from 'd3';
 import colors from '../../theme/colors';
 import Card from '../common/Card';
+import { PoolHashrateChartProps } from './Types';
 
 // Mock data for the hashrate over time
 const mockHashrateData = [
@@ -21,12 +22,6 @@ const mockHashrateData = [
   { time: '23m', value: 89.2 },
   { time: '22m', value: 98.3 },
 ];
-
-interface PoolHashrateChartProps {
-  height?: number;
-  data?: Array<{ time: string; value: number }>;
-  loading?: boolean;
-}
 
 const PoolHashrateChart: React.FC<PoolHashrateChartProps> = ({
   height = 300,
