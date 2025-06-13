@@ -3,12 +3,14 @@ import RecentBlocksTable from './RecentBlocksTable';
 import colors from '@/theme/colors';
 import { Block, miningPoolColors, miningPoolNames } from './Types';
 import { fetchPreviousBlocks } from './Utils';
+import BlockInfoDialog from './BlockDialog';
 
 const BlockViewer: React.FC = () => {
   const [latestBlock, setLatestBlock] = useState<Block | null>(null);
   const [previousBlocks, setPreviousBlocks] = useState<Block[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedBlock, setSelectedBlock] = useState<string | null>(null);
 
   useEffect(() => {
     const getBlocks = async () => {
@@ -114,11 +116,11 @@ const BlockViewer: React.FC = () => {
           {allBlocks.map((block, idx) => {
             const miningPool = miningPoolNames[idx % miningPoolNames.length];
             const poolColor = miningPoolColors[miningPool];
-            const feeRange = block.extras.feeRange.map((fee) =>
+            const feeRange = block.extras?.feeRange?.map((fee) =>
               Math.round(fee)
             );
-            const minFee = Math.min(...feeRange);
-            const maxFee = Math.max(...feeRange);
+            const minFee = feeRange ? Math.min(...feeRange) : 0;
+            const maxFee = feeRange ? Math.max(...feeRange) : 0;
             const blockHeightPercent = Math.min(
               100,
               (block.size / maxBlockSize) * 100
@@ -141,10 +143,11 @@ const BlockViewer: React.FC = () => {
                     height: `${blockHeightPercent}%`,
                     minHeight: '80px',
                   }}
+                  onClick={() => setSelectedBlock(block.id)}
                 >
                   <div className="absolute bottom-0 left-0 right-0 p-2 bg-black bg-opacity-50">
                     <div className="text-white text-center font-bold">
-                      {(block.extras.reward / 100000000).toFixed(2)} BTC
+                      {(block.extras?.reward / 100000000).toFixed(2) || 0} BTC
                     </div>
                     <div className="text-white text-center text-sm">
                       {block.tx_count.toLocaleString()} txs
@@ -164,7 +167,7 @@ const BlockViewer: React.FC = () => {
                     {minFee} - {maxFee} sat/vB
                   </div>
                   <div className="text-gray-400 text-center text-xs mt-1">
-                    ~{Math.round(block.extras.medianFee)} sat/vB median
+                    ~{Math.round(block.extras?.medianFee) || 0} sat/vB median
                   </div>
                 </div>
               </div>
@@ -181,6 +184,12 @@ const BlockViewer: React.FC = () => {
           {isConnected ? 'Connected' : 'Disconnected'}
         </div>
       </div>
+      {selectedBlock && (
+        <BlockInfoDialog
+          hash={selectedBlock}
+          onClose={() => setSelectedBlock(null)}
+        />
+      )}
       <RecentBlocksTable blocks={allBlocks} />
     </div>
   );
