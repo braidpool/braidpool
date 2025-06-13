@@ -42,18 +42,18 @@ export default function EnhancedBlocksTab({
     <div className="space-y-6 animate-fade-in-up px-4 sm:px-6 md:px-8 lg:px-6 ">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-blue-400 flex items-center gap-2 drop-shadow-md">
+          <h2 className="text-xl sm:text-3xl lg:text-4xl font-bold flex items-center gap-2 drop-shadow-md">
             <Layers className="h-6 w-6 sm:h-7 sm:w-7 lg:h-8 lg:w-8 text-blue-500 animate-pulse" />
             Block Explorer
           </h2>
-          <p className="text-gray-400 mt-1 text-sm md:text-base lg:text-lg max-w-md">
+          <p className="text-white mt-1 text-sm md:text-base lg:text-lg ">
             Explore the latest blocks in the network with detailed insights.
           </p>
         </div>
       </div>
 
       {/* Views */}
-      <div className="relative border border-blue-500/20 rounded-2xl p-4 sm:p-6 bg-gradient-to-br from-black via-slate-900 to-black shadow-lg shadow-blue-500/10 backdrop-blur-md overflow-hidden transition-all duration-300 min-h-[300px] md:min-h-[400px] lg:min-h-[500px]">
+      <div className="relative border  rounded-2xl p-4 sm:p-6  min-h-[300px] md:min-h-[400px] lg:min-h-[500px]">
         {viewMode === 'list' && (
           <BlockList
             blockVisualizationData={blockVisualizationData}

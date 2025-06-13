@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { motion } from 'framer-motion';
 import { Zap, Activity, Database } from 'lucide-react';
 import { useChartData } from '../Hooks/useChartData';
 import HashrateTab from './HashrateTab';
@@ -15,7 +14,7 @@ export function TrendsTab({ timeRange }: { timeRange: string }) {
   return (
     <div className="space-y-8">
       {/* Subtabs */}
-      <div className="flex border-b mb-6">
+      <div className="flex border-b mb-6 bg-[#1c1c1c]">
         {[
           {
             id: 'hashrate',
@@ -33,29 +32,18 @@ export function TrendsTab({ timeRange }: { timeRange: string }) {
             icon: <Database className="w-4 h-4" />,
           },
         ].map((tab) => (
-          <motion.button
+          <button
             key={tab.id}
             className={`flex items-center gap-2 px-4 py-3 font-medium relative ${
               activeSubTab === tab.id
-                ? 'text-blue-400'
+                ? 'text-blue-400 border-b-2 border-blue-500'
                 : 'text-gray-400 hover:text-gray-200'
             }`}
             onClick={() => setActiveSubTab(tab.id)}
-            whileHover={{ y: -2 }}
-            whileTap={{ scale: 0.97 }}
           >
             {tab.icon}
             {tab.label}
-            {activeSubTab === tab.id && (
-              <motion.div
-                className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500"
-                layoutId="activeSubTab"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              />
-            )}
-          </motion.button>
+          </button>
         ))}
       </div>
 

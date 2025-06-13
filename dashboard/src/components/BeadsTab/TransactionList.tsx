@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Activity } from 'lucide-react';
-import type { Transaction } from './lib/types';
-import { shortenHash } from './lib/utils/utils';
 
+import { shortenHash } from './lib/utils/utils';
 import { TransactionListProps } from './lib/types';
 export default function TransactionList({
   transactions,
@@ -64,9 +63,9 @@ export default function TransactionList({
             onMouseLeave={() => setHoveredTransaction(null)}
           >
             {/* Hover glow effect */}
-            <div className="absolute inset-0 bg-blue-500/5 opacity-0 group-hover:opacity-100 rounded-lg transition-opacity duration-300"></div>
+            <div className="absolute inset-0 bg-slate-600 opacity-0 group-hover:opacity-100 rounded-lg transition-opacity duration-300"></div>
 
-            <div className="text-cyan-400 font-mono relative z-10 group-hover:text-cyan-300 transition-colors duration-300 truncate">
+            <div className="text-white font-mono relative z-10 group-hover:text-cyan-300 transition-colors duration-300 truncate">
               <motion.span
                 animate={{ opacity: [0.7, 1, 0.7] }}
                 transition={{
@@ -89,22 +88,22 @@ export default function TransactionList({
                 </motion.div>
               )}
             </div>
-            <div className="text-gray-400 relative z-10 group-hover:text-gray-300 transition-colors duration-300">
+            <div className="text-white relative z-10 group-hover:text-gray-300 transition-colors duration-300">
               {transaction.size} vbytes
             </div>
-            <div className="text-emerald-300 relative z-10 group-hover:text-emerald-200 transition-colors duration-300">
+            <div className="text-white relative z-10 group-hover:text-emerald-200 transition-colors duration-300">
               {transaction.fee !== undefined
                 ? transaction.fee
                 : transaction.feePaid}{' '}
               BTC
             </div>
-            <div className="text-amber-300 relative z-10 group-hover:text-amber-200 transition-colors duration-300">
+            <div className="text-white relative z-10 group-hover:text-amber-200 transition-colors duration-300">
               {transaction.feeRate} sats/vB
             </div>
-            <div className="text-purple-300 relative z-10 group-hover:text-purple-200 transition-colors duration-300">
+            <div className="text-white relative z-10 group-hover:text-purple-200 transition-colors duration-300">
               {transaction.inputs} in
             </div>
-            <div className="text-blue-300 relative z-10 group-hover:text-blue-200 transition-colors duration-300">
+            <div className="text-white relative z-10 group-hover:text-blue-200 transition-colors duration-300">
               {transaction.outputs} out
             </div>
           </motion.div>

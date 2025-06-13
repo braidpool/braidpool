@@ -36,15 +36,15 @@ export default function HashrateTab({
   }, []);
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="space-y-6 bg-[#1c1c1c]">
+      <div className="flex justify-between items-center ">
         <div>
           <h3 className="text-xl font-bold text-blue-300">Hashrate (λ)</h3>
           <p className="text-sm text-gray-400 mt-1">
             Real-time hashrate measurements
           </p>
         </div>
-        <div className="bg-blue-900/30 px-3 py-1 rounded-md">
+        <div className=" px-3 py-1 rounded-md">
           <span className="text-blue-300 font-mono">
             {' '}
             λ ={' '}
@@ -56,13 +56,13 @@ export default function HashrateTab({
       </div>
 
       <div
-        className="relative border w-full border-gray-800/50 rounded-xl p-6 h-110 bg-black/30 backdrop-blur-md overflow-hidden"
+        className="relative border w-full border-gray-800/50 rounded-xl p-6 h-auto  backdrop-blur-md overflow-hidden"
         onMouseEnter={() => setChartHovered(true)}
         onMouseLeave={() => setChartHovered(false)}
       >
         <AdvancedChart
           data={chartData}
-          height={200}
+          height={350}
           isHovered={chartHovered}
           isLoading={isChartLoading}
           timeRange={timeRange}

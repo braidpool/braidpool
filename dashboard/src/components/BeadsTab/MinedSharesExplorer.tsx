@@ -46,8 +46,7 @@ export default function MinedSharesExplorer() {
     <div className="min-h-screen bg-black text-white relative">
       <div className="container mx-auto px-4 py-8">
         <DashboardHeader
-          headerOpacity={1}
-          headerScale={1}
+          
           activeTab={activeTab}
           setActiveTab={setActiveTab}
         />
@@ -55,7 +54,7 @@ export default function MinedSharesExplorer() {
         <div className="relative">
           {activeTab === 'beads' && (
             <div className="space-y-8">
-              <div className=" mb-8 bg-[#1c1c1c] border border-gray-700 rounded-xl backdrop-blur-sm overflow-hidden">
+              <div className="  bg-[#1c1c1c]  rounded-sm overflow-hidden">
                 {/* Table header */}
                 <div className="grid grid-cols-5 p-4 border-b  border-gray-800/80 font-medium">
                   {[
@@ -65,7 +64,7 @@ export default function MinedSharesExplorer() {
                     'Transactions',
                     'Rewards',
                   ].map((label) => (
-                    <div key={label} className="text-blue-200 font-semibold">
+                    <div key={label} className="text-white font-semibold">
                       {label}
                     </div>
                   ))}
@@ -95,7 +94,7 @@ export default function MinedSharesExplorer() {
 
           {activeTab === 'trends' && <TrendsTab timeRange={timeRange} />}
           {activeTab === 'blocks' && (
-            <div className="border border-gray-800/50 rounded-xl p-6 bg-black/30">
+            <div className="border border-gray-800/50 rounded-xl p-6 bg-[#1c1c1c]">
               <EnhancedBlocksTab timeRange={timeRange} />
             </div>
           )}

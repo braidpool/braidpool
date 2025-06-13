@@ -1,6 +1,5 @@
 import axios from 'axios';
 
-const BASE_URL = 'http://localhost:3001/api/node';
 
 export const getBlockTransactions = async (blockHash) => {
   const res = await axios.get(
