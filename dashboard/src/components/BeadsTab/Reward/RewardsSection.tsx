@@ -74,7 +74,7 @@ export function RewardsDashboard() {
   if (!rewardData) return null;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 bg-[#1c1c1c]">
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-2">
           <Bitcoin className="h-6 w-6 text-amber-400" />

@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 
 export function BlockList({
   blockVisualizationData,
-  animateBlocks,
+  
   isLoaded,
 }: {
   blockVisualizationData: any[];
@@ -27,15 +27,9 @@ export function BlockList({
         <div></div>
       </div>
       {blockVisualizationData.map((block, index) => (
-        <motion.div
+        <div
           key={block.id}
-          className="grid grid-cols-7 gap-4 px-4 py-3 rounded-lg items-center sm:grid sm:grid-rows-3 hover:bg-gray-800/30 transition-colors h-15"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{
-            opacity: animateBlocks ? 1 : 0,
-            y: animateBlocks ? 0 : 20,
-          }}
-          transition={{ duration: 0.3, delay: index * 0.03 }}
+          className="grid grid-cols-7 gap-4 px-4 py-3 rounded-lg items-center sm:grid sm:grid-rows-3 hover:bg-gray-800/30 transition-colors h-15 relative"
         >
           <div className="font-medium text-white">#{block.height}</div>
           <div className="text-gray-400 text-sm">
@@ -50,14 +44,7 @@ export function BlockList({
               Details
             </button>
           </div>
-          {index < 3 && (
-            <motion.div
-              className="absolute left-0 top-0 bottom-0 w-1 bg-green-500 rounded-l-lg"
-              animate={{ opacity: [0.5, 1, 0.5] }}
-              transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY }}
-            />
-          )}
-        </motion.div>
+        </div>
       ))}
     </div>
   );

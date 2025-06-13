@@ -38,8 +38,8 @@ export default function LatencyTab({
   }, []);
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="space-y-6 bg-[#1c1c1c]">
+      <div className="flex justify-between items-center ">
         <div>
           <h3 className="text-xl font-bold text-blue-300">Network Latency</h3>
 
@@ -55,13 +55,13 @@ export default function LatencyTab({
       </div>
 
       <div
-        className="relative border border-gray-800/50 rounded-xl p-6 h-130 bg-black/30 backdrop-blur-md overflow-hidden"
+        className="relative border border-gray-800/50 rounded-xl p-6 h-auto bg-[#1c1c1c] backdrop-blur-md overflow-hidden"
         onMouseEnter={() => setChartHovered(true)}
         onMouseLeave={() => setChartHovered(false)}
       >
         <AdvancedChart
           data={chartData}
-          height={200}
+          height={350}
           isHovered={chartHovered}
           isLoading={isChartLoading}
           timeRange={timeRange}

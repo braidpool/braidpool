@@ -13,8 +13,8 @@ const RewardHistoryChart: React.FC<RewardHistoryChartProps> = ({
   }));
 
   return (
-    <div className="w-full h-130  text-white rounded-xl shadow-lg p-6">
-      <h2 className="text-2xl font-bold mb-4 text-cyan-300 flex items-center gap-2">
+    <div className="w-full h-auto  text-white rounded-xl shadow-lg p-6">
+      <h2 className="text-2xl font-bold mb-4  flex items-center gap-2">
         <svg width="28" height="28" fill="none" viewBox="0 0 24 24">
           <circle cx="12" cy="12" r="10" fill="#06b6d4" opacity="0.2" />
           <path
@@ -29,7 +29,7 @@ const RewardHistoryChart: React.FC<RewardHistoryChartProps> = ({
       </h2>
       <AdvancedChart
         data={chartData}
-        height={300}
+        height={350}
         showControls={true}
         timeRange="all"
       />

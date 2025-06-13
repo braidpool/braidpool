@@ -10,7 +10,7 @@ export default function TransactionsTab({
   timeRange,
 }: any) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 bg-[#1c1c1c]">
       <div className="flex justify-between items-center">
         <div>
           <h3 className="text-xl font-bold text-blue-300">
@@ -26,13 +26,13 @@ export default function TransactionsTab({
       </div>
 
       <div
-        className="relative border border-gray-800/50 rounded-xl p-6 h-110 bg-black/30 backdrop-blur-md overflow-hidden"
+        className="relative border border-gray-800/50 rounded-xl p-6 h-auto bg-black/30 backdrop-blur-md overflow-hidden"
         onMouseEnter={() => setChartHovered(true)}
         onMouseLeave={() => setChartHovered(false)}
       >
         <AdvancedChart
           data={chartData.map((d: any) => ({ ...d, value: d.value * 0.8 }))}
-          height={200}
+          height={350}
           isHovered={chartHovered}
           isLoading={isChartLoading}
           timeRange={timeRange}
