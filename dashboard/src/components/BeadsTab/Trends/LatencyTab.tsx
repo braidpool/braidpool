@@ -1,36 +1,67 @@
+import React, { useEffect, useState } from 'react';
 import AdvancedChart from '../AdvancedChart';
 import AnimatedStatCard from '../AnimatedStatCard';
 import { Activity, ArrowUpRight, Cpu } from 'lucide-react';
 
 export default function LatencyTab({
-  chartData,
   isChartLoading,
   chartHovered,
   setChartHovered,
   timeRange,
 }: any) {
+  const [chartData, setChartData] = useState<any[]>([]);
+  const [averageLatency, setAverageLatency] = useState<string>('0ms');
+  const [peakLatency, setPeakLatency] = useState<string>('0ms');
+  const [peerCount, setPeerCount] = useState<number>(0);
+  useEffect(() => {
+    const fetchLatency = async () => {
+      try {
+        const res = await fetch('http://localhost:3001/api/latency');
+        const data = await res.json();
+        const latencyData = (data.chartData || []).map((d: any) => ({
+          ...d,
+          date: new Date(d.date),
+          label: new Date(d.date).toLocaleString(),
+        }));
+        setChartData(latencyData);
+        setAverageLatency(`${parseFloat(data.averageLatency).toFixed(0)}ms`);
+        setPeakLatency(`${parseFloat(data.peakLatency).toFixed(0)}ms`);
+        setPeerCount(data.peerCount);
+      } catch (err) {
+        setChartData([]);
+      }
+    };
+
+    fetchLatency();
+    const interval = setInterval(fetchLatency, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="space-y-6 bg-[#1c1c1c]">
+      <div className="flex justify-between items-center ">
         <div>
           <h3 className="text-xl font-bold text-blue-300">Network Latency</h3>
+
           <p className="text-sm text-gray-400 mt-1">
             Real-time latency measurements
           </p>
         </div>
         <div className="bg-purple-900/30 px-3 py-1 rounded-md">
-          <span className="text-purple-300 font-mono">120ms</span>
+          <span className="text-purple-300 font-mono">
+            AvgLatency : {averageLatency}
+          </span>
         </div>
       </div>
 
       <div
-        className="relative border border-gray-800/50 rounded-xl p-6 h-110 bg-black/30 backdrop-blur-md overflow-hidden"
+        className="relative border border-gray-800/50 rounded-xl p-6 h-auto bg-[#1c1c1c] backdrop-blur-md overflow-hidden"
         onMouseEnter={() => setChartHovered(true)}
         onMouseLeave={() => setChartHovered(false)}
       >
         <AdvancedChart
-          data={chartData.map((d: any) => ({ ...d, value: d.value / 2 }))}
-          height={200}
+          data={chartData}
+          height={350}
           isHovered={chartHovered}
           isLoading={isChartLoading}
           timeRange={timeRange}
@@ -40,26 +71,23 @@ export default function LatencyTab({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <AnimatedStatCard
           title="Average Latency"
-          value="118ms"
+          value={averageLatency}
           change="-3%"
           icon={<Activity />}
-          color="purple"
           delay={0.2}
         />
         <AnimatedStatCard
           title="Peak Latency"
-          value="210ms"
+          value={peakLatency}
           change="+15%"
           icon={<ArrowUpRight />}
-          color="blue"
           delay={0.3}
         />
         <AnimatedStatCard
           title="Nodes Reporting"
-          value="24"
+          value={peerCount.toString()}
           change="+2"
           icon={<Cpu />}
-          color="blue"
           delay={0.4}
         />
       </div>

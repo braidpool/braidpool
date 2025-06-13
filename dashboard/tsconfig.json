@@ -33,8 +33,12 @@
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
-    "src"
+    "src",
+    "api/api",
+    "api/proxy.js",
+    "api/nodeApi.js"
   ],
-  "exclude": ["node_modules"],
+
+  "exclude": ["node_modules", "vite.config.ts"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
