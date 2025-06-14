@@ -49,7 +49,8 @@ const TransactionDialog = ({
           <h2 className="text-lg font-bold">Transaction Details</h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white p-1 rounded-full hover:bg-gray-700"
+            className="text-gray-400 hover:text-white p-1 rounded-full hover:border-white/10 bg-[#1e1e1e]"
+            aria-label="Close dialog"
           >
             ✕
           </button>
@@ -76,6 +77,7 @@ const TransactionDialog = ({
                       onClick={handleCopy}
                       className="text-gray-400 hover:text-white ml-2"
                       title="Copy to clipboard"
+                      aria-label="Copy transaction ID"
                     >
                       <CopyIcon className="inline w-4 h-4" />
                     </button>
@@ -125,13 +127,13 @@ const TransactionDialog = ({
                 </div>
               </div>
 
-              <div className="pt-4">
+              <div className="pt-6 border-t border-gray-700">
                 <h3 className="font-medium text-gray-400 mb-2">
                   Inputs ({txInfo.vin.length})
                 </h3>
                 <div className="space-y-3">
                   {txInfo.vin.map((input: any, index: number) => (
-                    <div key={index} className="bg-gray-700 rounded p-3">
+                    <div key={index} className="bg-[#2a2a2a] rounded p-3">
                       <p className="text-xs break-all">
                         <span className="font-medium">From:</span>{' '}
                         {input.prevout?.scriptpubkey_address || 'Coinbase'}
@@ -147,13 +149,13 @@ const TransactionDialog = ({
                 </div>
               </div>
 
-              <div className="pt-4">
+              <div className="pt-6 border-t border-gray-700">
                 <h3 className="font-medium text-gray-400 mb-2">
                   Outputs ({txInfo.vout.length})
                 </h3>
                 <div className="space-y-3">
                   {txInfo.vout.map((output: any, index: number) => (
-                    <div key={index} className="bg-gray-700 rounded p-3">
+                    <div key={index} className="bg-[#2a2a2a] rounded p-3">
                       <p className="text-xs break-all">
                         <span className="font-medium">To:</span>{' '}
                         {output.scriptpubkey_address}

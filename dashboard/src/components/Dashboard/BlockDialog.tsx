@@ -51,12 +51,12 @@ const BlockInfoDialog = ({
       <div className="fixed inset-0 z-40" onClick={onClose} />
 
       {/* Block details sidebar */}
-      <div className="pt-14 fixed right-0 top-0 z-50 h-full w-96 bg-gray-800 overflow-y-auto shadow-xl text-white">
-        <div className="sticky top-0 bg-gray-800 p-4 border-b border-gray-700 flex justify-between items-center">
+      <div className="pt-14 fixed border-white right-0 top-0 z-50 h-full w-96 bg-[#1e1e1e] overflow-y-auto shadow-2xl text-white border border-gray-700">
+        <div className="sticky top-0 border-white bg-[#1e1e1e] p-4 flex justify-between items-center">
           <h2 className="text-lg font-bold">Block Details</h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white p-1 rounded-full hover:bg-gray-700"
+            className="text-gray-400 hover:text-white p-1 rounded-full hover:border-white/10 bg-[#1e1e1e]"
             aria-label="Close dialog"
           >
             ✕
