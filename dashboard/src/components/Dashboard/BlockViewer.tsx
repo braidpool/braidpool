@@ -74,13 +74,15 @@ const BlockViewer: React.FC = () => {
     };
 
     return () => {
-      socket.close();
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.close();
+      }
     };
   }, []);
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64 bg-gray-900 p-4">
+      <div className="flex items-center justify-center h-64 p-4">
         <div className="text-white">Loading blocks...</div>
       </div>
     );
@@ -93,7 +95,7 @@ const BlockViewer: React.FC = () => {
 
   if (allBlocks.length === 0) {
     return (
-      <div className="flex items-center justify-center h-64 bg-gray-900 p-4">
+      <div className="flex items-center justify-center h-64 p-4">
         <div className="text-white">No blocks available</div>
       </div>
     );
@@ -138,7 +140,7 @@ const BlockViewer: React.FC = () => {
 
                 {/* Block visualization */}
                 <div
-                  className={`w-full rounded-t-md ${poolColor} relative overflow-hidden transition-all duration-300`}
+                  className={`w-full rounded-t-md ${idx === 0 ? 'bg-green-500' : 'bg-blue-500'} relative overflow-hidden transition-all duration-300`}
                   style={{
                     height: `${blockHeightPercent}%`,
                     minHeight: '80px',
