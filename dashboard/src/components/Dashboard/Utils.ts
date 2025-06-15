@@ -3,7 +3,9 @@ import axios from 'axios';
 // via mempool api
 export const getBlockInfo = async (hash: string): Promise<any> => {
   try {
-    const response = await axios.get(`http://localhost:8999/api/v1/block/${hash}`);
+    const response = await axios.get(
+      `http://localhost:8999/api/v1/block/${hash}`
+    );
     console.log(response.data);
     return response.data;
   } catch (error) {
@@ -22,4 +24,14 @@ export const fetchPreviousBlocks = async () => {
     console.error('Failed to fetch previous blocks', err);
     throw err;
   }
+};
+
+export function formatUnixTimestamp(timestamp: number): string {
+  const date = new Date(timestamp * 1000);
+  return date.toISOString().replace('T', ' ').slice(0, 19);
+}
+
+export const formatTimestamp = (ts: number) => {
+  const d = new Date(ts * 1000);
+  return d.toLocaleString();
 };

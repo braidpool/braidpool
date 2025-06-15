@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import TransactionDialog from './TransactionDialog';
 import { shortenAddress } from './Utils';
 import colors from '../../theme/colors';
@@ -6,9 +6,8 @@ import { TransactionTableProps } from './Types';
 
 const TransactionTable: React.FC<TransactionTableProps> = ({
   transactions,
-  selectedTx,
-  setSelectedTx,
 }) => {
+  const [selectedTx, setSelectedTx] = useState<string | null>(null);
   return (
     <div
       className="rounded-2xl border border-white/10 bg-[#1e1e1e] shadow-md p-4"
@@ -52,15 +51,20 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
             </tr>
           </thead>
           <tbody>
-            {transactions.map((tx, txid) => (
+            {transactions.map((tx, index) => (
               <tr
-                key={txid}
-                className="hover:bg-white/5 transition-colors duration-150"
+                key={tx.txid}
+                className={`transition-colors duration-150 ${
+                  selectedTx === tx.txid ? 'bg-white/10' : 'hover:bg-white/10'
+                }`}
                 onClick={() => setSelectedTx(tx.txid)}
               >
-                <td className="px-4 py-2">
+                <td className="p-4">
                   <div className="relative group inline-block">
-                    <span className="cursor-pointer hover:underline">
+                    <span
+                      className="cursor-pointer hover:underline"
+                      style={{ color: colors.accent }}
+                    >
                       {shortenAddress(tx.txid)}
                     </span>
                     <div
@@ -72,9 +76,24 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                     </div>
                   </div>
                 </td>
-                <td className="px-4 py-2">{tx.fee / 100000000} BTC</td>
-                <td className="px-4 py-2">{tx.vsize} vB</td>
-                <td className="px-4 py-2">{tx.value / 100000000} BTC</td>
+                <td
+                  className="p-4 text-sm"
+                  style={{ color: colors.textPrimary }}
+                >
+                  {tx.fee / 100000000} BTC
+                </td>
+                <td
+                  className="p-4 text-sm"
+                  style={{ color: colors.textPrimary }}
+                >
+                  {tx.vsize} vB
+                </td>
+                <td
+                  className="p-4 text-sm"
+                  style={{ color: colors.textPrimary }}
+                >
+                  {tx.value / 100000000} BTC
+                </td>
               </tr>
             ))}
           </tbody>

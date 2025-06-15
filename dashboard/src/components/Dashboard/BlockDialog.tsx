@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getBlockInfo } from './Utils';
+import { formatTimestamp, getBlockInfo } from './Utils';
 import { CopyIcon } from 'lucide-react';
 
 const BlockInfoDialog = ({
@@ -40,11 +40,6 @@ const BlockInfoDialog = ({
 
     fetchData();
   }, [hash]);
-
-  const formatTimestamp = (ts: number) => {
-    const d = new Date(ts * 1000);
-    return d.toLocaleString();
-  };
 
   return (
     <>

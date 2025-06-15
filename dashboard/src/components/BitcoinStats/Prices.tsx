@@ -17,14 +17,17 @@ import {
   formatPrice,
   getCurrencySymbol,
   getLatestTransactions,
+  latestRBFTransactions,
 } from './Utils';
 import TransactionTable from './TransactionTable';
+import RBFTransactionTable from './RBFTransactions';
 
 const BitcoinPriceTracker: React.FC = () => {
   const [currency, setCurrency] = useState<'USD' | 'EUR' | 'GBP' | 'JPY'>(
     'USD'
   );
   const [transactions, setTransactions] = useState<any[]>([]);
+  const [rbftransactions, setrbfTransactions] = useState<any[]>([]);
   const [priceData, setPriceData] = useState<PriceData | null>(null);
   const [globalStats, setGlobalStats] = useState<GlobalStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -38,7 +41,6 @@ const BitcoinPriceTracker: React.FC = () => {
   >([]);
   const MAX_HISTORY_ITEMS = 30;
   const showSkeletons = loading || !isConnected || (!priceData && !globalStats);
-  const [selectedTx, setSelectedTx] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchTransactions = async () => {
@@ -46,8 +48,14 @@ const BitcoinPriceTracker: React.FC = () => {
       setTransactions(data as any[]);
     };
     fetchTransactions();
+    const fetchRbfTransactions = async () => {
+      const data = await latestRBFTransactions();
+      setrbfTransactions(data as any[]);
+    };
+    fetchRbfTransactions();
     const intervalId = setInterval(() => {
       fetchTransactions();
+      fetchRbfTransactions();
     }, 5000);
     return () => clearInterval(intervalId);
   }, []);
@@ -384,12 +392,12 @@ const BitcoinPriceTracker: React.FC = () => {
       </div>
 
       {/* Transactions Table */}
-      {transactions.length >= 0 && (
-        <TransactionTable
-          transactions={transactions}
-          selectedTx={selectedTx}
-          setSelectedTx={setSelectedTx}
-        />
+      {transactions.length > 0 && (
+        <TransactionTable transactions={transactions} />
+      )}
+      {/* RBF Transactions Table */}
+      {rbftransactions.length > 0 && (
+        <RBFTransactionTable transactions={rbftransactions} />
       )}
     </div>
   );

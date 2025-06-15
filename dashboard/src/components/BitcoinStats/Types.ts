@@ -17,6 +17,30 @@ export interface GlobalStats {
 
 export interface TransactionTableProps {
   transactions: any[];
-  selectedTx: string | null;
-  setSelectedTx: (txid: string | null) => void;
+}
+
+export interface TransactionInfo {
+  txid: string;
+  fee: number;
+  vsize: number;
+  value: number;
+  rate: number;
+  rbf: boolean;
+  fullRbf?: boolean;
+}
+
+export interface RBFTransaction {
+  tx: TransactionInfo;
+  time: number;
+  fullRbf?: boolean;
+  replaces: RBFTransaction[];
+}
+
+export interface RBFTransactionRowProps {
+  isReplacement?: boolean;
+  tx: RBFTransaction;
+  depth?: number;
+  onSelect: (txid: string) => void;
+  expandedTxs: Set<string>;
+  toggleExpanded: (txid: string) => void;
 }

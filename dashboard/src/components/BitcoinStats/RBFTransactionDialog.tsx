@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { getTxInfo } from './Utils';
 import { CopyIcon } from 'lucide-react';
 
-const TransactionDialog = ({
+const RBFTransactionDialog = ({
   txid,
   onClose,
 }: {
@@ -176,4 +176,4 @@ const TransactionDialog = ({
   );
 };
 
-export default TransactionDialog;
+export default RBFTransactionDialog;

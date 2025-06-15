@@ -56,3 +56,17 @@ export const getTxInfo = async (txid: string): Promise<any> => {
     throw error;
   }
 };
+
+// via mempool api
+export const latestRBFTransactions = async (): Promise<any> => {
+  try {
+    const response = await axios.get(
+      `http://localhost:8999/api/v1/replacements`
+    );
+    console.log(response.data);
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching RBF Transactions:', error);
+    throw error;
+  }
+};
