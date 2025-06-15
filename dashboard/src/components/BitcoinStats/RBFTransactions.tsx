@@ -52,11 +52,8 @@ const RBFTransactionRow: React.FC<RBFTransactionRowProps> = ({
         <td className="px-4 py-2">{(txData.fee / 1e8).toFixed(8)} BTC</td>
         <td className="px-4 py-2">{(txData.value / 1e8).toFixed(8)} BTC</td>
         <td className="px-4 py-2">{txData.rate.toFixed(2)} sat/vB</td>
-        <td className="px-4 py-2 text-xs">
+        <td className="px-4 py-2">
           {txData.rbf ? (txData.fullRbf ? 'Full RBF' : 'RBF') : 'No'}
-        </td>
-        <td className="px-4 py-2 text-xs">
-          {new Date(tx.time * 1000).toLocaleString()}
         </td>
       </tr>
 
@@ -100,7 +97,7 @@ const RBFTransactionTable: React.FC<TransactionTableProps> = ({
       className="rounded-2xl border mt-10 border-white/10 bg-[#1e1e1e] shadow-md p-4"
       style={{ borderColor: colors.cardAccentSecondary }}
     >
-      <div className="mb-2 text-sm text-gray-400">Latest RBF Transactions</div>
+      <div className="mb-2  text-gray-400">Latest RBF Transactions</div>
       <div
         className="overflow-auto rounded-md scrollbar-thin"
         style={{
@@ -110,7 +107,7 @@ const RBFTransactionTable: React.FC<TransactionTableProps> = ({
           backgroundColor: colors.paper,
         }}
       >
-        <table className="w-full text-sm">
+        <table className="w-full ">
           <thead
             className="sticky top-0 z-10"
             style={{ backgroundColor: colors.paper }}
@@ -145,12 +142,6 @@ const RBFTransactionTable: React.FC<TransactionTableProps> = ({
                 style={{ color: colors.textPrimary }}
               >
                 RBF
-              </th>
-              <th
-                className="text-left px-4 py-2"
-                style={{ color: colors.textPrimary }}
-              >
-                TIME
               </th>
             </tr>
           </thead>

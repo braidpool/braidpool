@@ -13,7 +13,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
       className="rounded-2xl border border-white/10 bg-[#1e1e1e] shadow-md p-4"
       style={{ borderColor: colors.cardAccentSecondary }}
     >
-      <div className="mb-2 text-sm text-gray-400">Latest Transactions</div>
+      <div className="mb-2  text-gray-400">Latest Transactions</div>
       <div
         className="overflow-auto rounded-md scrollbar-thin"
         style={{
@@ -25,25 +25,25 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
           <thead className="sticky top-0 z-10">
             <tr style={{ backgroundColor: colors.paper }}>
               <th
-                className="text-left p-4 font-semibold text-sm"
+                className="text-left p-4 font-semibold "
                 style={{ color: colors.textPrimary }}
               >
                 TXID
               </th>
               <th
-                className="text-left p-4 font-semibold text-sm"
+                className="text-left p-4 font-semibold "
                 style={{ color: colors.textPrimary }}
               >
                 FEE
               </th>
               <th
-                className="text-left p-4 font-semibold text-sm"
+                className="text-left p-4 font-semibold "
                 style={{ color: colors.textPrimary }}
               >
                 SIZE
               </th>
               <th
-                className="text-left p-4 font-semibold text-sm"
+                className="text-left p-4 font-semibold "
                 style={{ color: colors.textPrimary }}
               >
                 VALUE
@@ -76,22 +76,13 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                     </div>
                   </div>
                 </td>
-                <td
-                  className="p-4 text-sm"
-                  style={{ color: colors.textPrimary }}
-                >
+                <td className="p-4 " style={{ color: colors.textPrimary }}>
                   {tx.fee / 100000000} BTC
                 </td>
-                <td
-                  className="p-4 text-sm"
-                  style={{ color: colors.textPrimary }}
-                >
+                <td className="p-4 " style={{ color: colors.textPrimary }}>
                   {tx.vsize} vB
                 </td>
-                <td
-                  className="p-4 text-sm"
-                  style={{ color: colors.textPrimary }}
-                >
+                <td className="p-4 " style={{ color: colors.textPrimary }}>
                   {tx.value / 100000000} BTC
                 </td>
               </tr>
