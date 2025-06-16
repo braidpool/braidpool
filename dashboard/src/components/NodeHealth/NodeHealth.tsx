@@ -5,14 +5,14 @@ import {
   getNetworkInfo,
   getMempoolInfo,
   getNetTotals,
-} from '../../../api/nodeApi';
+} from './__tests__/nodeApi';
 
 import Peers from './Peers';
 import NetworkPanel from './Network';
 import MempoolPanel from './Mempool';
 import BandwidthPanel from './Bandwidth';
 import RawJsonViewer from './Rawdatajson';
-import { TABS } from '../../../api/utils';
+import { TABS } from './__tests__/utils';
 const NodeHealth: React.FC = () => {
   const [activeTab, setActiveTab] = useState('blockchain');
   const [blockchainInfo, setBlockchainInfo] = useState<any>(null);

@@ -1,8 +1,8 @@
 import RawJsonViewer from './Rawdatajson';
 
-import { Mempool } from '../../../api/types';
+import { Mempool } from './__tests__/types';
 
-import { formatBytes } from '../../../api/utils';
+import { formatBytes } from './__tests__/utils';
 
 export default function MempoolPanel({ mempool }: { mempool: Mempool }) {
   const mempoolUsage = (mempool.usage / mempool.maxmempool) * 100;

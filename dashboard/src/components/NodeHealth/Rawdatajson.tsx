@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
-import { RawJsonViewerProps } from '../../../api/types';
+import { RawJsonViewerProps } from './__tests__/types';
 
 export default function RawJsonViewer({
   data,
