@@ -415,10 +415,10 @@ const Dashboard = () => {
             </Card>
           </Box>
         );
-        case Page.NODE_HEALTH:
+      case Page.NODE_HEALTH:
         return (
-          <Box >
-            <Card >
+          <Box>
+            <Card>
               <Box>
                 <NodeHealth />
               </Box>

@@ -12,7 +12,7 @@ import NetworkPanel from './Network';
 import MempoolPanel from './Mempool';
 import BandwidthPanel from './Bandwidth';
 import RawJsonViewer from './Rawdatajson';
-import  {TABS} from '../../../api/utils'
+import { TABS } from '../../../api/utils';
 const NodeHealth: React.FC = () => {
   const [activeTab, setActiveTab] = useState('blockchain');
   const [blockchainInfo, setBlockchainInfo] = useState<any>(null);
