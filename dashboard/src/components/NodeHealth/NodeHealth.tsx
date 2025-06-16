@@ -89,7 +89,7 @@ const NodeHealth: React.FC = () => {
         <h1 className="text-xl md:text-2xl font-bold text-white">
           Node Health Dashboard
           <p className="text-xs sm:text-sm text-gray-500 ">
-           { `Last updated: ${lastUpdated}`}
+            {`Last updated: ${lastUpdated}`}
           </p>
         </h1>
         <div className="flex items-center mt-3 gap-4">
