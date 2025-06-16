@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDown, Zap } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import TransactionList from './TransactionList';
 import { shortenHash } from './lib/utils/utils';
 import type { BeadRowProps } from './lib/types';
@@ -48,11 +48,7 @@ export default function BeadRow({
           >
             {bead.name}
           </span>
-          {isExpanded && (
-            <div className="ml-2">
-              <Zap className="h-4 w-4 text-yellow-400" />
-            </div>
-          )}
+          {isExpanded && <div className="ml-2"></div>}
         </div>
 
         {/* Timestamp */}
