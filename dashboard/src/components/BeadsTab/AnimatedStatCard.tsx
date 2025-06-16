@@ -1,5 +1,4 @@
 import React, { useState, useRef } from 'react';
-import { motion, useInView } from 'framer-motion';
 import { TrendingUp, ArrowDownRight } from 'lucide-react';
 import { AnimatedStatCardProps } from './lib/types';
 
@@ -8,11 +7,9 @@ export default function AnimatedStatCard({
   value,
   change,
   icon,
-  delay = 0,
 }: AnimatedStatCardProps) {
   const cardRef = useRef(null);
-  const isInView = useInView(cardRef, { once: false, amount: 0.3 });
-  const [isHovered, setIsHovered] = useState(false);
+
   const isPositive = change.startsWith('+');
   const trendColor = isPositive
     ? 'text-emerald-400'
@@ -21,14 +18,9 @@ export default function AnimatedStatCard({
       : 'text-gray-400';
 
   return (
-    <motion.div
+    <div
       ref={cardRef}
       className={`rounded-xl p-5 overflow-hidden bg-[#1c1c1c] shadow-lg hover:shadow-2xl transition-shadow`}
-      initial={{ opacity: 0, y: 30 }}
-      animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 30 }}
-      transition={{ duration: 0.6, delay }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
     >
       <div className="flex justify-between items-start">
         <div>
@@ -45,6 +37,6 @@ export default function AnimatedStatCard({
         </div>
         <div className="bg-white/5 p-3 rounded-lg">{icon}</div>
       </div>
-    </motion.div>
+    </div>
   );
 }

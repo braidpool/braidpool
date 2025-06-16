@@ -1,8 +1,6 @@
-import { motion } from 'framer-motion';
-
 export function BlockList({
   blockVisualizationData,
-  
+
   isLoaded,
 }: {
   blockVisualizationData: any[];
