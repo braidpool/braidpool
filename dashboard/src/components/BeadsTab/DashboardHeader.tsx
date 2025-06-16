@@ -45,11 +45,7 @@ export default function DashboardHeader({
             label: 'Trends',
             icon: <BarChart3 className="w-4 h-4" />,
           },
-          {
-            id: 'blocks',
-            label: 'Blocks',
-            icon: <Layers className="w-4 h-4" />,
-          },
+
           {
             id: 'rewards',
             label: 'Rewards',
