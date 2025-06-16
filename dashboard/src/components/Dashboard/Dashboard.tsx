@@ -23,30 +23,23 @@ import TopStatsBar from '../common/TopStatsBar';
 import Card from '../common/Card';
 import Header from '../common/Header';
 import InstallationInstructions from '../Installation/InstallationInstructions';
-import MineInventoryDashboard from '../MinerDashboard/MineInventoryDashboard';
+import MineInventoryDashboard from '../BeadsTab/MineInventoryDashboard';
 import PoolHashrateChart from './PoolHashrateChart';
 import MempoolLatencyStats from './MempoolLatencyStats';
 import RecentBlocksTable from './RecentBlocksTable';
 import GraphVisualization from '../BraidPoolDAG/BraidPoolDAG';
-import MinedSharesExplorer from '../MinerDashboard/MinedSharesExplorer';
+import MinedSharesExplorer from '../BeadsTab/MinedSharesExplorer';
 // Utils
 import {
   loadSampleBraidData,
   transformBraidData,
 } from '../../utils/braidDataTransformer';
+import BitcoinStats from '../BitcoinStats/BitcoinStats';
+import { BitcoinIcon } from 'lucide-react';
+import { Page } from './Types';
 
 // Constants
 const drawerWidth = 240;
-
-// Define available pages as an enum
-enum Page {
-  INSTALLATION = 'installation',
-  DASHBOARD = 'dashboard',
-  MINING_INVENTORY = 'mining-inventory',
-  MEMPOOL = 'mempool',
-  DAG_VISUALIZATION = 'dag-visualization',
-  MINER_STATS = 'miner-stats',
-}
 
 const Dashboard = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -296,6 +289,35 @@ const Dashboard = () => {
             primaryTypographyProps={{ fontSize: '0.875rem' }}
           />
         </ListItemButton>
+        <ListItemButton
+          onClick={() => setCurrentPage(Page.BITCOIN_STATS)}
+          selected={currentPage === Page.BITCOIN_STATS}
+          sx={{
+            pl: 2,
+            py: 1.5,
+            borderLeft:
+              currentPage === Page.BITCOIN_STATS
+                ? `4px solid ${colors.primary}`
+                : 'none',
+            '&.Mui-selected': { backgroundColor: 'rgba(57, 134, 232, 0.08)' },
+          }}
+        >
+          <ListItemIcon
+            sx={{
+              minWidth: 40,
+              color:
+                currentPage === Page.BITCOIN_STATS
+                  ? colors.primary
+                  : colors.textSecondary,
+            }}
+          >
+            <BitcoinIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText
+            primary="Bitcoin Statistics"
+            primaryTypographyProps={{ fontSize: '0.875rem' }}
+          />
+        </ListItemButton>
       </List>
     </Drawer>
   );
@@ -346,6 +368,16 @@ const Dashboard = () => {
             <Card title="Braid Visualization">
               <Box>
                 <GraphVisualization />
+              </Box>
+            </Card>
+          </Box>
+        );
+      case Page.BITCOIN_STATS:
+        return (
+          <Box sx={{ p: 1 }}>
+            <Card title="Bitcoin Statistics">
+              <Box>
+                <BitcoinStats />
               </Box>
             </Card>
           </Box>
