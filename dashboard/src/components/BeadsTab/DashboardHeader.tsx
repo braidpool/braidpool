@@ -14,24 +14,22 @@ export default function DashboardHeader({
           <h1 className="text-xl sm:text-xl md:text-3xl font-bold bg-clip-text  text-white tracking-tight">
             Beads Explorer
           </h1>
-          
-          <div className="flex gap-3 md:w-auto justify-end ">
-          <button className="relative px-3 sm:px-4 py-2 rounded-lg text-white text-sm sm:text-base font-medium overflow-hidden  bg-gray-700 hover:bg-black ">
-            <span className="relative z-10 flex items-center justify-center gap-2">
-              <BarChart3 className="w-4 h-4" />
-              <span className="">Analytics</span>
-            </span>
-          </button>
-          <button className="relative px-3 sm:px-4 py-2 rounded-lg text-white text-sm sm:text-base font-medium overflow-hidden   bg-gray-700 hover:bg-black">
-            <span className="relative z-10 flex items-center justify-center gap-2">
-              <Database className="w-4 h-4" />
-              <span className="">Export Data</span>
-            </span>
-          </button>
-        </div>
-        </div>
 
-        
+          <div className="flex gap-3 md:w-auto justify-end ">
+            <button className="relative px-3 sm:px-4 py-2 rounded-lg text-white text-sm sm:text-base font-medium overflow-hidden  bg-gray-700 hover:bg-black ">
+              <span className="relative z-10 flex items-center justify-center gap-2">
+                <BarChart3 className="w-4 h-4" />
+                <span className="">Analytics</span>
+              </span>
+            </button>
+            <button className="relative px-3 sm:px-4 py-2 rounded-lg text-white text-sm sm:text-base font-medium overflow-hidden   bg-gray-700 hover:bg-black">
+              <span className="relative z-10 flex items-center justify-center gap-2">
+                <Database className="w-4 h-4" />
+                <span className="">Export Data</span>
+              </span>
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Tab navigation */}

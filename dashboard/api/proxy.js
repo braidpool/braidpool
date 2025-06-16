@@ -18,8 +18,6 @@ app.use('/api/latency', latencyRoutes);
 app.use('/api/rewards', rewardsRoutes);
 app.use('/api/beads', beadRoutes);
 
-
-
 app.use('/api/node/:endpoint', async (req, res) => {
   try {
     const { endpoint } = req.params;

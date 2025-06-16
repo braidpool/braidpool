@@ -1,7 +1,6 @@
 import axios from 'axios';
 
 export async function callRpc({ url, user, pass, method, params = [] }) {
-    
   try {
     const response = await axios.post(
       url,

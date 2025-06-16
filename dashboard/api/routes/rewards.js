@@ -6,7 +6,6 @@ const router = express.Router();
 router.get('/', async (req, res) => {
   try {
     const blockchainInfo = await rpcWithEnv({
-      
       method: 'getblockchaininfo',
     });
     const blockCount = blockchainInfo.blocks;
@@ -17,7 +16,7 @@ router.get('/', async (req, res) => {
     let blockReward = 3.125;
 
     const totalRewards = blockCount * blockReward;
-    const rewardRate = blockReward * 144; 
+    const rewardRate = blockReward * 144;
 
     while (height <= currentHeight && blockReward >= 0.00000001) {
       rewardHistory.push({

@@ -1,6 +1,5 @@
 import axios from 'axios';
 
-
 export const getBlockTransactions = async (blockHash) => {
   const res = await axios.get(
     `http://localhost:3001/api/beads/${blockHash}/transactions`
