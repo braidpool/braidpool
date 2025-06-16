@@ -37,20 +37,6 @@ export function useChartData(timeRange: string) {
     let interval = 1; // days
     let format = 'day';
 
-    if (timeRange === 'week') {
-      interval = 1;
-      format = 'day';
-    } else if (timeRange === 'month') {
-      interval = 3;
-      format = 'day';
-    } else if (timeRange === 'quarter') {
-      interval = 7;
-      format = 'week';
-    } else if (timeRange === 'year') {
-      interval = 30;
-      format = 'month';
-    }
-
     // Generate data points
     const dataPoints: ChartDataPoint[] = [];
     const currentDate = new Date(startDate);

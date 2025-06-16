@@ -77,8 +77,9 @@ export function RewardsDashboard() {
     <div className="space-y-6 bg-[#1c1c1c]">
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-2">
-          <Bitcoin className="h-6 w-6 text-amber-400" />
-          <h2 className="text-2xl font-bold text-white">Rewards Dashboard</h2>
+          <h2 className="text-xl font-bold text-white tracking-tighter">
+            Rewards Dashboard
+          </h2>
         </div>
         <div className="flex space-x-4 mb-4">
           {['overview', 'history'].map((tab) => (
@@ -105,18 +106,18 @@ export function RewardsDashboard() {
         <div className="bg-[#1c1c1c] border border-gray-700 rounded-xl backdrop-blur-sm p-5">
           <div className="flex justify-between items-start mb-4">
             <div>
-              <h3 className="text-lg font-bold text-white flex items-center">
-                <Bitcoin className="h-5 w-5 text-amber-400 mr-2" />
+              <h3 className="text-md font-bold text-white flex items-center">
+                <Bitcoin className="h-4 w-4 text-amber-400 mr-2" />
                 Reward Summary
               </h3>
               <p className="text-gray-400 text-sm mt-1">Last 30 days</p>
             </div>
-            <div className="bg-amber-500/20 p-2 rounded-lg">
-              <TrendingUp className="h-5 w-5 text-amber-400" />
+            <div className=" p-2 rounded-lg">
+              <TrendingUp className="h-5 w-5 text-white" />
             </div>
           </div>
           <div className="mb-4">
-            <div className="text-2xl font-bold text-amber-300">
+            <div className="text-xl font-bold text-white">
               {formatMBTC(rewardData.totalRewards)} mBTC
             </div>
             <div className="text-gray-400 text-sm">
@@ -129,7 +130,7 @@ export function RewardsDashboard() {
                 <Clock className="h-4 w-4 mr-2 text-gray-400" />
                 Hourly Rate:
               </div>
-              <div className="text-amber-300 font-medium text-sm flex items-center">
+              <div className="text-white font-small text-sm flex items-center">
                 {formatMBTC(rewardData.dailyAverage / 24)} mBTC
                 <ArrowUpRight className="h-3 w-3 text-blue-400 ml-1" />
               </div>
@@ -139,7 +140,7 @@ export function RewardsDashboard() {
                 <Bitcoin className="h-4 w-4 mr-2 text-gray-400" />
                 USD Rate:
               </div>
-              <div className="text-blue-300 font-medium text-sm flex items-center">
+              <div className="text-white font-small text-sm flex items-center">
                 ${((rewardData.dailyAverage / 24) * 60000).toFixed(2)}/hr
                 <ArrowUpRight className="h-3 w-3 text-blue-400 ml-1" />
               </div>
@@ -149,11 +150,11 @@ export function RewardsDashboard() {
         {/* Live Reward Counter */}
         <div className=" bg-[#1c1c1c] border border-gray-700 rounded-xl backdrop-blur-sm p-5">
           <div className="flex justify-between mb-4">
-            <h3 className="text-lg font-bold text-white flex items-center">
+            <h3 className="text-md font-bold text-white flex items-center">
               <Clock className="h-5 w-5 text-blue-400 mr-2" /> Live Reward
               Counter
             </h3>
-            <div className="bg-blue-500/20 px-2 py-1 rounded text-xs font-medium text-blue-300">
+            <div className="px-2 py-1 rounded text-xs font-medium text-white">
               LIVE
             </div>
           </div>
@@ -167,7 +168,7 @@ export function RewardsDashboard() {
                 key={item.label}
                 className="bg-gray-900/50 rounded-lg p-3 text-center"
               >
-                <div className="text-blue-300 text-xl font-bold font-mono">
+                <div className="text-white text-xl font-bold font-mono">
                   {formatMBTC(item.value)}
                 </div>
                 <div className="text-gray-500 text-xs mt-1">
@@ -178,7 +179,7 @@ export function RewardsDashboard() {
           </div>
           <div className="mt-4 pt-4 border-t border-gray-800/50 flex justify-between">
             <div className="text-gray-400 text-sm">Last reward:</div>
-            <div className="text-blue-300 font-medium">
+            <div className="text-white font-medium">
               {formatMBTC(rewardData.lastReward)} mBTC
               <span className="text-gray-500 text-xs ml-2">
                 {timeAgo(rewardData.lastRewardTime)}

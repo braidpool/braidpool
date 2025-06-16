@@ -10,7 +10,6 @@ import {
 } from 'recharts';
 import { Maximize2, RefreshCw, Download } from 'lucide-react';
 import { useState } from 'react';
-import { motion } from 'framer-motion';
 import { Props } from './lib/types';
 
 export default function AdvancedChart({
@@ -59,20 +58,18 @@ export default function AdvancedChart({
       )}
 
       {showControls && (
-        <div className="absolute top-0 right-0 flex space-x-2 z-10 p-2">
-          <motion.button
-            className="bg-gray-800/70 p-1.5 rounded-md text-gray-300 hover:text-white"
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.95 }}
+        <div className="absolute top-0 right-0 flex space-x-2 z-10 p-2 ">
+          <button
+            className="bg-gray-800/70  p-1.5 rounded-md text-gray-300 hover:text-white transition-transform duration-200 hover:scale-110 active:scale-95"
             onClick={() => setIsZoomed(!isZoomed)}
             title="Toggle zoom"
           >
             <Maximize2 size={16} />
-          </motion.button>
-          <motion.button
-            className="bg-gray-800/70 p-1.5 rounded-md text-gray-300 hover:text-white"
-            whileHover={{ scale: 2.1 }}
-            whileTap={{ scale: 0.95 }}
+          </button>
+          <button
+            className={`bg-gray-800/70 p-1.5 rounded-md text-gray-300 hover:text-white transition-transform duration-200 hover:scale-110 active:scale-95 ${
+              isRefreshing ? 'cursor-not-allowed opacity-60' : ''
+            }`}
             onClick={handleRefresh}
             disabled={isRefreshing}
             title="Refresh chart"
@@ -81,16 +78,14 @@ export default function AdvancedChart({
               size={16}
               className={isRefreshing ? 'animate-spin' : ''}
             />
-          </motion.button>
-          <motion.button
-            className="bg-gray-800/70 p-1.5 rounded-md text-gray-300 hover:text-white"
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.95 }}
+          </button>
+          <button
+            className="bg-gray-800/70 p-1.5 rounded-md text-gray-300 hover:text-white transition-transform duration-200 hover:scale-110 active:scale-95"
             onClick={handleExport}
             title="Export chart"
           >
             <Download size={16} />
-          </motion.button>
+          </button>
         </div>
       )}
 
@@ -102,6 +97,18 @@ export default function AdvancedChart({
                 <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8} />
                 <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
               </linearGradient>
+              {comparisonData && (
+                <linearGradient
+                  id="colorComparison"
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
+                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.5} />
+                  <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                </linearGradient>
+              )}
             </defs>
 
             <CartesianGrid strokeDasharray="3 3" stroke="#4b5563" />
