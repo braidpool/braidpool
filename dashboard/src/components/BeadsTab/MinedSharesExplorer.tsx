@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import DashboardHeader from './DashboardHeader';
-import EnhancedBlocksTab from './BlockVisulisation/Block';
+
 import BeadRow from './BeadRow';
 import { BEADS, TRANSACTIONS } from './lib/constants';
 import { TrendsTab } from './Trends/TrendsTab';
@@ -43,7 +43,7 @@ export default function MinedSharesExplorer() {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white relative">
+    <div className="min-h-screen bg-[#1c1c1c] text-white relative">
       <div className="container mx-auto px-4 py-8">
         <DashboardHeader activeTab={activeTab} setActiveTab={setActiveTab} />
 
@@ -89,12 +89,12 @@ export default function MinedSharesExplorer() {
           )}
 
           {activeTab === 'trends' && <TrendsTab timeRange={timeRange} />}
-          {activeTab === 'blocks' && (
+
+          {activeTab === 'rewards' && (
             <div className="border border-gray-800/50 rounded-xl p-6 bg-[#1c1c1c]">
-              <EnhancedBlocksTab timeRange={timeRange} />
+              <RewardsDashboard />
             </div>
           )}
-          {activeTab === 'rewards' && <RewardsDashboard />}
         </div>
       </div>
     </div>

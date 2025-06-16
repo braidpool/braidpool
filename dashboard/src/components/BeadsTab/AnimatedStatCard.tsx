@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useRef } from 'react';
 import { TrendingUp, ArrowDownRight } from 'lucide-react';
 import { AnimatedStatCardProps } from './lib/types';
 

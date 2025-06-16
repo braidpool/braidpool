@@ -45,19 +45,19 @@ export default function TransactionList({
             <div className="text-white relative z-10 group-hover:text-gray-300 transition-colors duration-300">
               {transaction.size} vbytes
             </div>
-            <div className="text-white relative z-10 group-hover:text-emerald-200 transition-colors duration-300">
+            <div className="text-white relative z-10  group-hover:text-gray-300 transition-colors duration-300">
               {transaction.fee !== undefined
                 ? transaction.fee
                 : transaction.feePaid}{' '}
               BTC
             </div>
-            <div className="text-white relative z-10 group-hover:text-amber-200 transition-colors duration-300">
+            <div className="text-white relative z-10  group-hover:text-gray-300 transition-colors duration-300">
               {transaction.feeRate} sats/vB
             </div>
-            <div className="text-white relative z-10 group-hover:text-purple-200 transition-colors duration-300">
+            <div className="text-white relative z-10  group-hover:text-gray-300 transition-colors duration-300">
               {transaction.inputs} in
             </div>
-            <div className="text-white relative z-10 group-hover:text-blue-200 transition-colors duration-300">
+            <div className="text-white relative z-10  group-hover:text-gray-300 transition-colors duration-300">
               {transaction.outputs} out
             </div>
           </div>
