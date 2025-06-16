@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import RawJsonViewer from './Rawdatajson';
 
-import { NetworkInfo } from './__tests__/types';
+import { NetworkInfo } from '../../../api/types';
 interface NetworkPanelProps {
   network: NetworkInfo;
 }

@@ -1,5 +1,5 @@
-import { PeerInfo } from './__tests__/types';
-import { formatBytes } from './__tests__/utils';
+import { PeerInfo } from '../../../api/types';
+import { formatBytes } from '../../../api/utils';
 
 export default function Peers({ peers }: { peers: PeerInfo[] }) {
   return (

@@ -3,7 +3,7 @@ import axios from 'axios';
 
 const BASE_URL = 'http://localhost:3001/api/node';
 
-const fetchNodeData = async (method: string) => {
+const fetchNodeData = async (method) => {
   const res = await axios.post(`${BASE_URL}/${method}`);
   return res.data.result;
 };
