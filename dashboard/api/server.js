@@ -56,6 +56,6 @@ wss.on('connection', (ws) => {
 });
 
 console.log('WebSocket server running on ws://localhost:5000');
- app.listen(PORT, () => {
+app.listen(PORT, () => {
   console.log(`Proxy server running on http://localhost:${PORT}`);
 });

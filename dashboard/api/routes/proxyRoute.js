@@ -13,7 +13,10 @@ router.post('/node/:endpoint', async (req, res) => {
     res.json(data);
   } catch (error) {
     if (error?.response?.data) {
-      console.error('[Proxy] Proxy error (response.data):', error.response.data);
+      console.error(
+        '[Proxy] Proxy error (response.data):',
+        error.response.data
+      );
     } else {
       console.error('[Proxy] Proxy error:', error);
     }
