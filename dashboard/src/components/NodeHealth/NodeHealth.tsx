@@ -84,12 +84,12 @@ const NodeHealth: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-black px-2 sm:px-4 md:px-6 py-6 md:py-8 text-black">
-      <div className="mb-4 flex flex-row md:flex-row items-start md:items-center justify-between gap-4 bg-[#1c1c1c] px-4 py-3 rounded-3xl">
-        <h1 className="text-2xl md:text-3xl font-bold text-white">
+    <div className="min-h-screen bg-[#1c1c1c] px-2 sm:px-4 md:px-6 py-6 md:py-8 text-black">
+      <div className="mb-4 flex flex-row md:flex-row items-start md:items-center justify-between gap-4  px-4 py-3 ">
+        <h1 className="text-xl md:text-2xl font-bold text-white">
           Node Health Dashboard
           <p className="text-xs sm:text-sm text-gray-500 ">
-            Last updated: 10:44:54 AM
+           { `Last updated: ${lastUpdated}`}
           </p>
         </h1>
         <div className="flex items-center mt-3 gap-4">
