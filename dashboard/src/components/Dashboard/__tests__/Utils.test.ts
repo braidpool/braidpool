@@ -13,7 +13,7 @@ describe('Utility Functions', () => {
       const result = await getBlockInfo(hash);
 
       expect(mockedAxios.get).toHaveBeenCalledWith(
-        `http://localhost:8999/api/block/${hash}`
+        `http://localhost:8999/api/v1/block/${hash}`
       );
       expect(result).toEqual(resp);
     });
