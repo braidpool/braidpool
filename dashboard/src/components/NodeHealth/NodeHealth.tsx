@@ -136,7 +136,7 @@ const NodeHealth: React.FC = () => {
           <h2 className="text-xs sm:text-sm text-gray-500 mb-1">
             Block Height
           </h2>
-          <p className="text-lg sm:text-xl text-gray-500 font-bold">
+          <p className="text-lg sm:text-xl text-white font-bold">
             {blockchainInfo.blocks}
           </p>
           <p className="text-xs text-gray-500">
@@ -160,7 +160,7 @@ const NodeHealth: React.FC = () => {
         {/* Mempool */}
         <div className="bg-[#1c1c1c] border border-gray-700 rounded-xl backdrop-blur-sm shadow-md px-2 py-2">
           <h2 className="text-xs sm:text-sm text-gray-500 mb-1">Mempool</h2>
-          <p className="text-lg sm:text-xl font-bold">
+          <p className="text-lg sm:text-xl text-white  font-bold">
             {mempoolInfo?.size?.toLocaleString() ?? '...'}
           </p>
           <div className="w-full h-4 rounded bg-gray-200">
