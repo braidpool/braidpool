@@ -8,12 +8,12 @@ use libp2p::{
     swarm::SwarmEvent,
     PeerId,
 };
+use node::{bead, behaviour, braid, committed_metadata, uncommitted_metadata, utils};
 use std::error::Error;
 use std::fs;
 use std::time::Duration;
 use tokio::sync::mpsc;
 
-mod behaviour;
 mod block_template;
 mod cli;
 mod config;
