@@ -1,3 +1,5 @@
+use crate::bead::{Bead, BeadCodec, BeadRequest, BeadResponse};
+use crate::utils::BeadHash;
 use libp2p::{
     identify,
     identity::Keypair,
@@ -10,14 +12,10 @@ use libp2p::{
 use std::collections::HashSet;
 use std::{error::Error, time::Duration};
 
-use crate::bead::{Bead, BeadCodec, BeadRequest, BeadResponse};
-use crate::utils::BeadHash;
-
 // Protocol names
 pub const KADPROTOCOLNAME: StreamProtocol = StreamProtocol::new("/braidpool/kad/1.0.0");
 pub const IDENTIFYPROTOCOLNAME: StreamProtocol = StreamProtocol::new("/braidpool/identify/1.0.0");
-pub const BEAD_DOWNLOAD_PROTOCOL: StreamProtocol =
-    StreamProtocol::new("/braidpool/bead-download/1.0.0");
+pub const BEAD_SYNC_PROTOCOL: StreamProtocol = StreamProtocol::new("/braidpool/bead-sync/1.0.0");
 
 // Configuration for the request-response protocol
 #[derive(Debug, Clone)]
@@ -66,10 +64,7 @@ impl BraidPoolBehaviour {
         // Initialize bead download behaviour
         let bead_sync_config = BeadSyncConfig::default();
         let bead_sync = request_response::Behaviour::new(
-            [(
-                BEAD_DOWNLOAD_PROTOCOL,
-                request_response::ProtocolSupport::Full,
-            )],
+            [(BEAD_SYNC_PROTOCOL, request_response::ProtocolSupport::Full)],
             request_response::Config::default()
                 .with_request_timeout(bead_sync_config.request_timeout)
                 .with_max_concurrent_streams(bead_sync_config.max_concurrent_requests),
