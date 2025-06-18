@@ -3,6 +3,7 @@ use futures::StreamExt;
 use libp2p::{
     core::multiaddr::Multiaddr,
     dns, identify,
+    identity::Keypair,
     kad::{self, Mode, QueryResult},
     ping,
     swarm::SwarmEvent,
@@ -10,6 +11,8 @@ use libp2p::{
 };
 use std::error::Error;
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
+use std::path::Path;
 use std::time::Duration;
 use tokio::sync::mpsc;
 
@@ -62,7 +65,50 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (block_template_tx, block_template_rx) = mpsc::channel(1);
     tokio::spawn(zmq::zmq_hashblock_listener(zmq_url, rpc, block_template_tx));
     tokio::spawn(block_template::consumer(block_template_rx));
-    let mut swarm = libp2p::SwarmBuilder::with_new_identity()
+
+    let datadir_path = Path::new(&*datadir);
+    let keystore_path = datadir_path.join("keystore");
+    #[cfg(unix)]
+    {
+        if keystore_path.exists() {
+            let perms = fs::metadata(&keystore_path)?.permissions();
+            if perms.mode() & 0o777 != 0o400 {
+                log::warn!(
+                    "Keystore permissions are not secure: {:o}, setting to 0o400",
+                    perms.mode() & 0o777
+                );
+                let mut new_perms = perms.clone();
+                new_perms.set_mode(0o400);
+                fs::set_permissions(&keystore_path, new_perms)?;
+            }
+        }
+    }
+
+    let keypair = match fs::read(&keystore_path) {
+        Ok(keypair) => {
+            log::info!("Loading existing keypair from keystore...");
+            libp2p::identity::Keypair::from_protobuf_encoding(&keypair).map_err(|e| {
+                log::error!("Failed to read keypair from keystore: {}", e);
+                e
+            })?
+        }
+        Err(_) => {
+            log::info!("No existing keypair found, generating new keypair...");
+            let keypair: Keypair = libp2p::identity::Keypair::generate_ed25519();
+            let keypair_bytes = keypair.to_protobuf_encoding()?;
+            fs::write(&keystore_path, keypair_bytes)?;
+            #[cfg(unix)]
+            {
+                let mut perms = fs::metadata(&keystore_path)?.permissions();
+                perms.set_mode(0o400);
+                fs::set_permissions(&keystore_path, perms)?;
+                log::info!("Set keystore file permissions to 0o400");
+            }
+            keypair
+        }
+    };
+
+    let mut swarm = libp2p::SwarmBuilder::with_existing_identity(keypair)
         .with_tokio()
         .with_quic()
         .with_dns()

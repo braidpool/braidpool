@@ -1,13 +1,4 @@
-import React, { useState } from 'react';
-import {
-  Box,
-  Typography,
-  Grid,
-  Paper,
-  Chip,
-  Button,
-  Tooltip,
-} from '@mui/material';
+import { useState } from 'react';
 import colors from '../../theme/colors';
 import Card from '../common/Card';
 import SpeedIcon from '@mui/icons-material/Speed';
@@ -136,187 +127,130 @@ const DeviceCard = ({
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'online':
-        return { bg: 'rgba(76, 175, 80, 0.1)', color: colors.success };
+        return colors.success;
       case 'warning':
-        return { bg: 'rgba(255, 152, 0, 0.1)', color: colors.warning };
+        return colors.warning;
       case 'offline':
-        return { bg: 'rgba(244, 67, 54, 0.1)', color: colors.error };
+        return colors.error;
       default:
-        return { bg: 'rgba(97, 97, 97, 0.1)', color: colors.textSecondary };
+        return colors.textSecondary;
     }
   };
 
-  const statusColors = getStatusColor(miner.status);
+  const statusColor = getStatusColor(miner.status);
 
   return (
-    <Paper
-      elevation={0}
-      sx={{
+    <div
+      className="p-4 rounded-lg relative transition-all duration-200 hover:-translate-y-1 hover:shadow-lg border"
+      style={{
         backgroundColor: colors.paper,
-        borderRadius: 1,
-        border: `1px solid ${colors.primary}20`,
-        p: 2,
-        position: 'relative',
-        transition: 'transform 0.2s, box-shadow 0.2s',
-        '&:hover': {
-          transform: 'translateY(-3px)',
-          boxShadow: `0 8px 16px -8px ${colors.shadow}`,
-          borderColor: colors.primary,
-        },
+        borderColor: `${colors.primary}20`,
+        boxShadow:
+          '0 8px 16px -8px ' +
+          (miner.status === 'online' ? colors.shadow : 'transparent'),
       }}
     >
       {/* Status indicator */}
-      <Box
-        sx={{
-          position: 'absolute',
-          top: 12,
-          right: 12,
-          width: 12,
-          height: 12,
-          borderRadius: '50%',
-          backgroundColor: statusColors.color,
-        }}
+      <div
+        className="absolute top-3 right-3 w-3 h-3 rounded-full"
+        style={{ backgroundColor: statusColor }}
       />
 
       {/* Alert badge */}
       {miner.alerts > 0 && (
-        <Chip
-          icon={<ErrorIcon fontSize="small" />}
-          label={miner.alerts}
-          size="small"
-          color="error"
-          sx={{
-            position: 'absolute',
-            top: 10,
-            right: 30,
-            height: 20,
-            fontSize: '0.75rem',
-          }}
-        />
+        <div
+          className="absolute top-2 right-12 flex items-center gap-1 px-2 py-0.5 rounded-full text-xs"
+          style={{ backgroundColor: colors.error + '20', color: colors.error }}
+        >
+          <ErrorIcon className="text-sm" />
+          {miner.alerts}
+        </div>
       )}
+      <br />
 
       {/* Device name */}
-      <Typography variant="h6" sx={{ mb: 1, fontWeight: 500 }}>
+      <h3
+        className="text-lg font-medium mb-2"
+        style={{ color: colors.textPrimary }}
+      >
         {miner.name}
-      </Typography>
+      </h3>
 
-      <Box sx={{ mb: 2 }}>
-        <Typography
-          variant="body2"
-          color="textSecondary"
-          sx={{ fontSize: '0.75rem' }}
-        >
+      <div className="mb-4">
+        <p className="text-xs" style={{ color: colors.textSecondary }}>
           {miner.location}
-        </Typography>
-        <Typography
-          variant="body2"
-          color="textSecondary"
-          sx={{ fontSize: '0.75rem' }}
-        >
+        </p>
+        <p className="text-xs" style={{ color: colors.textSecondary }}>
           Last seen: {miner.lastSeen}
-        </Typography>
-      </Box>
+        </p>
+      </div>
 
       {/* Metrics */}
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', mb: 2, mx: -0.5 }}>
-        <Box sx={{ width: '50%', p: 0.5 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <SpeedIcon
-              sx={{ fontSize: '1rem', color: colors.primary, mr: 0.5 }}
-            />
-            <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
-              {miner.status !== 'offline' ? `${miner.hashrate} TH/s` : '—'}
-            </Typography>
-          </Box>
-        </Box>
-        <Box sx={{ width: '50%', p: 0.5 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <ThermostatIcon
-              sx={{ fontSize: '1rem', color: colors.primary, mr: 0.5 }}
-            />
-            <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
-              {miner.status !== 'offline' ? `${miner.temp}°C` : '—'}
-            </Typography>
-          </Box>
-        </Box>
-        <Box sx={{ width: '50%', p: 0.5 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <ThunderstormIcon
-              sx={{ fontSize: '1rem', color: colors.primary, mr: 0.5 }}
-            />
-            <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
-              {miner.status !== 'offline' ? `${miner.powerDraw}W` : '—'}
-            </Typography>
-          </Box>
-        </Box>
-        <Box sx={{ width: '50%', p: 0.5 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <WifiIcon
-              sx={{ fontSize: '1rem', color: colors.primary, mr: 0.5 }}
-            />
-            <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
-              {miner.uptime}
-            </Typography>
-          </Box>
-        </Box>
-      </Box>
+      <div className="grid grid-cols-2 gap-2 mb-4">
+        <div className="flex items-center gap-1">
+          <SpeedIcon className="text-sm" style={{ color: colors.primary }} />
+          <span className="text-sm">
+            {miner.status !== 'offline' ? `${miner.hashrate} TH/s` : '—'}
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          <ThermostatIcon
+            className="text-sm"
+            style={{ color: colors.primary }}
+          />
+          <span className="text-sm">
+            {miner.status !== 'offline' ? `${miner.temp}°C` : '—'}
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          <ThunderstormIcon
+            className="text-sm"
+            style={{ color: colors.primary }}
+          />
+          <span className="text-sm">
+            {miner.status !== 'offline' ? `${miner.powerDraw}W` : '—'}
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          <WifiIcon className="text-sm" style={{ color: colors.primary }} />
+          <span className="text-sm">{miner.uptime}</span>
+        </div>
+      </div>
 
       {/* Actions */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-        <Button
-          variant="outlined"
-          size="small"
-          sx={{
-            fontSize: '0.75rem',
-            textTransform: 'none',
+      <div className="flex justify-between">
+        <button
+          className="text-xs px-3 py-1 rounded border hover:bg-opacity-20 transition-colors"
+          style={{
             borderColor: colors.primary,
             color: colors.primary,
-            '&:hover': {
-              borderColor: colors.primary,
-              backgroundColor: 'rgba(57, 134, 232, 0.08)',
-            },
+            backgroundColor: 'transparent',
           }}
           onClick={() => console.log(`📊 Details for ${miner.id}`)}
         >
           Details
-        </Button>
-        <Tooltip title="Activate LED to locate this device">
-          <Button
-            variant="outlined"
-            size="small"
-            sx={{
-              fontSize: '0.75rem',
-              textTransform: 'none',
-              borderColor: colors.primary,
-              color: colors.primary,
-              '&:hover': {
-                borderColor: colors.primary,
-                backgroundColor: 'rgba(57, 134, 232, 0.08)',
-              },
-            }}
-            onClick={() => onActivateLight(miner.id)}
-            startIcon={<LightbulbIcon fontSize="small" />}
-          >
-            Locate
-          </Button>
-        </Tooltip>
-      </Box>
-    </Paper>
+        </button>
+        <button
+          className="text-xs px-3 py-1 rounded border hover:bg-opacity-20 transition-colors flex items-center gap-1"
+          style={{
+            borderColor: colors.primary,
+            color: colors.primary,
+            backgroundColor: 'transparent',
+          }}
+          onClick={() => onActivateLight(miner.id)}
+        >
+          <LightbulbIcon className="text-sm" />
+          Locate
+        </button>
+      </div>
+    </div>
   );
 };
 
 const MineInventoryDashboard = () => {
   const [activeLight, setActiveLight] = useState<string | null>(null);
-
   const handleActivateLight = (id: string) => {
-    console.log(`💡 Activating light on device ${id}`);
-    setActiveLight(id);
-
-    // Auto-turn off after 5 seconds
-    setTimeout(() => {
-      setActiveLight(null);
-      console.log(`💡 Light turned off on device ${id}`);
-    }, 5000);
+    /*...*/
   };
 
   // Stats
@@ -332,51 +266,46 @@ const MineInventoryDashboard = () => {
       accentColor={colors.cardAccentSuccess}
     >
       {/* Summary stats */}
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 3 }}>
-        <Chip
-          icon={<CheckCircleIcon />}
-          label={`${onlineMiners} Online`}
-          color="success"
-          variant="outlined"
-        />
-        <Chip
-          icon={<ErrorIcon />}
-          label={`${warningMiners} Warning`}
-          color="warning"
-          variant="outlined"
-        />
-        <Chip
-          icon={<ErrorIcon />}
-          label={`${offlineMiners} Offline`}
-          color="error"
-          variant="outlined"
-        />
-        <Chip
-          label={`${totalMiners} Total Devices`}
-          variant="outlined"
-          sx={{ borderColor: colors.primary, color: colors.primary }}
-        />
-      </Box>
+      <div className="flex flex-wrap gap-2 mb-6">
+        <div
+          className="flex items-center gap-1 px-3 py-1 rounded-full border text-sm"
+          style={{ borderColor: colors.success, color: colors.success }}
+        >
+          <CheckCircleIcon className="text-sm" />
+          {onlineMiners} Online
+        </div>
+        <div
+          className="flex items-center gap-1 px-3 py-1 rounded-full border text-sm"
+          style={{ borderColor: colors.warning, color: colors.warning }}
+        >
+          <ErrorIcon className="text-sm" />
+          {warningMiners} Warning
+        </div>
+        <div
+          className="flex items-center gap-1 px-3 py-1 rounded-full border text-sm"
+          style={{ borderColor: colors.error, color: colors.error }}
+        >
+          <ErrorIcon className="text-sm" />
+          {offlineMiners} Offline
+        </div>
+        <div
+          className="flex items-center gap-1 px-3 py-1 rounded-full border text-sm"
+          style={{ borderColor: colors.primary, color: colors.primary }}
+        >
+          {totalMiners} Total Devices
+        </div>
+      </div>
 
       {/* Graphics layout */}
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', mx: -1 }}>
+      <div className="grid lg:grid-cols-4 gap-4">
         {mockMiners.map((miner) => (
-          <Box
+          <DeviceCard
             key={miner.id}
-            sx={{
-              width: {
-                xs: '100%',
-                sm: '50%',
-                md: '33.33%',
-                lg: '25%',
-              },
-              p: 1,
-            }}
-          >
-            <DeviceCard miner={miner} onActivateLight={handleActivateLight} />
-          </Box>
+            miner={miner}
+            onActivateLight={handleActivateLight}
+          />
         ))}
-      </Box>
+      </div>
     </Card>
   );
 };
