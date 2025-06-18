@@ -2,10 +2,12 @@ use clap::Parser;
 use futures::StreamExt;
 use libp2p::{
     core::multiaddr::Multiaddr,
-    identify,
+    dns, identify,
     identity::Keypair,
+    kad::{self, Mode, QueryResult},
     ping,
-    swarm::{NetworkBehaviour, SwarmEvent},
+    swarm::SwarmEvent,
+    PeerId,
 };
 use std::error::Error;
 use std::fs;
@@ -14,24 +16,29 @@ use std::path::Path;
 use std::time::Duration;
 use tokio::sync::mpsc;
 
+mod behaviour;
 mod block_template;
 mod cli;
+mod config;
 mod rpc;
 mod zmq;
 
-#[derive(NetworkBehaviour)]
-struct NodeBehaviour {
-    identify: libp2p::identify::Behaviour,
-    ping: libp2p::ping::Behaviour,
-}
+use behaviour::{BraidPoolBehaviour, BraidPoolBehaviourEvent};
+
+use crate::behaviour::KADPROTOCOLNAME;
+//boot nodes peerIds
+const BOOTNODES: [&str; 1] = ["12D3KooWCXH2BiENJ7NkFUBSavd8Ed4ZSYKNdiFnYP5abSo36rGL"];
+//dns NS
+const SEED_DNS: &str = "/dnsaddr/french.braidpool.net";
+//combined addr for dns resolution and dialing of boot for peer discovery
+const ADDR_REFRENCE: &str =
+    "/dnsaddr/french.braidpool.net/p2p/12D3KooWCXH2BiENJ7NkFUBSavd8Ed4ZSYKNdiFnYP5abSo36rGL";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = cli::Cli::parse();
-
     setup_logging();
     setup_tracing()?;
-
     let datadir = shellexpand::full(args.datadir.to_str().unwrap()).unwrap();
     match fs::metadata(&*datadir) {
         Ok(m) => {
@@ -104,13 +111,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut swarm = libp2p::SwarmBuilder::with_existing_identity(keypair)
         .with_tokio()
         .with_quic()
-        .with_behaviour(|key| NodeBehaviour {
-            identify: identify::Behaviour::new(identify::Config::new(
-                "/braidpool/id/1.0.0".to_string(),
-                key.public(),
-            )),
-            ping: ping::Behaviour::default(),
-        })?
+        .with_dns()
+        .unwrap()
+        .with_behaviour(|local_key| BraidPoolBehaviour::new(local_key).unwrap())?
         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX)))
         .build();
     println!("Local Peerid: {}", swarm.local_peer_id());
@@ -128,8 +131,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
     .parse()
     .expect("Failed to create multiaddress");
 
-    swarm.listen_on(multi_addr.clone())?;
+    //setting the server mode for the kademlia apart from the server
+    swarm.behaviour_mut().kademlia.set_mode(Some(Mode::Server));
 
+    //adding the boot nodes for peer discovery
+    swarm.listen_on(multi_addr.clone())?;
+    for boot_peer in BOOTNODES {
+        swarm.behaviour_mut().kademlia.add_address(
+            &boot_peer.parse::<PeerId>().unwrap(),
+            SEED_DNS.parse::<Multiaddr>().unwrap(),
+        );
+    }
+    log::info!("Boot nodes have been added to the node's local DHT");
+    swarm.dial(ADDR_REFRENCE.parse::<Multiaddr>().unwrap())?;
+    log::info!("Boot Node dialied with listening addr {:?}", ADDR_REFRENCE);
     if let Some(addnode) = args.addnode {
         for node in addnode.iter() {
             let node_multiaddr: Multiaddr = node.parse().expect("Failed to parse to multiaddr");
@@ -149,28 +164,65 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let swarm_handle = tokio::spawn(async move {
         loop {
             match swarm.select_next_some().await {
-                SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {:?}", address),
+                SwarmEvent::Behaviour(BraidPoolBehaviourEvent::Kademlia(
+                    kad::Event::RoutingUpdated {
+                        peer,
+                        is_new_peer,
+                        addresses,
+                        bucket_range,
+                        old_peer,
+                    },
+                )) => {
+                    log::info!(
+                        "Routing updated for peer: {peer}, new: {is_new_peer}, addresses: {:?}, bucket: {:?}, old_peer: {:?}",
+                        addresses, bucket_range, old_peer
+                    );
+                }
+                SwarmEvent::NewListenAddr { address, .. } => {
+                    log::info!("Listening on {:?}", address)
+                }
                 // Prints peer id identify info is being sent to.
-                SwarmEvent::Behaviour(NodeBehaviourEvent::Identify(identify::Event::Sent {
-                    peer_id,
-                    ..
-                })) => {
+                SwarmEvent::Behaviour(BraidPoolBehaviourEvent::Identify(
+                    identify::Event::Sent { peer_id, .. },
+                )) => {
                     log::info!("Sent identify info to {:?}", peer_id);
                 }
                 // Prints out the info received via the identify event
-                SwarmEvent::Behaviour(NodeBehaviourEvent::Identify(
-                    identify::Event::Received { info, .. },
+                SwarmEvent::Behaviour(BraidPoolBehaviourEvent::Identify(
+                    identify::Event::Received { info, peer_id, .. },
                 )) => {
-                    log::info!("Received {:?}", info);
+                    let info_reference = info.clone();
+                    if info.protocols.iter().any(|p| *p == KADPROTOCOLNAME) {
+                        for addr in info.listen_addrs {
+                            log::info!("received addr {addr} through identify");
+                            swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
+                        }
+                    } else {
+                        log::info!("The peer was not added to the local DHT ");
+                    }
+                    log::info!("Received {:?}", info_reference);
                 }
-                SwarmEvent::Behaviour(NodeBehaviourEvent::Identify(identify::Event::Error {
-                    peer_id,
-                    error,
-                    connection_id: _,
-                })) => {
+                SwarmEvent::Behaviour(BraidPoolBehaviourEvent::Kademlia(
+                    kad::Event::OutboundQueryProgressed { result, .. },
+                )) => match result {
+                    QueryResult::GetClosestPeers(Ok(ok)) => {
+                        log::info!("Got closest peers: {:?}", ok.peers);
+                    }
+                    QueryResult::GetClosestPeers(Err(err)) => {
+                        log::info!("Failed to get closest peers: {err}");
+                    }
+                    _ => log::info!("Other query result: {:?}", result),
+                },
+                SwarmEvent::Behaviour(BraidPoolBehaviourEvent::Identify(
+                    identify::Event::Error {
+                        peer_id,
+                        error,
+                        connection_id: _,
+                    },
+                )) => {
                     log::error!("Error in identify event for peer {}: {:?}", peer_id, error);
                 }
-                SwarmEvent::Behaviour(NodeBehaviourEvent::Ping(ping::Event {
+                SwarmEvent::Behaviour(BraidPoolBehaviourEvent::Ping(ping::Event {
                     peer,
                     result,
                     ..
@@ -194,8 +246,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     cause,
                 } => {
                     log::info!("Connection closed to peer: {} with connection id: {} via {}. Number of established connections: {}. Cause: {:?}", peer_id,connection_id,endpoint.get_remote_address(), num_established,cause);
+                    swarm
+                        .behaviour_mut()
+                        .kademlia
+                        .remove_address(&peer_id, endpoint.get_remote_address());
                 }
-                _ => {}
+                event => {
+                    log::info!("{:?}", event);
+                }
             }
         }
     });
