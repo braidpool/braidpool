@@ -12,8 +12,13 @@ class MockWebSocket {
   url: string;
 
   constructor(url: string) {
-    if (!url.startsWith('ws://') && !url.startsWith('wss://') && !url.startsWith('http://') && !url.startsWith('https://')) {
-      throw new SyntaxError("Invalid WebSocket URL");
+    if (
+      !url.startsWith('ws://') &&
+      !url.startsWith('wss://') &&
+      !url.startsWith('http://') &&
+      !url.startsWith('https://')
+    ) {
+      throw new SyntaxError('Invalid WebSocket URL');
     }
     this.url = url;
     setTimeout(() => this.onopen({}), 10); // Simulate connection open
@@ -28,7 +33,9 @@ import BlockViewer from '../BlockViewer';
 import * as Utils from '../Utils';
 import { Block } from '../Types';
 
-jest.mock('../RecentBlocksTable', () => () => <div data-testid="recent-blocks-table" />);
+jest.mock('../RecentBlocksTable', () => () => (
+  <div data-testid="recent-blocks-table" />
+));
 jest.mock('../BlockDialog', () => ({ hash, onClose }: any) => (
   <div data-testid="block-dialog">
     Block Dialog: {hash}
@@ -82,7 +89,10 @@ describe('BlockViewer Component', () => {
     },
   });
 
-  const mockBlocks = [createMockBlock('abc123', 12345), createMockBlock('def456', 12344)];
+  const mockBlocks = [
+    createMockBlock('abc123', 12345),
+    createMockBlock('def456', 12344),
+  ];
 
   beforeEach(() => {
     jest.spyOn(Utils, 'fetchPreviousBlocks').mockResolvedValue(mockBlocks);
@@ -99,7 +109,9 @@ describe('BlockViewer Component', () => {
   it('shows loading state initially', async () => {
     render(<BlockViewer />);
     expect(screen.getByText(/loading blocks/i)).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByText(/loading blocks/i)).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByText(/loading blocks/i)).not.toBeInTheDocument()
+    );
   });
 
   it('displays fetched blocks after loading', async () => {
@@ -130,7 +142,9 @@ describe('BlockViewer Component', () => {
 
   it('shows WebSocket connected status', async () => {
     render(<BlockViewer />);
-    await waitFor(() => expect(screen.getByText(/connected/i)).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText(/connected/i)).toBeInTheDocument()
+    );
   });
 
   it('shows WebSocket disconnected on error', async () => {
@@ -144,7 +158,9 @@ describe('BlockViewer Component', () => {
     global.WebSocket = ErrorMockWebSocket as any;
 
     render(<BlockViewer />);
-    await waitFor(() => expect(screen.getByText(/disconnected/i)).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText(/disconnected/i)).toBeInTheDocument()
+    );
   });
 
   it('processes new block from WebSocket message', async () => {
@@ -153,7 +169,9 @@ describe('BlockViewer Component', () => {
         super(url);
         setTimeout(() => {
           this.onmessage({
-            data: JSON.stringify({ block: createMockBlock('ws-new-block', 12346) }),
+            data: JSON.stringify({
+              block: createMockBlock('ws-new-block', 12346),
+            }),
           });
         }, 20);
       }

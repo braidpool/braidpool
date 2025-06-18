@@ -29,7 +29,11 @@ jest.mock('../Utils', () => ({
   formatUnixTimestamp: (ts: number) => `formatted:${ts}`,
 }));
 
-const createMockBlock = (id: string, height: number, timestamp: number): Block => ({
+const createMockBlock = (
+  id: string,
+  height: number,
+  timestamp: number
+): Block => ({
   id,
   height,
   version: 1,
@@ -96,7 +100,9 @@ describe('RecentBlocksTable', () => {
     fireEvent.click(blockIdCell);
 
     expect(screen.getByTestId('block-dialog')).toBeInTheDocument();
-    expect(screen.getByText(/block dialog: abc1234567890/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/block dialog: abc1234567890/i)
+    ).toBeInTheDocument();
 
     const closeBtn = screen.getByText(/close/i);
     fireEvent.click(closeBtn);
@@ -105,7 +111,9 @@ describe('RecentBlocksTable', () => {
   });
 
   it('respects maxHeight prop', () => {
-    const { container } = render(<RecentBlocksTable blocks={blocks} maxHeight={200} />);
+    const { container } = render(
+      <RecentBlocksTable blocks={blocks} maxHeight={200} />
+    );
     const scrollContainer = container.querySelector('.overflow-auto');
 
     expect(scrollContainer).toHaveStyle('max-height: 200px');

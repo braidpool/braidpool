@@ -41,7 +41,11 @@ const RBFTransactionDialog = ({
   return (
     <>
       {/* Clickable overlay that closes the dialog */}
-      <div className="fixed inset-0 z-40" data-testid="overlay" onClick={onClose} />
+      <div
+        className="fixed inset-0 z-40"
+        data-testid="overlay"
+        onClick={onClose}
+      />
 
       {/* Transaction details sidebar */}
       <div className="pt-14 fixed border-white right-0 top-0 z-50 h-full w-96 bg-[#1e1e1e] overflow-y-auto shadow-2xl text-white border border-gray-700">
@@ -79,7 +83,10 @@ const RBFTransactionDialog = ({
                       title="Copy to clipboard"
                       aria-label="Copy transaction ID"
                     >
-                      <CopyIcon data-testid="copy-icon" className="inline w-4 h-4" />
+                      <CopyIcon
+                        data-testid="copy-icon"
+                        className="inline w-4 h-4"
+                      />
                     </button>
                     {copied && (
                       <span className="ml-2 text-green-400 text-xs">

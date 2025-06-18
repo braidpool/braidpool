@@ -51,7 +51,7 @@ describe('RBFTransactionDialog', () => {
     jest.clearAllMocks();
     (getTxInfo as jest.Mock).mockReset();
     // Silence console.error for expected errors
-    jest.spyOn(console, 'error').mockImplementation(() => { });
+    jest.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -60,7 +60,7 @@ describe('RBFTransactionDialog', () => {
 
   it('renders loading state initially', () => {
     (getTxInfo as jest.Mock).mockImplementation(
-      () => new Promise(() => { }) // Never resolves
+      () => new Promise(() => {}) // Never resolves
     );
 
     render(<RBFTransactionDialog txid={mockTxid} onClose={mockOnClose} />);
@@ -98,7 +98,9 @@ describe('RBFTransactionDialog', () => {
     render(<RBFTransactionDialog txid={mockTxid} onClose={mockOnClose} />);
 
     await waitFor(() => {
-      expect(screen.getByText('Failed to load transaction details')).toBeInTheDocument();
+      expect(
+        screen.getByText('Failed to load transaction details')
+      ).toBeInTheDocument();
     });
   });
 

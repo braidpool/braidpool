@@ -12,7 +12,12 @@ jest.mock('../Utils', () => ({
   formatLargeNumber: jest.fn((num) => num.toString()),
   formatPrice: jest.fn((num) => num.toString()),
   getCurrencySymbol: jest.fn((currency: string) => {
-    const symbols: Record<string, string> = { USD: '$', EUR: '€', GBP: '£', JPY: '¥' };
+    const symbols: Record<string, string> = {
+      USD: '$',
+      EUR: '€',
+      GBP: '£',
+      JPY: '¥',
+    };
     return symbols[currency] || '$';
   }),
 }));
@@ -89,12 +94,12 @@ describe('BitcoinPriceTracker', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     MockWebSocket.instances = [];
-    
+
     (getLatestTransactions as jest.Mock).mockResolvedValue([
       { id: 'tx1', amount: 0.5 },
       { id: 'tx2', amount: 1.2 },
     ]);
-    
+
     (latestRBFTransactions as jest.Mock).mockResolvedValue([
       { id: 'rbf1', amount: 0.3 },
       { id: 'rbf2', amount: 0.7 },
@@ -108,7 +113,7 @@ describe('BitcoinPriceTracker', () => {
 
   it('connects to WebSocket and displays price data', async () => {
     render(<BitcoinPriceTracker />);
-    
+
     // Simulate WebSocket connection and message
     act(() => {
       MockWebSocket.mockOpen();
@@ -133,7 +138,7 @@ describe('BitcoinPriceTracker', () => {
 
   it('displays global stats when data is received', async () => {
     render(<BitcoinPriceTracker />);
-    
+
     act(() => {
       MockWebSocket.mockOpen();
       MockWebSocket.mockMessage({
@@ -153,8 +158,8 @@ describe('BitcoinPriceTracker', () => {
 
     await waitFor(() => {
       expect(screen.getByText('1000000000000')).toBeInTheDocument();
-      });
-    
+    });
+
     expect(screen.getByText('Active Cryptocurrencies')).toBeInTheDocument();
     expect(screen.getByText('45.00%')).toBeInTheDocument();
   });
@@ -162,7 +167,7 @@ describe('BitcoinPriceTracker', () => {
   it('fetches transactions on mount and periodically', async () => {
     jest.useFakeTimers();
     render(<BitcoinPriceTracker />);
-    
+
     await waitFor(() => {
       expect(getLatestTransactions).toHaveBeenCalledTimes(1);
     });
@@ -180,7 +185,7 @@ describe('BitcoinPriceTracker', () => {
 
   it('displays transaction tables when data is available', async () => {
     render(<BitcoinPriceTracker />);
-    
+
     await waitFor(() => {
       expect(screen.getByTestId('transaction-table')).toBeInTheDocument();
       expect(screen.getByTestId('rbf-transaction-table')).toBeInTheDocument();
@@ -189,7 +194,7 @@ describe('BitcoinPriceTracker', () => {
 
   it('renders price history chart', async () => {
     render(<BitcoinPriceTracker />);
-    
+
     act(() => {
       MockWebSocket.mockOpen();
       MockWebSocket.mockMessage({
@@ -205,7 +210,7 @@ describe('BitcoinPriceTracker', () => {
 
   it('renders price range bar chart', async () => {
     render(<BitcoinPriceTracker />);
-    
+
     act(() => {
       MockWebSocket.mockOpen();
       MockWebSocket.mockMessage({
@@ -221,12 +226,12 @@ describe('BitcoinPriceTracker', () => {
 
   it('cleans up WebSocket on unmount', () => {
     const { unmount } = render(<BitcoinPriceTracker />);
-    
+
     const instance = MockWebSocket.instances[0];
     const closeSpy = jest.spyOn(instance, 'close');
-    
+
     unmount();
-    
+
     expect(closeSpy).toHaveBeenCalled();
   });
 });
