@@ -1,5 +1,3 @@
-
-
 import { NetworkInfo } from './utils/types';
 interface NetworkPanelProps {
   network: NetworkInfo;
@@ -42,8 +40,6 @@ export default function NetworkPanel({ network }: NetworkPanelProps) {
           </div>
         </div>
       </div>
-
-      
     </div>
   );
 }

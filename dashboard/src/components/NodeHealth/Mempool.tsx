@@ -1,4 +1,3 @@
-
 import { Mempool } from './utils/types';
 
 import { formatBytes } from './utils/utils';
@@ -47,8 +46,6 @@ export default function MempoolPanel({ mempool }: { mempool: Mempool }) {
           </div>
         </div>
       </div>
-
-     
     </div>
   );
 }

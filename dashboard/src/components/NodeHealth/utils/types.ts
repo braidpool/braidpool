@@ -61,4 +61,3 @@ export interface NetTotals {
     time_left_in_cycle: number;
   };
 }
-

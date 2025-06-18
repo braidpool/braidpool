@@ -56,8 +56,6 @@ export default function BandwidthPanel({
           </div>
         </div>
       </div>
-
-     
     </div>
   );
 }
