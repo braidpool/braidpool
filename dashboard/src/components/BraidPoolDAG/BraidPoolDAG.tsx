@@ -2,25 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import * as d3 from 'd3';
 import '../../App.css';
 import { Loader } from 'lucide-react';
-
-interface NodeIdMapping {
-  [hash: string]: string; // maps hash to sequential ID
-}
-
-var COLORS = [
-  `rgba(${217}, ${95}, ${2}, 1)`,
-  `rgba(${117}, ${112}, ${179}, 1)`,
-  `rgba(${102}, ${166}, ${30}, 1)`,
-  `rgba(${231}, ${41}, ${138}, 1)`,
-];
-
-interface GraphData {
-  highest_work_path: string[];
-  parents: Record<string, string[]>;
-  children: Record<string, string[]>;
-  cohorts: string[][];
-  bead_count: number;
-}
+import { COLORS, GraphData, NodeIdMapping } from './Types';
 
 const GraphVisualization: React.FC = () => {
   const svgRef = useRef<SVGSVGElement>(null);
