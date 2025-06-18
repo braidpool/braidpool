@@ -61,7 +61,4 @@ export interface NetTotals {
     time_left_in_cycle: number;
   };
 }
-export interface RawJsonViewerProps {
-  data: object;
-  title?: string;
-}
+

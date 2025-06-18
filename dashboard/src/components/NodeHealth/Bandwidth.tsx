@@ -1,8 +1,8 @@
 import { Wifi } from 'lucide-react';
-import RawJsonViewer from './Rawdatajson';
-import { NetTotals } from '../../../api/types';
-import { formatBytes } from '../../../api/utils';
-import { formatDuration } from '../../../api/utils';
+
+import { NetTotals } from './utils/types';
+import { formatBytes } from './utils/utils';
+import { formatDuration } from './utils/utils';
 
 export default function BandwidthPanel({
   nettotals,
@@ -57,7 +57,7 @@ export default function BandwidthPanel({
         </div>
       </div>
 
-      <RawJsonViewer data={nettotals} />
+     
     </div>
   );
 }

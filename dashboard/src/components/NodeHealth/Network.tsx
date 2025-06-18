@@ -1,7 +1,6 @@
-import { useState } from 'react';
-import RawJsonViewer from './Rawdatajson';
 
-import { NetworkInfo } from '../../../api/types';
+
+import { NetworkInfo } from './utils/types';
 interface NetworkPanelProps {
   network: NetworkInfo;
 }
@@ -44,7 +43,7 @@ export default function NetworkPanel({ network }: NetworkPanelProps) {
         </div>
       </div>
 
-      <RawJsonViewer data={network}></RawJsonViewer>
+      
     </div>
   );
 }

@@ -11,8 +11,8 @@ import Peers from './Peers';
 import NetworkPanel from './Network';
 import MempoolPanel from './Mempool';
 import BandwidthPanel from './Bandwidth';
-import RawJsonViewer from './Rawdatajson';
-import { TABS } from '../../../api/utils';
+
+import { TABS } from './utils/utils';
 const NodeHealth: React.FC = () => {
   const [activeTab, setActiveTab] = useState('blockchain');
   const [blockchainInfo, setBlockchainInfo] = useState<any>(null);
@@ -84,7 +84,7 @@ const NodeHealth: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#1c1c1c] px-2 sm:px-4 md:px-6 py-6 md:py-8 text-black">
+    <div className="min-h-screen bg-[#1c1c1c] px-2 sm:px-4 md:px-6 py-6 md:py-8 ">
       <div className="mb-4 flex flex-row md:flex-row items-start md:items-center justify-between gap-4  px-4 py-3 ">
         <h1 className="text-xl md:text-2xl font-bold text-white">
           Node Health Dashboard
@@ -116,7 +116,7 @@ const NodeHealth: React.FC = () => {
           </p>
           <div className="w-full h-4 rounded text-white bg-gray-200">
             <div
-              className="h-full rounded bg-black"
+              className="h-full rounded bg-green-500"
               style={{
                 width: `${((blockchainInfo.blocks / blockchainInfo.headers) * 100).toFixed(2)}%`,
               }}
@@ -165,7 +165,7 @@ const NodeHealth: React.FC = () => {
           </p>
           <div className="w-full h-4 rounded bg-gray-200">
             <div
-              className="h-full  rounded bg-black"
+              className="h-full  rounded bg-green-500"
               style={{
                 width:
                   mempoolInfo && mempoolInfo.bytes && mempoolInfo.maxmempool
@@ -183,14 +183,14 @@ const NodeHealth: React.FC = () => {
       </div>
 
       {/* Tabs */}
-      <div className="mt-8 border border-gray-700 rounded-xl backdrop-blur-sm shadow-md overflow-x-auto bg-[#1c1c1c] p-3 flex items-center justify-center ">
+      <div className="mt-8 border border-gray-700 rounded-xl backdrop-blur-sm shadow-md overflow-x-auto bg-[#1c1c1c]  p-3 flex items-center justify-center ">
         <nav className="flex gap-4 sm:gap-10 text-xs sm:text-sm font-medium whitespace-nowrap">
           {TABS.map((tab) => (
             <button
               key={tab.value}
               className={`py-2 border-b-2 ${
                 activeTab === tab.value
-                  ? 'text-white border-black'
+                  ? 'text-white border-blue-900'
                   : 'text-gray-500 border-transparent'
               }`}
               onClick={() => setActiveTab(tab.value)}
@@ -262,7 +262,7 @@ const NodeHealth: React.FC = () => {
                 </div>
               </div>
             </div>
-            <RawJsonViewer data={blockchainInfo} />
+           
           </div>
         )}
 
