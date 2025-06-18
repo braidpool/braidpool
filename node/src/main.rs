@@ -5,18 +5,18 @@ use libp2p::{
     dns, identify,
     identity::Keypair,
     kad::{self, Mode, QueryResult},
-    ping,
+    ping, request_response,
     swarm::SwarmEvent,
     PeerId,
 };
-use std::error::Error;
+use node::{bead, behaviour, braid, committed_metadata, uncommitted_metadata, utils};
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::time::Duration;
+use std::{collections::HashSet, error::Error};
 use tokio::sync::mpsc;
 
-mod behaviour;
 mod block_template;
 mod cli;
 mod config;
@@ -250,6 +250,65 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         .behaviour_mut()
                         .kademlia
                         .remove_address(&peer_id, endpoint.get_remote_address());
+                }
+                SwarmEvent::Behaviour(BraidPoolBehaviourEvent::BeadSync(
+                    request_response::Event::Message {
+                        peer,
+                        message,
+                        connection_id,
+                    },
+                )) => {
+                    log::info!(
+                        "Received bead sync message from peer: {}: {:?}. Connection-id: {:?}",
+                        peer,
+                        message,
+                        connection_id
+                    );
+                    match message {
+                        request_response::Message::Request {
+                            request,
+                            request_id,
+                            channel,
+                        } => {
+                            // Handle the bead sync request here
+                            match request {
+                                bead::BeadRequest::GetBeads(hashes) => {
+                                    // Get the beads from the local store
+                                    let beads = Vec::new(); // Replace with actual logic to fetch beads
+                                    swarm.behaviour_mut().respond_with_beads(channel, beads);
+                                }
+                                bead::BeadRequest::GetTips => {
+                                    // Get the tips from the local store
+                                    let tips = HashSet::new();
+                                    swarm.behaviour_mut().respond_with_tips(channel, tips);
+                                }
+                                bead::BeadRequest::GetGenesis => {
+                                    // Get the genesis beads from the local store
+                                    let genesis = HashSet::new();
+                                    swarm.behaviour_mut().respond_with_genesis(channel, genesis);
+                                }
+                            }
+                        }
+                        request_response::Message::Response {
+                            request_id,
+                            response,
+                        } => {
+                            match response {
+                                bead::BeadResponse::Beads(beads) => {
+                                    // Handle the received beads here
+                                }
+                                bead::BeadResponse::Tips(tips) => {
+                                    // Handle the received tips here
+                                }
+                                bead::BeadResponse::Genesis(genesis) => {
+                                    // Handle the received genesis beads here
+                                }
+                                bead::BeadResponse::Error(error) => {
+                                    // Handle the error response here
+                                }
+                            };
+                        }
+                    }
                 }
                 event => {
                     log::info!("{:?}", event);
