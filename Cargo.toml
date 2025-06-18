@@ -1,0 +1,3 @@
+[workspace]
+members = ["node", "braidpool-primitives"]
+resolver = "3"
