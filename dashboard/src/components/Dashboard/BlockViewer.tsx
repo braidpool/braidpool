@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import RecentBlocksTable from './RecentBlocksTable';
-import colors from '@/theme/colors';
+import colors from '../../theme/colors';
 import { Block, miningPoolColors, miningPoolNames } from './Types';
 import { fetchPreviousBlocks } from './Utils';
 import BlockInfoDialog from './BlockDialog';
@@ -34,7 +34,6 @@ const BlockViewer: React.FC = () => {
 
     socket.onopen = () => {
       setIsConnected(true);
-      // Subscribe to block updates
       socket.send(
         JSON.stringify({
           action: 'want',

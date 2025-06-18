@@ -6,7 +6,7 @@ import {
   shortenAddress,
   getLatestTransactions,
   getTxInfo,
-} from '../Utils'; // replace with actual file path
+} from '../Utils';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;

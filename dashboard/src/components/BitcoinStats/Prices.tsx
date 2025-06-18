@@ -171,7 +171,7 @@ const BitcoinPriceTracker: React.FC = () => {
             {error}
           </div>
         ) : showSkeletons ? (
-          <div className="flex gap-6">
+          <div className="flex gap-6" data-testid="animate-pulse">
             {[...Array(3)].map((_, i) => (
               <div key={i} className="flex flex-col gap-1">
                 <div className="animate-pulse bg-gray-200 rounded h-7 w-20"></div>
