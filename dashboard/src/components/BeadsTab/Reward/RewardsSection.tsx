@@ -8,7 +8,7 @@ export function RewardsDashboard() {
   const [activeTab, setActiveTab] = useState('overview');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-useEffect(() => {
+  useEffect(() => {
     const ws = new WebSocket('ws://localhost:5000');
 
     ws.onopen = () => {
@@ -23,8 +23,8 @@ useEffect(() => {
           setRewardData({
             totalRewards: data.totalRewards ?? 0,
             dailyAverage: data.rewardRate ?? 0,
-            weeklyProjection: (data.rewardRate  ??0 )* 7,
-            monthlyProjection: (data.rewardRate ?? 0) *30 ,
+            weeklyProjection: (data.rewardRate ?? 0) * 7,
+            monthlyProjection: (data.rewardRate ?? 0) * 30,
             lastReward: data.blockReward ?? 0,
             lastRewardTime: data.lastRewardTime ?? '',
             streak: data.streak ?? 0,
@@ -51,7 +51,6 @@ useEffect(() => {
 
     return () => ws.close();
   }, []);
-
 
   const formatMBTC = (btc: number) => (btc * 1000).toFixed(2);
 

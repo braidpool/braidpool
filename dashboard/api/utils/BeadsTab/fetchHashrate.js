@@ -1,4 +1,4 @@
-import { rpcWithEnv } from "./rpcWithEnv.js";
+import { rpcWithEnv } from './rpcWithEnv.js';
 
 const statsHistory = [];
 
@@ -43,6 +43,9 @@ export async function fetchHashrateStats(wss) {
       }
     });
   } catch (err) {
-    console.error('[WebSocket] Failed to fetch or send hashrate stats:', err.message);
+    console.error(
+      '[WebSocket] Failed to fetch or send hashrate stats:',
+      err.message
+    );
   }
 }

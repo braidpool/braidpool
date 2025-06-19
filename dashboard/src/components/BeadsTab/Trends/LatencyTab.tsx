@@ -4,7 +4,6 @@ import AnimatedStatCard from '../AnimatedStatCard';
 import { Activity, ArrowUpRight, Cpu } from 'lucide-react';
 import { LatencyPayload } from '../lib/types';
 
-
 export default function LatencyTab({
   isChartLoading,
   chartHovered,
@@ -16,7 +15,7 @@ export default function LatencyTab({
   const [peakLatency, setPeakLatency] = useState<string>('0ms');
   const [peerCount, setPeerCount] = useState<number>(0);
 
- useEffect(() => {
+  useEffect(() => {
     const ws = new WebSocket('ws://localhost:5000');
 
     ws.onopen = () => {
@@ -36,28 +35,28 @@ export default function LatencyTab({
             label: new Date(d.date).toLocaleString(),
           }));
 
-      setChartData(latencyData);
-      setAverageLatency(`${parseFloat(incoming.averageLatency).toFixed(0)}ms`);
-      setPeakLatency(`${parseFloat(incoming.peakLatency).toFixed(0)}ms`);
-      setPeerCount(incoming.peerCount);
-    }
-  }
-  catch (err) {
+          setChartData(latencyData);
+          setAverageLatency(
+            `${parseFloat(incoming.averageLatency).toFixed(0)}ms`
+          );
+          setPeakLatency(`${parseFloat(incoming.peakLatency).toFixed(0)}ms`);
+          setPeerCount(incoming.peerCount);
+        }
+      } catch (err) {
         console.error('WebSocket message error:', err);
       }
     };
- ws.onerror = (err) => {
+    ws.onerror = (err) => {
       console.error('WebSocket error:', err);
     };
 
     ws.onclose = () => {
       console.log('WebSocket disconnected');
     };
-  return () => {
-    ws?.close();
-  };
-}, []);
-
+    return () => {
+      ws?.close();
+    };
+  }, []);
 
   return (
     <div className="space-y-6 bg-[#1c1c1c]">

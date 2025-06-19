@@ -14,7 +14,6 @@ export default function HashrateTab({
   const ws = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    
     ws.current = new WebSocket('ws://localhost:5000');
     ws.current.onopen = () => {
       console.log('WebSocket connected');
@@ -103,9 +102,7 @@ export default function HashrateTab({
         <AnimatedStatCard
           title="Peak Hashrate"
           value={
-            stats
-              ? `${(stats.peakHashrate / 1e12).toFixed(4)} λ`
-              : 'Loading...'
+            stats ? `${(stats.peakHashrate / 1e12).toFixed(4)} λ` : 'Loading...'
           }
           change="+12%"
           icon={<TrendingUp />}

@@ -9,7 +9,7 @@ import { handleWebSocketConnection } from './ws/handleWebSocketConnection.js';
 
 dotenv.config();
 
-const PORT = process.env.WS_PORT || 5000 ;
+const PORT = process.env.WS_PORT || 5000;
 const wss = new WebSocketServer({ port: PORT });
 
 const BITCOIN_PRICE_URL = process.env.BITCOIN_PRICE_URL;
@@ -17,7 +17,6 @@ const BITCOIN_PRICE_URL_SUFFIX = process.env.BITCOIN_PRICE_URL_SUFFIX;
 const CRYPTO_URL = process.env.CRYPTO_URL;
 
 wss.on('connection', (ws) => handleWebSocketConnection(ws, wss));
-
 
 // Send combined data to all connected WebSocket clients
 async function sendDataToClients() {
@@ -53,7 +52,6 @@ async function sendDataToClients() {
   }
 }
 
-
 // Fetch and send every 10 seconds
 setInterval(sendDataToClients, 1000);
 setInterval(() => fetchHashrateStats(wss), 1000);
@@ -61,6 +59,5 @@ setInterval(() => fetchLatencyData(wss), 1000);
 setInterval(() => fetchReward(wss), 1000);
 
 // WebSocket connection handler
-
 
 console.log('WebSocket server running on ws://localhost:5000');
