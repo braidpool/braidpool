@@ -382,9 +382,9 @@ const Dashboard = () => {
             </Card>
           </Box>
         );
-        case Page.MINER_STATS:
+      case Page.MINER_STATS:
         return (
-          <Box >
+          <Box>
             <Card>
               <Box>
                 <MinedSharesExplorer />
@@ -398,7 +398,6 @@ const Dashboard = () => {
             <Typography>Coming soon</Typography>
           </Box>
         );
-      
     }
   };
 

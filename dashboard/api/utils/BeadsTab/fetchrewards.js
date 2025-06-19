@@ -1,5 +1,5 @@
 import { rpcWithEnv } from './rpcWithEnv.js';
-import WebSocket from 'ws'; 
+import WebSocket from 'ws';
 
 export async function fetchReward(wss) {
   try {
@@ -56,7 +56,9 @@ export async function fetchReward(wss) {
       }
     });
 
-    console.log(`Sent rewards update to clients in ${Date.now() - startTime}ms`);
+    console.log(
+      `Sent rewards update to clients in ${Date.now() - startTime}ms`
+    );
   } catch (err) {
     console.error('[WebSocket] Failed to fetch/send reward data:', err.message);
   }

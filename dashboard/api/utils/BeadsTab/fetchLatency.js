@@ -1,8 +1,7 @@
-
 import { rpcWithEnv } from './rpcWithEnv.js';
 
 const latencyHistory = [];
-export async function fetchLatencyData (wss){
+export async function fetchLatencyData(wss) {
   try {
     const peers = await rpcWithEnv({
       method: 'getpeerinfo',
@@ -27,16 +26,16 @@ export async function fetchLatencyData (wss){
 
     if (latencyHistory.length > 100) latencyHistory.shift();
 
-    const payload ={
-      type :'latency_update',
-      data :{
-      chartData: latencyHistory,
-      averageLatency: latency.toFixed(2),
-      peakLatency: peakLatency.toFixed(2),
-      peerCount,
-    },
-  } ;
- console.log(' Broadcasting latency_update');
+    const payload = {
+      type: 'latency_update',
+      data: {
+        chartData: latencyHistory,
+        averageLatency: latency.toFixed(2),
+        peakLatency: peakLatency.toFixed(2),
+        peerCount,
+      },
+    };
+    console.log(' Broadcasting latency_update');
 
     wss.clients.forEach((client) => {
       if (client.readyState === client.OPEN) {

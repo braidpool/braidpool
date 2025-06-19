@@ -1,4 +1,3 @@
-
 import { callRpc } from '../utils/BeadsTab/fetchRpc.js';
 
 export async function handleWebSocketConnection(ws, wss) {
@@ -22,7 +21,9 @@ export async function handleWebSocketConnection(ws, wss) {
       }
     } catch (err) {
       console.error('WS error:', err);
-      ws.send(JSON.stringify({ type: 'error', message: 'Invalid request format' }));
+      ws.send(
+        JSON.stringify({ type: 'error', message: 'Invalid request format' })
+      );
     }
   });
 }
