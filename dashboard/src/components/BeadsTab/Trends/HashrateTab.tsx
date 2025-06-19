@@ -1,7 +1,7 @@
 import AdvancedChart from '../AdvancedChart';
 import AnimatedStatCard from '../AnimatedStatCard';
 import { TrendingUp, Zap, Activity } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 
 export default function HashrateTab({
   isChartLoading,
@@ -11,52 +11,72 @@ export default function HashrateTab({
 }: any) {
   const [stats, setStats] = useState<any>(null);
   const [chartData, setChartData] = useState<any>([]);
+  const ws = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    const fetchStats = async () => {
+    // Connect to WebSocket server
+    ws.current = new WebSocket('ws://localhost:5000');
+
+    ws.current.onopen = () => {
+      console.log('WebSocket connected');
+    };
+
+    ws.current.onmessage = (event) => {
       try {
-        const res = await fetch('http://localhost:3001/api/stats');
-        const data = await res.json();
-        setStats(data);
-        const chartData = (data.chartData || []).map((d: any) => ({
-          ...d,
-          date: new Date(d.date),
-          label: new Date(d.date).toLocaleString(),
-        }));
-        setChartData(chartData);
+        const message = JSON.parse(event.data);
+
+        if (message.type === 'hashrate_update') {
+          const incoming = message.data;
+
+          setStats(incoming);
+
+          const formattedChart = (incoming.chartData || []).map((d: any) => ({
+            ...d,
+            date: new Date(d.date),
+            label: new Date(d.date).toLocaleString(),
+          }));
+
+          setChartData(formattedChart);
+        }
       } catch (err) {
-        setStats(null);
-        setChartData([]);
+        console.error('Invalid WebSocket message', err);
       }
     };
-    fetchStats();
-    const interval = setInterval(fetchStats, 60000);
 
-    return () => clearInterval(interval);
+    ws.current.onerror = (err) => {
+      console.error('WebSocket error:', err);
+    };
+
+    ws.current.onclose = () => {
+      console.log('WebSocket disconnected');
+    };
+
+    return () => {
+      ws.current?.close();
+    };
   }, []);
 
   return (
     <div className="space-y-6 bg-[#1c1c1c]">
-      <div className="flex justify-between items-center ">
+      <div className="flex justify-between items-center">
         <div>
           <h3 className="text-xl font-bold text-blue-300">Hashrate (λ)</h3>
           <p className="text-sm text-gray-400 mt-1">
             Real-time hashrate measurements
           </p>
         </div>
-        <div className=" px-3 py-1 rounded-md">
+        <div className="px-3 py-1 rounded-md">
           <span className="text-blue-300 font-mono">
-            {' '}
             λ ={' '}
             {stats
-              ? `${(stats.chartData.at(-1)?.value / 1e12).toFixed(4)}`
+              ? `${(stats.chartData?.at(-1)?.value / 1e12).toFixed(4)}`
               : '...'}
           </span>
         </div>
       </div>
 
       <div
-        className="relative border w-full border-gray-800/50 rounded-xl p-6 h-auto  backdrop-blur-md overflow-hidden"
+        className="relative border w-full border-gray-800/50 rounded-xl p-6 h-auto backdrop-blur-md overflow-hidden"
         onMouseEnter={() => setChartHovered(true)}
         onMouseLeave={() => setChartHovered(false)}
       >
@@ -84,7 +104,9 @@ export default function HashrateTab({
         <AnimatedStatCard
           title="Peak Hashrate"
           value={
-            stats ? `${(stats.peakHashrate / 1e12).toFixed(4)} λ` : 'Loading...'
+            stats
+              ? `${(stats.peakHashrate / 1e12).toFixed(4)} λ`
+              : 'Loading...'
           }
           change="+12%"
           icon={<TrendingUp />}
