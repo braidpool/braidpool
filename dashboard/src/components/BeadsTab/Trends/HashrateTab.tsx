@@ -14,9 +14,8 @@ export default function HashrateTab({
   const ws = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    // Connect to WebSocket server
+    
     ws.current = new WebSocket('ws://localhost:5000');
-
     ws.current.onopen = () => {
       console.log('WebSocket connected');
     };

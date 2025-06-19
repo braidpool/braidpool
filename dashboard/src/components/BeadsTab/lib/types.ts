@@ -86,3 +86,15 @@ export interface BeadRewardTooltipProps {
 export interface TransactionListProps {
   transactions: Transaction[];
 }
+export type LatencyEntry = {
+  value: number;
+  label: string;
+  date: Date;
+};
+
+export type LatencyPayload = {
+  chartData: LatencyEntry[];
+  averageLatency: string;
+  peakLatency: string;
+  peerCount: number;
+};

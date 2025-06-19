@@ -1,15 +1,23 @@
 import { WebSocketServer } from 'ws';
 import dotenv from 'dotenv';
-import fetchBitcoinPrices from './utils/fetchBitcoinPrices.js';
-import fetchGlobalCryptoData from './utils/fetchGlobalData.js';
+import fetchBitcoinPrices from './utils/BitcoinPrice/fetchBitcoinPrices.js';
+import fetchGlobalCryptoData from './utils/BitcoinPrice/fetchGlobalData.js';
+import { fetchHashrateStats } from './utils/BeadsTab/fetchHashrate.js';
+import { fetchLatencyData } from './utils/BeadsTab/fetchLatency.js';
+import { fetchReward } from './utils/BeadsTab/fetchrewards.js';
+import { handleWebSocketConnection } from './ws/handleWebSocketConnection.js';
 
 dotenv.config();
 
-const wss = new WebSocketServer({ port: 5000 });
+const PORT = process.env.WS_PORT || 5000 ;
+const wss = new WebSocketServer({ port: PORT });
 
 const BITCOIN_PRICE_URL = process.env.BITCOIN_PRICE_URL;
 const BITCOIN_PRICE_URL_SUFFIX = process.env.BITCOIN_PRICE_URL_SUFFIX;
 const CRYPTO_URL = process.env.CRYPTO_URL;
+
+wss.on('connection', (ws) => handleWebSocketConnection(ws, wss));
+
 
 // Send combined data to all connected WebSocket clients
 async function sendDataToClients() {
@@ -45,13 +53,14 @@ async function sendDataToClients() {
   }
 }
 
+
 // Fetch and send every 10 seconds
 setInterval(sendDataToClients, 1000);
+setInterval(() => fetchHashrateStats(wss), 1000);
+setInterval(() => fetchLatencyData(wss), 1000);
+setInterval(() => fetchReward(wss), 1000);
 
 // WebSocket connection handler
-wss.on('connection', (ws) => {
-  console.log('Client connected');
-  ws.send(JSON.stringify({ type: 'connection', status: 'connected' }));
-});
+
 
 console.log('WebSocket server running on ws://localhost:5000');

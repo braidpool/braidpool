@@ -1,4 +1,4 @@
-import { BarChart3, Layers, Cpu, Database, Bitcoin } from 'lucide-react';
+import { BarChart3, Cpu, Database, Bitcoin } from 'lucide-react';
 
 export default function DashboardHeader({
   activeTab,

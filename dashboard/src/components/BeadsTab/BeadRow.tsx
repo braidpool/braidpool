@@ -10,7 +10,6 @@ export default function BeadRow({
   bead,
   isExpanded,
   onToggle,
-  isActive,
   transactions,
   onParentClick,
 }: BeadRowProps) {
