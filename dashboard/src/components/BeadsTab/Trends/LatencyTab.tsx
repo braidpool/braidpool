@@ -2,19 +2,8 @@ import React, { useEffect, useState } from 'react';
 import AdvancedChart from '../AdvancedChart';
 import AnimatedStatCard from '../AnimatedStatCard';
 import { Activity, ArrowUpRight, Cpu } from 'lucide-react';
+import { LatencyPayload } from '../lib/types';
 
-type LatencyEntry = {
-  value: number;
-  label: string;
-  date: Date;
-};
-
-type LatencyPayload = {
-  chartData: LatencyEntry[];
-  averageLatency: string;
-  peakLatency: string;
-  peerCount: number;
-};
 
 export default function LatencyTab({
   isChartLoading,

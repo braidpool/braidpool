@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Bitcoin, Clock, TrendingUp, ArrowUpRight } from 'lucide-react';
 import RewardHistoryChart from './RewardHistoryChart';
-import { getBlockReward } from '../../../../api/nodeApi';
 import { RewardData } from '../lib/types';
 
 export function RewardsDashboard() {
@@ -9,38 +8,50 @@ export function RewardsDashboard() {
   const [activeTab, setActiveTab] = useState('overview');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+useEffect(() => {
+    const ws = new WebSocket('ws://localhost:5000');
 
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    const fetchData = async () => {
+    ws.onopen = () => {
+      console.log('[✓] Rewards WebSocket connected');
+    };
+
+    ws.onmessage = (event) => {
       try {
-        const data = await getBlockReward();
-        setRewardData({
-          totalRewards: data.totalRewards ?? 0,
-          dailyAverage: data.rewardRate ?? 0,
-          weeklyProjection: data.rewardRate ? data.rewardRate * 7 : 0,
-          monthlyProjection: data.rewardRate,
-          lastReward: data.blockReward ?? 0,
-          lastRewardTime: data.lastRewardTime ?? '',
-          streak: data.streak ?? 0,
-          nextMilestone: data.nextMilestone ?? 0.05,
-          achievements: data.achievements ?? [],
-          rewardHistory: data.rewardHistory ?? [],
-        });
-        setError(null);
+        const message = JSON.parse(event.data);
+        if (message.type === 'Rewards_update') {
+          const data = message.data;
+          setRewardData({
+            totalRewards: data.totalRewards ?? 0,
+            dailyAverage: data.rewardRate ?? 0,
+            weeklyProjection: (data.rewardRate  ??0 )* 7,
+            monthlyProjection: (data.rewardRate ?? 0) *30 ,
+            lastReward: data.blockReward ?? 0,
+            lastRewardTime: data.lastRewardTime ?? '',
+            streak: data.streak ?? 0,
+            nextMilestone: data.nextMilestone ?? 0.05,
+            achievements: data.achievements ?? [],
+            rewardHistory: data.rewardHistory ?? [],
+          });
+          setIsLoading(false);
+          setError(null);
+        }
       } catch (err) {
-        setError('Failed to load rewards data');
-      } finally {
-        setIsLoading(false);
+        console.error('Failed to parse reward WebSocket message:', err);
       }
     };
 
-    setIsLoading(true);
-    fetchData();
-    interval = setInterval(fetchData, 1000);
+    ws.onerror = (err) => {
+      console.error('WebSocket error:', err);
+      setError('WebSocket connection failed');
+    };
 
-    return () => clearInterval(interval);
+    ws.onclose = () => {
+      console.warn('Rewards WebSocket disconnected');
+    };
+
+    return () => ws.close();
   }, []);
+
 
   const formatMBTC = (btc: number) => (btc * 1000).toFixed(2);
 

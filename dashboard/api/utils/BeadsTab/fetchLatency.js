@@ -1,8 +1,8 @@
-import express from 'express';
-import { rpcWithEnv } from '../utils/rpcWithEnv.js';
-const router = express.Router();
+
+import { rpcWithEnv } from './rpcWithEnv.js';
+
 const latencyHistory = [];
-router.get('/', async (req, res) => {
+export async function fetchLatencyData (wss){
   try {
     const peers = await rpcWithEnv({
       method: 'getpeerinfo',
@@ -27,16 +27,23 @@ router.get('/', async (req, res) => {
 
     if (latencyHistory.length > 100) latencyHistory.shift();
 
-    res.json({
+    const payload ={
+      type :'latency_update',
+      data :{
       chartData: latencyHistory,
       averageLatency: latency.toFixed(2),
       peakLatency: peakLatency.toFixed(2),
       peerCount,
+    },
+  } ;
+ console.log(' Broadcasting latency_update');
+
+    wss.clients.forEach((client) => {
+      if (client.readyState === client.OPEN) {
+        client.send(JSON.stringify(payload));
+      }
     });
   } catch (err) {
-    console.error('[Latency] Error:', err.message);
-    res.status(500).json({ error: 'Failed to fetch latency' });
+    console.error('[LatencyStats] Error:', err.message);
   }
-});
-
-export default router;
+}

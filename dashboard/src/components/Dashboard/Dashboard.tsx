@@ -382,14 +382,23 @@ const Dashboard = () => {
             </Card>
           </Box>
         );
+        case Page.MINER_STATS:
+        return (
+          <Box >
+            <Card>
+              <Box>
+                <MinedSharesExplorer />
+              </Box>
+            </Card>
+          </Box>
+        );
       default:
         return (
           <Box sx={{ p: 1 }}>
             <Typography>Coming soon</Typography>
           </Box>
         );
-      case Page.MINER_STATS:
-        return <MinedSharesExplorer />;
+      
     }
   };
 
