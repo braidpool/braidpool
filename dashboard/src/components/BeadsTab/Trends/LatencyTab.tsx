@@ -3,6 +3,19 @@ import AdvancedChart from '../AdvancedChart';
 import AnimatedStatCard from '../AnimatedStatCard';
 import { Activity, ArrowUpRight, Cpu } from 'lucide-react';
 
+type LatencyEntry = {
+  value: number;
+  label: string;
+  date: Date;
+};
+
+type LatencyPayload = {
+  chartData: LatencyEntry[];
+  averageLatency: string;
+  peakLatency: string;
+  peerCount: number;
+};
+
 export default function LatencyTab({
   isChartLoading,
   chartHovered,
@@ -13,29 +26,49 @@ export default function LatencyTab({
   const [averageLatency, setAverageLatency] = useState<string>('0ms');
   const [peakLatency, setPeakLatency] = useState<string>('0ms');
   const [peerCount, setPeerCount] = useState<number>(0);
-  useEffect(() => {
-    const fetchLatency = async () => {
-      try {
-        const res = await fetch('http://localhost:3001/api/latency');
-        const data = await res.json();
-        const latencyData = (data.chartData || []).map((d: any) => ({
-          ...d,
-          date: new Date(d.date),
-          label: new Date(d.date).toLocaleString(),
-        }));
-        setChartData(latencyData);
-        setAverageLatency(`${parseFloat(data.averageLatency).toFixed(0)}ms`);
-        setPeakLatency(`${parseFloat(data.peakLatency).toFixed(0)}ms`);
-        setPeerCount(data.peerCount);
-      } catch (err) {
-        setChartData([]);
-      }
+
+ useEffect(() => {
+    const ws = new WebSocket('ws://localhost:5000');
+
+    ws.onopen = () => {
+      console.log('WebSocket connected');
     };
 
-    fetchLatency();
-    const interval = setInterval(fetchLatency, 60000);
-    return () => clearInterval(interval);
-  }, []);
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+
+        if (message.type === 'latency_update') {
+          const incoming: LatencyPayload = message.data;
+
+          const latencyData = (incoming.chartData || []).map((d: any) => ({
+            ...d,
+            date: new Date(d.date),
+            label: new Date(d.date).toLocaleString(),
+          }));
+
+      setChartData(latencyData);
+      setAverageLatency(`${parseFloat(incoming.averageLatency).toFixed(0)}ms`);
+      setPeakLatency(`${parseFloat(incoming.peakLatency).toFixed(0)}ms`);
+      setPeerCount(incoming.peerCount);
+    }
+  }
+  catch (err) {
+        console.error('WebSocket message error:', err);
+      }
+    };
+ ws.onerror = (err) => {
+      console.error('WebSocket error:', err);
+    };
+
+    ws.onclose = () => {
+      console.log('WebSocket disconnected');
+    };
+  return () => {
+    ws?.close();
+  };
+}, []);
+
 
   return (
     <div className="space-y-6 bg-[#1c1c1c]">
