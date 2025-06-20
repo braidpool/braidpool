@@ -37,6 +37,11 @@ const chartRef = useRef<HTMLDivElement>(null);
  const handleExport = () => {
   const svg = chartRef.current?.querySelector('svg');
   if (!svg) return;
+  const background = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  background.setAttribute('width', '100%');
+  background.setAttribute('height', '100%');
+  background.setAttribute('fill', 'black');
+  svg.insertBefore(background, svg.firstChild);
   const serializer = new XMLSerializer();
   const source = serializer.serializeToString(svg);
   const blob = new Blob([source], { type: 'image/svg+xml' });
