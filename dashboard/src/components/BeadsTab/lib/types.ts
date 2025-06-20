@@ -46,6 +46,9 @@ export interface Props {
   comparisonData?: ChartDataPoint[];
   comparisonLabel?: string;
   timeRange: string;
+  primaryLabel?: string;
+tooltipFormatter?: (value: number, name: string, props?: any) => [string | number, string | number];
+
 }
 export interface BeadRowProps {
   bead: Bead;

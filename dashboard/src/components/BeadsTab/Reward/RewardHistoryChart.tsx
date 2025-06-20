@@ -22,6 +22,8 @@ const RewardHistoryChart: React.FC<RewardHistoryChartProps> = ({
         height={350}
         showControls={true}
         timeRange="all"
+        primaryLabel="Reward"
+        tooltipFormatter={(value, name) => [`${value} BTC`, name]}
       />
     </div>
   );

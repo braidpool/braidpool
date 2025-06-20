@@ -9,9 +9,9 @@ import {
   Area,
 } from 'recharts';
 import { Maximize2, RefreshCw, Download } from 'lucide-react';
-import { useState } from 'react';
-import { Props } from './lib/types';
 
+import { Props } from './lib/types';
+import { useState, useRef } from 'react';
 export default function AdvancedChart({
   data,
   height = 300,
@@ -19,7 +19,10 @@ export default function AdvancedChart({
   showControls = true,
   isLoading = false,
   comparisonData,
-  comparisonLabel = 'Comparison',
+  tooltipFormatter,
+  primaryLabel='primary'
+
+  
 }: Props) {
   const [isZoomed, setIsZoomed] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -30,19 +33,20 @@ export default function AdvancedChart({
       setIsRefreshing(false);
     }, 1500);
   };
+const chartRef = useRef<HTMLDivElement>(null);
 
-  const handleExport = () => {
-    const svg = document.querySelector('svg');
-    if (!svg) return;
-    const serializer = new XMLSerializer();
-    const source = serializer.serializeToString(svg);
-    const blob = new Blob([source], { type: 'image/svg+xml' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'chart.svg';
-    link.click();
-  };
+ const handleExport = () => {
+  const svg = chartRef.current?.querySelector('svg');
+  if (!svg) return;
+  const serializer = new XMLSerializer();
+  const source = serializer.serializeToString(svg);
+  const blob = new Blob([source], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `chart-${Date.now()}.svg`;
+  link.click();
+};
 
   const chartHeight = isZoomed ? 400 : height;
 
@@ -89,7 +93,7 @@ export default function AdvancedChart({
         </div>
       )}
 
-      <div className="w-full h-full pt-8">
+      <div ref={chartRef} className="w-full h-full pt-8">
         <ResponsiveContainer width="100%" height={chartHeight}>
           <LineChart data={data}>
             <defs>
@@ -128,15 +132,17 @@ export default function AdvancedChart({
               }}
             />
             <YAxis stroke="#ffffff" />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: '#1f2937',
-                borderColor: '#3b82f6',
-                borderRadius: 8,
-              }}
-              labelStyle={{ color: '#fff' }}
-              itemStyle={{ color: '#fff' }}
-            />
+           <Tooltip
+  contentStyle={{
+    backgroundColor: '#1f2937',
+    borderColor: '#3b82f6',
+    borderRadius: 8,
+  }}
+  labelStyle={{ color: '#fff' }}
+  itemStyle={{ color: '#fff' }}
+  formatter={tooltipFormatter || ((value: number, name: string) => [`${value}`, name])}
+
+/>
 
             {comparisonData && (
               <>
@@ -147,12 +153,12 @@ export default function AdvancedChart({
                   stroke="#10b981"
                   strokeWidth={2}
                   dot={false}
-                  name={comparisonLabel}
+                 
                 />
                 <Area
                   type="monotone"
                   dataKey="value"
-                  data={comparisonData}
+                  
                   fillOpacity={1}
                   fill="url(#colorComparison)"
                 />
@@ -165,7 +171,8 @@ export default function AdvancedChart({
               stroke="#3b82f6"
               strokeWidth={3}
               dot={isHovered}
-              name="Primary"
+              name={primaryLabel}
+
             />
             <Area
               type="monotone"

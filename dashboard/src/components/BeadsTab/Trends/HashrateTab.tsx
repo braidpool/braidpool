@@ -2,7 +2,7 @@ import AdvancedChart from '../AdvancedChart';
 import AnimatedStatCard from '../AnimatedStatCard';
 import { TrendingUp, Zap, Activity } from 'lucide-react';
 import React, { useEffect, useState, useRef } from 'react';
-
+import { formatHashrate } from '../lib/formatHashrate';
 export default function HashrateTab({
   isChartLoading,
   chartHovered,
@@ -30,6 +30,7 @@ export default function HashrateTab({
 
           const formattedChart = (incoming.chartData || []).map((d: any) => ({
             ...d,
+            value: (d.value / 1e18 ),
             date: new Date(d.date),
             label: new Date(d.date).toLocaleString(),
           }));
@@ -79,11 +80,13 @@ export default function HashrateTab({
         onMouseLeave={() => setChartHovered(false)}
       >
         <AdvancedChart
-          data={chartData}
+        data={chartData}
           height={350}
           isHovered={chartHovered}
           isLoading={isChartLoading}
           timeRange={timeRange}
+          primaryLabel="Hashrate "
+          tooltipFormatter={(value, name) => [`${value.toFixed(2)} EH/s`, name]}
         />
       </div>
 
@@ -92,7 +95,7 @@ export default function HashrateTab({
           title="Average Hashrate"
           value={
             stats
-              ? `${(stats.averageHashrate / 1e12).toFixed(2)} λ`
+              ? `${formatHashrate(stats.averageHashrate )} `
               : 'Loading...'
           }
           change="+8%"
@@ -102,7 +105,7 @@ export default function HashrateTab({
         <AnimatedStatCard
           title="Peak Hashrate"
           value={
-            stats ? `${(stats.peakHashrate / 1e12).toFixed(4)} λ` : 'Loading...'
+            stats ? `${formatHashrate(stats.peakHashrate )} ` : 'Loading...'
           }
           change="+12%"
           icon={<TrendingUp />}
