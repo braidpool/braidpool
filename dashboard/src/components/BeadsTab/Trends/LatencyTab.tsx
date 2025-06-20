@@ -86,6 +86,8 @@ export default function LatencyTab({
           isHovered={chartHovered}
           isLoading={isChartLoading}
           timeRange={timeRange}
+          primaryLabel="Latency"
+          tooltipFormatter={(value, name) => [`${value} ms`, name]}
         />
       </div>
 
