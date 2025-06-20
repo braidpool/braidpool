@@ -2,7 +2,8 @@ import { WebSocketServer } from 'ws';
 import dotenv from 'dotenv';
 import fetchBitcoinPrices from './utils/fetchBitcoinPrices.js';
 import fetchGlobalCryptoData from './utils/fetchGlobalData.js';
-
+import app from './app.js';
+import { PORT } from './config/env.js';
 dotenv.config();
 
 const wss = new WebSocketServer({ port: 5000 });
@@ -55,3 +56,6 @@ wss.on('connection', (ws) => {
 });
 
 console.log('WebSocket server running on ws://localhost:5000');
+app.listen(PORT, () => {
+  console.log(`Proxy server running on http://localhost:${PORT}`);
+});
