@@ -7,7 +7,6 @@ export const TIME_RANGES: TimeRange[] = [
   { label: 'Year', value: 'year', days: 365 },
 ];
 
-// Store only full hashes, not shortened versions
 export const BEADS: Bead[] = [
   {
     id: 'bead1',
@@ -60,6 +59,7 @@ export const TRANSACTIONS: Record<string, Transaction[]> = {
       feeRate: 9.6,
       inputs: 2,
       outputs: 3,
+      fee: 90,
     },
     {
       id: 'tx2',
@@ -72,6 +72,7 @@ export const TRANSACTIONS: Record<string, Transaction[]> = {
       feeRate: 9.4,
       inputs: 1,
       outputs: 2,
+      fee: 90,
     },
     {
       id: 'tx3',
@@ -84,6 +85,7 @@ export const TRANSACTIONS: Record<string, Transaction[]> = {
       feeRate: 13.6,
       inputs: 3,
       outputs: 2,
+      fee: 90,
     },
   ],
   bead2: [
@@ -98,6 +100,7 @@ export const TRANSACTIONS: Record<string, Transaction[]> = {
       feeRate: 10.9,
       inputs: 2,
       outputs: 1,
+      fee: 90,
     },
     {
       id: 'tx5',
@@ -110,6 +113,7 @@ export const TRANSACTIONS: Record<string, Transaction[]> = {
       feeRate: 9.3,
       inputs: 1,
       outputs: 2,
+      fee: 90,
     },
   ],
   bead3: [
@@ -124,6 +128,7 @@ export const TRANSACTIONS: Record<string, Transaction[]> = {
       feeRate: 13.3,
       inputs: 3,
       outputs: 4,
+      fee: 90,
     },
     {
       id: 'tx7',
@@ -132,6 +137,7 @@ export const TRANSACTIONS: Record<string, Transaction[]> = {
       count: 8,
       blockId: '1249',
       size: 980,
+      fee: 90,
       feePaid: '0.00011',
       feeRate: 11.2,
       inputs: 2,
@@ -146,6 +152,7 @@ export const TRANSACTIONS: Record<string, Transaction[]> = {
       count: 7,
       blockId: '1250',
       size: 820,
+      fee: 900,
       feePaid: '0.00009',
       feeRate: 11.0,
       inputs: 1,
@@ -153,54 +160,4 @@ export const TRANSACTIONS: Record<string, Transaction[]> = {
     },
   ],
 };
-
-export const BLOCKS = [
-  {
-    id: '1243',
-    miner: 'miner1',
-    timestamp: '2021-08-15 14:23',
-    transactions: 12,
-  },
-  {
-    id: '1244',
-    miner: 'miner1',
-    timestamp: '2021-08-15 14:33',
-    transactions: 7,
-  },
-  {
-    id: '1245',
-    miner: 'miner1',
-    timestamp: '2021-08-30 09:17',
-    transactions: 12,
-  },
-  {
-    id: '1246',
-    miner: 'miner2',
-    timestamp: '2021-08-30 09:17',
-    transactions: 9,
-  },
-  {
-    id: '1247',
-    miner: 'miner2',
-    timestamp: '2021-08-30 10:05',
-    transactions: 5,
-  },
-  {
-    id: '1248',
-    miner: 'miner3',
-    timestamp: '2021-09-05 11:42',
-    transactions: 14,
-  },
-  {
-    id: '1249',
-    miner: 'miner3',
-    timestamp: '2021-09-05 12:15',
-    transactions: 8,
-  },
-  {
-    id: '1250',
-    miner: 'miner4',
-    timestamp: '2021-09-12 16:08',
-    transactions: 7,
-  },
-];
+export type BeadId = (typeof BEADS)[number]['id'];
