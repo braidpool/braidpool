@@ -8,7 +8,7 @@ export function RewardsDashboard() {
   const [activeTab, setActiveTab] = useState('overview');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
+useEffect(() => {
     const ws = new WebSocket('ws://localhost:5000');
 
     ws.onopen = () => {
@@ -23,8 +23,8 @@ export function RewardsDashboard() {
           setRewardData({
             totalRewards: data.totalRewards ?? 0,
             dailyAverage: data.rewardRate ?? 0,
-            weeklyProjection: (data.rewardRate ?? 0) * 7,
-            monthlyProjection: (data.rewardRate ?? 0) * 30,
+            weeklyProjection: (data.rewardRate  ??0 )* 7,
+            monthlyProjection: (data.rewardRate ?? 0) *30 ,
             lastReward: data.blockReward ?? 0,
             lastRewardTime: data.lastRewardTime ?? '',
             streak: data.streak ?? 0,
@@ -51,6 +51,7 @@ export function RewardsDashboard() {
 
     return () => ws.close();
   }, []);
+
 
   const formatMBTC = (btc: number) => (btc * 1000).toFixed(2);
 
@@ -111,7 +112,7 @@ export function RewardsDashboard() {
         <RewardHistoryChart rewardHistory={rewardData.rewardHistory} />
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-2 xl:grid-cols-4 gap-6 ">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 ">
         {/* Reward Summary */}
         <div className="bg-[#1c1c1c] border border-gray-700 rounded-xl backdrop-blur-sm p-5">
           <div className="flex justify-between items-start mb-4">

@@ -30,8 +30,8 @@ export async function fetchLatencyData(wss) {
       type: 'latency_update',
       data: {
         chartData: latencyHistory,
-        averageLatency: latency.toFixed(2),
-        peakLatency: peakLatency.toFixed(2),
+        averageLatency: latency,
+        peakLatency: peakLatency,
         peerCount,
       },
     };

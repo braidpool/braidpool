@@ -2,7 +2,7 @@ import AdvancedChart from '../AdvancedChart';
 import AnimatedStatCard from '../AnimatedStatCard';
 import { TrendingUp, Zap, Activity } from 'lucide-react';
 import React, { useEffect, useState, useRef } from 'react';
-import { formatHashrate } from '../lib/formatHashrate';
+import { formatHashrate } from '../lib/utils/formatHashrate';
 export default function HashrateTab({
   isChartLoading,
   chartHovered,
