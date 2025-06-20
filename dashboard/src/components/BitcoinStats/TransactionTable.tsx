@@ -51,7 +51,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
             </tr>
           </thead>
           <tbody>
-            {transactions.map((tx, index) => (
+            {transactions.map((tx) => (
               <tr
                 key={tx.txid}
                 className={`transition-colors duration-150 ${
