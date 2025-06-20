@@ -2,8 +2,8 @@ import React, { useEffect, useState } from 'react';
 import AdvancedChart from '../AdvancedChart';
 import AnimatedStatCard from '../AnimatedStatCard';
 import { Activity, ArrowUpRight, Cpu } from 'lucide-react';
-import { LatencyPayload } from '../lib/types';
 import { LatencyTabProps } from '../lib/types';
+
 export default function LatencyTab({
   isChartLoading,
   chartHovered,
@@ -27,25 +27,37 @@ export default function LatencyTab({
         const message = JSON.parse(event.data);
 
         if (message.type === 'latency_update') {
-          const incoming: LatencyPayload = message.data;
+          const rawData = message.data.chartData || [];
 
-          const latencyData = (incoming.chartData || []).map((d: any) => ({
+          const formattedData = rawData.map((d: any) => ({
             ...d,
             date: new Date(d.date),
             label: new Date(d.date).toLocaleString(),
           }));
 
-          setChartData(latencyData);
-          setAverageLatency(
-            `${parseFloat(incoming.averageLatency).toFixed(0)}ms`
-          );
-          setPeakLatency(`${parseFloat(incoming.peakLatency).toFixed(0)}ms`);
-          setPeerCount(incoming.peerCount);
+          setChartData(formattedData);
+
+          const latencies = formattedData.map((d: any) => d.value);
+          if (latencies.length) {
+            const avg =
+              latencies.reduce((sum: number, val: number) => sum + val, 0) /
+              latencies.length;
+            const peak = Math.max(...latencies);
+
+            setAverageLatency(`${avg.toFixed(0)}ms`);
+            setPeakLatency(`${peak.toFixed(0)}ms`);
+            setPeerCount(latencies.length);
+          } else {
+            setAverageLatency('0ms');
+            setPeakLatency('0ms');
+            setPeerCount(0);
+          }
         }
       } catch (err) {
         console.error('WebSocket message error:', err);
       }
     };
+
     ws.onerror = (err) => {
       console.error('WebSocket error:', err);
     };
@@ -53,6 +65,7 @@ export default function LatencyTab({
     ws.onclose = () => {
       console.log('WebSocket disconnected');
     };
+
     return () => {
       ws?.close();
     };
@@ -60,10 +73,9 @@ export default function LatencyTab({
 
   return (
     <div className="space-y-6 bg-[#1c1c1c]">
-      <div className="flex justify-between items-center ">
+      <div className="flex justify-between items-center">
         <div>
           <h3 className="text-xl font-bold text-blue-300">Network Latency</h3>
-
           <p className="text-sm text-gray-400 mt-1">
             Real-time latency measurements
           </p>
@@ -95,7 +107,7 @@ export default function LatencyTab({
         <AnimatedStatCard
           title="Average Latency"
           value={averageLatency}
-          change="-3%"
+          change="-3%" 
           icon={<Activity />}
           delay={0.2}
         />
