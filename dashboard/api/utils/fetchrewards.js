@@ -5,11 +5,8 @@ export async function fetchReward(wss) {
   try {
     const startTime = Date.now();
     const blockchainInfo = await rpcWithEnv({ method: 'getblockchaininfo' });
-
     const blockCount = blockchainInfo.blocks;
-    const currentHeight = blockCount;
     let blockReward = 3.125;
-
     const totalRewards = blockCount * blockReward;
     const rewardRate = blockReward * 144; // Block reward per day
 

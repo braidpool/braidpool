@@ -61,6 +61,7 @@ setInterval(() => {
     fetchReward(wss),
   ]).catch(console.error);
 }, 1000);
+
 // WebSocket connection handler
 
 console.log('WebSocket server running on ws://localhost:5000');
