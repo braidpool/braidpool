@@ -1,4 +1,4 @@
-import { callRpc } from '../utils/BeadsTab/fetchRpc.js';
+import { callRpc } from '../utils/fetchRpc.js';
 
 export async function handleWebSocketConnection(ws, wss) {
   console.log('Client connected');
