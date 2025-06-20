@@ -7,10 +7,6 @@ export const TIME_RANGES: TimeRange[] = [
   { label: 'Year', value: 'year', days: 365 },
 ];
 
-
-
-
-
 export const BEADS: Bead[] = [
   {
     id: 'bead1',
@@ -164,4 +160,4 @@ export const TRANSACTIONS: Record<string, Transaction[]> = {
     },
   ],
 };
-export type BeadId = typeof BEADS[number]['id']; 
+export type BeadId = (typeof BEADS)[number]['id'];

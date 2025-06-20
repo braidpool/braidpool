@@ -14,25 +14,16 @@ export async function fetchHashrateStats(wss) {
     const latency = Date.now() - startTime;
     const timestamp = new Date().toISOString();
 
-    statsHistory.push({
-      value: hashrate,
-      label: new Date(timestamp).toLocaleString(),
-      date: timestamp,
-      latency,
-    });
-
-    if (statsHistory.length > 100) statsHistory.shift();
-
-    const values = statsHistory.map((entry) => entry.value);
-    const averageHashrate = values.reduce((a, b) => a + b, 0) / values.length;
-    const peakHashrate = Math.max(...values);
-
     const payload = {
       type: 'hashrate_update',
       data: {
-        chartData: statsHistory,
-        averageHashrate,
-        peakHashrate,
+        latestStat: {
+          value: hashrate,
+          label: new Date(timestamp).toLocaleString(),
+          date: timestamp,
+          latency,
+        },
+
         networkDifficulty: difficulty,
       },
     };

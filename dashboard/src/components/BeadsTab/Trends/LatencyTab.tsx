@@ -107,7 +107,7 @@ export default function LatencyTab({
         <AnimatedStatCard
           title="Average Latency"
           value={averageLatency}
-          change="-3%" 
+          change="-3%"
           icon={<Activity />}
           delay={0.2}
         />
