@@ -123,19 +123,19 @@ const chartRef = useRef<HTMLDivElement>(null);
             <XAxis
               dataKey="label"
               stroke="#ffffff"
-              tickFormatter={(_, index) => {
-                const dataPoint = data[index];
-                if (dataPoint && dataPoint.date) {
-                  const d = new Date(dataPoint.date);
-                  return d.toLocaleDateString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                  });
-                }
-                return '';
-              }}
+               tickFormatter={(dateStr) => {
+    const d = new Date(dateStr);
+    return d.toLocaleTimeString(); 
+  }}
+    tick={{
+    fontSize: 12, 
+    
+  }}
             />
-            <YAxis stroke="#ffffff" />
+            <YAxis stroke="#ffffff"  tick={{
+    fontSize: 12, 
+     
+  }}/>
            <Tooltip
   contentStyle={{
     backgroundColor: '#1f2937',

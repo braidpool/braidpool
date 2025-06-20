@@ -1,41 +1,37 @@
+
 import { rpcWithEnv } from './rpcWithEnv.js';
 
 const latencyHistory = [];
+
 export async function fetchLatencyData(wss) {
   try {
     const peers = await rpcWithEnv({
       method: 'getpeerinfo',
     });
+    const now = new Date();
     const pings = peers
       .map((peer) => peer.pingtime)
-      .filter((t) => typeof t === 'number');
+      .filter((t) => typeof t === 'number' && t>0 && t * 1000 < 10000)
+      .map((ping) => ({
+        value: Math.round(ping * 1000), // convert to ms
+        timeStamp: now.toISOString(),
+        date: now.toISOString(),
+      }));
 
-    const avgPing = pings.length
-      ? pings.reduce((a, b) => a + b, 0) / pings.length
-      : 0;
-    const peakLatency = pings.length ? Math.max(...pings) * 1000 : 0;
-    const peerCount = pings.length;
-    const latency = Math.round(avgPing * 1000);
-    const timestamp = new Date().toISOString();
+    latencyHistory.push(...pings);
 
-    latencyHistory.push({
-      value: latency,
-      label: new Date(timestamp).toLocaleString(),
-      date: timestamp,
-    });
-
-    if (latencyHistory.length > 100) latencyHistory.shift();
+    
+    while (latencyHistory.length > 100) latencyHistory.shift();
 
     const payload = {
       type: 'latency_update',
       data: {
         chartData: latencyHistory,
-        averageLatency: latency,
-        peakLatency: peakLatency,
-        peerCount,
+        timestamp: now.getTime(),
       },
     };
-    console.log(' Broadcasting latency_update');
+
+    console.log('Broadcasting raw latency_update' );
 
     wss.clients.forEach((client) => {
       if (client.readyState === client.OPEN) {
