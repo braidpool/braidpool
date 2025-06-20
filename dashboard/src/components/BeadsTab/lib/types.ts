@@ -47,8 +47,11 @@ export interface Props {
   comparisonLabel?: string;
   timeRange: string;
   primaryLabel?: string;
-tooltipFormatter?: (value: number, name: string, props?: any) => [string | number, string | number];
-
+  tooltipFormatter?: (
+    value: number,
+    name: string,
+    props?: any
+  ) => [string | number, string | number];
 }
 export interface BeadRowProps {
   bead: Bead;
@@ -112,4 +115,3 @@ export interface LatencyTabProps {
   setChartHovered: (val: boolean) => void;
   timeRange: string;
 }
-

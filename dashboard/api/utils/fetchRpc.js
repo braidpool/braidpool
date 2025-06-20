@@ -3,8 +3,8 @@ import axios from 'axios';
 export async function callRpc(
   { url, user, pass, method, params = [] },
   retries = 3,
-  delay = 2000,           
-  timeout = 5000          
+  delay = 2000,
+  timeout = 5000
 ) {
   const payload = {
     jsonrpc: '1.0',
@@ -28,7 +28,9 @@ export async function callRpc(
       return response.data.result;
     } catch (error) {
       if (attempt < retries) {
-        console.warn(`RPC call failed (attempt ${attempt}): Retrying in ${delay}ms...`);
+        console.warn(
+          `RPC call failed (attempt ${attempt}): Retrying in ${delay}ms...`
+        );
         await new Promise((res) => setTimeout(res, delay));
       } else {
         console.error(`RPC call failed after ${retries} attempts.`);

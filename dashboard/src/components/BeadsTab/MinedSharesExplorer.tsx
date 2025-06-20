@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import DashboardHeader from './DashboardHeader';
 
 import BeadRow from './BeadRow';
-import { BEADS, TRANSACTIONS ,BeadId } from './lib/constants';
+import { BEADS, TRANSACTIONS, BeadId } from './lib/constants';
 import { TrendsTab } from './Trends/TrendsTab';
 import { RewardsDashboard } from './Reward/RewardsSection';
 
@@ -14,7 +14,7 @@ export default function MinedSharesExplorer() {
   const [isLoaded, setIsLoaded] = useState(false);
   const [activeBead, setActiveBead] = useState<BeadId | null>(null);
   const [activeTab, setActiveTab] = useState('beads');
-  const timeRange= 'month'
+  const timeRange = 'month';
 
   useEffect(() => {
     const timer = setTimeout(() => setIsLoaded(true), 1000);
@@ -28,13 +28,11 @@ export default function MinedSharesExplorer() {
     }));
     setActiveBead(beadId);
   };
-const handleParentClick = (hash: string) => {
-  navigator.clipboard.writeText(hash).catch(() => {
-    console.error('Failed to copy');
-  });
-};
-
-
+  const handleParentClick = (hash: string) => {
+    navigator.clipboard.writeText(hash).catch(() => {
+      console.error('Failed to copy');
+    });
+  };
 
   return (
     <div className="min-h-screen bg-[#1c1c1c] text-white relative">
@@ -66,13 +64,13 @@ const handleParentClick = (hash: string) => {
                     <div className="h-12 bg-gray-800/50 rounded-md animate-pulse"></div>
                   </div>
                 ) : (
-                   BEADS.map((bead) => (
+                  BEADS.map((bead) => (
                     <BeadRow
                       key={bead.id}
                       bead={bead}
                       isExpanded={expandedBeads[bead.id]}
                       onToggle={() => toggleBead(bead.id)}
-                      isActive={activeBead === (bead.id)}
+                      isActive={activeBead === bead.id}
                       transactions={TRANSACTIONS[bead.id] || []}
                       onParentClick={handleParentClick}
                     />

@@ -2,13 +2,14 @@ import { useState, useEffect } from 'react';
 import { Bitcoin, Clock, TrendingUp, ArrowUpRight } from 'lucide-react';
 import RewardHistoryChart from './RewardHistoryChart';
 import { RewardData } from '../lib/types';
+import { generateRewardHistory } from './generateRewardHistory';
 
 export function RewardsDashboard() {
   const [rewardData, setRewardData] = useState<RewardData | null>(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-useEffect(() => {
+  useEffect(() => {
     const ws = new WebSocket('ws://localhost:5000');
 
     ws.onopen = () => {
@@ -20,17 +21,22 @@ useEffect(() => {
         const message = JSON.parse(event.data);
         if (message.type === 'Rewards_update') {
           const data = message.data;
+          const rewardHistory = generateRewardHistory(
+            data.blockCount,
+            data.blockReward
+          );
+
           setRewardData({
             totalRewards: data.totalRewards ?? 0,
             dailyAverage: data.rewardRate ?? 0,
-            weeklyProjection: (data.rewardRate  ??0 )* 7,
-            monthlyProjection: (data.rewardRate ?? 0) *30 ,
+            weeklyProjection: (data.rewardRate ?? 0) * 7,
+            monthlyProjection: (data.rewardRate ?? 0) * 30,
             lastReward: data.blockReward ?? 0,
             lastRewardTime: data.lastRewardTime ?? '',
             streak: data.streak ?? 0,
             nextMilestone: data.nextMilestone ?? 0.05,
             achievements: data.achievements ?? [],
-            rewardHistory: data.rewardHistory ?? [],
+            rewardHistory: rewardHistory ?? [],
           });
           setIsLoading(false);
           setError(null);
@@ -51,7 +57,6 @@ useEffect(() => {
 
     return () => ws.close();
   }, []);
-
 
   const formatMBTC = (btc: number) => (btc * 1000).toFixed(2);
 

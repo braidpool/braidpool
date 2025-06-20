@@ -19,9 +19,7 @@ export default function AdvancedChart({
   isLoading = false,
   comparisonData,
   tooltipFormatter,
-  primaryLabel='primary'
-
-  
+  primaryLabel = 'primary',
 }: Props) {
   const [isZoomed, setIsZoomed] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -32,25 +30,28 @@ export default function AdvancedChart({
       setIsRefreshing(false);
     }, 1500);
   };
-const chartRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<HTMLDivElement>(null);
 
- const handleExport = () => {
-  const svg = chartRef.current?.querySelector('svg');
-  if (!svg) return;
-  const background = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-  background.setAttribute('width', '100%');
-  background.setAttribute('height', '100%');
-  background.setAttribute('fill', 'black');
-  svg.insertBefore(background, svg.firstChild);
-  const serializer = new XMLSerializer();
-  const source = serializer.serializeToString(svg);
-  const blob = new Blob([source], { type: 'image/svg+xml' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `chart-${Date.now()}.svg`;
-  link.click();
-};
+  const handleExport = () => {
+    const svg = chartRef.current?.querySelector('svg');
+    if (!svg) return;
+    const background = document.createElementNS(
+      'http://www.w3.org/2000/svg',
+      'rect'
+    );
+    background.setAttribute('width', '100%');
+    background.setAttribute('height', '100%');
+    background.setAttribute('fill', 'black');
+    svg.insertBefore(background, svg.firstChild);
+    const serializer = new XMLSerializer();
+    const source = serializer.serializeToString(svg);
+    const blob = new Blob([source], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `chart-${Date.now()}.svg`;
+    link.click();
+  };
 
   const chartHeight = isZoomed ? 400 : height;
 
@@ -123,30 +124,33 @@ const chartRef = useRef<HTMLDivElement>(null);
             <XAxis
               dataKey="label"
               stroke="#ffffff"
-               tickFormatter={(dateStr) => {
-    const d = new Date(dateStr);
-    return d.toLocaleTimeString(); 
-  }}
-    tick={{
-    fontSize: 12, 
-    
-  }}
+              tickFormatter={(dateStr) => {
+                const d = new Date(dateStr);
+                return d.toLocaleTimeString();
+              }}
+              tick={{
+                fontSize: 12,
+              }}
             />
-            <YAxis stroke="#ffffff"  tick={{
-    fontSize: 12, 
-     
-  }}/>
-           <Tooltip
-  contentStyle={{
-    backgroundColor: '#1f2937',
-    borderColor: '#3b82f6',
-    borderRadius: 8,
-  }}
-  labelStyle={{ color: '#fff' }}
-  itemStyle={{ color: '#fff' }}
-  formatter={tooltipFormatter || ((value: number, name: string) => [`${value}`, name])}
-
-/>
+            <YAxis
+              stroke="#ffffff"
+              tick={{
+                fontSize: 12,
+              }}
+            />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: '#1f2937',
+                borderColor: '#3b82f6',
+                borderRadius: 8,
+              }}
+              labelStyle={{ color: '#fff' }}
+              itemStyle={{ color: '#fff' }}
+              formatter={
+                tooltipFormatter ||
+                ((value: number, name: string) => [`${value}`, name])
+              }
+            />
 
             {comparisonData && (
               <>
@@ -157,12 +161,10 @@ const chartRef = useRef<HTMLDivElement>(null);
                   stroke="#10b981"
                   strokeWidth={2}
                   dot={false}
-                 
                 />
                 <Area
                   type="monotone"
                   dataKey="value"
-                  
                   fillOpacity={1}
                   fill="url(#colorComparison)"
                 />
@@ -176,7 +178,6 @@ const chartRef = useRef<HTMLDivElement>(null);
               strokeWidth={3}
               dot={isHovered}
               name={primaryLabel}
-
             />
             <Area
               type="monotone"

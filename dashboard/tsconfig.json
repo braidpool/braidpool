@@ -34,8 +34,7 @@
     "**/*.tsx",
     ".next/types/**/*.ts",
     "src",
-    "api/api",
-    
+    "api/api"
   ],
 
   "exclude": ["node_modules", "vite.config.ts"],
