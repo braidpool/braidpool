@@ -1,10 +1,10 @@
 import { WebSocketServer } from 'ws';
 import dotenv from 'dotenv';
-import fetchBitcoinPrices from './utils/BitcoinPrice/fetchBitcoinPrices.js';
-import fetchGlobalCryptoData from './utils/BitcoinPrice/fetchGlobalData.js';
-import { fetchHashrateStats } from './utils/BeadsTab/fetchHashrate.js';
-import { fetchLatencyData } from './utils/BeadsTab/fetchLatency.js';
-import { fetchReward } from './utils/BeadsTab/fetchrewards.js';
+import fetchBitcoinPrices from './utils/fetchBitcoinPrices.js';
+import fetchGlobalCryptoData from './utils/fetchGlobalData.js';
+import { fetchHashrateStats } from './utils/fetchHashrate.js';
+import { fetchLatencyData } from './utils/fetchLatency.js';
+import { fetchReward } from './utils/fetchrewards.js';
 import { handleWebSocketConnection } from './ws/handleWebSocketConnection.js';
 
 dotenv.config();
@@ -52,12 +52,15 @@ async function sendDataToClients() {
   }
 }
 
-// Fetch and send every 10 seconds
-setInterval(sendDataToClients, 1000);
-setInterval(() => fetchHashrateStats(wss), 1000);
-setInterval(() => fetchLatencyData(wss), 1000);
-setInterval(() => fetchReward(wss), 1000);
-
+// Fetch and broadcast all data every second
+setInterval(() => {
+  Promise.all([
+    sendDataToClients(),
+    fetchHashrateStats(wss),
+    fetchLatencyData(wss),
+    fetchReward(wss),
+  ]).catch(console.error);
+}, 1000);
 // WebSocket connection handler
 
 console.log('WebSocket server running on ws://localhost:5000');

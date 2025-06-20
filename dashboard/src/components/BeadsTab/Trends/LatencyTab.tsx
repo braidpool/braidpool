@@ -3,13 +3,13 @@ import AdvancedChart from '../AdvancedChart';
 import AnimatedStatCard from '../AnimatedStatCard';
 import { Activity, ArrowUpRight, Cpu } from 'lucide-react';
 import { LatencyPayload } from '../lib/types';
-
+import { LatencyTabProps } from '../lib/types';
 export default function LatencyTab({
   isChartLoading,
   chartHovered,
   setChartHovered,
   timeRange,
-}: any) {
+}: LatencyTabProps) {
   const [chartData, setChartData] = useState<any[]>([]);
   const [averageLatency, setAverageLatency] = useState<string>('0ms');
   const [peakLatency, setPeakLatency] = useState<string>('0ms');
