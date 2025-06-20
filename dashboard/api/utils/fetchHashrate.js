@@ -1,7 +1,5 @@
 import { rpcWithEnv } from './rpcWithEnv.js';
 
-const statsHistory = [];
-
 export async function fetchHashrateStats(wss) {
   try {
     const startTime = Date.now();
@@ -23,7 +21,6 @@ export async function fetchHashrateStats(wss) {
           date: timestamp,
           latency,
         },
-
         networkDifficulty: difficulty,
       },
     };

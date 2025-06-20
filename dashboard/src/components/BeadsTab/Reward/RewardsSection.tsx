@@ -9,6 +9,7 @@ export function RewardsDashboard() {
   const [activeTab, setActiveTab] = useState('overview');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
     const ws = new WebSocket('ws://localhost:5000');
 

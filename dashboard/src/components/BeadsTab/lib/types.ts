@@ -107,9 +107,7 @@ export type LatencyPayload = {
 
 export interface LatencyTabProps {
   chartData: any[];
-  averageLatency: string;
-  peakLatency: string;
-  peerCount: number;
+
   isChartLoading: boolean;
   chartHovered: boolean;
   setChartHovered: (val: boolean) => void;
