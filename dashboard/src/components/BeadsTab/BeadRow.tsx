@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import TransactionList from './TransactionList';
-import { shortenHash } from './lib/utils/utils';
+import { shortenHash, formatWork } from './lib/utils/utils';
 import type { BeadRowProps } from './lib/types';
 import { BeadRewardTooltip } from './BeadRewardTooltip';
-import { formatWork } from './lib/utils/utils';
 
 export default function BeadRow({
   bead,
@@ -15,6 +14,7 @@ export default function BeadRow({
 }: BeadRowProps) {
   const { value: formattedWork, unit: workUnit } = formatWork(bead.difficulty);
   const [isRewardOpen, setIsRewardOpen] = useState(false);
+  const [copiedParent, setCopiedParent] = useState<string | null>(null);
 
   const handleKeyToggle = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -22,10 +22,18 @@ export default function BeadRow({
     }
   };
 
+  const handleCopyParent = (parent: string) => {
+    navigator.clipboard.writeText(parent).then(() => {
+      setCopiedParent(parent);
+      setTimeout(() => setCopiedParent(null), 1500);
+    });
+    onParentClick(parent);
+  };
+
   return (
-    <div className="border-b border-gray-800/80 ">
+    <div className="border-b border-gray-800/80">
       <div
-        className={`grid sm:grid-cols-2 md:grid-cols-5 gap-2 p-4 cursor-pointer hover:bg-gray-600 `}
+        className="grid sm:grid-cols-2 md:grid-cols-5 gap-2 p-4 cursor-pointer hover:bg-gray-600"
         onClick={() => onToggle(bead.id)}
         onKeyDown={handleKeyToggle}
         role="button"
@@ -33,9 +41,7 @@ export default function BeadRow({
       >
         {/* Bead Name */}
         <div className="flex items-center col-span-1 md:col-span-1">
-          <div
-            className={`mr-2 flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`}
-          >
+          <div className={`mr-2 flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`}>
             <ChevronDown className="h-5 w-5 text-blue-400" />
           </div>
           <span
@@ -45,7 +51,6 @@ export default function BeadRow({
           >
             {bead.name}
           </span>
-          {isExpanded && <div className="ml-2"></div>}
         </div>
 
         {/* Timestamp */}
@@ -84,18 +89,24 @@ export default function BeadRow({
             <span className="text-blue-300 font-medium text-sm whitespace-nowrap">
               Parents:
             </span>
-            <div className="flex flex-wrap gap-2 overflow-x-auto">
+            <div className="flex flex-wrap gap-4 overflow-x-auto">
               {bead.parents.map((parent) => (
-                <button
-                  key={parent}
-                  className="text-white font-mono text-xs sm:text-sm hover:text-cyan-300 hover:underline truncate max-w-[150px] sm:max-w-[200px]"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onParentClick(parent);
-                  }}
-                >
-                  {shortenHash(parent)}
-                </button>
+                <div key={parent} className="relative">
+                  <button
+                    className="text-white font-mono text-xs sm:text-sm hover:text-cyan-300 hover:underline truncate max-w-[150px] sm:max-w-[200px]"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCopyParent(parent);
+                    }}
+                  >
+                    {shortenHash(parent)}
+                  </button>
+                  {copiedParent === parent && (
+                    <span className=" px-2 text-green-400 text-xs">
+                      Copied!
+                    </span>
+                  )}
+                </div>
               ))}
             </div>
           </div>

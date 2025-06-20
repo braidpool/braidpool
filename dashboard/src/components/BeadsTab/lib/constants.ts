@@ -7,6 +7,10 @@ export const TIME_RANGES: TimeRange[] = [
   { label: 'Year', value: 'year', days: 365 },
 ];
 
+
+
+
+
 export const BEADS: Bead[] = [
   {
     id: 'bead1',
@@ -160,54 +164,4 @@ export const TRANSACTIONS: Record<string, Transaction[]> = {
     },
   ],
 };
-
-export const BLOCKS = [
-  {
-    id: '1243',
-    miner: 'miner1',
-    timestamp: '2021-08-15 14:23',
-    transactions: 12,
-  },
-  {
-    id: '1244',
-    miner: 'miner1',
-    timestamp: '2021-08-15 14:33',
-    transactions: 7,
-  },
-  {
-    id: '1245',
-    miner: 'miner1',
-    timestamp: '2021-08-30 09:17',
-    transactions: 12,
-  },
-  {
-    id: '1246',
-    miner: 'miner2',
-    timestamp: '2021-08-30 09:17',
-    transactions: 9,
-  },
-  {
-    id: '1247',
-    miner: 'miner2',
-    timestamp: '2021-08-30 10:05',
-    transactions: 5,
-  },
-  {
-    id: '1248',
-    miner: 'miner3',
-    timestamp: '2021-09-05 11:42',
-    transactions: 14,
-  },
-  {
-    id: '1249',
-    miner: 'miner3',
-    timestamp: '2021-09-05 12:15',
-    transactions: 8,
-  },
-  {
-    id: '1250',
-    miner: 'miner4',
-    timestamp: '2021-09-12 16:08',
-    transactions: 7,
-  },
-];
+export type BeadId = typeof BEADS[number]['id']; 
