@@ -62,23 +62,3 @@ export interface Block {
     coinbaseSignatureAscii: string;
   };
 }
-
-export const miningPoolNames = [
-  'Orange',
-  'Blue',
-  'Purple',
-  'Yellow',
-  'Green',
-  'Red',
-] as const;
-
-export type MiningPool = (typeof miningPoolNames)[number];
-
-export const miningPoolColors: Record<MiningPool, string> = {
-  Orange: 'bg-orange-500',
-  Blue: 'bg-blue-500',
-  Purple: 'bg-purple-500',
-  Yellow: 'bg-yellow-500',
-  Green: 'bg-green-500',
-  Red: 'bg-red-500',
-};

@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import RecentBlocksTable from './RecentBlocksTable';
 import colors from '../../theme/colors';
-import { Block, miningPoolColors, miningPoolNames } from './Types';
+import { Block } from './Types';
 import { fetchPreviousBlocks } from './Utils';
 import BlockInfoDialog from './BlockDialog';
 
 const BlockViewer: React.FC = () => {
-  const [latestBlock, setLatestBlock] = useState<Block | null>(null);
+  const [nextBlock, setNextBlock] = useState<Block | null>(null);
   const [previousBlocks, setPreviousBlocks] = useState<Block[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -28,7 +28,7 @@ const BlockViewer: React.FC = () => {
     getBlocks();
   }, []);
 
-  // Setup WebSocket for latest block updates via mempool API - Note - it shows 8080 (Frontend) but works as backend for API's websocker
+  // Setup WebSocket for next block updates via mempool API - Note - it shows 8080but works as backend for API's websocket
   useEffect(() => {
     const socket = new WebSocket('http://localhost:8080/api/v1/ws');
 
@@ -47,7 +47,7 @@ const BlockViewer: React.FC = () => {
         const data = JSON.parse(event.data);
 
         if (data.block) {
-          setLatestBlock(data.block);
+          setNextBlock(data.block);
           // Add to previous blocks if not already there
           setPreviousBlocks((prev) => {
             const exists = prev.some((b) => b.id === data.block.id);
@@ -87,9 +87,9 @@ const BlockViewer: React.FC = () => {
     );
   }
 
-  // Combine latest block with previous blocks (avoid duplicates)
-  const allBlocks = latestBlock
-    ? [latestBlock, ...previousBlocks.filter((b) => b.id !== latestBlock.id)]
+  // Combine next block with previous blocks and avoid duplicates
+  const allBlocks = nextBlock
+    ? [nextBlock, ...previousBlocks.filter((b) => b.id !== nextBlock.id)]
     : previousBlocks;
 
   if (allBlocks.length === 0) {
@@ -115,8 +115,6 @@ const BlockViewer: React.FC = () => {
           }}
         >
           {allBlocks.map((block, idx) => {
-            const miningPool = miningPoolNames[idx % miningPoolNames.length];
-            const poolColor = miningPoolColors[miningPool];
             const feeRange = block.extras?.feeRange?.map((fee) =>
               Math.round(fee)
             );
@@ -132,9 +130,9 @@ const BlockViewer: React.FC = () => {
                 key={block.id}
                 className="flex flex-col items-center min-w-[180px]"
               >
-                {/* Highlight the latest block */}
-                {idx === 0 && latestBlock && (
-                  <div className="text-green-400 text-xs mb-1">LATEST</div>
+                {/* Highlight the next block */}
+                {idx === 0 && nextBlock && (
+                  <div className="text-green-400 text-xs mb-1">next</div>
                 )}
 
                 {/* Block visualization */}
@@ -158,9 +156,6 @@ const BlockViewer: React.FC = () => {
 
                 {/* Block footer */}
                 <div className="w-full bg-gray-800 rounded-b-md p-3">
-                  {/* <div className="text-white text-center font-semibold mb-1">
-                  {miningPool}
-                </div> */}
                   <div className="text-white text-center text-sm">
                     Height: {block.height}
                   </div>

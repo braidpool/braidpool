@@ -1,7 +1,6 @@
 import '@testing-library/jest-dom';
 import React from 'react';
 import { render, screen, waitFor, act } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import BitcoinPriceTracker from '../Prices';
 import { getLatestTransactions, latestRBFTransactions } from '../Utils';
 
@@ -22,7 +21,7 @@ jest.mock('../Utils', () => ({
   }),
 }));
 
-// Mock the recharts components to simplify testing
+// Mock the recharts components
 jest.mock('recharts', () => ({
   BarChart: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="barchart">{children}</div>
@@ -226,12 +225,10 @@ describe('BitcoinPriceTracker', () => {
 
   it('cleans up WebSocket on unmount', () => {
     const { unmount } = render(<BitcoinPriceTracker />);
-
     const instance = MockWebSocket.instances[0];
     const closeSpy = jest.spyOn(instance, 'close');
 
     unmount();
-
     expect(closeSpy).toHaveBeenCalled();
   });
 });

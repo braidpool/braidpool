@@ -16,9 +16,10 @@ export interface GlobalStats {
 }
 
 export interface TransactionTableProps {
-  transactions: any[];
+  transactions: any[]; // will have to replace this with the final Transaction props
 }
 
+// All props will need to be updated once RPC is ready
 export interface TransactionInfo {
   txid: string;
   fee: number;
