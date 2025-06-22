@@ -4,6 +4,7 @@ import RewardHistoryChart from './RewardHistoryChart';
 import { RewardData } from '../lib/types';
 import { generateRewardHistory } from './generateRewardHistory';
 import { useWebSocket } from '../Hooks/useWebSocket';
+import AnimatedStatCard from '../AnimatedStatCard';
 
 export function RewardsDashboard() {
   const [rewardData, setRewardData] = useState<RewardData | null>(null);
@@ -169,25 +170,21 @@ export function RewardsDashboard() {
                   LIVE
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-4">
-                {[
-                  { label: 'day', value: rewardData.dailyAverage },
-                  { label: 'week', value: rewardData.weeklyProjection },
-                  { label: 'month', value: rewardData.monthlyProjection },
-                ].map((item) => (
-                  <div
-                    key={item.label}
-                    className="bg-gray-900/50 rounded-lg p-3 text-center"
-                  >
-                    <div className="text-white text-xl font-bold font-mono">
-                      {formatMBTC(item.value)}
-                    </div>
-                    <div className="text-gray-500 text-xs mt-1">
-                      mBTC / {item.label}
-                    </div>
-                  </div>
-                ))}
+              <div className="grid grid-cols-3 md:grid-cols-3 sm:grid-cols-1  gap-6">
+                <AnimatedStatCard
+                  title="mBTC / day"
+                  value={formatMBTC(rewardData.dailyAverage)}
+                />
+                <AnimatedStatCard
+                  title="mBTC / week"
+                  value={formatMBTC(rewardData.weeklyProjection)}
+                />
+                <AnimatedStatCard
+                  title="mBTC/month"
+                  value={formatMBTC(rewardData.monthlyProjection)}
+                />
               </div>
+
               <div className="mt-4 pt-4 border-t border-gray-800/50 flex justify-between">
                 <div className="text-gray-400 text-sm">Last reward:</div>
                 <div className="text-white font-medium">
