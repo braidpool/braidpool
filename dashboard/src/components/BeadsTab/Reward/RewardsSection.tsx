@@ -7,6 +7,7 @@ import { useWebSocket } from '../Hooks/useWebSocket';
 
 export function RewardsDashboard() {
   const [rewardData, setRewardData] = useState<RewardData | null>(null);
+  const [bitcoinPrice, setBitcoinPrice] = useState<number>(0);
   const [activeTab, setActiveTab] = useState('overview');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -16,7 +17,6 @@ export function RewardsDashboard() {
       if (message.type === 'Rewards_update') {
         const data = message.data;
         console.log('Received rewards data:', data);
-        
         const rewardHistory = generateRewardHistory(
           data.blockCount,
           data.blockReward
@@ -38,6 +38,11 @@ export function RewardsDashboard() {
         });
         setIsLoading(false);
         setError(null);
+      } else if (message.type === 'bitcoin_update') {
+        const priceData = message.data.price;
+        if (priceData && priceData.USD) {
+          setBitcoinPrice(parseFloat(priceData.USD));
+        }
       }
     },
     onError: (error) => {
@@ -106,7 +111,10 @@ export function RewardsDashboard() {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 ">
+
         {/* Reward Summary */}
+      {activeTab === 'overview' && (
+        <>
         <div className="bg-[#1c1c1c] border border-gray-700 rounded-xl backdrop-blur-sm p-5">
           <div className="flex justify-between items-start mb-4">
             <div>
@@ -125,7 +133,7 @@ export function RewardsDashboard() {
               {formatMBTC(rewardData.totalRewards)} mBTC
             </div>
             <div className="text-gray-400 text-sm">
-              ${(rewardData.totalRewards * 60000).toFixed(2)} USD
+              ${(rewardData.totalRewards * bitcoinPrice).toFixed(2)} USD
             </div>
           </div>
           <div className="border-t border-gray-800/50 pt-3 space-y-2">
@@ -145,7 +153,7 @@ export function RewardsDashboard() {
                 USD Rate:
               </div>
               <div className="text-white font-small text-sm flex items-center">
-                ${((rewardData.dailyAverage / 24) * 60000).toFixed(2)}/hr
+                ${((rewardData.dailyAverage / 24) * bitcoinPrice).toFixed(2)}/hr
                 <ArrowUpRight className="h-3 w-3 text-blue-400 ml-1" />
               </div>
             </div>
@@ -191,6 +199,8 @@ export function RewardsDashboard() {
             </div>
           </div>
         </div>
+         </>
+        )}
       </div>
     </div>
   );

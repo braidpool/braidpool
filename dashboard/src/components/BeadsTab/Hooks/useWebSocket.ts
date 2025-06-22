@@ -1,4 +1,10 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { 
+  processHashrateData, 
+  processLatencyData, 
+  processBlockData, 
+  processRewardsData 
+} from '../lib/utils/dataProcessor';
 
 interface WebSocketMessage {
   type: string;
@@ -12,12 +18,11 @@ interface UseWebSocketOptions {
   onClose?: () => void;
 }
 
-// Global WebSocket instance and listeners
 let globalWebSocket: WebSocket | null = null;
 let globalListeners: Set<UseWebSocketOptions> = new Set();
 
 const connect = () => {
-  // Avoid creating multiple connections
+  
   if (globalWebSocket && globalWebSocket.readyState !== WebSocket.CLOSED) {
     return;
   }
@@ -31,7 +36,43 @@ const connect = () => {
   globalWebSocket.onmessage = (event) => {
     try {
       const message = JSON.parse(event.data);
-      globalListeners.forEach(l => l.onMessage?.(message));
+      
+      // Process data based on message type
+      let processedMessage = message;
+      switch (message.type) {
+        case 'hashrate_data':
+          processedMessage = {
+            type: 'hashrate_update',
+            data: processHashrateData(message.data)
+          };
+          break;
+        case 'latency_data':
+          processedMessage = {
+            type: 'latency_update',
+            data: processLatencyData(message.data)
+          };
+          break;
+        case 'block_data':
+          processedMessage = {
+            type: 'Block_summary',
+            data: processBlockData(message.data)
+          };
+          break;
+        case 'rewards_data':
+          processedMessage = {
+            type: 'Rewards_update',
+            data: processRewardsData(message.data)
+          };
+          break;
+        case 'transaction_stats':
+          
+          break;
+        default:
+          
+          break;
+      }
+      
+      globalListeners.forEach(l => l.onMessage?.(processedMessage));
     } catch (error) {
       console.error('[WebSocket] Failed to parse message:', error);
     }
@@ -44,7 +85,7 @@ const connect = () => {
 
   globalWebSocket.onclose = () => {
     globalListeners.forEach(l => l.onClose?.());
-    globalWebSocket = null; // Ensure we can reconnect
+    globalWebSocket = null;
   };
 };
 
@@ -53,13 +94,11 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     globalWebSocket?.readyState === WebSocket.OPEN
   );
   
-  // Use refs to store the latest callbacks to prevent effect re-runs
   const onMessageRef = useRef(options.onMessage);
   const onErrorRef = useRef(options.onError);
   const onOpenRef = useRef(options.onOpen);
   const onCloseRef = useRef(options.onClose);
 
-  // Update refs when options change
   useEffect(() => {
     onMessageRef.current = options.onMessage;
     onErrorRef.current = options.onError;
@@ -68,7 +107,6 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
   });
 
   useEffect(() => {
-    // Wrap callbacks to handle state updates within the hook
     const listener: UseWebSocketOptions = {
       onMessage: (message) => onMessageRef.current?.(message),
       onOpen: () => {
@@ -85,7 +123,6 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     globalListeners.add(listener);
     connect();
 
-    // If already connected, manually trigger the onOpen to set initial state
     if (globalWebSocket?.readyState === WebSocket.OPEN) {
       listener.onOpen?.();
     }
