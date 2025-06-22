@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { 
-  processHashrateData, 
-  processLatencyData, 
-  processBlockData, 
-  processRewardsData 
+import {
+  processHashrateData,
+  processLatencyData,
+  processBlockData,
+  processRewardsData,
 } from '../lib/utils/dataProcessor';
 
 interface WebSocketMessage {
@@ -22,7 +22,6 @@ let globalWebSocket: WebSocket | null = null;
 let globalListeners: Set<UseWebSocketOptions> = new Set();
 
 const connect = () => {
-  
   if (globalWebSocket && globalWebSocket.readyState !== WebSocket.CLOSED) {
     return;
   }
@@ -30,49 +29,47 @@ const connect = () => {
   globalWebSocket = new WebSocket('ws://localhost:5000');
 
   globalWebSocket.onopen = () => {
-    globalListeners.forEach(l => l.onOpen?.());
+    globalListeners.forEach((l) => l.onOpen?.());
   };
 
   globalWebSocket.onmessage = (event) => {
     try {
       const message = JSON.parse(event.data);
-      
+
       // Process data based on message type
       let processedMessage = message;
       switch (message.type) {
         case 'hashrate_data':
           processedMessage = {
             type: 'hashrate_update',
-            data: processHashrateData(message.data)
+            data: processHashrateData(message.data),
           };
           break;
         case 'latency_data':
           processedMessage = {
             type: 'latency_update',
-            data: processLatencyData(message.data)
+            data: processLatencyData(message.data),
           };
           break;
         case 'block_data':
           processedMessage = {
             type: 'Block_summary',
-            data: processBlockData(message.data)
+            data: processBlockData(message.data),
           };
           break;
         case 'rewards_data':
           processedMessage = {
             type: 'Rewards_update',
-            data: processRewardsData(message.data)
+            data: processRewardsData(message.data),
           };
           break;
         case 'transaction_stats':
-          
           break;
         default:
-          
           break;
       }
-      
-      globalListeners.forEach(l => l.onMessage?.(processedMessage));
+
+      globalListeners.forEach((l) => l.onMessage?.(processedMessage));
     } catch (error) {
       console.error('[WebSocket] Failed to parse message:', error);
     }
@@ -80,11 +77,11 @@ const connect = () => {
 
   globalWebSocket.onerror = (error) => {
     console.error('[WebSocket] Error:', error);
-    globalListeners.forEach(l => l.onError?.(error));
+    globalListeners.forEach((l) => l.onError?.(error));
   };
 
   globalWebSocket.onclose = () => {
-    globalListeners.forEach(l => l.onClose?.());
+    globalListeners.forEach((l) => l.onClose?.());
     globalWebSocket = null;
   };
 };
@@ -93,7 +90,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
   const [isConnected, setIsConnected] = useState(
     globalWebSocket?.readyState === WebSocket.OPEN
   );
-  
+
   const onMessageRef = useRef(options.onMessage);
   const onErrorRef = useRef(options.onError);
   const onOpenRef = useRef(options.onOpen);
@@ -143,6 +140,6 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
 
   return {
     isConnected,
-    sendMessage
+    sendMessage,
   };
-} 
+}

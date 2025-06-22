@@ -5,10 +5,10 @@ export async function fetchLatencyData(wss) {
     const peers = await rpcWithEnv({
       method: 'getpeerinfo',
     });
-    
+
     const now = Date.now();
     const totalPeers = peers.length;
-    
+
     const validPings = peers
       .filter((peer) => typeof peer.pingtime === 'number' && peer.pingtime > 0)
       .map((peer) => Math.round(peer.pingtime * 1000))
@@ -36,7 +36,8 @@ export async function fetchLatencyData(wss) {
       return;
     }
 
-    const averageLatency = validPings.reduce((a, b) => a + b, 0) / validPings.length;
+    const averageLatency =
+      validPings.reduce((a, b) => a + b, 0) / validPings.length;
     const peakLatency = Math.max(...validPings);
 
     const payload = {
@@ -51,7 +52,9 @@ export async function fetchLatencyData(wss) {
       },
     };
 
-    console.log(`[LatencyStats] Broadcasting latency update: ${validPings.length}/${totalPeers} peers with valid pings, avg: ${averageLatency.toFixed(0)}ms`);
+    console.log(
+      `[LatencyStats] Broadcasting latency update: ${validPings.length}/${totalPeers} peers with valid pings, avg: ${averageLatency.toFixed(0)}ms`
+    );
 
     wss.clients.forEach((client) => {
       if (client.readyState === client.OPEN) {

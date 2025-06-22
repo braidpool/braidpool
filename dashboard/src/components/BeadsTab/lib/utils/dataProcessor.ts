@@ -4,7 +4,7 @@ import {
   ProcessedHashrateData,
   ProcessedLatencyData,
   BlockData,
-  RewardsData
+  RewardsData,
 } from '../types';
 
 const MAX_HISTORY_LENGTH = 288;
@@ -16,12 +16,12 @@ let peakHashrate = 0;
 
 export function processHashrateData(data: ProcessedHashrateData) {
   const { hashrate, timestamp, networkDifficulty, latency } = data;
-  
+
   const historyEntry = {
     value: hashrate,
     date: new Date(timestamp).toISOString(),
     label: new Date(timestamp).toLocaleTimeString(),
-    timestamp
+    timestamp,
   };
 
   if (hashrateHistory.length >= MAX_HISTORY_LENGTH) {
@@ -38,13 +38,20 @@ export function processHashrateData(data: ProcessedHashrateData) {
     current: `${hashrate.toFixed(2)} EH/s`,
     peak: `${peakHashrate.toFixed(2)} EH/s`,
     networkDifficulty,
-    latency
+    latency,
   };
 }
 
 export function processLatencyData(data: ProcessedLatencyData) {
-  const { pings, averageLatency, peakLatency, peerCount, validPings, timestamp } = data;
-  
+  const {
+    pings,
+    averageLatency,
+    peakLatency,
+    peerCount,
+    validPings,
+    timestamp,
+  } = data;
+
   if (pings.length === 0) {
     return {
       chartData: latencyHistory,
@@ -53,10 +60,9 @@ export function processLatencyData(data: ProcessedLatencyData) {
       peerCount,
       totalPeers: peerCount,
       validPings: 0,
-      timestamp
+      timestamp,
     };
   }
-
 
   const newEntries = pings.map((ping: number) => ({
     value: ping,
@@ -67,7 +73,6 @@ export function processLatencyData(data: ProcessedLatencyData) {
 
   latencyHistory.push(...newEntries);
 
- 
   while (latencyHistory.length > MAX_LATENCY_HISTORY) {
     latencyHistory.shift();
   }
@@ -79,20 +84,28 @@ export function processLatencyData(data: ProcessedLatencyData) {
     peerCount,
     totalPeers: peerCount,
     validPings,
-    timestamp
+    timestamp,
   };
 }
 
 export function processBlockData(data: BlockData) {
-  const { blockHash, timestamp, height, difficulty, txCount, reward, parent, transactions } = data;
-  
- 
+  const {
+    blockHash,
+    timestamp,
+    height,
+    difficulty,
+    txCount,
+    reward,
+    parent,
+    transactions,
+  } = data;
+
   const work = `${(difficulty / 1e6).toFixed(2)} EH`;
 
   const formattedTransactions = transactions.map((tx: any) => ({
     ...tx,
     timestamp: new Date(tx.timestamp).toISOString(),
-    feePaid: tx.fee.toFixed(8)
+    feePaid: tx.fee.toFixed(8),
   }));
 
   return {
@@ -103,23 +116,34 @@ export function processBlockData(data: BlockData) {
     txCount,
     reward,
     parent,
-    transactions: formattedTransactions
+    transactions: formattedTransactions,
   };
 }
 
 export function processRewardsData(data: RewardsData) {
-  const { blockCount, blockReward, totalRewards, rewardRate, lastRewardTime, halvings, nextHalving, blocksUntilHalving } = data;
-  
+  const {
+    blockCount,
+    blockReward,
+    totalRewards,
+    rewardRate,
+    lastRewardTime,
+    halvings,
+    nextHalving,
+    blocksUntilHalving,
+  } = data;
+
   return {
     blockCount,
     blockReward,
     totalRewards: totalRewards,
     rewardRate,
-    lastRewardTime: lastRewardTime ? new Date(lastRewardTime).toISOString() : null,
+    lastRewardTime: lastRewardTime
+      ? new Date(lastRewardTime).toISOString()
+      : null,
     unit: 'BTC',
     halvings,
     nextHalving,
-    blocksUntilHalving
+    blocksUntilHalving,
   };
 }
 
@@ -135,4 +159,4 @@ export function clearHistory() {
   hashrateHistory = [];
   latencyHistory = [];
   peakHashrate = 0;
-} 
+}

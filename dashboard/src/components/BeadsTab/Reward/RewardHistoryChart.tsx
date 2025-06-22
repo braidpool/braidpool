@@ -7,28 +7,38 @@ const RewardHistoryChart: React.FC<RewardHistoryChartProps> = ({
   rewardHistory,
 }) => {
   console.log('RewardHistoryChart data:', rewardHistory);
-  
-  const chartData = rewardHistory.map((item, index) => {
-    if (!item || typeof item.height !== 'number' || typeof item.reward !== 'number') {
-      console.warn('Invalid reward history item:', item);
+
+  const chartData = rewardHistory
+    .map((item, index) => {
+      if (
+        !item ||
+        typeof item.height !== 'number' ||
+        typeof item.reward !== 'number'
+      ) {
+        console.warn('Invalid reward history item:', item);
+        return {
+          value: 0,
+          label: `Block ${index}`,
+          date: new Date(),
+          formattedDate: `Block ${index}`,
+        };
+      }
+
+      const label = item.label || formatBlockLabel(item.height);
+      console.log('Chart item:', {
+        height: item.height,
+        label,
+        reward: item.reward,
+      });
+
       return {
-        value: 0,
-        label: `Block ${index}`,
+        value: item.reward,
+        label: label,
         date: new Date(),
-        formattedDate: `Block ${index}`,
+        formattedDate: label,
       };
-    }
-    
-    const label = item.label || formatBlockLabel(item.height);
-    console.log('Chart item:', { height: item.height, label, reward: item.reward });
-    
-    return {
-      value: item.reward,
-      label: label,
-      date: new Date(),
-      formattedDate: label,
-    };
-  }).filter(Boolean);
+    })
+    .filter(Boolean);
 
   console.log('Final chart data:', chartData);
 

@@ -385,7 +385,7 @@ const Dashboard = () => {
       case Page.MINER_STATS:
         return (
           <Box sx={{ p: 1 }}>
-            <Card title="Beads Explorer" >
+            <Card title="Beads Explorer">
               <Box>
                 <MinedSharesExplorer />
               </Box>

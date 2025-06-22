@@ -60,9 +60,9 @@ export function formatChartTime(date: Date | string | any): string {
         return date;
       }
     }
-    
+
     let parsedDate: Date;
-    
+
     if (date instanceof Date) {
       parsedDate = date;
     } else if (typeof date === 'string') {
@@ -70,22 +70,21 @@ export function formatChartTime(date: Date | string | any): string {
     } else {
       parsedDate = new Date();
     }
-    
+
     if (isNaN(parsedDate.getTime())) {
       return 'Invalid Date';
     }
-    
-    return parsedDate.toLocaleTimeString('en-US', { 
-      hour: '2-digit', 
-      minute: '2-digit', 
+
+    return parsedDate.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
       second: '2-digit',
-      hour12: true 
+      hour12: true,
     });
   } catch {
     return 'Invalid Date';
   }
 }
-
 
 export function formatBlockLabel(height: number): string {
   return `Block ${height.toLocaleString()}`;

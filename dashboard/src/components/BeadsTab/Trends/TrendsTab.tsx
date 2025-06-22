@@ -7,12 +7,12 @@ import TransactionsTab from './TransactionsTab';
 
 export function TrendsTab({ timeRange }: { timeRange: string }) {
   const [activeSubTab, setActiveSubTab] = useState('hashrate');
-  const { 
-    data: chartData, 
+  const {
+    data: chartData,
     hashrateData,
     latencyData,
     stats,
-    isLoading: isChartLoading 
+    isLoading: isChartLoading,
   } = useChartData(timeRange);
   const [chartHovered, setChartHovered] = useState(false);
 

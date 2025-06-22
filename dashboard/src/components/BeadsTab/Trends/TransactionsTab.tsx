@@ -49,11 +49,15 @@ export default function TransactionsTab({
         />
         <AnimatedStatCard
           title="Avg Fee Rate"
-          value={stats?.avgFeeRate ? `${stats.avgFeeRate.toFixed(1)} sats/vB` : 'Loading...'}
+          value={
+            stats?.avgFeeRate
+              ? `${stats.avgFeeRate.toFixed(1)} sats/vB`
+              : 'Loading...'
+          }
         />
         <AnimatedStatCard
           title="Avg Tx Size"
-          value={stats?.avgTxSize ? `${stats.avgTxSize} vB` : 'Loading...'}       
+          value={stats?.avgTxSize ? `${stats.avgTxSize} vB` : 'Loading...'}
         />
       </div>
     </div>
