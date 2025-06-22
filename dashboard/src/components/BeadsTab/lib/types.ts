@@ -133,7 +133,6 @@ export interface TransactionStats {
   totalFees: number;
 }
 
-
 export interface HistoryEntry {
   value: number;
   date: string;

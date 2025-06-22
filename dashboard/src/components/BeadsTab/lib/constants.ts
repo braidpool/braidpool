@@ -1,5 +1,5 @@
-import type { TimeRange} from './types';
-import { Zap,Activity,Database } from 'lucide-react';
+import type { TimeRange } from './types';
+import { Zap, Activity, Database } from 'lucide-react';
 export const TIME_RANGES: TimeRange[] = [
   { label: 'Week', value: 'week', days: 7 },
   { label: 'Month', value: 'month', days: 30 },
@@ -8,11 +8,10 @@ export const TIME_RANGES: TimeRange[] = [
 ];
 
 export const TrendsTABS = [
-    { id: 'hashrate', label: 'Hashrate', icon: Zap },
-    { id: 'latency', label: 'Latency', icon: Activity },
-    { id: 'transactions', label: 'Transactions', icon: Database },
-  ];
-
+  { id: 'hashrate', label: 'Hashrate', icon: Zap },
+  { id: 'latency', label: 'Latency', icon: Activity },
+  { id: 'transactions', label: 'Transactions', icon: Database },
+];
 
 export const TABS = [
   { id: 'beads', label: 'Bead Explorer' },

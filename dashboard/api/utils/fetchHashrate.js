@@ -7,7 +7,7 @@ export async function fetchHashrateStats(wss) {
   try {
     const startTime = Date.now();
     const now = Date.now();
-  
+
     if (!lastDifficulty || now - lastDiffTime > 30_000) {
       lastDifficulty = await rpcWithEnv({ method: 'getdifficulty' });
       lastDiffTime = now;
@@ -24,8 +24,8 @@ export async function fetchHashrateStats(wss) {
         hashrate: hashrateEH,
         timestamp: timestamp,
         networkDifficulty: lastDifficulty,
-        latency
-      }
+        latency,
+      },
     };
 
     wss.clients.forEach((client) => {
@@ -33,8 +33,10 @@ export async function fetchHashrateStats(wss) {
         client.send(JSON.stringify(payload));
       }
     });
-
   } catch (err) {
-    console.error('[WebSocket] Failed to fetch or send hashrate stats:', err.message);
+    console.error(
+      '[WebSocket] Failed to fetch or send hashrate stats:',
+      err.message
+    );
   }
 }

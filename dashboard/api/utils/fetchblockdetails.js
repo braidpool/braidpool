@@ -31,7 +31,7 @@ export async function fetchBlockDetails(wss, blockHeight = null) {
       return {
         id: `${blockHash}_tx_${index}`,
         hash: tx.txid,
-        timestamp: blockData.time * 1000, 
+        timestamp: blockData.time * 1000,
         count: index + 1,
         blockId: height.toString(),
         fee: feeBTC,
@@ -59,12 +59,16 @@ export async function fetchBlockDetails(wss, blockHeight = null) {
 
     // Send transaction statistics as raw data
     const totalFees = transactions.reduce((acc, tx) => acc + tx.fee, 0);
-    const avgFeeRate = transactions.length > 0 
-      ? transactions.reduce((acc, tx) => acc + tx.feeRate, 0) / transactions.length 
-      : 0;
-    const avgTxSize = transactions.length > 0 
-      ? transactions.reduce((acc, tx) => acc + tx.size, 0) / transactions.length 
-      : 0;
+    const avgFeeRate =
+      transactions.length > 0
+        ? transactions.reduce((acc, tx) => acc + tx.feeRate, 0) /
+          transactions.length
+        : 0;
+    const avgTxSize =
+      transactions.length > 0
+        ? transactions.reduce((acc, tx) => acc + tx.size, 0) /
+          transactions.length
+        : 0;
 
     const statsPayload = {
       type: 'transaction_stats',
@@ -73,7 +77,7 @@ export async function fetchBlockDetails(wss, blockHeight = null) {
         avgFeeRate: avgFeeRate,
         avgTxSize: Math.round(avgTxSize),
         txRate: blockData.tx.length - 1,
-        totalFees: totalFees
+        totalFees: totalFees,
       },
     };
 

@@ -10,18 +10,17 @@ import { useChartData } from './Hooks/useChartData';
 type BeadId = string;
 
 export default function MinedSharesExplorer() {
-   const [expandedBeads, setExpandedBeads] = useState<Record<BeadId, boolean>>({
-      bead1: true,
-      bead2: false,
-    });
-    
+  const [expandedBeads, setExpandedBeads] = useState<Record<BeadId, boolean>>({
+    bead1: true,
+    bead2: false,
+  });
+
   const [activeTab, setActiveTab] = useState('beads');
   const [liveBeads, setLiveBeads] = useState<Bead[]>([]);
   const [activeBead, setActiveBead] = useState<BeadId | null>(null);
   const [bitcoinPrice, setBitcoinPrice] = useState<number>(0);
-    
+
   const timeRange = 'month';
-  
 
   const { isConnected: wsConnected } = useWebSocket({
     onMessage: (message) => {
@@ -45,21 +44,24 @@ export default function MinedSharesExplorer() {
             count: tx.count || 0,
             blockId: tx.blockId || height.toString(),
             fee: typeof tx.fee === 'number' ? tx.fee : parseFloat(tx.fee) || 0,
-            size: typeof tx.size === 'number' ? tx.size : parseInt(tx.size) || 0,
+            size:
+              typeof tx.size === 'number' ? tx.size : parseInt(tx.size) || 0,
             feePaid: tx.feePaid || '0',
             feeRate:
               typeof tx.feeRate === 'number'
                 ? tx.feeRate
                 : parseInt(tx.feeRate) || 0,
             inputs:
-              typeof tx.inputs === 'number' ? tx.inputs : parseInt(tx.inputs) || 0,
+              typeof tx.inputs === 'number'
+                ? tx.inputs
+                : parseInt(tx.inputs) || 0,
             outputs:
               typeof tx.outputs === 'number'
                 ? tx.outputs
                 : parseInt(tx.outputs) || 0,
           })
         );
-        
+
         const difficultyMatch = work ? String(work).match(/(\d+\.?\d*)/) : null;
         const difficulty = difficultyMatch ? parseFloat(difficultyMatch[1]) : 0;
 
@@ -77,7 +79,7 @@ export default function MinedSharesExplorer() {
         setLiveBeads((prev) => {
           const exists = prev.find((b) => b.id === newBead.id);
           if (exists) return prev;
-          return [newBead, ...prev.slice(0, 100)]; 
+          return [newBead, ...prev.slice(0, 100)];
         });
       } else if (message.type === 'bitcoin_update') {
         const priceData = message.data.price;
@@ -88,7 +90,7 @@ export default function MinedSharesExplorer() {
     },
     onError: (error) => {
       console.error('WebSocket error:', error);
-    }
+    },
   });
 
   const toggleBead = (beadId: string) => {
@@ -112,7 +114,7 @@ export default function MinedSharesExplorer() {
             <div className="space-y-8">
               <div className="bg-[#1c1c1c] rounded-sm overflow-hidden">
                 {/* Table header */}
-                  <div className="grid grid-cols-5 p-4 border-b  text-sm  border-gray-800/80 font-medium">
+                <div className="grid grid-cols-5 p-4 border-b  text-sm  border-gray-800/80 font-medium">
                   {[
                     'Bead Hash',
                     'Timestamp',
@@ -128,20 +130,24 @@ export default function MinedSharesExplorer() {
 
                 {!wsConnected ? (
                   <div className="p-8 text-center">
-                    <div className="text-gray-400 mb-4">Connecting to server...</div>
+                    <div className="text-gray-400 mb-4">
+                      Connecting to server...
+                    </div>
                     <div className="h-12 bg-gray-800/50 rounded-md animate-pulse mb-4"></div>
                     <div className="h-12 bg-gray-800/50 rounded-md animate-pulse"></div>
                   </div>
                 ) : liveBeads.length === 0 ? (
                   <div className="p-8 text-center">
-                    <div className="text-gray-400 mb-4">Waiting for block data...</div>
+                    <div className="text-gray-400 mb-4">
+                      Waiting for block data...
+                    </div>
                     <div className="h-12 bg-gray-800/50 rounded-md animate-pulse mb-4"></div>
                     <div className="h-12 bg-gray-800/50 rounded-md animate-pulse"></div>
                   </div>
                 ) : (
                   liveBeads.map((bead) => (
                     <BeadRow
-                    isActive
+                      isActive
                       key={bead.id}
                       bead={bead}
                       isExpanded={!!expandedBeads[bead.id]}
@@ -158,7 +164,7 @@ export default function MinedSharesExplorer() {
           {activeTab === 'trends' && <TrendsTab timeRange={timeRange} />}
           {activeTab === 'rewards' && (
             <div className="border border-gray-800/50 rounded-xl p-6 bg-[#1c1c1c]">
-              <RewardsDashboard/>
+              <RewardsDashboard />
             </div>
           )}
         </div>

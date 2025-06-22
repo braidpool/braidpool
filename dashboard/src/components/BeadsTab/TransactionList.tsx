@@ -3,9 +3,9 @@ import { Activity } from 'lucide-react';
 import { shortenHash } from './lib/utils/utils';
 import { TransactionListProps } from './lib/types';
 
-export default function TransactionList({ transactions }: TransactionListProps) {
- 
-
+export default function TransactionList({
+  transactions,
+}: TransactionListProps) {
   const limitedTransactions = transactions.slice(0, 10);
   const hasMoreTransactions = transactions.length > 10;
 
@@ -13,9 +13,12 @@ export default function TransactionList({ transactions }: TransactionListProps) 
     <div className="pl-4 sm:pl-10 pr-4 pb-3 ">
       <div className="text-white mb-3 font-medium flex items-center text-sm">
         <Activity className="h-4 w-4 mr-2 flex-shrink-0" />
-        Showing {limitedTransactions.length} of {transactions.length} Transactions
+        Showing {limitedTransactions.length} of {transactions.length}{' '}
+        Transactions
         {hasMoreTransactions && (
-          <span className="text-gray-400 text-xs ml-2">(displaying first 10)</span>
+          <span className="text-gray-400 text-xs ml-2">
+            (displaying first 10)
+          </span>
         )}
       </div>
 
@@ -25,10 +28,10 @@ export default function TransactionList({ transactions }: TransactionListProps) 
           <div className="grid sm:grid grid-cols-6 text-sm text-blue-300 font-semibold ml-4 mb-2 px-2">
             <div>Hash</div>
             <div>Size</div>
-            <div >Fee</div>
+            <div>Fee</div>
             <div>Fee Rate</div>
-            <div >Inputs</div>
-            <div >Outputs</div>
+            <div>Inputs</div>
+            <div>Outputs</div>
           </div>
 
           {/* Transaction rows */}
@@ -37,16 +40,27 @@ export default function TransactionList({ transactions }: TransactionListProps) 
               key={transaction.id}
               className="grid grid-cols-6 gap-2 py-2.5 px-2 rounded-lg transition-all duration-300  group relative text-sm sm:text-sm"
             >
-               <div className="text-white text-sm font-mono relative z-10 group-hover:text-cyan-300 transition-colors duration-300 truncate"
+              <div
+                className="text-white text-sm font-mono relative z-10 group-hover:text-cyan-300 transition-colors duration-300 truncate"
                 title={transaction.hash}
               >
                 {shortenHash(transaction.hash)}
               </div>
-              <div className="text-white text-sm relative z-10  group-hover:text-gray-300 transition-colors duration-300">{transaction.size} vB</div>
-              <div className="text-white text-sm relative z-10  group-hover:text-gray-300 transition-colors duration-300">{transaction.fee.toFixed(8)} BTC</div>
-              <div className="text-white text-sm relative z-10 group-hover:text-gray-300 transition-colors duration-300">{transaction.feeRate.toFixed(2)} sats/vB</div>
-              <div className="text-white text-sm relative z-10  group-hover:text-gray-300 transition-colors duration-300">{transaction.inputs}</div>
-              <div className="text-white text-sm relative z-10  group-hover:text-gray-300 transition-colors duration-300">{transaction.outputs}</div>
+              <div className="text-white text-sm relative z-10  group-hover:text-gray-300 transition-colors duration-300">
+                {transaction.size} vB
+              </div>
+              <div className="text-white text-sm relative z-10  group-hover:text-gray-300 transition-colors duration-300">
+                {transaction.fee.toFixed(8)} BTC
+              </div>
+              <div className="text-white text-sm relative z-10 group-hover:text-gray-300 transition-colors duration-300">
+                {transaction.feeRate.toFixed(2)} sats/vB
+              </div>
+              <div className="text-white text-sm relative z-10  group-hover:text-gray-300 transition-colors duration-300">
+                {transaction.inputs}
+              </div>
+              <div className="text-white text-sm relative z-10  group-hover:text-gray-300 transition-colors duration-300">
+                {transaction.outputs}
+              </div>
             </div>
           ))}
         </div>

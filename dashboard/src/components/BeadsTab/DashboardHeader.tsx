@@ -1,12 +1,13 @@
 import React from 'react';
 import { DashboardHeaderProps } from './lib/types';
-import {TABS} from "./lib/constants"
+import { TABS } from './lib/constants';
 
-export default function DashboardHeader({ activeTab, setActiveTab }: DashboardHeaderProps) {
+export default function DashboardHeader({
+  activeTab,
+  setActiveTab,
+}: DashboardHeaderProps) {
   return (
     <header className="mb-8">
-      
-
       <div className="border-b border-gray-700">
         <nav className="mb-px  flex flex-wrap gap-x-6" aria-label="Tabs">
           {TABS.map((tab) => (

@@ -4,8 +4,6 @@ import { AnimatedStatCardProps } from './lib/types';
 export default function AnimatedStatCard({
   title,
   value,
- 
- 
 }: AnimatedStatCardProps) {
   const cardRef = useRef(null);
   return (

@@ -34,9 +34,7 @@ export default function HashrateTab({
         </div>
       </div>
 
-      <div
-        className="relative border border-gray-800/50 rounded-xl p-6 h-auto bg-[#1c1c1c] backdrop-blur-md overflow-hidden"
-      >
+      <div className="relative border border-gray-800/50 rounded-xl p-6 h-auto bg-[#1c1c1c] backdrop-blur-md overflow-hidden">
         <AdvancedChart
           data={chartData}
           height={350}

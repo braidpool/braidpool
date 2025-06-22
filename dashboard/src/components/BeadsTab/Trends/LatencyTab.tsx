@@ -16,12 +16,12 @@ export default function LatencyTab({
     value: d.value,
     date: new Date(d.date),
     label: new Date(d.date).toLocaleTimeString('en-US', {
-  hour: '2-digit',
-  minute: '2-digit',
-  second: '2-digit',
-  hour12: true,
-  fractionalSecondDigits: 3,
-}),
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true,
+      fractionalSecondDigits: 3,
+    }),
   }));
 
   return (
@@ -35,14 +35,13 @@ export default function LatencyTab({
         </div>
         <div className="bg-purple-900/30 px-3 py-1 rounded-md">
           <span className="text-purple-300 font-mono">
-            Avg: {latencyData.averageLatency} | {latencyData.validPings}/{latencyData.peerCount} peers
+            Avg: {latencyData.averageLatency} | {latencyData.validPings}/
+            {latencyData.peerCount} peers
           </span>
         </div>
       </div>
 
-      <div
-        className="relative border border-gray-800/50 rounded-xl p-6 h-auto bg-[#1c1c1c] backdrop-blur-md overflow-hidden"
-      >
+      <div className="relative border border-gray-800/50 rounded-xl p-6 h-auto bg-[#1c1c1c] backdrop-blur-md overflow-hidden">
         <AdvancedChart
           data={chartData}
           height={350}
