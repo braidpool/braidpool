@@ -1,29 +1,19 @@
 export function generateRewardHistory(
   blockCount: number,
-  initialReward: number = 3.125
+  currentReward: number = 3.125
 ) {
+    
   const rewardHistory = [];
-  let height = 0;
-  let reward = initialReward;
-
-  while (height <= blockCount && reward >= 0.00000001) {
-    rewardHistory.push({
-      height,
+  const maxBlocks = Math.min(blockCount, 1000); 
+  for (let i = Math.max(0, blockCount - maxBlocks); i <= blockCount; i += Math.max(1, Math.floor(maxBlocks / 50))) {
+    const blockHalving = Math.floor(i / 210000);
+    const reward = 50 / Math.pow(2, blockHalving);
+    const item = {
+      height: i,
       reward,
-      label: `Block ${height}`,
-    });
-
-    for (let i = 1; i < 210000 && height + i <= blockCount; i += 10000) {
-      rewardHistory.push({
-        height: height + i,
-        reward,
-        label: `Block ${height + i}`,
-      });
-    }
-
-    reward /= 2;
-    height += 210000;
+      label: `Block ${i}`,
+    };
+    rewardHistory.push(item);
   }
-
   return rewardHistory;
 }

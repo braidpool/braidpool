@@ -3,6 +3,7 @@ import { Bitcoin, Clock, TrendingUp, ArrowUpRight } from 'lucide-react';
 import RewardHistoryChart from './RewardHistoryChart';
 import { RewardData } from '../lib/types';
 import { generateRewardHistory } from './generateRewardHistory';
+import { useWebSocket } from '../Hooks/useWebSocket';
 
 export function RewardsDashboard() {
   const [rewardData, setRewardData] = useState<RewardData | null>(null);
@@ -10,54 +11,40 @@ export function RewardsDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const ws = new WebSocket('ws://localhost:5000');
+  const { isConnected } = useWebSocket({
+    onMessage: (message) => {
+      if (message.type === 'Rewards_update') {
+        const data = message.data;
+        console.log('Received rewards data:', data);
+        
+        const rewardHistory = generateRewardHistory(
+          data.blockCount,
+          data.blockReward
+        );
+        
+        
 
-    ws.onopen = () => {
-      console.log('[✓] Rewards WebSocket connected');
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const message = JSON.parse(event.data);
-        if (message.type === 'Rewards_update') {
-          const data = message.data;
-          const rewardHistory = generateRewardHistory(
-            data.blockCount,
-            data.blockReward
-          );
-
-          setRewardData({
-            totalRewards: data.totalRewards ?? 0,
-            dailyAverage: data.rewardRate ?? 0,
-            weeklyProjection: (data.rewardRate ?? 0) * 7,
-            monthlyProjection: (data.rewardRate ?? 0) * 30,
-            lastReward: data.blockReward ?? 0,
-            lastRewardTime: data.lastRewardTime ?? '',
-            streak: data.streak ?? 0,
-            nextMilestone: data.nextMilestone ?? 0.05,
-            achievements: data.achievements ?? [],
-            rewardHistory: rewardHistory ?? [],
-          });
-          setIsLoading(false);
-          setError(null);
-        }
-      } catch (err) {
-        console.error('Failed to parse reward WebSocket message:', err);
+        setRewardData({
+          totalRewards: data.totalRewards ?? 0,
+          dailyAverage: data.rewardRate ?? 0,
+          weeklyProjection: (data.rewardRate ?? 0) * 7,
+          monthlyProjection: (data.rewardRate ?? 0) * 30,
+          lastReward: data.blockReward ?? 0,
+          lastRewardTime: data.lastRewardTime ?? '',
+          streak: data.streak ?? 0,
+          nextMilestone: data.nextMilestone ?? 0.05,
+          achievements: data.achievements ?? [],
+          rewardHistory: rewardHistory ?? [],
+        });
+        setIsLoading(false);
+        setError(null);
       }
-    };
-
-    ws.onerror = (err) => {
-      console.error('WebSocket error:', err);
+    },
+    onError: (error) => {
+      console.error('WebSocket error:', error);
       setError('WebSocket connection failed');
-    };
-
-    ws.onclose = () => {
-      console.warn('Rewards WebSocket disconnected');
-    };
-
-    return () => ws.close();
-  }, []);
+    }
+  });
 
   const formatMBTC = (btc: number) => (btc * 1000).toFixed(2);
 
@@ -72,7 +59,7 @@ export function RewardsDashboard() {
     return `${Math.floor(seconds / 86400)} days ago`;
   };
 
-  if (isLoading) {
+  if (isLoading || !isConnected) {
     return (
       <div className="h-80 flex items-center justify-center">
         <p className="text-blue-300">Loading your rewards data...</p>
