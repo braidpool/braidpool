@@ -1,5 +1,5 @@
-import type { TimeRange, Bead, Transaction } from './types';
-
+import type { TimeRange} from './types';
+import { Zap,Activity,Database } from 'lucide-react';
 export const TIME_RANGES: TimeRange[] = [
   { label: 'Week', value: 'week', days: 7 },
   { label: 'Month', value: 'month', days: 30 },
@@ -7,157 +7,15 @@ export const TIME_RANGES: TimeRange[] = [
   { label: 'Year', value: 'year', days: 365 },
 ];
 
-export const BEADS: Bead[] = [
-  {
-    id: 'bead1',
-    name: 'f68b21dbde3b0803',
-    timestamp: '2021-08-15 14:23',
-    transactions: 3,
-    difficulty: 2e18,
-    parents: ['a7c43e912f5d78c', '58d2f1a9e7b3d45'],
-    reward: 0.00278,
-  },
-  {
-    id: 'bead2',
-    name: 'a7c43e9b4e8f12f5d78c',
-    timestamp: '2021-08-30 09:17',
-    transactions: 2,
-    difficulty: 5e15,
-    parents: ['2c1a7f84477aec04'],
-    reward: 0.00192,
-  },
-  {
-    id: 'bead3',
-    name: 'b9e72d1c5a8f3e6b',
-    timestamp: '2021-09-05 11:42',
-    transactions: 2,
-    difficulty: 56896,
-    parents: ['964aebde4813c0a6', 'c5d8e7f61a2b3c4d'],
-    reward: 0.00245,
-  },
-  {
-    id: 'bead4',
-    name: 'c5d8e7f61a2b3c4d',
-    timestamp: '2021-09-12 16:08',
-    transactions: 1,
-    difficulty: 4e9,
-    parents: ['f68b21dbde3b0803'],
-    reward: 0.00163,
-  },
-];
+export const TrendsTABS = [
+    { id: 'hashrate', label: 'Hashrate', icon: Zap },
+    { id: 'latency', label: 'Latency', icon: Activity },
+    { id: 'transactions', label: 'Transactions', icon: Database },
+  ];
 
-export const TRANSACTIONS: Record<string, Transaction[]> = {
-  bead1: [
-    {
-      id: 'tx1',
-      hash: 'f68b21dbde3b0803',
-      timestamp: '2021-08-15 14:23',
-      count: 12,
-      blockId: '1243',
-      size: 1250,
-      feePaid: '0.00012',
-      feeRate: 9.6,
-      inputs: 2,
-      outputs: 3,
-      fee: 90,
-    },
-    {
-      id: 'tx2',
-      hash: '964aebde4813c0a6',
-      timestamp: '2021-08-15 14:33',
-      count: 7,
-      blockId: '1244',
-      size: 850,
-      feePaid: '0.00008',
-      feeRate: 9.4,
-      inputs: 1,
-      outputs: 2,
-      fee: 90,
-    },
-    {
-      id: 'tx3',
-      hash: '2c1a7f84477aec04',
-      timestamp: '2021-08-30 09:17',
-      count: 12,
-      blockId: '1245',
-      size: 1100,
-      feePaid: '0.00015',
-      feeRate: 13.6,
-      inputs: 3,
-      outputs: 2,
-      fee: 90,
-    },
-  ],
-  bead2: [
-    {
-      id: 'tx4',
-      hash: 'a7c43e9b4e8f12f5d78c',
-      timestamp: '2021-08-30 09:17',
-      count: 9,
-      blockId: '1246',
-      size: 920,
-      feePaid: '0.00010',
-      feeRate: 10.9,
-      inputs: 2,
-      outputs: 1,
-      fee: 90,
-    },
-    {
-      id: 'tx5',
-      hash: '58d2f1a9e7b3d45',
-      timestamp: '2021-08-30 10:05',
-      count: 5,
-      blockId: '1247',
-      size: 750,
-      feePaid: '0.00007',
-      feeRate: 9.3,
-      inputs: 1,
-      outputs: 2,
-      fee: 90,
-    },
-  ],
-  bead3: [
-    {
-      id: 'tx6',
-      hash: 'b9e72d1c5a8f3e6b',
-      timestamp: '2021-09-05 11:42',
-      count: 14,
-      blockId: '1248',
-      size: 1350,
-      feePaid: '0.00018',
-      feeRate: 13.3,
-      inputs: 3,
-      outputs: 4,
-      fee: 90,
-    },
-    {
-      id: 'tx7',
-      hash: '3f6a9c8d2b7e4d1a',
-      timestamp: '2021-09-05 12:15',
-      count: 8,
-      blockId: '1249',
-      size: 980,
-      fee: 90,
-      feePaid: '0.00011',
-      feeRate: 11.2,
-      inputs: 2,
-      outputs: 3,
-    },
-  ],
-  bead4: [
-    {
-      id: 'tx8',
-      hash: 'c5d8e7f61a2b3c4d',
-      timestamp: '2021-09-12 16:08',
-      count: 7,
-      blockId: '1250',
-      size: 820,
-      fee: 900,
-      feePaid: '0.00009',
-      feeRate: 11.0,
-      inputs: 1,
-      outputs: 2,
-    },
-  ],
-};
-export type BeadId = (typeof BEADS)[number]['id'];
+
+export const TABS = [
+  { id: 'beads', label: 'Bead Explorer' },
+  { id: 'trends', label: 'Network Trends' },
+  { id: 'rewards', label: 'Rewards' },
+];

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Zap, Activity, Database } from 'lucide-react';
+import { TrendsTABS } from '../lib/constants';
 import { useChartData } from '../Hooks/useChartData';
 import HashrateTab from './HashrateTab';
 import LatencyTab from './LatencyTab';
@@ -7,50 +7,46 @@ import TransactionsTab from './TransactionsTab';
 
 export function TrendsTab({ timeRange }: { timeRange: string }) {
   const [activeSubTab, setActiveSubTab] = useState('hashrate');
-  const { data: chartData, isLoading: isChartLoading } =
+  const { data: chartData, isLoading: isChartLoading, stats } =
     useChartData(timeRange);
   const [chartHovered, setChartHovered] = useState(false);
+
+  
 
   return (
     <div className="space-y-8">
       {/* Subtabs */}
-      <div className="flex border-b mb-6 bg-[#1c1c1c]">
-        {[
-          {
-            id: 'hashrate',
-            label: 'Hashrate',
-            icon: <Zap className="w-4 h-4" />,
-          },
-          {
-            id: 'latency',
-            label: 'Latency',
-            icon: <Activity className="w-4 h-4" />,
-          },
-          {
-            id: 'transactions',
-            label: 'Transactions',
-            icon: <Database className="w-4 h-4" />,
-          },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            className={`flex items-center gap-2 px-4 py-3 font-medium relative ${
-              activeSubTab === tab.id
-                ? 'text-blue-400 border-b-2 border-blue-500'
-                : 'text-gray-400 hover:text-gray-200'
-            }`}
-            onClick={() => setActiveSubTab(tab.id)}
-          >
-            {tab.icon}
-            {tab.label}
-          </button>
-        ))}
+      <div className="border-b border-gray-800">
+        <nav className="-mb-px flex flex-wrap gap-x-6" aria-label="Tabs">
+          {TrendsTABS.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveSubTab(tab.id)}
+              className={`
+                group inline-flex items-center gap-2 whitespace-nowrap py-3 px-1 border-b-2
+                font-medium text-sm transition-all duration-200
+                ${
+                  activeSubTab === tab.id
+                    ? 'border-blue-500 text-blue-400'
+                    : 'border-transparent text-gray-400 hover:text-white hover:border-gray-300'
+                }
+              `}
+            >
+              <tab.icon
+                className={`w-4 h-4 transition-colors duration-200 ${
+                  activeSubTab === tab.id
+                    ? 'text-blue-400'
+                    : 'text-gray-500 group-hover:text-white'
+                }`}
+              />
+              {tab.label}
+            </button>
+          ))}
+        </nav>
       </div>
 
       {activeSubTab === 'hashrate' && (
         <HashrateTab
-          chartData={chartData}
-          isChartLoading={isChartLoading}
           chartHovered={chartHovered}
           setChartHovered={setChartHovered}
           timeRange={timeRange}
@@ -59,8 +55,6 @@ export function TrendsTab({ timeRange }: { timeRange: string }) {
 
       {activeSubTab === 'latency' && (
         <LatencyTab
-          chartData={chartData}
-          isChartLoading={isChartLoading}
           chartHovered={chartHovered}
           setChartHovered={setChartHovered}
           timeRange={timeRange}
@@ -74,6 +68,7 @@ export function TrendsTab({ timeRange }: { timeRange: string }) {
           chartHovered={chartHovered}
           setChartHovered={setChartHovered}
           timeRange={timeRange}
+          stats={stats}
         />
       )}
     </div>

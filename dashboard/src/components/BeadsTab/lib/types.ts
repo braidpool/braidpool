@@ -80,9 +80,6 @@ export interface RewardData {
 export interface AnimatedStatCardProps {
   title: string;
   value: string;
-  change: string;
-  icon: React.ReactNode;
-  delay?: number;
   color?: string;
 }
 export interface BeadRewardTooltipProps {
@@ -92,14 +89,9 @@ export interface BeadRewardTooltipProps {
 export interface TransactionListProps {
   transactions: Transaction[];
 }
-export type LatencyEntry = {
-  value: number;
-  label: string;
-  date: Date;
-};
 
 export type LatencyPayload = {
-  chartData: LatencyEntry[];
+  chartData: LatencyDataPoint[];
   averageLatency: string;
   peakLatency: string;
   peerCount: number;
@@ -107,9 +99,17 @@ export type LatencyPayload = {
 
 export interface LatencyTabProps {
   chartData: any[];
-
   isChartLoading: boolean;
   chartHovered: boolean;
   setChartHovered: (val: boolean) => void;
   timeRange: string;
+}
+ export type LatencyDataPoint = {
+  value: number;
+  date: Date;
+  label: string;
+};
+export interface DashboardHeaderProps {
+  activeTab: string;
+  setActiveTab: (tab: string) => void;
 }

@@ -6,7 +6,7 @@ import { fetchHashrateStats } from './utils/fetchHashrate.js';
 import { fetchLatencyData } from './utils/fetchLatency.js';
 import { fetchReward } from './utils/fetchrewards.js';
 import { handleWebSocketConnection } from './ws/handleWebSocketConnection.js';
-
+import { fetchBlockDetails } from './utils/fetchblockdetails.js';
 dotenv.config();
 
 const PORT = process.env.WS_PORT || 5000;
@@ -52,16 +52,20 @@ async function sendDataToClients() {
   }
 }
 
-// Fetch and broadcast all data every second
-setInterval(() => {
-  Promise.all([
-    sendDataToClients(),
-    fetchHashrateStats(wss),
-    fetchLatencyData(wss),
-    fetchReward(wss),
-  ]).catch(console.error);
-}, 1000);
-
-// WebSocket connection handler
+// Fetch and broadcast all data every 60 seconds (more reasonable interval)
+setInterval(async () => {  
+  try {
+   await Promise.allSettled([
+  sendDataToClients(),
+  fetchHashrateStats(wss),
+  fetchLatencyData(wss),
+  fetchReward(wss),
+  fetchBlockDetails(wss),
+]);
+  } catch (error) {
+    console.error('[Server] Data refresh failed:', error);
+  }
+}, 60000); // 60 seconds interval for better performance
 
 console.log('WebSocket server running on ws://localhost:5000');
+

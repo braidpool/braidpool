@@ -6,9 +6,23 @@ export async function fetchReward(wss) {
     const startTime = Date.now();
     const blockchainInfo = await rpcWithEnv({ method: 'getblockchaininfo' });
     const blockCount = blockchainInfo.blocks;
-    let blockReward = 3.125;
+    
+    const halvings = Math.floor(blockCount / 210000);
+    const blockReward = 50 / Math.pow(2, halvings);
+    
     const totalRewards = blockCount * blockReward;
-    const rewardRate = blockReward * 144; // Block reward per day
+    const rewardRate = blockReward * 144; 
+  
+    let lastRewardTime = '';
+    try {
+      const recentBlock = await rpcWithEnv({
+        method: 'getblock',
+        params: [blockchainInfo.bestblockhash, 1]
+      });
+      lastRewardTime = new Date(recentBlock.time * 1000).toISOString();
+    } catch (err) {
+      console.warn('[Rewards] Could not fetch recent block info:', err.message);
+    }
 
     const payload = {
       type: 'Rewards_update',
@@ -17,7 +31,11 @@ export async function fetchReward(wss) {
         blockReward,
         totalRewards,
         rewardRate,
+        lastRewardTime,
         unit: 'BTC',
+        halvings,
+        nextHalving: (halvings + 1) * 210000,
+        blocksUntilHalving: ((halvings + 1) * 210000) - blockCount,
       },
     };
 
@@ -28,9 +46,9 @@ export async function fetchReward(wss) {
     });
 
     console.log(
-      `Sent rewards update to clients in ${Date.now() - startTime}ms`
+      `[Rewards] Sent rewards update in ${Date.now() - startTime}ms - Block ${blockCount}, Reward: ${blockReward} BTC`
     );
   } catch (err) {
-    console.error('[WebSocket] Failed to fetch/send reward data:', err.message);
+    console.error('[Rewards] Failed to fetch/send reward data:', err.message);
   }
 }

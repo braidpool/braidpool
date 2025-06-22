@@ -11,6 +11,8 @@ import {
 import { Maximize2, RefreshCw, Download } from 'lucide-react';
 import { Props } from './lib/types';
 import { useState, useRef } from 'react';
+
+
 export default function AdvancedChart({
   data,
   height = 300,
@@ -22,14 +24,9 @@ export default function AdvancedChart({
   primaryLabel = 'primary',
 }: Props) {
   const [isZoomed, setIsZoomed] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  
 
-  const handleRefresh = () => {
-    setIsRefreshing(true);
-    setTimeout(() => {
-      setIsRefreshing(false);
-    }, 1500);
-  };
+  
   const chartRef = useRef<HTMLDivElement>(null);
 
   const handleExport = () => {
@@ -75,19 +72,8 @@ export default function AdvancedChart({
           >
             <Maximize2 size={16} />
           </button>
-          <button
-            className={`bg-gray-800/70 p-1.5 rounded-md text-gray-300 hover:text-white transition-transform duration-200 hover:scale-110 active:scale-95 ${
-              isRefreshing ? 'cursor-not-allowed opacity-60' : ''
-            }`}
-            onClick={handleRefresh}
-            disabled={isRefreshing}
-            title="Refresh chart"
-          >
-            <RefreshCw
-              size={16}
-              className={isRefreshing ? 'animate-spin' : ''}
-            />
-          </button>
+          
+            
           <button
             className="bg-gray-800/70 p-1.5 rounded-md text-gray-300 hover:text-white transition-transform duration-200 hover:scale-110 active:scale-95"
             onClick={handleExport}
@@ -124,9 +110,38 @@ export default function AdvancedChart({
             <XAxis
               dataKey="label"
               stroke="#ffffff"
-              tickFormatter={(dateStr) => {
-                const d = new Date(dateStr);
-                return d.toLocaleTimeString();
+              tickFormatter={(label) => {
+                // Handle different types of labels
+                if (typeof label === 'string') {
+                 
+                  if (label.startsWith('Block')) {  // Block numbers (e.g., "Block 123,456")
+                    return label;
+                  }
+                  
+                  if (label.includes(':') && !label.includes('-')) {// Time strings (ex = "2:30:45 PM")
+                    return label;
+                  }
+                
+                  if (!label.includes('-') && !label.includes('/') && !label.includes('T')) {  // Other formatted strings
+                    return label;
+                  }
+                }
+                
+                try {
+                  const d = new Date(label); // Try to format as date/time
+                  if (!isNaN(d.getTime())) {
+                    return d.toLocaleTimeString('en-US', { 
+                      hour: '2-digit', 
+                      minute: '2-digit', 
+                      second: '2-digit',
+                      hour12: true 
+                    });
+                  }
+                } catch (e) {
+                  console.warn('Failed to parse date:', label, e);
+                }
+     
+                return label || 'Invalid'; // default 
               }}
               tick={{
                 fontSize: 12,

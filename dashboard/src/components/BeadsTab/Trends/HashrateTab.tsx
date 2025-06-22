@@ -1,94 +1,76 @@
+import React, { useState, useCallback } from 'react';
 import AdvancedChart from '../AdvancedChart';
 import AnimatedStatCard from '../AnimatedStatCard';
-import { TrendingUp, Zap, Activity } from 'lucide-react';
-import React, { useEffect, useState, useRef } from 'react';
-import { formatHashrate } from '../lib/utils/formatHashrate';
+import { useWebSocket } from '../Hooks/useWebSocket';
+
+type HashrateDataPoint = {
+  value: number;
+  date: Date;
+  label: string;
+};
 
 export default function HashrateTab({
-  isChartLoading,
   chartHovered,
   setChartHovered,
   timeRange,
-}: any) {
-  const [latestStat, setLatestStat] = useState<any>(null);
-  const [chartData, setChartData] = useState<any[]>([]);
-  const [networkDifficulty, setNetworkDifficulty] = useState<number | null>(
-    null
-  );
-  const ws = useRef<WebSocket | null>(null);
+}: {
+  chartHovered: boolean;
+  setChartHovered: (isHovered: boolean) => void;
+  timeRange: string;
+}) {
+  const [chartData, setChartData] = useState<HashrateDataPoint[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [currentHashrate, setCurrentHashrate] = useState('0 EH/s');
+  const [peakHashrate, setPeakHashrate] = useState('0 EH/s');
+  const [poolDominance, setPoolDominance] = useState('0%');
+  const handleMessage = useCallback((message: any) => {
+    if (message.type === 'hashrate_update') {
+      const { history, current, peak, dominance } = message.data;
 
-  useEffect(() => {
-    ws.current = new WebSocket('ws://localhost:5000');
+      const formattedData: HashrateDataPoint[] = (history || []).map((d: any) => ({
+        value: parseFloat(d.value) || 0,
+        date: new Date(d.date),
+        label: new Date(d.date).toLocaleTimeString(),
+      }));
 
-    ws.current.onopen = () => {
-      console.log('WebSocket connected');
-    };
-
-    ws.current.onmessage = (event) => {
-      try {
-        const message = JSON.parse(event.data);
-
-        if (message.type === 'hashrate_update') {
-          const { latestStat, networkDifficulty } = message.data;
-
-          setLatestStat(latestStat);
-          setNetworkDifficulty(networkDifficulty);
-
-          const formatted = {
-            ...latestStat,
-            value: latestStat.value / 1e18, // convert to EH/s
-            date: new Date(latestStat.date),
-            label: new Date(latestStat.date).toLocaleString(),
-          };
-
-          setChartData((prev) => {
-            const updated = [...prev, formatted];
-
-            return updated.length > 100 ? updated.slice(-100) : updated;
-          });
-        }
-      } catch (err) {
-        console.error('Invalid WebSocket message', err);
+      setChartData(formattedData);
+      setCurrentHashrate(current || '0 EH/s');
+      setPeakHashrate(peak || '0 EH/s');
+      setPoolDominance(dominance || '0%');
+      if (formattedData.length > 0) {
+        setIsLoading(false);
       }
-    };
-
-    ws.current.onerror = (err) => {
-      console.error('WebSocket error:', err);
-    };
-
-    ws.current.onclose = () => {
-      console.log('WebSocket disconnected');
-    };
-
-    return () => {
-      ws.current?.close();
-    };
+    }
   }, []);
 
-  const latestValue = chartData.at(-1)?.value || 0;
-  const averageHashrate =
-    chartData.reduce((acc, d) => acc + d.value, 0) / chartData.length || 0;
-  const peakHashrate =
-    chartData.reduce((max, d) => Math.max(max, d.value), 0) || 0;
+  const handleError = useCallback((error: any) => {
+    console.error('[HashrateTab] WebSocket error:', error);
+    setIsLoading(false);
+  }, []);
+
+  const { isConnected } = useWebSocket({
+    onMessage: handleMessage,
+    onError: handleError
+  });
 
   return (
     <div className="space-y-6 bg-[#1c1c1c]">
       <div className="flex justify-between items-center">
         <div>
-          <h3 className="text-xl font-bold text-blue-300">Hashrate (λ)</h3>
+          <h3 className="text-xl font-bold text-blue-300">Pool Hashrate</h3>
           <p className="text-sm text-gray-400 mt-1">
-            Real-time hashrate measurements
+            Live hashrate of the Braidpool
           </p>
         </div>
-        <div className="px-3 py-1 rounded-md">
-          <span className="text-blue-300 font-mono">
-            λ = {latestValue.toFixed(4)}
+        <div className="bg-emerald-900/30 px-3 py-1 rounded-md">
+          <span className="text-emerald-300 font-mono">
+            {currentHashrate}
           </span>
         </div>
       </div>
 
       <div
-        className="relative border w-full border-gray-800/50 rounded-xl p-6 h-auto backdrop-blur-md overflow-hidden"
+        className="relative border border-gray-800/50 rounded-xl p-6 h-auto bg-[#1c1c1c] backdrop-blur-md overflow-hidden"
         onMouseEnter={() => setChartHovered(true)}
         onMouseLeave={() => setChartHovered(false)}
       >
@@ -96,38 +78,25 @@ export default function HashrateTab({
           data={chartData}
           height={350}
           isHovered={chartHovered}
-          isLoading={isChartLoading}
+          isLoading={isLoading || !isConnected}
           timeRange={timeRange}
-          primaryLabel="Hashrate "
-          tooltipFormatter={(value, name) => [`${value.toFixed(2)} EH/s`, name]}
+          primaryLabel="Hashrate (EH/s)"
+          tooltipFormatter={(value) => [`${value} EH/s`, 'Hashrate']}
         />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 md:grid-cols-3 sm:grid-cols-1  gap-6">
         <AnimatedStatCard
-          title="Average Hashrate"
-          value={`${formatHashrate(averageHashrate * 1e18)}`} // convert back to H/s for formatting
-          change="+8%"
-          icon={<Zap />}
-          delay={0.2}
+          title="Current Hashrate"
+          value={(currentHashrate)}
         />
         <AnimatedStatCard
-          title="Peak Hashrate"
-          value={`${formatHashrate(peakHashrate * 1e18)}`}
-          change="+12%"
-          icon={<TrendingUp />}
-          delay={0.3}
+          title="Peak Hashrate (24h)"
+          value={(peakHashrate)}      
         />
         <AnimatedStatCard
-          title="Network Difficulty"
-          value={
-            typeof networkDifficulty === 'number'
-              ? networkDifficulty.toFixed(2)
-              : 'Loading...'
-          }
-          change="+5%"
-          icon={<Activity />}
-          delay={0.4}
+          title="Pool Dominance"
+          value={poolDominance}    
         />
       </div>
     </div>
