@@ -52,7 +52,7 @@ async function sendDataToClients() {
   }
 }
 
-// Fetch and broadcast all data every 60 seconds (more reasonable interval)
+// Fetch and broadcast all data every 10 seconds (more reasonable interval)
 setInterval(async () => {  
   try {
    await Promise.allSettled([
@@ -65,7 +65,7 @@ setInterval(async () => {
   } catch (error) {
     console.error('[Server] Data refresh failed:', error);
   }
-}, 60000); // 60 seconds interval for better performance
+}, 10000); // 10-second interval for better performance
 
 console.log('WebSocket server running on ws://localhost:5000');
 

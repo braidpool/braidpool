@@ -11,28 +11,27 @@ export async function fetchReward(wss) {
     const blockReward = 50 / Math.pow(2, halvings);
     
     const totalRewards = blockCount * blockReward;
-    const rewardRate = blockReward * 144; 
+    const rewardRate = blockReward * 144;
   
-    let lastRewardTime = '';
+    let lastRewardTime = null;
     try {
       const recentBlock = await rpcWithEnv({
         method: 'getblock',
         params: [blockchainInfo.bestblockhash, 1]
       });
-      lastRewardTime = new Date(recentBlock.time * 1000).toISOString();
+      lastRewardTime = recentBlock.time * 1000; 
     } catch (err) {
       console.warn('[Rewards] Could not fetch recent block info:', err.message);
     }
 
     const payload = {
-      type: 'Rewards_update',
+      type: 'rewards_data',
       data: {
         blockCount,
         blockReward,
         totalRewards,
         rewardRate,
         lastRewardTime,
-        unit: 'BTC',
         halvings,
         nextHalving: (halvings + 1) * 210000,
         blocksUntilHalving: ((halvings + 1) * 210000) - blockCount,

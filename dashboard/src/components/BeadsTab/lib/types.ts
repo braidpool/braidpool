@@ -53,6 +53,7 @@ export interface Props {
     props?: any
   ) => [string | number, string | number];
 }
+
 export interface BeadRowProps {
   bead: Bead;
   isExpanded: boolean;
@@ -61,9 +62,11 @@ export interface BeadRowProps {
   transactions: Transaction[];
   onParentClick: (parentHash: string) => void;
 }
+
 export interface RewardHistoryChartProps {
   rewardHistory: { height: number; reward: number; label: string }[];
 }
+
 export interface RewardData {
   totalRewards: number;
   dailyAverage: number;
@@ -82,20 +85,15 @@ export interface AnimatedStatCardProps {
   value: string;
   color?: string;
 }
+
 export interface BeadRewardTooltipProps {
   reward: number; // in BTC
   isOpen?: boolean;
 }
+
 export interface TransactionListProps {
   transactions: Transaction[];
 }
-
-export type LatencyPayload = {
-  chartData: LatencyDataPoint[];
-  averageLatency: string;
-  peakLatency: string;
-  peerCount: number;
-};
 
 export interface LatencyTabProps {
   chartData: any[];
@@ -104,12 +102,86 @@ export interface LatencyTabProps {
   setChartHovered: (val: boolean) => void;
   timeRange: string;
 }
- export type LatencyDataPoint = {
-  value: number;
-  date: Date;
-  label: string;
-};
+
 export interface DashboardHeaderProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
+}
+
+export interface HashrateData {
+  history: { value: number; date: string; label: string }[];
+  current: string;
+  peak: string;
+  networkDifficulty: number;
+  latency: number;
+}
+
+export interface LatencyData {
+  chartData: { value: number; label: string; date: string }[];
+  averageLatency: string;
+  peakLatency: string;
+  peerCount: number;
+  validPings: number;
+  timestamp: number;
+}
+
+export interface TransactionStats {
+  mempoolSize: number;
+  avgFeeRate: number;
+  avgTxSize: number;
+  txRate: number;
+  totalFees: number;
+}
+
+
+export interface HistoryEntry {
+  value: number;
+  date: string;
+  label: string;
+  timestamp: number;
+}
+
+export interface LatencyEntry {
+  value: number;
+  label: string;
+  date: string;
+  timeStamp: string;
+}
+
+export interface ProcessedHashrateData {
+  hashrate: number;
+  timestamp: number;
+  networkDifficulty: number;
+  latency: number;
+}
+
+export interface ProcessedLatencyData {
+  pings: number[];
+  averageLatency: number;
+  peakLatency: number;
+  peerCount: number;
+  validPings: number;
+  timestamp: number;
+}
+
+export interface BlockData {
+  blockHash: string;
+  timestamp: number;
+  height: number;
+  difficulty: number;
+  txCount: number;
+  reward: number;
+  parent: string;
+  transactions: any[];
+}
+
+export interface RewardsData {
+  blockCount: number;
+  blockReward: number;
+  totalRewards: number;
+  rewardRate: number;
+  lastRewardTime: number | null;
+  halvings: number;
+  nextHalving: number;
+  blocksUntilHalving: number;
 }

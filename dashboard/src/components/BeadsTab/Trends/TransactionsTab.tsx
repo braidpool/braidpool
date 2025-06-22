@@ -28,7 +28,7 @@ export default function TransactionsTab({
       </div>
 
       <div
-        className="relative border border-gray-800/50 rounded-xl p-6 h-auto bg-black/30 backdrop-blur-md overflow-hidden"
+        className="relative border border-gray-800/50 rounded-xl p-6 h-auto bg-[#1c1c1c] backdrop-blur-md overflow-hidden"
         onMouseEnter={() => setChartHovered(true)}
         onMouseLeave={() => setChartHovered(false)}
       >

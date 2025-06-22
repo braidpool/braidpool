@@ -1,33 +1,30 @@
 import { rpcWithEnv } from './rpcWithEnv.js';
 
-const latencyHistory = [];
-
 export async function fetchLatencyData(wss) {
   try {
     const peers = await rpcWithEnv({
       method: 'getpeerinfo',
     });
     
-    const now = new Date();
+    const now = Date.now();
     const totalPeers = peers.length;
     
     const validPings = peers
       .filter((peer) => typeof peer.pingtime === 'number' && peer.pingtime > 0)
-      .map((peer) => Math.round(peer.pingtime * 1000)) 
-      .filter((ping) => ping < 10000); 
+      .map((peer) => Math.round(peer.pingtime * 1000))
+      .filter((ping) => ping < 10000);
 
     if (validPings.length === 0) {
       console.warn('[LatencyStats] No valid pings to record.');
       const payload = {
-        type: 'latency_update',
+        type: 'latency_data',
         data: {
-          chartData: latencyHistory,
-          averageLatency: '0ms',
-          peakLatency: '0ms',
+          pings: [],
+          averageLatency: 0,
+          peakLatency: 0,
           peerCount: totalPeers,
-          totalPeers: totalPeers,
           validPings: 0,
-          timestamp: now.getTime(),
+          timestamp: now,
         },
       };
 
@@ -39,34 +36,18 @@ export async function fetchLatencyData(wss) {
       return;
     }
 
-    // Create data points for each valid ping
-    const pings = validPings.map((ping) => ({
-      value: ping,
-      label: now.toLocaleTimeString(),
-      date: now.toISOString(),
-      timeStamp: now.toISOString(),
-    }));
-
-    latencyHistory.push(...pings);
-
-    // Keep only last 100 data points
-    while (latencyHistory.length > 100) {
-      latencyHistory.shift();
-    }
-
     const averageLatency = validPings.reduce((a, b) => a + b, 0) / validPings.length;
     const peakLatency = Math.max(...validPings);
 
     const payload = {
-      type: 'latency_update',
+      type: 'latency_data',
       data: {
-        chartData: latencyHistory,
-        averageLatency: `${averageLatency.toFixed(0)}ms`,
-        peakLatency: `${peakLatency}ms`,
-        peerCount: totalPeers, // Show total peers, not just those with pings
-        totalPeers: totalPeers,
+        pings: validPings,
+        averageLatency: averageLatency,
+        peakLatency: peakLatency,
+        peerCount: totalPeers,
         validPings: validPings.length,
-        timestamp: now.getTime(),
+        timestamp: now,
       },
     };
 

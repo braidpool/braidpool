@@ -5,9 +5,9 @@ import { TrendsTab } from './Trends/TrendsTab';
 import { RewardsDashboard } from './Reward/RewardsSection';
 import { Transaction, Bead } from './lib/types';
 import { useWebSocket } from './Hooks/useWebSocket';
+import { useChartData } from './Hooks/useChartData';
 
 type BeadId = string;
-
 
 export default function MinedSharesExplorer() {
    const [expandedBeads, setExpandedBeads] = useState<Record<BeadId, boolean>>({
@@ -18,10 +18,12 @@ export default function MinedSharesExplorer() {
   const [activeTab, setActiveTab] = useState('beads');
   const [liveBeads, setLiveBeads] = useState<Bead[]>([]);
   const [activeBead, setActiveBead] = useState<BeadId | null>(null);
+  const [bitcoinPrice, setBitcoinPrice] = useState<number>(0);
     
-    const timeRange = 'month';
+  const timeRange = 'month';
+  
 
-  const { isConnected } = useWebSocket({
+  const { isConnected: wsConnected } = useWebSocket({
     onMessage: (message) => {
       if (message.type === 'Block_summary') {
         const {
@@ -77,6 +79,11 @@ export default function MinedSharesExplorer() {
           if (exists) return prev;
           return [newBead, ...prev.slice(0, 100)]; 
         });
+      } else if (message.type === 'bitcoin_update') {
+        const priceData = message.data.price;
+        if (priceData && priceData.USD) {
+          setBitcoinPrice(parseFloat(priceData.USD));
+        }
       }
     },
     onError: (error) => {
@@ -119,7 +126,7 @@ export default function MinedSharesExplorer() {
                   ))}
                 </div>
 
-                {!isConnected ? (
+                {!wsConnected ? (
                   <div className="p-8 text-center">
                     <div className="text-gray-400 mb-4">Connecting to server...</div>
                     <div className="h-12 bg-gray-800/50 rounded-md animate-pulse mb-4"></div>
@@ -151,7 +158,7 @@ export default function MinedSharesExplorer() {
           {activeTab === 'trends' && <TrendsTab timeRange={timeRange} />}
           {activeTab === 'rewards' && (
             <div className="border border-gray-800/50 rounded-xl p-6 bg-[#1c1c1c]">
-              <RewardsDashboard />
+              <RewardsDashboard/>
             </div>
           )}
         </div>

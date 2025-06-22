@@ -24,56 +24,40 @@ export async function fetchBlockDetails(wss, blockHeight = null) {
     const rewardBTC = coinbaseTx.vout.reduce((acc, out) => acc + out.value, 0);
 
     const transactions = blockData.tx.slice(1).map((tx, index) => {
-      // Calculate fee more accurately
-      let feeBTC = 0;
-      if (tx.fee !== undefined) {
-        feeBTC = tx.fee;
-      } else {
-        
-        feeBTC = 0.0001; 
-      }
-
-      const size = tx.size || tx.weight || 225; 
+      const feeBTC = tx.fee !== undefined ? tx.fee : 0.0001;
+      const size = tx.size || tx.weight || 225;
       const feeRate = size > 0 ? (feeBTC * 1e8) / size : 0;
 
       return {
-        id: `${blockHash}_tx_${index}`, 
+        id: `${blockHash}_tx_${index}`,
         hash: tx.txid,
-        timestamp: new Date(blockData.time * 1000).toISOString(),
+        timestamp: blockData.time * 1000, 
         count: index + 1,
         blockId: height.toString(),
-        fee: feeBTC, 
+        fee: feeBTC,
         size: size,
-        feePaid: feeBTC.toFixed(8), 
         feeRate: Math.round(feeRate),
         inputs: tx.vin.length,
         outputs: tx.vout.length,
       };
     });
 
-    // Step 6: Build block summary
+    // Send raw block data for frontend processing
     const blockPayload = {
-      type: 'Block_summary',
+      type: 'block_data',
       data: {
         blockHash: blockData.hash,
-        timestamp: new Date(blockData.time * 1000).toISOString(),
+        timestamp: blockData.time * 1000,
         height,
-        work: `${(blockData.difficulty / 1e6).toFixed(2)} EH`, 
+        difficulty: blockData.difficulty,
         txCount: blockData.tx.length,
-        reward: rewardBTC, 
+        reward: rewardBTC,
         parent: blockData.previousblockhash,
         transactions,
       },
     };
 
-    console.log(`Block ${height} data:`, {
-      hash: blockData.hash,
-      txCount: blockData.tx.length,
-      reward: rewardBTC,
-      transactionsCount: transactions.length
-    });
-
-    // Send transaction stats
+    // Send transaction statistics as raw data
     const totalFees = transactions.reduce((acc, tx) => acc + tx.fee, 0);
     const avgFeeRate = transactions.length > 0 
       ? transactions.reduce((acc, tx) => acc + tx.feeRate, 0) / transactions.length 
@@ -85,10 +69,10 @@ export async function fetchBlockDetails(wss, blockHeight = null) {
     const statsPayload = {
       type: 'transaction_stats',
       data: {
-        mempoolSize: blockData.tx.length - 1, // Exclude coinbase
+        mempoolSize: blockData.tx.length - 1,
         avgFeeRate: avgFeeRate,
         avgTxSize: Math.round(avgTxSize),
-        txRate: blockData.tx.length - 1, // Transactions per block
+        txRate: blockData.tx.length - 1,
         totalFees: totalFees
       },
     };
