@@ -29,16 +29,20 @@ export default function AdvancedChart({
   const handleExport = () => {
     const svg = chartRef.current?.querySelector('svg');
     if (!svg) return;
+    const clonedSvg = svg.cloneNode(true) as SVGSVGElement;
+
     const background = document.createElementNS(
       'http://www.w3.org/2000/svg',
       'rect'
     );
     background.setAttribute('width', '100%');
     background.setAttribute('height', '100%');
-    background.setAttribute('fill', 'black');
-    svg.insertBefore(background, svg.firstChild);
+    background.setAttribute('fill', '#1c1c1c');
+
+    clonedSvg.insertBefore(background, clonedSvg.firstChild);
+
     const serializer = new XMLSerializer();
-    const source = serializer.serializeToString(svg);
+    const source = serializer.serializeToString(clonedSvg);
     const blob = new Blob([source], { type: 'image/svg+xml' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
