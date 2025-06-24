@@ -19,7 +19,7 @@ export interface TransactionTableProps {
   transactions: any[]; // will have to replace this with the final Transaction props
 }
 
-// All props will need to be updated once RPC is ready
+// All props will need to be updated here once RPC is ready, and will have to update <any> in tests and code later on
 export interface TransactionInfo {
   txid: string;
   fee: number;

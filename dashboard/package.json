@@ -39,6 +39,8 @@
     "test": "jest"
   },
   "devDependencies": {
+    "@babel/core": "^7.27.4",
+    "@babel/preset-env": "^7.27.2",
     "@tailwindcss/postcss": "^4.1.5",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.6.3",
@@ -47,6 +49,7 @@
     "@types/jest": "^29.5.14",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.21",
+    "babel-jest": "^30.0.2",
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^30.0.0-beta.3",
     "postcss": "^8.5.3",
