@@ -6,7 +6,7 @@ let lastDiffTime = 0;
 export async function fetchHashrateStats(wss) {
   try {
     const startTime = Date.now();
-    const now = startTime
+    const now = startTime;
 
     if (!lastDifficulty || now - lastDiffTime > 30_000) {
       lastDifficulty = await rpcWithEnv({ method: 'getdifficulty' });
@@ -30,7 +30,7 @@ export async function fetchHashrateStats(wss) {
 
     wss.clients.forEach((client) => {
       if (client.readyState === client.OPEN) {
-        client.send(JSON.stringify(payload));   
+        client.send(JSON.stringify(payload));
       }
     });
   } catch (err) {
