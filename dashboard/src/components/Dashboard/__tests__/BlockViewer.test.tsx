@@ -1,3 +1,9 @@
+import '@testing-library/jest-dom';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import BlockViewer from '../BlockViewer';
+import * as Utils from '../Utils';
+import { Block } from '../Types';
+
 // Mock WebSocket for testing
 const originalWebSocket = global.WebSocket;
 
@@ -26,12 +32,6 @@ class MockWebSocket {
 }
 
 global.WebSocket = MockWebSocket as any;
-
-import '@testing-library/jest-dom';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import BlockViewer from '../BlockViewer';
-import * as Utils from '../Utils';
-import { Block } from '../Types';
 
 jest.mock('../RecentBlocksTable', () => () => (
   <div data-testid="recent-blocks-table" />
