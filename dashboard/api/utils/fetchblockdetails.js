@@ -24,7 +24,7 @@ export async function fetchBlockDetails(wss, blockHeight = null) {
     const rewardBTC = coinbaseTx.vout.reduce((acc, out) => acc + out.value, 0);
 
     const transactions = blockData.tx.slice(1).map((tx, index) => {
-      const feeBTC = tx.fee !== undefined ? tx.fee : 0.0001;
+      const feeBTC = tx.fee !== undefined ? tx.fee : 'Unknown';
       const size = tx.size || tx.weight || 225;
       const feeRate = size > 0 ? (feeBTC * 1e8) / size : 0;
 

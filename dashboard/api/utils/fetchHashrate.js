@@ -15,8 +15,7 @@ export async function fetchHashrateStats(wss) {
 
     const hashrate = await rpcWithEnv({ method: 'getnetworkhashps' });
     const hashrateEH = hashrate / 1e18;
-    const latency = Date.now() - startTime;
-    const timestamp = Date.now();
+    const latency = now - startTime;
 
     const payload = {
       type: 'hashrate_data',
