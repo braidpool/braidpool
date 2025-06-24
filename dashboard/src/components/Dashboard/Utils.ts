@@ -28,7 +28,7 @@ export const fetchPreviousBlocks = async () => {
 
 export function formatUnixTimestamp(timestamp: number): string {
   const date = new Date(timestamp * 1000);
-  return date.toISOString().replace('T', ' ').slice(0, 19);
+  return date.toTimeString().slice(0, 8); // "HH:MM:SS"
 }
 
 export const formatTimestamp = (ts: number) => {

@@ -104,7 +104,7 @@ const BlockViewer: React.FC = () => {
   const maxBlockSize = Math.max(...allBlocks.map((block) => block.size), 1);
 
   return (
-    <div>
+    <div className="max-w-screen w-full overflow-x-hidden">
       <div className="p-4">
         <h2 className="text-white text-xl font-bold mb-4">Block Explorer</h2>
         <div
