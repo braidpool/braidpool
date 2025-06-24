@@ -1,19 +1,26 @@
 import WebSocket from 'ws';
 import { rpcWithEnv } from './rpcWithEnv.js';
 
-export async function fetchBlockDetails(wss, blockHeight = null) {
+let lastBlockHash = null;
+
+export async function fetchBlockDetails(wss) {
   try {
     const startTime = Date.now();
-    let height = blockHeight;
-    if (!height) {
-      const blockchainInfo = await rpcWithEnv({ method: 'getblockchaininfo' });
-      height = blockchainInfo.blocks;
-    }
+
+    const blockchainInfo = await rpcWithEnv({ method: 'getblockchaininfo' });
+    const latestHeight = blockchainInfo.blocks;
 
     const blockHash = await rpcWithEnv({
       method: 'getblockhash',
-      params: [height],
+      params: [latestHeight],
     });
+
+    if (blockHash === lastBlockHash) {
+      console.log(` No new block at height ${latestHeight}`);
+      return;
+    }
+
+    lastBlockHash = blockHash;
 
     const blockData = await rpcWithEnv({
       method: 'getblock',
@@ -24,7 +31,7 @@ export async function fetchBlockDetails(wss, blockHeight = null) {
     const rewardBTC = coinbaseTx.vout.reduce((acc, out) => acc + out.value, 0);
 
     const transactions = blockData.tx.slice(1).map((tx, index) => {
-      const feeBTC = tx.fee !== undefined ? tx.fee : 'Unknown';
+      const feeBTC = tx.fee !== undefined ? tx.fee : 0.0001;
       const size = tx.size || tx.weight || 225;
       const feeRate = size > 0 ? (feeBTC * 1e8) / size : 0;
 
@@ -33,7 +40,7 @@ export async function fetchBlockDetails(wss, blockHeight = null) {
         hash: tx.txid,
         timestamp: blockData.time * 1000,
         count: index + 1,
-        blockId: height.toString(),
+        blockId: latestHeight.toString(),
         fee: feeBTC,
         size: size,
         feeRate: Math.round(feeRate),
@@ -42,13 +49,12 @@ export async function fetchBlockDetails(wss, blockHeight = null) {
       };
     });
 
-    // Send raw block data for frontend processing
     const blockPayload = {
       type: 'block_data',
       data: {
         blockHash: blockData.hash,
         timestamp: blockData.time * 1000,
-        height,
+        height: latestHeight,
         difficulty: blockData.difficulty,
         txCount: blockData.tx.length,
         reward: rewardBTC,
@@ -57,7 +63,6 @@ export async function fetchBlockDetails(wss, blockHeight = null) {
       },
     };
 
-    // Send transaction statistics as raw data
     const totalFees = transactions.reduce((acc, tx) => acc + tx.fee, 0);
     const avgFeeRate =
       transactions.length > 0
@@ -88,10 +93,8 @@ export async function fetchBlockDetails(wss, blockHeight = null) {
       }
     });
 
-    console.log(
-      `[WebSocket] Block ${height} sent in ${Date.now() - startTime}ms`
-    );
+    console.log(`Block ${latestHeight} sent in ${Date.now() - startTime}ms`);
   } catch (err) {
-    console.error('[WebSocket] Block fetch failed:', err.message);
+    console.error(' Block fetch failed:', err.message);
   }
 }

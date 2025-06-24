@@ -57,6 +57,9 @@ setInterval(() => {
     console.error('[Server] sendDataToClients failed:', err)
   );
 
+  fetchBlockDetails(wss).catch((err) =>
+    console.error('[Server] fetchBlockDetails failed:', err)
+  );
   fetchHashrateStats(wss).catch((err) =>
     console.error('[Server] fetchHashrateStats failed:', err)
   );
@@ -67,10 +70,6 @@ setInterval(() => {
 
   fetchReward(wss).catch((err) =>
     console.error('[Server] fetchReward failed:', err)
-  );
-
-  fetchBlockDetails(wss).catch((err) =>
-    console.error('[Server] fetchBlockDetails failed:', err)
   );
 }, 10000); // 10-second interval for better performance
 
