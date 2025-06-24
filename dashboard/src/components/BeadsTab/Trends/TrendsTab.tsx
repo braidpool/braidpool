@@ -1,19 +1,11 @@
 import { useState } from 'react';
 import { TrendsTABS } from '../lib/constants';
-import { useChartData } from '../Hooks/useChartData';
 import HashrateTab from './HashrateTab';
 import LatencyTab from './LatencyTab';
 import TransactionsTab from './TransactionsTab';
 
 export function TrendsTab({ timeRange }: { timeRange: string }) {
   const [activeSubTab, setActiveSubTab] = useState('hashrate');
-  const {
-    data: chartData,
-    hashrateData,
-    latencyData,
-    stats,
-    isLoading: isChartLoading,
-  } = useChartData(timeRange);
   const [chartHovered, setChartHovered] = useState(false);
 
   return (
@@ -48,30 +40,15 @@ export function TrendsTab({ timeRange }: { timeRange: string }) {
         </nav>
       </div>
 
-      {activeSubTab === 'hashrate' && (
-        <HashrateTab
-          hashrateData={hashrateData}
-          isLoading={isChartLoading}
-          timeRange={timeRange}
-        />
-      )}
+      {activeSubTab === 'hashrate' && <HashrateTab timeRange={timeRange} />}
 
-      {activeSubTab === 'latency' && (
-        <LatencyTab
-          latencyData={latencyData}
-          isLoading={isChartLoading}
-          timeRange={timeRange}
-        />
-      )}
+      {activeSubTab === 'latency' && <LatencyTab timeRange={timeRange} />}
 
       {activeSubTab === 'transactions' && (
         <TransactionsTab
-          chartData={chartData}
-          isChartLoading={isChartLoading}
           chartHovered={chartHovered}
           setChartHovered={setChartHovered}
           timeRange={timeRange}
-          stats={stats}
         />
       )}
     </div>

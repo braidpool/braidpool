@@ -23,7 +23,7 @@ import TopStatsBar from '../common/TopStatsBar';
 import Card from '../common/Card';
 import Header from '../common/Header';
 import InstallationInstructions from '../Installation/InstallationInstructions';
-import MineInventoryDashboard from '../BeadsTab/MineInventoryDashboard';
+import MineInventoryDashboard from '../MinerInventory/MineInventoryDashboard';
 import PoolHashrateChart from './PoolHashrateChart';
 import MempoolLatencyStats from './MempoolLatencyStats';
 import RecentBlocksTable from './RecentBlocksTable';

@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import DashboardHeader from './DashboardHeader';
 import BeadRow from './BeadRow';
 import { TrendsTab } from './Trends/TrendsTab';
 import { RewardsDashboard } from './Reward/RewardsSection';
 import { Transaction, Bead } from './lib/types';
-import { useWebSocket } from './Hooks/useWebSocket';
-import { useChartData } from './Hooks/useChartData';
+import { processBlockData } from './lib/utils/dataProcessor';
 
 type BeadId = string;
 
@@ -18,80 +17,97 @@ export default function MinedSharesExplorer() {
   const [activeTab, setActiveTab] = useState('beads');
   const [liveBeads, setLiveBeads] = useState<Bead[]>([]);
   const [activeBead, setActiveBead] = useState<BeadId | null>(null);
-  const [bitcoinPrice, setBitcoinPrice] = useState<number>(0);
-
+  const [wsConnected, setWsConnected] = useState(false);
+  const wsRef = useRef<WebSocket | null>(null);
   const timeRange = 'month';
 
-  const { isConnected: wsConnected } = useWebSocket({
-    onMessage: (message) => {
-      if (message.type === 'Block_summary') {
-        const {
-          blockHash,
-          height,
-          timestamp,
-          work,
-          txCount,
-          reward,
-          parent,
-          transactions,
-        } = message.data;
-
-        const validatedTransactions: Transaction[] = (transactions || []).map(
-          (tx: any, index: number) => ({
-            id: tx.id || `${blockHash}_tx_${index}`,
-            hash: tx.hash || tx.txid || '',
-            timestamp: tx.timestamp || timestamp,
-            count: tx.count || 0,
-            blockId: tx.blockId || height.toString(),
-            fee: typeof tx.fee === 'number' ? tx.fee : parseFloat(tx.fee) || 0,
-            size:
-              typeof tx.size === 'number' ? tx.size : parseInt(tx.size) || 0,
-            feePaid: tx.feePaid || '0',
-            feeRate:
-              typeof tx.feeRate === 'number'
-                ? tx.feeRate
-                : parseInt(tx.feeRate) || 0,
-            inputs:
-              typeof tx.inputs === 'number'
-                ? tx.inputs
-                : parseInt(tx.inputs) || 0,
-            outputs:
-              typeof tx.outputs === 'number'
-                ? tx.outputs
-                : parseInt(tx.outputs) || 0,
-          })
-        );
-
-        const difficultyMatch = work ? String(work).match(/(\d+\.?\d*)/) : null;
-        const difficulty = difficultyMatch ? parseFloat(difficultyMatch[1]) : 0;
-
-        const newBead: Bead = {
-          id: blockHash,
-          name: `#${height}`,
-          timestamp,
-          transactions: txCount,
-          difficulty: difficulty,
-          reward: typeof reward === 'number' ? reward : parseFloat(reward) || 0,
-          parents: parent ? [parent] : [],
-          details: validatedTransactions,
-        };
-
-        setLiveBeads((prev) => {
-          const exists = prev.find((b) => b.id === newBead.id);
-          if (exists) return prev;
-          return [newBead, ...prev.slice(0, 100)];
-        });
-      } else if (message.type === 'bitcoin_update') {
-        const priceData = message.data.price;
-        if (priceData && priceData.USD) {
-          setBitcoinPrice(parseFloat(priceData.USD));
-        }
-      }
-    },
-    onError: (error) => {
+  useEffect(() => {
+    const ws = new WebSocket('ws://localhost:5000');
+    wsRef.current = ws;
+    ws.onopen = () => {
+      setWsConnected(true);
+    };
+    ws.onclose = () => {
+      setWsConnected(false);
+    };
+    ws.onerror = (error) => {
+      setWsConnected(false);
       console.error('WebSocket error:', error);
-    },
-  });
+    };
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        if (message.type === 'block_data') {
+          const processed = processBlockData(message.data);
+          const {
+            blockHash,
+            height,
+            timestamp,
+            work,
+            txCount,
+            reward,
+            parent,
+            transactions,
+          } = processed;
+          const validatedTransactions: Transaction[] = (transactions || []).map(
+            (tx: any, index: number) => ({
+              id: tx.id || `${blockHash}_tx_${index}`,
+              hash: tx.hash || tx.txid || '',
+              timestamp: tx.timestamp || timestamp,
+              count: tx.count || 0,
+              blockId: tx.blockId || height.toString(),
+              fee:
+                typeof tx.fee === 'number' ? tx.fee : parseFloat(tx.fee) || 0,
+              size:
+                typeof tx.size === 'number' ? tx.size : parseInt(tx.size) || 0,
+              feePaid: tx.feePaid || '0',
+              feeRate:
+                typeof tx.feeRate === 'number'
+                  ? tx.feeRate
+                  : parseInt(tx.feeRate) || 0,
+              inputs:
+                typeof tx.inputs === 'number'
+                  ? tx.inputs
+                  : parseInt(tx.inputs) || 0,
+              outputs:
+                typeof tx.outputs === 'number'
+                  ? tx.outputs
+                  : parseInt(tx.outputs) || 0,
+            })
+          );
+          const difficultyMatch = work
+            ? String(work).match(/(\d+\.?\d*)/)
+            : null;
+          const difficulty = difficultyMatch
+            ? parseFloat(difficultyMatch[1])
+            : 0;
+          const newBead: Bead = {
+            id: blockHash,
+            name: `#${height}`,
+            timestamp,
+            transactions: txCount,
+            difficulty: difficulty,
+            reward:
+              typeof reward === 'number' ? reward : parseFloat(reward) || 0,
+            parents: parent ? [parent] : [],
+            details: validatedTransactions,
+          };
+          setLiveBeads((prev) => {
+            const exists = prev.find((b) => b.id === newBead.id);
+            if (exists) return prev;
+            return [newBead, ...prev.slice(0, 100)];
+          });
+        }
+      } catch (e) {
+        console.error('WebSocket message parse error:', e);
+      }
+    };
+    return () => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
+    };
+  }, []);
 
   const toggleBead = (beadId: string) => {
     setExpandedBeads((prev) => ({ ...prev, [beadId]: !prev[beadId] }));

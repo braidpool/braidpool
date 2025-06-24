@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Bitcoin, Clock, TrendingUp, ArrowUpRight } from 'lucide-react';
 import RewardHistoryChart from './RewardHistoryChart';
 import { RewardData } from '../lib/types';
 import { generateRewardHistory } from './generateRewardHistory';
-import { useWebSocket } from '../Hooks/useWebSocket';
 import AnimatedStatCard from '../AnimatedStatCard';
+import { processRewardsData } from '../lib/utils/dataProcessor';
 
 export function RewardsDashboard() {
   const [rewardData, setRewardData] = useState<RewardData | null>(null);
@@ -12,43 +12,61 @@ export function RewardsDashboard() {
   const [activeTab, setActiveTab] = useState('overview');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const wsRef = useRef<WebSocket | null>(null);
 
-  const { isConnected } = useWebSocket({
-    onMessage: (message) => {
-      if (message.type === 'Rewards_update') {
-        const data = message.data;
-        console.log('Received rewards data:', data);
-        const rewardHistory = generateRewardHistory(
-          data.blockCount,
-          data.blockReward
-        );
-
-        setRewardData({
-          totalRewards: data.totalRewards ?? 0,
-          dailyAverage: data.rewardRate ?? 0,
-          weeklyProjection: (data.rewardRate ?? 0) * 7,
-          monthlyProjection: (data.rewardRate ?? 0) * 30,
-          lastReward: data.blockReward ?? 0,
-          lastRewardTime: data.lastRewardTime ?? '',
-          streak: data.streak ?? 0,
-          nextMilestone: data.nextMilestone ?? 0.05,
-          achievements: data.achievements ?? [],
-          rewardHistory: rewardHistory ?? [],
-        });
-        setIsLoading(false);
-        setError(null);
-      } else if (message.type === 'bitcoin_update') {
-        const priceData = message.data.price;
-        if (priceData && priceData.USD) {
-          setBitcoinPrice(parseFloat(priceData.USD));
-        }
-      }
-    },
-    onError: (error) => {
-      console.error('WebSocket error:', error);
+  useEffect(() => {
+    const ws = new WebSocket('ws://localhost:5000');
+    wsRef.current = ws;
+    ws.onopen = () => {
+      setIsConnected(true);
+      setIsLoading(false);
+    };
+    ws.onclose = () => {
+      setIsConnected(false);
+    };
+    ws.onerror = (error) => {
+      setIsConnected(false);
       setError('WebSocket connection failed');
-    },
-  });
+      console.error('WebSocket error:', error);
+    };
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        if (message.type === 'rewards_data') {
+          const processed = processRewardsData(message.data);
+          const rewardHistory = generateRewardHistory(
+            processed.blockCount,
+            processed.blockReward
+          );
+          setRewardData({
+            totalRewards: processed.totalRewards ?? 0,
+            dailyAverage: processed.rewardRate ?? 0,
+            weeklyProjection: (processed.rewardRate ?? 0) * 7,
+            monthlyProjection: (processed.rewardRate ?? 0) * 30,
+            lastReward: processed.blockReward ?? 0,
+            lastRewardTime: processed.lastRewardTime ?? '',
+            rewardHistory: rewardHistory ?? [],
+          });
+          setIsLoading(false);
+          setError(null);
+        } else if (message.type === 'bitcoin_update') {
+          const priceData = message.data.price;
+          if (priceData && priceData.USD) {
+            setBitcoinPrice(parseFloat(priceData.USD));
+          }
+        }
+      } catch (e) {
+        setError('WebSocket message parse error');
+        console.error('WebSocket message parse error:', e);
+      }
+    };
+    return () => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
+    };
+  }, []);
 
   const formatMBTC = (btc: number) => (btc * 1000).toFixed(2);
 
