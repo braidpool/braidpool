@@ -1,6 +1,5 @@
 import { callRpc } from '../utils/fetchRpc.js';
 
-
 const ALLOWED_RPC_METHODS = new Set([
   'getblock',
   'getblockhash',
@@ -9,7 +8,6 @@ const ALLOWED_RPC_METHODS = new Set([
   'getmempoolinfo',
   'getpeerinfo',
   'getblockchaininfo',
-  
 ]);
 
 export async function handleWebSocketConnection(ws, wss) {
@@ -29,7 +27,9 @@ export async function handleWebSocketConnection(ws, wss) {
         }
 
         if (!ALLOWED_RPC_METHODS.has(data.method)) {
-          console.warn(`[SECURITY] Blocked unauthorized RPC method: ${data.method}`);
+          console.warn(
+            `[SECURITY] Blocked unauthorized RPC method: ${data.method}`
+          );
           ws.send(
             JSON.stringify({
               type: 'error',
@@ -47,9 +47,7 @@ export async function handleWebSocketConnection(ws, wss) {
           params: data.params || [],
         });
 
-        ws.send(
-          JSON.stringify({ type: 'rpc_response', id: data.id, result })
-        );
+        ws.send(JSON.stringify({ type: 'rpc_response', id: data.id, result }));
       }
     } catch (err) {
       console.error('WS error:', err);
