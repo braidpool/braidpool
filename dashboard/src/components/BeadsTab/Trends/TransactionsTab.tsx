@@ -1,40 +1,54 @@
 import { useState, useEffect, useRef } from 'react';
 import AdvancedChart from '../AdvancedChart';
 import AnimatedStatCard from '../AnimatedStatCard';
+import { TransactionTabProps, ChartDataItem, Stats } from '../lib/types';
 
 export default function TransactionsTab({
   chartHovered,
   setChartHovered,
   timeRange,
-}: any) {
-  const [chartData, setChartData] = useState<any[]>([]);
-  const [stats, setStats] = useState<any>({});
-  const [isLoading, setIsLoading] = useState(true);
-  const [isConnected, setIsConnected] = useState(false);
+}: TransactionTabProps) {
+  const [chartData, setChartData] = useState<ChartDataItem[]>([]);
+  const [stats, setStats] = useState<Stats>({
+    txRate: 0,
+    mempoolSize: 0,
+    avgFeeRate: 0,
+    avgTxSize: 0,
+  });
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isConnected, setIsConnected] = useState<boolean>(false);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     const ws = new WebSocket('ws://localhost:5000');
     wsRef.current = ws;
+
     ws.onopen = () => {
       setIsConnected(true);
       setIsLoading(false);
     };
+
     ws.onclose = () => {
       setIsConnected(false);
     };
+
     ws.onerror = (error) => {
       setIsConnected(false);
       setIsLoading(false);
       console.error('[TransactionsTab] WebSocket error:', error);
     };
+
     ws.onmessage = (event) => {
       try {
-        const message = JSON.parse(event.data);
-        if (message.type === 'block_data') {
+        const parsed = JSON.parse(event.data);
+
+        if (
+          parsed.type === 'block_data' &&
+          parsed.data?.txCount !== undefined
+        ) {
           const now = new Date();
-          const newDataPoint = {
-            value: message.data.txCount || 0,
+          const newDataPoint: ChartDataItem = {
+            value: parsed.data.txCount || 0,
             label: now.toLocaleTimeString('en-US', {
               hour: '2-digit',
               minute: '2-digit',
@@ -44,14 +58,21 @@ export default function TransactionsTab({
             date: now,
           };
           setChartData((prev) => [...prev, newDataPoint].slice(-100));
-        } else if (message.type === 'transaction_stats') {
-          setStats(message.data);
+        } else if (
+          parsed.type === 'transaction_stats' &&
+          parsed.data &&
+          typeof parsed.data.txRate === 'number'
+        ) {
+          setStats(parsed.data);
+        } else {
+          console.warn('[TransactionsTab] Unknown message format:', parsed);
         }
       } catch (e) {
         setIsLoading(false);
         console.error('[TransactionsTab] WebSocket message parse error:', e);
       }
     };
+
     return () => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.close();

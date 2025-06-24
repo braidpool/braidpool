@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Activity } from 'lucide-react';
 import { shortenHash } from './lib/utils/utils';
 import { TransactionListProps } from './lib/types';

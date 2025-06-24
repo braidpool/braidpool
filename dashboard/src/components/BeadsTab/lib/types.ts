@@ -182,3 +182,25 @@ export interface RewardsData {
   nextHalving: number;
   blocksUntilHalving: number;
 }
+export type ChartDataItem = {
+  value: number;
+  label: string;
+  date: Date;
+};
+
+export type Stats = {
+  txRate: number;
+  mempoolSize: number;
+  avgFeeRate: number;
+  avgTxSize: number;
+};
+
+export type TransactionTabProps = {
+  chartHovered: boolean;
+  setChartHovered: (val: boolean) => void;
+  timeRange: string;
+};
+
+type WebSocketMessage =
+  | { type: 'block_data'; data: { txCount: number } }
+  | { type: 'transaction_stats'; data: Stats };
