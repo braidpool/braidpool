@@ -8,7 +8,7 @@ import {
 } from '../types';
 
 const MAX_HISTORY_LENGTH = 288;
-const MAX_LATENCY_HISTORY = 200;
+const MAX_LATENCY_HISTORY = 100;
 
 let hashrateHistory: HistoryEntry[] = [];
 let latencyHistory: LatencyEntry[] = [];
@@ -70,14 +70,7 @@ export function processLatencyData(data: ProcessedLatencyData) {
     date: new Date(timestamp).toISOString(),
     timeStamp: new Date(timestamp).toISOString(),
   };
-  const peakEntry = {
-    value: peakLatency,
-    label: new Date(timestamp).toLocaleTimeString() + ' (peak)',
-    date: new Date(timestamp).toISOString(),
-    timeStamp: new Date(timestamp).toISOString(),
-  };
-
-  latencyHistory.push(newEntry, peakEntry);
+  latencyHistory.push(newEntry);
 
   while (latencyHistory.length > MAX_LATENCY_HISTORY) {
     latencyHistory.shift();

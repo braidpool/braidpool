@@ -1,14 +1,64 @@
+import { useState, useEffect, useRef } from 'react';
 import AdvancedChart from '../AdvancedChart';
 import AnimatedStatCard from '../AnimatedStatCard';
 
 export default function TransactionsTab({
-  chartData,
-  isChartLoading,
   chartHovered,
   setChartHovered,
   timeRange,
-  stats,
 }: any) {
+  const [chartData, setChartData] = useState<any[]>([]);
+  const [stats, setStats] = useState<any>({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [isConnected, setIsConnected] = useState(false);
+  const wsRef = useRef<WebSocket | null>(null);
+
+  useEffect(() => {
+    const ws = new WebSocket('ws://localhost:5000');
+    wsRef.current = ws;
+    ws.onopen = () => {
+      setIsConnected(true);
+      setIsLoading(false);
+    };
+    ws.onclose = () => {
+      setIsConnected(false);
+    };
+    ws.onerror = (error) => {
+      setIsConnected(false);
+      setIsLoading(false);
+      console.error('[TransactionsTab] WebSocket error:', error);
+    };
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        if (message.type === 'block_data') {
+          const now = new Date();
+          const newDataPoint = {
+            value: message.data.txCount || 0,
+            label: now.toLocaleTimeString('en-US', {
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit',
+              hour12: true,
+            }),
+            date: now,
+          };
+          setChartData((prev) => [...prev, newDataPoint].slice(-100));
+        } else if (message.type === 'transaction_stats') {
+          setStats(message.data);
+        }
+      } catch (e) {
+        setIsLoading(false);
+        console.error('[TransactionsTab] WebSocket message parse error:', e);
+      }
+    };
+    return () => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
+    };
+  }, [timeRange]);
+
   return (
     <div className="space-y-6 bg-[#1c1c1c]">
       <div className="flex justify-between items-center">
@@ -20,8 +70,8 @@ export default function TransactionsTab({
             Real-time transaction statistics
           </p>
         </div>
-        <div className="bg-emerald-900/30 px-3 py-1 rounded-md">
-          <span className="text-emerald-300 font-mono">
+        <div className="bg-purple-900/30 px-3 py-1 rounded-md">
+          <span className="text-purple-300 font-mono">
             {stats?.txRate ? `${stats.txRate.toFixed(1)} tx/min` : 'Loading...'}
           </span>
         </div>
@@ -36,7 +86,7 @@ export default function TransactionsTab({
           data={chartData}
           height={350}
           isHovered={chartHovered}
-          isLoading={isChartLoading}
+          isLoading={isLoading}
           timeRange={timeRange}
           primaryLabel="Transactions per Block"
         />

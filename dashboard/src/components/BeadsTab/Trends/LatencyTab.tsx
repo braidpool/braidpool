@@ -1,17 +1,58 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import AdvancedChart from '../AdvancedChart';
 import AnimatedStatCard from '../AnimatedStatCard';
 import { LatencyData } from '../lib/types';
+import { processLatencyData } from '../lib/utils/dataProcessor';
 
-export default function LatencyTab({
-  latencyData,
-  isLoading,
-  timeRange,
-}: {
-  latencyData: LatencyData;
-  isLoading: boolean;
-  timeRange: string;
-}) {
+export default function LatencyTab({ timeRange }: { timeRange: string }) {
+  const [latencyData, setLatencyData] = useState<LatencyData>({
+    chartData: [],
+    averageLatency: '0ms',
+    peakLatency: '0ms',
+    peerCount: 0,
+    validPings: 0,
+    timestamp: 0,
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [isConnected, setIsConnected] = useState(false);
+  const wsRef = useRef<WebSocket | null>(null);
+
+  useEffect(() => {
+    const ws = new WebSocket('ws://localhost:5000');
+    wsRef.current = ws;
+    ws.onopen = () => {
+      setIsConnected(true);
+      setIsLoading(false);
+    };
+    ws.onclose = () => {
+      setIsConnected(false);
+    };
+    ws.onerror = (error) => {
+      setIsConnected(false);
+      setIsLoading(false);
+      console.error('[LatencyTab] WebSocket error:', error);
+    };
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        if (message.type === 'latency_data') {
+          const processed = processLatencyData(message.data);
+          setLatencyData(processed);
+          setIsLoading(false);
+        }
+      } catch (e) {
+        setIsLoading(false);
+        console.error('[LatencyTab] WebSocket message parse error:', e);
+      }
+    };
+
+    return () => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
+    };
+  }, [timeRange]);
+
   const chartData = (latencyData.chartData || []).map((d: any) => ({
     value: d.value,
     date: new Date(d.date),
@@ -23,6 +64,14 @@ export default function LatencyTab({
       fractionalSecondDigits: 3,
     }),
   }));
+
+  if (isLoading || !isConnected) {
+    return (
+      <div className="p-8 text-center text-purple-300">
+        Loading latency data...
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 bg-[#1c1c1c]">
@@ -48,7 +97,9 @@ export default function LatencyTab({
           isLoading={isLoading}
           timeRange={timeRange}
           primaryLabel="Latency (ms)"
-          tooltipFormatter={(value, name) => [`${value} ms`, name]}
+          tooltipFormatter={function (value, name): [string, string] {
+            return [`${(value as number).toFixed(2)} ms`, name as string];
+          }}
         />
       </div>
 

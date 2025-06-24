@@ -52,19 +52,26 @@ async function sendDataToClients() {
   }
 }
 
-// Fetch and broadcast all data every 10 seconds (more reasonable interval)
-setInterval(async () => {
-  try {
-    await Promise.allSettled([
-      sendDataToClients(),
-      fetchHashrateStats(wss),
-      fetchLatencyData(wss),
-      fetchReward(wss),
-      fetchBlockDetails(wss),
-    ]);
-  } catch (error) {
-    console.error('[Server] Data refresh failed:', error);
-  }
+setInterval(() => {
+  sendDataToClients().catch((err) =>
+    console.error('[Server] sendDataToClients failed:', err)
+  );
+
+  fetchHashrateStats(wss).catch((err) =>
+    console.error('[Server] fetchHashrateStats failed:', err)
+  );
+
+  fetchLatencyData(wss).catch((err) =>
+    console.error('[Server] fetchLatencyData failed:', err)
+  );
+
+  fetchReward(wss).catch((err) =>
+    console.error('[Server] fetchReward failed:', err)
+  );
+
+  fetchBlockDetails(wss).catch((err) =>
+    console.error('[Server] fetchBlockDetails failed:', err)
+  );
 }, 10000); // 10-second interval for better performance
 
 console.log('WebSocket server running on ws://localhost:5000');

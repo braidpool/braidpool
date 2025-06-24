@@ -74,9 +74,7 @@ export interface RewardData {
   monthlyProjection: number;
   lastReward: number;
   lastRewardTime: string;
-  streak: number;
-  nextMilestone: number;
-  achievements: string[];
+
   rewardHistory: { height: number; reward: number; label: string }[];
 }
 
