@@ -920,7 +920,7 @@ pub fn test_all_ancestors() {
             );
             let mut d2: HashMap<usize, HashSet<usize>> = HashMap::new();
 
-            let ancestor_mapping_dfs = current_file_braid.clone().all_ancestors(
+            let ancestor_mapping_dfs = current_file_braid.clone().updating_ancestors(
                 current_bead_hash,
                 &mut d2,
                 current_braid_parents.clone(),
