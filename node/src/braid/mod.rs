@@ -28,7 +28,7 @@ pub struct Braid {
 }
 
 impl Braid {
-    // All public funtions go here!
+    ///Initializing the Braid object for keeping track of current state of Braid
     pub fn new(genesis_beads: HashSet<Bead>) -> Self {
         let mut beads = Vec::new();
         let mut bead_indices = HashSet::new();
@@ -166,7 +166,9 @@ impl Braid {
         true
     }
 
-    //returning the genesis indices
+    ///Returning the genesis beads belonging to a Braid object
+    /// beads having no parents
+    /// representing the Braidpool architecture kindly refer to https://github.com/braidpool/braidpool/blob/dev/docs/braidpool_spec.md
     fn genesis(&mut self, parents: HashMap<usize, HashSet<usize>>) -> HashSet<usize> {
         let mut current_beads: Vec<usize> = Vec::new();
         for bead_idx in &parents {
@@ -182,7 +184,8 @@ impl Braid {
         }
         return genesis_bead_indices;
     }
-
+    ///Returning the tips belonging to a Braid object
+    /// beads having no children
     fn tips(&mut self, parents: HashMap<usize, HashSet<usize>>) -> HashSet<usize> {
         let mut bead_indices_mapping: HashMap<usize, usize> = HashMap::new();
         let mut tips_indices: HashSet<usize> = HashSet::new();
@@ -213,7 +216,7 @@ impl Braid {
         }
         tips_indices
     }
-
+    ///Reversing the bead<--->parent mapping to bead<---->children mapping
     fn reverse(
         &mut self,
         parents: HashMap<usize, HashSet<usize>>,
@@ -236,7 +239,7 @@ impl Braid {
         }
         return bead_children_mapping;
     }
-
+    ///Provides the complete set of child beads belonging to a particular set of beads
     fn generation(
         &mut self,
         beads_indices: HashSet<usize>,
@@ -261,8 +264,10 @@ impl Braid {
         }
         return children_set;
     }
-
-    fn all_ancestors<'a>(
+    ///Provided the bead and returning the ancestors of the that particular bead from the Braid object
+    /// Updating the overall mapping of bead<---->ancestor
+    /// via traversing braid in dfs manner instead or recursive following iterative approach
+    fn updating_ancestors<'a>(
         &mut self,
         current_block_hash: BeadHash,
         ancestors: &'a mut HashMap<usize, HashSet<usize>>,
@@ -327,6 +332,7 @@ impl Braid {
 
         return ancestors;
     }
+    ///Providing all possible ancestors mapping for all the beads upto the current provided bead
     fn get_all_ancestors<'a>(
         &mut self,
         current_block_hash: BeadHash,
@@ -354,7 +360,7 @@ impl Braid {
         for parent_idx in parents[&current_block_idx].clone() {
             let current_parent_blockhash = self.beads[parent_idx].block_header.block_hash();
             if ancestors.contains_key(&parent_idx) == false {
-                self.all_ancestors(current_parent_blockhash, ancestors, parents.clone());
+                self.updating_ancestors(current_parent_blockhash, ancestors, parents.clone());
             }
             let ancestor_ref = ancestors.clone();
             if let Some(current_bead_ancestors) = ancestors.get_mut(&current_block_idx) {
@@ -374,7 +380,8 @@ impl Braid {
 
         return ancestors;
     }
-
+    ///The colors correspond to "cohorts" which are sub-graphs separated by graph cuts. A graph cut is a line drawn through the graph where all beads on the right side of the cut have all beads on the left side of the cut as ancestors.
+    /// returning the set of cohort bead indices from the overall beads present upto time T in the current Braid .
     fn cohort(
         &mut self,
         parents: HashMap<usize, HashSet<usize>>,
@@ -445,7 +452,7 @@ impl Braid {
                 for bead in tail.difference(&key_set) {
                     let current_bead_blockhash =
                         self.beads[*bead].clone().block_header.block_hash();
-                    self.all_ancestors(current_bead_blockhash, &mut ancestor, parents.clone());
+                    self.updating_ancestors(current_bead_blockhash, &mut ancestor, parents.clone());
                 }
 
                 cohort = HashSet::new();
@@ -504,7 +511,7 @@ impl Braid {
         }
         generator
     }
-
+    ///Returning the head of the cohort
     fn cohort_head(
         &mut self,
         cohort: HashSet<usize>,
@@ -539,7 +546,7 @@ impl Braid {
 
         return tail;
     }
-
+    ///Returning the tail of the cohort
     fn cohort_tail(
         &mut self,
         cohort: HashSet<usize>,
@@ -553,6 +560,8 @@ impl Braid {
 
         return self.cohort_head(cohort, childs, Some(parents));
     }
+    ///Sub-braid is referred to the sub-graph of the Overall braid
+    /// will be utilized in pruning functionality as well
     fn get_sub_braid(
         &mut self,
         beads: HashSet<usize>,
@@ -572,7 +581,8 @@ impl Braid {
         }
         return sub_braid;
     }
-    //descendant work for braidpool based POW (Proof of Work)
+    ///descendant work for braidpool based POW (Proof of Work)
+    ///Calculates the descendant work or the ancestor work by reversing the parameters of child bead mapping and the parent bead mapping for a particular bead mapping
     fn descendant_work(
         &mut self,
         parents: HashMap<usize, HashSet<usize>>,
@@ -630,8 +640,10 @@ impl Braid {
         }
         return ret_val;
     }
-    //we will have to return the Ordering type for comparator
-
+    ///we will have to return the Ordering type for comparator
+    ///provided the 2 beads acts as a closure to be provided as the comparatator according to the
+    /// according to the current consensus functionality mapping/priority for comparator is -:
+    /// bead index < Ancestor work < Descendant work
     fn bead_cmp<'a>(
         &mut self,
         a: usize,
@@ -666,7 +678,9 @@ impl Braid {
         }
         return Ordering::Equal;
     }
-
+    ///Calculating the highest work path for a given braid provided with parent mapping :: reverse along with child mapping :: reverse
+    ///following the approach for selecting the best possible chain for the purpose of resolving the conflicts
+    /// arising due to the simultaneous beads and which path to be taken as the main braid path .
     fn highest_work_path(
         &mut self,
         parents: HashMap<usize, HashSet<usize>>,
@@ -750,7 +764,7 @@ impl Braid {
         return highest_work_path;
     }
 
-    //existence of a cohort in forward as well as in backward direction
+    ///Check for the existence of a cohort in forward as well as in backward direction
     fn check_cohort(
         &mut self,
         cohort: HashSet<usize>,
@@ -767,6 +781,7 @@ impl Braid {
             parents.clone(),
         ) && self.check_cohort_ancestors(Some(parents), cohort, children);
     }
+    ///Checking for the ancestors of cohorts bead indices taken as parameter
     fn check_cohort_ancestors(
         &mut self,
         children_or_none: Option<HashMap<usize, HashSet<usize>>>,
