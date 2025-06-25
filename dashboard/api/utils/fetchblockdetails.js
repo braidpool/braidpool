@@ -6,7 +6,6 @@ let lastBlockHash = null;
 export async function fetchBlockDetails(wss) {
   try {
     const startTime = Date.now();
-
     const blockchainInfo = await rpcWithEnv({ method: 'getblockchaininfo' });
     const latestHeight = blockchainInfo.blocks;
 
