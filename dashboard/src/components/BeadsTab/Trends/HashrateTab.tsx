@@ -94,7 +94,7 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
         />
       </div>
 
-      <div className="grid grid-cols-3 md:grid-cols-3 sm:grid-cols-1  gap-6">
+      <div className="grid sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <AnimatedStatCard
           title="Current Hashrate"
           value={hashrateData.current}

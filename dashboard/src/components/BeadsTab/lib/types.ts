@@ -201,6 +201,6 @@ export type TransactionTabProps = {
   timeRange: string;
 };
 
-type WebSocketMessage =
+export type WebSocketMessage =
   | { type: 'block_data'; data: { txCount: number } }
   | { type: 'transaction_stats'; data: Stats };
