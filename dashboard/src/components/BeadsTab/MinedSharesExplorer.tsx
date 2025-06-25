@@ -169,7 +169,6 @@ export default function MinedSharesExplorer() {
                       isExpanded={!!expandedBeads[bead.id]}
                       onToggle={() => toggleBead(bead.id)}
                       transactions={bead.details || []}
-                      onParentClick={handleParentClick}
                     />
                   ))
                 )}

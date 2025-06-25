@@ -21,7 +21,7 @@ export function processHashrateData(data: ProcessedHashrateData) {
     value: hashrate,
     date: new Date(timestamp).toISOString(),
     label: new Date(timestamp).toLocaleTimeString(),
-    timestamp,
+    timestamp: new Date(timestamp).getTime(),
   };
 
   if (hashrateHistory.length >= MAX_HISTORY_LENGTH) {

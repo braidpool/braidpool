@@ -60,7 +60,6 @@ export interface BeadRowProps {
   onToggle: (beadId: string) => void;
   isActive: boolean;
   transactions: Transaction[];
-  onParentClick: (parentHash: string) => void;
 }
 
 export interface RewardHistoryChartProps {

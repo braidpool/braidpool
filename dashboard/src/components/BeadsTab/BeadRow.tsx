@@ -4,17 +4,15 @@ import TransactionList from './TransactionList';
 import { shortenHash, formatWork } from './lib/utils/utils';
 import type { BeadRowProps } from './lib/types';
 import { BeadRewardTooltip } from './BeadRewardTooltip';
-
+import useCopyToClipboard from './lib/utils/useCopyToClipboard';
 export default function BeadRow({
   bead,
   isExpanded,
   onToggle,
   transactions,
-  onParentClick,
 }: BeadRowProps) {
   const { value: formattedWork, unit: workUnit } = formatWork(bead.difficulty);
   const [isRewardOpen, setIsRewardOpen] = useState(false);
-  const [copiedParent, setCopiedParent] = useState<string | null>(null);
 
   const handleKeyToggle = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -22,14 +20,7 @@ export default function BeadRow({
     }
   };
 
-  const handleCopyParent = (parent: string) => {
-    navigator.clipboard.writeText(parent).then(() => {
-      setCopiedParent(parent);
-      setTimeout(() => setCopiedParent(null), 1500);
-    });
-    onParentClick(parent);
-  };
-
+  const { copied, copy } = useCopyToClipboard();
   return (
     <div className="border-b border-gray-800/80">
       <div
@@ -98,12 +89,12 @@ export default function BeadRow({
                     className="text-white font-mono text-xs sm:text-sm hover:text-cyan-300 hover:underline truncate max-w-[150px] sm:max-w-[200px]"
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleCopyParent(parent);
+                      copy(parent);
                     }}
                   >
                     {shortenHash(parent)}
                   </button>
-                  {copiedParent === parent && (
+                  {copied === parent && (
                     <span className=" px-2 text-green-400 text-xs">
                       Copied!
                     </span>

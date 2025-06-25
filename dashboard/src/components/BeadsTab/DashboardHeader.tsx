@@ -16,7 +16,7 @@ export default function DashboardHeader({
               onClick={() => setActiveTab(tab.id)}
               className={`
                 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm
-                transition-colors duration-200
+                transition-colors duration-200 
                 ${
                   activeTab === tab.id
                     ? 'border-blue-500 text-blue-400'

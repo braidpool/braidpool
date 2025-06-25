@@ -1,12 +1,13 @@
 import { Activity } from 'lucide-react';
 import { shortenHash } from './lib/utils/utils';
 import { TransactionListProps } from './lib/types';
-
+import useCopyToClipboard from './lib/utils/useCopyToClipboard';
 export default function TransactionList({
   transactions,
 }: TransactionListProps) {
   const limitedTransactions = transactions.slice(0, 10);
   const hasMoreTransactions = transactions.length > 10;
+  const { copied, copy } = useCopyToClipboard();
 
   return (
     <div className="pl-4 sm:pl-10 pr-4 pb-3 ">
@@ -39,12 +40,23 @@ export default function TransactionList({
               key={transaction.id}
               className="grid grid-cols-6 gap-2 py-2.5 px-2 rounded-lg transition-all duration-300  group relative text-sm sm:text-sm"
             >
-              <div
-                className="text-white text-sm font-mono relative z-10 group-hover:text-cyan-300 transition-colors duration-300 truncate"
-                title={transaction.hash}
-              >
-                {shortenHash(transaction.hash)}
+              <div className="flex flex-wrap gap-2">
+                <div className="relative">
+                  <button
+                    className="text-white font-mono text-xs sm:text-sm hover:text-cyan-300 hover:underline truncate max-w-[150px] sm:max-w-[200px]"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      copy(transaction.hash);
+                    }}
+                  >
+                    {shortenHash(transaction.hash)}
+                  </button>
+                  {copied === transaction.hash && (
+                    <span className="px-2 text-green-400 text-xs">Copied!</span>
+                  )}
+                </div>
               </div>
+
               <div className="text-white text-sm relative z-10  group-hover:text-gray-300 transition-colors duration-300">
                 {transaction.size} vB
               </div>
