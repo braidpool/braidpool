@@ -73,4 +73,4 @@ setInterval(() => {
   );
 }, 10000); // 10-second interval for better performance
 
-console.log('WebSocket server running on ws://localhost:5000');
+console.log(`WebSocket server running on ws://localhost:${PORT}`);

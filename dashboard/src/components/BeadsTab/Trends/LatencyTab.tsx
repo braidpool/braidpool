@@ -8,7 +8,7 @@ const MAX_LATENCY_HISTORY = 100;
 export default function LatencyTab({ timeRange }: { timeRange: string }) {
   const [latencyData, setLatencyData] = useState<LatencyData>({
     chartData: [],
-    averageLatency: 'Laoding',
+    averageLatency: 'Loading',
     peakLatency: 'Loading',
     peerCount: 0,
     validPings: 0,

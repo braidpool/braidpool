@@ -10,7 +10,7 @@ const ALLOWED_RPC_METHODS = new Set([
   'getblockchaininfo',
 ]);
 
-export async function handleWebSocketConnection(ws, wss) {
+export async function handleWebSocketConnection(ws) {
   console.log('Client connected');
   ws.send(JSON.stringify({ type: 'connection', status: 'connected' }));
 
