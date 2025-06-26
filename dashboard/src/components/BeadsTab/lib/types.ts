@@ -185,6 +185,7 @@ export type ChartDataItem = {
   value: number;
   label: string;
   date: Date;
+  timestamp:number,
 };
 
 export type Stats = {

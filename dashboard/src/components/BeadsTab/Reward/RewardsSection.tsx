@@ -4,7 +4,7 @@ import RewardHistoryChart from './RewardHistoryChart';
 import { RewardData } from '../lib/types';
 import { generateRewardHistory } from './generateRewardHistory';
 import AnimatedStatCard from '../AnimatedStatCard';
-import { processRewardsData } from '../lib/utils/dataProcessor';
+import { processRewardsData } from '../lib/utils/rewardsProcessor';
 
 export function RewardsDashboard() {
   const [rewardData, setRewardData] = useState<RewardData | null>(null);

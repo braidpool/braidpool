@@ -3,6 +3,8 @@ import AdvancedChart from '../AdvancedChart';
 import AnimatedStatCard from '../AnimatedStatCard';
 import { TransactionTabProps, ChartDataItem, Stats } from '../lib/types';
 
+const MAX_HISTORY_LENGTH = 50;
+
 export default function TransactionsTab({
   chartHovered,
   setChartHovered,
@@ -15,8 +17,10 @@ export default function TransactionsTab({
     avgFeeRate: 0,
     avgTxSize: 0,
   });
+
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isConnected, setIsConnected] = useState<boolean>(false);
+
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -42,30 +46,39 @@ export default function TransactionsTab({
       try {
         const parsed = JSON.parse(event.data);
 
-        if (
-          parsed.type === 'block_data' &&
-          parsed.data?.txCount !== undefined
-        ) {
+        // ✅ Handle block data for chart
+        if (parsed.type === 'block_data' && parsed.data?.txCount !== undefined) {
           const now = new Date();
-          const newDataPoint: ChartDataItem = {
+          const timeStamp = now.getTime();
+
+          const newEntry: ChartDataItem = {
             value: parsed.data.txCount || 0,
-            label: now.toLocaleTimeString('en-US', {
+            label: now.toLocaleTimeString('en-GB', {
               hour: '2-digit',
               minute: '2-digit',
               second: '2-digit',
-              hour12: true,
             }),
             date: now,
+            timestamp: timeStamp,
           };
-          setChartData((prev) => [...prev, newDataPoint].slice(-100));
-        } else if (
+
+          setChartData((prev) => {
+            const lastEntry = prev[prev.length - 1];
+          
+            if (lastEntry && lastEntry.timestamp === timeStamp) return prev;
+
+            const updated = [...prev, newEntry];
+            if (updated.length > MAX_HISTORY_LENGTH) updated.shift();
+            return updated;
+          });
+        }
+
+        if (
           parsed.type === 'transaction_stats' &&
           parsed.data &&
           typeof parsed.data.txRate === 'number'
         ) {
           setStats(parsed.data);
-        } else {
-          console.warn('[TransactionsTab] Unknown message format:', parsed);
         }
       } catch (e) {
         setIsLoading(false);
@@ -84,9 +97,7 @@ export default function TransactionsTab({
     <div className="space-y-6 bg-[#1c1c1c]">
       <div className="flex justify-between items-center">
         <div>
-          <h3 className="text-xl font-bold text-blue-300">
-            Transaction Activity
-          </h3>
+          <h3 className="text-xl font-bold text-blue-300">Transaction Activity</h3>
           <p className="text-sm text-gray-400 mt-1">
             Real-time transaction statistics
           </p>
@@ -110,6 +121,9 @@ export default function TransactionsTab({
           isLoading={isLoading}
           timeRange={timeRange}
           primaryLabel="Transactions per Block"
+          tooltipFormatter={(value, name) => {
+            return [`${value} tx`, name as string];
+          }}
         />
       </div>
 

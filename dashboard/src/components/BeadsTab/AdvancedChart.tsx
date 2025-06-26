@@ -8,7 +8,7 @@ import {
   ResponsiveContainer,
   Area,
 } from 'recharts';
-import { Maximize2, RefreshCw, Download } from 'lucide-react';
+import { Maximize2, Download } from 'lucide-react';
 import { Props } from './lib/types';
 import { useState, useRef } from 'react';
 
