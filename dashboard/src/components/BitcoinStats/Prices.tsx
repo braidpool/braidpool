@@ -286,77 +286,106 @@ const BitcoinPriceTracker: React.FC = () => {
       ) : null}
 
       {/* Charts Section */}
-      <div className="w-full flex flex-wrap justify-center items-center gap-4 md:gap-20 p-4 md:p-6 rounded-lg mb-6">
-        <div className="grid sm:grid-cols-1 md:grid-cols-2 gap-4 md:gap-20 p-4">
-          {/* Price Range Bar Chart */}
-          <div className="flex flex-col w-full h-72">
-            <p className="font-semibold text-base">Bitcoin 24H Price Range</p>
-            <span className="text-sm text-gray-500 mb-2">
-              Displays the low, current, and high prices in {currency}
-            </span>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={[
-                  { label: 'Low', value: priceData?.low24h ?? 0 },
-                  { label: 'Current', value: priceData?.current ?? 0 },
-                  { label: 'High', value: priceData?.high24h ?? 0 },
+      <div className="w-full flex flex-wrap grid grid-cols-1 p-4 justify-center items-center gap-4 md:gap-20 p-4 md:p-6 rounded-lg mb-6">
+        {/* Price Range Bar Chart */}
+        <div className="flex flex-col w-full h-80">
+          <p className="font-semibold text-base">Bitcoin 24H Price Range</p>
+          <span className="text-sm text-gray-500 mb-2">
+            Displays the low, current, and high prices in {currency}
+          </span>
+          <ResponsiveContainer width="99%" height="100%">
+            <BarChart
+              data={[
+                { label: 'Low', value: priceData?.low24h ?? 0 },
+                { label: 'Current', value: priceData?.current ?? 0 },
+                { label: 'High', value: priceData?.high24h ?? 0 },
+              ]}
+              margin={{ left: 40, right: 20, top: 20, bottom: 20 }}
+            >
+              <XAxis dataKey="label" />
+              <YAxis
+                width={80}
+                domain={[
+                  (dataMin: number) =>
+                    Math.floor(
+                      dataMin -
+                        (priceData
+                          ? (priceData.high24h - priceData.low24h) * 0.1
+                          : 0)
+                    ),
+                  (dataMax: number) =>
+                    Math.ceil(
+                      dataMax +
+                        (priceData
+                          ? (priceData.high24h - priceData.low24h) * 0.1
+                          : 0)
+                    ),
                 ]}
-              >
-                <XAxis dataKey="label" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="value" fill="#8884d8" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+                tickFormatter={(value) =>
+                  `${getCurrencySymbol(currency)}${formatPrice(value)}`
+                }
+              />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: 'black',
+                  border: '1px solid #ccc',
+                }}
+                formatter={(value) => [
+                  `${getCurrencySymbol(currency)}${formatPrice(Number(value))}`,
+                  'Price',
+                ]}
+              />
+              <Legend />
+              <Bar dataKey="value" fill="#8884d8" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
 
-          {/* Price History Line Chart */}
-          <div className="flex flex-col w-full h-72">
-            <p className="font-semibold text-base">
-              Bitcoin Price History (Live)
-            </p>
-            <span className="text-sm text-gray-500 mb-2">
-              Live updates in {currency}
-            </span>
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart
-                data={priceHistory}
-                margin={{ top: 5, right: 20, bottom: 5, left: 45 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="time"
-                  tick={{ fontSize: 10 }}
-                  interval={Math.floor(MAX_HISTORY_ITEMS / 5)}
-                />
-                <YAxis
-                  domain={['auto', 'auto']}
-                  tickFormatter={(value) =>
-                    `${getCurrencySymbol(currency)}${formatPrice(value)}`
-                  }
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'black',
-                    border: '1px solid #ccc',
-                  }}
-                  formatter={(value) => [
-                    `${getCurrencySymbol(currency)}${formatPrice(Number(value))}`,
-                    'Price',
-                  ]}
-                  labelFormatter={(label) => `Time: ${label}`}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="price"
-                  stroke="#8884d8"
-                  dot={false}
-                  isAnimationActive={false}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+        {/* Price History Line Chart */}
+        <div className="flex flex-col w-full h-80">
+          <p className="font-semibold text-base">
+            Bitcoin Price History (Live)
+          </p>
+          <span className="text-sm text-gray-500 mb-2">
+            Live updates in {currency}
+          </span>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart
+              data={priceHistory}
+              margin={{ top: 5, right: 20, bottom: 5, left: 45 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis
+                dataKey="time"
+                tick={{ fontSize: 10 }}
+                interval={Math.floor(MAX_HISTORY_ITEMS / 5)}
+              />
+              <YAxis
+                domain={['auto', 'auto']}
+                tickFormatter={(value) =>
+                  `${getCurrencySymbol(currency)}${formatPrice(value)}`
+                }
+              />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: 'black',
+                  border: '1px solid #ccc',
+                }}
+                formatter={(value) => [
+                  `${getCurrencySymbol(currency)}${formatPrice(Number(value))}`,
+                  'Price',
+                ]}
+                labelFormatter={(label) => `Time: ${label}`}
+              />
+              <Line
+                type="monotone"
+                dataKey="price"
+                stroke="#8884d8"
+                dot={false}
+                isAnimationActive={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
       </div>
 
