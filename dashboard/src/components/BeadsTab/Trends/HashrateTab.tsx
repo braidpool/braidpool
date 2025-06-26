@@ -11,7 +11,7 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
     current: 'Loading',
     peak: 'Loading',
     networkDifficulty: 0,
-    latency: 0,
+   
   });
 
   const [isLoading, setIsLoading] = useState(true);
@@ -23,7 +23,7 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
   const peakHashrate = useRef(0);
 
   const processHashrateData = (data: any) => {
-    const { hashrate, timestamp, networkDifficulty, latency } = data;
+    const { hashrate, timestamp, networkDifficulty } = data;
     const time = new Date(timestamp).getTime();
 
     const historyEntry = {
@@ -43,7 +43,7 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
         current: `${hashrate.toFixed(2)} EH/s`,
         peak: `${peakHashrate.current.toFixed(2)} EH/s`,
         networkDifficulty,
-        latency,
+        
       };
     }
 
@@ -61,7 +61,7 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
       current: `${hashrate.toFixed(2)} EH/s`,
       peak: `${peakHashrate.current.toFixed(2)} EH/s`,
       networkDifficulty,
-      latency,
+      
     };
   };
 
