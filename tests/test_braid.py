@@ -58,8 +58,11 @@ class TestCohortMethods(unittest.TestCase):
             c.reverse()
             self.assertEqual(list(cohorts(p)), c, msg="Test file: {filename}")
 
-    def test_highest_work_path(self):
+    def test_highest_work_path_blockchain(self):
         self.assertEqual(highest_work_path(self.parents1, reverse(self.parents1)), [0,1,2,3])
+
+    def test_highest_work_path_diamond(self):
+        self.assertEqual(highest_work_path(self.diamond, reverse(self.diamond)), [0,1,3,4])
 
     def test_higest_work_path_files(self):
         for filename in sorted([filename for filename in os.listdir(TEST_CASE_DIR) if filename.endswith(".json")]):
@@ -115,6 +118,17 @@ class TestCohortMethods(unittest.TestCase):
             for b in dag["parents"]:
                 msg = f"Test file: {filename}"
                 self.assertEqual(all_ancestors(b, dag["parents"]), all_ancestors_recursive(b, dag["parents"]), msg=msg)
+    def test_layout(self):
+        """ Create cohort layout json files for validating layout function. """
+        if not os.path.exists("layouts"):
+            os.makedirs("layouts")
+        for filename in sorted([filename for filename in os.listdir(TEST_CASE_DIR) if filename.endswith(".json")]):
+            dag = load_braid(TEST_CASE_DIR+filename)
+            previous_cohort_tips = None
+            for (c, i) in zip(dag["cohorts"], range(len(dag["cohorts"]))):
+                with open("layouts/" + filename.split('.')[0] + f"_{i}_layout.json", 'w', encoding="utf8") as file:
+                    L, previous_cohort_tips = layout(c, dag["parents"], dag["bead_work"], previous_cohort_tips)
+                    file.write(json.dumps([L, previous_cohort_tips], indent=4))
 
 if __name__ == "__main__":
     unittest.main()

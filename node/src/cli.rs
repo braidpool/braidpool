@@ -8,7 +8,7 @@ pub struct Cli {
     pub datadir: PathBuf,
 
     /// Bind to a given address and always listen on it
-    #[arg(long, default_value = "0.0.0.0:25188")]
+    #[arg(long, default_value = "0.0.0.0:6680")]
     pub bind: String,
 
     /// Add a node to connect to and attempt to keep the connection open. This option can be

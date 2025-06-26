@@ -2,16 +2,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Zap } from 'lucide-react';
 import TransactionList from './TransactionList';
 import { shortenHash } from './lib/utils/shortenHash';
-
 import type { Bead, Transaction } from './lib/types';
-
-interface MinerRowProps {
-  bead: Bead;
-  isExpanded: boolean;
-  onToggle: (beadId: string) => void;
-  isActive: boolean;
-  transactions: Transaction[];
-}
 
 export default function BeadRow({
   bead,
