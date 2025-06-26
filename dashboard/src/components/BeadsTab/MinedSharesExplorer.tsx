@@ -4,7 +4,7 @@ import BeadRow from './BeadRow';
 import { TrendsTab } from './Trends/TrendsTab';
 import { RewardsDashboard } from './Reward/RewardsSection';
 import { Transaction, Bead } from './lib/types';
-import { processBlockData } from './lib/utils/dataProcessor';
+import { processBlockData } from './lib/utils/blockProcessor';
 
 type BeadId = string;
 

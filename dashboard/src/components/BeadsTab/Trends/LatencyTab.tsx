@@ -2,24 +2,84 @@ import React, { useState, useEffect, useRef } from 'react';
 import AdvancedChart from '../AdvancedChart';
 import AnimatedStatCard from '../AnimatedStatCard';
 import { LatencyData } from '../lib/types';
-import { processLatencyData } from '../lib/utils/dataProcessor';
+
+const MAX_LATENCY_HISTORY = 100;
 
 export default function LatencyTab({ timeRange }: { timeRange: string }) {
   const [latencyData, setLatencyData] = useState<LatencyData>({
     chartData: [],
-    averageLatency: '0ms',
-    peakLatency: '0ms',
+    averageLatency: 'Laoding',
+    peakLatency: 'Loading',
     peerCount: 0,
     validPings: 0,
     timestamp: 0,
   });
+
   const [isLoading, setIsLoading] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
 
+  // Local latency history state
+  const latencyHistory = useRef<any[]>([]);
+
+  const processLatencyData = (data: any) => {
+    const { pings, averageLatency, peakLatency, peerCount, validPings, timestamp } = data;
+
+    if (!pings || pings.length === 0) {
+      return {
+        chartData: latencyHistory.current,
+        averageLatency: '0ms',
+        peakLatency: '0ms',
+        peerCount,
+        validPings: 0,
+        timestamp,
+      };
+    }
+
+    const time = new Date(timestamp).getTime();
+
+    const newEntry = {
+      value: averageLatency,
+      label: new Date(timestamp).toLocaleTimeString(),
+      date: new Date(timestamp).toISOString(),
+      timestamp: time,
+    };
+
+    const lastEntry = latencyHistory.current[latencyHistory.current.length - 1];
+
+    
+    if (lastEntry && lastEntry.timestamp === time) {
+      return {
+        chartData: [...latencyHistory.current],
+        averageLatency: `${averageLatency.toFixed(0)}ms`,
+        peakLatency: `${peakLatency}ms`,
+        peerCount,
+        validPings,
+        timestamp,
+      };
+    }
+
+    if (latencyHistory.current.length >= MAX_LATENCY_HISTORY) {
+      latencyHistory.current.shift();
+    }
+    latencyHistory.current.push(newEntry);
+
+    return {
+      chartData: [...latencyHistory.current],
+      averageLatency: `${averageLatency.toFixed(0)}ms`,
+      peakLatency: `${peakLatency}ms`,
+      peerCount,
+      validPings,
+      timestamp,
+    };
+  };
+
   useEffect(() => {
+    latencyHistory.current = [];
+
     const ws = new WebSocket('ws://localhost:5000');
     wsRef.current = ws;
+
     ws.onopen = () => {
       setIsConnected(true);
       setIsLoading(false);
@@ -97,7 +157,7 @@ export default function LatencyTab({ timeRange }: { timeRange: string }) {
           isLoading={isLoading}
           timeRange={timeRange}
           primaryLabel="Latency (ms)"
-          tooltipFormatter={function (value, name): [string, string] {
+          tooltipFormatter={(value, name) => {
             return [`${(value as number).toFixed(2)} ms`, name as string];
           }}
         />

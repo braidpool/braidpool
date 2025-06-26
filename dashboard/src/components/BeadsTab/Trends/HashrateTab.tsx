@@ -2,23 +2,76 @@ import React, { useState, useEffect, useRef } from 'react';
 import AdvancedChart from '../AdvancedChart';
 import AnimatedStatCard from '../AnimatedStatCard';
 import { HashrateData } from '../lib/types';
-import { processHashrateData } from '../lib/utils/dataProcessor';
+
+const MAX_HISTORY_LENGTH = 288;
 
 export default function HashrateTab({ timeRange }: { timeRange: string }) {
   const [hashrateData, setHashrateData] = useState<HashrateData>({
     history: [],
-    current: '0 EH/s',
-    peak: '0 EH/s',
+    current: 'Loading',
+    peak: 'Loading',
     networkDifficulty: 0,
     latency: 0,
   });
+
   const [isLoading, setIsLoading] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
 
+  // Local state for handling history and peak
+  const hashrateHistory = useRef<any[]>([]);
+  const peakHashrate = useRef(0);
+
+  const processHashrateData = (data: any) => {
+    const { hashrate, timestamp, networkDifficulty, latency } = data;
+    const time = new Date(timestamp).getTime();
+
+    const historyEntry = {
+      value: hashrate,
+      date: new Date(timestamp).toISOString(),
+      label: new Date(timestamp).toLocaleTimeString(),
+      timestamp: time,
+    };
+
+    const lastEntry = hashrateHistory.current[hashrateHistory.current.length - 1];
+
+   
+    if (lastEntry && lastEntry.timestamp === time) {
+      return {
+        ...hashrateData,
+        history: [...hashrateHistory.current],
+        current: `${hashrate.toFixed(2)} EH/s`,
+        peak: `${peakHashrate.current.toFixed(2)} EH/s`,
+        networkDifficulty,
+        latency,
+      };
+    }
+
+    if (hashrateHistory.current.length >= MAX_HISTORY_LENGTH) {
+      hashrateHistory.current.shift();
+    }
+    hashrateHistory.current.push(historyEntry);
+
+    if (hashrate > peakHashrate.current) {
+      peakHashrate.current = hashrate;
+    }
+
+    return {
+      history: [...hashrateHistory.current],
+      current: `${hashrate.toFixed(2)} EH/s`,
+      peak: `${peakHashrate.current.toFixed(2)} EH/s`,
+      networkDifficulty,
+      latency,
+    };
+  };
+
   useEffect(() => {
+    hashrateHistory.current = [];
+    peakHashrate.current = 0;
+
     const ws = new WebSocket('ws://localhost:5000');
     wsRef.current = ws;
+
     ws.onopen = () => {
       setIsConnected(true);
       setIsLoading(false);
@@ -44,6 +97,7 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
         console.error('[HashrateTab] WebSocket message parse error:', e);
       }
     };
+
     return () => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.close();
@@ -87,9 +141,9 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
           height={350}
           isLoading={isLoading}
           timeRange={timeRange}
-          primaryLabel="Hashrate "
-          tooltipFormatter={function (value, name): [string, string] {
-            return [`${(value as number).toFixed(2)} Eh/s`, name as string];
+          primaryLabel="Hashrate"
+          tooltipFormatter={(value, name) => {
+            return [`${(value as number).toFixed(2)} EH/s`, name as string];
           }}
         />
       </div>
