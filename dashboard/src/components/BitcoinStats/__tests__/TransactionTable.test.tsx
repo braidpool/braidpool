@@ -1,54 +1,46 @@
-import { render, screen, waitFor } from '@testing-library/react';
-import TransactionDialog from '../TransactionDialog';
-import * as Utils from '../Utils';
 import '@testing-library/jest-dom';
+import { render, screen, fireEvent } from '@testing-library/react';
+import TransactionTable from '../TransactionTable';
 
-jest.mock('../Utils');
+jest.mock('../TransactionDialog', () => ({
+  __esModule: true,
+  default: ({ txid, onClose }: { txid: string; onClose: () => void }) => (
+    <div data-testid="transaction-dialog">
+      Dialog for {txid}
+      <button onClick={onClose}>Close</button>
+    </div>
+  ),
+}));
 
-// Mock clipboard
-Object.assign(navigator, {
-  clipboard: {
-    writeText: jest.fn(),
-  },
-});
+describe('TransactionTable', () => {
+  it('renders "No transactions found" message when empty', () => {
+    render(<TransactionTable transactions={[]} />);
+    expect(screen.getByText(/no transactions found/i)).toBeInTheDocument();
+    expect(screen.queryByText(/TXID/i)).not.toBeInTheDocument(); // No headers
+  });
 
-const mockOnClose = jest.fn();
+  it('renders transactions and table headers when data is present', () => {
+    const mockTx = [
+      {
+        txid: 'abcdefgh12345678',
+        fee: 1000,
+        vsize: 225,
+        value: 2500000000,
+      },
+    ];
 
-describe('TransactionDialog', () => {
-  it('renders inputs and outputs when present', async () => {
-    const mockTxInfo = {
-      txid: 'abc123',
-      status: { confirmed: true },
-      fee: 1000,
-      size: 250,
-      weight: 1000,
-      version: 2,
-      locktime: 0,
-      vin: [
-        {
-          prevout: {
-            scriptpubkey_address: 'inputAddress',
-            value: 5000000000,
-          },
-        },
-      ],
-      vout: [
-        {
-          scriptpubkey_address: 'outputAddress',
-          value: 2500000000,
-        },
-      ],
-    };
+    render(<TransactionTable transactions={mockTx} />);
 
-    (Utils.getTxInfo as jest.Mock).mockResolvedValue(mockTxInfo);
+    // Headers
+    expect(screen.getByText(/TXID/i)).toBeInTheDocument();
+    expect(screen.getByText(/FEE/i)).toBeInTheDocument();
+    expect(screen.getByText(/SIZE/i)).toBeInTheDocument();
+    expect(screen.getByText(/VALUE/i)).toBeInTheDocument();
 
-    render(<TransactionDialog txid="abc123" onClose={mockOnClose} />);
-
-    await waitFor(() => {
-      expect(screen.getByText(/Inputs \(1\)/)).toBeInTheDocument();
-      expect(screen.getByText(/Outputs \(1\)/)).toBeInTheDocument();
-      expect(screen.getByText('inputAddress')).toBeInTheDocument();
-      expect(screen.getByText('outputAddress')).toBeInTheDocument();
-    });
+    // Row Data
+    expect(screen.getByText(/abcdefg....2345678/)).toBeInTheDocument(); // shortened txid
+    expect(screen.getByText(/0.00001 BTC/i)).toBeInTheDocument(); // fee
+    expect(screen.getByText(/225 vB/)).toBeInTheDocument(); // size
+    expect(screen.getByText(/25 BTC/)).toBeInTheDocument(); // value
   });
 });

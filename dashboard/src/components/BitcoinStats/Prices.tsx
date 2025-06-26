@@ -20,7 +20,7 @@ import {
   latestRBFTransactions,
 } from './Utils';
 import TransactionTable from './TransactionTable';
-import RBFTransactionTable from './RBFTransactions';
+import RBFTransactionTable from './RBFTransactionTable';
 
 const BitcoinPriceTracker: React.FC = () => {
   const [currency, setCurrency] = useState<'USD' | 'EUR' | 'GBP' | 'JPY'>(
@@ -421,13 +421,9 @@ const BitcoinPriceTracker: React.FC = () => {
       </div>
 
       {/* Transactions Table */}
-      {transactions.length > 0 && (
-        <TransactionTable transactions={transactions} />
-      )}
+      <TransactionTable transactions={transactions} />
       {/* RBF Transactions Table */}
-      {rbftransactions.length > 0 && (
-        <RBFTransactionTable transactions={rbftransactions} />
-      )}
+      <RBFTransactionTable transactions={rbftransactions} />
     </div>
   );
 };

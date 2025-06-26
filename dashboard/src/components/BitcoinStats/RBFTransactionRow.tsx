@@ -50,9 +50,6 @@ export const RBFTransactionRow: React.FC<RBFTransactionRowProps> = ({
         <td className="px-4 py-2">{(txData.fee / 1e8).toFixed(8)} BTC</td>
         <td className="px-4 py-2">{(txData.value / 1e8).toFixed(8)} BTC</td>
         <td className="px-4 py-2">{txData.rate.toFixed(2)} sat/vB</td>
-        <td className="px-4 py-2">
-          {txData.rbf ? (txData.fullRbf ? 'Full RBF' : 'RBF') : 'No'}
-        </td>
       </tr>
 
       {isExpanded &&

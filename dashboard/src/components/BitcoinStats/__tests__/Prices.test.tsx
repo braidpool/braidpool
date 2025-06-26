@@ -45,7 +45,7 @@ jest.mock('recharts', () => ({
 jest.mock('../TransactionTable', () => () => (
   <div data-testid="transaction-table" />
 ));
-jest.mock('../RBFTransactions', () => () => (
+jest.mock('../RBFTransactionTable', () => () => (
   <div data-testid="rbf-transaction-table" />
 ));
 
