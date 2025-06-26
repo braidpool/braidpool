@@ -114,11 +114,7 @@ export default function MinedSharesExplorer() {
     setActiveBead(beadId);
   };
 
-  const handleParentClick = (hash: string) => {
-    navigator.clipboard.writeText(hash).catch(() => {
-      console.error('Failed to copy');
-    });
-  };
+  
 
   return (
     <div className="min-h-screen bg-[#1c1c1c] text-white relative">

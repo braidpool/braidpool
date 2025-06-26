@@ -110,7 +110,7 @@ export interface HashrateData {
   current: string;
   peak: string;
   networkDifficulty: number;
-  latency: number;
+  
 }
 
 export interface LatencyData {
@@ -148,7 +148,7 @@ export interface ProcessedHashrateData {
   hashrate: number;
   timestamp: number;
   networkDifficulty: number;
-  latency: number;
+  
 }
 
 export interface ProcessedLatencyData {
