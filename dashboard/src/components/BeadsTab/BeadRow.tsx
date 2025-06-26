@@ -4,7 +4,7 @@ import TransactionList from './TransactionList';
 import { shortenHash, formatWork } from './lib/utils/utils';
 import type { BeadRowProps } from './lib/types';
 import { BeadRewardTooltip } from './BeadRewardTooltip';
-import useCopyToClipboard from './lib/utils/useCopyToClipboard';
+import useCopyToClipboard from './lib/utils/utils';
 export default function BeadRow({
   bead,
   isExpanded,
@@ -38,7 +38,7 @@ export default function BeadRow({
             <ChevronDown className="h-5 w-5 text-blue-400" />
           </div>
           <span
-            className={`text-sm sm:text-base truncate md:truncate-0 ${
+            className={`text-sm sm:text-base truncate ${
               isExpanded ? 'text-white' : 'text-blue-200'
             } font-medium font-mono`}
           >

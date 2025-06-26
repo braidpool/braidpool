@@ -1,9 +1,9 @@
 import WebSocket from 'ws';
 import { rpcWithEnv } from './rpcWithEnv.js';
 
-let lastBlockHash = null;
 
 export async function fetchBlockDetails(wss) {
+  let lastBlockHash = null;
   try {
     const startTime = Date.now();
     const blockchainInfo = await rpcWithEnv({ method: 'getblockchaininfo' });
