@@ -2,14 +2,17 @@ use clap::Parser;
 use futures::StreamExt;
 use libp2p::{
     core::multiaddr::Multiaddr,
-    dns, identify,
-    identity::Keypair,
+    floodsub, identify,
+    identity::{self, Keypair},
     kad::{self, Mode, QueryResult},
     ping, request_response,
     swarm::SwarmEvent,
     PeerId,
 };
-use node::{bead, behaviour, braid, committed_metadata, uncommitted_metadata, utils};
+use node::{
+    bead,
+    behaviour::{self, FLOODSUBPROTOCOLNAME},
+};
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
@@ -83,7 +86,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
         }
     }
-
+    //for local testing comment this loading of keypair from keystore
+    //and use the below one
     let keypair = match fs::read(&keystore_path) {
         Ok(keypair) => {
             log::info!("Loading existing keypair from keystore...");
@@ -108,6 +112,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     };
 
+    //For local testing uncomment this keypair peer since it running to process will
+    //result in same peerID leading to OutgoingConnectionError
+
+    // let keypair = identity::Keypair::generate_ed25519();
+    //creating a main topic subscribing to the current test topic
+    let current_broadcast_topic: floodsub::Topic = floodsub::Topic::new("braidpool_channel");
     let mut swarm = libp2p::SwarmBuilder::with_existing_identity(keypair)
         .with_tokio()
         .with_quic()
@@ -130,7 +140,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     )
     .parse()
     .expect("Failed to create multiaddress");
-
+    //subscribing to the braidpool topic for broadcasting bead_found and other peer_communications belonging to a particular mesh
+    swarm
+        .behaviour_mut()
+        .flood_sub
+        .subscribe(current_broadcast_topic);
     //setting the server mode for the kademlia apart from the server
     swarm.behaviour_mut().kademlia.set_mode(Some(Mode::Server));
 
@@ -178,6 +192,34 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         addresses, bucket_range, old_peer
                     );
                 }
+                SwarmEvent::Behaviour(BraidPoolBehaviourEvent::FloodSub(
+                    floodsub::FloodsubEvent::Subscribed { peer_id, topic },
+                )) => {
+                    log::info!(
+                        "A new peer {:?} subscribed to the topic {:?}",
+                        peer_id,
+                        topic
+                    );
+                }
+                SwarmEvent::Behaviour(BraidPoolBehaviourEvent::FloodSub(
+                    floodsub::FloodsubEvent::Unsubscribed { peer_id, topic },
+                )) => {
+                    log::info!(
+                        "A peer {:?} unsubsribed from the topic {:?}",
+                        peer_id,
+                        topic
+                    );
+                }
+                SwarmEvent::Behaviour(BraidPoolBehaviourEvent::FloodSub(
+                    floodsub::FloodsubEvent::Message(message),
+                )) => {
+                    log::info!(
+                        "{:?} Message has been recieved  from the peer {:?} and having data {:?}",
+                        message.topics,
+                        message.source,
+                        message.data
+                    );
+                }
                 SwarmEvent::NewListenAddr { address, .. } => {
                     log::info!("Listening on {:?}", address)
                 }
@@ -199,6 +241,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         }
                     } else {
                         log::info!("The peer was not added to the local DHT ");
+                    }
+                    if info_reference
+                        .clone()
+                        .protocols
+                        .iter()
+                        .any(|p| *p == FLOODSUBPROTOCOLNAME)
+                    {
+                        log::info!("PEER ADDED TO FLOODSUB MESH {:?}", peer_id);
+                        for addr in info_reference.clone().listen_addrs {
+                            swarm
+                                .behaviour_mut()
+                                .flood_sub
+                                .add_node_to_partial_view(peer_id);
+                        }
+                    } else {
+                        log::info!(
+                            "The peer listening at {:?} was not added to the floodsub mesh",
+                            info_reference.observed_addr
+                        );
                     }
                     log::info!("Received {:?}", info_reference);
                 }
@@ -317,10 +378,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     });
 
-    tokio::signal::ctrl_c().await?;
-    println!("Shutting down...");
-
-    swarm_handle.abort();
+    //gracefull shutdown
+    let shutdown_signal = tokio::signal::ctrl_c().await;
+    match shutdown_signal {
+        Ok(_) => {
+            println!("Shutting down...");
+            swarm_handle.abort();
+        }
+        Err(error) => {
+            println!(
+                "An error occurred while shutting down the braid node {:?}",
+                error
+            );
+        }
+    }
 
     Ok(())
 }
