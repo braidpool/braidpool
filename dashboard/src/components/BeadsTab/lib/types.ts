@@ -148,7 +148,6 @@ export interface ProcessedHashrateData {
   hashrate: number;
   timestamp: number;
   networkDifficulty: number;
-  
 }
 
 export interface ProcessedLatencyData {
@@ -185,7 +184,7 @@ export type ChartDataItem = {
   value: number;
   label: string;
   date: Date;
-  timestamp:number,
+  timestamp: number;
 };
 
 export type Stats = {

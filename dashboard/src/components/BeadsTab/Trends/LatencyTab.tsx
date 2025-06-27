@@ -3,7 +3,6 @@ import AdvancedChart from '../AdvancedChart';
 import AnimatedStatCard from '../AnimatedStatCard';
 import { LatencyData } from '../lib/types';
 
-
 const MAX_LATENCY_HISTORY = 100;
 
 export default function LatencyTab({ timeRange }: { timeRange: string }) {
@@ -24,7 +23,14 @@ export default function LatencyTab({ timeRange }: { timeRange: string }) {
   const latencyHistory = useRef<any[]>([]);
 
   const processLatencyData = (data: any) => {
-    const { pings, averageLatency, peakLatency, peerCount, validPings, timestamp } = data;
+    const {
+      pings,
+      averageLatency,
+      peakLatency,
+      peerCount,
+      validPings,
+      timestamp,
+    } = data;
 
     if (!pings || pings.length === 0) {
       return {
@@ -48,7 +54,6 @@ export default function LatencyTab({ timeRange }: { timeRange: string }) {
 
     const lastEntry = latencyHistory.current[latencyHistory.current.length - 1];
 
-    
     if (lastEntry && lastEntry.timestamp === time) {
       return {
         chartData: [...latencyHistory.current],
@@ -115,10 +120,9 @@ export default function LatencyTab({ timeRange }: { timeRange: string }) {
   }, [timeRange]);
 
   const chartData = (latencyData.chartData || []).map((d: any) => ({
-  value: Number(d.value) || 0,
-  timestamp: Number(d.timestamp) || Date.now(), // ✅ Proper timestamp
-}));
-
+    value: Number(d.value) || 0,
+    timestamp: Number(d.timestamp) || Date.now(), // ✅ Proper timestamp
+  }));
 
   if (isLoading || !isConnected) {
     return (
@@ -144,11 +148,11 @@ export default function LatencyTab({ timeRange }: { timeRange: string }) {
           </span>
         </div>
       </div>
-<div>
+      <div>
         <AdvancedChart
           data={chartData}
           yLabel="Laten"
-         unit="ms"
+          unit="ms"
           lineColor="#8884d8"
         />
       </div>

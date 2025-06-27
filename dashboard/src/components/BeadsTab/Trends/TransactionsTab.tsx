@@ -5,11 +5,7 @@ import { TransactionTabProps, ChartDataItem, Stats } from '../lib/types';
 
 const MAX_HISTORY_LENGTH = 50;
 
-export default function TransactionsTab({
-  chartHovered,
-  setChartHovered,
-  timeRange,
-}: TransactionTabProps) {
+export default function TransactionsTab({ timeRange }: TransactionTabProps) {
   const [chartData, setChartData] = useState<ChartDataItem[]>([]);
   const [stats, setStats] = useState<Stats>({
     txRate: 0,
@@ -47,7 +43,10 @@ export default function TransactionsTab({
         const parsed = JSON.parse(event.data);
 
         // ✅ Handle block data for chart
-        if (parsed.type === 'block_data' && parsed.data?.txCount !== undefined) {
+        if (
+          parsed.type === 'block_data' &&
+          parsed.data?.txCount !== undefined
+        ) {
           const now = new Date();
           const timeStamp = now.getTime();
 
@@ -64,7 +63,7 @@ export default function TransactionsTab({
 
           setChartData((prev) => {
             const lastEntry = prev[prev.length - 1];
-          
+
             if (lastEntry && lastEntry.timestamp === timeStamp) return prev;
 
             const updated = [...prev, newEntry];
@@ -97,7 +96,9 @@ export default function TransactionsTab({
     <div className="space-y-6 bg-[#1c1c1c]">
       <div className="flex justify-between items-center">
         <div>
-          <h3 className="text-xl font-bold text-blue-300 ">Transaction Activity</h3>
+          <h3 className="text-xl font-bold text-blue-300 ">
+            Transaction Activity
+          </h3>
           <p className="text-sm text-gray-400 mt-1">
             Real-time transaction statistics
           </p>
@@ -113,7 +114,7 @@ export default function TransactionsTab({
         <AdvancedChart
           data={chartData}
           yLabel="Transaction"
-         unit="tx/min"
+          unit="tx/min"
           lineColor="#8884d8"
         />
       </div>

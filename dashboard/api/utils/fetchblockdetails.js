@@ -1,7 +1,6 @@
 import WebSocket from 'ws';
 import { rpcWithEnv } from './rpcWithEnv.js';
 
-
 export async function fetchBlockDetails(wss) {
   let lastBlockHash = null;
   try {
@@ -30,7 +29,7 @@ export async function fetchBlockDetails(wss) {
     const rewardBTC = coinbaseTx.vout.reduce((acc, out) => acc + out.value, 0);
 
     const transactions = blockData.tx.slice(1).map((tx, index) => {
-      const feeBTC = tx.fee !== undefined ? tx.fee : "Unknown";
+      const feeBTC = tx.fee !== undefined ? tx.fee : 'Unknown';
       const size = tx.size || tx.weight || 225;
       const feeRate = size > 0 ? (feeBTC * 1e8) / size : 0;
 

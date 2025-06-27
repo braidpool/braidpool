@@ -28,7 +28,7 @@ export default function AdvancedChart({
         <LineChart data={data}>
           <CartesianGrid stroke="#444" />
           <XAxis
-          className='text-sm'
+            className="text-sm"
             dataKey="timestamp"
             domain={['auto', 'auto']}
             type="number"
@@ -43,10 +43,9 @@ export default function AdvancedChart({
             tick={{ fill: '#aaa' }}
           />
           <YAxis
-          className='text-sm'
+            className="text-sm"
             tick={{ fill: '#aaa' }}
             unit={` ${unit}`}
-            
           />
           <Tooltip
             contentStyle={{
@@ -60,7 +59,10 @@ export default function AdvancedChart({
                 second: '2-digit',
               })
             }
-            formatter={(value: number) => [`${value.toFixed(2)} ${unit}`, yLabel]}
+            formatter={(value: number) => [
+              `${value.toFixed(2)} ${unit}`,
+              yLabel,
+            ]}
           />
           <Line
             type="monotone"

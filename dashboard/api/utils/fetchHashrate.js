@@ -23,10 +23,9 @@ export async function fetchHashrateStats(wss) {
         hashrate: hashrateEH,
         timestamp: timestamp,
         networkDifficulty: lastDifficulty,
-       
       },
     };
- console.log("Hashrate" ,payload.data)
+    console.log('Hashrate', payload.data);
 
     wss.clients.forEach((client) => {
       if (client.readyState === client.OPEN) {
