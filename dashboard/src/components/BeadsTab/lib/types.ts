@@ -29,6 +29,7 @@ export interface ChartDataPoint {
   date: Date;
   formattedDate?: string;
   trend?: 'up' | 'down' | 'neutral';
+  timestamp?: number;
 }
 
 export interface TimeRange {
@@ -106,11 +107,10 @@ export interface DashboardHeaderProps {
 }
 
 export interface HashrateData {
-  history: { value: number; date: string; label: string }[];
+  history: { value: number; date: string; label: string; timestamp?: number }[];
   current: string;
   peak: string;
   networkDifficulty: number;
-  
 }
 
 export interface LatencyData {
