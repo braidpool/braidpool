@@ -11,7 +11,7 @@ import {
 import AnimatedStatCard from '../AnimatedStatCard';
 import { HashrateData } from '../lib/types';
 
-const MAX_HISTORY_LENGTH = 288;
+const MAX_HISTORY_LENGTH = 100; 
 
 export default function HashrateTab({ timeRange }: { timeRange: string }) {
   const [hashrateData, setHashrateData] = useState<HashrateData>({
@@ -19,14 +19,12 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
     current: 'Loading',
     peak: 'Loading',
     networkDifficulty: 0,
-    
   });
 
   const [isConnected, setIsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
 
-  
-  const [hashrateHistory, setHashrateHistory] = useState<any[]>([]);
+  const hashrateHistory = useRef<any[]>([]);
   const peakHashrate = useRef(0);
 
   const processHashrateData = (data: any) => {
@@ -35,28 +33,31 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
 
     if (!hashrate || isNaN(hashrate)) return;
 
-    const lastEntry = hashrateHistory.at(-1);
-    if (lastEntry?.timestamp === time) return; // skip duplicate timestamps
-
-    const historyEntry = {
+    const newEntry = {
       value: hashrate,
       timestamp: time,
       label: new Date(time).toLocaleTimeString(),
       date: new Date(time).toISOString(),
     };
 
-    const updatedHistory = [...hashrateHistory, historyEntry].slice(
-      -MAX_HISTORY_LENGTH
-    );
+    const lastEntry = hashrateHistory.current.at(-1);
+
+    if (lastEntry && lastEntry.timestamp === time) {
+      return;
+    }
+
+    if (hashrateHistory.current.length >= MAX_HISTORY_LENGTH) {
+      hashrateHistory.current.shift();
+    }
+
+    hashrateHistory.current.push(newEntry);
 
     if (hashrate > peakHashrate.current) {
       peakHashrate.current = hashrate;
     }
 
-    setHashrateHistory(updatedHistory);
-
     setHashrateData({
-      history: updatedHistory,
+      history: [...hashrateHistory.current],
       current: `${hashrate.toFixed(2)} EH/s`,
       peak: `${peakHashrate.current.toFixed(2)} EH/s`,
       networkDifficulty,
@@ -64,15 +65,13 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
   };
 
   useEffect(() => {
-    setHashrateHistory([]);
+    hashrateHistory.current = [];
     peakHashrate.current = 0;
 
     const ws = new WebSocket('ws://localhost:5000');
     wsRef.current = ws;
 
-    ws.onopen = () => {
-      setIsConnected(true);
-    };
+    ws.onopen = () => setIsConnected(true);
     ws.onclose = () => setIsConnected(false);
     ws.onerror = (error) => {
       setIsConnected(false);
@@ -94,16 +93,14 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
     };
   }, [timeRange]);
 
-  const chartData = (hashrateData.history || [])
-    .map((d) => ({
-      value: Number(d.value) || 0,
-      timestamp: d.timestamp ? Number(d.timestamp) : undefined,
-    }))
-    .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+  const chartData = (hashrateData.history || []).map((d) => ({
+    value: d.value,
+    label: d.label,
+  }));
 
   if (!isConnected) {
     return (
-      <div className="p-8 text-center text-red-500">
+      <div className="p-8 text-center text-purple-300">
         Loading hashrate data...
       </div>
     );
@@ -130,10 +127,7 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
           <LineChart data={chartData}>
             <CartesianGrid stroke="#4b5563" strokeDasharray="3 3" />
             <XAxis
-              dataKey="timestamp"
-              type="number"
-              domain={['auto', 'auto']}
-             tickFormatter={(ts) => new Date(ts).toLocaleTimeString()}
+              dataKey="label"
               stroke="#ccc"
               tick={{ fontSize: 12 }}
             />
@@ -142,7 +136,6 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
               tick={{ fontSize: 12 }}
             />
             <Tooltip
-              labelFormatter={(ts) => new Date(ts).toLocaleTimeString()}
               formatter={(value: number) => [
                 `${value.toFixed(2)} EH/s`,
                 'Hashrate',
@@ -167,8 +160,14 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
       </div>
 
       <div className="grid sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <AnimatedStatCard title="Current Hashrate" value={hashrateData.current} />
-        <AnimatedStatCard title="Peak Hashrate (24h)" value={hashrateData.peak} />
+        <AnimatedStatCard
+          title="Current Hashrate"
+          value={hashrateData.current}
+        />
+        <AnimatedStatCard
+          title="Peak Hashrate"
+          value={hashrateData.peak}
+        />
         <AnimatedStatCard
           title="Network Difficulty"
           value={hashrateData.networkDifficulty.toExponential(2)}
