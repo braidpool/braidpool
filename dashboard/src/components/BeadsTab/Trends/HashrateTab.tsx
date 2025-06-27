@@ -1,13 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-  ResponsiveContainer,
-} from 'recharts';
+import AdvancedChart from '../AdvancedChart';
 import AnimatedStatCard from '../AnimatedStatCard';
 import { HashrateData } from '../lib/types';
 
@@ -137,39 +129,14 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
         </div>
       </div>
 
-      <div className="relative border border-gray-800/50 rounded-xl p-6 h-auto bg-[#1c1c1c] backdrop-blur-md overflow-hidden">
-        <ResponsiveContainer width="100%" height={350}>
-          <LineChart data={chartData}>
-            <CartesianGrid stroke="#444" />
-            <XAxis
-              className='text-sm'
-              dataKey="timestamp"
-              domain={['auto', 'auto']}
-              type="number"
-              scale="time"
-              tickFormatter={(ts) =>
-                new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-              }
-              tick={{ fill: '#aaa' }}
-            />
-            <YAxis className='text-sm' tick={{ fill: '#aaa' }} unit=" EH/s" />
-            <Tooltip
-              contentStyle={{ backgroundColor: '#2d2d2d', borderColor: '#555' }}
-              labelFormatter={(ts) =>
-                new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-              }
-              formatter={(value: number) => [`${value.toFixed(2)} EH/s`, 'Hashrate']}
-            />
-            <Line
-              type="monotone"
-              dataKey="value"
-              stroke="#8884d8"
-              strokeWidth={2}
-              dot={false}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
+      <div>
+              <AdvancedChart
+                data={chartData}
+                yLabel="Hashrate"
+               unit="EH/s"
+                lineColor="#8884d8"
+              />
+            </div>
 
       <div className="grid sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <AnimatedStatCard title="Current Hashrate" value={hashrateData.current} />

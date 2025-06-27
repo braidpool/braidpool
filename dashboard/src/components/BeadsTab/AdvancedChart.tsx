@@ -1,214 +1,76 @@
+import React from 'react';
 import {
   LineChart,
   Line,
   XAxis,
   YAxis,
-  CartesianGrid,
   Tooltip,
+  CartesianGrid,
   ResponsiveContainer,
-  Area,
 } from 'recharts';
-import { Maximize2, Download } from 'lucide-react';
-import { Props } from './lib/types';
-import { useState, useRef } from 'react';
+
+interface ChartContainerProps {
+  data: { value: number; timestamp: number }[];
+  yLabel: string;
+  unit: string;
+  lineColor?: string;
+}
 
 export default function AdvancedChart({
   data,
-  height = 300,
-  isHovered = false,
-  showControls = true,
-  isLoading = false,
-  comparisonData,
-  tooltipFormatter,
-  primaryLabel = 'primary',
-}: Props) {
-  const [isZoomed, setIsZoomed] = useState(false);
-
-  const chartRef = useRef<HTMLDivElement>(null);
-
-  const handleExport = () => {
-    const svg = chartRef.current?.querySelector('svg');
-    if (!svg) return;
-    const clonedSvg = svg.cloneNode(true) as SVGSVGElement;
-
-    const background = document.createElementNS(
-      'http://www.w3.org/2000/svg',
-      'rect'
-    );
-    background.setAttribute('width', '100%');
-    background.setAttribute('height', '100%');
-    background.setAttribute('fill', '#1c1c1c');
-
-    clonedSvg.insertBefore(background, clonedSvg.firstChild);
-
-    const serializer = new XMLSerializer();
-    const source = serializer.serializeToString(clonedSvg);
-    const blob = new Blob([source], { type: 'image/svg+xml' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `chart-${Date.now()}.svg`;
-    link.click();
-  };
-
-  const chartHeight = isZoomed ? 400 : height;
-
+  yLabel,
+  unit,
+  lineColor = '#3b82f6',
+}: ChartContainerProps) {
   return (
-    <div className="relative w-full h-full">
-      {isLoading && (
-        <div className="absolute inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-20">
-          <div className="flex flex-col items-center">
-            <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-2" />
-            <p className="text-blue-300">Loading chart data...</p>
-          </div>
-        </div>
-      )}
-
-      {showControls && (
-        <div className="absolute top-0 right-0 flex space-x-2 z-10 p-2 ">
-          <button
-            className="bg-gray-800/70  p-1.5 rounded-md text-gray-300 hover:text-white transition-transform duration-200 hover:scale-110 active:scale-95"
-            onClick={() => setIsZoomed(!isZoomed)}
-            title="Toggle zoom"
-          >
-            <Maximize2 size={16} />
-          </button>
-
-          <button
-            className="bg-gray-800/70 p-1.5 rounded-md text-gray-300 hover:text-white transition-transform duration-200 hover:scale-110 active:scale-95"
-            onClick={handleExport}
-            title="Export chart"
-          >
-            <Download size={16} />
-          </button>
-        </div>
-      )}
-
-      <div ref={chartRef} className="w-full h-full pt-8">
-        <ResponsiveContainer width="100%" height={chartHeight}>
-          <LineChart data={data}>
-            <defs>
-              <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8} />
-                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-              </linearGradient>
-              {comparisonData && (
-                <linearGradient
-                  id="colorComparison"
-                  x1="0"
-                  y1="0"
-                  x2="0"
-                  y2="1"
-                >
-                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.5} />
-                  <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                </linearGradient>
-              )}
-            </defs>
-
-            <CartesianGrid strokeDasharray="3 3" stroke="#4b5563" />
-            <XAxis
-              dataKey="label"
-              stroke="#ffffff"
-              tickFormatter={(label) => {
-                // Handle different types of labels
-                if (typeof label === 'string') {
-                  if (label.startsWith('Block')) {
-                    // Block numbers (e.g., "Block 123,456")
-                    return label;
-                  }
-
-                  if (label.includes(':') && !label.includes('-')) {
-                    // Time strings (ex = "2:30:45 PM")
-                    return label;
-                  }
-
-                  if (
-                    !label.includes('-') &&
-                    !label.includes('/') &&
-                    !label.includes('T')
-                  ) {
-                    // Other formatted strings
-                    return label;
-                  }
-                }
-
-                try {
-                  const d = new Date(label); // Try to format as date/time
-                  if (!isNaN(d.getTime())) {
-                    return d.toLocaleTimeString('en-US', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      second: '2-digit',
-                      hour12: true,
-                    });
-                  }
-                } catch (e) {
-                  console.warn('Failed to parse date:', label, e);
-                }
-
-                return label || 'Invalid'; // default
-              }}
-              tick={{
-                fontSize: 12,
-              }}
-            />
-            <YAxis
-              stroke="#ffffff"
-              tick={{
-                fontSize: 12,
-              }}
-            />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: '#1f2937',
-                borderColor: '#3b82f6',
-                borderRadius: 8,
-              }}
-              labelStyle={{ color: '#fff' }}
-              itemStyle={{ color: '#fff' }}
-              formatter={
-                tooltipFormatter ||
-                ((value: number, name: string) => [`${value}`, name])
-              }
-            />
-
-            {comparisonData && (
-              <>
-                <Line
-                  type="monotone"
-                  dataKey="value"
-                  data={comparisonData}
-                  stroke="#10b981"
-                  strokeWidth={2}
-                  dot={false}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="value"
-                  fillOpacity={1}
-                  fill="url(#colorComparison)"
-                />
-              </>
-            )}
-
-            <Line
-              type="monotone"
-              dataKey="value"
-              stroke="#3b82f6"
-              strokeWidth={3}
-              dot={isHovered}
-              name={primaryLabel}
-            />
-            <Area
-              type="monotone"
-              dataKey="value"
-              fillOpacity={0.7}
-              fill="url(#colorValue)"
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
+    <div className=" relative border border-gray-800/50 rounded-xl p-4 h-auto bg-[#1c1c1c] backdrop-blur-md overflow-hidden  ">
+      <ResponsiveContainer width="100%" height={350}>
+        <LineChart data={data}>
+          <CartesianGrid stroke="#444" />
+          <XAxis
+          className='text-sm'
+            dataKey="timestamp"
+            domain={['auto', 'auto']}
+            type="number"
+            scale="time"
+            tickFormatter={(ts) =>
+              new Date(ts).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+              })
+            }
+            tick={{ fill: '#aaa' }}
+          />
+          <YAxis
+          className='text-sm'
+            tick={{ fill: '#aaa' }}
+            unit={` ${unit}`}
+            
+          />
+          <Tooltip
+            contentStyle={{
+              backgroundColor: '#2d2d2d',
+              borderColor: '#555',
+            }}
+            labelFormatter={(ts) =>
+              new Date(ts).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+              })
+            }
+            formatter={(value: number) => [`${value.toFixed(2)} ${unit}`, yLabel]}
+          />
+          <Line
+            type="monotone"
+            dataKey="value"
+            stroke={lineColor}
+            strokeWidth={2}
+            dot={false}
+          />
+        </LineChart>
+      </ResponsiveContainer>
     </div>
   );
 }

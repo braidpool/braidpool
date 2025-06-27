@@ -97,7 +97,7 @@ export default function TransactionsTab({
     <div className="space-y-6 bg-[#1c1c1c]">
       <div className="flex justify-between items-center">
         <div>
-          <h3 className="text-xl font-bold text-blue-300">Transaction Activity</h3>
+          <h3 className="text-xl font-bold text-blue-300 ">Transaction Activity</h3>
           <p className="text-sm text-gray-400 mt-1">
             Real-time transaction statistics
           </p>
@@ -109,21 +109,12 @@ export default function TransactionsTab({
         </div>
       </div>
 
-      <div
-        className="relative border border-gray-800/50 rounded-xl p-6 h-auto bg-[#1c1c1c] backdrop-blur-md overflow-hidden"
-        onMouseEnter={() => setChartHovered(true)}
-        onMouseLeave={() => setChartHovered(false)}
-      >
+      <div>
         <AdvancedChart
           data={chartData}
-          height={350}
-          isHovered={chartHovered}
-          isLoading={isLoading}
-          timeRange={timeRange}
-          primaryLabel="Transactions per Block"
-          tooltipFormatter={(value, name) => {
-            return [`${value} tx`, name as string];
-          }}
+          yLabel="Transaction"
+         unit="tx/min"
+          lineColor="#8884d8"
         />
       </div>
 
