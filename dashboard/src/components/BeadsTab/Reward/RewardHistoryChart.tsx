@@ -2,22 +2,24 @@ import React from 'react';
 import AdvancedChart from '../AdvancedChart';
 import { RewardHistoryChartProps } from '../lib/types';
 
-
 const RewardHistoryChart: React.FC<RewardHistoryChartProps> = ({
   rewardHistory,
 }) => {
- const chartData = rewardHistory
-  .map((item) => {
-    if (!item || typeof item.height !== 'number' || typeof item.reward !== 'number') {
-      return null;
-    }
-    return {
-      value: item.reward,
-      timestamp: item.height,
-    };
-  })
-  .filter((d): d is { value: number; timestamp: number } => d !== null);
-
+  const chartData = rewardHistory
+    .map((item) => {
+      if (
+        !item ||
+        typeof item.height !== 'number' ||
+        typeof item.reward !== 'number'
+      ) {
+        return null;
+      }
+      return {
+        value: item.reward,
+        timestamp: item.height,
+      };
+    })
+    .filter((d): d is { value: number; timestamp: number } => d !== null);
 
   if (chartData.length === 0) {
     return (

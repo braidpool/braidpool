@@ -9,8 +9,6 @@ export function BeadRewardTooltip({ reward }: BeadRewardTooltipProps) {
   // Convert BTC to mBTC
   const mBTC = reward * 1000;
 
-  
-
   return (
     <div className="relative inline-block">
       <div
@@ -24,17 +22,17 @@ export function BeadRewardTooltip({ reward }: BeadRewardTooltipProps) {
       </div>
 
       {showTooltip && (
-  <div
-    className={`
+        <div
+          className={`
       absolute z-50 top-full left-1/2 transform -translate-x-1/2 translate-y-2 w-48 
       bg-gray-900/95 border border-gray-700 rounded-lg shadow-xl p-3
       transition-all duration-200
       opacity-100 scale-100
     `}
-  >
-    Tooltip content
-  </div>
-)}
+        >
+          Tooltip content
+        </div>
+      )}
     </div>
   );
 }

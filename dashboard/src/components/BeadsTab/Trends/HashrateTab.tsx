@@ -29,7 +29,8 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
       timestamp: time,
     };
 
-    const lastEntry = hashrateHistory.current[hashrateHistory.current.length - 1];
+    const lastEntry =
+      hashrateHistory.current[hashrateHistory.current.length - 1];
 
     // Prevent duplicates or out-of-order timestamps
     if (lastEntry && historyEntry.timestamp <= lastEntry.timestamp) {
@@ -130,17 +131,23 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
       </div>
 
       <div>
-              <AdvancedChart
-                data={chartData}
-                yLabel="Hashrate"
-               unit="EH/s"
-                lineColor="#8884d8"
-              />
-            </div>
+        <AdvancedChart
+          data={chartData}
+          yLabel="Hashrate"
+          unit="EH/s"
+          lineColor="#8884d8"
+        />
+      </div>
 
       <div className="grid sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <AnimatedStatCard title="Current Hashrate" value={hashrateData.current} />
-        <AnimatedStatCard title="Peak Hashrate (24h)" value={hashrateData.peak} />
+        <AnimatedStatCard
+          title="Current Hashrate"
+          value={hashrateData.current}
+        />
+        <AnimatedStatCard
+          title="Peak Hashrate (24h)"
+          value={hashrateData.peak}
+        />
         <AnimatedStatCard
           title="Network Difficulty"
           value={hashrateData.networkDifficulty.toExponential(2)}

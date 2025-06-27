@@ -85,14 +85,14 @@ export default function MinedSharesExplorer() {
             id: blockHash,
             name: `#${height}`,
             timestamp: new Date(timestamp).toLocaleString('en-IN', {
-  day: '2-digit',
-  month: '2-digit',
-  year: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
-  second: '2-digit',
-  hour12: false,
-}),
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit',
+              hour12: false,
+            }),
             transactions: txCount,
             difficulty: difficulty,
             reward:
@@ -122,8 +122,6 @@ export default function MinedSharesExplorer() {
     setActiveBead(beadId);
   };
 
-  
-
   return (
     <div className="min-h-screen bg-[#1c1c1c] text-white relative">
       <div className="container mx-auto px-2 sm:px-4 py-8">
@@ -134,7 +132,7 @@ export default function MinedSharesExplorer() {
             <div className="space-y-8">
               <div className="bg-[#1c1c1c] rounded-sm overflow-hidden">
                 {/* Table header */}
-                <div className="grid sm:grid-cols-1 md:grid-cols-3  lg:grid-cols-5 p-4 border-b  text-sm  border-gray-800/80 font-medium">
+                <div className="grid sm:grid-cols-2 md:grid-cols-3  lg:grid-cols-5 p-4 border-b  text-sm  border-gray-800/80 font-medium">
                   {[
                     'Bead Hash',
                     'Timestamp',
