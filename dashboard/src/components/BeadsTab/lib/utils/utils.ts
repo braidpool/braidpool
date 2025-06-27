@@ -21,9 +21,7 @@ export function formatWork(difficulty: number): {
   };
 }
 
-export function formatBlockLabel(height: number): string {
-  return `Block ${height.toLocaleString()}`;
-}
+
 export default function useCopyToClipboard(timeout = 1500) {
   const [copied, setCopied] = useState<string | null>(null);
 

@@ -3,6 +3,7 @@ import AdvancedChart from '../AdvancedChart';
 import AnimatedStatCard from '../AnimatedStatCard';
 import { LatencyData } from '../lib/types';
 
+
 const MAX_LATENCY_HISTORY = 100;
 
 export default function LatencyTab({ timeRange }: { timeRange: string }) {
@@ -114,15 +115,10 @@ export default function LatencyTab({ timeRange }: { timeRange: string }) {
   }, [timeRange]);
 
   const chartData = (latencyData.chartData || []).map((d: any) => ({
-    value: d.value,
-    date: new Date(d.date),
-    label: new Date(d.date).toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      
-    }),
-  }));
+  value: Number(d.value) || 0,
+  timestamp: Number(d.timestamp) || Date.now(), // ✅ Proper timestamp
+}));
+
 
   if (isLoading || !isConnected) {
     return (
@@ -148,17 +144,12 @@ export default function LatencyTab({ timeRange }: { timeRange: string }) {
           </span>
         </div>
       </div>
-
-      <div className="relative border border-gray-800/50 rounded-xl p-6 h-auto bg-[#1c1c1c] backdrop-blur-md overflow-hidden">
+<div>
         <AdvancedChart
           data={chartData}
-          height={350}
-          isLoading={isLoading}
-          timeRange={timeRange}
-          primaryLabel="Latency (ms)"
-          tooltipFormatter={(value, name) => {
-            return [`${(value as number).toFixed(2)} ms`, name as string];
-          }}
+          yLabel="Laten"
+         unit="ms"
+          lineColor="#8884d8"
         />
       </div>
 
