@@ -26,6 +26,7 @@ export async function fetchHashrateStats(wss) {
        
       },
     };
+ console.log("Hashrate" ,payload.data)
 
     wss.clients.forEach((client) => {
       if (client.readyState === client.OPEN) {
