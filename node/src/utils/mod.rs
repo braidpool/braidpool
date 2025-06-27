@@ -25,9 +25,3 @@ pub(crate) fn hashset_to_vec_deterministic(hashset: &HashSet<BeadHash>) -> Vec<B
 pub(crate) fn vec_to_hashset(vec: Vec<BeadHash>) -> HashSet<BeadHash> {
     vec.iter().cloned().collect()
 }
-
-pub(crate) fn retrieve_bead(beadhash: BeadHash) -> Option<Bead> {
-    // This function is a placeholder for the actual retrieval logic.
-    // In a real implementation, this would fetch the bead from a database or other storage.
-    None
-}
