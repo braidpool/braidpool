@@ -32,11 +32,6 @@ export interface ChartDataPoint {
   timestamp?: number;
 }
 
-export interface TimeRange {
-  label: string;
-  value: string;
-  days: number;
-}
 
 export interface Props {
   data: ChartDataPoint[];
@@ -93,28 +88,14 @@ export interface TransactionListProps {
   transactions: Transaction[];
 }
 
-export interface LatencyTabProps {
-  chartData: any[];
-  isChartLoading: boolean;
-  chartHovered: boolean;
-  setChartHovered: (val: boolean) => void;
-  timeRange: string;
-}
+
 
 export interface DashboardHeaderProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
 }
-
-export interface HashrateData {
-  history: { value: number; date: string; label: string; timestamp?: number }[];
-  current: string;
-  peak: string;
-  networkDifficulty: number;
-}
-
 export interface LatencyData {
-  chartData: { value: number; label: string; date: string }[];
+  chartData: { value: number; label: string; date: string ;timestamp: number;}[];
   averageLatency: string;
   peakLatency: string;
   peerCount: number;
@@ -134,28 +115,6 @@ export interface HistoryEntry {
   value: number;
   date: string;
   label: string;
-  timestamp: number;
-}
-
-export interface LatencyEntry {
-  value: number;
-  label: string;
-  date: string;
-  timeStamp: string;
-}
-
-export interface ProcessedHashrateData {
-  hashrate: number;
-  timestamp: number;
-  networkDifficulty: number;
-}
-
-export interface ProcessedLatencyData {
-  pings: number[];
-  averageLatency: number;
-  peakLatency: number;
-  peerCount: number;
-  validPings: number;
   timestamp: number;
 }
 
@@ -203,3 +162,65 @@ export type TransactionTabProps = {
 export type WebSocketMessage =
   | { type: 'block_data'; data: { txCount: number } }
   | { type: 'transaction_stats'; data: Stats };
+
+   export interface AdvancedchartProps {
+  data: { value: number; timestamp: number }[];
+  yLabel: string;
+  unit: string;
+  lineColor?: string;
+}
+export interface HashrateHistoryEntry{
+  value:number;
+  timestamp:number;
+  date:string;
+  label:string;
+}
+
+export interface HashrateWebSocketMessage {
+  type: 'hashrate_data';
+  data: {
+    hashrate: number;
+    timestamp: string | number;
+    networkDifficulty: number;
+  };
+}
+export interface LatencyHistoryEntry {
+  value: number;
+  timestamp: number;
+  date: string;
+  label: string;
+}
+
+export interface LatencyWebSocketMessage {
+  type: 'latency_data';
+  data: {
+    pings: number[];
+    averageLatency: number;
+    peakLatency: number;
+    peerCount: number;
+    validPings: number;
+    timestamp: string | number;
+  };
+}
+export interface HashrateHistoryEntry{
+  value:number;
+  timestamp:number;
+  date:string;
+  label:string;
+}
+
+export interface HashrateWebSocketMessage {
+  type: 'hashrate_data';
+  data: {
+    hashrate: number;
+    timestamp: string | number;
+    networkDifficulty: number;
+  };
+}
+
+export interface HashrateData {
+  history: { value: number; date: string; label: string; timestamp: number }[];
+  current: string;
+  peak: string;
+  networkDifficulty: number;
+}

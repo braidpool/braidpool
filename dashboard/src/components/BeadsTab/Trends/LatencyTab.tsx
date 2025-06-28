@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import AdvancedChart from '../AdvancedChart';
 import AnimatedStatCard from '../AnimatedStatCard';
-import { LatencyData } from '../lib/types';
+import { LatencyData ,LatencyWebSocketMessage,LatencyHistoryEntry} from '../lib/types';
 
 const MAX_LATENCY_HISTORY = 100;
 
@@ -19,12 +19,15 @@ export default function LatencyTab({ timeRange }: { timeRange: string }) {
   const [isConnected, setIsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
 
-  // Local latency history state
-  const latencyHistory = useRef<any[]>([]);
+  
+  const latencyHistory = useRef<LatencyHistoryEntry[]>([]);
 
-  const processLatencyData = (data: any) => {
+  // ✅ Process incoming data
+  const processLatencyData = (
+    data: LatencyWebSocketMessage['data']
+  ): LatencyData => {
     const {
-      pings,
+      
       averageLatency,
       peakLatency,
       peerCount,
@@ -32,20 +35,9 @@ export default function LatencyTab({ timeRange }: { timeRange: string }) {
       timestamp,
     } = data;
 
-    if (!pings || pings.length === 0) {
-      return {
-        chartData: latencyHistory.current,
-        averageLatency: '0ms',
-        peakLatency: '0ms',
-        peerCount,
-        validPings: 0,
-        timestamp,
-      };
-    }
-
     const time = new Date(timestamp).getTime();
 
-    const newEntry = {
+    const newEntry: LatencyHistoryEntry = {
       value: averageLatency,
       label: new Date(timestamp).toLocaleTimeString(),
       date: new Date(timestamp).toISOString(),
@@ -56,18 +48,20 @@ export default function LatencyTab({ timeRange }: { timeRange: string }) {
 
     if (lastEntry && lastEntry.timestamp === time) {
       return {
+        ...latencyData,
         chartData: [...latencyHistory.current],
         averageLatency: `${averageLatency.toFixed(0)}ms`,
         peakLatency: `${peakLatency}ms`,
         peerCount,
         validPings,
-        timestamp,
+        timestamp: time,
       };
     }
 
     if (latencyHistory.current.length >= MAX_LATENCY_HISTORY) {
       latencyHistory.current.shift();
     }
+
     latencyHistory.current.push(newEntry);
 
     return {
@@ -76,10 +70,11 @@ export default function LatencyTab({ timeRange }: { timeRange: string }) {
       peakLatency: `${peakLatency}ms`,
       peerCount,
       validPings,
-      timestamp,
+      timestamp: time,
     };
   };
 
+  // ✅ WebSocket connection
   useEffect(() => {
     latencyHistory.current = [];
 
@@ -90,25 +85,26 @@ export default function LatencyTab({ timeRange }: { timeRange: string }) {
       setIsConnected(true);
       setIsLoading(false);
     };
-    ws.onclose = () => {
-      setIsConnected(false);
-    };
+
+    ws.onclose = () => setIsConnected(false);
+
     ws.onerror = (error) => {
+      console.error('[LatencyTab] WebSocket error:', error);
       setIsConnected(false);
       setIsLoading(false);
-      console.error('[LatencyTab] WebSocket error:', error);
     };
+
     ws.onmessage = (event) => {
       try {
-        const message = JSON.parse(event.data);
+        const message: LatencyWebSocketMessage = JSON.parse(event.data);
         if (message.type === 'latency_data') {
           const processed = processLatencyData(message.data);
           setLatencyData(processed);
           setIsLoading(false);
         }
       } catch (e) {
-        setIsLoading(false);
         console.error('[LatencyTab] WebSocket message parse error:', e);
+        setIsLoading(false);
       }
     };
 
@@ -119,11 +115,13 @@ export default function LatencyTab({ timeRange }: { timeRange: string }) {
     };
   }, [timeRange]);
 
-  const chartData = (latencyData.chartData || []).map((d: any) => ({
-    value: Number(d.value) || 0,
-    timestamp: Number(d.timestamp) || Date.now(), // ✅ Proper timestamp
+  // ✅ Chart data extraction
+  const chartData = latencyData.chartData.slice(-10).map((d) => ({
+    value: d.value,
+    timestamp: d.timestamp,
   }));
 
+  // ✅ Loading UI
   if (isLoading || !isConnected) {
     return (
       <div className="p-8 text-center text-purple-300">
@@ -132,6 +130,7 @@ export default function LatencyTab({ timeRange }: { timeRange: string }) {
     );
   }
 
+  // ✅ Render UI
   return (
     <div className="space-y-6 bg-[#1c1c1c]">
       <div className="flex justify-between items-center">
@@ -148,10 +147,11 @@ export default function LatencyTab({ timeRange }: { timeRange: string }) {
           </span>
         </div>
       </div>
+
       <div>
         <AdvancedChart
           data={chartData}
-          yLabel="Laten"
+          yLabel="Latency"
           unit="ms"
           lineColor="#8884d8"
         />
