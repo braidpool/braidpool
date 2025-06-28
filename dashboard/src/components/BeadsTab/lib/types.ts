@@ -27,7 +27,7 @@ export interface ChartDataPoint {
   value: number;
   label: string;
   date: Date;
-  
+
   formattedDate?: string;
   trend?: 'up' | 'down' | 'neutral';
   timestamp?: number;
