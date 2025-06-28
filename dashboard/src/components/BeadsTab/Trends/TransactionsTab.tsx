@@ -1,13 +1,17 @@
 import { useState, useEffect, useRef } from 'react';
 import AdvancedChart from '../AdvancedChart';
 import AnimatedStatCard from '../AnimatedStatCard';
-import { TransactionTabProps, ChartDataItem, Stats } from '../lib/types';
+import {
+  TransactionTabProps,
+  TransactionDataItem,
+  TransactionStats,
+} from '../lib/types';
 
 const MAX_HISTORY_LENGTH = 50;
 
 export default function TransactionsTab({ timeRange }: TransactionTabProps) {
-  const [chartData, setChartData] = useState<ChartDataItem[]>([]);
-  const [stats, setStats] = useState<Stats>({
+  const [chartData, setChartData] = useState<TransactionDataItem[]>([]);
+  const [stats, setStats] = useState<TransactionStats>({
     txRate: 0,
     mempoolSize: 0,
     avgFeeRate: 0,
@@ -47,7 +51,7 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
           const now = new Date();
           const timeStamp = now.getTime();
 
-          const newEntry: ChartDataItem = {
+          const newEntry: TransactionDataItem = {
             value: parsed.data.txCount,
             label: now.toLocaleTimeString('en-GB', {
               hour: '2-digit',

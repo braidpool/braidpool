@@ -1,4 +1,4 @@
-//Beads ==>
+//Beads
 export interface Transaction {
   id: string;
   hash: string;
@@ -39,7 +39,7 @@ export interface BeadRewardTooltipProps {
   reward: number; // in BTC
   isOpen?: boolean;
 }
-// <==Beads
+//annimatedstats
 export interface AnimatedStatCardProps {
   title: string;
   value: string;
@@ -51,7 +51,7 @@ export interface DashboardHeaderProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
 }
-//Latency ==>
+//Latency
 export interface LatencyData {
   chartData: {
     value: number;
@@ -83,10 +83,8 @@ export interface LatencyHistoryEntry {
   date: string;
   label: string;
 }
-//<==Latency
 
-//Hashrate ==>
-
+//Hashrate
 export interface HashrateWebSocketMessage {
   type: 'hashrate_data';
   data: {
@@ -109,17 +107,16 @@ export interface HashrateData {
   peak: string;
   networkDifficulty: number;
 }
-// <==Hashrate
 
-//Transactions ==>
-export type ChartDataItem = {
+//Transactions
+export type TransactionDataItem = {
   value: number;
   label: string;
   date: Date;
   timestamp: number;
 };
 
-export type Stats = {
+export type TransactionStats = {
   txRate: number;
   mempoolSize: number;
   avgFeeRate: number;
@@ -131,7 +128,6 @@ export type TransactionTabProps = {
   setChartHovered: (val: boolean) => void;
   timeRange: string;
 };
-// <==transactions
 
 export interface BlockData {
   blockHash: string;
