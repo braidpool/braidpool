@@ -165,38 +165,63 @@ impl Braid {
 
         true
     }
-
-    ///Returning the genesis beads belonging to a Braid object
-    /// beads having no parents
-    /// representing the Braidpool architecture kindly refer to https://github.com/braidpool/braidpool/blob/dev/docs/braidpool_spec.md
-    fn genesis(&mut self, parents: HashMap<usize, HashSet<usize>>) -> HashSet<usize> {
-        let mut current_beads: Vec<usize> = Vec::new();
-        for bead_idx in &parents {
-            let current_bead = self.beads[*bead_idx.0].clone();
-            current_beads.push(*bead_idx.0);
-        }
+}
+#[allow(unused)]
+mod consensus_functions {
+    use super::*;
+    /// Returns the set of **genesis beads** from a given Braid object.
+    ///
+    /// A **genesis bead** is defined as a bead that has no parents, i.e., it is a root node in the Braid DAG.
+    /// These beads represent the starting points in the Braidpool architecture, with no dependencies upstream.
+    ///
+    /// # Arguments
+    ///
+    /// * `braid_obj` - A reference to the `Braid` object.  
+    ///   While not directly used in the logic here, it is included to align with interface expectations or future-proofing.
+    ///
+    /// * `parents` - A map from bead indices to their parent bead indices.
+    ///   Each entry represents a bead and its set of parent beads.
+    ///
+    /// # Returns
+    ///
+    /// A `HashSet<usize>` containing the indices of all beads that do not have any parents.
+    ///
+    /// # Reference
+    ///
+    /// For architectural context, refer to the [Braidpool Specification](https://github.com/braidpool/braidpool/blob/dev/docs/braidpool_spec.md).
+    pub fn genesis(braid_obj: &Braid, parents: &HashMap<usize, HashSet<usize>>) -> HashSet<usize> {
         let mut genesis_bead_indices: HashSet<usize> = HashSet::new();
-        for bead in current_beads {
-            let bead_parents = parents[&bead].clone();
-            if bead_parents.len() == 0 {
-                genesis_bead_indices.insert(bead);
+        for bead in parents {
+            if parents[&*bead.0].is_empty() == true {
+                genesis_bead_indices.insert(*bead.0);
             }
         }
         return genesis_bead_indices;
     }
-    ///Returning the tips belonging to a Braid object
-    /// beads having no children
-    fn tips(&mut self, parents: HashMap<usize, HashSet<usize>>) -> HashSet<usize> {
+    /// Returns the set of **tip beads** from a given Braid object.
+    ///
+    /// A **tip bead** is defined as a bead that has no children (i.e., no other bead references it as a parent).
+    /// These beads represent the leaves or endpoints in the Braid DAG structure.
+    ///
+    /// # Arguments
+    ///
+    /// * `braid_obj` - A reference to the `Braid` object, used to access bead metadata and index mappings.
+    /// * `parents` - A map from each bead index to a `HashSet` of its parent bead indices.
+    ///
+    /// # Returns
+    ///
+    /// A `HashSet<usize>` containing the indices of all beads that are **not referenced** as a parent by any other bead.
+    pub fn tips(braid_obj: &Braid, parents: &HashMap<usize, HashSet<usize>>) -> HashSet<usize> {
         let mut bead_indices_mapping: HashMap<usize, usize> = HashMap::new();
         let mut tips_indices: HashSet<usize> = HashSet::new();
-        for parent_bead_idx in parents.clone() {
-            bead_indices_mapping.insert(parent_bead_idx.0, 0);
+        for parent_bead_idx in parents {
+            bead_indices_mapping.insert(*parent_bead_idx.0, 0);
         }
         //tips are the beads having no childs//
         //utilizing the passed arguments as of parents instead of the internal braid one
-        let current_beads = self.beads.clone();
+        let current_beads = &braid_obj.beads;
         for bead in current_beads {
-            let current_bead_index = self.bead_index_mapping[&bead.block_header.block_hash()];
+            let current_bead_index = braid_obj.bead_index_mapping[&bead.block_header.block_hash()];
             let parents = match parents.get(&current_bead_index) {
                 Some(b) => b,
                 _ => {
@@ -216,19 +241,33 @@ impl Braid {
         }
         tips_indices
     }
-    ///Reversing the bead<--->parent mapping to bead<---->children mapping
-    fn reverse(
-        &mut self,
-        parents: HashMap<usize, HashSet<usize>>,
+    /// Reverses the parent mapping of beads to generate a child mapping.
+    ///
+    /// Given a mapping from each bead to its parent beads (`parents`), this function constructs
+    /// the reverse: a mapping from each bead to the set of **children** beads that reference it as a parent.
+    ///
+    /// This is useful for traversing the Braid DAG in the **forward** direction (from ancestors to descendants),
+    /// whereas the original parent map is used for **backward** traversal.
+    ///
+    /// # Arguments
+    ///
+    /// * `braid_obj` - A reference to the `Braid` object, required to resolve bead indices.
+    /// * `parents` - A `HashMap` where each key is a bead index, and the value is a `HashSet` of its parent bead indices.
+    ///
+    /// # Returns
+    ///
+    /// A `HashMap<usize, HashSet<usize>>` where each key is a bead index, and the value is a set of its children.
+    pub fn reverse(
+        braid_obj: &Braid,
+        parents: &HashMap<usize, HashSet<usize>>,
     ) -> HashMap<usize, HashSet<usize>> {
-        let mut bead_children_mapping: HashMap<usize, HashSet<usize>> = HashMap::new();
-        for bead_idx in &parents {
-            bead_children_mapping.insert(*bead_idx.0, HashSet::new());
-        }
-        let current_beads = self.beads.clone();
+        let mut bead_children_mapping: HashMap<usize, HashSet<usize>> =
+            parents.keys().map(|&idx| (idx, HashSet::new())).collect();
+
+        let current_beads = &braid_obj.beads;
         for bead in current_beads {
-            let current_bead_idx = self.bead_index_mapping[&bead.block_header.block_hash()];
-            let parents = parents[&current_bead_idx].clone();
+            let current_bead_idx = braid_obj.bead_index_mapping[&bead.block_header.block_hash()];
+            let parents = &parents[&current_bead_idx];
 
             for parent_bead_idx in parents.iter() {
                 bead_children_mapping
@@ -239,44 +278,73 @@ impl Braid {
         }
         return bead_children_mapping;
     }
-    ///Provides the complete set of child beads belonging to a particular set of beads
-    fn generation(
-        &mut self,
-        beads_indices: HashSet<usize>,
-        children: Option<HashMap<usize, HashSet<usize>>>,
+    /// Returns the complete set of **child beads** for a given set of bead indices.
+    ///
+    /// This function computes the immediate children of a set of beads using either a provided
+    /// bead-to-children map or by computing one on the fly via the reverse of the parent map.
+    ///
+    /// It is useful when traversing a Braid structure **forward** from a set of beads
+    /// to explore their direct descendants.
+    ///
+    /// # Arguments
+    ///
+    /// * `braid_obj` - A reference to the `Braid` object, used only when `children` is `None`.
+    /// * `beads_indices` - A `HashSet` of bead indices whose children need to be found.
+    /// * `children` - An optional reference to a `HashMap` representing bead → children mappings.
+    ///   If `None`, the mapping is generated using the `reverse` function and an empty parent map (as a fallback).
+    ///
+    /// # Returns
+    ///
+    /// A `HashSet<usize>` containing all bead indices that are children of the given input beads.
+    pub fn generation(
+        braid_obj: &Braid,
+        beads_indices: &HashSet<usize>,
+        children: Option<&HashMap<usize, HashSet<usize>>>,
     ) -> HashSet<usize> {
         let mut children_set: HashSet<usize> = HashSet::new();
         let mut parents: HashMap<usize, HashSet<usize>> = HashMap::new();
-        for idx in &beads_indices {
+        for idx in beads_indices {
             parents.insert(*idx, HashSet::new());
         }
         //values of children beads/mapping is always provided though
         let bead_children_mapping = match children {
             Some(children) => children,
-            None => self.reverse(parents),
+            None => &reverse(braid_obj, &parents),
         };
-        for bead in &beads_indices {
+        for bead in beads_indices {
             if let Some(child_beads) = bead_children_mapping.get(&bead) {
-                for child_bead in child_beads {
-                    children_set.insert(*child_bead);
-                }
+                children_set.extend(child_beads.iter());
             }
         }
         return children_set;
     }
-    ///Provided the bead and returning the ancestors of the that particular bead from the Braid object
-    /// Updating the overall mapping of bead<---->ancestor
-    /// via traversing braid in dfs manner instead or recursive following iterative approach
-    fn updating_ancestors<'a>(
-        &mut self,
+
+    /// Updates the ancestors of a given bead within a Braid DAG using an iterative DFS traversal.
+    ///
+    /// This function computes the complete set of **ancestors** for the bead corresponding to `current_block_hash`.
+    /// It uses an **iterative DFS** approach to avoid recursion stack overflows and updates a shared
+    /// `ancestors` mapping (`HashMap<usize, HashSet<usize>>`) in-place.
+    ///
+    /// # Arguments
+    ///
+    /// * `braid_obj` - A reference to the `Braid` object, which provides bead metadata and index mapping.
+    /// * `current_block_hash` - The hash of the bead whose ancestors need to be computed.
+    /// * `ancestors` - A mutable reference to the global bead-to-ancestors map that will be updated.
+    /// * `parents` - A mapping from bead indices to their parent bead indices.
+    ///
+    /// # Returns
+    ///
+    /// A mutable reference to the updated `ancestors` map where:
+    /// - `ancestors[i]` contains all ancestor indices (direct and transitive) of bead `i`.
+    pub fn updating_ancestors<'a>(
+        braid_obj: &Braid,
         current_block_hash: BeadHash,
         ancestors: &'a mut HashMap<usize, HashSet<usize>>,
-        parents: HashMap<usize, HashSet<usize>>,
+        parents: &HashMap<usize, HashSet<usize>>,
     ) -> &'a mut HashMap<usize, HashSet<usize>> {
         let mut dequeue: VecDeque<(usize, bool)> = VecDeque::new();
-        let current_bead_index = self.bead_index_mapping[&current_block_hash];
+        let current_bead_index = braid_obj.bead_index_mapping[&current_block_hash];
         dequeue.push_back((current_bead_index, false));
-
         while dequeue.len() > 0 {
             let (current, is_processed) = dequeue[dequeue.len() - 1];
 
@@ -284,34 +352,26 @@ impl Braid {
                 dequeue.pop_back();
                 if let Some(current_ancestor) = ancestors.get_mut(&current) {
                     current_ancestor.clear();
-                    if let Some(parents_beads) = parents.get(&current) {
-                        for parent_bead_idx in parents_beads {
-                            current_ancestor.insert(*parent_bead_idx);
-                        }
+                    if let Some(parents_beads) = parents.get(&current).as_mut() {
+                        current_ancestor.extend(parents_beads.iter());
                     }
                 } else {
                     let mut val_set: HashSet<usize> = HashSet::new();
                     if let Some(parents_beads) = parents.get(&current) {
-                        for parent_bead_idx in parents_beads {
-                            val_set.insert(*parent_bead_idx);
-                        }
+                        val_set.extend(parents_beads);
                     }
                     ancestors.insert(current, val_set);
                 }
                 if let Some(parent_indices) = parents.get(&current) {
-                    let ancestor_ref = ancestors.clone();
+                    let ancestor_ref = ancestors.to_owned();
                     for parent_idx in parent_indices {
                         if let Some(current_ancestors) = ancestors.get_mut(&current) {
-                            let beads = ancestor_ref[parent_idx].clone();
-                            for bead in beads {
-                                current_ancestors.insert(bead);
-                            }
+                            let beads = &ancestor_ref[parent_idx];
+                            current_ancestors.extend(beads.iter());
                         } else {
                             let mut val_set: HashSet<usize> = HashSet::new();
-                            let beads = ancestor_ref[parent_idx].clone();
-                            for bead in beads {
-                                val_set.insert(bead);
-                            }
+                            let beads = &ancestor_ref[parent_idx];
+                            val_set.extend(beads.iter());
                             ancestors.insert(current, val_set);
                         }
                     }
@@ -332,70 +392,107 @@ impl Braid {
 
         return ancestors;
     }
-    ///Providing all possible ancestors mapping for all the beads upto the current provided bead
-    fn get_all_ancestors<'a>(
-        &mut self,
+    /// Computes and returns the complete set of **ancestors** for all beads up to a given bead
+    /// in a Braid DAG (Directed Acyclic Graph).
+    ///
+    /// This function ensures that the provided `ancestors` mapping is updated for each bead in the ancestry
+    /// chain of `current_block_hash`. It traverses recursively through the parent hierarchy and
+    /// builds the transitive closure of ancestors.
+    ///
+    /// # Arguments
+    ///
+    /// * `braid_obj` - A reference to the `Braid` object, providing bead metadata and index resolution.
+    /// * `current_block_hash` - The block hash of the bead for which ancestors (and all predecessors) should be updated.
+    /// * `ancestors` - A mutable reference to a global map where each bead index maps to its ancestors.
+    /// * `parents` - A mapping from bead index to the set of its parent bead indices.
+    ///
+    /// # Returns
+    ///
+    /// A mutable reference to the updated `ancestors` map.
+    ///
+    /// # Notes
+    ///
+    /// - If a bead is already present in the `ancestors` map, it is recalculated.
+    /// - The function uses `updating_ancestors` internally for deferred DFS-style expansion.
+    /// - Avoids redundant computation by checking `ancestors.contains_key(...)` before updating parent entries.
+    pub fn get_all_ancestors<'a>(
+        braid_obj: &Braid,
         current_block_hash: BeadHash,
         ancestors: &'a mut HashMap<usize, HashSet<usize>>,
-        parents: HashMap<usize, HashSet<usize>>,
+        parents: &HashMap<usize, HashSet<usize>>,
     ) -> &'a mut HashMap<usize, HashSet<usize>> {
-        let current_block_idx = self.bead_index_mapping[&current_block_hash];
+        let current_block_idx = braid_obj.bead_index_mapping[&current_block_hash];
         //if bead entry already exists in the current ancestor mapping
         if let Some(current_bead_ancestors) = ancestors.get_mut(&current_block_idx) {
             current_bead_ancestors.clear();
-            let parents_current_block = parents[&current_block_idx].clone();
-            for idx in parents_current_block {
-                current_bead_ancestors.insert(idx);
-            }
+            let parents_current_block: &HashSet<usize> = &parents[&current_block_idx];
+            current_bead_ancestors.extend(parents_current_block.iter());
         }
         //if bead entry does not exists in the current ancestor mapping
         else {
-            let parents_current_block = parents[&current_block_idx].clone();
+            let parents_current_block: &HashSet<usize> = &parents[&current_block_idx];
             let mut value_set: HashSet<usize> = HashSet::new();
-            for idx in parents_current_block {
-                value_set.insert(idx);
-            }
+            value_set.extend(parents_current_block.iter());
             ancestors.insert(current_block_idx, value_set);
         }
-        for parent_idx in parents[&current_block_idx].clone() {
-            let current_parent_blockhash = self.beads[parent_idx].block_header.block_hash();
+        for parent_idx in &parents[&current_block_idx] {
+            let current_parent_blockhash = braid_obj.beads[*parent_idx].block_header.block_hash();
             if ancestors.contains_key(&parent_idx) == false {
-                self.updating_ancestors(current_parent_blockhash, ancestors, parents.clone());
+                updating_ancestors(&braid_obj, current_parent_blockhash, ancestors, &parents);
             }
-            let ancestor_ref = ancestors.clone();
+            let ancestor_ref = ancestors.to_owned();
             if let Some(current_bead_ancestors) = ancestors.get_mut(&current_block_idx) {
-                let parent_ancestors = ancestor_ref[&parent_idx].clone();
-                for ancestor in parent_ancestors {
-                    current_bead_ancestors.insert(ancestor);
-                }
+                let parent_ancestors: &HashSet<usize> = &ancestor_ref[&parent_idx];
+                current_bead_ancestors.extend(parent_ancestors.iter());
             } else {
-                let parent_ancestors = ancestors[&parent_idx].clone();
+                let parent_ancestors: &HashSet<usize> = &ancestors[&parent_idx];
                 let mut value_set = HashSet::new();
-                for ancestor in parent_ancestors {
-                    value_set.insert(ancestor);
-                }
+                value_set.extend(parent_ancestors.iter());
                 ancestors.insert(current_block_idx, value_set);
             }
         }
 
         return ancestors;
     }
-    ///The colors correspond to "cohorts" which are sub-graphs separated by graph cuts. A graph cut is a line drawn through the graph where all beads on the right side of the cut have all beads on the left side of the cut as ancestors.
-    /// returning the set of cohort bead indices from the overall beads present upto time T in the current Braid .
-    fn cohort(
-        &mut self,
-        parents: HashMap<usize, HashSet<usize>>,
-        children_or_not: Option<HashMap<usize, HashSet<usize>>>,
+    /// Computes the **cohorts** in a Braid DAG, representing layered subgraphs (slices) bounded by graph cuts.
+    ///
+    /// A **cohort** is a set of bead indices forming a layer where all included beads share the same
+    /// topological generation, i.e., all their ancestors lie strictly in earlier cohorts.
+    ///
+    /// Graphically, this corresponds to a **graph cut**: a boundary line across the DAG such that
+    /// every bead on the right side of the cut has all beads on the left side as its ancestors.
+    ///
+    /// # Arguments
+    ///
+    /// * `braid_obj` - A reference to the `Braid` object, which holds all bead metadata and index mappings.
+    /// * `parents` - A map from bead index to its parent indices, used for ancestry traversal.
+    /// * `children_or_not` - Optional map from bead index to its child indices (precomputed). If `None`, it is derived via `reverse()`.
+    /// * `inital_cohort` - Optional starting cohort (e.g., genesis beads). If `None`, it defaults to `genesis(...)`.
+    ///
+    /// # Returns
+    ///
+    /// A `Vec<HashSet<usize>>`, where each set represents a **cohort** in topological order.
+    /// Each cohort is disjoint and collectively they partition the beads in the Braid up to time `T`.
+    ///
+    /// # Key Concepts
+    ///
+    /// - **Tips** are beads with no children — they represent terminal points in the DAG.
+    /// - The function maintains a `head` (current working cohort) and `tail` (future candidate beads).
+    /// - A loop iteratively grows the frontier (`cohort`) until all tips are included.
+    pub fn cohort(
+        braid_obj: &Braid,
+        parents: &HashMap<usize, HashSet<usize>>,
+        children_or_not: Option<&HashMap<usize, HashSet<usize>>>,
         inital_cohort: Option<HashSet<usize>>,
     ) -> Vec<HashSet<usize>> {
         let children = match children_or_not {
             Some(val) => val,
-            None => self.reverse(parents.clone()),
+            None => &reverse(braid_obj, parents),
         };
-        let braid_tips = self.tips(parents.clone());
+        let braid_tips = tips(braid_obj, parents);
         let mut cohort = match inital_cohort {
             Some(inital_cohort) => inital_cohort,
-            None => self.genesis(parents.clone()),
+            None => genesis(braid_obj, parents),
         };
         let mut generator: Vec<HashSet<usize>> = Vec::new();
         let mut oldcohort: HashSet<usize> = HashSet::new();
@@ -404,21 +501,20 @@ impl Braid {
         let mut loop_flag = false;
         loop {
             let mut ancestor: HashMap<usize, HashSet<usize>> = HashMap::new();
-            for b in head.clone() {
-                ancestor.insert(b, HashSet::new());
+            for b in &head {
+                ancestor.insert(*b, HashSet::new());
             }
 
-            cohort = head.clone();
+            cohort = head.to_owned();
             loop {
                 if head.is_empty() == true {
                     loop_flag = true;
                     break;
                 }
+
                 for bead in cohort.difference(&oldcohort) {
                     if let Some(children) = children.get(bead) {
-                        for child in children {
-                            tail.insert(*child);
-                        }
+                        tail.extend(children.iter());
                     }
                 }
                 for bead in oldcohort.difference(&cohort) {
@@ -431,15 +527,13 @@ impl Braid {
                         break;
                     }
                 }
-                //flagged 1
                 if has_tips == true {
                     for bead in braid_tips.difference(&cohort) {
                         tail.insert(*bead);
                     }
                 } else {
-                    //flagged2
-                    for t in cohort.clone() {
-                        tail.remove(&t);
+                    for t in &cohort {
+                        tail.remove(t);
                     }
                 }
                 oldcohort = cohort.clone();
@@ -448,33 +542,28 @@ impl Braid {
                 for temp in t {
                     key_set.insert(*temp);
                 }
-                //flagged 3
                 for bead in tail.difference(&key_set) {
-                    let current_bead_blockhash =
-                        self.beads[*bead].clone().block_header.block_hash();
-                    self.updating_ancestors(current_bead_blockhash, &mut ancestor, parents.clone());
+                    let current_bead_blockhash = braid_obj.beads[*bead].block_header.block_hash();
+                    updating_ancestors(braid_obj, current_bead_blockhash, &mut ancestor, parents);
                 }
 
                 cohort = HashSet::new();
-                for (_key, val) in ancestor.clone() {
-                    for ancestor_value in val {
-                        cohort.insert(ancestor_value);
-                    }
+                for (_key, val) in &ancestor {
+                    cohort.extend(val);
                 }
-                //flagged 4
                 //cohort is the superset
-                let a: HashSet<&usize> = cohort.intersection(&braid_tips).collect();
+                let cohort_intersection_tips: HashSet<&usize> =
+                    cohort.intersection(&braid_tips).collect();
                 //if all tips are present in cohort then the size of a.len = braid.tips.len
-                if a.len() == braid_tips.len() {
+                if cohort_intersection_tips.len() == braid_tips.len() {
                     head.clear();
                     break;
                 }
-                //flagged 5//
                 if cohort.is_empty() == false {
                     let mut flag = false;
-                    for t in tail.clone() {
-                        if let Some(value) = ancestor.get(&t) {
-                            if cohort != *value {
+                    for t in &tail {
+                        if let Some(value) = &ancestor.get(&t) {
+                            if cohort != **value {
                                 flag = true;
                                 break;
                             }
@@ -490,119 +579,179 @@ impl Braid {
                     //tail contains all the tips
                     if set.len() == braid_tips.len() {
                         head.clear();
-                        for bead in tail.clone() {
-                            cohort.insert(bead);
-                        }
+                        cohort.extend(tail.iter());
                         tail.clear();
                         break;
                     }
-                    for bead in tail.clone() {
-                        cohort.insert(bead);
-                    }
+                    cohort.extend(tail.iter());
                 }
             }
             if loop_flag == true {
                 break;
             }
             if !cohort.is_empty() {
-                generator.push(cohort.clone());
+                generator.push(cohort);
             }
             oldcohort.clear();
         }
         generator
     }
-    ///Returning the head of the cohort
-    fn cohort_head(
-        &mut self,
-        cohort: HashSet<usize>,
-        parents: HashMap<usize, HashSet<usize>>,
-        children: Option<HashMap<usize, HashSet<usize>>>,
+    /// Determines and returns the **head** of a given cohort in a Braid DAG.
+    ///
+    /// The head of a cohort is the set of beads that immediately follow the given cohort
+    /// in the DAG structure — i.e., the "next generation" of beads.
+    /// These are computed by finding children of the current cohort,
+    /// removing those that already belong to the cohort,
+    /// and then finding the children of the resulting set (the *tail*).
+    ///
+    /// In the special case where the *tail* is empty or overlaps with **genesis tips**,
+    /// the function returns the tips instead.
+    ///
+    /// # Arguments
+    ///
+    /// * `braid_obj` - A reference to the `Braid` object for accessing metadata and bead index mappings.
+    /// * `cohort` - A reference to a `HashSet<usize>` representing the current cohort (layer) of bead indices.
+    /// * `parents` - A reference to the bead → parent mapping.
+    /// * `children` - An optional bead → children mapping; if `None`, it is computed as needed.
+    ///
+    /// # Returns
+    ///
+    /// A `HashSet<usize>` representing the next possible head cohort — either:
+    /// - The set of children that follow this cohort, or
+    /// - The **genesis tips**, if the tail is empty or intersects with them.
+    pub fn cohort_head(
+        braid_obj: &Braid,
+        cohort: &HashSet<usize>,
+        parents: &HashMap<usize, HashSet<usize>>,
+        children: Option<&HashMap<usize, HashSet<usize>>>,
     ) -> HashSet<usize> {
-        let cohort_children: HashSet<usize> =
-            self.generation(cohort.clone(), Some(parents.clone()));
+        let cohort_children: HashSet<usize> = generation(braid_obj, &cohort, Some(parents));
+        let mut cohort_children_ref: HashSet<usize> =
+            cohort_children.difference(&cohort).copied().collect();
+        let tail = generation(braid_obj, &cohort_children_ref, children);
+        let cohort_tips = genesis(braid_obj, parents);
+        let flag = tail.iter().any(|t| cohort_tips.contains(t));
 
-        let diff: HashSet<&usize> = cohort_children.difference(&cohort).collect();
-
-        let mut cohort_children_ref: HashSet<usize> = HashSet::new();
-
-        for child in diff {
-            cohort_children_ref.insert(*child);
-        }
-
-        let tail = self.generation(cohort_children_ref, children.clone());
-
-        let cohort_tips = self.genesis(parents);
-
-        let mut flag = false;
-        for t in tail.clone() {
-            if cohort_tips.contains(&t) {
-                flag = true;
-                break;
-            }
-        }
-        if tail.clone().is_empty() == true || flag {
+        if tail.is_empty() == true || flag {
             return cohort_tips;
         }
 
         return tail;
     }
-    ///Returning the tail of the cohort
-    fn cohort_tail(
-        &mut self,
-        cohort: HashSet<usize>,
-        parents: HashMap<usize, HashSet<usize>>,
+    /// Returns the **tail** of a given cohort in a Braid DAG.
+    ///
+    /// The **tail** refers to the immediate set of beads that follow the current cohort,
+    /// based on child relationships. It is essentially the "head" of the reverse graph traversal,
+    /// where parent and child roles are flipped.
+    ///
+    /// Internally, this function computes the child mapping (if not provided), and delegates to
+    /// `cohort_head()` using the reversed direction (i.e., children become parents and vice versa).
+    ///
+    /// # Arguments
+    ///
+    /// * `braid_obj` - Reference to the `Braid` object containing all bead metadata and mappings.
+    /// * `cohort` - The current cohort whose tail (i.e., next layer) is to be determined.
+    /// * `parents` - The original bead → parent mapping used to reverse relationships if needed.
+    /// * `children` - Optional bead → children mapping. If `None`, it is computed via `reverse(...)`.
+    ///
+    /// # Returns
+    ///
+    /// A `HashSet<usize>` representing the **tail** of the cohort, based on topological progression.
+    pub fn cohort_tail(
+        braid_obj: &Braid,
+        cohort: &HashSet<usize>,
+        parents: &HashMap<usize, HashSet<usize>>,
         children: Option<HashMap<usize, HashSet<usize>>>,
     ) -> HashSet<usize> {
-        let childs = match children.clone() {
+        let childs = match children {
             Some(childrens) => childrens,
-            None => self.reverse(parents.clone()),
+            None => reverse(braid_obj, parents),
         };
 
-        return self.cohort_head(cohort, childs, Some(parents));
+        return cohort_head(braid_obj, cohort, &childs, Some(parents));
     }
-    ///Sub-braid is referred to the sub-graph of the Overall braid
-    /// will be utilized in pruning functionality as well
-    fn get_sub_braid(
-        &mut self,
-        beads: HashSet<usize>,
-        parents: HashMap<usize, HashSet<usize>>,
+    /// Constructs a **sub-braid** from a specified set of bead indices within a Braid DAG.
+    ///
+    /// A *sub-braid* is defined as the subgraph induced by a subset of beads —
+    /// that is, only the beads in the input `beads` set are considered, and only the parent
+    /// relationships between those beads are retained.
+    ///
+    /// This is especially useful in contexts like:
+    /// - **Pruning** parts of the DAG.
+    /// - **Cohort isolation** or localized validation.
+    /// - Visualization of subgraphs or ancestry scopes.
+    ///
+    /// # Arguments
+    ///
+    /// * `braid_obj` - A reference to the full `Braid` object (not directly used here, but useful for consistency).
+    /// * `beads` - A set of bead indices to include in the sub-braid.
+    /// * `parents` - A mapping from each bead index to its set of parent bead indices (the full parent DAG).
+    ///
+    /// # Returns
+    ///
+    /// A `HashMap<usize, HashSet<usize>>` where:
+    /// - Keys are bead indices from the `beads` set.
+    /// - Values are sets of **parents also within the `beads` set**.
+    pub fn get_sub_braid(
+        braid_obj: &Braid,
+        beads: &HashSet<usize>,
+        parents: &HashMap<usize, HashSet<usize>>,
     ) -> HashMap<usize, HashSet<usize>> {
         let mut sub_braid: HashMap<usize, HashSet<usize>> = HashMap::new();
-        for bead in beads.clone() {
+        for bead in beads {
             let mut current_bead_sub: HashSet<usize> = HashSet::new();
-            if let Some(current_bead_parent) = parents.get(&bead) {
+            if let Some(current_bead_parent) = parents.get(bead) {
                 for parent_bead_idx in current_bead_parent {
-                    if beads.clone().contains(parent_bead_idx) {
+                    if beads.contains(parent_bead_idx) {
                         current_bead_sub.insert(*parent_bead_idx);
                     }
                 }
             }
-            sub_braid.insert(bead, current_bead_sub);
+            sub_braid.insert(*bead, current_bead_sub);
         }
         return sub_braid;
     }
-    ///descendant work for braidpool based POW (Proof of Work)
-    ///Calculates the descendant work or the ancestor work by reversing the parameters of child bead mapping and the parent bead mapping for a particular bead mapping
-    fn descendant_work(
-        &mut self,
-        parents: HashMap<usize, HashSet<usize>>,
-        children_or_not: Option<HashMap<usize, HashSet<usize>>>,
-        bead_work_or_not: Option<HashMap<usize, u32>>,
+    /// Computes the **descendant work** for each bead in the Braid DAG.
+    ///
+    /// In Braidpool’s Proof-of-Work (PoW) model, each bead has intrinsic work (e.g., hash difficulty),
+    /// and the total work includes contributions from all its **descendants** in the DAG.
+    ///
+    /// This function traverses the DAG in **cohort-reversed** (topological reverse) order
+    /// and accumulates the descendant work for each bead, i.e., the sum of its own work and
+    /// all work contributed by beads that descend from it.
+    ///
+    /// # Parameters
+    ///
+    /// * `braid_obj` - Reference to the complete `Braid` DAG object.
+    /// * `parents` - A map from bead indices to their immediate parents.
+    /// * `children_or_not` - Optional map from bead indices to their children. If `None`, it is computed by reversing `parents`.
+    /// * `bead_work_or_not` - Optional map of bead index to intrinsic work (`u32`). If `None`, assigns all beads a default `FIXED_BEAD_WORK`.
+    /// * `in_cohorts_or_not` - Optional precomputed cohort list. If `None`, it is generated using `cohort(...)`.
+    ///
+    /// # Returns
+    ///
+    /// A map from bead indices to their **descendant work** value.
+    /// That is:
+    /// ```text
+    /// descendant_work[b] = work(b) + Σ work(descendant(b))
+    /// ```
+    pub fn descendant_work(
+        braid_obj: &Braid,
+        parents: &HashMap<usize, HashSet<usize>>,
+        children_or_not: Option<&HashMap<usize, HashSet<usize>>>,
+        bead_work_or_not: Option<&HashMap<usize, u32>>,
         in_cohorts_or_not: Option<Vec<HashSet<usize>>>,
     ) -> HashMap<usize, u32> {
         let children = match children_or_not {
             Some(val) => val,
-            None => self.reverse(parents.clone()),
+            None => &reverse(braid_obj, parents),
         };
+        //This is done for increasing the scope
+        //therefore trading of with iteration each time the function is called but it avoids `cloning` which may be expensive
+        let work: HashMap<usize, u32> = parents.keys().map(|&k| (k, FIXED_BEAD_WORK)).collect();
         let bead_work = match bead_work_or_not {
             Some(val) => val,
-            None => {
-                let mut work: HashMap<usize, u32> = HashMap::new();
-                for bead_idx in parents.clone() {
-                    work.insert(bead_idx.0, FIXED_BEAD_WORK);
-                }
-                work
-            }
+            None => &work,
         };
         let mut previous_work: u32 = 0;
         let rev_cohorts = match in_cohorts_or_not {
@@ -611,45 +760,57 @@ impl Braid {
                 val_ref.reverse();
                 val_ref
             }
-            None => self.cohort(children.clone(), Some(parents.clone()), None),
+            None => cohort(braid_obj, &children, Some(parents), None),
         };
         let mut ret_val: HashMap<usize, u32> = HashMap::new();
         for curr_cohort in rev_cohorts {
-            let sub_children = self.get_sub_braid(curr_cohort.clone(), children.clone());
+            let sub_children = get_sub_braid(braid_obj, &curr_cohort, &children);
             let mut sub_descendants: HashMap<usize, HashSet<usize>> = HashMap::new();
-            for bead in curr_cohort.clone() {
-                let current_bead_hash = self.beads[bead].block_header.block_hash();
-                self.get_all_ancestors(
+            for bead in &curr_cohort {
+                let current_bead_hash = braid_obj.beads[*bead].block_header.block_hash();
+                get_all_ancestors(
+                    braid_obj,
                     current_bead_hash,
                     &mut sub_descendants,
-                    sub_children.clone(),
+                    &sub_children,
                 );
-                let mut work_summation: u32 = 0;
-                if let Some(descendants) = sub_descendants.get(&bead) {
-                    for descendant in descendants {
-                        work_summation = work_summation + bead_work[descendant];
-                    }
-                }
-                ret_val.insert(bead, previous_work + bead_work[&bead] + work_summation);
+                let work_summation = sub_descendants
+                    .get(&bead)
+                    .map(|descendants| descendants.iter().map(|d| bead_work[d]).sum())
+                    .unwrap_or(0);
+                ret_val.insert(*bead, previous_work + bead_work[bead] + work_summation);
             }
-            let mut work_summation: u32 = 0;
-            for bead in curr_cohort {
-                work_summation += bead_work[&bead];
-            }
-            previous_work = previous_work + work_summation;
+            let work_summation: u32 = curr_cohort.iter().map(|bead| bead_work[bead]).sum();
+            previous_work += work_summation;
         }
         return ret_val;
     }
-    ///we will have to return the Ordering type for comparator
-    ///provided the 2 beads acts as a closure to be provided as the comparatator according to the
-    /// according to the current consensus functionality mapping/priority for comparator is -:
-    /// bead index < Ancestor work < Descendant work
-    fn bead_cmp<'a>(
-        &mut self,
+    /// Comparator function for ordering bead indices in Braidpool consensus logic.
+    ///
+    /// The comparison follows a strict priority:
+    /// 1. **Descendant Work** (`dwork`)
+    /// 2. **Ancestor Work** (`awork`)
+    /// 3. **Bead Index** (in reverse; i.e., smaller index wins last)
+    ///
+    /// This comparator is designed to be used in sorting and priority queues where
+    /// consensus-based ordering of beads is necessary (e.g., tip selection, leader election).
+    ///
+    /// # Arguments
+    ///
+    /// * `a` - Index of bead A.
+    /// * `b` - Index of bead B.
+    /// * `dwork` - Map of bead index to its **descendant work** (must be provided).
+    /// * `awork_or_not` - Optional map of bead index to **ancestor work**; required for full comparison.
+    ///
+    /// # Returns
+    ///
+    /// An `Ordering` (`Less`, `Greater`, or `Equal`) indicating the relative ranking of bead A vs B.
+    ///
+    pub fn bead_cmp<'a>(
         a: usize,
         b: usize,
-        dwork: HashMap<usize, u32>,
-        awork_or_not: Option<HashMap<usize, u32>>,
+        dwork: &HashMap<usize, u32>,
+        awork_or_not: Option<&HashMap<usize, u32>>,
     ) -> Ordering {
         if dwork[&a] < dwork[&b] {
             return Ordering::Less;
@@ -678,54 +839,64 @@ impl Braid {
         }
         return Ordering::Equal;
     }
-    ///Calculating the highest work path for a given braid provided with parent mapping :: reverse along with child mapping :: reverse
-    ///following the approach for selecting the best possible chain for the purpose of resolving the conflicts
-    /// arising due to the simultaneous beads and which path to be taken as the main braid path .
-    fn highest_work_path(
-        &mut self,
-        parents: HashMap<usize, HashSet<usize>>,
-        children_or_none: Option<HashMap<usize, HashSet<usize>>>,
+    /// Computes the **highest-work path** in the Braid DAG.
+    ///
+    /// This function identifies the most "valuable" path in terms of cumulative **Proof-of-Work (PoW)**
+    /// starting from a genesis bead and ending at a tip bead, which is particularly useful for:
+    /// - Conflict resolution due to simultaneous bead proposals.
+    /// - Establishing a canonical chain or subchain in a DAG-based consensus.
+    ///
+    /// The "highest work" path is selected by:
+    /// 1. Choosing the genesis bead with the maximum **descendant work** (and then ancestor work, and then index).
+    /// 2. Repeatedly walking forward by selecting the child with the highest work according to the same criteria.
+    /// 3. Continuing until a tip bead is reached.
+    ///
+    /// # Parameters
+    ///
+    /// * `braid_obj` - The full `Braid` structure representing the DAG.
+    /// * `parents` - Map of bead index to its immediate parents.
+    /// * `children_or_none` - Optional child map (bead index → set of children); computed if `None`.
+    /// * `bead_work_or_not` - Optional work map for beads; if `None`, a constant work value is used for each bead.
+    ///
+    /// # Returns
+    ///
+    /// A `Vec<usize>` representing the highest-work path as a sequence of bead indices from genesis to tip.
+    ///
+    /// /// # Consensus Rule
+    /// Sorting order uses `bead_cmp(...)`, which prioritizes:
+    /// - Descendant Work
+    /// - Ancestor Work
+    /// - Bead Index (reverse order)
+    pub fn highest_work_path(
+        braid_obj: &Braid,
+        parents: &HashMap<usize, HashSet<usize>>,
+        children_or_none: Option<&HashMap<usize, HashSet<usize>>>,
         bead_work_or_not: Option<HashMap<usize, u32>>,
     ) -> Vec<usize> {
         let children = match children_or_none {
             Some(child) => child,
-            None => self.reverse(parents.clone()),
+            None => &reverse(braid_obj, parents),
         };
         let bead_work = match bead_work_or_not {
             Some(work) => work,
             None => {
-                let mut work: HashMap<usize, u32> = HashMap::new();
-                for bead in parents.clone() {
-                    work.insert(bead.0, FIXED_BEAD_WORK);
-                }
+                let mut work: HashMap<usize, u32> =
+                    parents.keys().map(|&k| (k, FIXED_BEAD_WORK)).collect();
                 work
             }
         };
-        let descendant_work = self.descendant_work(
-            parents.clone(),
-            Some(children.clone()),
-            Some(bead_work.clone()),
-            None,
-        );
-        let ancestor_work = self.descendant_work(
-            children.clone(),
-            Some(parents.clone()),
-            Some(bead_work.clone()),
-            None,
-        );
+        let descendant_work_braid =
+            descendant_work(braid_obj, parents, Some(children), Some(&bead_work), None);
+        let ancestor_work =
+            descendant_work(braid_obj, children, Some(parents), Some(&bead_work), None);
         //getting the genesis beads and for each evaluating the highest
         //work genesis bead to be included inside the highest work path
-        let genesis_beads = self.genesis(parents.clone());
+        let genesis_beads = genesis(braid_obj, parents);
         //getting the maxima out of the genesis beads
-        let max_gensis_bead = match genesis_beads.iter().max_by(|a, b| {
-            self.bead_cmp(
-                **a,
-                **b,
-                descendant_work.clone(),
-                Some(ancestor_work.clone()),
-            )
-            .clone()
-        }) {
+        let max_gensis_bead = match genesis_beads
+            .iter()
+            .max_by(|a, b| bead_cmp(**a, **b, &descendant_work_braid, Some(&ancestor_work)))
+        {
             Some(val) => val,
             None => {
                 panic!("An error occurred while fetching the highest work bead");
@@ -735,24 +906,19 @@ impl Braid {
         //entire braid for computation of highest work path
         let mut highest_work_path: Vec<usize> = vec![*max_gensis_bead];
         //getting the tip beads
-        let tips_beads: HashSet<usize> = self.tips(parents.clone());
+        let tips_beads: HashSet<usize> = tips(braid_obj, parents);
         //computing while iterating and processing the previous best nodes and generating all
         //its corresponding set of childrens for getting further best maximum work path nodes
         while tips_beads.contains(&highest_work_path[highest_work_path.len() - 1]) == false {
             let mut beads_indices: HashSet<usize> = HashSet::new();
             beads_indices.insert(highest_work_path[highest_work_path.len() - 1]);
             //generating the child sets for the previous best bead
-            let current_bead_children_set = self.generation(beads_indices, Some(children.clone()));
+            let current_bead_children_set = generation(braid_obj, &beads_indices, Some(children));
             //getting the maximum via comparator
-            let max_bead = match current_bead_children_set.iter().max_by(|a, b| {
-                self.bead_cmp(
-                    **a,
-                    **b,
-                    descendant_work.clone(),
-                    Some(ancestor_work.clone()),
-                )
-                .clone()
-            }) {
+            let max_bead = match current_bead_children_set
+                .iter()
+                .max_by(|a, b| bead_cmp(**a, **b, &descendant_work_braid, Some(&ancestor_work)))
+            {
                 Some(val) => val,
                 None => {
                     panic!("An error occurred while Ordering to take place")
@@ -764,42 +930,81 @@ impl Braid {
         return highest_work_path;
     }
 
-    ///Check for the existence of a cohort in forward as well as in backward direction
-    fn check_cohort(
-        &mut self,
-        cohort: HashSet<usize>,
-        parents: HashMap<usize, HashSet<usize>>,
-        children_or_none: Option<HashMap<usize, HashSet<usize>>>,
+    /// Validates the **structural integrity of a cohort** in both forward and backward directions within the Braid DAG.
+    ///
+    /// This function checks whether a given set of bead indices (`cohort`) forms a valid subgraph in terms of:
+    /// - All ancestors of any bead in the cohort being present in the cohort (`backward check`)
+    /// - All descendants of any bead in the cohort being present in the cohort (`forward check`)
+    ///
+    /// This ensures the cohort is closed under transitive ancestry and descent, forming a **fully-connected induced subgraph**.
+    /// It's often used during pruning, consensus validation, or snapshot isolation.
+    ///
+    /// # Parameters
+    ///
+    /// * `braid_obj` - Reference to the full `Braid` object.
+    /// * `cohort` - Set of bead indices to validate.
+    /// * `parents` - Mapping from bead index to its parent set.
+    /// * `children_or_none` - Optional child mapping. If `None`, it is computed from `parents`.
+    ///
+    /// # Returns
+    ///
+    /// * `true` if the cohort passes both ancestor and descendant checks.
+    /// * `false` if any external bead influences or is influenced by beads in the cohort.
+    ///
+    pub fn check_cohort(
+        braid_obj: &Braid,
+        cohort: &HashSet<usize>,
+        parents: &HashMap<usize, HashSet<usize>>,
+        children_or_none: Option<&HashMap<usize, HashSet<usize>>>,
     ) -> bool {
         let children = match children_or_none {
             Some(childs) => childs,
-            None => self.reverse(parents.clone()),
+            None => &reverse(braid_obj, parents),
         };
-        return self.check_cohort_ancestors(
-            Some(children.clone()),
-            cohort.clone(),
-            parents.clone(),
-        ) && self.check_cohort_ancestors(Some(parents), cohort, children);
+        return check_cohort_ancestors(braid_obj, Some(children), cohort, parents)
+            && check_cohort_ancestors(braid_obj, Some(parents), cohort, children);
     }
-    ///Checking for the ancestors of cohorts bead indices taken as parameter
-    fn check_cohort_ancestors(
-        &mut self,
-        children_or_none: Option<HashMap<usize, HashSet<usize>>>,
-        cohort: HashSet<usize>,
-        parents: HashMap<usize, HashSet<usize>>,
+    /// Validates that all ancestors of a given cohort are contained within the cohort itself,
+    /// or are part of its "cohort head" (i.e., entry points).
+    ///
+    /// This function ensures that the cohort is **ancestrally closed**:
+    /// - All ancestors of all beads in the cohort must either:
+    ///     - Belong to the cohort itself, or
+    ///     - Be part of its head (i.e., minimal external dependencies).
+    ///
+    /// This check is useful for confirming if the cohort forms a self-contained component
+    /// of the Braid DAG that could be used for pruning, consensus snapshots, or isolation.
+    ///
+    /// # Parameters
+    ///
+    /// * `braid_obj` - Reference to the Braid DAG.
+    /// * `children_or_none` - Optional child mapping (used for generating children of missing ancestors).
+    ///                        If `None`, it is computed using `reverse(...)`.
+    /// * `cohort` - Set of bead indices representing the cohort.
+    /// * `parents` - Parent mapping of the entire braid (used for ancestor traversal).
+    ///
+    /// # Returns
+    ///
+    /// `true` if the cohort is valid with respect to its ancestors (no invalid external ancestry),
+    /// `false` otherwise.
+    pub fn check_cohort_ancestors(
+        braid_obj: &Braid,
+        children_or_none: Option<&HashMap<usize, HashSet<usize>>>,
+        cohort: &HashSet<usize>,
+        parents: &HashMap<usize, HashSet<usize>>,
     ) -> bool {
         let children = match children_or_none {
             Some(child) => child,
-            None => self.reverse(parents.clone()),
+            None => &reverse(braid_obj, parents),
         };
         let mut ancestors: HashMap<usize, HashSet<usize>> = HashMap::new();
         let mut all_ancestors: HashSet<usize> = HashSet::new();
 
-        let head = self.cohort_head(cohort.clone(), parents.clone(), Some(children.clone()));
+        let head = cohort_head(braid_obj, cohort, parents, Some(children));
 
-        for bead in cohort.clone() {
-            let current_bead_hash = self.beads[bead].block_header.block_hash();
-            self.get_all_ancestors(current_bead_hash, &mut ancestors, parents.clone());
+        for bead in cohort {
+            let current_bead_hash = braid_obj.beads[*bead].block_header.block_hash();
+            get_all_ancestors(braid_obj, current_bead_hash, &mut ancestors, parents);
             if let Some(ancestor_beads) = ancestors.get(&bead) {
                 for ancestor_bead in ancestor_beads {
                     if !cohort.contains(ancestor_bead) {
@@ -809,14 +1014,12 @@ impl Braid {
             }
         }
         if all_ancestors.is_empty() == false {
-            let generated_child_set =
-                self.generation(all_ancestors.clone(), Some(children.clone()));
-            let diff: HashSet<&usize> = generated_child_set.difference(&all_ancestors).collect();
-            let mut diff_ref: HashSet<usize> = HashSet::new();
-            for bead in diff {
-                diff_ref.insert(*bead);
-            }
-            if diff_ref != head {
+            let generated_child_set = generation(braid_obj, &all_ancestors, Some(children));
+            let diff: HashSet<usize> = generated_child_set
+                .difference(&all_ancestors)
+                .copied()
+                .collect();
+            if diff != head {
                 return false;
             }
         }
