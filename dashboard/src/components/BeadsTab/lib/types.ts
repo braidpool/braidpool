@@ -1,3 +1,4 @@
+//Beads ==>
 export interface Transaction {
   id: string;
   hash: string;
@@ -11,6 +12,9 @@ export interface Transaction {
   inputs: number;
   outputs: number;
 }
+export interface TransactionListProps {
+  transactions: Transaction[];
+}
 
 export interface Bead {
   id: string;
@@ -23,7 +27,6 @@ export interface Bead {
   reward: number;
 }
 
-
 export interface BeadRowProps {
   bead: Bead;
   isExpanded: boolean;
@@ -32,40 +35,23 @@ export interface BeadRowProps {
   transactions: Transaction[];
 }
 
-export interface RewardHistoryChartProps {
-  rewardHistory: { height: number; reward: number; label: string }[];
+export interface BeadRewardTooltipProps {
+  reward: number; // in BTC
+  isOpen?: boolean;
 }
-
-export interface RewardData {
-  totalRewards: number;
-  dailyAverage: number;
-  weeklyProjection: number;
-  monthlyProjection: number;
-  lastReward: number;
-  lastRewardTime: string;
-  rewardHistory: { height: number; reward: number; label: string }[];
-}
-
+// <==Beads
 export interface AnimatedStatCardProps {
   title: string;
   value: string;
   color?: string;
 }
 
-export interface BeadRewardTooltipProps {
-  reward: number; // in BTC
-  isOpen?: boolean;
-}
-
-export interface TransactionListProps {
-  transactions: Transaction[];
-}
-
+//Dashboard
 export interface DashboardHeaderProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
 }
-//Latency 
+//Latency ==>
 export interface LatencyData {
   chartData: {
     value: number;
@@ -97,17 +83,9 @@ export interface LatencyHistoryEntry {
   date: string;
   label: string;
 }
- //Latency 
+//<==Latency
 
-export interface TransactionStats {
-  mempoolSize: number;
-  avgFeeRate: number;
-  avgTxSize: number;
-  txRate: number;
-  totalFees: number;
-}
-
-//Hashrate 
+//Hashrate ==>
 
 export interface HashrateWebSocketMessage {
   type: 'hashrate_data';
@@ -125,37 +103,15 @@ export interface HashrateHistoryEntry {
   label: string;
 }
 
-
-
 export interface HashrateData {
   history: { value: number; date: string; label: string; timestamp: number }[];
   current: string;
   peak: string;
   networkDifficulty: number;
 }
-// Hashrate 
+// <==Hashrate
 
-export interface BlockData {
-  blockHash: string;
-  timestamp: number;
-  height: number;
-  difficulty: number;
-  txCount: number;
-  reward: number;
-  parent: string;
-  transactions: any[];
-}
-
-export interface RewardsData {
-  blockCount: number;
-  blockReward: number;
-  totalRewards: number;
-  rewardRate: number;
-  lastRewardTime: number | null;
-  halvings: number;
-  nextHalving: number;
-  blocksUntilHalving: number;
-}
+//Transactions ==>
 export type ChartDataItem = {
   value: number;
   label: string;
@@ -175,8 +131,18 @@ export type TransactionTabProps = {
   setChartHovered: (val: boolean) => void;
   timeRange: string;
 };
+// <==transactions
 
-
+export interface BlockData {
+  blockHash: string;
+  timestamp: number;
+  height: number;
+  difficulty: number;
+  txCount: number;
+  reward: number;
+  parent: string;
+  transactions: any[];
+}
 
 export interface AdvancedchartProps {
   data: { value: number; timestamp: number }[];
@@ -184,4 +150,18 @@ export interface AdvancedchartProps {
   unit: string;
   lineColor?: string;
 }
+//Reward section
 
+export interface RewardHistoryChartProps {
+  rewardHistory: { height: number; reward: number; label: string }[];
+}
+
+export interface RewardData {
+  totalRewards: number;
+  dailyAverage: number;
+  weeklyProjection: number;
+  monthlyProjection: number;
+  lastReward: number;
+  lastRewardTime: string;
+  rewardHistory: { height: number; reward: number; label: string }[];
+}
