@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useRef } from 'react';
 import AdvancedChart from '../AdvancedChart';
 import AnimatedStatCard from '../AnimatedStatCard';
@@ -28,9 +29,7 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
       setIsLoading(false);
     };
 
-    ws.onclose = () => {
-      setIsConnected(false);
-    };
+    ws.onclose = () => setIsConnected(false);
 
     ws.onerror = (error) => {
       setIsConnected(false);
@@ -42,7 +41,6 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
       try {
         const parsed = JSON.parse(event.data);
 
-        // ✅ Handle block data for chart
         if (
           parsed.type === 'block_data' &&
           parsed.data?.txCount !== undefined
@@ -51,7 +49,7 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
           const timeStamp = now.getTime();
 
           const newEntry: ChartDataItem = {
-            value: parsed.data.txCount || 0,
+            value: parsed.data.txCount,
             label: now.toLocaleTimeString('en-GB', {
               hour: '2-digit',
               minute: '2-digit',
@@ -63,7 +61,6 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
 
           setChartData((prev) => {
             const lastEntry = prev[prev.length - 1];
-
             if (lastEntry && lastEntry.timestamp === timeStamp) return prev;
 
             const updated = [...prev, newEntry];
@@ -112,7 +109,7 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
 
       <div>
         <AdvancedChart
-          data={chartData}
+          data={chartData.slice(-10)}
           yLabel="Transaction"
           unit="tx/min"
           lineColor="#8884d8"
