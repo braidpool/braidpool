@@ -11,7 +11,7 @@ export function processBlockData(data: BlockData) {
     parent,
     transactions,
   } = data;
-  
+
   const work = `${(difficulty / 1e6).toFixed(2)} EH`;
   const formattedTransactions = transactions.map((tx: any) => ({
     ...tx,

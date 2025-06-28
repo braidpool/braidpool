@@ -1,7 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import AdvancedChart from '../AdvancedChart';
 import AnimatedStatCard from '../AnimatedStatCard';
-import { LatencyData ,LatencyWebSocketMessage,LatencyHistoryEntry} from '../lib/types';
+import {
+  LatencyData,
+  LatencyWebSocketMessage,
+  LatencyHistoryEntry,
+} from '../lib/types';
 
 const MAX_LATENCY_HISTORY = 100;
 
@@ -19,21 +23,14 @@ export default function LatencyTab({ timeRange }: { timeRange: string }) {
   const [isConnected, setIsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
 
-  
   const latencyHistory = useRef<LatencyHistoryEntry[]>([]);
 
   // ✅ Process incoming data
   const processLatencyData = (
     data: LatencyWebSocketMessage['data']
   ): LatencyData => {
-    const {
-      
-      averageLatency,
-      peakLatency,
-      peerCount,
-      validPings,
-      timestamp,
-    } = data;
+    const { averageLatency, peakLatency, peerCount, validPings, timestamp } =
+      data;
 
     const time = new Date(timestamp).getTime();
 

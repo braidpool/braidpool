@@ -32,7 +32,6 @@ export interface ChartDataPoint {
   timestamp?: number;
 }
 
-
 export interface Props {
   data: ChartDataPoint[];
   height?: number;
@@ -88,14 +87,17 @@ export interface TransactionListProps {
   transactions: Transaction[];
 }
 
-
-
 export interface DashboardHeaderProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
 }
 export interface LatencyData {
-  chartData: { value: number; label: string; date: string ;timestamp: number;}[];
+  chartData: {
+    value: number;
+    label: string;
+    date: string;
+    timestamp: number;
+  }[];
   averageLatency: string;
   peakLatency: string;
   peerCount: number;
@@ -163,17 +165,17 @@ export type WebSocketMessage =
   | { type: 'block_data'; data: { txCount: number } }
   | { type: 'transaction_stats'; data: Stats };
 
-   export interface AdvancedchartProps {
+export interface AdvancedchartProps {
   data: { value: number; timestamp: number }[];
   yLabel: string;
   unit: string;
   lineColor?: string;
 }
-export interface HashrateHistoryEntry{
-  value:number;
-  timestamp:number;
-  date:string;
-  label:string;
+export interface HashrateHistoryEntry {
+  value: number;
+  timestamp: number;
+  date: string;
+  label: string;
 }
 
 export interface HashrateWebSocketMessage {
@@ -202,11 +204,11 @@ export interface LatencyWebSocketMessage {
     timestamp: string | number;
   };
 }
-export interface HashrateHistoryEntry{
-  value:number;
-  timestamp:number;
-  date:string;
-  label:string;
+export interface HashrateHistoryEntry {
+  value: number;
+  timestamp: number;
+  date: string;
+  label: string;
 }
 
 export interface HashrateWebSocketMessage {

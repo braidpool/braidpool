@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import AdvancedChart from '../AdvancedChart';
 import AnimatedStatCard from '../AnimatedStatCard';
-import { HashrateData ,HashrateWebSocketMessage,HashrateHistoryEntry } from '../lib/types';
+import {
+  HashrateData,
+  HashrateWebSocketMessage,
+  HashrateHistoryEntry,
+} from '../lib/types';
 
 const MAX_HISTORY_LENGTH = 288;
-
-
 
 export default function HashrateTab({ timeRange }: { timeRange: string }) {
   const [hashrateData, setHashrateData] = useState<HashrateData>({
@@ -25,7 +27,7 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
     const { hashrate, timestamp, networkDifficulty } = data;
     const time = new Date(timestamp).getTime();
 
-    const historyEntry:HashrateHistoryEntry = {
+    const historyEntry: HashrateHistoryEntry = {
       value: hashrate,
       date: new Date(timestamp).toISOString(),
       timestamp: time,
@@ -102,9 +104,7 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
     };
   }, [timeRange]);
 
- const chartData = hashrateData.history
-  .slice(-10)
-  .map((d) => ({
+  const chartData = hashrateData.history.slice(-10).map((d) => ({
     value: d.value,
     timestamp: d.timestamp,
   }));
