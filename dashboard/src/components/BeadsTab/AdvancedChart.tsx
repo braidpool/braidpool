@@ -9,19 +9,14 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 
-interface ChartContainerProps {
-  data: { value: number; timestamp: number }[];
-  yLabel: string;
-  unit: string;
-  lineColor?: string;
-}
+import { AdvancedchartProps } from './lib/types';
 
 export default function AdvancedChart({
   data,
   yLabel,
   unit,
   lineColor = '#3b82f6',
-}: ChartContainerProps) {
+}: AdvancedchartProps) {
   return (
     <div className=" relative border border-gray-800/50 rounded-xl p-4 h-auto bg-[#1c1c1c] backdrop-blur-md overflow-hidden  ">
       <ResponsiveContainer width="100%" height={350}>
