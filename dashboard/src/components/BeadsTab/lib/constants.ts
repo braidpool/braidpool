@@ -1,6 +1,4 @@
-
 import { Zap, Activity, Database } from 'lucide-react';
-
 
 export const TrendsTABS = [
   { id: 'hashrate', label: 'Hashrate', icon: Zap },

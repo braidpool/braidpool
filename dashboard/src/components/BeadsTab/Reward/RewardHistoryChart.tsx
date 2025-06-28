@@ -25,7 +25,7 @@ const RewardHistoryChart: React.FC<RewardHistoryChartProps> = ({
     return (
       <div className="w-full h-auto text-white rounded-xl shadow-lg p-6">
         <h2 className="text-xl font-bold mb-4 tracking-tighter">
-          Bitcoin Block Reward 
+          Bitcoin Block Reward
         </h2>
         <div className="h-64 flex items-center justify-center text-gray-400">
           No reward history data available
@@ -37,7 +37,7 @@ const RewardHistoryChart: React.FC<RewardHistoryChartProps> = ({
   return (
     <div className="w-full h-auto text-white rounded-xl shadow-lg p-6">
       <h2 className="text-xl font-bold mb-4 tracking-tighter">
-        Bitcoin Block Reward 
+        Bitcoin Block Reward
       </h2>
       <AdvancedChart
         data={chartData}
