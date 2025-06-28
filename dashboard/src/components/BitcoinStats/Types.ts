@@ -2,7 +2,6 @@ export interface PriceData {
   current: number;
   high24h: number;
   low24h: number;
-  priceChange24h: number;
   currencySymbol: string;
 }
 
