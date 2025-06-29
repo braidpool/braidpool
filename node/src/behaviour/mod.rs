@@ -17,7 +17,7 @@ use std::{error::Error, time::Duration};
 pub const KADPROTOCOLNAME: StreamProtocol = StreamProtocol::new("/braidpool/kad/1.0.0");
 pub const IDENTIFYPROTOCOLNAME: StreamProtocol = StreamProtocol::new("/braidpool/identify/1.0.0");
 pub const BEAD_SYNC_PROTOCOL: StreamProtocol = StreamProtocol::new("/braidpool/bead-sync/1.0.0");
-pub const FLOODSUBPROTOCOLNAME: StreamProtocol = StreamProtocol::new("/floodsub/1.0.0");
+pub const BEAD_ANNOUNCE_PROTOCOL: StreamProtocol = StreamProtocol::new("/floodsub/1.0.0");
 
 // Configuration for the request-response protocol
 #[derive(Debug, Clone)]
@@ -42,7 +42,7 @@ pub struct BraidPoolBehaviour {
     pub identify: identify::Behaviour,
     pub ping: ping::Behaviour,
     pub bead_sync: request_response::Behaviour<BeadCodec>,
-    pub flood_sub: floodsub::Floodsub,
+    pub bead_announce: floodsub::Floodsub,
 }
 
 impl BraidPoolBehaviour {
@@ -75,15 +75,15 @@ impl BraidPoolBehaviour {
                 .with_request_timeout(bead_sync_config.request_timeout)
                 .with_max_concurrent_streams(bead_sync_config.max_concurrent_requests),
         );
-        let flood_sub_config = floodsub::FloodsubConfig::new(local_key.public().to_peer_id());
-        let floodsub = floodsub::Floodsub::from_config(flood_sub_config);
+        let bead_announce_config = floodsub::FloodsubConfig::new(local_key.public().to_peer_id());
+        let bead_announce = floodsub::Floodsub::from_config(bead_announce_config);
 
         let braidpool_behaviour = BraidPoolBehaviour {
             identify: identify_behaviour,
             ping: ping_behaviour,
             kademlia: kademlia_behaviour,
             bead_sync,
-            flood_sub: floodsub,
+            bead_announce: bead_announce,
         };
 
         return Ok(braidpool_behaviour);
