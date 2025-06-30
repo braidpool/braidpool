@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { Bitcoin, Clock, TrendingUp, ArrowUpRight } from 'lucide-react';
 import RewardHistoryChart from './RewardHistoryChart';
-import { RewardData } from '../lib/types';
+import { RewardData } from '../lib/Types';
 import { generateRewardHistory } from './generateRewardHistory';
 import AnimatedStatCard from '../AnimatedStatCard';
-import { processRewardsData } from '../lib/utils/rewardsProcessor';
+import { processRewardsData } from '../lib/Utils';
 
 export function RewardsDashboard() {
   const [rewardData, setRewardData] = useState<RewardData | null>(null);

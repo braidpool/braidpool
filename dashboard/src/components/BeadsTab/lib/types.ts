@@ -161,3 +161,14 @@ export interface RewardData {
   lastRewardTime: string;
   rewardHistory: { height: number; reward: number; label: string }[];
 }
+
+export interface RewardsData {
+  blockCount: number;
+  blockReward: number;
+  totalRewards: number;
+  rewardRate: number;
+  lastRewardTime: number | null;
+  halvings: number;
+  nextHalving: number;
+  blocksUntilHalving: number;
+}

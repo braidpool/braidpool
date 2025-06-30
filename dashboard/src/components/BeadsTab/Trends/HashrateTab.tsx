@@ -5,7 +5,7 @@ import {
   HashrateData,
   HashrateWebSocketMessage,
   HashrateHistoryEntry,
-} from '../lib/types';
+} from '../lib/Types';
 
 const MAX_HISTORY_LENGTH = 288;
 

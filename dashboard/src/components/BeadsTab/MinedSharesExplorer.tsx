@@ -3,8 +3,8 @@ import DashboardHeader from './DashboardHeader';
 import BeadRow from './BeadRow';
 import { TrendsTab } from './Trends/TrendsTab';
 import { RewardsDashboard } from './Reward/RewardsSection';
-import { Transaction, Bead } from './lib/types';
-import { processBlockData } from './lib/utils/blockProcessor';
+import { Transaction, Bead } from './lib/Types';
+import { processBlockData } from './lib/Utils';
 
 type BeadId = string;
 
@@ -132,7 +132,7 @@ export default function MinedSharesExplorer() {
             <div className="space-y-8">
               <div className="bg-[#1c1c1c] rounded-sm overflow-hidden">
                 {/* Table header */}
-                <div className="grid sm:grid-cols-2 md:grid-cols-5 p-4 border-b  text-sm  border-gray-800/80 font-medium">
+                <div className="grid  max-sm:grid-cols-3 md:grid-cols-5 p-4 border-b  text-sm  border-gray-800/80 font-medium">
                   {[
                     'Bead Hash',
                     'Timestamp',

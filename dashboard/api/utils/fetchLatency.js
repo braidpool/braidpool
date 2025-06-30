@@ -51,10 +51,8 @@ export async function fetchLatencyData(wss) {
         timestamp: now,
       },
     };
-
-    console.log(
-      `[LatencyStats] Broadcasting latency update: ${validPings.length}/${totalPeers} peers with valid pings, avg: ${averageLatency.toFixed(0)}ms`
-    );
+  console.log("Latency details" , payload.data)
+   
 
     wss.clients.forEach((client) => {
       if (client.readyState === client.OPEN) {

@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import TransactionList from './TransactionList';
-import { shortenHash, formatWork } from './lib/utils/utils';
-import type { BeadRowProps } from './lib/types';
+import { shortenHash, formatWork } from './lib/Utils';
+import type { BeadRowProps } from './lib/Types';
 import { BeadRewardTooltip } from './BeadRewardTooltip';
-import useCopyToClipboard from './lib/utils/utils';
+import useCopyToClipboard from './lib/Utils';
 export default function BeadRow({
   bead,
   isExpanded,
@@ -24,7 +24,7 @@ export default function BeadRow({
   return (
     <div className="border-b border-gray-800/80">
       <div
-        className="grid sm:grid-cols-2 md:grid-cols-5 gap-2 t p-4 cursor-pointer hover:bg-gray-600"
+        className="grid max-sm:grid-cols-3 md:grid-cols-5 gap-2 t p-4 cursor-pointer hover:bg-gray-600"
         onClick={() => onToggle(bead.id)}
         onKeyDown={handleKeyToggle}
         role="button"

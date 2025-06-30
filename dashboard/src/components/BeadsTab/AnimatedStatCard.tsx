@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { AnimatedStatCardProps } from './lib/types';
+import { AnimatedStatCardProps } from './lib/Types';
 
 export default function AnimatedStatCard({
   title,

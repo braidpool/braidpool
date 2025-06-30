@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { TrendsTABS } from '../lib/constants';
+import { TrendsTABS } from '../lib/Constants';
 import HashrateTab from './HashrateTab';
 import LatencyTab from './LatencyTab';
 import TransactionsTab from './TransactionsTab';

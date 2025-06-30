@@ -5,7 +5,7 @@ import {
   TransactionTabProps,
   TransactionDataItem,
   TransactionStats,
-} from '../lib/types';
+} from '../lib/Types';
 
 const MAX_HISTORY_LENGTH = 50;
 
@@ -20,6 +20,7 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
 
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isConnected, setIsConnected] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -30,13 +31,18 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
     ws.onopen = () => {
       setIsConnected(true);
       setIsLoading(false);
+      setError(null);
     };
 
-    ws.onclose = () => setIsConnected(false);
+    ws.onclose = () => {
+      setIsConnected(false);
+      setError('Connection closed');
+    };
 
     ws.onerror = (error) => {
       setIsConnected(false);
       setIsLoading(false);
+      setError('WebSocket connection error');
       console.error('[TransactionsTab] WebSocket error:', error);
     };
 
@@ -44,14 +50,18 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
       try {
         const parsed = JSON.parse(event.data);
 
-        if (
-          parsed.type === 'block_data' &&
-          parsed.data?.txCount !== undefined
-        ) {
+        // Handle error messages from backend
+        if (parsed.type === 'error') {
+          setError(parsed.data?.message || 'Unknown error');
+          return;
+        }
+
+        if (parsed.type === 'block_data' && parsed.data?.txCount !== undefined) {
           const now = new Date();
           const timeStamp = now.getTime();
 
           const newEntry: TransactionDataItem = {
+           
             value: parsed.data.txCount,
             label: now.toLocaleTimeString('en-GB', {
               hour: '2-digit',
@@ -72,15 +82,18 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
           });
         }
 
-        if (
-          parsed.type === 'transaction_stats' &&
-          parsed.data &&
-          typeof parsed.data.txRate === 'number'
-        ) {
-          setStats(parsed.data);
+        if (parsed.type === 'transaction_stats' && parsed.data) {
+          setStats({
+            txRate: parsed.data.txRate || 0,
+            mempoolSize: parsed.data.mempoolSize || 0,
+            avgFeeRate: parsed.data.avgFeeRate || 0,
+            avgTxSize: parsed.data.avgTxSize || 0,
+          });
+          setError(null); 
         }
       } catch (e) {
         setIsLoading(false);
+        setError('Failed to parse data');
         console.error('[TransactionsTab] WebSocket message parse error:', e);
       }
     };
@@ -96,16 +109,27 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
     <div className="space-y-6 bg-[#1c1c1c]">
       <div className="flex justify-between items-center">
         <div>
-          <h3 className="text-xl font-bold text-blue-300 ">
+          <h3 className="text-xl font-bold text-blue-300">
             Transaction Activity
           </h3>
           <p className="text-sm text-gray-400 mt-1">
             Real-time transaction statistics
           </p>
+          {/* Show connection/error status */}
+          {error && (
+            <p className="text-sm text-red-400 mt-1">Error: {error}</p>
+          )}
+          {!isConnected && !error && (
+            <p className="text-sm text-yellow-400 mt-1">Disconnected</p>
+          )}
         </div>
         <div className="bg-purple-900/30 px-3 py-1 rounded-md">
           <span className="text-purple-300 font-mono">
-            {stats?.txRate ? `${stats.txRate.toFixed(1)} tx/min` : 'Loading...'}
+            {/* Fixed: Now correctly shows tx/min */}
+            {stats?.txRate 
+              ? `${stats.txRate.toFixed(1)} tx/min` 
+              : isLoading ? 'Loading...' : 'No data'
+            }
           </span>
         </div>
       </div>
@@ -113,8 +137,8 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
       <div>
         <AdvancedChart
           data={chartData.slice(-10)}
-          yLabel="Transaction"
-          unit="tx/min"
+          yLabel="Transactions per Block"
+          unit="tx"
           lineColor="#8884d8"
         />
       </div>
@@ -122,19 +146,27 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
       <div className="grid sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <AnimatedStatCard
           title="Mempool Size"
-          value={stats?.mempoolSize ? `${stats.mempoolSize} tx` : 'Loading...'}
+          value={
+            stats?.mempoolSize 
+              ? `${stats.mempoolSize.toLocaleString()} tx` 
+              : isLoading ? 'Loading...' : 'No data'
+          }
         />
         <AnimatedStatCard
           title="Avg Fee Rate"
           value={
             stats?.avgFeeRate
-              ? `${stats.avgFeeRate.toFixed(1)} sats/vB`
-              : 'Loading...'
+              ? `${stats.avgFeeRate.toFixed(1)} sat/vB`
+              : isLoading ? 'Loading...' : 'No data'
           }
         />
         <AnimatedStatCard
           title="Avg Tx Size"
-          value={stats?.avgTxSize ? `${stats.avgTxSize} vB` : 'Loading...'}
+          value={
+            stats?.avgTxSize 
+              ? `${Math.round(stats.avgTxSize)} vB` 
+              : isLoading ? 'Loading...' : 'No data'
+          }
         />
       </div>
     </div>

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Bitcoin } from 'lucide-react';
 
-import { BeadRewardTooltipProps } from './lib/types';
+import { BeadRewardTooltipProps } from './lib/Types';
 
 export function BeadRewardTooltip({ reward }: BeadRewardTooltipProps) {
   const [showTooltip, setShowTooltip] = useState(false);

@@ -9,7 +9,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 
-import { AdvancedchartProps } from './lib/types';
+import { AdvancedchartProps } from './lib/Types';
 
 export default function AdvancedChart({
   data,

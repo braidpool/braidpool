@@ -1,6 +1,6 @@
 import React from 'react';
-import { DashboardHeaderProps } from './lib/types';
-import { TABS } from './lib/constants';
+import { DashboardHeaderProps } from './lib/Types';
+import { TABS } from './lib/Constants';
 
 export default function DashboardHeader({
   activeTab,
