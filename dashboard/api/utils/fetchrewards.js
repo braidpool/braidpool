@@ -37,6 +37,7 @@ export async function fetchReward(wss) {
         blocksUntilHalving: (halvings + 1) * 210000 - blockCount,
       },
     };
+    console.log("rewards" ,payload.data)
 
     wss.clients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
@@ -44,9 +45,6 @@ export async function fetchReward(wss) {
       }
     });
 
-    console.log(
-      `[Rewards] Sent rewards update in ${Date.now() - startTime}ms - Block ${blockCount}, Reward: ${blockReward} BTC`
-    );
   } catch (err) {
     console.error('[Rewards] Failed to fetch/send reward data:', err.message);
   }

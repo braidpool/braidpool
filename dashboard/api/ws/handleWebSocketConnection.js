@@ -1,4 +1,5 @@
 import { callRpc } from '../utils/fetchRpc.js';
+import { latestBlockPayload, latestStatsPayload } from '../utils/fetchBlockDetails.js';
 
 const ALLOWED_RPC_METHODS = new Set([
   'getblock',
@@ -13,6 +14,13 @@ const ALLOWED_RPC_METHODS = new Set([
 export async function handleWebSocketConnection(ws) {
   console.log('Client connected');
   ws.send(JSON.stringify({ type: 'connection', status: 'connected' }));
+
+  if (latestBlockPayload) {
+    ws.send(JSON.stringify(latestBlockPayload));
+  }
+  if (latestStatsPayload) {
+    ws.send(JSON.stringify(latestStatsPayload));
+  }
 
   ws.on('message', async (message) => {
     try {

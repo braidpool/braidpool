@@ -6,7 +6,8 @@ import { fetchHashrateStats } from './utils/fetchHashrate.js';
 import { fetchLatencyData } from './utils/fetchLatency.js';
 import { fetchReward } from './utils/fetchrewards.js';
 import { handleWebSocketConnection } from './ws/handleWebSocketConnection.js';
-import { fetchBlockDetails } from './utils/fetchblockdetails.js';
+import { fetchBlockDetails} from './utils/fetchBlockDetails.js'
+
 dotenv.config();
 
 const PORT = process.env.WS_PORT || 5000;
@@ -60,6 +61,7 @@ setInterval(() => {
   fetchBlockDetails(wss).catch((err) =>
     console.error('[Server] fetchBlockDetails failed:', err)
   );
+ 
   fetchHashrateStats(wss).catch((err) =>
     console.error('[Server] fetchHashrateStats failed:', err)
   );
@@ -71,6 +73,6 @@ setInterval(() => {
   fetchReward(wss).catch((err) =>
     console.error('[Server] fetchReward failed:', err)
   );
-}, 10000); // 10-second interval for better performance
+}, 1000); // 10-second interval for better performance
 
 console.log(`WebSocket server running on ws://localhost:${PORT}`);

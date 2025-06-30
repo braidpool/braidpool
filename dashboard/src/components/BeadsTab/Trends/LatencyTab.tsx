@@ -5,7 +5,7 @@ import {
   LatencyData,
   LatencyWebSocketMessage,
   LatencyHistoryEntry,
-} from '../lib/types';
+} from '../lib/Types';
 
 const MAX_LATENCY_HISTORY = 100;
 
