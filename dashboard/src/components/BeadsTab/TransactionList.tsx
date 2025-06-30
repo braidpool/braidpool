@@ -25,7 +25,7 @@ export default function TransactionList({
       <div className="overflow-x-auto">
         <div className="min-w-[700px]">
           {/* Table header */}
-          <div className="grid sm:grid grid-cols-6 text-sm text-blue-300 font-semibold ml-4 mb-2 px-2">
+          <div className="grid  grid-cols-6 text-sm text-blue-300 font-semibold ml-4 mb-2 px-2">
             <div>Hash</div>
             <div>Size</div>
             <div>Fee</div>

@@ -172,3 +172,4 @@ export interface RewardsData {
   nextHalving: number;
   blocksUntilHalving: number;
 }
+export type BeadId = string;
