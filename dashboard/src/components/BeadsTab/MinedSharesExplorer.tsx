@@ -3,10 +3,8 @@ import DashboardHeader from './DashboardHeader';
 import BeadRow from './BeadRow';
 import { TrendsTab } from './Trends/TrendsTab';
 import { RewardsDashboard } from './Reward/RewardsSection';
-import { Transaction, Bead } from './lib/Types';
+import { Transaction, Bead, BeadId } from './lib/Types';
 import { processBlockData } from './lib/Utils';
-
-type BeadId = string;
 
 export default function MinedSharesExplorer() {
   const [expandedBeads, setExpandedBeads] = useState<Record<BeadId, boolean>>({
@@ -20,6 +18,17 @@ export default function MinedSharesExplorer() {
   const [wsConnected, setWsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const timeRange = 'month';
+
+  // Pagination state
+  const itemsPerPage = 3;
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const totalPages = Math.ceil(liveBeads.length / itemsPerPage);
+
+  const paginatedBeads = liveBeads.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
 
   useEffect(() => {
     const ws = new WebSocket('ws://localhost:5000');
@@ -49,6 +58,7 @@ export default function MinedSharesExplorer() {
             parent,
             transactions,
           } = processed;
+
           const validatedTransactions: Transaction[] = (transactions || []).map(
             (tx: any, index: number) => ({
               id: tx.id || `${blockHash}_tx_${index}`,
@@ -56,10 +66,8 @@ export default function MinedSharesExplorer() {
               timestamp: tx.timestamp || timestamp,
               count: tx.count || 0,
               blockId: tx.blockId || height.toString(),
-              fee:
-                typeof tx.fee === 'number' ? tx.fee : parseFloat(tx.fee) || 0,
-              size:
-                typeof tx.size === 'number' ? tx.size : parseInt(tx.size) || 0,
+              fee: typeof tx.fee === 'number' ? tx.fee : parseFloat(tx.fee) || 0,
+              size: typeof tx.size === 'number' ? tx.size : parseInt(tx.size) || 0,
               feePaid: tx.feePaid || '0',
               feeRate:
                 typeof tx.feeRate === 'number'
@@ -75,12 +83,10 @@ export default function MinedSharesExplorer() {
                   : parseInt(tx.outputs) || 0,
             })
           );
-          const difficultyMatch = work
-            ? String(work).match(/(\d+\.?\d*)/)
-            : null;
-          const difficulty = difficultyMatch
-            ? parseFloat(difficultyMatch[1])
-            : 0;
+
+          const difficultyMatch = work ? String(work).match(/(\d+\.?\d*)/) : null;
+          const difficulty = difficultyMatch ? parseFloat(difficultyMatch[1]) : 0;
+
           const newBead: Bead = {
             id: blockHash,
             name: `#${height}`,
@@ -95,11 +101,11 @@ export default function MinedSharesExplorer() {
             }),
             transactions: txCount,
             difficulty: difficulty,
-            reward:
-              typeof reward === 'number' ? reward : parseFloat(reward) || 0,
+            reward: typeof reward === 'number' ? reward : parseFloat(reward) || 0,
             parents: parent ? [parent] : [],
             details: validatedTransactions,
           };
+
           setLiveBeads((prev) => {
             const exists = prev.find((b) => b.id === newBead.id);
             if (exists) return prev;
@@ -132,18 +138,14 @@ export default function MinedSharesExplorer() {
             <div className="space-y-8">
               <div className="bg-[#1c1c1c] rounded-sm overflow-hidden">
                 {/* Table header */}
-                <div className="grid  max-sm:grid-cols-3 md:grid-cols-5 p-4 border-b  text-sm  border-gray-800/80 font-medium">
-                  {[
-                    'Bead Hash',
-                    'Timestamp',
-                    'Work',
-                    'Transactions',
-                    'Rewards',
-                  ].map((label) => (
-                    <div key={label} className="text-white font-semibold">
-                      {label}
-                    </div>
-                  ))}
+                <div className="grid max-sm:grid-cols-3 md:grid-cols-5 p-4 border-b text-sm border-gray-800/80 font-medium">
+                  {['Bead Hash', 'Timestamp', 'Work', 'Transactions', 'Rewards'].map(
+                    (label) => (
+                      <div key={label} className="text-white font-semibold">
+                        {label}
+                      </div>
+                    )
+                  )}
                 </div>
 
                 {!wsConnected ? (
@@ -154,7 +156,7 @@ export default function MinedSharesExplorer() {
                     <div className="h-12 bg-gray-800/50 rounded-md animate-pulse mb-4"></div>
                     <div className="h-12 bg-gray-800/50 rounded-md animate-pulse"></div>
                   </div>
-                ) : liveBeads.length === 0 ? (
+                ) : paginatedBeads.length === 0 ? (
                   <div className="p-8 text-center">
                     <div className="text-gray-400 mb-4">
                       Waiting for block data...
@@ -163,10 +165,10 @@ export default function MinedSharesExplorer() {
                     <div className="h-12 bg-gray-800/50 rounded-md animate-pulse"></div>
                   </div>
                 ) : (
-                  liveBeads.map((bead) => (
+                  paginatedBeads.map((bead) => (
                     <BeadRow
-                      isActive
                       key={bead.id}
+                      isActive={activeBead === bead.id}
                       bead={bead}
                       isExpanded={!!expandedBeads[bead.id]}
                       onToggle={() => toggleBead(bead.id)}
@@ -175,6 +177,37 @@ export default function MinedSharesExplorer() {
                   ))
                 )}
               </div>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-center gap-4 mt-4">
+                  <button
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage((prev) => prev - 1)}
+                    className={`px-3 py-1 rounded-md ${
+                      currentPage === 1
+                        ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                        : 'bg-gray-800 hover:bg-gray-700'
+                    }`}
+                  >
+                    Previous
+                  </button>
+                  <span className="text-sm">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <button
+                    disabled={currentPage === totalPages}
+                    onClick={() => setCurrentPage((prev) => prev + 1)}
+                    className={`px-3 py-1 rounded-md ${
+                      currentPage === totalPages
+                        ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                        : 'bg-gray-800 hover:bg-gray-700'
+                    }`}
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
