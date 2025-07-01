@@ -2,7 +2,10 @@ import React, { useState } from 'react';
 import TransactionList from './TransactionList';
 import { shortenHash, formatWork } from './lib/Utils';
 import type { BeadRowProps } from './lib/Types';
+import { shortenHash, formatWork } from './lib/Utils';
+import type { BeadRowProps } from './lib/Types';
 import { BeadRewardTooltip } from './BeadRewardTooltip';
+import useCopyToClipboard from './lib/Utils';
 import useCopyToClipboard from './lib/Utils';
 export default function BeadRow({
   bead,
@@ -15,6 +18,7 @@ export default function BeadRow({
   };
 
   const { copied, copy } = useCopyToClipboard();
+  const { copied, copy } = useCopyToClipboard();
   return (
     <div className="border-b border-gray-800/80">
       <div
@@ -24,6 +28,7 @@ export default function BeadRow({
         role="button"
         tabIndex={0}
       >
+      >
         {/* Bead Name */}
         <div className="flex items-center col-span-1 md:col-span-1">         
           <span
@@ -32,12 +37,15 @@ export default function BeadRow({
           >
             {bead.name}
           </span>
+          </span>
         </div>
 
         {/* Timestamp */}
         <div className="text-white text-sm sm:text-base">{bead.timestamp}</div>
+        <div className="text-white text-sm sm:text-base">{bead.timestamp}</div>
 
         {/* Work */}
+        <div className="text-white font-medium text-sm sm:text-base">
         <div className="text-white font-medium text-sm sm:text-base">
           {formattedWork} {workUnit}
         </div>
@@ -45,10 +53,14 @@ export default function BeadRow({
         {/* Transactions */}
         <div className="text-white font-medium text-sm sm:text-base">
           {bead.transactions}
+        <div className="text-white font-medium text-sm sm:text-base">
+          {bead.transactions}
         </div>
 
         {/* Reward */}
+        {/* Reward */}
         <div
+          className={`text-white font-medium text-sm sm:text-base ${
           className={`text-white font-medium text-sm sm:text-base ${
             isRewardOpen ? 'pb-6' : ''
           }`}
@@ -58,9 +70,12 @@ export default function BeadRow({
           }}
         >
           <div className="cursor-pointer">
+          <div className="cursor-pointer">
             <BeadRewardTooltip reward={bead.reward} isOpen={isRewardOpen} />
           </div>
+          </div>
         </div>
+      </div>
       </div>
 
       {/* Parents */}
@@ -71,7 +86,24 @@ export default function BeadRow({
               Parents:
             </span>
             <div className="flex flex-wrap gap-4 overflow-x-auto">
+            <div className="flex flex-wrap gap-4 overflow-x-auto">
               {bead.parents.map((parent) => (
+                <div key={parent} className="relative">
+                  <button
+                    className="text-white font-mono text-xs sm:text-sm hover:text-cyan-300 hover:underline truncate max-w-[150px] sm:max-w-[200px]"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      copy(parent);
+                    }}
+                  >
+                    {shortenHash(parent)}
+                  </button>
+                  {copied === parent && (
+                    <span className=" px-2 text-green-400 text-xs">
+                      Copied!
+                    </span>
+                  )}
+                </div>
                 <div key={parent} className="relative">
                   <button
                     className="text-white font-mono text-xs sm:text-sm hover:text-cyan-300 hover:underline truncate max-w-[150px] sm:max-w-[200px]"

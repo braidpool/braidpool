@@ -1,10 +1,20 @@
 //Beads
+//Beads
 export interface Transaction {
   id: string;
   hash: string;
   timestamp: string;
   count: number;
   blockId: string;
+  fee: number;
+  size: number;
+  feePaid: string;
+  feeRate: number;
+  inputs: number;
+  outputs: number;
+}
+export interface TransactionListProps {
+  transactions: Transaction[];
   fee: number;
   size: number;
   feePaid: string;
@@ -149,6 +159,43 @@ export interface AdvancedchartProps {
 
 export interface RewardHistoryChartProps {
   rewardHistory: { height: number; reward: number; label: string }[];
+  timestamp: number;
+};
+
+export type TransactionStats = {
+  txRate: number;
+  mempoolSize: number;
+  avgFeeRate: number;
+  avgTxSize: number;
+};
+
+export type TransactionTabProps = {
+  chartHovered: boolean;
+  setChartHovered: (val: boolean) => void;
+  timeRange: string;
+};
+
+export interface BlockData {
+  blockHash: string;
+  timestamp: number;
+  height: number;
+  difficulty: number;
+  txCount: number;
+  reward: number;
+  parent: string;
+  transactions: any[];
+}
+
+export interface AdvancedchartProps {
+  data: { value: number; timestamp: number }[];
+  yLabel: string;
+  unit: string;
+  lineColor?: string;
+}
+//Reward section
+
+export interface RewardHistoryChartProps {
+  rewardHistory: { height: number; reward: number; label: string }[];
 }
 
 export interface RewardData {
@@ -170,5 +217,25 @@ export interface RewardsData {
   halvings: number;
   nextHalving: number;
   blocksUntilHalving: number;
+export interface RewardData {
+  totalRewards: number;
+  dailyAverage: number;
+  weeklyProjection: number;
+  monthlyProjection: number;
+  lastReward: number;
+  lastRewardTime: string;
+  rewardHistory: { height: number; reward: number; label: string }[];
 }
+
+export interface RewardsData {
+  blockCount: number;
+  blockReward: number;
+  totalRewards: number;
+  rewardRate: number;
+  lastRewardTime: number | null;
+  halvings: number;
+  nextHalving: number;
+  blocksUntilHalving: number;
+}
+export type BeadId = string;
 export type BeadId = string;

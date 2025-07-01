@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import DashboardHeader from './DashboardHeader';
 import BeadRow from './BeadRow';
 import { TrendsTab } from './Trends/TrendsTab';
 import { RewardsDashboard } from './Reward/RewardsSection';
+import { Transaction, Bead, BeadId } from './lib/Types';
+import { processBlockData } from './lib/Utils';
 import { Transaction, Bead, BeadId } from './lib/Types';
 import { processBlockData } from './lib/Utils';
 
@@ -10,6 +13,11 @@ export default function MinedSharesExplorer() {
   
 
   const [activeTab, setActiveTab] = useState('beads');
+  const [liveBeads, setLiveBeads] = useState<Bead[]>([]);
+  const [activeBead, setActiveBead] = useState<BeadId | null>(null);
+  const [wsConnected, setWsConnected] = useState(false);
+  const wsRef = useRef<WebSocket | null>(null);
+  const timeRange = 'month';
   const [liveBeads, setLiveBeads] = useState<Bead[]>([]);
   const [activeBead, setActiveBead] = useState<BeadId | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
@@ -125,11 +133,111 @@ export default function MinedSharesExplorer() {
         ws.close();
       }
     };
+    const ws = new WebSocket('ws://localhost:5000');
+    wsRef.current = ws;
+    ws.onopen = () => {
+      setWsConnected(true);
+    };
+    ws.onclose = () => {
+      setWsConnected(false);
+    };
+    ws.onerror = (error) => {
+      setWsConnected(false);
+      console.error('WebSocket error:', error);
+    };
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        if (message.type === 'block_data') {
+          const processed = processBlockData(message.data);
+          const {
+            blockHash,
+            height,
+            timestamp,
+            work,
+            txCount,
+            reward,
+            parent,
+            transactions,
+          } = processed;
+
+          const validatedTransactions: Transaction[] = (transactions || []).map(
+            (tx: any, index: number) => ({
+              id: tx.id || `${blockHash}_tx_${index}`,
+              hash: tx.hash || tx.txid || '',
+              timestamp: tx.timestamp || timestamp,
+              count: tx.count || 0,
+              blockId: tx.blockId || height.toString(),
+              fee:
+                typeof tx.fee === 'number' ? tx.fee : parseFloat(tx.fee) || 0,
+              size:
+                typeof tx.size === 'number' ? tx.size : parseInt(tx.size) || 0,
+              feePaid: tx.feePaid || '0',
+              feeRate:
+                typeof tx.feeRate === 'number'
+                  ? tx.feeRate
+                  : parseInt(tx.feeRate) || 0,
+              inputs:
+                typeof tx.inputs === 'number'
+                  ? tx.inputs
+                  : parseInt(tx.inputs) || 0,
+              outputs:
+                typeof tx.outputs === 'number'
+                  ? tx.outputs
+                  : parseInt(tx.outputs) || 0,
+            })
+          );
+
+          const difficultyMatch = work
+            ? String(work).match(/(\d+\.?\d*)/)
+            : null;
+          const difficulty = difficultyMatch
+            ? parseFloat(difficultyMatch[1])
+            : 0;
+
+          const newBead: Bead = {
+            id: blockHash,
+            name: `#${height}`,
+            timestamp: new Date(timestamp).toLocaleString('en-IN', {
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit',
+              hour12: false,
+            }),
+            transactions: txCount,
+            difficulty: difficulty,
+            reward:
+              typeof reward === 'number' ? reward : parseFloat(reward) || 0,
+            parents: parent ? [parent] : [],
+            details: validatedTransactions,
+          };
+
+          setLiveBeads((prev) => {
+            const exists = prev.find((b) => b.id === newBead.id);
+            if (exists) return prev;
+            return [newBead, ...prev.slice(0, 100)];
+          });
+        }
+      } catch (e) {
+        console.error('WebSocket message parse error:', e);
+      }
+    };
+    return () => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
+    };
   }, []);
 
  
 
   return (
+    <div className="min-h-screen bg-[#1c1c1c] text-white relative">
+      <div className="container mx-auto px-2 sm:px-4 py-8">
+        <DashboardHeader activeTab={activeTab} setActiveTab={setActiveTab} />
     <div className="min-h-screen bg-[#1c1c1c] text-white relative">
       <div className="container mx-auto px-2 sm:px-4 py-8">
         <DashboardHeader activeTab={activeTab} setActiveTab={setActiveTab} />
@@ -216,6 +324,13 @@ export default function MinedSharesExplorer() {
             </div>
           )}
 
+          {activeTab === 'trends' && <TrendsTab timeRange={timeRange} />}
+          {activeTab === 'rewards' && (
+            <div className="border border-gray-800/50 rounded-xl p-6 bg-[#1c1c1c]">
+              <RewardsDashboard />
+            </div>
+          )}
+        </div>
           {activeTab === 'trends' && <TrendsTab timeRange={timeRange} />}
           {activeTab === 'rewards' && (
             <div className="border border-gray-800/50 rounded-xl p-6 bg-[#1c1c1c]">

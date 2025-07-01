@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Bitcoin } from 'lucide-react';
 
 import { BeadRewardTooltipProps } from './lib/Types';
+import { BeadRewardTooltipProps } from './lib/Types';
 
 export function BeadRewardTooltip({ reward }: BeadRewardTooltipProps) {
   const [showTooltip, setShowTooltip] = useState(false);
@@ -15,10 +16,15 @@ export function BeadRewardTooltip({ reward }: BeadRewardTooltipProps) {
         className="flex items-center cursor-pointer transition-transform hover:scale-105"
         onMouseEnter={() => setShowTooltip(true)}
         onMouseLeave={() => setShowTooltip(false)}
+      <div
+        className="flex items-center cursor-pointer transition-transform hover:scale-105"
+        onMouseEnter={() => setShowTooltip(true)}
+        onMouseLeave={() => setShowTooltip(false)}
         onClick={() => setShowTooltip(!showTooltip)} // For mobile support
       >
         <Bitcoin className="h-4 w-4 text-amber-400 mr-1" />
         <span>{mBTC.toFixed(2)} mBTC</span>
+      </div>
       </div>
 
       {showTooltip && (
