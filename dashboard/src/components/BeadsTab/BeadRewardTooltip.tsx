@@ -30,7 +30,7 @@ export function BeadRewardTooltip({ reward }: BeadRewardTooltipProps) {
       opacity-100 scale-100
     `}
         >
-          Tooltip content
+        <span>{mBTC.toFixed(2)} mBTC</span>
         </div>
       )}
     </div>

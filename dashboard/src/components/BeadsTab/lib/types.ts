@@ -29,8 +29,7 @@ export interface Bead {
 
 export interface BeadRowProps {
   bead: Bead;
-  isExpanded: boolean;
-  onToggle: (beadId: string) => void;
+ 
   isActive: boolean;
   transactions: Transaction[];
 }

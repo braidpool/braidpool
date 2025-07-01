@@ -1,4 +1,4 @@
-import { Activity } from 'lucide-react';
+
 import { shortenHash } from './lib/Utils';
 import { TransactionListProps } from './lib/Types';
 import useCopyToClipboard from './lib/Utils';
@@ -12,7 +12,7 @@ export default function TransactionList({
   return (
     <div className="pl-4 sm:pl-10 pr-4 pb-3 ">
       <div className="text-white mb-3 font-medium flex items-center text-sm">
-        <Activity className="h-4 w-4 mr-2 flex-shrink-0" />
+        
         Showing {limitedTransactions.length} of {transactions.length}{' '}
         Transactions
         {hasMoreTransactions && (
