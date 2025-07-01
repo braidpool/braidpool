@@ -66,8 +66,10 @@ export default function MinedSharesExplorer() {
               timestamp: tx.timestamp || timestamp,
               count: tx.count || 0,
               blockId: tx.blockId || height.toString(),
-              fee: typeof tx.fee === 'number' ? tx.fee : parseFloat(tx.fee) || 0,
-              size: typeof tx.size === 'number' ? tx.size : parseInt(tx.size) || 0,
+              fee:
+                typeof tx.fee === 'number' ? tx.fee : parseFloat(tx.fee) || 0,
+              size:
+                typeof tx.size === 'number' ? tx.size : parseInt(tx.size) || 0,
               feePaid: tx.feePaid || '0',
               feeRate:
                 typeof tx.feeRate === 'number'
@@ -84,8 +86,12 @@ export default function MinedSharesExplorer() {
             })
           );
 
-          const difficultyMatch = work ? String(work).match(/(\d+\.?\d*)/) : null;
-          const difficulty = difficultyMatch ? parseFloat(difficultyMatch[1]) : 0;
+          const difficultyMatch = work
+            ? String(work).match(/(\d+\.?\d*)/)
+            : null;
+          const difficulty = difficultyMatch
+            ? parseFloat(difficultyMatch[1])
+            : 0;
 
           const newBead: Bead = {
             id: blockHash,
@@ -101,7 +107,8 @@ export default function MinedSharesExplorer() {
             }),
             transactions: txCount,
             difficulty: difficulty,
-            reward: typeof reward === 'number' ? reward : parseFloat(reward) || 0,
+            reward:
+              typeof reward === 'number' ? reward : parseFloat(reward) || 0,
             parents: parent ? [parent] : [],
             details: validatedTransactions,
           };
@@ -139,13 +146,17 @@ export default function MinedSharesExplorer() {
               <div className="bg-[#1c1c1c] rounded-sm overflow-hidden">
                 {/* Table header */}
                 <div className="grid max-sm:grid-cols-3 md:grid-cols-5 p-4 border-b text-sm border-gray-800/80 font-medium">
-                  {['Bead Hash', 'Timestamp', 'Work', 'Transactions', 'Rewards'].map(
-                    (label) => (
-                      <div key={label} className="text-white font-semibold">
-                        {label}
-                      </div>
-                    )
-                  )}
+                  {[
+                    'Bead Hash',
+                    'Timestamp',
+                    'Work',
+                    'Transactions',
+                    'Rewards',
+                  ].map((label) => (
+                    <div key={label} className="text-white font-semibold">
+                      {label}
+                    </div>
+                  ))}
                 </div>
 
                 {!wsConnected ? (

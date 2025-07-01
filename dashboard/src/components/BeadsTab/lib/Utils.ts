@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { RewardsData ,BlockData } from "./Types"
+import { RewardsData, BlockData } from './Types';
 
 export function shortenHash(hash: string, start = 6, end = 6): string {
   if (hash.length <= start + end) return hash;
@@ -36,7 +36,6 @@ export default function useCopyToClipboard(timeout = 1500) {
   return { copied, copy };
 }
 
-
 export function processRewardsData(data: RewardsData) {
   const {
     blockCount,
@@ -62,7 +61,6 @@ export function processRewardsData(data: RewardsData) {
     blocksUntilHalving,
   };
 }
-
 
 export function processBlockData(data: BlockData) {
   const {
@@ -93,4 +91,3 @@ export function processBlockData(data: BlockData) {
     transactions: formattedTransactions,
   };
 }
-

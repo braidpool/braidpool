@@ -37,14 +37,13 @@ export async function fetchReward(wss) {
         blocksUntilHalving: (halvings + 1) * 210000 - blockCount,
       },
     };
-    console.log("rewards" ,payload.data)
+    console.log('rewards', payload.data);
 
     wss.clients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
         client.send(JSON.stringify(payload));
       }
     });
-
   } catch (err) {
     console.error('[Rewards] Failed to fetch/send reward data:', err.message);
   }

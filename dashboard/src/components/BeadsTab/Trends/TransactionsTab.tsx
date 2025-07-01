@@ -56,12 +56,14 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
           return;
         }
 
-        if (parsed.type === 'block_data' && parsed.data?.txCount !== undefined) {
+        if (
+          parsed.type === 'block_data' &&
+          parsed.data?.txCount !== undefined
+        ) {
           const now = new Date();
           const timeStamp = now.getTime();
 
           const newEntry: TransactionDataItem = {
-           
             value: parsed.data.txCount,
             label: now.toLocaleTimeString('en-GB', {
               hour: '2-digit',
@@ -89,7 +91,7 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
             avgFeeRate: parsed.data.avgFeeRate || 0,
             avgTxSize: parsed.data.avgTxSize || 0,
           });
-          setError(null); 
+          setError(null);
         }
       } catch (e) {
         setIsLoading(false);
@@ -116,9 +118,7 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
             Real-time transaction statistics
           </p>
           {/* Show connection/error status */}
-          {error && (
-            <p className="text-sm text-red-400 mt-1">Error: {error}</p>
-          )}
+          {error && <p className="text-sm text-red-400 mt-1">Error: {error}</p>}
           {!isConnected && !error && (
             <p className="text-sm text-yellow-400 mt-1">Disconnected</p>
           )}
@@ -126,10 +126,11 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
         <div className="bg-purple-900/30 px-3 py-1 rounded-md">
           <span className="text-purple-300 font-mono">
             {/* Fixed: Now correctly shows tx/min */}
-            {stats?.txRate 
-              ? `${stats.txRate.toFixed(1)} tx/min` 
-              : isLoading ? 'Loading...' : 'No data'
-            }
+            {stats?.txRate
+              ? `${stats.txRate.toFixed(1)} tx/min`
+              : isLoading
+                ? 'Loading...'
+                : 'No data'}
           </span>
         </div>
       </div>
@@ -147,9 +148,11 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
         <AnimatedStatCard
           title="Mempool Size"
           value={
-            stats?.mempoolSize 
-              ? `${stats.mempoolSize.toLocaleString()} tx` 
-              : isLoading ? 'Loading...' : 'No data'
+            stats?.mempoolSize
+              ? `${stats.mempoolSize.toLocaleString()} tx`
+              : isLoading
+                ? 'Loading...'
+                : 'No data'
           }
         />
         <AnimatedStatCard
@@ -157,15 +160,19 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
           value={
             stats?.avgFeeRate
               ? `${stats.avgFeeRate.toFixed(1)} sat/vB`
-              : isLoading ? 'Loading...' : 'No data'
+              : isLoading
+                ? 'Loading...'
+                : 'No data'
           }
         />
         <AnimatedStatCard
           title="Avg Tx Size"
           value={
-            stats?.avgTxSize 
-              ? `${Math.round(stats.avgTxSize)} vB` 
-              : isLoading ? 'Loading...' : 'No data'
+            stats?.avgTxSize
+              ? `${Math.round(stats.avgTxSize)} vB`
+              : isLoading
+                ? 'Loading...'
+                : 'No data'
           }
         />
       </div>

@@ -6,7 +6,7 @@ import { fetchHashrateStats } from './utils/fetchHashrate.js';
 import { fetchLatencyData } from './utils/fetchLatency.js';
 import { fetchReward } from './utils/fetchrewards.js';
 import { handleWebSocketConnection } from './ws/handleWebSocketConnection.js';
-import { fetchBlockDetails} from './utils/fetchBlockDetails.js'
+import { fetchBlockDetails } from './utils/fetchBlockDetails.js';
 
 dotenv.config();
 
@@ -61,7 +61,7 @@ setInterval(() => {
   fetchBlockDetails(wss).catch((err) =>
     console.error('[Server] fetchBlockDetails failed:', err)
   );
- 
+
   fetchHashrateStats(wss).catch((err) =>
     console.error('[Server] fetchHashrateStats failed:', err)
   );
