@@ -5,24 +5,24 @@ use crate::bead::Bead;
 #[cfg(test)]
 use crate::committed_metadata::CommittedMetadata;
 #[cfg(test)]
-use crate::committed_metadata::TimeVec;
+pub use crate::committed_metadata::TimeVec;
 #[cfg(test)]
 use crate::uncommitted_metadata::UnCommittedMetadata;
 #[cfg(test)]
-use bitcoin::ecdsa::Signature;
+pub use bitcoin::ecdsa::Signature;
 #[cfg(test)]
 use bitcoin::p2p::Address as P2P_Address;
 #[cfg(test)]
 use bitcoin::BlockHeader;
 #[cfg(test)]
-use bitcoin::{absolute::Time, p2p::address::AddrV2, PublicKey, Transaction};
+pub use bitcoin::{absolute::Time, p2p::address::AddrV2, PublicKey, Transaction};
 #[cfg(test)]
 pub mod test_utility_functions {
     use std::collections::HashSet;
 
     use bitcoin::CompactTarget;
 
-    use super::*;
+    pub use super::*;
     pub struct TestUnCommittedMetadataBuilder {
         extra_nonce: i32,
         broadcast_timestamp: Option<Time>,
