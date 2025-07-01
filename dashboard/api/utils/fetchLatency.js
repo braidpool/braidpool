@@ -51,8 +51,7 @@ export async function fetchLatencyData(wss) {
         timestamp: now,
       },
     };
-  console.log("Latency details" , payload.data)
-   
+    console.log('Latency details', payload.data);
 
     wss.clients.forEach((client) => {
       if (client.readyState === client.OPEN) {

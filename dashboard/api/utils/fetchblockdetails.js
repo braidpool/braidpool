@@ -69,14 +69,18 @@ export async function fetchBlockDetails(wss) {
       },
     };
 
-    const validTransactions = transactions.filter(tx => tx.fee > 0);
+    const validTransactions = transactions.filter((tx) => tx.fee > 0);
     const totalFees = validTransactions.reduce((acc, tx) => acc + tx.fee, 0);
-    const avgFeeRate = validTransactions.length > 0
-      ? validTransactions.reduce((acc, tx) => acc + tx.feeRate, 0) / validTransactions.length
-      : 0;
-    const avgTxSize = validTransactions.length > 0
-      ? validTransactions.reduce((acc, tx) => acc + tx.size, 0) / validTransactions.length
-      : 0;
+    const avgFeeRate =
+      validTransactions.length > 0
+        ? validTransactions.reduce((acc, tx) => acc + tx.feeRate, 0) /
+          validTransactions.length
+        : 0;
+    const avgTxSize =
+      validTransactions.length > 0
+        ? validTransactions.reduce((acc, tx) => acc + tx.size, 0) /
+          validTransactions.length
+        : 0;
 
     let mempoolSize = 0;
     try {
@@ -98,14 +102,14 @@ export async function fetchBlockDetails(wss) {
         blockTransactionCount: transactions.length,
       },
     };
-   
+
     // Store latest payloads
     latestBlockPayload = blockPayload;
     latestStatsPayload = statsPayload;
-   
-   console.log("Block fetching details : ",blockPayload.data)
-   console.log("Mempool fetching details : ",statsPayload.data)
-   
+
+    console.log('Block fetching details : ', blockPayload.data);
+    console.log('Mempool fetching details : ', statsPayload.data);
+
     const blockMessage = JSON.stringify(blockPayload);
     const statsMessage = JSON.stringify(statsPayload);
 
@@ -121,8 +125,6 @@ export async function fetchBlockDetails(wss) {
         }
       }
     });
-
-
   } catch (err) {
     console.error('Block fetch failed:', err.message);
 
