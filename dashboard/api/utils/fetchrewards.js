@@ -3,7 +3,7 @@ import WebSocket from 'ws';
 
 export async function fetchReward(wss) {
   try {
-    const startTime = Date.now();
+    
     const blockchainInfo = await rpcWithEnv({ method: 'getblockchaininfo' });
     const blockCount = blockchainInfo.blocks;
 
