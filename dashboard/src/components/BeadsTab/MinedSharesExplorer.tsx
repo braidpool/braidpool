@@ -7,8 +7,6 @@ import { Transaction, Bead, BeadId } from './lib/Types';
 import { processBlockData } from './lib/Utils';
 
 export default function MinedSharesExplorer() {
-  
-
   const [activeTab, setActiveTab] = useState('beads');
   const [liveBeads, setLiveBeads] = useState<Bead[]>([]);
   const [activeBead, setActiveBead] = useState<BeadId | null>(null);
@@ -127,8 +125,6 @@ export default function MinedSharesExplorer() {
     };
   }, []);
 
- 
-
   return (
     <div className="min-h-screen bg-[#1c1c1c] text-white relative">
       <div className="container mx-auto px-2 sm:px-4 py-8">
@@ -174,7 +170,7 @@ export default function MinedSharesExplorer() {
                     <BeadRow
                       key={bead.id}
                       isActive={activeBead === bead.id}
-                      bead={bead}                    
+                      bead={bead}
                       transactions={bead.details || []}
                     />
                   ))
@@ -183,34 +179,34 @@ export default function MinedSharesExplorer() {
 
               {/* Pagination */}
               {totalPages > 1 && (
-                <div className='w-full flex justify-center mt-4 '>
-                <div className="flex items-center gap-4 ">
-                  <button
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage((prev) => prev - 1)}
-                    className={`px-3 py-1 rounded-md ${
-                      currentPage === 1
-                        ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
-                        : 'bg-gray-800 hover:bg-gray-700'
-                    }`}
-                  >
-                    Previous
-                  </button>
-                  <span className="text-sm">
-                    Page {currentPage} of {totalPages}
-                  </span>
-                  <button
-                    disabled={currentPage === totalPages}
-                    onClick={() => setCurrentPage((prev) => prev + 1)}
-                    className={`px-3 py-1 rounded-md ${
-                      currentPage === totalPages
-                        ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
-                        : 'bg-gray-800 hover:bg-gray-700'
-                    }`}
-                  >
-                    Next
-                  </button>
-                </div>
+                <div className="w-full flex justify-center mt-4 ">
+                  <div className="flex items-center gap-4 ">
+                    <button
+                      disabled={currentPage === 1}
+                      onClick={() => setCurrentPage((prev) => prev - 1)}
+                      className={`px-3 py-1 rounded-md ${
+                        currentPage === 1
+                          ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                          : 'bg-gray-800 hover:bg-gray-700'
+                      }`}
+                    >
+                      Previous
+                    </button>
+                    <span className="text-sm">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <button
+                      disabled={currentPage === totalPages}
+                      onClick={() => setCurrentPage((prev) => prev + 1)}
+                      className={`px-3 py-1 rounded-md ${
+                        currentPage === totalPages
+                          ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                          : 'bg-gray-800 hover:bg-gray-700'
+                      }`}
+                    >
+                      Next
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

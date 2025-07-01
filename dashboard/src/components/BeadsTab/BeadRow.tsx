@@ -4,28 +4,22 @@ import { shortenHash, formatWork } from './lib/Utils';
 import type { BeadRowProps } from './lib/Types';
 import { BeadRewardTooltip } from './BeadRewardTooltip';
 import useCopyToClipboard from './lib/Utils';
-export default function BeadRow({
-  bead,
-  transactions,
-}: BeadRowProps) {
+export default function BeadRow({ bead, transactions }: BeadRowProps) {
   const { value: formattedWork, unit: workUnit } = formatWork(bead.difficulty);
   const [isRewardOpen, setIsRewardOpen] = useState(false);
-  const handleKeyToggle = (e: React.KeyboardEvent<HTMLDivElement>) => {
-  
-  };
+  const handleKeyToggle = (e: React.KeyboardEvent<HTMLDivElement>) => {};
 
   const { copied, copy } = useCopyToClipboard();
   return (
     <div className="border-b border-gray-800/80">
       <div
         className="grid max-sm:grid-cols-3 md:grid-cols-5 gap-2 t p-4 cursor-pointer hover:bg-gray-600"
-        
         onKeyDown={handleKeyToggle}
         role="button"
         tabIndex={0}
       >
         {/* Bead Name */}
-        <div className="flex items-center col-span-1 md:col-span-1">         
+        <div className="flex items-center col-span-1 md:col-span-1">
           <span
             className={`text-sm sm:text-base truncate 
              font-medium font-mono`}
@@ -95,11 +89,10 @@ export default function BeadRow({
       )}
 
       {/* Transaction List */}
-       
-        <div className="overflow-hidden">
-          <TransactionList transactions={transactions} />
-        </div>
-      
+
+      <div className="overflow-hidden">
+        <TransactionList transactions={transactions} />
+      </div>
     </div>
   );
 }

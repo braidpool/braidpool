@@ -29,7 +29,7 @@ export interface Bead {
 
 export interface BeadRowProps {
   bead: Bead;
- 
+
   isActive: boolean;
   transactions: Transaction[];
 }

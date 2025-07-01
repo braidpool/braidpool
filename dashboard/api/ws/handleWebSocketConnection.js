@@ -1,7 +1,7 @@
 import { callRpc } from '../utils/fetchRpc.js';
 import {
   latestBlockPayload,
-  latestStatsPayload
+  latestStatsPayload,
 } from '../utils/fetchBlockDetails.js';
 
 const ALLOWED_RPC_METHODS = new Set([
