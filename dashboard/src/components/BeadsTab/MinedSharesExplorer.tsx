@@ -7,7 +7,7 @@ import { Transaction, Bead, BeadId } from './lib/Types';
 import { processBlockData } from './lib/Utils';
 
 export default function MinedSharesExplorer() {
-   const [expandedBeads, setExpandedBeads] = useState<Record<BeadId, boolean>>({
+  const [expandedBeads, setExpandedBeads] = useState<Record<BeadId, boolean>>({
     bead1: true,
     bead2: false,
   });
