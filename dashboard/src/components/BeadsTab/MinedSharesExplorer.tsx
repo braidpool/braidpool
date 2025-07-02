@@ -7,6 +7,10 @@ import { Transaction, Bead, BeadId } from './lib/Types';
 import { processBlockData } from './lib/Utils';
 
 export default function MinedSharesExplorer() {
+   const [expandedBeads, setExpandedBeads] = useState<Record<BeadId, boolean>>({
+    bead1: true,
+    bead2: false,
+  });
   const [activeTab, setActiveTab] = useState('beads');
   const [liveBeads, setLiveBeads] = useState<Bead[]>([]);
   const [activeBead, setActiveBead] = useState<BeadId | null>(null);
@@ -15,7 +19,7 @@ export default function MinedSharesExplorer() {
   const timeRange = 'month';
 
   // Pagination state
-  const itemsPerPage = 1;
+  const itemsPerPage = 5;
   const [currentPage, setCurrentPage] = useState(1);
 
   const totalPages = Math.ceil(liveBeads.length / itemsPerPage);
@@ -124,6 +128,10 @@ export default function MinedSharesExplorer() {
       }
     };
   }, []);
+  const toggleBead = (beadId: string) => {
+    setExpandedBeads((prev) => ({ ...prev, [beadId]: !prev[beadId] }));
+    setActiveBead(beadId);
+  };
 
   return (
     <div className="min-h-screen bg-[#1c1c1c] text-white relative">
@@ -171,6 +179,8 @@ export default function MinedSharesExplorer() {
                       key={bead.id}
                       isActive={activeBead === bead.id}
                       bead={bead}
+                      isExpanded={!!expandedBeads[bead.id]}
+                      onToggle={() => toggleBead(bead.id)}
                       transactions={bead.details || []}
                     />
                   ))

@@ -97,7 +97,7 @@ export async function fetchBlockDetails(wss) {
         mempoolSize,
         avgFeeRate: Math.round(avgFeeRate),
         avgTxSize: Math.round(avgTxSize),
-        txRate: transactions.length,
+        txRate:Math.round(transactions.length / 600),
         totalFees,
         blockTransactionCount: transactions.length,
       },
