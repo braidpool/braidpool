@@ -1,14 +1,16 @@
 use crate::bead::Bead;
 use crate::utils::{retrieve_bead, BeadHash};
+use num::BigUint;
 use serde::Serialize;
 use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::collections::{HashMap, HashSet};
-pub const FIXED_BEAD_WORK: u32 = 1;
+pub mod error;
 #[derive(Clone, Debug, Serialize, PartialEq)]
 
 pub(crate) struct Cohort(HashSet<usize>);
 
+use error::BraidError::{HighestWorkBeadFetchFailed, MissingAncestorWork};
 pub enum AddBeadStatus {
     DagAlreadyContainsBead,
     InvalidBead,
@@ -22,7 +24,7 @@ pub struct Braid {
     pub(crate) beads: Vec<Bead>,
     pub(crate) tips: HashSet<usize>,
     pub(crate) cohorts: Vec<Cohort>,
-    pub(crate) orphan_beads: Vec<usize>,
+    pub(crate) orphan_beads: Vec<Bead>,
     pub(crate) genesis_beads: HashSet<usize>,
     pub(crate) bead_index_mapping: HashMap<BeadHash, usize>,
 }
@@ -61,11 +63,7 @@ impl Braid {
         }
         // Don't have all parents
         for parent_hash in &bead.committed_metadata.parents {
-            // Check if we already have this parent in our beads
-            let parent_exists = self
-                .beads
-                .iter()
-                .any(|b| b.block_header.block_hash() == *parent_hash);
+            let parent_exists = self.bead_index_mapping.contains_key(parent_hash);
 
             if !parent_exists {
                 // Try to retrieve the parent
@@ -73,6 +71,7 @@ impl Braid {
                     self.extend(&retrieved_bead);
                 } else {
                     // Parent not found and can't be retrieved
+                    self.orphan_beads.push(bead.clone());
                     return false;
                 }
             }
@@ -102,11 +101,7 @@ impl Braid {
         for (i, cohort) in self.cohorts.iter().enumerate().rev() {
             // Find which parent indices are in this cohort
             for parent_hash in &bead.committed_metadata.parents {
-                if let Some(parent_index) = self
-                    .beads
-                    .iter()
-                    .position(|b| b.block_header.block_hash() == *parent_hash)
-                {
+                if let Some(&parent_index) = self.bead_index_mapping.get(parent_hash) {
                     if cohort.0.contains(&parent_index) {
                         found_parent_indices.insert(parent_index);
                     }
@@ -145,11 +140,7 @@ impl Braid {
         // Remove parents from tips if present
         for parent_hash in &bead.committed_metadata.parents {
             // Find the index of the parent bead
-            if let Some(parent_index) = self
-                .beads
-                .iter()
-                .position(|b| b.block_header.block_hash() == *parent_hash)
-            {
+            if let Some(&parent_index) = self.bead_index_mapping.get(parent_hash) {
                 self.tips.remove(&parent_index);
             }
         }
@@ -168,6 +159,10 @@ impl Braid {
 }
 #[allow(unused)]
 mod consensus_functions {
+    use num::{One, Zero};
+
+    use crate::braid::error::BraidError;
+
     use super::*;
     /// Returns the set of **genesis beads** from a given Braid object.
     ///
@@ -345,14 +340,11 @@ mod consensus_functions {
         let mut dequeue: VecDeque<(usize, bool)> = VecDeque::new();
         let current_bead_index = braid_obj.bead_index_mapping[&current_block_hash];
         dequeue.push_back((current_bead_index, false));
-        while dequeue.len() > 0 {
-            let (current, is_processed) = dequeue[dequeue.len() - 1];
-
-            if is_processed == true {
-                dequeue.pop_back();
+        while let Some((current, is_processed)) = dequeue.pop_back() {
+            if is_processed {
                 if let Some(current_ancestor) = ancestors.get_mut(&current) {
                     current_ancestor.clear();
-                    if let Some(parents_beads) = parents.get(&current).as_mut() {
+                    if let Some(parents_beads) = parents.get(&current) {
                         current_ancestor.extend(parents_beads.iter());
                     }
                 } else {
@@ -366,23 +358,23 @@ mod consensus_functions {
                     let ancestor_ref = ancestors.to_owned();
                     for parent_idx in parent_indices {
                         if let Some(current_ancestors) = ancestors.get_mut(&current) {
-                            let beads = &ancestor_ref[parent_idx];
-                            current_ancestors.extend(beads.iter());
+                            if let Some(beads) = ancestor_ref.get(parent_idx) {
+                                current_ancestors.extend(beads);
+                            }
                         } else {
                             let mut val_set: HashSet<usize> = HashSet::new();
-                            let beads = &ancestor_ref[parent_idx];
-                            val_set.extend(beads.iter());
+                            if let Some(beads) = ancestor_ref.get(parent_idx) {
+                                val_set.extend(beads);
+                            }
                             ancestors.insert(current, val_set);
                         }
                     }
                 }
             } else {
-                dequeue.pop_back();
                 dequeue.push_back((current, true));
-
                 if let Some(parents) = parents.get(&current) {
                     for parent in parents {
-                        if ancestors.contains_key(parent) == false {
+                        if !ancestors.contains_key(parent) {
                             dequeue.push_back((*parent, false));
                         }
                     }
@@ -537,11 +529,7 @@ mod consensus_functions {
                     }
                 }
                 oldcohort = cohort.clone();
-                let mut key_set: HashSet<usize> = HashSet::new();
-                let t: HashSet<&usize> = ancestor.keys().collect();
-                for temp in t {
-                    key_set.insert(*temp);
-                }
+                let mut key_set: HashSet<usize> = ancestor.keys().copied().collect();
                 for bead in tail.difference(&key_set) {
                     let current_bead_blockhash = braid_obj.beads[*bead].block_header.block_hash();
                     updating_ancestors(braid_obj, current_bead_blockhash, &mut ancestor, parents);
@@ -725,7 +713,7 @@ mod consensus_functions {
     /// * `braid_obj` - Reference to the complete `Braid` DAG object.
     /// * `parents` - A map from bead indices to their immediate parents.
     /// * `children_or_not` - Optional map from bead indices to their children. If `None`, it is computed by reversing `parents`.
-    /// * `bead_work_or_not` - Optional map of bead index to intrinsic work (`u32`). If `None`, assigns all beads a default `FIXED_BEAD_WORK`.
+    /// * `bead_work_or_not` - Optional map of bead index to intrinsic work (`BigUint`). If `None`, assigns all beads a default `FIXED_BEAD_WORK`.
     /// * `in_cohorts_or_not` - Optional precomputed cohort list. If `None`, it is generated using `cohort(...)`.
     ///
     /// # Returns
@@ -739,21 +727,21 @@ mod consensus_functions {
         braid_obj: &Braid,
         parents: &HashMap<usize, HashSet<usize>>,
         children_or_not: Option<&HashMap<usize, HashSet<usize>>>,
-        bead_work_or_not: Option<&HashMap<usize, u32>>,
+        bead_work_or_not: Option<&HashMap<usize, BigUint>>,
         in_cohorts_or_not: Option<Vec<HashSet<usize>>>,
-    ) -> HashMap<usize, u32> {
+    ) -> HashMap<usize, BigUint> {
         let children = match children_or_not {
             Some(val) => val,
             None => &reverse(braid_obj, parents),
         };
         //This is done for increasing the scope
         //therefore trading of with iteration each time the function is called but it avoids `cloning` which may be expensive
-        let work: HashMap<usize, u32> = parents.keys().map(|&k| (k, FIXED_BEAD_WORK)).collect();
+        let work: HashMap<usize, BigUint> = parents.keys().map(|&k| (k, BigUint::one())).collect();
         let bead_work = match bead_work_or_not {
             Some(val) => val,
             None => &work,
         };
-        let mut previous_work: u32 = 0;
+        let mut previous_work: BigUint = BigUint::zero();
         let rev_cohorts = match in_cohorts_or_not {
             Some(val) => {
                 let mut val_ref = val;
@@ -762,7 +750,7 @@ mod consensus_functions {
             }
             None => cohort(braid_obj, &children, Some(parents), None),
         };
-        let mut ret_val: HashMap<usize, u32> = HashMap::new();
+        let mut ret_val: HashMap<usize, BigUint> = HashMap::new();
         for curr_cohort in rev_cohorts {
             let sub_children = get_sub_braid(braid_obj, &curr_cohort, &children);
             let mut sub_descendants: HashMap<usize, HashSet<usize>> = HashMap::new();
@@ -776,11 +764,14 @@ mod consensus_functions {
                 );
                 let work_summation = sub_descendants
                     .get(&bead)
-                    .map(|descendants| descendants.iter().map(|d| bead_work[d]).sum())
-                    .unwrap_or(0);
-                ret_val.insert(*bead, previous_work + bead_work[bead] + work_summation);
+                    .map(|descendants| descendants.iter().map(|d| &bead_work[d]).sum())
+                    .unwrap_or(BigUint::zero());
+                ret_val.insert(
+                    *bead,
+                    previous_work.clone() + &bead_work[bead] + work_summation,
+                );
             }
-            let work_summation: u32 = curr_cohort.iter().map(|bead| bead_work[bead]).sum();
+            let work_summation: BigUint = curr_cohort.iter().map(|bead| &bead_work[bead]).sum();
             previous_work += work_summation;
         }
         return ret_val;
@@ -806,38 +797,34 @@ mod consensus_functions {
     ///
     /// An `Ordering` (`Less`, `Greater`, or `Equal`) indicating the relative ranking of bead A vs B.
     ///
-    pub fn bead_cmp<'a>(
+    pub fn bead_cmp(
         a: usize,
         b: usize,
-        dwork: &HashMap<usize, u32>,
-        awork_or_not: Option<&HashMap<usize, u32>>,
-    ) -> Ordering {
+        dwork: &HashMap<usize, BigUint>,
+        awork: &HashMap<usize, BigUint>,
+    ) -> Result<Ordering, BraidError> {
         if dwork[&a] < dwork[&b] {
-            return Ordering::Less;
+            return Ok(Ordering::Less);
         }
         if dwork[&a] > dwork[&b] {
-            return Ordering::Greater;
+            return Ok(Ordering::Greater);
         }
 
-        let awork = match awork_or_not {
-            Some(val) => val,
-            None => {
-                panic!("No ancestor work supplied");
-            }
-        };
         if awork[&a] < awork[&b] {
-            return Ordering::Less;
+            return Ok(Ordering::Less);
         }
         if awork[&a] > awork[&b] {
-            return Ordering::Greater;
+            return Ok(Ordering::Greater);
         }
+
         if a > b {
-            return Ordering::Less;
+            return Ok(Ordering::Less);
         }
         if a < b {
-            return Ordering::Greater;
+            return Ok(Ordering::Greater);
         }
-        return Ordering::Equal;
+
+        Ok(Ordering::Equal)
     }
     /// Computes the **highest-work path** in the Braid DAG.
     ///
@@ -871,8 +858,8 @@ mod consensus_functions {
         braid_obj: &Braid,
         parents: &HashMap<usize, HashSet<usize>>,
         children_or_none: Option<&HashMap<usize, HashSet<usize>>>,
-        bead_work_or_not: Option<HashMap<usize, u32>>,
-    ) -> Vec<usize> {
+        bead_work_or_not: Option<HashMap<usize, BigUint>>,
+    ) -> Result<Vec<usize>, BraidError> {
         let children = match children_or_none {
             Some(child) => child,
             None => &reverse(braid_obj, parents),
@@ -880,8 +867,8 @@ mod consensus_functions {
         let bead_work = match bead_work_or_not {
             Some(work) => work,
             None => {
-                let mut work: HashMap<usize, u32> =
-                    parents.keys().map(|&k| (k, FIXED_BEAD_WORK)).collect();
+                let mut work: HashMap<usize, BigUint> =
+                    parents.keys().map(|&k| (k, BigUint::one())).collect();
                 work
             }
         };
@@ -893,15 +880,11 @@ mod consensus_functions {
         //work genesis bead to be included inside the highest work path
         let genesis_beads = genesis(braid_obj, parents);
         //getting the maxima out of the genesis beads
-        let max_gensis_bead = match genesis_beads
+        let max_gensis_bead = genesis_beads
             .iter()
-            .max_by(|a, b| bead_cmp(**a, **b, &descendant_work_braid, Some(&ancestor_work)))
-        {
-            Some(val) => val,
-            None => {
-                panic!("An error occurred while fetching the highest work bead");
-            }
-        };
+            .max_by(|a, b| bead_cmp(**a, **b, &descendant_work_braid, &ancestor_work).unwrap())
+            .ok_or(HighestWorkBeadFetchFailed)
+            .unwrap();
         //populating the highest work path with indices representing the beads involved from the
         //entire braid for computation of highest work path
         let mut highest_work_path: Vec<usize> = vec![*max_gensis_bead];
@@ -915,19 +898,15 @@ mod consensus_functions {
             //generating the child sets for the previous best bead
             let current_bead_children_set = generation(braid_obj, &beads_indices, Some(children));
             //getting the maximum via comparator
-            let max_bead = match current_bead_children_set
+            let max_bead = current_bead_children_set
                 .iter()
-                .max_by(|a, b| bead_cmp(**a, **b, &descendant_work_braid, Some(&ancestor_work)))
-            {
-                Some(val) => val,
-                None => {
-                    panic!("An error occurred while Ordering to take place")
-                }
-            };
+                .max_by(|a, b| bead_cmp(**a, **b, &descendant_work_braid, &ancestor_work).unwrap())
+                .ok_or(HighestWorkBeadFetchFailed)
+                .unwrap();
             highest_work_path.push(*max_bead);
         }
 
-        return highest_work_path;
+        return Ok(highest_work_path);
     }
 
     /// Validates the **structural integrity of a cohort** in both forward and backward directions within the Braid DAG.

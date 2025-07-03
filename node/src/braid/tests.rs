@@ -25,6 +25,7 @@ use bitcoin::{
 };
 use core::net::SocketAddr;
 use num::range;
+use num::BigUint;
 use rand::{rngs::OsRng, thread_rng, RngCore};
 use secp256k1::{Message, Secp256k1, SecretKey};
 use serde::{Deserialize, Serialize};
@@ -1126,7 +1127,7 @@ pub fn test_highest_work_path_1() {
     parents1.insert(3, HashSet::from([2]));
     let test_braid_child_beads = reverse(&test_braid, &parents1);
     let highest_work_path_bead_indices =
-        highest_work_path(&test_braid, &parents1, Some(&test_braid_child_beads), None);
+        highest_work_path(&test_braid, &parents1, Some(&test_braid_child_beads), None).unwrap();
     assert_eq!(highest_work_path_bead_indices, Vec::from([0, 1, 2, 3]));
 }
 #[test]
@@ -1197,7 +1198,8 @@ pub fn test_diamond_path_highest_work() {
         &parents1,
         Some(&test_braid_child_mapping),
         None,
-    );
+    )
+    .unwrap();
 
     assert_eq!(highest_work_path, Vec::from([0, 1, 3, 4]));
 }
@@ -1227,7 +1229,8 @@ pub fn highest_work_path_testcases_directory() {
             &current_braid_parents,
             Some(&current_braid_children_mapping),
             None,
-        );
+        )
+        .unwrap();
         assert_eq!(highest_work_path, file_braid.highest_work_path);
     }
 }
@@ -1418,13 +1421,22 @@ pub fn test_check_work_files() {
         }
         let current_braid_children_mapping = reverse(&current_file_braid, &current_braid_parents);
         let current_braid_cohorts = file_braid.cohorts;
-        let current_dag_braid_work = file_braid.work.clone();
+        let current_dag_braid_work_u32 = file_braid.work.clone();
+        let mut current_dag_braid_work = HashMap::new();
+        for (idx, work) in current_dag_braid_work_u32 {
+            current_dag_braid_work.insert(idx, BigUint::from(work));
+        }
         for cohort in current_braid_cohorts {
             let mut cohort_set: HashSet<usize> = HashSet::new();
             for bead in cohort.clone() {
                 cohort_set.insert(bead);
             }
-            let current_file_braid_bead_work = file_braid.bead_work.clone();
+            let current_file_braid_bead_work_u32 = file_braid.bead_work.clone();
+            let mut current_file_braid_bead_work = HashMap::new();
+
+            for (idx, work) in current_file_braid_bead_work_u32 {
+                current_file_braid_bead_work.insert(idx, BigUint::from(work));
+            }
             let current_cohort_descendant_work = descendant_work(
                 &current_file_braid,
                 &current_braid_parents,
