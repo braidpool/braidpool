@@ -36,6 +36,17 @@ const SEED_DNS: &str = "/dnsaddr/french.braidpool.net";
 const ADDR_REFRENCE: &str =
     "/dnsaddr/french.braidpool.net/p2p/12D3KooWCXH2BiENJ7NkFUBSavd8Ed4ZSYKNdiFnYP5abSo36rGL";
 
+#[allow(dead_code)]
+mod chain_capnp;
+mod common_capnp;
+mod echo_capnp;
+mod handler_capnp;
+#[allow(dead_code)]
+mod init_capnp;
+mod mining_capnp;
+#[allow(dead_code)]
+mod proxy_capnp;
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = cli::Cli::parse();
