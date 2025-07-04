@@ -132,7 +132,7 @@ const BlockViewer: React.FC = () => {
               >
                 {/* Highlight the next block */}
                 {idx === 0 && nextBlock && (
-                  <div className="text-green-400 text-xs mb-1">next</div>
+                  <div className="text-green-400 text-xs mb-1">Next</div>
                 )}
 
                 {/* Block visualization */}
