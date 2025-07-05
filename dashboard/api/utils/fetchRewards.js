@@ -9,7 +9,16 @@ export async function fetchReward(wss) {
     const halvings = Math.floor(blockCount / 210000);
     const blockReward = 50 / Math.pow(2, halvings);
 
-    const totalRewards = blockCount * blockReward;
+    let totalRewards = 0;
+    let remainingBlocks = blockCount;
+    let reward = 50;
+    let halvingHeight = 210000;
+    while (remainingBlocks > 0 && reward > 0) {
+      const blocksThisEra = Math.min(remainingBlocks, halvingHeight);
+      totalRewards += blocksThisEra * reward;
+      remainingBlocks -= blocksThisEra;
+      reward /= 2;
+    }
     const rewardRate = blockReward * 144;
 
     let lastRewardTime = null;
@@ -36,7 +45,6 @@ export async function fetchReward(wss) {
         blocksUntilHalving: (halvings + 1) * 210000 - blockCount,
       },
     };
-    console.log('rewards', payload.data);
 
     wss.clients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {

@@ -26,17 +26,14 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
 
   useEffect(() => {
     const ws = new WebSocket('ws://localhost:5000');
+    let isMounted = true;
     wsRef.current = ws;
 
     ws.onopen = () => {
+      if (!isMounted) return;
       setIsConnected(true);
       setIsLoading(false);
       setError(null);
-    };
-
-    ws.onclose = () => {
-      setIsConnected(false);
-      setError('Connection closed');
     };
 
     ws.onerror = (error) => {
@@ -47,6 +44,7 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
     };
 
     ws.onmessage = (event) => {
+      if (!isMounted) return;
       try {
         const parsed = JSON.parse(event.data);
 
@@ -98,6 +96,11 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
         setError('Failed to parse data');
         console.error('[TransactionsTab] WebSocket message parse error:', e);
       }
+    };
+    ws.onclose = () => {
+      if (!isMounted) return;
+      console.log('WebSocket disconnected');
+      setIsConnected(false);
     };
 
     return () => {

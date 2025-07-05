@@ -31,18 +31,19 @@ export default function MinedSharesExplorer() {
 
   useEffect(() => {
     const ws = new WebSocket('ws://localhost:5000');
+    let isMounted = true;
     wsRef.current = ws;
     ws.onopen = () => {
+      if (!isMounted) return;
       setWsConnected(true);
     };
-    ws.onclose = () => {
-      setWsConnected(false);
-    };
+
     ws.onerror = (error) => {
       setWsConnected(false);
       console.error('WebSocket error:', error);
     };
     ws.onmessage = (event) => {
+      if (!isMounted) return;
       try {
         const message = JSON.parse(event.data);
         if (message.type === 'block_data') {
@@ -122,7 +123,13 @@ export default function MinedSharesExplorer() {
         console.error('WebSocket message parse error:', e);
       }
     };
+    ws.onclose = () => {
+      if (!isMounted) return;
+      console.log('WebSocket disconnected');
+      setWsConnected(false);
+    };
     return () => {
+      isMounted = false;
       if (ws.readyState === WebSocket.OPEN) {
         ws.close();
       }

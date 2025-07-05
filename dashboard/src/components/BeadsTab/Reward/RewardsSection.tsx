@@ -17,20 +17,21 @@ export function RewardsDashboard() {
 
   useEffect(() => {
     const ws = new WebSocket('ws://localhost:5000');
+    let isMounted = true;
     wsRef.current = ws;
     ws.onopen = () => {
+      if (!isMounted) return;
       setIsConnected(true);
       setIsLoading(false);
     };
-    ws.onclose = () => {
-      setIsConnected(false);
-    };
+
     ws.onerror = (error) => {
       setIsConnected(false);
       setError('WebSocket connection failed');
       console.error('WebSocket error:', error);
     };
     ws.onmessage = (event) => {
+      if (!isMounted) return;
       try {
         const message = JSON.parse(event.data);
         if (message.type === 'rewards_data') {
@@ -60,6 +61,11 @@ export function RewardsDashboard() {
         setError('WebSocket message parse error');
         console.error('WebSocket message parse error:', e);
       }
+    };
+    ws.onclose = () => {
+      if (!isMounted) return;
+      console.log('WebSocket disconnected');
+      setIsConnected(false);
     };
     return () => {
       if (ws.readyState === WebSocket.OPEN) {

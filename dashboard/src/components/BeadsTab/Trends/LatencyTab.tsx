@@ -76,14 +76,14 @@ export default function LatencyTab({ timeRange }: { timeRange: string }) {
     latencyHistory.current = [];
 
     const ws = new WebSocket('ws://localhost:5000');
+    let isMounted = true;
     wsRef.current = ws;
 
     ws.onopen = () => {
+      if (!isMounted) return;
       setIsConnected(true);
       setIsLoading(false);
     };
-
-    ws.onclose = () => setIsConnected(false);
 
     ws.onerror = (error) => {
       console.error('[LatencyTab] WebSocket error:', error);
@@ -92,6 +92,7 @@ export default function LatencyTab({ timeRange }: { timeRange: string }) {
     };
 
     ws.onmessage = (event) => {
+      if (!isMounted) return;
       try {
         const message: LatencyWebSocketMessage = JSON.parse(event.data);
         if (message.type === 'latency_data') {
@@ -103,6 +104,11 @@ export default function LatencyTab({ timeRange }: { timeRange: string }) {
         console.error('[LatencyTab] WebSocket message parse error:', e);
         setIsLoading(false);
       }
+    };
+    ws.onclose = () => {
+      if (!isMounted) return;
+      console.log('WebSocket disconnected');
+      setIsConnected(false);
     };
 
     return () => {

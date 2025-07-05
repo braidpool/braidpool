@@ -71,19 +71,22 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
     peakHashrate.current = 0;
 
     const ws = new WebSocket('ws://localhost:5000');
+    let isMounted = true;
     wsRef.current = ws;
 
     ws.onopen = () => {
+      if (!isMounted) return;
       setIsConnected(true);
       setIsLoading(false);
     };
-    ws.onclose = () => setIsConnected(false);
+
     ws.onerror = (error) => {
       setIsConnected(false);
       setIsLoading(false);
       console.error('[HashrateTab] WebSocket error:', error);
     };
     ws.onmessage = (event) => {
+      if (!isMounted) return;
       try {
         const message = JSON.parse(event.data);
         if (message.type === 'hashrate_data') {
@@ -95,6 +98,11 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
         setIsLoading(false);
         console.error('[HashrateTab] WebSocket message parse error:', e);
       }
+    };
+    ws.onclose = () => {
+      if (!isMounted) return;
+      console.log('WebSocket disconnected');
+      setIsConnected(false);
     };
 
     return () => {
