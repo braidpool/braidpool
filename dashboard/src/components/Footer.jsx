@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 
 export default function Footer() {
   return (
-    <footer className=" text-gray-300 px-8 sm:px-10 md:px-20 py-8 sm:ml-[30%] md:ml-[10%] ">
+    <footer className=" text-gray-300 px-8 sm:px-10 md:px-20 py-8   ">
       <motion.div
         initial="hidden"
         whileInView="visible"

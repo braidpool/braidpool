@@ -1,10 +1,6 @@
 import React, { useState } from 'react';
 import {
   Bitcoin,
-  Home,
-  Settings,
-  Bell,
-  Filter,
   Wrench,
   LayoutDashboard,
   Package,
@@ -12,10 +8,12 @@ import {
   Layers,
   Menu,
   X,
+  Search,
 } from 'lucide-react';
 import { Page } from '../Dashboard/Types';
+import { HeaderNavProps } from './Types';
 
-const navItems = [
+const NAV_ITEMS = [
   {
     label: 'Installation',
     page: Page.INSTALLATION,
@@ -45,18 +43,11 @@ const navItems = [
   },
 ];
 
-type HeaderNavProps = {
-  title?: string;
-  currentPage: Page;
-  setCurrentPage: (page: Page) => void;
-};
-
 const Header: React.FC<HeaderNavProps> = ({
   title = 'Braidpool',
   currentPage,
   setCurrentPage,
 }) => {
-  const [notificationCount] = useState(3);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
@@ -78,15 +69,16 @@ const Header: React.FC<HeaderNavProps> = ({
 
             {/* Mobile Menu Toggle */}
             <button
-              className="md:hidden lg:hidden ml-2 p-2 rounded hover:bg-white/10 text-white"
+              className="md:hidden ml-2 p-2 rounded hover:bg-white/10 text-white"
               onClick={() => setSidebarOpen(true)}
             >
               <Menu size={22} />
             </button>
 
             {/* Desktop Nav */}
-            <nav className="sm:hidden md:flex lg:flex ml-25 space-x-1">
-              {navItems.map((item) => (
+            {/* Desktop Nav */}
+            <nav className="max-md:hidden md:flex lg:flex ml-25 space-x-1">
+              {NAV_ITEMS.map((item) => (
                 <button
                   key={item.label}
                   onClick={() => setCurrentPage(item.page)}
@@ -104,29 +96,16 @@ const Header: React.FC<HeaderNavProps> = ({
             </nav>
           </div>
 
-          <div className="flex items-center gap-4">
-            <button className="bg-slate-700 text-white font-medium text-sm rounded-md px-4 py-1.5 shadow hover:shadow-lg transition-all">
-              Add Miner
-            </button>
-            <button className="p-2 rounded-full hover:bg-white/10 text-white">
-              <Home size={19} />
-            </button>
-            <button className="p-2 rounded-full hover:bg-white/10 text-white">
-              <Filter size={19} />
-            </button>
-            <div className="relative">
-              <button className="p-2 rounded-full hover:bg-white/10 text-white">
-                <Bell size={19} />
-              </button>
-              {notificationCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold border border-[#1a1a1a]">
-                  {notificationCount}
-                </span>
-              )}
-            </div>
-            <button className="p-2 rounded-full hover:bg-white/10 text-white">
-              <Settings size={19} />
-            </button>
+          {/* Search Bar */}
+          <div className="relative group">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500 transition-colors">
+              <Search size={18} />
+            </span>
+            <input
+              type="text"
+              placeholder="Search Braidpool..."
+              className="pl-10 pr-4 py-2 rounded-lg bg-[#232323] text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-[#1f1f1f] hover:bg-[#252525] transition-all duration-200 shadow-sm w-48 md:w-64"
+            />
           </div>
         </div>
       </header>
@@ -147,7 +126,7 @@ const Header: React.FC<HeaderNavProps> = ({
           </button>
         </div>
         <nav className="flex flex-col py-4">
-          {navItems.map((item) => (
+          {NAV_ITEMS.map((item) => (
             <button
               key={item.label}
               onClick={() => {
@@ -155,11 +134,11 @@ const Header: React.FC<HeaderNavProps> = ({
                 setSidebarOpen(false);
               }}
               className={`flex items-center px-5 py-3 border-l-4 text-left transition-colors font-medium text-base
-              ${
-                currentPage === item.page
-                  ? 'text-blue-500 border-blue-500 bg-blue-500/10 font-bold'
-                  : 'text-white/80 border-transparent hover:bg-blue-500/10'
-              }`}
+                ${
+                  currentPage === item.page
+                    ? 'text-blue-500 border-blue-500 bg-blue-500/10 font-bold'
+                    : 'text-white/80 border-transparent hover:bg-blue-500/10'
+                }`}
             >
               <span className="mr-2">{item.icon}</span>
               {item.label}

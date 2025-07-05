@@ -90,14 +90,14 @@ const Dashboard = () => {
             </Card>
           </div>
         );
+      case Page.MINER_STATS:
+        return <MinedSharesExplorer />;
       default:
         return (
           <div className="p-2">
             <span>Coming soon</span>
           </div>
         );
-      case Page.MINER_STATS:
-        return <MinedSharesExplorer />;
     }
   };
 
