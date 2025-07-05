@@ -92,7 +92,7 @@ impl BraidpoolConfig {
 
 #[cfg(test)]
 mod test {
-    use std::path::{Path, PathBuf};
+    use std::path::Path;
 
     use bitcoin::Network;
 

@@ -116,7 +116,7 @@ impl BraidPoolBehaviour {
     pub fn respond_with_tips(
         &mut self,
         channel: ResponseChannel<BeadResponse>,
-        tips: HashSet<BeadHash>,
+        tips: Vec<BeadHash>,
     ) {
         self.bead_sync
             .send_response(channel, BeadResponse::Tips(tips))
@@ -127,7 +127,7 @@ impl BraidPoolBehaviour {
     pub fn respond_with_genesis(
         &mut self,
         channel: ResponseChannel<BeadResponse>,
-        genesis: HashSet<BeadHash>,
+        genesis: Vec<BeadHash>,
     ) {
         self.bead_sync
             .send_response(channel, BeadResponse::Genesis(genesis))

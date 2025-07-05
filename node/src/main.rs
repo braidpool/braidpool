@@ -1,7 +1,7 @@
+use crate::utils::BeadHash;
 use bitcoin::consensus::encode::deserialize;
 use clap::Parser;
 use futures::StreamExt;
-use libp2p::kad::RecordKey;
 use libp2p::{
     core::multiaddr::Multiaddr,
     floodsub, identify,
@@ -12,11 +12,11 @@ use libp2p::{
     PeerId,
 };
 use node::{
-    bead::{self, Bead},
+    bead::{self, Bead, BeadRequest},
     behaviour::{self, BEAD_ANNOUNCE_PROTOCOL},
-    braid, committed_metadata,
+    braid,
     peer_manager::PeerManager,
-    uncommitted_metadata, utils,
+    utils,
 };
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
@@ -118,12 +118,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     };
 
     // Initializing the braid object
-    let mut braid = Arc::new(Mutex::new(braid::Braid::new(
+    let braid = Arc::new(Mutex::new(braid::Braid::new(
         HashSet::new(), // beads
     )));
     // load beads from db (if present) and insert in braid here
     // Initializing the peer manager
-    let peer_manager = PeerManager::new(8);
+    let mut peer_manager = PeerManager::new(8);
 
     //For local testing uncomment this keypair peer since it running to process will
     //result in same peerID leading to OutgoingConnectionError
@@ -241,7 +241,26 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             // Handle the received bead here
                             let mut braid_lock = braid.lock().await;
                             let status = braid_lock.extend(&bead);
-                            
+                            if let braid::AddBeadStatus::ParentsNotYetReceived = status {
+                                //request the parents using request response protocol
+                                let peer_id = peer_manager.get_top_k_peers_for_propagation(1);
+                                if let Some(peer) = peer_id.first() {
+                                    swarm.behaviour_mut().bead_sync.send_request(
+                                        &peer,
+                                        BeadRequest::GetBeads(
+                                            bead.committed_metadata.parents.clone(),
+                                        ),
+                                    );
+                                } else {
+                                    log::warn!("No peers available to request parents");
+                                }
+                            } else if let braid::AddBeadStatus::InvalidBead = status {
+                                // update the peer manager about the invalid bead
+                                peer_manager.penalize_for_invalid_bead(&message.source);
+                            } else if let braid::AddBeadStatus::BeadAdded = status {
+                                // update score of the peer
+                                peer_manager.update_score(&message.source, 1.0);
+                            }
                         }
                         Err(e) => {
                             log::error!("Failed to deserialize bead: {}", e);
@@ -275,7 +294,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         .any(|p| *p == BEAD_ANNOUNCE_PROTOCOL)
                     {
                         log::info!("PEER ADDED TO FLOODSUB MESH {:?}", peer_id);
-                        for addr in info_reference.clone().listen_addrs {
+                        for _addr in info_reference.clone().listen_addrs {
                             swarm
                                 .behaviour_mut()
                                 .bead_announce
@@ -337,7 +356,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         }
                         _ => None,
                     });
-
+                    peer_manager.add_peer(peer_id, !endpoint.is_dialer(), ip);
                     log::info!(
                         "Connection established to peer: {} via {}",
                         peer_id,
@@ -352,6 +371,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     cause,
                 } => {
                     log::info!("Connection closed to peer: {} with connection id: {} via {}. Number of established connections: {}. Cause: {:?}", peer_id,connection_id,endpoint.get_remote_address(), num_established,cause);
+                    // Remove the peer from the peer manager
+                    peer_manager.remove_peer(&peer_id);
                     swarm
                         .behaviour_mut()
                         .kademlia
@@ -373,65 +394,109 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     match message {
                         request_response::Message::Request {
                             request,
-                            request_id,
+                            request_id: _,
                             channel,
                         } => {
                             // Handle the bead sync request here
                             match request {
                                 bead::BeadRequest::GetBeads(hashes) => {
-                                    // Get the beads from the local store
-                                    let beads = Vec::new(); // Replace with actual logic to fetch beads
+                                    let braid_lock = braid.lock().await;
+                                    let mut beads = Vec::new();
+                                    for hash in hashes.iter() {
+                                        if let Some(index) = braid_lock.bead_index_mapping.get(hash)
+                                        {
+                                            if let Some(bead) = braid_lock.beads.get(*index) {
+                                                beads.push(bead.clone());
+                                            }
+                                        }
+                                    }
                                     swarm.behaviour_mut().respond_with_beads(channel, beads);
                                 }
                                 bead::BeadRequest::GetTips => {
-                                    // Get the tips from the local store
-                                    let tips = HashSet::new(); // Replace with actual logic to fetch tips
+                                    let braid_lock = braid.lock().await;
+                                    let tips: Vec<BeadHash> = braid_lock
+                                        .tips
+                                        .iter()
+                                        .filter_map(|index| braid_lock.beads.get(*index))
+                                        .cloned()
+                                        .map(|bead| bead.block_header.block_hash())
+                                        .collect();
                                     swarm.behaviour_mut().respond_with_tips(channel, tips);
                                 }
                                 bead::BeadRequest::GetGenesis => {
-                                    // Get the genesis beads from the local store
-                                    let genesis = HashSet::new(); // Replace with actual logic to fetch genesis
+                                    let braid_lock = braid.lock().await;
+                                    let genesis: Vec<BeadHash> = braid_lock
+                                        .genesis_beads
+                                        .iter()
+                                        .filter_map(|index| braid_lock.beads.get(*index))
+                                        .cloned()
+                                        .map(|bead| bead.block_header.block_hash())
+                                        .collect();
                                     swarm.behaviour_mut().respond_with_genesis(channel, genesis);
+                                }
+                                bead::BeadRequest::GetAllBeads => {
+                                    let braid_lock = braid.lock().await;
+                                    let all_beads: Vec<Bead> =
+                                        braid_lock.beads.iter().cloned().collect();
+                                    swarm.behaviour_mut().respond_with_beads(channel, all_beads);
                                 }
                             }
                         }
                         request_response::Message::Response {
-                            request_id,
+                            request_id: _,
                             response,
                         } => {
                             match response {
-                                // might consider spawning this task on the blocking threadpool if the ex. time is more
                                 bead::BeadResponse::Beads(beads) => {
-                                    tokio::task::spawn_blocking({
-                                        || {
-                                            // let mut lock = braid.lock().await;
-                                            // lock.handle_beads(peer, beads);
+                                    for bead in beads {
+                                        let mut braid_lock = braid.lock().await;
+                                        let status = braid_lock.extend(&bead);
+                                        if let braid::AddBeadStatus::InvalidBead = status {
+                                            // update the peer manager about the invalid bead
+                                            peer_manager.penalize_for_invalid_bead(&peer);
+                                        } else if let braid::AddBeadStatus::BeadAdded = status {
+                                            // update score of the peer
+                                            peer_manager.update_score(&peer, 1.0);
                                         }
-                                    });
+                                    }
                                 }
+                                // no use of this arm as of now
                                 bead::BeadResponse::Tips(tips) => {
-                                    tokio::task::spawn_blocking({
-                                        || {
-                                            // let mut lock = braid.lock().await;
-                                            // lock.handle_tips(peer, tips);
-                                        }
-                                    });
+                                    log::info!("Received tips: {:?}", tips);
                                 }
                                 bead::BeadResponse::Genesis(genesis) => {
-                                    tokio::task::spawn_blocking({
-                                        || {
-                                            // let mut lock = braid.lock().await;
-                                            // lock.handle_genesis(peer, genesis);
+                                    log::info!("Received genesis beads: {:?}", genesis);
+                                    let mut braid_lock = braid.lock().await;
+                                    let status = braid_lock.check_genesis_beads(&genesis);
+                                    match status {
+                                        braid::GenesisCheckStatus::GenesisBeadsValid => {
+                                            log::info!("Genesis beads are valid");
                                         }
-                                    });
+                                        braid::GenesisCheckStatus::MissingGenesisBead => {
+                                            log::warn!("Missing genesis bead");
+                                        }
+                                        braid::GenesisCheckStatus::GenesisBeadsCountMismatch => {
+                                            log::warn!("Genesis beads count mismatch");
+                                        }
+                                    }
+                                }
+                                bead::BeadResponse::GetAllBeads(beads) => {
+                                    log::info!("Received all beads: {:?}", beads);
+                                    let mut braid_lock = braid.lock().await;
+                                    for bead in beads {
+                                        let status = braid_lock.extend(&bead);
+                                        if let braid::AddBeadStatus::InvalidBead = status {
+                                            // update the peer manager about the invalid bead
+                                            peer_manager.penalize_for_invalid_bead(&peer);
+                                        } else if let braid::AddBeadStatus::BeadAdded = status {
+                                            // update score of the peer
+                                            peer_manager.update_score(&peer, 1.0);
+                                        }
+                                    }
                                 }
                                 bead::BeadResponse::Error(error) => {
-                                    tokio::task::spawn_blocking({
-                                        || {
-                                            // let mut lock = braid.lock().await;
-                                            // lock.handle_error(peer, error);
-                                        }
-                                    });
+                                    log::error!("Error in bead sync response: {:?}", error);
+                                    peer_manager.update_score(&peer, -1.0);
                                 }
                             };
                         }

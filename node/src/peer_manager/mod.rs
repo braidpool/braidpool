@@ -16,6 +16,8 @@ pub struct PeerInfo {
     pub last_message_time: Instant,
     /// Score used for peer ranking (higher is better)
     pub score: f64,
+    /// Multiplier for score penalty, initially set to 0.01, doubles with each decrement
+    pub score_penalty_multiplier: f64,
     /// Group identifier for geographic/network diversity (similar to Bitcoin's netgroup)
     pub geo_group: Option<String>,
     /// When we last sent a ping to this peer
@@ -34,11 +36,12 @@ impl PeerInfo {
             latency: None,
             inbound,
             last_message_time: Instant::now(),
-            score: 0.0,
+            score: 100.0,
             geo_group: ip.map(|addr| Self::calculate_geo_group(addr)),
             last_ping: None,
             connected: true,
             ip_addr: ip,
+            score_penalty_multiplier: 0.01,
         }
     }
 
@@ -302,7 +305,7 @@ impl PeerManager {
         let now = Instant::now();
 
         // Update scores based on idle time
-        for (id, info) in self.peers.iter_mut() {
+        for (_id, info) in self.peers.iter_mut() {
             if !info.connected {
                 continue;
             }
@@ -323,6 +326,16 @@ impl PeerManager {
             for id in to_evict.iter().take(num_to_evict) {
                 self.remove_peer(id);
             }
+        }
+    }
+
+    /// Update the peer's score due to an invalid bead from the peer
+    pub fn penalize_for_invalid_bead(&mut self, peer_id: &PeerId) {
+        if let Some(peer) = self.peers.get_mut(peer_id) {
+            // Apply a penalty to the peer's score for sending an invalid bead
+            peer.score -= peer.score * peer.score_penalty_multiplier;
+            peer.score_penalty_multiplier *= 2.0; // Double the penalty multiplier
+            peer.last_message_time = Instant::now(); // Reset last message time
         }
     }
 }
