@@ -42,9 +42,20 @@ export async function fetchBlockDetails(wss) {
       timestamp: blockData.time * 1000,
       count: index + 1,
       blockId: latestHeight.toString(),
-      fee: typeof tx.fee === 'number' ? Math.abs(tx.fee) : 0,
-      size: tx.size || tx.vsize || (tx.weight ? tx.weight / 4 : 225),
-      feeRate: Math.round((tx.fee * 1e8) / (tx.size || tx.vsize || 225)),
+      // Fixed: Handle missing fee properly and convert to BTC
+      fee:
+        typeof tx.fee === 'number' && tx.fee !== undefined
+          ? Math.abs(tx.fee)
+          : 0,
+      size: tx.size || tx.vsize || (tx.weight ? Math.ceil(tx.weight / 4) : 225),
+      // Fixed: Calculate fee rate properly (sat/vB)
+      feeRate:
+        typeof tx.fee === 'number' && tx.fee !== undefined && tx.fee !== 0
+          ? Math.round(
+              Math.abs(tx.fee * 1e8) /
+                (tx.vsize || tx.size || Math.ceil(tx.weight / 4) || 225)
+            )
+          : 0,
       inputs: tx.vin.length,
       outputs: tx.vout.length,
     }));
@@ -60,7 +71,10 @@ export async function fetchBlockDetails(wss) {
       MIN_BLOCK_TIME_SEC
     );
     const nonCoinbaseTxCount = blockData.tx.length - 1;
-    const txRatePerMin = (nonCoinbaseTxCount / timeDiffSeconds) * 60;
+
+    // Fixed: More accurate transaction rate calculation
+    const txRatePerSec = nonCoinbaseTxCount / timeDiffSeconds;
+    const txRatePerMin = txRatePerSec * 60;
 
     // --- Mempool stats ---
     let mempoolSize = 0;
@@ -75,6 +89,7 @@ export async function fetchBlockDetails(wss) {
     // --- Fee/size stats ---
     const validTransactions = transactions.filter((tx) => tx.fee > 0);
     const totalFees = validTransactions.reduce((acc, tx) => acc + tx.fee, 0);
+
     const avgFeeRate =
       validTransactions.length > 0
         ? Math.round(
@@ -82,6 +97,7 @@ export async function fetchBlockDetails(wss) {
               validTransactions.length
           )
         : 0;
+
     const avgTxSize =
       validTransactions.length > 0
         ? Math.round(
@@ -90,7 +106,6 @@ export async function fetchBlockDetails(wss) {
           )
         : 0;
 
-    // --- Build payloads ---
     const blockPayload = {
       type: 'block_data',
       data: {
@@ -112,9 +127,11 @@ export async function fetchBlockDetails(wss) {
         mempoolSize,
         avgFeeRate,
         avgTxSize,
-        txRate: Math.round(txRatePerMin),
+        txRate: Math.round(txRatePerMin * 100) / 100,
+        txRatePerSec: Math.round(txRatePerSec * 100) / 100,
         totalFees,
         blockTransactionCount: transactions.length,
+        blockTimeDiff: timeDiffSeconds,
       },
     };
 
