@@ -68,14 +68,17 @@ const BitcoinPriceTracker: React.FC = () => {
 
   useEffect(() => {
     const websocket = new WebSocket('ws://localhost:5000/');
+    let isMounted = true;
 
     websocket.onopen = () => {
+      if (!isMounted) return;
       console.log('Connected to WebSocket server');
       setIsConnected(true);
       setLoading(false);
     };
 
     websocket.onmessage = (event) => {
+      if (!isMounted) return;
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'bitcoin_update') {
@@ -83,7 +86,6 @@ const BitcoinPriceTracker: React.FC = () => {
           const currentPrice = data.data.price?.[selectedCurrency]?.current;
           const high24hPrice = data.data.price?.[selectedCurrency]?.high24h;
           const low24hPrice = data.data.price?.[selectedCurrency]?.low24h;
-
           const currencySymbol = getCurrencySymbol(selectedCurrency);
 
           setPriceData((prev) => {
@@ -132,12 +134,14 @@ const BitcoinPriceTracker: React.FC = () => {
     };
 
     websocket.onclose = () => {
+      if (!isMounted) return;
       console.log('WebSocket disconnected');
       setIsConnected(false);
       setLoading(false);
     };
 
     return () => {
+      isMounted = false;
       if (websocket.readyState === WebSocket.OPEN) {
         websocket.close();
       }
