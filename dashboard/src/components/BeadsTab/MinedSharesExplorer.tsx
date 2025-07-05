@@ -33,6 +33,7 @@ export default function MinedSharesExplorer() {
     const ws = new WebSocket('ws://localhost:5000');
     let isMounted = true;
     wsRef.current = ws;
+
     ws.onopen = () => {
       if (!isMounted) return;
       setWsConnected(true);
@@ -42,6 +43,7 @@ export default function MinedSharesExplorer() {
       setWsConnected(false);
       console.error('WebSocket error:', error);
     };
+
     ws.onmessage = (event) => {
       if (!isMounted) return;
       try {
@@ -123,13 +125,19 @@ export default function MinedSharesExplorer() {
         console.error('WebSocket message parse error:', e);
       }
     };
+
     ws.onclose = () => {
       if (!isMounted) return;
       console.log('WebSocket disconnected');
       setWsConnected(false);
     };
+
     return () => {
       isMounted = false;
+      ws.onopen = null;
+      ws.onclose = null;
+      ws.onerror = null;
+      ws.onmessage = null;
       if (ws.readyState === WebSocket.OPEN) {
         ws.close();
       }
