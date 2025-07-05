@@ -73,6 +73,6 @@ setInterval(() => {
   fetchReward(wss).catch((err) =>
     console.error('[Server] fetchReward failed:', err)
   );
-}, 1000); // 10-second interval for better performance
+}, 10000); // 10-second interval for better performance
 
 console.log(`WebSocket server running on ws://localhost:${PORT}`);
