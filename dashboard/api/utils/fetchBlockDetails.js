@@ -127,12 +127,11 @@ export async function fetchBlockDetails(wss) {
       },
     };
 
-    console.log('=== Transaction Stats ===');
     console.log(
       `Moving Avg (${blockHistory.length} blocks): ${txRates.movingAverage} tx/min`
     );
     console.log(`Time Between Last 2 Blocks: ${txRates.lastBlockTime}s`);
-    console.log('==========================');
+
 
     latestBlockPayload = blockPayload;
     latestStatsPayload = statsPayload;
