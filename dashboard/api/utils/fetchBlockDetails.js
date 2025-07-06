@@ -132,7 +132,6 @@ export async function fetchBlockDetails(wss) {
     );
     console.log(`Time Between Last 2 Blocks: ${txRates.lastBlockTime}s`);
 
-
     latestBlockPayload = blockPayload;
     latestStatsPayload = statsPayload;
 
