@@ -121,6 +121,7 @@ export type TransactionStats = {
   mempoolSize: number;
   avgFeeRate: number;
   avgTxSize: number;
+  averagingWindow?: number;
 };
 
 export type TransactionTabProps = {

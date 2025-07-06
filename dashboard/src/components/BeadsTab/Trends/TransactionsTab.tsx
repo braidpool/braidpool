@@ -48,7 +48,6 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
       try {
         const parsed = JSON.parse(event.data);
 
-        // Handle error messages from backend
         if (parsed.type === 'error') {
           setError(parsed.data?.message || 'Unknown error');
           return;
@@ -88,6 +87,7 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
             mempoolSize: parsed.data.mempoolSize || 0,
             avgFeeRate: parsed.data.avgFeeRate || 0,
             avgTxSize: parsed.data.avgTxSize || 0,
+            averagingWindow: parsed.data.averagingWindow || 0,
           });
           setError(null);
         }
@@ -115,6 +115,10 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
     };
   }, [timeRange]);
 
+  const getCurrentRate = () => stats?.txRate || 0;
+  const getRateLabel = () =>
+    `Moving Avg (${stats?.averagingWindow || 0} blocks)`;
+
   return (
     <div className="space-y-6 bg-[#1c1c1c]">
       <div className="flex justify-between items-center">
@@ -125,21 +129,26 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
           <p className="text-sm text-gray-400 mt-1">
             Real-time transaction statistics
           </p>
-          {/* Show connection/error status */}
           {error && <p className="text-sm text-red-400 mt-1">Error: {error}</p>}
           {!isConnected && !error && (
             <p className="text-sm text-yellow-400 mt-1">Disconnected</p>
           )}
         </div>
-        <div className="bg-purple-900/30 px-3 py-1 rounded-md">
-          <span className="text-purple-300 font-mono">
-            {/* Fixed: Now correctly shows tx/min */}
-            {stats?.txRate
-              ? `${stats.txRate.toFixed(1)} tx/min`
-              : isLoading
-                ? 'Loading...'
-                : 'No data'}
-          </span>
+        <div className="flex items-center gap-4">
+          <div className="bg-purple-900/30 px-3 py-1 rounded-md">
+            <div className="text-center">
+              <span className="text-purple-300 font-mono text-lg">
+                {getCurrentRate()
+                  ? `${getCurrentRate().toFixed(1)} tx/min`
+                  : isLoading
+                    ? 'Loading...'
+                    : 'No data'}
+              </span>
+              <div className="text-xs text-purple-400 mt-1">
+                {getRateLabel()}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 

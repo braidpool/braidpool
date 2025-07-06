@@ -2,12 +2,11 @@ import WebSocket from 'ws';
 import { rpcWithEnv } from './rpcWithEnv.js';
 
 let lastBlockHash = null;
+let blockHistory = [];
+const AVERAGING_WINDOW = 10;
 
 export let latestBlockPayload = null;
 export let latestStatsPayload = null;
-
-// Minimum time between blocks (seconds) to prevent unrealistic tx rate spikes
-const MIN_BLOCK_TIME_SEC = 10;
 
 export async function fetchBlockDetails(wss) {
   try {
@@ -32,7 +31,6 @@ export async function fetchBlockDetails(wss) {
       params: [blockHash, 2],
     });
 
-    // --- Process block transactions ---
     const coinbaseTx = blockData.tx[0];
     const rewardBTC = coinbaseTx.vout.reduce((acc, out) => acc + out.value, 0);
 
@@ -42,15 +40,10 @@ export async function fetchBlockDetails(wss) {
       timestamp: blockData.time * 1000,
       count: index + 1,
       blockId: latestHeight.toString(),
-      // Fixed: Handle missing fee properly and convert to BTC
-      fee:
-        typeof tx.fee === 'number' && tx.fee !== undefined
-          ? Math.abs(tx.fee)
-          : 0,
+      fee: typeof tx.fee === 'number' ? Math.abs(tx.fee) : 0,
       size: tx.size || tx.vsize || (tx.weight ? Math.ceil(tx.weight / 4) : 225),
-      // Fixed: Calculate fee rate properly (sat/vB)
       feeRate:
-        typeof tx.fee === 'number' && tx.fee !== undefined && tx.fee !== 0
+        typeof tx.fee === 'number' && tx.fee !== 0
           ? Math.round(
               Math.abs(tx.fee * 1e8) /
                 (tx.vsize || tx.size || Math.ceil(tx.weight / 4) || 225)
@@ -60,23 +53,23 @@ export async function fetchBlockDetails(wss) {
       outputs: tx.vout.length,
     }));
 
-    // --- Calculate tx rate (transactions per minute) ---
-    const previousBlockData = await rpcWithEnv({
-      method: 'getblock',
-      params: [blockData.previousblockhash, 1],
-    });
+    // Log number of transactions in this block
+    console.log(`Number of transactions in this block: ${blockData.tx.length}`);
 
-    const timeDiffSeconds = Math.max(
-      blockData.time - previousBlockData.time,
-      MIN_BLOCK_TIME_SEC
-    );
-    const nonCoinbaseTxCount = blockData.tx.length - 1;
+    const blockInfo = {
+      height: latestHeight,
+      timestamp: blockData.time,
+      txCount: blockData.tx.length - 1,
+      hash: blockData.hash,
+    };
 
-    // Fixed: More accurate transaction rate calculation
-    const txRatePerSec = nonCoinbaseTxCount / timeDiffSeconds;
-    const txRatePerMin = txRatePerSec * 60;
+    blockHistory.push(blockInfo);
+    if (blockHistory.length > AVERAGING_WINDOW) {
+      blockHistory.shift();
+    }
 
-    // --- Mempool stats ---
+    const txRates = calculateTransactionRates(blockHistory);
+
     let mempoolSize = 0;
     try {
       const mempoolInfo = await rpcWithEnv({ method: 'getmempoolinfo' });
@@ -86,7 +79,6 @@ export async function fetchBlockDetails(wss) {
       mempoolSize = -1;
     }
 
-    // --- Fee/size stats ---
     const validTransactions = transactions.filter((tx) => tx.fee > 0);
     const totalFees = validTransactions.reduce((acc, tx) => acc + tx.fee, 0);
 
@@ -114,7 +106,7 @@ export async function fetchBlockDetails(wss) {
         height: latestHeight,
         difficulty: blockData.difficulty,
         txCount: blockData.tx.length,
-        nonCoinbaseTxCount,
+        nonCoinbaseTxCount: blockData.tx.length - 1,
         reward: rewardBTC,
         parent: blockData.previousblockhash,
         transactions,
@@ -127,15 +119,21 @@ export async function fetchBlockDetails(wss) {
         mempoolSize,
         avgFeeRate,
         avgTxSize,
-        txRate: Math.round(txRatePerMin * 100) / 100,
-        txRatePerSec: Math.round(txRatePerSec * 100) / 100,
+        txRate: txRates.movingAverage,
         totalFees,
         blockTransactionCount: transactions.length,
-        blockTimeDiff: timeDiffSeconds,
+        blockTimeDiff: txRates.lastBlockTime,
+        averagingWindow: blockHistory.length,
       },
     };
 
-    // Update and broadcast
+    console.log('=== Transaction Stats ===');
+    console.log(
+      `Moving Avg (${blockHistory.length} blocks): ${txRates.movingAverage} tx/min`
+    );
+    console.log(`Time Between Last 2 Blocks: ${txRates.lastBlockTime}s`);
+    console.log('==========================');
+
     latestBlockPayload = blockPayload;
     latestStatsPayload = statsPayload;
 
@@ -146,7 +144,33 @@ export async function fetchBlockDetails(wss) {
   }
 }
 
-// Helper: Broadcast data to all connected clients
+function calculateTransactionRates(blockHistory) {
+  if (blockHistory.length < 2) {
+    return {
+      movingAverage: 0,
+      lastBlockTime: 0,
+    };
+  }
+
+  const latest = blockHistory[blockHistory.length - 1];
+  const previous = blockHistory[blockHistory.length - 2];
+  const lastBlockTime = Math.max(latest.timestamp - previous.timestamp, 1);
+
+  // Calculate moving average over available window
+  const first = blockHistory[0];
+  const totalTime = latest.timestamp - first.timestamp; // seconds
+  const totalTxs = blockHistory.reduce((sum, block) => sum + block.txCount, 0);
+
+  // Convert to tx/min (if totalTime > 0)
+  const movingAverage =
+    totalTime > 0 ? Math.round((totalTxs / (totalTime / 60)) * 100) / 100 : 0;
+
+  return {
+    movingAverage,
+    lastBlockTime,
+  };
+}
+
 function broadcastToClients(wss, blockPayload, statsPayload) {
   const blockMsg = JSON.stringify(blockPayload);
   const statsMsg = JSON.stringify(statsPayload);
