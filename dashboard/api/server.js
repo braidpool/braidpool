@@ -4,7 +4,7 @@ import fetchBitcoinPrices from './utils/fetchBitcoinPrices.js';
 import fetchGlobalCryptoData from './utils/fetchGlobalData.js';
 import { fetchHashrateStats } from './utils/fetchHashrate.js';
 import { fetchLatencyData } from './utils/fetchLatency.js';
-import { fetchReward } from './utils/fetchrewards.js';
+import { fetchReward } from './utils/fetchRewards.js';
 import { handleWebSocketConnection } from './ws/handleWebSocketConnection.js';
 import { fetchBlockDetails } from './utils/fetchBlockDetails.js';
 
