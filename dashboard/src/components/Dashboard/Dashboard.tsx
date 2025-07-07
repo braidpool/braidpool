@@ -22,7 +22,7 @@ import LayersIcon from '@mui/icons-material/Layers';
 import Card from '../common/Card';
 import Header from '../common/Header';
 import InstallationInstructions from '../Installation/InstallationInstructions';
-import MineInventoryDashboard from '../BeadsTab/MineInventoryDashboard';
+import MineInventoryDashboard from '../MinerInventory/MineInventoryDashboard';
 import MempoolLatencyStats from './MempoolLatencyStats';
 import GraphVisualization from '../BraidPoolDAG/BraidPoolDAG';
 import MinedSharesExplorer from '../BeadsTab/MinedSharesExplorer';
@@ -324,14 +324,22 @@ const Dashboard = () => {
             </Card>
           </Box>
         );
+      case Page.MINER_STATS:
+        return (
+          <Box sx={{ p: 1 }}>
+            <Card title="Beads Explorer">
+              <Box>
+                <MinedSharesExplorer />
+              </Box>
+            </Card>
+          </Box>
+        );
       default:
         return (
           <Box sx={{ p: 1 }}>
             <Typography>Coming soon</Typography>
           </Box>
         );
-      case Page.MINER_STATS:
-        return <MinedSharesExplorer />;
     }
   };
 
