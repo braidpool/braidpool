@@ -13,7 +13,10 @@ const Card: React.FC<CardProps> = ({
   headerExtra,
 }) => {
   return (
-    <div className="relative px-3 rounded border border-black/5 overflow-hidden h-full shadow-sm" style={{ backgroundColor: 'rgba(30, 30, 30, 1)' }}>
+    <div
+      className="relative px-3 rounded border border-black/5 overflow-hidden h-full shadow-sm"
+      style={{ backgroundColor: 'rgba(30, 30, 30, 1)' }}
+    >
       {/* Accent color border */}
       {accentColor && (
         <div
@@ -21,26 +24,20 @@ const Card: React.FC<CardProps> = ({
           style={{ backgroundColor: accentColor }}
         />
       )}
-      
+
       {/* Header section */}
       {(title || subtitle || headerExtra) && (
         <div className="px-3 py-3 border-b border-black/5 flex justify-between items-center bg-black/[0.01]">
           <div>
             {title && (
-              <h3 className="text-base font-medium text-white">
-                {title}
-              </h3>
+              <h3 className="text-base font-medium text-white">{title}</h3>
             )}
-            {subtitle && (
-              <p className="text-xs text-gray-300">
-                {subtitle}
-              </p>
-            )}
+            {subtitle && <p className="text-xs text-gray-300">{subtitle}</p>}
           </div>
           {headerExtra && <div>{headerExtra}</div>}
         </div>
       )}
-      
+
       {/* Content */}
       <div className="p-0">{children}</div>
     </div>
