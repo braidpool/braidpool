@@ -1,5 +1,4 @@
 import React from 'react';
-import { Box, Paper, Typography } from '@mui/material';
 import { CardProps } from './Types';
 
 /**
@@ -14,61 +13,37 @@ const Card: React.FC<CardProps> = ({
   headerExtra,
 }) => {
   return (
-    <Paper
-      elevation={0}
-      sx={{
-        p: 0,
-        borderRadius: 1,
-        border: '1px solid rgba(0,0,0,0.05)',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.03)',
-        overflow: 'hidden',
-        height: '100%',
-        ...(accentColor && {
-          position: 'relative',
-          '&::after': {
-            content: '""',
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '4px',
-            height: '100%',
-            backgroundColor: accentColor,
-          },
-        }),
-      }}
-    >
+    <div className="relative px-3 rounded border border-black/5 overflow-hidden h-full shadow-sm" style={{ backgroundColor: 'rgba(30, 30, 30, 1)' }}>
+      {/* Accent color border */}
+      {accentColor && (
+        <div
+          className="absolute top-0 left-0 w-1 h-full"
+          style={{ backgroundColor: accentColor }}
+        />
+      )}
+      
+      {/* Header section */}
       {(title || subtitle || headerExtra) && (
-        <Box
-          sx={{
-            px: 2,
-            py: 1.5,
-            borderBottom: '1px solid rgba(0,0,0,0.05)',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            bgcolor: 'rgba(0,0,0,0.01)',
-          }}
-        >
-          <Box>
+        <div className="px-3 py-3 border-b border-black/5 flex justify-between items-center bg-black/[0.01]">
+          <div>
             {title && (
-              <Typography
-                variant="subtitle1"
-                sx={{ fontWeight: 500, color: 'text.primary' }}
-              >
+              <h3 className="text-base font-medium text-white">
                 {title}
-              </Typography>
+              </h3>
             )}
             {subtitle && (
-              <Typography variant="caption" color="text.secondary">
+              <p className="text-xs text-gray-300">
                 {subtitle}
-              </Typography>
+              </p>
             )}
-          </Box>
-          {headerExtra && <Box>{headerExtra}</Box>}
-        </Box>
+          </div>
+          {headerExtra && <div>{headerExtra}</div>}
+        </div>
       )}
-      <Box sx={{ p: 0 }}>{children}</Box>
-    </Paper>
+      
+      {/* Content */}
+      <div className="p-0">{children}</div>
+    </div>
   );
 };
 

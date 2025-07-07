@@ -19,7 +19,6 @@ import MemoryIcon from '@mui/icons-material/Memory';
 import LayersIcon from '@mui/icons-material/Layers';
 
 // Components
-import TopStatsBar from '../common/TopStatsBar';
 import Card from '../common/Card';
 import Header from '../common/Header';
 import InstallationInstructions from '../Installation/InstallationInstructions';
@@ -28,10 +27,6 @@ import MempoolLatencyStats from './MempoolLatencyStats';
 import GraphVisualization from '../BraidPoolDAG/BraidPoolDAG';
 import MinedSharesExplorer from '../BeadsTab/MinedSharesExplorer';
 // Utils
-import {
-  loadSampleBraidData,
-  transformBraidData,
-} from '../../utils/braidDataTransformer';
 import BitcoinStats from '../BitcoinStats/BitcoinStats';
 import { BitcoinIcon } from 'lucide-react';
 import { Page } from './Types';
@@ -43,36 +38,9 @@ const drawerWidth = 240;
 const Dashboard = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [_data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
   const [_error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState<Page>(Page.DASHBOARD);
 
-  // Fetch data when component mounts
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        console.log('🔄 Loading braid data...');
-        setLoading(true);
-        setError(null);
-
-        // Load sample data
-        const braidData = await loadSampleBraidData();
-
-        // Transform data for visualization
-        const transformedData = transformBraidData(braidData);
-
-        setData(transformedData);
-        console.log('✅ Data loaded successfully!');
-      } catch (err) {
-        console.error('❌ Error loading data:', err);
-        setError('Failed to load data. Please try again later.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, []);
   const sidebar = (
     <Drawer
       variant="permanent"
@@ -323,7 +291,6 @@ const Dashboard = () => {
       case Page.DASHBOARD:
         return (
           <>
-            <TopStatsBar loading={loading} />
             <BlockViewer />
           </>
         );
