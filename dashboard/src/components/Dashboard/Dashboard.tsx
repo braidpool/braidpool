@@ -88,23 +88,15 @@ const Dashboard = () => {
                 <BitcoinStats />
               </div>
             </Card>
-          </Box>
+          </div>
         );
       case Page.MINER_STATS:
-        return (
-          <Box sx={{ p: 1 }}>
-            <Card title="Beads Explorer">
-              <Box>
-                <MinedSharesExplorer />
-              </Box>
-            </Card>
-          </Box>
-        );
+        return <MinedSharesExplorer />;
       default:
         return (
-          <Box sx={{ p: 1 }}>
-            <Typography>Coming soon</Typography>
-          </Box>
+          <div className="p-2">
+            <span>Coming soon</span>
+          </div>
         );
     }
   };
