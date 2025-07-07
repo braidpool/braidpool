@@ -23,7 +23,7 @@ import TopStatsBar from '../common/TopStatsBar';
 import Card from '../common/Card';
 import Header from '../common/Header';
 import InstallationInstructions from '../Installation/InstallationInstructions';
-import MineInventoryDashboard from '../BeadsTab/MineInventoryDashboard';
+import MineInventoryDashboard from '../MinerInventory/MineInventoryDashboard';
 import PoolHashrateChart from './PoolHashrateChart';
 import MempoolLatencyStats from './MempoolLatencyStats';
 import RecentBlocksTable from './RecentBlocksTable';
@@ -382,14 +382,22 @@ const Dashboard = () => {
             </Card>
           </Box>
         );
+      case Page.MINER_STATS:
+        return (
+          <Box sx={{ p: 1 }}>
+            <Card title="Beads Explorer">
+              <Box>
+                <MinedSharesExplorer />
+              </Box>
+            </Card>
+          </Box>
+        );
       default:
         return (
           <Box sx={{ p: 1 }}>
             <Typography>Coming soon</Typography>
           </Box>
         );
-      case Page.MINER_STATS:
-        return <MinedSharesExplorer />;
     }
   };
 

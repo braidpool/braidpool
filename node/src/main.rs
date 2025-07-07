@@ -1,4 +1,3 @@
-use crate::utils::BeadHash;
 use bitcoin::consensus::encode::deserialize;
 use clap::Parser;
 use futures::StreamExt;
@@ -16,14 +15,13 @@ use node::{
     behaviour::{self, BEAD_ANNOUNCE_PROTOCOL},
     braid,
     peer_manager::PeerManager,
-    utils,
 };
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::sync::Arc;
 use std::{collections::HashSet, error::Error};
 use std::{fs, time::Duration};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{mpsc, RwLock};
 
 mod block_template;
 mod cli;
@@ -118,9 +116,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     };
 
     // Initializing the braid object
-    let braid = Arc::new(Mutex::new(braid::Braid::new(
-        HashSet::new(), // beads
-    )));
+    let braid = Arc::new(RwLock::new(braid::Braid::new(HashSet::new())));
     // load beads from db (if present) and insert in braid here
     // Initializing the peer manager
     let mut peer_manager = PeerManager::new(8);
@@ -239,8 +235,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         Ok(bead) => {
                             log::info!("Received bead: {:?}", bead);
                             // Handle the received bead here
-                            let mut braid_lock = braid.lock().await;
-                            let status = braid_lock.extend(&bead);
+                            let status = {
+                                let mut braid_lock = braid.write().await;
+                                braid_lock.extend(&bead)
+                            };
                             if let braid::AddBeadStatus::ParentsNotYetReceived = status {
                                 //request the parents using request response protocol
                                 let peer_id = peer_manager.get_top_k_peers_for_propagation(1);
@@ -400,44 +398,55 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             // Handle the bead sync request here
                             match request {
                                 bead::BeadRequest::GetBeads(hashes) => {
-                                    let braid_lock = braid.lock().await;
                                     let mut beads = Vec::new();
-                                    for hash in hashes.iter() {
-                                        if let Some(index) = braid_lock.bead_index_mapping.get(hash)
-                                        {
-                                            if let Some(bead) = braid_lock.beads.get(*index) {
-                                                beads.push(bead.clone());
+                                    {
+                                        let braid_lock = braid.read().await;
+                                        for hash in hashes.iter() {
+                                            if let Some(index) =
+                                                braid_lock.bead_index_mapping.get(hash)
+                                            {
+                                                if let Some(bead) = braid_lock.beads.get(*index) {
+                                                    beads.push(bead.clone());
+                                                }
                                             }
                                         }
                                     }
                                     swarm.behaviour_mut().respond_with_beads(channel, beads);
                                 }
                                 bead::BeadRequest::GetTips => {
-                                    let braid_lock = braid.lock().await;
-                                    let tips: Vec<BeadHash> = braid_lock
-                                        .tips
-                                        .iter()
-                                        .filter_map(|index| braid_lock.beads.get(*index))
-                                        .cloned()
-                                        .map(|bead| bead.block_header.block_hash())
-                                        .collect();
+                                    let tips;
+                                    {
+                                        let braid_lock = braid.read().await;
+                                        tips = braid_lock
+                                            .tips
+                                            .iter()
+                                            .filter_map(|index| braid_lock.beads.get(*index))
+                                            .cloned()
+                                            .map(|bead| bead.block_header.block_hash())
+                                            .collect();
+                                    }
                                     swarm.behaviour_mut().respond_with_tips(channel, tips);
                                 }
                                 bead::BeadRequest::GetGenesis => {
-                                    let braid_lock = braid.lock().await;
-                                    let genesis: Vec<BeadHash> = braid_lock
-                                        .genesis_beads
-                                        .iter()
-                                        .filter_map(|index| braid_lock.beads.get(*index))
-                                        .cloned()
-                                        .map(|bead| bead.block_header.block_hash())
-                                        .collect();
+                                    let genesis;
+                                    {
+                                        let braid_lock = braid.read().await;
+                                        genesis = braid_lock
+                                            .genesis_beads
+                                            .iter()
+                                            .filter_map(|index| braid_lock.beads.get(*index))
+                                            .cloned()
+                                            .map(|bead| bead.block_header.block_hash())
+                                            .collect();
+                                    }
                                     swarm.behaviour_mut().respond_with_genesis(channel, genesis);
                                 }
                                 bead::BeadRequest::GetAllBeads => {
-                                    let braid_lock = braid.lock().await;
-                                    let all_beads: Vec<Bead> =
-                                        braid_lock.beads.iter().cloned().collect();
+                                    let all_beads;
+                                    {
+                                        let braid_lock = braid.read().await;
+                                        all_beads = braid_lock.beads.iter().cloned().collect();
+                                    }
                                     swarm.behaviour_mut().respond_with_beads(channel, all_beads);
                                 }
                             }
@@ -447,9 +456,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             response,
                         } => {
                             match response {
-                                bead::BeadResponse::Beads(beads) => {
+                                bead::BeadResponse::Beads(beads)
+                                | bead::BeadResponse::GetAllBeads(beads) => {
+                                    let mut braid_lock = braid.write().await;
                                     for bead in beads {
-                                        let mut braid_lock = braid.lock().await;
                                         let status = braid_lock.extend(&bead);
                                         if let braid::AddBeadStatus::InvalidBead = status {
                                             // update the peer manager about the invalid bead
@@ -466,8 +476,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                 }
                                 bead::BeadResponse::Genesis(genesis) => {
                                     log::info!("Received genesis beads: {:?}", genesis);
-                                    let mut braid_lock = braid.lock().await;
-                                    let status = braid_lock.check_genesis_beads(&genesis);
+                                    let status = {
+                                        let braid_lock = braid.read().await;
+                                        braid_lock.check_genesis_beads(&genesis)
+                                    };
                                     match status {
                                         braid::GenesisCheckStatus::GenesisBeadsValid => {
                                             log::info!("Genesis beads are valid");
@@ -477,20 +489,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                         }
                                         braid::GenesisCheckStatus::GenesisBeadsCountMismatch => {
                                             log::warn!("Genesis beads count mismatch");
-                                        }
-                                    }
-                                }
-                                bead::BeadResponse::GetAllBeads(beads) => {
-                                    log::info!("Received all beads: {:?}", beads);
-                                    let mut braid_lock = braid.lock().await;
-                                    for bead in beads {
-                                        let status = braid_lock.extend(&bead);
-                                        if let braid::AddBeadStatus::InvalidBead = status {
-                                            // update the peer manager about the invalid bead
-                                            peer_manager.penalize_for_invalid_bead(&peer);
-                                        } else if let braid::AddBeadStatus::BeadAdded = status {
-                                            // update score of the peer
-                                            peer_manager.update_score(&peer, 1.0);
                                         }
                                     }
                                 }

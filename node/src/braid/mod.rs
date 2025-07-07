@@ -163,7 +163,7 @@ impl Braid {
         AddBeadStatus::BeadAdded
     }
 
-    pub fn check_genesis_beads(&mut self, genesis_beads: &Vec<BeadHash>) -> GenesisCheckStatus {
+    pub fn check_genesis_beads(&self, genesis_beads: &Vec<BeadHash>) -> GenesisCheckStatus {
         if (genesis_beads.len() != self.genesis_beads.len()) {
             return GenesisCheckStatus::GenesisBeadsCountMismatch;
         }
