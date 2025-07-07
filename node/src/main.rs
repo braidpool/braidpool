@@ -1,20 +1,23 @@
 use clap::Parser;
 use futures::StreamExt;
+use libp2p::kad::RecordKey;
 use libp2p::{
     core::multiaddr::Multiaddr,
-    dns, identify,
+    floodsub, identify,
     identity::Keypair,
     kad::{self, Mode, QueryResult},
     ping, request_response,
     swarm::SwarmEvent,
     PeerId,
 };
-use node::{bead, behaviour, braid, committed_metadata, uncommitted_metadata, utils};
-use std::fs;
+use node::{
+    bead,
+    behaviour::{self, BEAD_ANNOUNCE_PROTOCOL},
+};
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
-use std::time::Duration;
 use std::{collections::HashSet, error::Error};
+use std::{fs, time::Duration};
 use tokio::sync::mpsc;
 
 mod block_template;
@@ -83,7 +86,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
         }
     }
-
+    //for local testing comment this loading of keypair from keystore
+    //and use the below one
     let keypair = match fs::read(&keystore_path) {
         Ok(keypair) => {
             log::info!("Loading existing keypair from keystore...");
@@ -108,6 +112,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     };
 
+    //For local testing uncomment this keypair peer since it running to process will
+    //result in same peerID leading to OutgoingConnectionError
+
+    // let keypair = identity::Keypair::generate_ed25519();
+    //creating a main topic subscribing to the current test topic
+    let current_broadcast_topic: floodsub::Topic = floodsub::Topic::new("braidpool_channel");
     let mut swarm = libp2p::SwarmBuilder::with_existing_identity(keypair)
         .with_tokio()
         .with_quic()
@@ -130,7 +140,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     )
     .parse()
     .expect("Failed to create multiaddress");
-
+    //subscribing to the braidpool topic for broadcasting bead_found and other peer_communications belonging to a particular topic
+    swarm
+        .behaviour_mut()
+        .bead_announce
+        .subscribe(current_broadcast_topic.clone());
     //setting the server mode for the kademlia apart from the server
     swarm.behaviour_mut().kademlia.set_mode(Some(Mode::Server));
 
@@ -160,167 +174,235 @@ async fn main() -> Result<(), Box<dyn Error>> {
             log::info!("Dialed : {}", node_multiaddr);
         }
     };
-    // Spawn a tokio task to handle the swarm events
     let swarm_handle = tokio::spawn(async move {
         loop {
-            match swarm.select_next_some().await {
-                SwarmEvent::Behaviour(BraidPoolBehaviourEvent::Kademlia(
-                    kad::Event::RoutingUpdated {
-                        peer,
-                        is_new_peer,
-                        addresses,
-                        bucket_range,
-                        old_peer,
-                    },
-                )) => {
-                    log::info!(
-                        "Routing updated for peer: {peer}, new: {is_new_peer}, addresses: {:?}, bucket: {:?}, old_peer: {:?}",
-                        addresses, bucket_range, old_peer
-                    );
-                }
-                SwarmEvent::NewListenAddr { address, .. } => {
-                    log::info!("Listening on {:?}", address)
-                }
-                // Prints peer id identify info is being sent to.
-                SwarmEvent::Behaviour(BraidPoolBehaviourEvent::Identify(
-                    identify::Event::Sent { peer_id, .. },
-                )) => {
-                    log::info!("Sent identify info to {:?}", peer_id);
-                }
-                // Prints out the info received via the identify event
-                SwarmEvent::Behaviour(BraidPoolBehaviourEvent::Identify(
-                    identify::Event::Received { info, peer_id, .. },
-                )) => {
-                    let info_reference = info.clone();
-                    if info.protocols.iter().any(|p| *p == KADPROTOCOLNAME) {
-                        for addr in info.listen_addrs {
-                            log::info!("received addr {addr} through identify");
-                            swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
+            tokio::select! {
+
+                event = swarm.select_next_some() => {
+                    match event {
+                        SwarmEvent::Behaviour(BraidPoolBehaviourEvent::Kademlia(
+                            kad::Event::RoutingUpdated {
+                                peer,
+                                is_new_peer,
+                                addresses,
+                                bucket_range,
+                                old_peer,
+                            },
+                        )) => {
+                            log::info!(
+                                "Routing updated for peer: {peer}, new: {is_new_peer}, addresses: {:?}, bucket: {:?}, old_peer: {:?}",
+                                addresses, bucket_range, old_peer
+                            );
                         }
-                    } else {
-                        log::info!("The peer was not added to the local DHT ");
-                    }
-                    log::info!("Received {:?}", info_reference);
-                }
-                SwarmEvent::Behaviour(BraidPoolBehaviourEvent::Kademlia(
-                    kad::Event::OutboundQueryProgressed { result, .. },
-                )) => match result {
-                    QueryResult::GetClosestPeers(Ok(ok)) => {
-                        log::info!("Got closest peers: {:?}", ok.peers);
-                    }
-                    QueryResult::GetClosestPeers(Err(err)) => {
-                        log::info!("Failed to get closest peers: {err}");
-                    }
-                    _ => log::info!("Other query result: {:?}", result),
-                },
-                SwarmEvent::Behaviour(BraidPoolBehaviourEvent::Identify(
-                    identify::Event::Error {
-                        peer_id,
-                        error,
-                        connection_id: _,
-                    },
-                )) => {
-                    log::error!("Error in identify event for peer {}: {:?}", peer_id, error);
-                }
-                SwarmEvent::Behaviour(BraidPoolBehaviourEvent::Ping(ping::Event {
-                    peer,
-                    result,
-                    ..
-                })) => {
-                    log::info!("Response from peer: {} with result: {:?}", peer, result);
-                }
-                SwarmEvent::ConnectionEstablished {
-                    peer_id, endpoint, ..
-                } => {
-                    log::info!(
-                        "Connection established to peer: {} via {}",
-                        peer_id,
-                        endpoint.get_remote_address()
-                    );
-                }
-                SwarmEvent::ConnectionClosed {
-                    peer_id,
-                    connection_id,
-                    endpoint,
-                    num_established,
-                    cause,
-                } => {
-                    log::info!("Connection closed to peer: {} with connection id: {} via {}. Number of established connections: {}. Cause: {:?}", peer_id,connection_id,endpoint.get_remote_address(), num_established,cause);
-                    swarm
-                        .behaviour_mut()
-                        .kademlia
-                        .remove_address(&peer_id, endpoint.get_remote_address());
-                }
-                SwarmEvent::Behaviour(BraidPoolBehaviourEvent::BeadSync(
-                    request_response::Event::Message {
-                        peer,
-                        message,
-                        connection_id,
-                    },
-                )) => {
-                    log::info!(
-                        "Received bead sync message from peer: {}: {:?}. Connection-id: {:?}",
-                        peer,
-                        message,
-                        connection_id
-                    );
-                    match message {
-                        request_response::Message::Request {
-                            request,
-                            request_id,
-                            channel,
+
+                        SwarmEvent::Behaviour(BraidPoolBehaviourEvent::BeadAnnounce(
+                            floodsub::FloodsubEvent::Subscribed { peer_id, topic },
+                        )) => {
+                            log::info!(
+                                "A new peer {:?} subscribed to the topic {:?}",
+                                peer_id,
+                                topic
+                            );
+                        }
+
+                        SwarmEvent::Behaviour(BraidPoolBehaviourEvent::BeadAnnounce(
+                            floodsub::FloodsubEvent::Unsubscribed { peer_id, topic },
+                        )) => {
+                            log::info!(
+                                "A peer {:?} unsubsribed from the topic {:?}",
+                                peer_id,
+                                topic
+                            );
+                        }
+
+                        SwarmEvent::Behaviour(BraidPoolBehaviourEvent::BeadAnnounce(
+                            floodsub::FloodsubEvent::Message(message),
+                        )) => {
+                            log::info!(
+                                "{:?} Message has been recieved  from the peer {:?} and having data {:?}",
+                                message.topics,
+                                message.source,
+                                message.data
+                            );
+                        }
+
+                        SwarmEvent::NewListenAddr { address, .. } => {
+                            log::info!("Listening on {:?}", address)
+                        }
+
+                        SwarmEvent::Behaviour(BraidPoolBehaviourEvent::Identify(
+                            identify::Event::Sent { peer_id, .. },
+                        )) => {
+                            log::info!("Sent identify info to {:?}", peer_id);
+                        }
+
+                        SwarmEvent::Behaviour(BraidPoolBehaviourEvent::Identify(
+                            identify::Event::Received { info, peer_id, .. },
+                        )) => {
+                            let info_reference = info.clone();
+                            if info.protocols.iter().any(|p| *p == KADPROTOCOLNAME) {
+                                for addr in info.listen_addrs {
+                                    log::info!("received addr {addr} through identify");
+                                    swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
+                                }
+                            } else {
+                                log::info!("The peer was not added to the local DHT ");
+                            }
+                            if info_reference
+                                .clone()
+                                .protocols
+                                .iter()
+                                .any(|p| *p == BEAD_ANNOUNCE_PROTOCOL)
+                            {
+                                log::info!("PEER ADDED TO FLOODSUB MESH {:?}", peer_id);
+                                for addr in info_reference.clone().listen_addrs {
+                                    swarm
+                                        .behaviour_mut()
+                                        .bead_announce
+                                        .add_node_to_partial_view(peer_id);
+                                }
+                            } else {
+                                log::info!(
+                                    "The peer listening at {:?} was not added to the floodsub mesh",
+                                    info_reference.observed_addr
+                                );
+                            }
+                            log::info!("Received {:?}", info_reference);
+                        }
+
+                        SwarmEvent::Behaviour(BraidPoolBehaviourEvent::Kademlia(
+                            kad::Event::OutboundQueryProgressed { result, .. },
+                        )) => match result {
+                            QueryResult::GetClosestPeers(Ok(ok)) => {
+                                log::info!("Got closest peers: {:?}", ok.peers);
+                            }
+                            QueryResult::GetClosestPeers(Err(err)) => {
+                                log::info!("Failed to get closest peers: {err}");
+                            }
+                            _ => log::info!("Other query result: {:?}", result),
+                        },
+
+                        SwarmEvent::Behaviour(BraidPoolBehaviourEvent::Identify(
+                            identify::Event::Error {
+                                peer_id,
+                                error,
+                                ..
+                            },
+                        )) => {
+                            log::error!("Error in identify event for peer {}: {:?}", peer_id, error);
+                        }
+
+                        SwarmEvent::Behaviour(BraidPoolBehaviourEvent::Ping(ping::Event {
+                            peer,
+                            result,
+                            ..
+                        })) => {
+                            log::info!("Response from peer: {} with result: {:?}", peer, result);
+                        }
+
+                        SwarmEvent::ConnectionEstablished {
+                            peer_id, endpoint, ..
                         } => {
-                            // Handle the bead sync request here
-                            match request {
-                                bead::BeadRequest::GetBeads(hashes) => {
-                                    // Get the beads from the local store
-                                    let beads = Vec::new(); // Replace with actual logic to fetch beads
-                                    swarm.behaviour_mut().respond_with_beads(channel, beads);
+                            log::info!(
+                                "Connection established to peer: {} via {}",
+                                peer_id,
+                                endpoint.get_remote_address()
+                            );
+                        }
+
+                        SwarmEvent::ConnectionClosed {
+                            peer_id,
+                            connection_id,
+                            endpoint,
+                            num_established,
+                            cause,
+                        } => {
+                            log::info!("Connection closed to peer: {} with connection id: {} via {}. Number of established connections: {}. Cause: {:?}", peer_id,connection_id,endpoint.get_remote_address(), num_established,cause);
+                            swarm
+                                .behaviour_mut()
+                                .kademlia
+                                .remove_address(&peer_id, endpoint.get_remote_address());
+                        }
+
+                        SwarmEvent::Behaviour(BraidPoolBehaviourEvent::BeadSync(
+                            request_response::Event::Message {
+                                peer,
+                                message,
+                                connection_id,
+                            },
+                        )) => {
+                            log::info!(
+                                "Received bead sync message from peer: {}: {:?}. Connection-id: {:?}",
+                                peer,
+                                message,
+                                connection_id
+                            );
+                            match message {
+                                request_response::Message::Request {
+                                    request,
+                                    request_id,
+                                    channel,
+                                } => {
+                                    match request {
+                                        bead::BeadRequest::GetBeads(hashes) => {
+                                            let beads = Vec::new();
+                                            swarm.behaviour_mut().respond_with_beads(channel, beads);
+                                        }
+                                        bead::BeadRequest::GetTips => {
+                                            let tips = HashSet::new();
+                                            swarm.behaviour_mut().respond_with_tips(channel, tips);
+                                        }
+                                        bead::BeadRequest::GetGenesis => {
+                                            let genesis = HashSet::new();
+                                            swarm.behaviour_mut().respond_with_genesis(channel, genesis);
+                                        }
+                                    }
                                 }
-                                bead::BeadRequest::GetTips => {
-                                    // Get the tips from the local store
-                                    let tips = HashSet::new();
-                                    swarm.behaviour_mut().respond_with_tips(channel, tips);
-                                }
-                                bead::BeadRequest::GetGenesis => {
-                                    // Get the genesis beads from the local store
-                                    let genesis = HashSet::new();
-                                    swarm.behaviour_mut().respond_with_genesis(channel, genesis);
+                                request_response::Message::Response {
+                                    request_id,
+                                    response,
+                                } => {
+                                    match response {
+                                        bead::BeadResponse::Beads(beads) => {
+                                            // Handle beads
+                                        }
+                                        bead::BeadResponse::Tips(tips) => {
+                                            // Handle tips
+                                        }
+                                        bead::BeadResponse::Genesis(genesis) => {
+                                            // Handle genesis
+                                        }
+                                        bead::BeadResponse::Error(error) => {
+                                            // Handle error
+                                        }
+                                    };
                                 }
                             }
                         }
-                        request_response::Message::Response {
-                            request_id,
-                            response,
-                        } => {
-                            match response {
-                                bead::BeadResponse::Beads(beads) => {
-                                    // Handle the received beads here
-                                }
-                                bead::BeadResponse::Tips(tips) => {
-                                    // Handle the received tips here
-                                }
-                                bead::BeadResponse::Genesis(genesis) => {
-                                    // Handle the received genesis beads here
-                                }
-                                bead::BeadResponse::Error(error) => {
-                                    // Handle the error response here
-                                }
-                            };
+
+                        event => {
+                            log::info!("{:?}", event);
                         }
                     }
-                }
-                event => {
-                    log::info!("{:?}", event);
                 }
             }
         }
     });
 
-    tokio::signal::ctrl_c().await?;
-    println!("Shutting down...");
-
-    swarm_handle.abort();
+    //gracefull shutdown
+    let shutdown_signal = tokio::signal::ctrl_c().await;
+    match shutdown_signal {
+        Ok(_) => {
+            println!("Shutting down...");
+            swarm_handle.abort();
+        }
+        Err(error) => {
+            println!(
+                "An error occurred while shutting down the braid node {:?}",
+                error
+            );
+        }
+    }
 
     Ok(())
 }

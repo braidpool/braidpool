@@ -1,7 +1,5 @@
 import { FaGithub, FaTwitter, FaDiscord, FaCode } from 'react-icons/fa';
 
-import { motion } from 'framer-motion';
-
 export default function Footer() {
   return (
     <footer className=" text-gray-300 px-8 sm:px-10 md:px-20 py-8   ">
@@ -19,17 +17,9 @@ export default function Footer() {
   gap-10 "
       >
         {/* Logo & Description */}
-        <motion.div
-          variants={{
-            hidden: { opacity: 0, y: 20 },
-            visible: { opacity: 1, y: 0 },
-          }}
-          className="space-y-3"
-        >
+        <div className="space-y-3">
           <div className="flex items-center gap-3">
-            <motion.img
-              whileHover={{ rotate: 12, scale: 1.1 }}
-              transition={{ type: 'spring', stiffness: 300 }}
+            <img
               src="./favicon.ico"
               alt="Braidpool Logo"
               className="h-10 w-10"
@@ -43,15 +33,10 @@ export default function Footer() {
             <br />
             Miner-owned. Censorship-resistant. Open-source.
           </p>
-        </motion.div>
+        </div>
 
         {/* Project */}
-        <motion.div
-          variants={{
-            hidden: { opacity: 0, y: 20 },
-            visible: { opacity: 1, y: 0 },
-          }}
-        >
+        <div>
           <h2 className="text-base font-semibold text-white mb-2 mt-2">
             Project
           </h2>
@@ -67,15 +52,10 @@ export default function Footer() {
               </li>
             ))}
           </ul>
-        </motion.div>
+        </div>
 
         {/* Community */}
-        <motion.div
-          variants={{
-            hidden: { opacity: 0, y: 20 },
-            visible: { opacity: 1, y: 0 },
-          }}
-        >
+        <div>
           <h2 className="text-base font-semibold text-white mb-2 mt-2">
             Community
           </h2>
@@ -109,15 +89,10 @@ export default function Footer() {
               </a>
             </li>
           </ul>
-        </motion.div>
+        </div>
 
         {/* Legal */}
-        <motion.div
-          variants={{
-            hidden: { opacity: 0, y: 20 },
-            visible: { opacity: 1, y: 0 },
-          }}
-        >
+        <div>
           <h2 className="text-base font-semibold text-white mb-2 mt-2">
             Legal
           </h2>
@@ -148,7 +123,7 @@ export default function Footer() {
               </a>
             </li>
           </ul>
-        </motion.div>
+        </div>
         <div className="flex-col sm:flex-row">
           <h3 className="text-white font-bold mb-4 text-lg">Stay Updated</h3>
           <p className="text-gray-400 mb-4 text-sm">
@@ -165,7 +140,7 @@ export default function Footer() {
             </button>
           </div>
         </div>
-      </motion.div>
+      </div>
 
       {/* Bottom Bar */}
       <div className="border-t border-gray-800 mt-8 pt-4 text-center text-xs text-gray-500">

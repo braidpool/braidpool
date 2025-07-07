@@ -4,14 +4,17 @@ use crate::bead::{Bead, BeadResponse};
 use crate::utils::test_utils::test_utility_functions::{
     Signature, TestCommittedMetadataBuilder, TestUnCommittedMetadataBuilder, Time, TimeVec,
 };
+use bitcoin::consensus::encode::deserialize;
+use bitcoin::consensus::serialize;
 use bitcoin::p2p::address::Address as P2P_Address;
 use bitcoin::p2p::ServiceFlags;
 use bitcoin::BlockVersion;
 use bitcoin::CompactTarget;
 use bitcoin::{BlockHash, BlockHeader, BlockTime, EcdsaSighashType, TxMerkleNode};
 use futures::StreamExt;
-use libp2p::Multiaddr;
-use libp2p::{identity, swarm::SwarmEvent};
+use libp2p::floodsub::Topic;
+use libp2p::swarm::SwarmEvent;
+use libp2p::{Multiaddr, Swarm, SwarmBuilder};
 use std::collections::HashSet;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::str::FromStr;
@@ -67,26 +70,25 @@ fn create_test_bead() -> Bead {
         uncommitted_metadata: test_uncommitted_metadata,
     }
 }
+fn build_swarm() -> (Swarm<BraidPoolBehaviour>, PeerId) {
+    let key = Keypair::generate_ed25519();
+    let peer_id = PeerId::from(key.public());
+    let swarm = SwarmBuilder::with_existing_identity(key)
+        .with_tokio()
+        .with_quic()
+        .with_dns()
+        .unwrap()
+        .with_behaviour(|local_key| BraidPoolBehaviour::new(local_key).unwrap())
+        .unwrap()
+        .build();
+    (swarm, peer_id)
+}
 
 #[tokio::test]
 async fn test_bead_request_handling() {
-    // Create two nodes with different keypairs
-    let key1 = identity::Keypair::generate_ed25519();
-    let key2 = identity::Keypair::generate_ed25519();
+    let mut swarm1 = build_swarm().0;
 
-    let mut swarm1 = libp2p::SwarmBuilder::with_existing_identity(key1.clone())
-        .with_tokio()
-        .with_quic()
-        .with_behaviour(|_| BraidPoolBehaviour::new(&key1).unwrap())
-        .unwrap()
-        .build();
-
-    let mut swarm2 = libp2p::SwarmBuilder::with_existing_identity(key2.clone())
-        .with_tokio()
-        .with_quic()
-        .with_behaviour(|_| BraidPoolBehaviour::new(&key2).unwrap())
-        .unwrap()
-        .build();
+    let mut swarm2 = build_swarm().0;
 
     // Listen on random ports
     swarm1
@@ -106,7 +108,9 @@ async fn test_bead_request_handling() {
                 addr = address;
                 listening_established = true;
             }
-            Ok(Some(_)) => {} // Ignore other events
+            Ok(Some(event)) => {
+                println!("{:?}", event);
+            } // Ignore other events
             Ok(None) => break,
             Err(_) => panic!("Test timed out waiting for swarm1 to listen"),
         }
@@ -119,7 +123,9 @@ async fn test_bead_request_handling() {
             Ok(Some(SwarmEvent::NewListenAddr { address: _, .. })) => {
                 swarm2_listening = true;
             }
-            Ok(Some(_)) => {} // Ignore other events
+            Ok(Some(event)) => {
+                println!("{:?}", event);
+            } // Ignore other events
             Ok(None) => break,
             Err(_) => panic!("Test timed out waiting for swarm2 to listen"),
         }
@@ -272,6 +278,168 @@ async fn test_bead_request_handling() {
 
     _ = tokio::time::timeout(
         tokio::time::Duration::from_secs(10),
+        futures::future::join_all(vec![swarm1_handle, swarm2_handle]),
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_floodsub_message_propagation() {
+    let mut swarm1 = build_swarm().0;
+
+    let mut swarm2 = build_swarm().0;
+
+    swarm1
+        .listen_on("/ip4/127.0.0.1/udp/5001/quic-v1".parse().unwrap())
+        .unwrap();
+    swarm2
+        .listen_on("/ip4/127.0.0.1/udp/6001/quic-v1".parse().unwrap())
+        .unwrap();
+
+    let mut addr = Multiaddr::empty();
+    let timeout_duration = Duration::from_secs(5);
+    let mut listening_established = false;
+    while !listening_established {
+        match timeout(timeout_duration, swarm1.next()).await {
+            Ok(Some(SwarmEvent::NewListenAddr { address, .. })) => {
+                addr = address;
+                listening_established = true;
+            }
+            Ok(Some(event)) => {
+                println!("{:?}", event);
+            }
+            Ok(None) => break,
+            Err(_) => panic!("Test timed out waiting for swarm1 to listen"),
+        }
+    }
+
+    let mut swarm2_listening = false;
+    while !swarm2_listening {
+        match timeout(timeout_duration, swarm2.next()).await {
+            Ok(Some(SwarmEvent::NewListenAddr { address: _, .. })) => {
+                swarm2_listening = true;
+            }
+            Ok(Some(event)) => {
+                println!("{:?}", event);
+            }
+            Ok(None) => break,
+            Err(_) => panic!("Test timed out waiting for swarm2 to listen"),
+        }
+    }
+
+    println!("Swarm1 listening on: {}", addr);
+    println!(
+        "Swarm2 listening on: {}",
+        swarm2.listeners().next().unwrap()
+    );
+    println!("Swarm1 local peer ID: {}", swarm1.local_peer_id());
+    // Connect swarm2 to swarm1
+    let test_bead = create_test_bead();
+    let test_bead_ref = test_bead.clone();
+    let bead_hash = test_bead.block_header.block_hash();
+
+    let topic = Topic::new("test");
+    swarm1
+        .behaviour_mut()
+        .bead_announce
+        .subscribe(topic.clone());
+    swarm2
+        .behaviour_mut()
+        .bead_announce
+        .subscribe(topic.clone());
+
+    swarm2.dial(addr.clone()).unwrap();
+
+    println!("Swarm2 dialed swarm1 at: {}", addr);
+    // Process events until we get a response or timeout
+    println!("Swarm2: Requesting beads with hashes: {:?}", bead_hash);
+    swarm1
+        .behaviour_mut()
+        .bead_announce
+        .add_node_to_partial_view(*swarm2.local_peer_id());
+    swarm2
+        .behaviour_mut()
+        .bead_announce
+        .add_node_to_partial_view(*swarm1.local_peer_id());
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<Vec<u8>>(100);
+    // swarm1 event loop
+    let swarm1_handle = tokio::spawn(async move {
+        let mut swarm = swarm1;
+        loop {
+            match swarm.next().await {
+                Some(SwarmEvent::ConnectionEstablished { peer_id, .. }) => {
+                    println!("Swarm1: Connection established with {}", peer_id);
+                }
+                Some(SwarmEvent::IncomingConnection { .. }) => {
+                    println!("Swarm1: Incoming connection");
+                }
+                Some(SwarmEvent::Behaviour(BraidPoolBehaviourEvent::BeadAnnounce(
+                    floodsub::FloodsubEvent::Subscribed { peer_id, topic },
+                ))) => {
+                    println!("A peer {:?} subscribed to the topic {:?}", peer_id, topic);
+                }
+                Some(SwarmEvent::Behaviour(BraidPoolBehaviourEvent::BeadAnnounce(
+                    floodsub::FloodsubEvent::Message(msg),
+                ))) => {
+                    println!(
+                        "Bead succesfully received from a peer with peer id {:?} from topic {:?}",
+                        msg.source, topic
+                    );
+                    let res = tx.send(msg.data.to_ascii_lowercase()).await;
+                    match res {
+                        Ok(_) => {
+                            println!("Bead succesfully sent to the main thread reciever");
+                        }
+                        Err(error) => {
+                            println!(
+                                "An error occurred while sending bead to the main thread receiver -- {:?}",error
+                            );
+                        }
+                    }
+                }
+                Some(_) => {}
+                None => break,
+            }
+        }
+        swarm
+    });
+
+    // swarm2 event loop
+    let swarm2_handle = tokio::spawn(async move {
+        let mut swarm = swarm2;
+        loop {
+            match swarm.next().await {
+                Some(SwarmEvent::ConnectionEstablished { peer_id, .. }) => {
+                    println!("Swarm2: Connection established with {}", peer_id);
+                }
+                Some(SwarmEvent::Behaviour(BraidPoolBehaviourEvent::BeadAnnounce(
+                    floodsub::FloodsubEvent::Subscribed { topic, .. },
+                ))) => {
+                    println!("Sent bead to other peers");
+                    swarm
+                        .behaviour_mut()
+                        .bead_announce
+                        .publish(topic.clone(), serialize(&test_bead));
+                }
+                Some(SwarmEvent::IncomingConnection { .. }) => {
+                    println!("Swarm2: Incoming connection");
+                }
+
+                Some(_) => {}
+                None => break,
+            }
+        }
+        swarm
+    });
+
+    let result = rx.recv().await.unwrap();
+    let received_bead: Result<Bead, bitcoin::consensus::DeserializeError> = deserialize(&result);
+    assert_eq!(
+        received_bead.unwrap().block_header.block_hash(),
+        test_bead_ref.clone().block_header.block_hash()
+    );
+    _ = tokio::time::timeout(
+        tokio::time::Duration::from_secs(20),
         futures::future::join_all(vec![swarm1_handle, swarm2_handle]),
     )
     .await;

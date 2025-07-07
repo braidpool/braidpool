@@ -1,5 +1,17 @@
 use super::Bead;
 use super::Braid;
+use crate::braid::consensus_functions::check_cohort;
+use crate::braid::consensus_functions::cohort;
+use crate::braid::consensus_functions::cohort_head;
+use crate::braid::consensus_functions::cohort_tail;
+use crate::braid::consensus_functions::descendant_work;
+use crate::braid::consensus_functions::genesis;
+use crate::braid::consensus_functions::get_all_ancestors;
+use crate::braid::consensus_functions::get_sub_braid;
+use crate::braid::consensus_functions::highest_work_path;
+use crate::braid::consensus_functions::reverse;
+use crate::braid::consensus_functions::tips;
+use crate::braid::consensus_functions::updating_ancestors;
 use crate::braid::Cohort;
 use crate::committed_metadata::TimeVec;
 use crate::utils::test_utils::test_utility_functions::*;
@@ -13,6 +25,7 @@ use bitcoin::{
 };
 use core::net::SocketAddr;
 use num::range;
+use num::BigUint;
 use rand::{rngs::OsRng, thread_rng, RngCore};
 use secp256k1::{Message, Secp256k1, SecretKey};
 use serde::{Deserialize, Serialize};
@@ -22,7 +35,6 @@ use std::collections::HashSet;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::Path;
 use std::str::FromStr;
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct FileBraid {
     pub description: String,
@@ -36,7 +48,7 @@ struct FileBraid {
     pub highest_work_path: Vec<usize>,
 }
 
-pub const test_directory: &str = "tests/braids";
+pub const BRAIDTESTDIRECTORY: &str = "tests/braids";
 
 fn generate_random_public_key_string() -> String {
     let secp = Secp256k1::new();
@@ -395,7 +407,6 @@ pub fn test_extend_functionality() {
         .parents
         .insert(test_bead_12.block_header.block_hash());
     test_braid.extend(&test_bead_13);
-
     assert_eq!(
         test_braid.cohorts,
         vec![
@@ -431,7 +442,7 @@ pub fn test_genesis1() {
         .parents
         .insert(test_bead_2.block_header.block_hash());
 
-    let mut test_braid = Braid {
+    let test_braid = Braid {
         beads: vec![
             test_bead_0.clone(),
             test_bead_1.clone(),
@@ -460,7 +471,7 @@ pub fn test_genesis1() {
     parents1.insert(2, HashSet::from([1]));
     parents1.insert(3, HashSet::from([2]));
 
-    let geneses_bead_indices = test_braid.genesis(parents1);
+    let geneses_bead_indices = genesis(&test_braid, &parents1);
     assert_eq!(geneses_bead_indices, HashSet::from([0]));
 }
 #[test]
@@ -480,7 +491,7 @@ pub fn test_genesis2() {
         .committed_metadata
         .parents
         .insert(test_bead_1.block_header.prev_blockhash);
-    let mut test_braid = Braid {
+    let test_braid = Braid {
         beads: vec![
             test_bead_0.clone(),
             test_bead_1.clone(),
@@ -508,8 +519,7 @@ pub fn test_genesis2() {
     parents1.insert(2, HashSet::from([1]));
     parents1.insert(3, HashSet::from([1]));
 
-    let geneses_bead_indices = test_braid.genesis(parents1);
-
+    let geneses_bead_indices = genesis(&test_braid, &parents1);
     assert_eq!(geneses_bead_indices, HashSet::from([0, 1]));
 }
 #[test]
@@ -531,7 +541,7 @@ pub fn test_genesis3() {
         .parents
         .insert(test_bead_0.block_header.block_hash());
 
-    let mut test_braid = Braid {
+    let test_braid = Braid {
         beads: vec![
             test_bead_0.clone(),
             test_bead_1.clone(),
@@ -562,22 +572,21 @@ pub fn test_genesis3() {
     parents1.insert(3, HashSet::from([1]));
     parents1.insert(3, HashSet::from([0]));
 
-    let geneses_bead_indices = test_braid.genesis(parents1);
+    let geneses_bead_indices = genesis(&test_braid, &parents1);
     assert_eq!(geneses_bead_indices, HashSet::from([0, 1, 2]));
 }
 
 #[test]
-pub fn test_geneses_files() {
+pub fn test_genesis_files() {
     let ancestors = std::env::current_dir().unwrap();
     let ancestors_directory: Vec<&Path> = ancestors.ancestors().collect();
     let parent_directory = ancestors_directory[1];
-    let test_absolute_path = parent_directory.join(test_directory);
+    let test_absolute_path = parent_directory.join(BRAIDTESTDIRECTORY);
     for test_braid_file in std::fs::read_dir(test_absolute_path.as_path()).unwrap() {
         let re = test_braid_file.unwrap().file_name();
         let current_file_name = re.to_str().unwrap();
         let file_path = test_absolute_path.join(current_file_name);
-        let (mut current_file_braid, file_braid) =
-            loading_braid_from_file(file_path.to_str().unwrap());
+        let (current_file_braid, file_braid) = loading_braid_from_file(file_path.to_str().unwrap());
         let mut current_braid_parents: HashMap<usize, HashSet<usize>> = HashMap::new();
         for beads in file_braid.parents {
             let mut current_bead_parents: HashSet<usize> = HashSet::new();
@@ -587,7 +596,7 @@ pub fn test_geneses_files() {
             current_braid_parents.insert(beads.0, current_bead_parents);
         }
 
-        let computed_genesis_indices = current_file_braid.genesis(current_braid_parents);
+        let computed_genesis_indices = genesis(&current_file_braid, &current_braid_parents);
         let current_file_genesis = file_braid.geneses;
         let mut file_genesis_set: HashSet<usize> = HashSet::new();
         for genesis_idx in current_file_genesis {
@@ -598,7 +607,7 @@ pub fn test_geneses_files() {
 }
 
 #[test]
-pub fn tips1() {
+pub fn test_tips1() {
     let test_bead_0 = emit_bead();
     let mut test_bead_1 = emit_bead();
 
@@ -620,7 +629,7 @@ pub fn tips1() {
         .parents
         .insert(test_bead_2.block_header.block_hash());
 
-    let mut test_braid = Braid {
+    let test_braid = Braid {
         beads: vec![
             test_bead_0.clone(),
             test_bead_1.clone(),
@@ -648,12 +657,12 @@ pub fn tips1() {
     parents1.insert(1, HashSet::from([0]));
     parents1.insert(2, HashSet::from([1]));
     parents1.insert(3, HashSet::from([2]));
-    let tips_bead_indices = test_braid.tips(parents1);
+    let tips_bead_indices = tips(&test_braid, &parents1);
     assert_eq!(tips_bead_indices, HashSet::from([3]));
 }
 
 #[test]
-pub fn tips2() {
+pub fn test_tips2() {
     let test_bead_0 = emit_bead();
     let mut test_bead_1 = emit_bead();
 
@@ -675,7 +684,7 @@ pub fn tips2() {
         .parents
         .insert(test_bead_1.block_header.block_hash());
 
-    let mut test_braid = Braid {
+    let test_braid = Braid {
         beads: vec![
             test_bead_0.clone(),
             test_bead_1.clone(),
@@ -704,12 +713,12 @@ pub fn tips2() {
     parents1.insert(2, HashSet::from([1]));
     parents1.insert(3, HashSet::from([1]));
 
-    let tips_bead_indices = test_braid.tips(parents1);
+    let tips_bead_indices = tips(&test_braid, &parents1);
     assert_eq!(tips_bead_indices, HashSet::from([2, 3]));
 }
 
 #[test]
-pub fn tips3() {
+pub fn test_tips3() {
     let test_bead_0 = emit_bead();
     let test_bead_1 = emit_bead();
 
@@ -756,7 +765,7 @@ pub fn tips3() {
         .committed_metadata
         .parents
         .insert(test_bead_2.block_header.block_hash());
-    let mut test_braid = Braid {
+    let test_braid = Braid {
         beads: vec![
             test_bead_0.clone(),
             test_bead_1.clone(),
@@ -791,7 +800,7 @@ pub fn tips3() {
 
     parents1.insert(5, HashSet::from([0, 1, 2]));
 
-    let tips_bead_indices = test_braid.tips(parents1);
+    let tips_bead_indices = tips(&test_braid, &parents1);
     assert_eq!(tips_bead_indices, HashSet::from([3, 4, 5]));
 }
 #[test]
@@ -843,7 +852,7 @@ pub fn test_reverse() {
         .committed_metadata
         .parents
         .insert(test_bead_2.block_header.block_hash());
-    let mut test_braid = Braid {
+    let test_braid = Braid {
         beads: vec![
             test_bead_0.clone(),
             test_bead_1.clone(),
@@ -877,7 +886,7 @@ pub fn test_reverse() {
     parents1.insert(4, HashSet::from([0, 1, 2]));
 
     parents1.insert(5, HashSet::from([0, 1, 2]));
-    let reverse_children_mapping = test_braid.reverse(parents1);
+    let reverse_children_mapping = reverse(&test_braid, &parents1);
     let mut actual_children_mapping: HashMap<usize, HashSet<usize>> = HashMap::new();
     actual_children_mapping.insert(0, HashSet::from([3, 4, 5]));
     actual_children_mapping.insert(1, HashSet::from([3, 4, 5]));
@@ -886,7 +895,6 @@ pub fn test_reverse() {
     actual_children_mapping.insert(3, HashSet::new());
     actual_children_mapping.insert(4, HashSet::new());
     actual_children_mapping.insert(5, HashSet::new());
-
     assert_eq!(reverse_children_mapping, actual_children_mapping);
 }
 #[test]
@@ -894,7 +902,7 @@ pub fn test_all_ancestors() {
     let ancestors = std::env::current_dir().unwrap();
     let ancestors_directory: Vec<&Path> = ancestors.ancestors().collect();
     let parent_directory = ancestors_directory[1];
-    let test_absolute_path = parent_directory.join(test_directory);
+    let test_absolute_path = parent_directory.join(BRAIDTESTDIRECTORY);
     for test_braid_file in std::fs::read_dir(test_absolute_path.as_path()).unwrap() {
         let re = test_braid_file.unwrap().file_name();
         let current_file_name = re.to_str().unwrap();
@@ -912,20 +920,22 @@ pub fn test_all_ancestors() {
             let current_bead_hash = current_file_braid.beads[bead_index.0]
                 .block_header
                 .block_hash();
-            let mut d1: HashMap<usize, HashSet<usize>> = HashMap::new();
-            let ancestor_mapping = current_file_braid.clone().get_all_ancestors(
+            let mut d1_compute: HashMap<usize, HashSet<usize>> = HashMap::new();
+            get_all_ancestors(
+                &current_file_braid,
                 current_bead_hash,
-                &mut d1,
-                current_braid_parents.clone(),
+                &mut d1_compute,
+                &current_braid_parents,
             );
-            let mut d2: HashMap<usize, HashSet<usize>> = HashMap::new();
+            let mut d2_compute: HashMap<usize, HashSet<usize>> = HashMap::new();
 
-            let ancestor_mapping_dfs = current_file_braid.clone().updating_ancestors(
+            updating_ancestors(
+                &current_file_braid,
                 current_bead_hash,
-                &mut d2,
-                current_braid_parents.clone(),
+                &mut d2_compute,
+                &current_braid_parents,
             );
-            assert_eq!(d1, d2);
+            assert_eq!(d1_compute, d2_compute);
         }
     }
 }
@@ -953,7 +963,7 @@ pub fn test_cohorts_parents_1() {
         .parents
         .insert(test_bead_2.block_header.block_hash());
 
-    let mut test_braid = Braid {
+    let test_braid = Braid {
         beads: vec![
             test_bead_0.clone(),
             test_bead_1.clone(),
@@ -982,7 +992,7 @@ pub fn test_cohorts_parents_1() {
     parents1.insert(2, HashSet::from([1]));
     parents1.insert(3, HashSet::from([2]));
 
-    let cohort_indices = test_braid.cohort(parents1, None, None);
+    let cohort_indices = cohort(&test_braid, &parents1, None, None);
     assert_eq!(
         cohort_indices,
         vec![
@@ -999,7 +1009,7 @@ pub fn test_cohorts_braid_testcases() {
     let ancestors = std::env::current_dir().unwrap();
     let ancestors_directory: Vec<&Path> = ancestors.ancestors().collect();
     let parent_directory = ancestors_directory[1];
-    let test_absolute_path = parent_directory.join(test_directory);
+    let test_absolute_path = parent_directory.join(BRAIDTESTDIRECTORY);
     for test_braid_file in std::fs::read_dir(test_absolute_path.as_path()).unwrap() {
         let re = test_braid_file.unwrap().file_name();
         let current_file_name = re.to_str().unwrap();
@@ -1014,9 +1024,7 @@ pub fn test_cohorts_braid_testcases() {
             current_braid_parents.insert(beads.0, current_bead_parents);
         }
 
-        let cohort_indices = current_file_braid
-            .clone()
-            .cohort(current_braid_parents, None, None);
+        let cohort_indices = cohort(&current_file_braid, &current_braid_parents, None, None);
 
         let mut computed_cohorts: Vec<HashSet<usize>> = Vec::new();
         for cohort in cohort_indices {
@@ -1038,18 +1046,19 @@ pub fn test_cohorts_braid_testcases() {
         assert_eq!(computed_cohorts, current_file_cohorts_set_vec);
     }
 }
+
 #[test]
+#[allow(unused)]
 pub fn reverse_cohorts_testcases() {
     let ancestors = std::env::current_dir().unwrap();
     let ancestors_directory: Vec<&Path> = ancestors.ancestors().collect();
     let parent_directory = ancestors_directory[1];
-    let test_absolute_path = parent_directory.join(test_directory);
+    let test_absolute_path = parent_directory.join(BRAIDTESTDIRECTORY);
     for test_braid_file in std::fs::read_dir(test_absolute_path.as_path()).unwrap() {
         let re = test_braid_file.unwrap().file_name();
         let current_file_name = re.to_str().unwrap();
         let file_path = test_absolute_path.join(current_file_name);
-        let (mut current_file_braid, file_braid) =
-            loading_braid_from_file(file_path.to_str().unwrap());
+        let (current_file_braid, file_braid) = loading_braid_from_file(file_path.to_str().unwrap());
         let mut current_braid_parents: HashMap<usize, HashSet<usize>> = HashMap::new();
         for beads in file_braid.parents {
             let mut current_bead_parents: HashSet<usize> = HashSet::new();
@@ -1058,10 +1067,10 @@ pub fn reverse_cohorts_testcases() {
             }
             current_braid_parents.insert(beads.0, current_bead_parents);
         }
-        let reversed_beads = current_file_braid.reverse(current_braid_parents.clone());
+        let reversed_beads = reverse(&current_file_braid, &current_braid_parents);
         let current_braid_cohorts = file_braid.cohorts;
 
-        let computed_val = current_file_braid.cohort(reversed_beads, None, None);
+        let computed_val = cohort(&current_file_braid, &reversed_beads, None, None);
         //TODO:assetion to be done
     }
 }
@@ -1088,7 +1097,7 @@ pub fn test_highest_work_path_1() {
         .parents
         .insert(test_bead_2.block_header.block_hash());
 
-    let mut test_braid = Braid {
+    let test_braid = Braid {
         beads: vec![
             test_bead_0.clone(),
             test_bead_1.clone(),
@@ -1116,10 +1125,9 @@ pub fn test_highest_work_path_1() {
     parents1.insert(1, HashSet::from([0]));
     parents1.insert(2, HashSet::from([1]));
     parents1.insert(3, HashSet::from([2]));
-    let test_braid_child_beads = test_braid.reverse(parents1.clone());
+    let test_braid_child_beads = reverse(&test_braid, &parents1);
     let highest_work_path_bead_indices =
-        test_braid.highest_work_path(parents1.clone(), Some(test_braid_child_beads), None);
-
+        highest_work_path(&test_braid, &parents1, Some(&test_braid_child_beads), None).unwrap();
     assert_eq!(highest_work_path_bead_indices, Vec::from([0, 1, 2, 3]));
 }
 #[test]
@@ -1154,7 +1162,7 @@ pub fn test_diamond_path_highest_work() {
         .parents
         .insert(test_bead_3.block_header.block_hash());
 
-    let mut test_braid = Braid {
+    let test_braid = Braid {
         beads: vec![
             test_bead_0.clone(),
             test_bead_1.clone(),
@@ -1184,9 +1192,14 @@ pub fn test_diamond_path_highest_work() {
     parents1.insert(2, HashSet::from([0]));
     parents1.insert(3, HashSet::from([1, 2]));
     parents1.insert(4, HashSet::from([3]));
-    let test_braid_child_mapping = test_braid.reverse(parents1.clone());
-    let highest_work_path =
-        test_braid.highest_work_path(parents1, Some(test_braid_child_mapping), None);
+    let test_braid_child_mapping = reverse(&test_braid, &parents1);
+    let highest_work_path = highest_work_path(
+        &test_braid,
+        &parents1,
+        Some(&test_braid_child_mapping),
+        None,
+    )
+    .unwrap();
 
     assert_eq!(highest_work_path, Vec::from([0, 1, 3, 4]));
 }
@@ -1196,13 +1209,12 @@ pub fn highest_work_path_testcases_directory() {
     let ancestors = std::env::current_dir().unwrap();
     let ancestors_directory: Vec<&Path> = ancestors.ancestors().collect();
     let parent_directory = ancestors_directory[1];
-    let test_absolute_path = parent_directory.join(test_directory);
+    let test_absolute_path = parent_directory.join(BRAIDTESTDIRECTORY);
     for test_braid_file in std::fs::read_dir(test_absolute_path.as_path()).unwrap() {
         let re = test_braid_file.unwrap().file_name();
         let current_file_name = re.to_str().unwrap();
         let file_path = test_absolute_path.join(current_file_name);
-        let (mut current_file_braid, file_braid) =
-            loading_braid_from_file(file_path.to_str().unwrap());
+        let (current_file_braid, file_braid) = loading_braid_from_file(file_path.to_str().unwrap());
         let mut current_braid_parents: HashMap<usize, HashSet<usize>> = HashMap::new();
         for beads in file_braid.parents {
             let mut current_bead_parents: HashSet<usize> = HashSet::new();
@@ -1211,13 +1223,14 @@ pub fn highest_work_path_testcases_directory() {
             }
             current_braid_parents.insert(beads.0, current_bead_parents);
         }
-        let current_braid_children_mapping =
-            current_file_braid.reverse(current_braid_parents.clone());
-        let highest_work_path = current_file_braid.highest_work_path(
-            current_braid_parents,
-            Some(current_braid_children_mapping),
+        let current_braid_children_mapping = reverse(&current_file_braid, &current_braid_parents);
+        let highest_work_path = highest_work_path(
+            &current_file_braid,
+            &current_braid_parents,
+            Some(&current_braid_children_mapping),
             None,
-        );
+        )
+        .unwrap();
         assert_eq!(highest_work_path, file_braid.highest_work_path);
     }
 }
@@ -1227,14 +1240,13 @@ pub fn test_check_cohort_files() {
     let ancestors = std::env::current_dir().unwrap();
     let ancestors_directory: Vec<&Path> = ancestors.ancestors().collect();
     let parent_directory = ancestors_directory[1];
-    let test_absolute_path = parent_directory.join(test_directory);
+    let test_absolute_path = parent_directory.join(BRAIDTESTDIRECTORY);
     for test_braid_file in std::fs::read_dir(test_absolute_path.as_path()).unwrap() {
         let re = test_braid_file.unwrap().file_name();
         let current_file_name = re.to_str().unwrap();
         let file_path = test_absolute_path.join(current_file_name);
 
-        let (mut current_file_braid, file_braid) =
-            loading_braid_from_file(file_path.to_str().unwrap());
+        let (current_file_braid, file_braid) = loading_braid_from_file(file_path.to_str().unwrap());
         let mut current_braid_parents: HashMap<usize, HashSet<usize>> = HashMap::new();
         for beads in file_braid.parents {
             let mut current_bead_parents: HashSet<usize> = HashSet::new();
@@ -1243,18 +1255,18 @@ pub fn test_check_cohort_files() {
             }
             current_braid_parents.insert(beads.0, current_bead_parents);
         }
-        let current_braid_children_mapping =
-            current_file_braid.reverse(current_braid_parents.clone());
+        let current_braid_children_mapping = reverse(&current_file_braid, &current_braid_parents);
         let current_braid_cohorts = file_braid.cohorts;
         for cohort in current_braid_cohorts {
             let mut cohort_set: HashSet<usize> = HashSet::new();
             for bead in cohort.clone() {
                 cohort_set.insert(bead);
             }
-            let result = current_file_braid.check_cohort(
-                cohort_set,
-                current_braid_parents.clone(),
-                Some(current_braid_children_mapping.clone()),
+            let result = check_cohort(
+                &current_file_braid,
+                &cohort_set,
+                &current_braid_parents,
+                Some(&current_braid_children_mapping),
             );
             assert_eq!(result, true);
         }
@@ -1265,14 +1277,13 @@ pub fn test_sub_braids() {
     let ancestors = std::env::current_dir().unwrap();
     let ancestors_directory: Vec<&Path> = ancestors.ancestors().collect();
     let parent_directory = ancestors_directory[1];
-    let test_absolute_path = parent_directory.join(test_directory);
+    let test_absolute_path = parent_directory.join(BRAIDTESTDIRECTORY);
     for test_braid_file in std::fs::read_dir(test_absolute_path.as_path()).unwrap() {
         let re = test_braid_file.unwrap().file_name();
         let current_file_name = re.to_str().unwrap();
         let file_path = test_absolute_path.join(current_file_name);
 
-        let (mut current_file_braid, file_braid) =
-            loading_braid_from_file(file_path.to_str().unwrap());
+        let (current_file_braid, file_braid) = loading_braid_from_file(file_path.to_str().unwrap());
         let mut current_braid_parents: HashMap<usize, HashSet<usize>> = HashMap::new();
         for beads in file_braid.parents {
             let mut current_bead_parents: HashSet<usize> = HashSet::new();
@@ -1281,28 +1292,28 @@ pub fn test_sub_braids() {
             }
             current_braid_parents.insert(beads.0, current_bead_parents);
         }
-        let current_braid_children_mapping =
-            current_file_braid.reverse(current_braid_parents.clone());
+        let current_braid_children_mapping = reverse(&current_file_braid, &current_braid_parents);
         let current_braid_cohorts = file_braid.cohorts;
         for cohort in current_braid_cohorts {
             let mut cohort_set: HashSet<usize> = HashSet::new();
             for bead in cohort.clone() {
                 cohort_set.insert(bead);
             }
-            let sub_braid =
-                current_file_braid.get_sub_braid(cohort_set.clone(), current_braid_parents.clone());
-            let gen = current_file_braid.genesis(sub_braid.clone());
-            let curr_cohort_head = current_file_braid.cohort_head(
-                cohort_set.clone(),
-                current_braid_parents.clone(),
-                Some(current_braid_children_mapping.clone()),
+            let sub_braid = get_sub_braid(&current_file_braid, &cohort_set, &current_braid_parents);
+            let gen = genesis(&current_file_braid, &sub_braid);
+            let curr_cohort_head = cohort_head(
+                &current_file_braid,
+                &cohort_set,
+                &current_braid_parents,
+                Some(&current_braid_children_mapping),
             );
             assert_eq!(gen, curr_cohort_head);
 
-            let curr_cohort_tips = current_file_braid.tips(sub_braid.clone());
-            let curr_cohort_tail = current_file_braid.cohort_tail(
-                cohort_set,
-                current_braid_parents.clone(),
+            let curr_cohort_tips = tips(&current_file_braid, &sub_braid);
+            let curr_cohort_tail = cohort_tail(
+                &current_file_braid,
+                &cohort_set,
+                &current_braid_parents,
                 Some(current_braid_children_mapping.clone()),
             );
             assert_eq!(curr_cohort_tail, curr_cohort_tips);
@@ -1314,14 +1325,13 @@ pub fn test_cohort_tail_braids() {
     let ancestors = std::env::current_dir().unwrap();
     let ancestors_directory: Vec<&Path> = ancestors.ancestors().collect();
     let parent_directory = ancestors_directory[1];
-    let test_absolute_path = parent_directory.join(test_directory);
+    let test_absolute_path = parent_directory.join(BRAIDTESTDIRECTORY);
     for test_braid_file in std::fs::read_dir(test_absolute_path.as_path()).unwrap() {
         let re = test_braid_file.unwrap().file_name();
         let current_file_name = re.to_str().unwrap();
         let file_path = test_absolute_path.join(current_file_name);
 
-        let (mut current_file_braid, file_braid) =
-            loading_braid_from_file(file_path.to_str().unwrap());
+        let (current_file_braid, file_braid) = loading_braid_from_file(file_path.to_str().unwrap());
         let mut current_braid_parents: HashMap<usize, HashSet<usize>> = HashMap::new();
         for beads in file_braid.parents {
             let mut current_bead_parents: HashSet<usize> = HashSet::new();
@@ -1330,23 +1340,22 @@ pub fn test_cohort_tail_braids() {
             }
             current_braid_parents.insert(beads.0, current_bead_parents);
         }
-        let current_braid_children_mapping =
-            current_file_braid.reverse(current_braid_parents.clone());
+        let current_braid_children_mapping = reverse(&current_file_braid, &current_braid_parents);
         let current_braid_cohorts = file_braid.cohorts;
         for cohort in current_braid_cohorts {
             let mut cohort_set: HashSet<usize> = HashSet::new();
             for bead in cohort.clone() {
                 cohort_set.insert(bead);
             }
-            let a = current_file_braid.cohort_tail(
-                cohort_set.clone(),
-                current_braid_parents.clone(),
+            let a = cohort_tail(
+                &current_file_braid,
+                &cohort_set,
+                &current_braid_parents,
                 Some(current_braid_children_mapping.clone()),
             );
-            let b =
-                current_file_braid.get_sub_braid(cohort_set.clone(), current_braid_parents.clone());
+            let b = get_sub_braid(&current_file_braid, &cohort_set, &current_braid_parents);
 
-            let c = current_file_braid.tips(b);
+            let c = tips(&current_file_braid, &b);
             assert_eq!(a, c);
         }
     }
@@ -1356,14 +1365,13 @@ pub fn test_cohort_head_braids() {
     let ancestors = std::env::current_dir().unwrap();
     let ancestors_directory: Vec<&Path> = ancestors.ancestors().collect();
     let parent_directory = ancestors_directory[1];
-    let test_absolute_path = parent_directory.join(test_directory);
+    let test_absolute_path = parent_directory.join(BRAIDTESTDIRECTORY);
     for test_braid_file in std::fs::read_dir(test_absolute_path.as_path()).unwrap() {
         let re = test_braid_file.unwrap().file_name();
         let current_file_name = re.to_str().unwrap();
         let file_path = test_absolute_path.join(current_file_name);
 
-        let (mut current_file_braid, file_braid) =
-            loading_braid_from_file(file_path.to_str().unwrap());
+        let (current_file_braid, file_braid) = loading_braid_from_file(file_path.to_str().unwrap());
         let mut current_braid_parents: HashMap<usize, HashSet<usize>> = HashMap::new();
         for beads in file_braid.parents {
             let mut current_bead_parents: HashSet<usize> = HashSet::new();
@@ -1372,22 +1380,21 @@ pub fn test_cohort_head_braids() {
             }
             current_braid_parents.insert(beads.0, current_bead_parents);
         }
-        let current_braid_children_mapping =
-            current_file_braid.reverse(current_braid_parents.clone());
+        let current_braid_children_mapping = reverse(&current_file_braid, &current_braid_parents);
         let current_braid_cohorts = file_braid.cohorts;
         for cohort in current_braid_cohorts {
             let mut cohort_set: HashSet<usize> = HashSet::new();
             for bead in cohort.clone() {
                 cohort_set.insert(bead);
             }
-            let c = current_file_braid.cohort_head(
-                cohort_set.clone(),
-                current_braid_parents.clone(),
-                Some(current_braid_children_mapping.clone()),
+            let c = cohort_head(
+                &current_file_braid,
+                &cohort_set,
+                &current_braid_parents,
+                Some(&current_braid_children_mapping),
             );
-            let d =
-                current_file_braid.get_sub_braid(cohort_set.clone(), current_braid_parents.clone());
-            let e = current_file_braid.genesis(d);
+            let d = get_sub_braid(&current_file_braid, &cohort_set, &current_braid_parents);
+            let e = genesis(&current_file_braid, &d);
             assert_eq!(e, c);
         }
     }
@@ -1397,14 +1404,13 @@ pub fn test_check_work_files() {
     let ancestors = std::env::current_dir().unwrap();
     let ancestors_directory: Vec<&Path> = ancestors.ancestors().collect();
     let parent_directory = ancestors_directory[1];
-    let test_absolute_path = parent_directory.join(test_directory);
+    let test_absolute_path = parent_directory.join(BRAIDTESTDIRECTORY);
     for test_braid_file in std::fs::read_dir(test_absolute_path.as_path()).unwrap() {
         let re = test_braid_file.unwrap().file_name();
         let current_file_name = re.to_str().unwrap();
         let file_path = test_absolute_path.join(current_file_name);
 
-        let (mut current_file_braid, file_braid) =
-            loading_braid_from_file(file_path.to_str().unwrap());
+        let (current_file_braid, file_braid) = loading_braid_from_file(file_path.to_str().unwrap());
         let mut current_braid_parents: HashMap<usize, HashSet<usize>> = HashMap::new();
         for beads in file_braid.parents {
             let mut current_bead_parents: HashSet<usize> = HashSet::new();
@@ -1413,20 +1419,29 @@ pub fn test_check_work_files() {
             }
             current_braid_parents.insert(beads.0, current_bead_parents);
         }
-        let current_braid_children_mapping =
-            current_file_braid.reverse(current_braid_parents.clone());
+        let current_braid_children_mapping = reverse(&current_file_braid, &current_braid_parents);
         let current_braid_cohorts = file_braid.cohorts;
-        let current_dag_braid_work = file_braid.work.clone();
+        let current_dag_braid_work_u32 = file_braid.work.clone();
+        let mut current_dag_braid_work = HashMap::new();
+        for (idx, work) in current_dag_braid_work_u32 {
+            current_dag_braid_work.insert(idx, BigUint::from(work));
+        }
         for cohort in current_braid_cohorts {
             let mut cohort_set: HashSet<usize> = HashSet::new();
             for bead in cohort.clone() {
                 cohort_set.insert(bead);
             }
-            let current_file_braid_bead_work = file_braid.bead_work.clone();
-            let current_cohort_descendant_work = current_file_braid.descendant_work(
-                current_braid_parents.clone(),
-                Some(current_braid_children_mapping.clone()),
-                Some(current_file_braid_bead_work),
+            let current_file_braid_bead_work_u32 = file_braid.bead_work.clone();
+            let mut current_file_braid_bead_work = HashMap::new();
+
+            for (idx, work) in current_file_braid_bead_work_u32 {
+                current_file_braid_bead_work.insert(idx, BigUint::from(work));
+            }
+            let current_cohort_descendant_work = descendant_work(
+                &current_file_braid,
+                &current_braid_parents,
+                Some(&current_braid_children_mapping),
+                Some(&current_file_braid_bead_work),
                 None,
             );
             assert_eq!(current_cohort_descendant_work, current_dag_braid_work);

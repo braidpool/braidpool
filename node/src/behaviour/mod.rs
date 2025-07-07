@@ -1,5 +1,6 @@
 use crate::bead::{Bead, BeadCodec, BeadRequest, BeadResponse};
 use crate::utils::BeadHash;
+use libp2p::floodsub;
 use libp2p::{
     identify,
     identity::Keypair,
@@ -16,6 +17,7 @@ use std::{error::Error, time::Duration};
 pub const KADPROTOCOLNAME: StreamProtocol = StreamProtocol::new("/braidpool/kad/1.0.0");
 pub const IDENTIFYPROTOCOLNAME: StreamProtocol = StreamProtocol::new("/braidpool/identify/1.0.0");
 pub const BEAD_SYNC_PROTOCOL: StreamProtocol = StreamProtocol::new("/braidpool/bead-sync/1.0.0");
+pub const BEAD_ANNOUNCE_PROTOCOL: StreamProtocol = StreamProtocol::new("/floodsub/1.0.0");
 
 // Configuration for the request-response protocol
 #[derive(Debug, Clone)]
@@ -40,6 +42,7 @@ pub struct BraidPoolBehaviour {
     pub identify: identify::Behaviour,
     pub ping: ping::Behaviour,
     pub bead_sync: request_response::Behaviour<BeadCodec>,
+    pub bead_announce: floodsub::Floodsub,
 }
 
 impl BraidPoolBehaviour {
@@ -49,6 +52,9 @@ impl BraidPoolBehaviour {
         //custom kademlia protocol
         let mut kad_config = kad::Config::new(KADPROTOCOLNAME);
         kad_config.set_query_timeout(tokio::time::Duration::from_secs(60));
+        //Querying the boot node for finding the neareast neigbor set up for 10 minutes
+        //dynamic value can be changed not to small though
+        kad_config.set_periodic_bootstrap_interval(Some(Duration::from_secs(600)));
         //custom kad configuration
         let kademlia_behaviour =
             kad::Behaviour::with_config(local_key.public().to_peer_id(), store, kad_config);
@@ -58,7 +64,7 @@ impl BraidPoolBehaviour {
         let identify_behaviour = identify::Behaviour::new(identify_config);
         let ping_config = ping::Config::default()
             .with_timeout(Duration::from_secs(3600))
-            .with_interval(Duration::from_millis(1));
+            .with_interval(Duration::from_secs(60));
         let ping_behaviour = ping::Behaviour::new(ping_config.clone());
 
         // Initialize bead download behaviour
@@ -69,12 +75,15 @@ impl BraidPoolBehaviour {
                 .with_request_timeout(bead_sync_config.request_timeout)
                 .with_max_concurrent_streams(bead_sync_config.max_concurrent_requests),
         );
+        let bead_announce_config = floodsub::FloodsubConfig::new(local_key.public().to_peer_id());
+        let bead_announce = floodsub::Floodsub::from_config(bead_announce_config);
 
         let braidpool_behaviour = BraidPoolBehaviour {
             identify: identify_behaviour,
             ping: ping_behaviour,
             kademlia: kademlia_behaviour,
             bead_sync,
+            bead_announce: bead_announce,
         };
 
         return Ok(braidpool_behaviour);
