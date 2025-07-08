@@ -9,6 +9,7 @@ const config: JestConfigWithTsJest = {
     '^.+\\.(js|jsx)$': 'babel-jest',
   },
   transformIgnorePatterns: ['/node_modules/'],
+  setupFilesAfterEnv: ['<rootDir>/setupTests.ts'],
 };
 
 export default config;
