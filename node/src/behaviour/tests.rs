@@ -6,8 +6,6 @@ use crate::utils::test_utils::test_utility_functions::{
 };
 use bitcoin::consensus::encode::deserialize;
 use bitcoin::consensus::serialize;
-use bitcoin::p2p::address::Address as P2P_Address;
-use bitcoin::p2p::ServiceFlags;
 use bitcoin::BlockVersion;
 use bitcoin::CompactTarget;
 use bitcoin::{BlockHash, BlockHeader, BlockTime, EcdsaSighashType, TxMerkleNode};
@@ -16,18 +14,16 @@ use libp2p::floodsub::Topic;
 use libp2p::swarm::SwarmEvent;
 use libp2p::{Multiaddr, Swarm, SwarmBuilder};
 use std::collections::HashSet;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::str::FromStr;
 use tokio::time::timeout;
 
 // Helper function to create a test bead
 fn create_test_bead() -> Bead {
-    let test_sock_add = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8888);
-    let _address = P2P_Address::new(&test_sock_add.clone(), ServiceFlags::NONE);
+    let _address = String::from("127.0.0.1:8888");
     let public_key = "020202020202020202020202020202020202020202020202020202020202020202"
         .parse::<bitcoin::PublicKey>()
         .unwrap();
-    let socket = bitcoin::p2p::address::AddrV2::Ipv4(Ipv4Addr::new(127, 0, 0, 1));
+    let socket = String::from("127.0.0.1");
     let time_hash_set = TimeVec(Vec::new());
     let parent_hash_set: HashSet<BlockHash> = HashSet::new();
     let weak_target = CompactTarget::from_consensus(32);

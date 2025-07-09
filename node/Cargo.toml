@@ -40,4 +40,5 @@ transitive = "1.1.0"
 secp256k1 = "0.30.0"
 libp2p = { version = "0.55.0", features = ["identify", "quic", "tokio","ping","macros","kad","dns","request-response","floodsub"] }
 toml = "0.8.22"
+jsonrpsee = {version = "0.25.1",features = ["full"]}
 async-trait = "0.1.88"

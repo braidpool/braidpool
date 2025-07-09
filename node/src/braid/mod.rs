@@ -5,18 +5,17 @@ use serde::Serialize;
 use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::collections::{HashMap, HashSet};
-pub mod error;
 #[derive(Clone, Debug, Serialize, PartialEq)]
 
 pub struct Cohort(HashSet<usize>);
-
-use error::BraidError::HighestWorkBeadFetchFailed;
+#[derive(Debug, Clone)]
 pub enum AddBeadStatus {
     DagAlreadyContainsBead,
     InvalidBead,
     BeadAdded,
     ParentsNotYetReceived,
 }
+#[derive(Debug, Clone)]
 
 pub enum GenesisCheckStatus {
     GenesisBeadsValid,
@@ -37,7 +36,7 @@ pub struct Braid {
 
 impl Braid {
     ///Initializing the Braid object for keeping track of current state of Braid
-    pub fn new(genesis_beads: HashSet<Bead>) -> Self {
+    pub fn new(genesis_beads: Vec<Bead>) -> Self {
         let mut beads = Vec::new();
         let mut bead_indices = HashSet::new();
         let mut bead_index_mapping = HashMap::new();
@@ -65,6 +64,27 @@ impl Braid {
     pub fn extend(&mut self, bead: &Bead) -> AddBeadStatus {
         // No parents: bad block
         if bead.committed_metadata.parents.is_empty() {
+            // Check if we already have this bead
+            let bead_hash = bead.block_header.block_hash();
+            if self
+                .beads
+                .iter()
+                .any(|b| b.block_header.block_hash() == bead_hash)
+            {
+                return AddBeadStatus::DagAlreadyContainsBead; // Already seen this bead
+            }
+
+            // Add the genesis bead
+            self.beads.push(bead.clone());
+            //current bead index
+            let new_bead_index = self.beads.len() - 1;
+
+            self.bead_index_mapping.insert(bead_hash, new_bead_index);
+
+            self.genesis_beads.insert(new_bead_index);
+
+            self.tips.insert(new_bead_index);
+            self.cohorts.push(Cohort(HashSet::from([new_bead_index])));
             return AddBeadStatus::InvalidBead;
         }
         // Don't have all parents
@@ -242,9 +262,9 @@ impl Braid {
 mod consensus_functions {
     use num::{One, Zero};
 
-    use crate::braid::error::BraidError;
-
     use super::*;
+    use crate::error::BraidError;
+    use crate::error::BraidError::{HighestWorkBeadFetchFailed, MissingAncestorWork};
     /// Returns the set of **genesis beads** from a given Braid object.
     ///
     /// A **genesis bead** is defined as a bead that has no parents, i.e., it is a root node in the Braid DAG.

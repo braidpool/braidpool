@@ -17,13 +17,9 @@ use crate::committed_metadata::TimeVec;
 use crate::utils::test_utils::test_utility_functions::*;
 use bitcoin::block::BlockHash as BeadHash;
 use bitcoin::{
-    absolute::Time,
-    ecdsa::Signature,
-    p2p::{Address as P2P_Address, ServiceFlags},
-    BlockHash, BlockHeader, BlockTime, BlockVersion, CompactTarget, EcdsaSighashType, PublicKey,
-    TxMerkleNode,
+    absolute::Time, ecdsa::Signature, BlockHash, BlockHeader, BlockTime, BlockVersion,
+    CompactTarget, EcdsaSighashType, PublicKey, TxMerkleNode,
 };
-use core::net::SocketAddr;
 use num::range;
 use num::BigUint;
 use rand::{rngs::OsRng, thread_rng, RngCore};
@@ -32,7 +28,6 @@ use serde::{Deserialize, Serialize};
 use serde_json;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::net::{IpAddr, Ipv4Addr};
 use std::path::Path;
 use std::str::FromStr;
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -71,10 +66,12 @@ fn emit_bead() -> Bead {
         .as_secs() as u32;
     let current_time = Time::from_consensus(now).unwrap();
 
-    let test_sock_add = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8888);
-    let _address = P2P_Address::new(&test_sock_add.clone(), ServiceFlags::NONE);
+    // let test_sock_add = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8888);
+    // let _address = P2P_Address::new(&test_sock_add.clone(), ServiceFlags::NONE);
+    let _address = String::from("127.0.0.1:8888");
     let public_key = random_public_key;
-    let socket = bitcoin::p2p::address::AddrV2::Ipv4(Ipv4Addr::new(127, 0, 0, 1));
+    // let socket = bitcoin::p2p::address::AddrV2::Ipv4(Ipv4Addr::new(127, 0, 0, 1));
+    let socket: String = String::from("127.0.0.1");
     let time_hash_set = TimeVec(Vec::new());
     let parent_hash_set: HashSet<BlockHash> = HashSet::new();
     let weak_target = CompactTarget::from_consensus(32);

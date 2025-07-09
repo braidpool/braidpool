@@ -69,12 +69,12 @@ pub mod test_utility_functions {
         transactions: Vec<Transaction>,
         parents: std::collections::HashSet<BeadHash>,
         parent_bead_timestamps: Option<TimeVec>,
-        payout_address: Option<P2P_Address>,
+        payout_address: Option<String>,
         start_timestamp: Option<Time>,
         comm_pub_key: Option<PublicKey>,
         min_target: Option<CompactTarget>,
         weak_target: Option<CompactTarget>,
-        miner_ip: Option<AddrV2>,
+        miner_ip: Option<String>,
     }
 
     #[cfg(test)]
@@ -108,7 +108,7 @@ pub mod test_utility_functions {
             self
         }
 
-        pub fn payout_address(mut self, address: P2P_Address) -> Self {
+        pub fn payout_address(mut self, address: String) -> Self {
             self.payout_address = Some(address);
             self
         }
@@ -123,7 +123,7 @@ pub mod test_utility_functions {
             self
         }
 
-        pub fn miner_ip(mut self, ip: AddrV2) -> Self {
+        pub fn miner_ip(mut self, ip: String) -> Self {
             self.miner_ip = Some(ip);
             self
         }
