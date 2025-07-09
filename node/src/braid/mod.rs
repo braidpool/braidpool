@@ -160,7 +160,53 @@ impl Braid {
             self.cohorts.push(Cohort(dangling));
         }
 
+        self.process_orphan_beads();
+
         AddBeadStatus::BeadAdded
+    }
+
+    /// Process orphan beads to see if any can now be added to the braid
+    /// This method checks if all parents of orphan beads are now available
+    /// and recursively extends the braid with those beads
+    fn process_orphan_beads(&mut self) {
+        // Process orphans in reverse order to maintain proper indexing
+        let mut i = self.orphan_beads.len();
+        while i > 0 {
+            i -= 1;
+
+            // Check if all parents are now available for this orphan
+            let mut all_parents_available = true;
+            for parent_hash in &self.orphan_beads[i].committed_metadata.parents {
+                if !self.bead_index_mapping.contains_key(parent_hash) {
+                    all_parents_available = false;
+                    break;
+                }
+            }
+
+            if all_parents_available {
+                // Remove the orphan bead first, then process it
+                let orphan_bead = self.orphan_beads.remove(i);
+
+                // Now extend with the orphan bead
+                match self.extend(&orphan_bead) {
+                    AddBeadStatus::BeadAdded => {
+                        // Recursively process remaining orphans as this addition
+                        // might enable more orphans to be processed
+                        self.process_orphan_beads();
+                        return; // Exit current processing as recursion will handle the rest
+                    }
+                    AddBeadStatus::DagAlreadyContainsBead => {
+                        continue;
+                    }
+                    AddBeadStatus::InvalidBead => {
+                        continue;
+                    }
+                    AddBeadStatus::ParentsNotYetReceived => {
+                        self.orphan_beads.push(orphan_bead);
+                    }
+                }
+            }
+        }
     }
 
     pub fn check_genesis_beads(&self, genesis_beads: &Vec<BeadHash>) -> GenesisCheckStatus {
