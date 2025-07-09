@@ -6,17 +6,9 @@ import MineInventoryDashboard from '../MinerInventory/MineInventoryDashboard';
 import MempoolLatencyStats from './MempoolLatencyStats';
 import GraphVisualization from '../BraidPoolDAG/BraidPoolDAG';
 import MinedSharesExplorer from '../BeadsTab/MinedSharesExplorer';
-// Utils
-import {
-  loadSampleBraidData,
-  transformBraidData,
-} from '../../utils/braidDataTransformer';
 import BitcoinStats from '../BitcoinStats/BitcoinStats';
 import { Page } from './Types';
 import BlockViewer from './BlockViewer';
-
-// Constants
-const drawerWidth = 240;
 
 const Dashboard = () => {
   const [currentPage, setCurrentPage] = useState<Page>(Page.DASHBOARD);
@@ -28,28 +20,12 @@ const Dashboard = () => {
         return <InstallationInstructions />;
       case Page.DASHBOARD:
         return (
-          <>
-            <TopStatsBar loading={loading} />
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', mt: 2, mx: -1 }}>
-              <Box sx={{ width: { xs: '100%', md: '50%' }, p: 1 }}>
-                <Card title="Pool Hashrate">
-                  <PoolHashrateChart loading={loading} />
-                </Card>
-              </Box>
-              <Box sx={{ width: { xs: '100%', md: '50%' }, p: 1 }}>
-                <Card title="Mempool Activity">
-                  <MempoolLatencyStats />
-                </Card>
-              </Box>
-            </Box>
-            <Box sx={{ mt: 2, mx: -1 }}>
-              <Box sx={{ p: 1 }}>
-                <Card title="Recent Blocks">
-                  <RecentBlocksTable />
-                </Card>
-              </Box>
-            </Box>
-          </>
+          <Card
+            title="Braidpool Dashboard"
+            subtitle="Welcome to the Braidpool dashboard!"
+          >
+            <BlockViewer />
+          </Card>
         );
       case Page.MINING_INVENTORY:
         return <MineInventoryDashboard />;
