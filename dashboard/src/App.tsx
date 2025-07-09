@@ -63,12 +63,12 @@ function App() {
               component="footer"
               sx={{
                 py: 3,
-                mt: 'auto',
+                mt: 3,
                 bgcolor: 'background.paper',
                 borderTop: '1px solid rgba(255,255,255,0.05)',
               }}
             >
-              <Footer></Footer>
+              <Footer />
             </Box>
           </Box>
         </Box>

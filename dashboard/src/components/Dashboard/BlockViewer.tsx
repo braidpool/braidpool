@@ -94,7 +94,7 @@ const BlockViewer: React.FC = () => {
 
   if (allBlocks.length === 0) {
     return (
-      <div className="flex items-center justify-center h-64 p-4">
+      <div className="flex items-center justify-center h-50 p-4">
         <div className="text-white">No blocks available</div>
       </div>
     );

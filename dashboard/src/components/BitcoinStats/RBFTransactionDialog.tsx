@@ -48,7 +48,7 @@ const RBFTransactionDialog = ({
       />
 
       {/* Transaction details sidebar */}
-      <div className="pt-14 fixed border-white right-0 top-0 z-50 h-full w-96 bg-[#1e1e1e] overflow-y-auto shadow-2xl text-white border border-gray-700">
+      <div className="fixed right-0 top-14 z-50 h-[calc(100%-3.5rem)] w-full max-w-md sm:w-96 bg-[#1e1e1e] overflow-y-auto shadow-2xl text-white border border-gray-700">
         <div className="sticky top-0 border-white bg-[#1e1e1e] p-4 flex justify-between items-center">
           <h2 className="text-lg font-bold">Transaction Details</h2>
           <button

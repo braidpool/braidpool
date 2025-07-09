@@ -14,7 +14,7 @@ const Card: React.FC<CardProps> = ({
 }) => {
   return (
     <div
-      className="relative px-3 rounded border border-black/5 overflow-hidden h-full shadow-sm"
+      className="relative px-3 rounded border border-black/5 overflow-hidden h-full shadow-sm pb-3"
       style={{ backgroundColor: 'rgba(30, 30, 30, 1)' }}
     >
       {/* Accent color border */}

@@ -8,9 +8,9 @@ use std::collections::{HashMap, HashSet};
 pub mod error;
 #[derive(Clone, Debug, Serialize, PartialEq)]
 
-pub(crate) struct Cohort(HashSet<usize>);
+pub struct Cohort(HashSet<usize>);
 
-use error::BraidError::{HighestWorkBeadFetchFailed, MissingAncestorWork};
+use error::BraidError::HighestWorkBeadFetchFailed;
 pub enum AddBeadStatus {
     DagAlreadyContainsBead,
     InvalidBead,
@@ -18,15 +18,21 @@ pub enum AddBeadStatus {
     ParentsNotYetReceived,
 }
 
+pub enum GenesisCheckStatus {
+    GenesisBeadsValid,
+    MissingGenesisBead,
+    GenesisBeadsCountMismatch,
+}
+
 #[derive(Clone, Debug)]
 
 pub struct Braid {
-    pub(crate) beads: Vec<Bead>,
-    pub(crate) tips: HashSet<usize>,
-    pub(crate) cohorts: Vec<Cohort>,
-    pub(crate) orphan_beads: Vec<Bead>,
-    pub(crate) genesis_beads: HashSet<usize>,
-    pub(crate) bead_index_mapping: HashMap<BeadHash, usize>,
+    pub beads: Vec<Bead>,
+    pub tips: HashSet<usize>,
+    pub cohorts: Vec<Cohort>,
+    pub orphan_beads: Vec<Bead>,
+    pub genesis_beads: HashSet<usize>,
+    pub bead_index_mapping: HashMap<BeadHash, usize>,
 }
 
 impl Braid {
@@ -56,10 +62,10 @@ impl Braid {
 impl Braid {
     /// Attempts to extend the braid with the given bead.
     /// Returns true if the bead successfully extended the braid, false otherwise.
-    pub fn extend(&mut self, bead: &Bead) -> bool {
+    pub fn extend(&mut self, bead: &Bead) -> AddBeadStatus {
         // No parents: bad block
         if bead.committed_metadata.parents.is_empty() {
-            return false;
+            return AddBeadStatus::InvalidBead;
         }
         // Don't have all parents
         for parent_hash in &bead.committed_metadata.parents {
@@ -72,7 +78,7 @@ impl Braid {
                 } else {
                     // Parent not found and can't be retrieved
                     self.orphan_beads.push(bead.clone());
-                    return false;
+                    return AddBeadStatus::ParentsNotYetReceived;
                 }
             }
         }
@@ -83,7 +89,7 @@ impl Braid {
             .iter()
             .any(|b| b.block_header.block_hash() == bead_hash)
         {
-            return false;
+            return AddBeadStatus::DagAlreadyContainsBead;
         }
 
         // Insert bead into beads vector
@@ -154,7 +160,36 @@ impl Braid {
             self.cohorts.push(Cohort(dangling));
         }
 
-        true
+        AddBeadStatus::BeadAdded
+    }
+
+    pub fn check_genesis_beads(&self, genesis_beads: &Vec<BeadHash>) -> GenesisCheckStatus {
+        if (genesis_beads.len() != self.genesis_beads.len()) {
+            return GenesisCheckStatus::GenesisBeadsCountMismatch;
+        }
+        for bead_hash in genesis_beads {
+            let index = self.bead_index_mapping.get(bead_hash);
+            let bead_exists = match index {
+                Some(idx) => self.genesis_beads.contains(idx),
+                None => false,
+            };
+            if !bead_exists {
+                return GenesisCheckStatus::MissingGenesisBead;
+            }
+        }
+        return GenesisCheckStatus::GenesisBeadsValid;
+    }
+
+    pub fn insert_genesis_beads(&mut self, genesis_beads: Vec<Bead>) {
+        for bead in genesis_beads {
+            let bead_hash = bead.block_header.block_hash();
+            if !self.bead_index_mapping.contains_key(&bead_hash) {
+                self.beads.push(bead.clone());
+                let new_index = self.beads.len() - 1;
+                self.bead_index_mapping.insert(bead_hash, new_index);
+                self.genesis_beads.insert(new_index);
+            }
+        }
     }
 }
 #[allow(unused)]
