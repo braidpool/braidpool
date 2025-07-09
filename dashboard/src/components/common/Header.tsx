@@ -1,211 +1,139 @@
 import React, { useState } from 'react';
-import { AppBar, Box, Toolbar, Typography, Button } from '@mui/material';
-import MenuIcon from '@mui/icons-material/Menu';
-import SettingsIcon from '@mui/icons-material/Settings';
-import NotificationsIcon from '@mui/icons-material/Notifications';
-import FilterListIcon from '@mui/icons-material/FilterList';
-import HomeIcon from '@mui/icons-material/Home';
-import ActionIconButton from './ActionIconButton';
-import colors from '../../theme/colors';
-import { HeaderProps } from './Types';
+import {
+  Bitcoin,
+  Wrench,
+  LayoutDashboard,
+  Package,
+  MemoryStick,
+  Layers,
+  Menu,
+  X,
+} from 'lucide-react';
+import { Page } from '../Dashboard/Types';
+import { HeaderNavProps } from './Types';
 
-const Header: React.FC<HeaderProps> = ({ title = 'BRAIDPOOL' }) => {
-  const [notificationCount] = useState<number>(3); // Mock notification count
+const NAV_ITEMS = [
+  {
+    label: 'Installation',
+    page: Page.INSTALLATION,
+    icon: <Wrench size={18} />,
+  },
+  {
+    label: 'Dashboard',
+    page: Page.DASHBOARD,
+    icon: <LayoutDashboard size={18} />,
+  },
+  { label: 'Bead', page: Page.MINER_STATS, icon: <MemoryStick size={18} /> },
+  {
+    label: 'Inventory',
+    page: Page.MINING_INVENTORY,
+    icon: <Package size={18} />,
+  },
+  { label: 'Mempool', page: Page.MEMPOOL, icon: <MemoryStick size={18} /> },
+  {
+    label: 'Visualize',
+    page: Page.DAG_VISUALIZATION,
+    icon: <Layers size={18} />,
+  },
+  {
+    label: 'Bitcoin Statistics',
+    page: Page.BITCOIN_STATS,
+    icon: <Bitcoin size={18} />,
+  },
+];
 
-  // Mock function to add miner
-  const handleAddMiner = () => {
-    console.log('🔌 Adding new miner...');
-    // In real implementation, this would open a dialog to add a new miner
-  };
+const Header: React.FC<HeaderNavProps> = ({
+  title = 'Braidpool',
+  currentPage,
+  setCurrentPage,
+}) => {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <AppBar
-      position="fixed"
-      elevation={0}
-      sx={{
-        backgroundColor: '#1a1a1a',
-        boxShadow: `0 2px 4px rgba(0,0,0,0.3)`,
-        height: 56,
-        zIndex: (theme) => theme.zIndex.drawer + 1,
-        borderBottom: '1px solid rgba(255,255,255,0.1)',
-      }}
-    >
-      <Toolbar
-        sx={{
-          minHeight: 56,
-          height: 56,
-          px: { xs: 2, sm: 3 },
-          py: 0,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          position: 'relative',
-        }}
-      >
-        {/* Left side - Logo and Brand */}
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            height: '100%',
-            my: 'auto',
-          }}
-        >
-          <Box
-            component="div"
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: colors.textLight,
-
-              borderRadius: '50%',
-              width: 36,
-              height: 36,
-              mr: 2,
-              fontSize: '1.1rem',
-              fontWeight: 'bold',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-              flexShrink: 0,
-              transform: 'translateY(-1px)',
-              overflow: 'hidden', // Ensure image doesn't overflow the circle
-            }}
-          >
-            <img
-              src="/favicon.ico" // Update this path to your actual icon path
-              alt="favicon"
-              style={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover', // Adjust image fit
-              }}
-            />
-          </Box>
-
-          <Typography
-            variant="body1"
-            component="div"
-            sx={{
-              fontWeight: 'bold',
-              color: colors.textLight,
-              letterSpacing: '0.5px',
-              fontSize: '1.1rem',
-              lineHeight: 1,
-              mr: 2,
-              whiteSpace: 'nowrap',
-              transform: 'translateY(-1px)', // Subtle adjustment to visually center
-            }}
-          >
-            BRAIDPOOL
-          </Typography>
-          <Box
-            sx={{
-              display: { xs: 'none', md: 'flex' },
-              borderLeft: '1px solid rgba(255,255,255,0.2)',
-              height: 28,
-              mx: 2,
-              transform: 'translateY(-1px)', // Subtle adjustment to visually center
-            }}
-          />
-          <Box
-            component="span"
-            sx={{
-              display: { xs: 'none', md: 'flex' },
-              alignItems: 'center',
-              color: colors.textLight,
-              fontSize: '0.9rem',
-              fontWeight: 500,
-              ml: 0.5,
-              transform: 'translateY(-1px)', // Subtle adjustment to visually center
-            }}
-          >
-            <MenuIcon sx={{ fontSize: '1.2rem', mr: 1 }} />
-          </Box>
-        </Box>
-
-        {/* Right side - Actions */}
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1.5,
-            height: '100%',
-            transform: 'translateY(-1px)', // Subtle adjustment to visually center
-          }}
-        >
-          <Button
-            variant="contained"
-            size="small"
-            onClick={handleAddMiner}
-            sx={{
-              textTransform: 'none',
-              px: { xs: 1.5, sm: 2 },
-              py: 0.75,
-              height: 34,
-              backgroundColor: '#36454F',
-              color: 'white',
-              fontWeight: 500,
-              fontSize: '0.875rem',
-              borderRadius: 1.5,
-              minWidth: 'auto',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.3)',
-              '&:hover': {
-                boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
-              },
-            }}
-          >
-            Add Miner
-          </Button>
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1,
-              height: '100%',
-            }}
-          >
-            <ActionIconButton icon={<HomeIcon sx={{ fontSize: '1.2rem' }} />} />
-
-            <ActionIconButton
-              icon={<FilterListIcon sx={{ fontSize: '1.2rem' }} />}
-            />
-
-            <Box sx={{ position: 'relative' }}>
-              <ActionIconButton
-                icon={<NotificationsIcon sx={{ fontSize: '1.2rem' }} />}
+    <>
+      {/* Header */}
+      <header className="fixed top-0 left-0 w-full bg-[#1a1a1a] border-b border-white/10 shadow z-50 h-14 flex items-center">
+        <div className="flex items-center justify-between px-4 md:px-6 w-full">
+          {/*  Logo and Title */}
+          <div className="flex items-center">
+            <div className="w-9 h-9 mr-2 rounded-full overflow-hidden">
+              <img
+                src="/favicon.ico"
+                alt="Logo"
+                className="w-full h-full object-cover"
               />
-              {notificationCount > 0 && (
-                <Box
-                  sx={{
-                    position: 'absolute',
-                    top: -2,
-                    right: -2,
-                    bgcolor: colors.notification,
-                    color: colors.textLight,
-                    borderRadius: '50%',
-                    width: 16,
-                    height: 16,
-                    fontSize: 10,
-                    fontWeight: 'bold',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    border: '1.5px solid #1a1a1a',
-                    boxShadow: '0 1px 2px rgba(0,0,0,0.3)',
-                  }}
-                >
-                  {notificationCount}
-                </Box>
-              )}
-            </Box>
+            </div>
+            <span className="text-white font-bold text-[1.1rem] tracking-wide">
+              {title}
+            </span>
+          </div>
 
-            <ActionIconButton
-              icon={<SettingsIcon sx={{ fontSize: '1.2rem' }} />}
-            />
-          </Box>
-        </Box>
-      </Toolbar>
-    </AppBar>
+          {/* Desktop Nav */}
+          <div className="max-md:hidden md:flex lg:flex items-center ">
+            {NAV_ITEMS.map((item) => (
+              <button
+                key={item.label}
+                onClick={() => setCurrentPage(item.page)}
+                className={`flex items-center px-3 py-1.5 border-b-2 rounded transition-colors font-medium text-sm
+                  ${
+                    currentPage === item.page
+                      ? 'text-blue-500 border-blue-500 bg-blue-500/10 font-bold'
+                      : 'text-white/80 border-transparent hover:bg-blue-500/10'
+                  }`}
+              >
+                <span className="mr-1.5">{item.icon}</span>
+                {item.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Mobile Menu Toggle  */}
+          <button
+            className="md:hidden ml-2 p-2 rounded hover:bg-white/10 text-white"
+            onClick={() => setSidebarOpen(true)}
+          >
+            <Menu size={22} />
+          </button>
+        </div>
+      </header>
+
+      {/* Sidebar for Mobile */}
+      <div
+        className={`fixed top-0 left-0 h-full w-64 bg-[#1a1a1a] border-r border-white/10 shadow-lg z-[9999] transform transition-transform duration-300 ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        } md:hidden`}
+      >
+        <div className="flex items-center justify-between px-4 h-14 border-b border-white/10">
+          <span className="text-white font-bold text-lg">{title}</span>
+          <button
+            className="p-2 rounded hover:bg-white/10 text-white"
+            onClick={() => setSidebarOpen(false)}
+          >
+            <X size={22} />
+          </button>
+        </div>
+        <nav className="flex flex-col py-4">
+          {NAV_ITEMS.map((item) => (
+            <button
+              key={item.label}
+              onClick={() => {
+                setCurrentPage(item.page);
+                setSidebarOpen(false);
+              }}
+              className={`flex items-center px-5 py-3 border-l-4 text-left transition-colors font-medium text-base
+                ${
+                  currentPage === item.page
+                    ? 'text-blue-500 border-blue-500 bg-blue-500/10 font-bold'
+                    : 'text-white/80 border-transparent hover:bg-blue-500/10'
+                }`}
+            >
+              <span className="mr-2">{item.icon}</span>
+              {item.label}
+            </button>
+          ))}
+        </nav>
+      </div>
+    </>
   );
 };
 

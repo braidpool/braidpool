@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-
+import { Page } from '../Dashboard/Types';
 export interface CardProps {
   title?: ReactNode;
   subtitle?: ReactNode;
@@ -32,3 +32,8 @@ export interface StatCardProps {
 export interface TopStatsBarProps {
   loading?: boolean;
 }
+export type HeaderNavProps = {
+  title?: string;
+  currentPage: Page;
+  setCurrentPage: (page: Page) => void;
+};
