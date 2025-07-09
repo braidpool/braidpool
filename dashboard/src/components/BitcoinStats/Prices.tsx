@@ -367,10 +367,10 @@ const BitcoinPriceTracker: React.FC = () => {
           <span className="text-sm text-gray-500 mb-2">
             Live updates in {currency}
           </span>
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="99%" height="100%">
             <LineChart
               data={priceHistory}
-              margin={{ top: 5, right: 20, bottom: 5, left: 45 }}
+              margin={{ left: 60, right: 20, top: 20, bottom: 20 }}
             >
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis
