@@ -1,12 +1,26 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import TransactionDialog from '../TransactionDialog';
-import * as utils from '../Utils';
+import { getTxInfo } from '../Utils';
 import '@testing-library/jest-dom';
+import userEvent from '@testing-library/user-event';
 
-// Mocking getTxInfo
+const mockCopyToClipboard = jest.fn();
+
 jest.mock('../Utils', () => ({
+  ...jest.requireActual('../Utils'),
   getTxInfo: jest.fn(),
+  useCopyToClipboard: () => [false, mockCopyToClipboard],
 }));
+
+jest.mock('lucide-react', () => ({
+  CopyIcon: () => <svg data-testid="copy-icon" />,
+}));
+
+Object.assign(navigator, {
+  clipboard: {
+    writeText: jest.fn(),
+  },
+});
 
 const mockTxData = {
   txid: 'sample-txid-123',
@@ -34,7 +48,7 @@ const mockTxData = {
 
 describe('TransactionDialog', () => {
   it('renders transaction info after loading', async () => {
-    (utils.getTxInfo as jest.Mock).mockResolvedValue(mockTxData);
+    (getTxInfo as jest.Mock).mockResolvedValue(mockTxData);
 
     const onClose = jest.fn();
 
@@ -57,5 +71,15 @@ describe('TransactionDialog', () => {
     // Simulate close
     fireEvent.click(screen.getByText('✕'));
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('copies transaction ID to clipboard using hook', async () => {
+    (getTxInfo as jest.Mock).mockResolvedValue(mockTxData);
+
+    render(<TransactionDialog txid={mockTxData.txid} onClose={jest.fn()} />);
+    const copyButton = await screen.findByLabelText('Copy transaction ID');
+    await userEvent.click(copyButton);
+
+    expect(mockCopyToClipboard).toHaveBeenCalledWith(mockTxData.txid);
   });
 });

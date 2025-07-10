@@ -69,9 +69,26 @@ describe('Utility Functions', () => {
       expect(shortenAddress(addr)).toBe('1234567....0abcdef');
     });
 
-    it('works with short strings', () => {
+    it('returns original string if shorter than 14 chars', () => {
       const addr = '1234567';
-      expect(shortenAddress(addr)).toBe('1234567....1234567'); // but since slice may behave differently if string is short
+      expect(shortenAddress(addr)).toBe('1234567');
+    });
+
+    it('returns original string if exactly 14 chars', () => {
+      const addr = '1234567890abcd';
+      expect(shortenAddress(addr)).toBe('1234567890abcd');
+    });
+
+    it('returns "N/A" if input is undefined', () => {
+      expect(shortenAddress(undefined as any)).toBe('N/A');
+    });
+
+    it('returns "N/A" if input is null', () => {
+      expect(shortenAddress(null as any)).toBe('N/A');
+    });
+
+    it('returns "N/A" if input is empty string', () => {
+      expect(shortenAddress('')).toBe('N/A');
     });
   });
 

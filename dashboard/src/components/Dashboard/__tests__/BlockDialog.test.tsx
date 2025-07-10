@@ -1,7 +1,20 @@
 import '@testing-library/jest-dom';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import BlockInfoDialog from '../BlockDialog';
-import * as utils from '../Utils';
+import { getBlockInfo } from '../Utils';
+import userEvent from '@testing-library/user-event';
+
+const mockCopyToClipboard = jest.fn();
+
+jest.mock('../Utils', () => ({
+  ...jest.requireActual('../Utils'),
+  getBlockInfo: jest.fn(),
+  useCopyToClipboard: () => [false, mockCopyToClipboard],
+}));
+
+jest.mock('lucide-react', () => ({
+  CopyIcon: () => <svg data-testid="copy-icon" />,
+}));
 
 Object.assign(navigator, {
   clipboard: {
@@ -31,8 +44,6 @@ const mockBlockInfo = {
   },
 };
 
-jest.spyOn(utils, 'getBlockInfo');
-
 describe('BlockInfoDialog', () => {
   const onClose = jest.fn();
 
@@ -41,16 +52,14 @@ describe('BlockInfoDialog', () => {
   });
 
   it('shows loading indicator initially', async () => {
-    (utils.getBlockInfo as jest.Mock).mockReturnValue(new Promise(() => {}));
+    (getBlockInfo as jest.Mock).mockReturnValue(new Promise(() => {}));
 
     render(<BlockInfoDialog hash="testhash" onClose={onClose} />);
     expect(screen.getByText(/loading block data/i)).toBeInTheDocument();
   });
 
   it('displays error message on fetch failure', async () => {
-    (utils.getBlockInfo as jest.Mock).mockRejectedValue(
-      new Error('Fetch error')
-    );
+    (getBlockInfo as jest.Mock).mockRejectedValue(new Error('Fetch error'));
 
     render(<BlockInfoDialog hash="badHash" onClose={onClose} />);
     await waitFor(() =>
@@ -61,46 +70,37 @@ describe('BlockInfoDialog', () => {
   });
 
   it('renders block details on success', async () => {
-    (utils.getBlockInfo as jest.Mock).mockResolvedValue(mockBlockInfo);
+    (getBlockInfo as jest.Mock).mockResolvedValue(mockBlockInfo);
 
     render(<BlockInfoDialog hash="goodHash" onClose={onClose} />);
-
-    await waitFor(() => {
-      expect(screen.getByText(/Block ID \(Hash\)/)).toBeInTheDocument();
-    });
+    await waitFor(() =>
+      expect(screen.getByText(/Block ID \(Hash\)/)).toBeInTheDocument()
+    );
 
     expect(screen.getByText(mockBlockInfo.id)).toBeInTheDocument();
-    expect(screen.getByText(mockBlockInfo.height)).toBeInTheDocument();
+    expect(
+      screen.getByText(mockBlockInfo.height.toString())
+    ).toBeInTheDocument();
     expect(screen.getByText(/F2Pool/)).toBeInTheDocument();
   });
 
-  it('copies block hash to clipboard', async () => {
-    (utils.getBlockInfo as jest.Mock).mockResolvedValue(mockBlockInfo);
+  it('copies block ID to clipboard using hook', async () => {
+    (getBlockInfo as jest.Mock).mockResolvedValue(mockBlockInfo);
 
-    render(<BlockInfoDialog hash="hashToCopy" onClose={onClose} />);
-
-    await waitFor(() =>
-      expect(screen.getByText(mockBlockInfo.id)).toBeInTheDocument()
-    );
-
-    fireEvent.click(screen.getByLabelText(/copy block hash/i));
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
-      mockBlockInfo.id
-    );
-
-    expect(await screen.findByText(/copied!/i)).toBeInTheDocument();
+    render(<BlockInfoDialog hash={mockBlockInfo.id} onClose={jest.fn()} />);
+    const copyButton = await screen.findByLabelText('Copy block hash');
+    await userEvent.click(copyButton);
+    expect(mockCopyToClipboard).toHaveBeenCalledWith(mockBlockInfo.id);
   });
 
   it('calls onClose when background is clicked', async () => {
-    (utils.getBlockInfo as jest.Mock).mockResolvedValue(mockBlockInfo);
+    (getBlockInfo as jest.Mock).mockResolvedValue(mockBlockInfo);
 
     render(<BlockInfoDialog hash="hashToClose" onClose={onClose} />);
+    await screen.findByText(mockBlockInfo.id);
 
-    await waitFor(() =>
-      expect(screen.getByText(mockBlockInfo.id)).toBeInTheDocument()
-    );
-
-    fireEvent.click(screen.getByText('', { selector: '.fixed.inset-0' }));
+    const overlay = screen.getByTestId('overlay');
+    fireEvent.click(overlay);
     expect(onClose).toHaveBeenCalled();
   });
 });

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getTxInfo } from './Utils';
+import { getTxInfo, useCopyToClipboard } from './Utils';
 import { CopyIcon } from 'lucide-react';
 
 const TransactionDialog = ({
@@ -12,13 +12,7 @@ const TransactionDialog = ({
   const [txInfo, setTxInfo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(txInfo.txid);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
+  const [copied, copyToClipboard] = useCopyToClipboard();
 
   useEffect(() => {
     setLoading(true);
@@ -74,7 +68,7 @@ const TransactionDialog = ({
                   <p className="text-sm break-all mt-1">
                     {txInfo.txid}
                     <button
-                      onClick={handleCopy}
+                      onClick={() => copyToClipboard(txInfo.txid)}
                       className="text-gray-400 hover:text-white ml-2"
                       title="Copy to clipboard"
                       aria-label="Copy transaction ID"

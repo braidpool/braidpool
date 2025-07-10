@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { useState } from 'react';
 
 // via mempool api
 export const getBlockInfo = async (hash: string): Promise<any> => {
@@ -34,4 +35,19 @@ export function formatUnixTimestamp(timestamp: number): string {
 export const formatTimestamp = (ts: number) => {
   const d = new Date(ts * 1000);
   return d.toLocaleString();
+};
+
+export const useCopyToClipboard = (
+  timeout: number = 1500
+): [boolean, (text: string) => void] => {
+  const [copied, setCopied] = useState(false);
+
+  const copy = (text: string) => {
+    if (!navigator?.clipboard) return;
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), timeout);
+  };
+
+  return [copied, copy];
 };

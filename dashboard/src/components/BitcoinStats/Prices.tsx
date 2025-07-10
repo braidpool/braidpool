@@ -261,7 +261,7 @@ const BitcoinPriceTracker: React.FC = () => {
 
       {/* Global Stats */}
       {showSkeletons ? (
-        <div className="flex flex-wrap justify-center items-center gap-4 md:gap-20 p-4">
+        <div className="flex flex-wrap shadow-sm justify-center items-center gap-4 md:gap-20 p-4">
           {[...Array(5)].map((_, i) => (
             <div key={i} className="flex flex-col gap-1">
               <div className="animate-pulse bg-gray-200 rounded h-6 w-20"></div>
@@ -270,7 +270,7 @@ const BitcoinPriceTracker: React.FC = () => {
           ))}
         </div>
       ) : globalStats ? (
-        <div className="flex flex-wrap justify-center items-center gap-4 md:gap-20 p-4">
+        <div className="flex flex-wrap shadow-sm justify-center items-center gap-4 md:gap-20 p-4">
           <div className="flex flex-col">
             <p className="text-base">{globalStats.marketCap}</p>
             <span className="text-sm text-gray-500">Market Cap</span>
@@ -303,7 +303,7 @@ const BitcoinPriceTracker: React.FC = () => {
       ) : null}
 
       {/* Charts Section */}
-      <div className="w-full flex flex-wrap grid grid-cols-1 p-4 justify-center items-center gap-4 md:gap-20 p-4 md:p-6 rounded-lg mb-6">
+      <div className="w-full flex flex-wrap justify-center items-center gap-4 md:gap-20 p-4 mt-4 md:p-6 rounded-lg mb-6">
         {/* Price Range Bar Chart */}
         <div className="flex flex-col w-full h-80">
           <p className="font-semibold text-base">Bitcoin Price Range (24h)</p>

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { useState } from 'react';
 
 export const getCurrencySymbol = (curr: string) => {
   switch (curr) {
@@ -30,6 +31,8 @@ export const formatLargeNumber = (value: number): string => {
 };
 
 export const shortenAddress = (value: string): string => {
+  if (!value) return 'N/A';
+  else if (value.length < 15) return value;
   return value.slice(0, 7) + '....' + value.slice(-7);
 };
 
@@ -69,4 +72,19 @@ export const latestRBFTransactions = async (): Promise<any> => {
     console.error('Error fetching RBF Transactions:', error);
     throw error;
   }
+};
+
+export const useCopyToClipboard = (
+  timeout: number = 1500
+): [boolean, (text: string) => void] => {
+  const [copied, setCopied] = useState(false);
+
+  const copy = (text: string) => {
+    if (!navigator?.clipboard) return;
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), timeout);
+  };
+
+  return [copied, copy];
 };

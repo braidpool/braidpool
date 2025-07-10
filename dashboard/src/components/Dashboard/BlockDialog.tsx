@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { formatTimestamp, getBlockInfo } from './Utils';
+import { formatTimestamp, getBlockInfo, useCopyToClipboard } from './Utils';
 import { CopyIcon } from 'lucide-react';
 
 const BlockInfoDialog = ({
@@ -12,15 +12,7 @@ const BlockInfoDialog = ({
   const [blockInfo, setBlockInfo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    if (blockInfo?.id) {
-      navigator.clipboard.writeText(blockInfo.id);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    }
-  };
+  const [copied, copyToClipboard] = useCopyToClipboard();
 
   useEffect(() => {
     setLoading(true);
@@ -43,7 +35,11 @@ const BlockInfoDialog = ({
 
   return (
     <>
-      <div className="fixed inset-0 z-40" onClick={onClose} />
+      <div
+        className="fixed inset-0 z-40"
+        onClick={onClose}
+        data-testid="overlay"
+      />
 
       {/* Block details sidebar */}
       <div className="fixed right-0 top-14 z-50 h-[calc(100%-3.5rem)] w-full max-w-md sm:w-96 bg-[#1e1e1e] overflow-y-auto shadow-2xl text-white border border-gray-700">
@@ -75,7 +71,7 @@ const BlockInfoDialog = ({
                 <p className="text-sm break-all mt-1">
                   {blockInfo.id}
                   <button
-                    onClick={handleCopy}
+                    onClick={() => copyToClipboard(blockInfo.id)}
                     className="text-gray-400 hover:text-white ml-2"
                     title="Copy to clipboard"
                     aria-label="Copy block hash"
