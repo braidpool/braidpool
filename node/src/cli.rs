@@ -47,6 +47,7 @@ pub struct Cli {
     #[arg(long, default_value = "28332")]
     pub zmqhashblockport: u16,
 
+    ///Rpc endpoints for the specific methods
     #[command(subcommand)]
     pub command: Option<RpcCommand>,
 }

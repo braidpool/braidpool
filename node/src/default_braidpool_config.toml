@@ -26,3 +26,6 @@ port="18443"
 #ip of the bitcoind node
 bitcoind_ip = "0.0.0.0"
 
+#rpc server configuration
+[braid_rpc_config]
+rpc_server_addr="127.0.0.1:6682"

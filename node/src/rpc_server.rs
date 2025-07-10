@@ -276,7 +276,7 @@ pub async fn run_rpc_server(braid_shared_pointer: Arc<RwLock<Braid>>) -> Result<
     //building the context/server supporting the http transport and ws
     let server = jsonrpsee::server::Server::builder()
         .set_rpc_middleware(rpc_middleware)
-        .build("127.0.0.1:8888")
+        .build("127.0.0.1:6682")
         .await
         .unwrap();
     //listening address for incoming requests/connection
@@ -304,7 +304,7 @@ pub async fn test_extend_rpc() {
 
     let _ = run_rpc_server(Arc::clone(&braid)).await.unwrap();
 
-    let server_addr = "127.0.0.1:8888";
+    let server_addr = "127.0.0.1:6682";
     let target_uri = format!("http://{}", server_addr);
     let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
 
@@ -335,9 +335,18 @@ pub async fn test_same_bead_extend() {
 
     let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
 
-    let _ = run_rpc_server(Arc::clone(&braid)).await.unwrap();
+    //Initializing the test server
+    let rpc_middleware =
+        jsonrpsee::server::middleware::rpc::RpcServiceBuilder::new().layer_fn(LoggingMiddleware);
+    let server = jsonrpsee::server::Server::builder()
+        .set_rpc_middleware(rpc_middleware)
+        .build("127.0.0.1:8889")
+        .await
+        .unwrap();
+    let rpc_impl = RpcServerImpl::new(braid);
+    let handle = server.start(rpc_impl.into_rpc());
 
-    let server_addr = "127.0.0.1:8888";
+    let server_addr = "127.0.0.1:8889";
     let target_uri = format!("http://{}", server_addr);
     let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
 
@@ -370,10 +379,18 @@ pub async fn test_cohort_count_rpc() {
     let genesis_beads = vec![test_bead_1.clone()];
 
     let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+    //Initializing the test server
+    let rpc_middleware =
+        jsonrpsee::server::middleware::rpc::RpcServiceBuilder::new().layer_fn(LoggingMiddleware);
+    let server = jsonrpsee::server::Server::builder()
+        .set_rpc_middleware(rpc_middleware)
+        .build("127.0.0.1:9000")
+        .await
+        .unwrap();
+    let rpc_impl = RpcServerImpl::new(braid);
+    let handle = server.start(rpc_impl.into_rpc());
 
-    let _ = run_rpc_server(Arc::clone(&braid)).await.unwrap();
-
-    let server_addr = "127.0.0.1:8888";
+    let server_addr = "127.0.0.1:9000";
     let target_uri = format!("http://{}", server_addr);
     let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
 

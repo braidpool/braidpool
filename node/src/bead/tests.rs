@@ -29,13 +29,10 @@ use std::str::FromStr;
 #[test]
 
 fn test_serialized_committed_metadata() {
-    // let test_sock_add = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8888);
-    // let _address = P2P_Address::new(&test_sock_add.clone(), ServiceFlags::NONE);
     let _address = String::from("127.0.0.1:8000");
     let public_key = "020202020202020202020202020202020202020202020202020202020202020202"
         .parse::<bitcoin::PublicKey>()
         .unwrap();
-    // let socket = bitcoin::p2p::address::AddrV2::Ipv4(Ipv4Addr::new(127, 0, 0, 1));
     let socket = String::from("127.0.0.1");
     let time_val = Time::from_consensus(1653195600).unwrap();
     let parent_hash_set: HashSet<BlockHash> = HashSet::new();
