@@ -1,4 +1,4 @@
-import { NetworkInfo } from './utils/types';
+import { NetworkInfo } from './Types';
 interface NetworkPanelProps {
   network: NetworkInfo;
 }

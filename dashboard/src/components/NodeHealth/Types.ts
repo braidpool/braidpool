@@ -5,10 +5,9 @@ export interface BlockchainInfo {
   bestblockhash: string;
   difficulty: number;
   verificationprogress: number;
-  chainwork: string;
-  size_on_disk: number;
+  chainwork:string,
   pruned: boolean;
-  warnings: string;
+  size_on_disk: number;
 }
 
 export interface PeerInfo {
@@ -34,13 +33,16 @@ export interface NetworkInfo {
   timeoffset: number;
   networkactive: boolean;
   connections: number;
+  connections_in:number;
+  connections_out:number;
   relayfee: number;
   incrementalfee: number;
   localaddresses: string[];
   warnings: string;
 }
-export interface Mempool {
-  loaded: boolean;
+
+export interface MempoolInfo {
+   loaded: boolean;
   size: number;
   bytes: number;
   usage: number;
@@ -48,6 +50,7 @@ export interface Mempool {
   mempoolminfee: number;
   minrelaytxfee: number;
 }
+
 export interface NetTotals {
   totalbytesrecv: number;
   totalbytessent: number;
@@ -60,4 +63,28 @@ export interface NetTotals {
     bytes_left_in_cycle: number;
     time_left_in_cycle: number;
   };
+}
+
+export interface NodeHealthMessage {
+  type: 'node_health_data';
+  data: {
+    blockchainInfo: BlockchainInfo;
+    peerInfo: PeerInfo[];
+    networkInfo: NetworkInfo;
+    mempoolInfo: MempoolInfo;
+    netTotals: NetTotals;
+    lastUpdated: string;
+  };
+}
+export interface BandwidthHistoryPoint {
+  timestamp: number;
+  totalbytesrecv: number;
+  totalbytessent: number;
+  recvRate: number;
+  sentRate: number;
+}
+
+export interface BandwidthPanelProps {
+  nettotals: NetTotals;
+  bandwidthHistory: BandwidthHistoryPoint[];
 }

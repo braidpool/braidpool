@@ -4,7 +4,6 @@ export const formatBytes = (bytes: number) => {
   const i = Math.floor(Math.log(bytes) / Math.log(1024));
   return Math.round((bytes / Math.pow(1024, i)) * 100) / 100 + ' ' + sizes[i];
 };
-
 export const formatDuration = (ms: number) => {
   const seconds = Math.floor(ms / 1000);
   const minutes = Math.floor(seconds / 60);

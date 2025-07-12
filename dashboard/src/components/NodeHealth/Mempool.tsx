@@ -1,8 +1,8 @@
-import { Mempool } from './utils/types';
+import { MempoolInfo } from './Types';
 
-import { formatBytes } from './utils/utils';
+import { formatBytes } from './Utils';
 
-export default function MempoolPanel({ mempool }: { mempool: Mempool }) {
+export default function MempoolPanel({ mempool }: { mempool: MempoolInfo }) {
   const mempoolUsage = (mempool.usage / mempool.maxmempool) * 100;
 
   return (

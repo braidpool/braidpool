@@ -1,67 +1,131 @@
-import React, { useState, useEffect } from 'react';
-import {
-  getBlockchainInfo,
-  getPeerInfo,
-  getNetworkInfo,
-  getMempoolInfo,
-  getNetTotals,
-} from '../../../api/nodeApi';
-
+import React, { useState, useEffect, useRef } from 'react';
 import Peers from './Peers';
 import NetworkPanel from './Network';
 import MempoolPanel from './Mempool';
 import BandwidthPanel from './Bandwidth';
+import { TABS } from './Utils';
+import {
+  BlockchainInfo,
+  PeerInfo,
+  NetworkInfo,
+  MempoolInfo,
+  NetTotals,
+  BandwidthHistoryPoint,
+} from './Types';
+;
 
-import { TABS } from './utils/utils';
 const NodeHealth: React.FC = () => {
   const [activeTab, setActiveTab] = useState('blockchain');
-  const [blockchainInfo, setBlockchainInfo] = useState<any>(null);
-  const [peerInfo, setPeerInfo] = useState<any[]>([]);
-  const [networkInfo, setNetworkInfo] = useState<any>(null);
-  const [mempoolInfo, setMempoolInfo] = useState<any>(null);
-  const [netTotals, setNetTotals] = useState<any>(null);
-  const [lastUpdated, setLastUpdated] = useState<string>(
-    new Date().toLocaleTimeString()
-  );
+  const [blockchainInfo, setBlockchainInfo] = useState<BlockchainInfo | null>(null);
+  const [peerInfo, setPeerInfo] = useState<PeerInfo[]>([]);
+  const [networkInfo, setNetworkInfo] = useState<NetworkInfo | null>(null);
+  const [mempoolInfo, setMempoolInfo] = useState<MempoolInfo | null>(null);
+  const [netTotals, setNetTotals] = useState<NetTotals | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [wsConnected, setWsConnected] = useState(false);
+  const [bandwidthHistory, setBandwidthHistory] = useState<BandwidthHistoryPoint[]>([]);
 
-  const fetchAllData = async () => {
-    try {
-      setLoading(true);
-      const [blockchain, peers, network, mempool, totals] =
-        await await Promise.all([
-          getBlockchainInfo(),
-          getPeerInfo(),
-          getNetworkInfo(),
-          getMempoolInfo(),
-          getNetTotals(),
-        ]);
-      setBlockchainInfo(blockchain);
-      setPeerInfo(peers);
-      setNetworkInfo(network);
-      setMempoolInfo(mempool);
-      setNetTotals(totals);
-      setLastUpdated(new Date().toLocaleTimeString());
-      setError(null);
-    } catch (err) {
-      console.error('Error fetching blockchain info:', err);
-      setError('Failed to fetch block height. Check proxy or cookie.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const wsRef = useRef<WebSocket | null>(null);
+
   useEffect(() => {
-    fetchAllData();
+    const ws = new WebSocket('ws://localhost:5000');
+    let isMounted = true;
+    wsRef.current = ws;
 
-    // Set up auto-refresh every 30 seconds
-    const interval = setInterval(fetchAllData, 30000);
-    return () => clearInterval(interval);
+    ws.onopen = () => {
+      if (!isMounted) return;
+      setWsConnected(true);
+    };
+
+    ws.onerror = (err) => {
+      setWsConnected(false);
+      console.error('WebSocket error:', err);
+      setLoading(false);
+    };
+
+    ws.onmessage = (event) => {
+      if (!isMounted) return;
+      try {
+        const message = JSON.parse(event.data);
+        if (message.type === 'node_health_data') {
+          const data = message.data;
+          setBlockchainInfo(data.blockchainInfo);
+          setPeerInfo(data.peerInfo);
+          setNetworkInfo(data.networkInfo);
+          setMempoolInfo(data.mempoolInfo);
+          setNetTotals(data.netTotals);
+          setLastUpdated(new Date(data.lastUpdated).toLocaleTimeString());
+          setLoading(false);
+          setError(null);
+          
+          if (data.netTotals) {
+            setBandwidthHistory((prev: BandwidthHistoryPoint[]) => {
+              const timestamp = new Date(data.lastUpdated).getTime();
+              const currentRecv = data.netTotals.totalbytesrecv;
+              const currentSent = data.netTotals.totalbytessent;
+              
+              let recvRate = 0;
+              let sentRate = 0;
+              
+              if (prev.length > 0) {
+                const lastPoint = prev[prev.length - 1];
+                const timeDiff = (timestamp - lastPoint.timestamp) / 1000; // seconds
+                
+                if (timeDiff > 0) {
+                  recvRate = Math.max(0, (currentRecv - lastPoint.totalbytesrecv) / timeDiff);
+                  sentRate = Math.max(0, (currentSent - lastPoint.totalbytessent) / timeDiff);
+                }
+              }
+              
+              const newPoint: BandwidthHistoryPoint = {
+                timestamp,
+                totalbytesrecv: currentRecv,
+                totalbytessent: currentSent,
+                recvRate,
+                sentRate
+              };
+              
+              const updated = [...prev, newPoint];
+              // Keep only last 60 points
+              return updated.length > 60 ? updated.slice(updated.length - 60) : updated;
+            });
+          }
+        }
+     
+      } catch (err) {
+        console.error('Error parsing WebSocket message:', err);
+      }
+    };
+
+    ws.onclose = () => {
+      if (!isMounted) return;
+      console.warn('WebSocket closed');
+      setWsConnected(false);
+    };
+
+    return () => {
+      isMounted = false;
+      ws.onopen = null;
+      ws.onclose = null;
+      ws.onerror = null;
+      ws.onmessage = null;
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
+    };
   }, []);
 
-  if (loading && !blockchainInfo) {
+  const handleManualRefresh = () => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ action: 'refresh' }));
+    }
+  };
+
+  if (loading || !blockchainInfo) {
     return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+      <div className="min-h-screen bg-[#1c1c1c] text-white flex items-center justify-center">
         Loading...
       </div>
     );
@@ -69,11 +133,11 @@ const NodeHealth: React.FC = () => {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+      <div className="min-h-screen bg-[#1c1c1c] text-white flex items-center justify-center">
         <div className="text-center">
           <p className="text-red-500 mb-4">{error}</p>
           <button
-            onClick={fetchAllData}
+            onClick={handleManualRefresh}
             className="bg-white text-black px-4 py-2 rounded"
           >
             Retry
@@ -83,23 +147,25 @@ const NodeHealth: React.FC = () => {
     );
   }
 
+  const {
+    blocks,
+    headers,
+    size_on_disk,
+    bestblockhash,
+    chain,
+    verificationprogress,
+    difficulty,
+    pruned,
+  } = blockchainInfo;
+
+  const syncPercentage = ((blocks / headers) * 100).toFixed(2);
+
   return (
-    <div className="min-h-screen bg-[#1c1c1c] px-2 sm:px-4 md:px-6 py-6 md:py-8 ">
-      <div className="mb-4 flex flex-row md:flex-row items-start md:items-center justify-between gap-4  px-4 py-3 ">
-        <h1 className="text-xl md:text-2xl font-bold text-white">
-          Node Health Dashboard
-          <p className="text-xs sm:text-sm text-gray-500 ">
-            {`Last updated: ${lastUpdated}`}
-          </p>
-        </h1>
-        <div className="flex items-center mt-3 gap-4">
-          <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-medium">
-            Auto-refresh ON
-          </span>
-          <button className="rounded-md border text-white border-gray-300 px-4 py-1 text-sm hover:bg-gray-100 hover:text-black">
-            Refresh
-          </button>
-        </div>
+    <div className="min-h-screen bg-[#1c1c1c] px-2 sm:px-4 md:px-6 py-6 md:py-8">
+      <div>
+        <p className="text-xs flex justify-end sm:text-sm text-gray-500 mb-4">
+          {`Last updated: ${lastUpdated}`}
+        </p>
       </div>
 
       {/* Top Summary Cards */}
@@ -107,49 +173,31 @@ const NodeHealth: React.FC = () => {
         {/* Sync Status */}
         <div className="bg-[#1c1c1c] border border-gray-700 rounded-xl backdrop-blur-sm shadow-md px-2 py-2">
           <h2 className="text-xs sm:text-sm text-gray-500 mb-1">Sync Status</h2>
-          <p
-            className={`text-lg sm:text-xl font-bold mb-1 ${blockchainInfo.headers === blockchainInfo.blocks ? 'text-green-600' : 'text-yellow-500'}`}
-          >
-            {blockchainInfo.headers === blockchainInfo.blocks
-              ? 'Synced'
-              : 'Syncing'}
+          <p className={`text-lg sm:text-xl font-bold mb-1 ${headers === blocks ? 'text-green-600' : 'text-yellow-500'}`}>
+            {headers === blocks ? 'Synced' : 'Syncing'}
           </p>
           <div className="w-full h-4 rounded text-white bg-gray-200">
             <div
               className="h-full rounded bg-green-500"
-              style={{
-                width: `${((blockchainInfo.blocks / blockchainInfo.headers) * 100).toFixed(2)}%`,
-              }}
+              style={{ width: `${syncPercentage}%` }}
             ></div>
           </div>
-          <p className="text-xs text-gray-500 mt-1">
-            {' '}
-            {((blockchainInfo.blocks / blockchainInfo.headers) * 100).toFixed(
-              2
-            )}
-            % complete
-          </p>
+          <p className="text-xs text-gray-500 mt-1">{syncPercentage}% complete</p>
         </div>
 
         {/* Block Height */}
         <div className="bg-[#1c1c1c] border border-gray-700 rounded-xl backdrop-blur-sm shadow-md px-2 py-2">
-          <h2 className="text-xs sm:text-sm text-gray-500 mb-1">
-            Block Height
-          </h2>
-          <p className="text-lg sm:text-xl text-white font-bold">
-            {blockchainInfo.blocks}
-          </p>
+          <h2 className="text-xs sm:text-sm text-gray-500 mb-1">Block Height</h2>
+          <p className="text-lg sm:text-xl text-white font-bold">{blocks}</p>
           <p className="text-xs text-gray-500">
-            {(blockchainInfo.size_on_disk / (1024 * 1024 * 1024)).toFixed(2)}GB
+            {(size_on_disk / (1024 * 1024 * 1024)).toFixed(2)}GB
           </p>
         </div>
 
         {/* Connections */}
         <div className="bg-[#1c1c1c] border border-gray-700 rounded-xl backdrop-blur-sm shadow-md px-2 py-2">
           <h2 className="text-xs sm:text-sm text-gray-500 mb-1">Connections</h2>
-          <p className="text-lg sm:text-xl text-white font-bold">
-            {networkInfo.connections ?? '...'}
-          </p>
+          <p className="text-lg sm:text-xl text-white font-bold">{networkInfo?.connections ?? '...'}</p>
           <p className="text-xs text-gray-500">
             {networkInfo
               ? `${networkInfo.connections_in ?? '?'} inbound, ${networkInfo.connections_out ?? '?'} outbound`
@@ -160,38 +208,36 @@ const NodeHealth: React.FC = () => {
         {/* Mempool */}
         <div className="bg-[#1c1c1c] border border-gray-700 rounded-xl backdrop-blur-sm shadow-md px-2 py-2">
           <h2 className="text-xs sm:text-sm text-gray-500 mb-1">Mempool</h2>
-          <p className="text-lg sm:text-xl text-white  font-bold">
+          <p className="text-lg sm:text-xl text-white font-bold">
             {mempoolInfo?.size?.toLocaleString() ?? '...'}
           </p>
           <div className="w-full h-4 rounded bg-gray-200">
             <div
-              className="h-full  rounded bg-green-500"
+              className="h-full rounded bg-green-500"
               style={{
                 width:
-                  mempoolInfo && mempoolInfo.bytes && mempoolInfo.maxmempool
-                    ? `${((mempoolInfo.bytes / mempoolInfo.maxmempool) * 100).toFixed(2)}%`
+                  mempoolInfo && mempoolInfo.usage && mempoolInfo.maxmempool
+                    ? `${((mempoolInfo.usage / mempoolInfo.maxmempool) * 100).toFixed(2)}%`
                     : '0%',
               }}
             ></div>
           </div>
           <p className="text-xs text-gray-500 mt-1">
-            {mempoolInfo && mempoolInfo.bytes
-              ? `${(mempoolInfo.bytes / (1024 * 1024)).toFixed(2)} MB`
+            {mempoolInfo && mempoolInfo.usage
+              ? `${(mempoolInfo.usage / (1024 * 1024)).toFixed(2)} MB`
               : '...'}
           </p>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="mt-8 border border-gray-700 rounded-xl backdrop-blur-sm shadow-md overflow-x-auto bg-[#1c1c1c]  p-3 flex items-center justify-center ">
+      <div className="mt-8 border border-gray-700 rounded-xl backdrop-blur-sm shadow-md overflow-x-auto bg-[#1c1c1c]  p-3 flex items-center justify-center">
         <nav className="flex gap-4 sm:gap-10 text-xs sm:text-sm font-medium whitespace-nowrap">
           {TABS.map((tab) => (
             <button
               key={tab.value}
               className={`py-2 border-b-2 ${
-                activeTab === tab.value
-                  ? 'text-white border-blue-900'
-                  : 'text-gray-500 border-transparent'
+                activeTab === tab.value ? 'text-white border-blue-900' : 'text-gray-500 border-transparent'
               }`}
               onClick={() => setActiveTab(tab.value)}
             >
@@ -203,81 +249,40 @@ const NodeHealth: React.FC = () => {
 
       {/* Tab Content */}
       <div className="mt-6">
-        {activeTab === 'blockchain' && blockchainInfo && (
+        {activeTab === 'blockchain' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mt-6">
-            <div className="rounded-xl border border-gray-700 backdrop-blur-sm shadow-md  p-4 md:p-6 bg-[#1c1c1c]">
-              <h3 className="text-base md:text-lg flex items-center justify-center  text-white font-semibold mb-4">
+            <div className="rounded-xl border border-gray-700 backdrop-blur-sm shadow-md p-4 md:p-6 bg-[#1c1c1c]">
+              <h3 className="text-base md:text-lg flex items-center justify-center text-white font-semibold mb-4">
                 Blockchain Information
               </h3>
               <div className="space-y-2 text-xs sm:text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Chain</span>
-                  <span className="font-medium text-white">
-                    {blockchainInfo.chain}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Current Blocks</span>
-                  <span className="font-medium text-white">
-                    {blockchainInfo.blocks}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Synced</span>
-                  <span className="font-medium text-white">
-                    {blockchainInfo.headers === blockchainInfo.blocks
-                      ? 'True'
-                      : 'False'}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Blocks Best Hash</span>
-                  <span className="font-medium text-white">
-                    {blockchainInfo.bestblockhash}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Verification Progress</span>
-                  <span className="text-white font-medium">
-                    {(blockchainInfo.verificationprogress * 100).toFixed(4)}%
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Difficulty</span>
-                  <span className="font-medium text-white">
-                    {blockchainInfo.difficulty}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Pruned</span>
-                  <span className="bg-black text-white px-2 py-0.5 rounded-full text-xs">
-                    {blockchainInfo.pruned ? 'True' : 'False'}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Warnings</span>
-                  <span className="font-medium text-white">
-                    {blockchainInfo.warnings || 'None'}
-                  </span>
-                </div>
+                <InfoRow label="Chain" value={chain} />
+                <InfoRow label="Current Blocks" value={blocks} />
+                <InfoRow label="Synced" value={headers === blocks ? 'True' : 'False'} />
+                <InfoRow label="Blocks Best Hash" value={bestblockhash} />
+                <InfoRow label="Verification Progress" value={`${(verificationprogress * 100).toFixed(4)}%`} />
+                <InfoRow label="Difficulty" value={difficulty} />
+                <InfoRow label="Pruned" value={pruned ? 'True' : 'False'} />
               </div>
             </div>
           </div>
         )}
 
         {activeTab === 'peers' && peerInfo && <Peers peers={peerInfo} />}
-        {activeTab === 'network' && networkInfo && (
-          <NetworkPanel network={networkInfo} />
-        )}
-        {activeTab === 'mempool' && mempoolInfo && (
-          <MempoolPanel mempool={mempoolInfo} />
-        )}
+        {activeTab === 'network' && networkInfo && <NetworkPanel network={networkInfo} />}
+        {activeTab === 'mempool' && mempoolInfo && <MempoolPanel mempool={mempoolInfo} />}
         {activeTab === 'bandwidth' && netTotals && (
-          <BandwidthPanel nettotals={netTotals} />
+          <BandwidthPanel nettotals={netTotals} bandwidthHistory={bandwidthHistory} />
         )}
       </div>
     </div>
   );
 };
+const InfoRow = ({ label, value }: { label: string; value: string | number }) => (
+  <div className="flex justify-between">
+    <span className="text-gray-500">{label}</span>
+    <span className="font-medium text-white">{value}</span>
+  </div>
+);
 
 export default NodeHealth;
