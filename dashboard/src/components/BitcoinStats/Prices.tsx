@@ -40,7 +40,7 @@ const BitcoinPriceTracker: React.FC = () => {
   const [priceHistory, setPriceHistory] = useState<
     { price: number; time: string }[]
   >([]);
-  const MAX_HISTORY_ITEMS = 30;
+  const MAX_HISTORY_ITEMS = 10;
   const showSkeletons = loading || !isConnected || (!priceData && !globalStats);
   const currencyRef = useRef(currency);
 
@@ -119,7 +119,7 @@ const BitcoinPriceTracker: React.FC = () => {
           setPriceHistory((prev) => {
             if (typeof currentPrice === 'number' && !isNaN(currentPrice)) {
               const newHistory = [
-                ...prev,
+                ...prev.slice(-MAX_HISTORY_ITEMS),
                 { price: currentPrice, time: timeString },
               ];
               return newHistory.slice(-MAX_HISTORY_ITEMS);
@@ -370,7 +370,7 @@ const BitcoinPriceTracker: React.FC = () => {
           <ResponsiveContainer width="99%" height="100%">
             <LineChart
               data={priceHistory}
-              margin={{ left: 60, right: 20, top: 20, bottom: 20 }}
+              margin={{ left: 60, right: 40, top: 20, bottom: 20 }}
             >
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="time" tick={{ fontSize: 10 }} interval={0} />
