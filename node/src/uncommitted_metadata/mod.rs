@@ -5,8 +5,10 @@ use bitcoin::consensus::Error;
 use bitcoin::ecdsa::Signature;
 use bitcoin::io::{self, BufRead, Write};
 use core::str::FromStr;
+use serde::Deserialize;
+use serde::Serialize;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct UnCommittedMetadata {
     pub extra_nonce: i32,
     pub broadcast_timestamp: Time,

@@ -5,18 +5,17 @@ use serde::Serialize;
 use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::collections::{HashMap, HashSet};
-pub mod error;
 #[derive(Clone, Debug, Serialize, PartialEq)]
 
 pub struct Cohort(HashSet<usize>);
-
-use error::BraidError::HighestWorkBeadFetchFailed;
+#[derive(Debug, Clone)]
 pub enum AddBeadStatus {
     DagAlreadyContainsBead,
     InvalidBead,
     BeadAdded,
     ParentsNotYetReceived,
 }
+#[derive(Debug, Clone)]
 
 pub enum GenesisCheckStatus {
     GenesisBeadsValid,
@@ -37,7 +36,7 @@ pub struct Braid {
 
 impl Braid {
     ///Initializing the Braid object for keeping track of current state of Braid
-    pub fn new(genesis_beads: HashSet<Bead>) -> Self {
+    pub fn new(genesis_beads: Vec<Bead>) -> Self {
         let mut beads = Vec::new();
         let mut bead_indices = HashSet::new();
         let mut bead_index_mapping = HashMap::new();
@@ -47,11 +46,14 @@ impl Braid {
             bead_indices.insert(index);
             bead_index_mapping.insert(bead.block_header.block_hash(), index);
         }
-
+        let mut genesis_cohort: Vec<Cohort> = Vec::new();
+        if bead_indices.len() != 0 {
+            genesis_cohort.push(Cohort(HashSet::from(bead_indices.clone())));
+        }
         Braid {
             beads,
             tips: bead_indices.clone(),
-            cohorts: vec![Cohort(bead_indices.clone())],
+            cohorts: genesis_cohort,
             orphan_beads: Vec::new(),
             genesis_beads: bead_indices,
             bead_index_mapping,
@@ -63,7 +65,8 @@ impl Braid {
     /// Attempts to extend the braid with the given bead.
     /// Returns true if the bead successfully extended the braid, false otherwise.
     pub fn extend(&mut self, bead: &Bead) -> AddBeadStatus {
-        // No parents: bad block
+        // No parents: bad block i.e. the extend will add beads after the genesis
+        //bead is done and the extension of genesis beads to Braid shall be done via Braid::new
         if bead.committed_metadata.parents.is_empty() {
             return AddBeadStatus::InvalidBead;
         }
@@ -160,7 +163,53 @@ impl Braid {
             self.cohorts.push(Cohort(dangling));
         }
 
+        self.process_orphan_beads();
+
         AddBeadStatus::BeadAdded
+    }
+
+    /// Process orphan beads to see if any can now be added to the braid
+    /// This method checks if all parents of orphan beads are now available
+    /// and recursively extends the braid with those beads
+    fn process_orphan_beads(&mut self) {
+        // Process orphans in reverse order to maintain proper indexing
+        let mut i = self.orphan_beads.len();
+        while i > 0 {
+            i -= 1;
+
+            // Check if all parents are now available for this orphan
+            let mut all_parents_available = true;
+            for parent_hash in &self.orphan_beads[i].committed_metadata.parents {
+                if !self.bead_index_mapping.contains_key(parent_hash) {
+                    all_parents_available = false;
+                    break;
+                }
+            }
+
+            if all_parents_available {
+                // Remove the orphan bead first, then process it
+                let orphan_bead = self.orphan_beads.remove(i);
+
+                // Now extend with the orphan bead
+                match self.extend(&orphan_bead) {
+                    AddBeadStatus::BeadAdded => {
+                        // Recursively process remaining orphans as this addition
+                        // might enable more orphans to be processed
+                        self.process_orphan_beads();
+                        return; // Exit current processing as recursion will handle the rest
+                    }
+                    AddBeadStatus::DagAlreadyContainsBead => {
+                        continue;
+                    }
+                    AddBeadStatus::InvalidBead => {
+                        continue;
+                    }
+                    AddBeadStatus::ParentsNotYetReceived => {
+                        self.orphan_beads.push(orphan_bead);
+                    }
+                }
+            }
+        }
     }
 
     pub fn check_genesis_beads(&self, genesis_beads: &Vec<BeadHash>) -> GenesisCheckStatus {
@@ -196,9 +245,9 @@ impl Braid {
 mod consensus_functions {
     use num::{One, Zero};
 
-    use crate::braid::error::BraidError;
-
     use super::*;
+    use crate::error::BraidError;
+    use crate::error::BraidError::{HighestWorkBeadFetchFailed, MissingAncestorWork};
     /// Returns the set of **genesis beads** from a given Braid object.
     ///
     /// A **genesis bead** is defined as a bead that has no parents, i.e., it is a root node in the Braid DAG.

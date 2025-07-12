@@ -14,8 +14,6 @@ use bitcoin::consensus::encode::Encodable;
 use bitcoin::consensus::serialize;
 use bitcoin::consensus::DeserializeError;
 use bitcoin::ecdsa::Signature;
-use bitcoin::p2p::Address as P2P_Address;
-use bitcoin::p2p::ServiceFlags;
 use bitcoin::BlockHash;
 use bitcoin::BlockHeader;
 use bitcoin::BlockTime;
@@ -23,22 +21,19 @@ use bitcoin::BlockVersion;
 use bitcoin::CompactTarget;
 use bitcoin::EcdsaSighashType;
 use bitcoin::TxMerkleNode;
-use core::net::SocketAddr;
 use futures::executor::block_on;
 use libp2p::request_response::Codec;
 use std::collections::HashSet;
 use std::io::Cursor;
-use std::net::{IpAddr, Ipv4Addr};
 use std::str::FromStr;
 #[test]
 
 fn test_serialized_committed_metadata() {
-    let test_sock_add = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8888);
-    let _address = P2P_Address::new(&test_sock_add.clone(), ServiceFlags::NONE);
+    let _address = String::from("127.0.0.1:8000");
     let public_key = "020202020202020202020202020202020202020202020202020202020202020202"
         .parse::<bitcoin::PublicKey>()
         .unwrap();
-    let socket = bitcoin::p2p::address::AddrV2::Ipv4(Ipv4Addr::new(127, 0, 0, 1));
+    let socket = String::from("127.0.0.1");
     let time_val = Time::from_consensus(1653195600).unwrap();
     let parent_hash_set: HashSet<BlockHash> = HashSet::new();
     let time_hash_set = TimeVec(Vec::new());
@@ -102,12 +97,11 @@ fn test_serialized_uncommitted_metadata() {
 #[test]
 
 fn test_serialized_bead() {
-    let test_sock_add = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8888);
-    let _address = P2P_Address::new(&test_sock_add.clone(), ServiceFlags::NONE);
+    let _address = String::from("127.0.0.1:8000");
     let public_key = "020202020202020202020202020202020202020202020202020202020202020202"
         .parse::<bitcoin::PublicKey>()
         .unwrap();
-    let socket = bitcoin::p2p::address::AddrV2::Ipv4(Ipv4Addr::new(127, 0, 0, 1));
+    let socket = String::from("127.0.0.1");
     let time_hash_set = TimeVec(Vec::new());
     let parent_hash_set: HashSet<BlockHash> = HashSet::new();
     let weak_target = CompactTarget::from_consensus(32);
@@ -177,12 +171,11 @@ fn test_bead_request_serialization() {
 
 #[test]
 fn test_bead_response_serialization() {
-    let test_sock_add = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8888);
-    let _address = P2P_Address::new(&test_sock_add.clone(), ServiceFlags::NONE);
+    let _address = String::from("127.0.0.1:8000");
     let public_key = "020202020202020202020202020202020202020202020202020202020202020202"
         .parse::<bitcoin::PublicKey>()
         .unwrap();
-    let socket = bitcoin::p2p::address::AddrV2::Ipv4(Ipv4Addr::new(127, 0, 0, 1));
+    let socket = String::from("127.0.0.1");
     let time_hash_set = TimeVec(Vec::new());
     let parent_hash_set: HashSet<BlockHash> = HashSet::new();
     let weak_target = CompactTarget::from_consensus(32);

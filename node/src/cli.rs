@@ -1,7 +1,10 @@
 use clap::Parser;
 use std::path::PathBuf;
 
-#[derive(Parser, Debug)]
+use crate::rpc_server::RpcCommand;
+
+#[derive(Parser, Debug, Clone)]
+#[command(name = "braid", about = "Braidpool Node CLI")]
 pub struct Cli {
     /// Braid data directory
     #[arg(long, default_value = "~/.braidpool/")]
@@ -43,4 +46,8 @@ pub struct Cli {
     /// Use this port for bitcoin ZMQ
     #[arg(long, default_value = "28332")]
     pub zmqhashblockport: u16,
+
+    ///Rpc endpoints for the specific methods
+    #[command(subcommand)]
+    pub command: Option<RpcCommand>,
 }

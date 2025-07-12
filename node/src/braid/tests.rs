@@ -17,13 +17,9 @@ use crate::committed_metadata::TimeVec;
 use crate::utils::test_utils::test_utility_functions::*;
 use bitcoin::block::BlockHash as BeadHash;
 use bitcoin::{
-    absolute::Time,
-    ecdsa::Signature,
-    p2p::{Address as P2P_Address, ServiceFlags},
-    BlockHash, BlockHeader, BlockTime, BlockVersion, CompactTarget, EcdsaSighashType, PublicKey,
-    TxMerkleNode,
+    absolute::Time, ecdsa::Signature, BlockHash, BlockHeader, BlockTime, BlockVersion,
+    CompactTarget, EcdsaSighashType, PublicKey, TxMerkleNode,
 };
-use core::net::SocketAddr;
 use num::range;
 use num::BigUint;
 use rand::{rngs::OsRng, thread_rng, RngCore};
@@ -32,7 +28,6 @@ use serde::{Deserialize, Serialize};
 use serde_json;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::net::{IpAddr, Ipv4Addr};
 use std::path::Path;
 use std::str::FromStr;
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -71,10 +66,9 @@ fn emit_bead() -> Bead {
         .as_secs() as u32;
     let current_time = Time::from_consensus(now).unwrap();
 
-    let test_sock_add = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8888);
-    let _address = P2P_Address::new(&test_sock_add.clone(), ServiceFlags::NONE);
+    let _address = String::from("127.0.0.1:8888");
     let public_key = random_public_key;
-    let socket = bitcoin::p2p::address::AddrV2::Ipv4(Ipv4Addr::new(127, 0, 0, 1));
+    let socket: String = String::from("127.0.0.1");
     let time_hash_set = TimeVec(Vec::new());
     let parent_hash_set: HashSet<BlockHash> = HashSet::new();
     let weak_target = CompactTarget::from_consensus(32);
@@ -419,6 +413,61 @@ pub fn test_extend_functionality() {
         ]
     );
 }
+
+#[test]
+pub fn test_orphan_beads_functinality() {
+    let test_bead_0 = emit_bead();
+
+    let mut test_braid = Braid {
+        beads: vec![test_bead_0.clone()],
+        genesis_beads: HashSet::from([0]),
+        tips: HashSet::from([0]),
+        orphan_beads: Vec::new(),
+        cohorts: vec![Cohort(HashSet::from([0]))],
+        bead_index_mapping: std::collections::HashMap::from([(
+            test_bead_0.block_header.block_hash(),
+            0,
+        )]),
+    };
+    assert_eq!(
+        test_braid.cohorts,
+        vec![Cohort(HashSet::from([0]))],
+        "Initial cohort should contain only the genesis bead"
+    );
+
+    let mut test_bead_1 = emit_bead();
+    let mut test_bead_2 = emit_bead();
+
+    test_bead_1
+        .committed_metadata
+        .parents
+        .insert(test_bead_2.block_header.block_hash());
+
+    test_braid.extend(&test_bead_1);
+    assert_eq!(
+        test_braid.cohorts,
+        vec![Cohort(HashSet::from([0]))],
+        "The added bead was an orphan, cohort shouldn't change."
+    );
+
+    test_bead_2
+        .committed_metadata
+        .parents
+        .insert(test_bead_0.block_header.block_hash());
+    test_braid.extend(&test_bead_2);
+
+    // After adding the second bead, we should have three cohorts
+    assert_eq!(
+        test_braid.cohorts,
+        vec![
+            Cohort(HashSet::from([0])),
+            Cohort(HashSet::from([1])),
+            Cohort(HashSet::from([2]))
+        ],
+        "After adding the third bead, there should be three cohorts"
+    );
+}
+
 #[test]
 pub fn test_genesis1() {
     let test_bead_0 = emit_bead();

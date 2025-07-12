@@ -31,6 +31,19 @@ pub struct BraidpoolConfig {
     pub bitcoin_config: BitcoinConfig,
     pub braid_directory: BraidDirectoryConfig,
     pub miner_config: MinerConfig,
+    pub braid_rpc_config: BraidRpcConfig,
+}
+#[derive(Serialize, Deserialize, Clone)]
+//Rpc server configuration
+pub struct BraidRpcConfig {
+    rpc_server_addr: String,
+}
+impl Default for BraidRpcConfig {
+    fn default() -> Self {
+        BraidRpcConfig {
+            rpc_server_addr: String::from("127.0.0.1:6682"),
+        }
+    }
 }
 #[allow(dead_code)]
 impl BraidpoolConfig {
@@ -96,7 +109,7 @@ mod test {
 
     use bitcoin::Network;
 
-    use crate::config::MinerConfig;
+    use crate::config::{BraidRpcConfig, MinerConfig};
 
     use super::{BitcoinConfig, BraidDirectoryConfig, BraidpoolConfig, NetworkConfig};
     #[test]
@@ -129,6 +142,7 @@ mod test {
             miner_config: MinerConfig {
                 miner_pubkey: "".to_string(),
             },
+            braid_rpc_config: BraidRpcConfig::default(),
         };
         assert_eq!(
             from_file.braidnetwork_config.listen_address,
@@ -160,5 +174,9 @@ mod test {
             built.bitcoin_config.cookie_path
         );
         assert_eq!(from_file.braid_directory.path, built.braid_directory.path);
+        assert_eq!(
+            from_file.braid_rpc_config.rpc_server_addr,
+            built.braid_rpc_config.rpc_server_addr
+        );
     }
 }
