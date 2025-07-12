@@ -14,6 +14,10 @@ pub enum BraidRPCError {
         source: jsonrpsee::core::ClientError,
     },
 }
+#[derive(Debug)]
+pub enum IPCtemplateError {
+    TemplateConsumError,
+}
 impl fmt::Display for BraidRPCError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -37,5 +41,13 @@ impl fmt::Display for BraidError {
         }
     }
 }
-
+impl fmt::Display for IPCtemplateError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            IPCtemplateError::TemplateConsumError => {
+                write!(f, "An error occurred while consuming the template")
+            }
+        }
+    }
+}
 impl std::error::Error for BraidError {}

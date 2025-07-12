@@ -14,9 +14,10 @@ use node::{
     bead::{self, Bead, BeadRequest},
     behaviour::{self, BEAD_ANNOUNCE_PROTOCOL},
     braid, cli,
+    error::IPCtemplateError,
+    ipc,
     peer_manager::PeerManager,
     rpc_server::{parse_arguments, run_rpc_server},
-    utils::create_test_bead,
 };
 use std::error::Error;
 use std::os::unix::fs::PermissionsExt;
@@ -35,6 +36,11 @@ const SEED_DNS: &str = "/dnsaddr/french.braidpool.net";
 //combined addr for dns resolution and dialing of boot for peer discovery
 const ADDR_REFRENCE: &str =
     "/dnsaddr/french.braidpool.net/p2p/12D3KooWCXH2BiENJ7NkFUBSavd8Ed4ZSYKNdiFnYP5abSo36rGL";
+use tokio::sync::mpsc;
+
+mod block_template;
+mod rpc;
+mod zmq;
 
 #[allow(dead_code)]
 mod chain_capnp;
@@ -177,6 +183,79 @@ async fn main() -> Result<(), Box<dyn Error>> {
     log::info!("Boot nodes have been added to the node's local DHT");
     swarm.dial(ADDR_REFRENCE.parse::<Multiaddr>().unwrap())?;
     log::info!("Boot Node dialied with listening addr {:?}", ADDR_REFRENCE);
+    //IPC(inter process communication) based `getblocktemplate` and `notification` to send to the downstream via the `cmempoold` architecture
+    if args.ipc {
+        log::info!("Socket path: {}", args.ipc_socket);
+
+        let (ipc_template_tx, ipc_template_rx) = mpsc::channel::<Vec<u8>>(1);
+
+        let ipc_socket_path = args.ipc_socket.clone();
+
+        tokio::task::spawn_blocking(move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("Failed to create tokio runtime");
+
+            rt.block_on(async {
+                let local_set = tokio::task::LocalSet::new();
+
+                local_set
+                    .run_until(async {
+                        let listener_task = tokio::task::spawn_local({
+                            let ipc_socket_path = ipc_socket_path.clone();
+                            let ipc_template_tx = ipc_template_tx.clone();
+                            async move {
+                                loop {
+                                    match ipc::ipc_block_listener(
+                                        ipc_socket_path.clone(),
+                                        ipc_template_tx.clone(),
+                                    )
+                                    .await
+                                    {
+                                        Ok(_) => {
+                                            break;
+                                        }
+                                        Err(e) => {
+                                            log::error!("IPC block listener failed: {}", e);
+                                            log::info!("Restarting IPC listener in 10 seconds...");
+                                            tokio::time::sleep(tokio::time::Duration::from_secs(
+                                                10,
+                                            ))
+                                            .await;
+                                        }
+                                    }
+                                }
+                            }
+                        });
+
+                        let consumer_task = tokio::task::spawn_local(async move {
+                            ipc_template_consumer(ipc_template_rx).await;
+                        });
+
+                        tokio::select! {
+                            _ = listener_task => log::info!("IPC listener completed"),
+                            _ = consumer_task => log::info!("IPC consumer completed"),
+                        }
+                    })
+                    .await;
+            });
+        });
+    } else {
+        log::info!("Using ZMQ for Bitcoin Core communication");
+        log::info!("ZMQ URL: tcp://{}:{}", args.bitcoin, args.zmqhashblockport);
+        let rpc = rpc::setup(
+            args.bitcoin.clone(),
+            args.rpcport,
+            args.rpcuser,
+            args.rpcpass,
+            args.rpccookie,
+        )?;
+        let (zmq_template_tx, zmq_template_rx) = mpsc::channel(1);
+        let zmq_url = format!("tcp://{}:{}", args.bitcoin, args.zmqhashblockport);
+        tokio::spawn(zmq::zmq_hashblock_listener(zmq_url, rpc, zmq_template_tx));
+        tokio::spawn(block_template::consumer(zmq_template_rx));
+    }
     if let Some(addnode) = args.addnode {
         for node in addnode.iter() {
             let node_multiaddr: Multiaddr = node.parse().expect("Failed to parse to multiaddr");
@@ -527,6 +606,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 "An error occurred while shutting down the braid node {:?}",
                 error
             );
+        }
+    }
+
+    Ok(())
+}
+
+async fn ipc_template_consumer(
+    mut template_rx: mpsc::Receiver<Vec<u8>>,
+) -> Result<(), IPCtemplateError> {
+    while let Some(template_bytes) = template_rx.recv().await {
+        if template_bytes.len() > 0 {
+            // Process the template bytes as needed
+            // For example, you could deserialize it or log its contents
+            // let hex_string = bytes_to_hex(&template_bytes);
+            // log::info!("Template in hex: {}", hex_string);
+        } else {
+            log::warn!("IPC template too short: {} bytes", template_bytes.len());
         }
     }
 
