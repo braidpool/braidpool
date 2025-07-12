@@ -46,11 +46,14 @@ impl Braid {
             bead_indices.insert(index);
             bead_index_mapping.insert(bead.block_header.block_hash(), index);
         }
-
+        let mut genesis_cohort: Vec<Cohort> = Vec::new();
+        if bead_indices.len() != 0 {
+            genesis_cohort.push(Cohort(HashSet::from(bead_indices.clone())));
+        }
         Braid {
             beads,
             tips: bead_indices.clone(),
-            cohorts: vec![Cohort(bead_indices.clone())],
+            cohorts: genesis_cohort,
             orphan_beads: Vec::new(),
             genesis_beads: bead_indices,
             bead_index_mapping,
@@ -62,29 +65,9 @@ impl Braid {
     /// Attempts to extend the braid with the given bead.
     /// Returns true if the bead successfully extended the braid, false otherwise.
     pub fn extend(&mut self, bead: &Bead) -> AddBeadStatus {
-        // No parents: bad block
+        // No parents: bad block i.e. the extend will add beads after the genesis
+        //bead is done and the extension of genesis beads to Braid shall be done via Braid::new
         if bead.committed_metadata.parents.is_empty() {
-            // Check if we already have this bead
-            let bead_hash = bead.block_header.block_hash();
-            if self
-                .beads
-                .iter()
-                .any(|b| b.block_header.block_hash() == bead_hash)
-            {
-                return AddBeadStatus::DagAlreadyContainsBead; // Already seen this bead
-            }
-
-            // Add the genesis bead
-            self.beads.push(bead.clone());
-            //current bead index
-            let new_bead_index = self.beads.len() - 1;
-
-            self.bead_index_mapping.insert(bead_hash, new_bead_index);
-
-            self.genesis_beads.insert(new_bead_index);
-
-            self.tips.insert(new_bead_index);
-            self.cohorts.push(Cohort(HashSet::from([new_bead_index])));
             return AddBeadStatus::InvalidBead;
         }
         // Don't have all parents
