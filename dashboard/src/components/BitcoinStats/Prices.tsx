@@ -373,11 +373,7 @@ const BitcoinPriceTracker: React.FC = () => {
               margin={{ left: 60, right: 20, top: 20, bottom: 20 }}
             >
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis
-                dataKey="time"
-                tick={{ fontSize: 10 }}
-                interval={Math.floor(MAX_HISTORY_ITEMS / 5)}
-              />
+              <XAxis dataKey="time" tick={{ fontSize: 10 }} interval={0} />
               <YAxis
                 domain={['auto', 'auto']}
                 tickFormatter={(value) =>
