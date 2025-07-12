@@ -221,25 +221,30 @@ const GraphVisualization: React.FC = () => {
   useEffect(() => {
     const url = 'ws://localhost:65433/';
     const socket = new WebSocket(url);
+    let isMounted = true;
 
     socket.onopen = () => {
+      if (!isMounted) return;
       console.log('Connected to WebSocket', url);
       setConnectionStatus('Connected');
     };
 
     socket.onclose = () => {
+      if (!isMounted) return;
       setConnectionStatus('Disconnected');
     };
 
     socket.onerror = (err) => {
+      if (!isMounted) return;
       setConnectionStatus(`Error: ${err}`);
     };
 
     socket.onmessage = (event) => {
+      if (!isMounted) return;
       try {
         const parsed = JSON.parse(event.data);
         const parsedData = parsed.data;
-
+        console.log('Received data:', parsedData);
         if (!parsedData?.parents || typeof parsedData.parents !== 'object') {
           return;
         }
@@ -347,6 +352,7 @@ const GraphVisualization: React.FC = () => {
     };
 
     return () => {
+      isMounted = false;
       if (socket.readyState === WebSocket.OPEN) {
         socket.close();
       }
