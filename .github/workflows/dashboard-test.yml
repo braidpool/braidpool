@@ -12,22 +12,28 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
-    defaults:
-      run:
-        working-directory: ./dashboard
-
     strategy:
       matrix:
         node-version: [18.x, 20.x, 22.x]
 
     steps:
       - uses: actions/checkout@v4
+
       - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
           cache: "npm"
-      - run: npm ci
-      - run: npm run build --if-present
-      - run: npm test
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Install deps
+        run: npm ci
+        working-directory: dashboard
+
+      - name: Build project
+        run: npm run build --if-present
+        working-directory: dashboard
+
+      - name: Run tests
+        run: npm test
+        working-directory: dashboard
