@@ -61,7 +61,13 @@ const Dashboard = () => {
           </>
         );
       case Page.MINING_INVENTORY:
-        return <MineInventoryDashboard />;
+        return (
+          <div className="p-2">
+            <Card title="Miner Inventory">
+             <MineInventoryDashboard />
+            </Card>
+          </div>
+        );
       case Page.MEMPOOL:
         return (
           <div className="p-2">
