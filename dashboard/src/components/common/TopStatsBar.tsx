@@ -1,17 +1,7 @@
 import React from 'react';
 import { Box, Typography, Stack, Skeleton } from '@mui/material';
 import colors from '../../theme/colors';
-
-interface StatCardProps {
-  title: string;
-  value: string;
-  icon?: React.ReactNode;
-  loading?: boolean;
-}
-
-interface TopStatsBarProps {
-  loading?: boolean;
-}
+import { StatCardProps, TopStatsBarProps } from './Types';
 
 const StatCard: React.FC<StatCardProps> = ({
   title,

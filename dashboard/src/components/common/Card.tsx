@@ -1,13 +1,6 @@
-import React, { ReactNode } from 'react';
+import React from 'react';
 import { Box, Paper, Typography } from '@mui/material';
-
-interface CardProps {
-  title?: ReactNode;
-  subtitle?: ReactNode;
-  children: ReactNode;
-  accentColor?: string;
-  headerExtra?: ReactNode;
-}
+import { CardProps } from './Types';
 
 /**
  * A reusable card component with a standard styling pattern
