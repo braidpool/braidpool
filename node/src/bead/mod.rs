@@ -10,6 +10,7 @@ use bitcoin::BlockHeader;
 use libp2p::futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use libp2p::request_response::Codec;
 use libp2p::StreamProtocol;
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 const GET_BEADS: u8 = 0;
@@ -18,7 +19,7 @@ const GET_GENESIS: u8 = 2;
 const GET_ALL_BEADS: u8 = 3;
 const BEAD_RESPONSE_ERROR: u8 = 4;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Bead {
     pub block_header: BlockHeader,
     pub committed_metadata: CommittedMetadata,

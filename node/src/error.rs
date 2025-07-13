@@ -1,3 +1,4 @@
+//All braidpool specific errors are defined here
 use std::fmt;
 
 #[derive(Debug)]
@@ -6,7 +7,26 @@ pub enum BraidError {
     MissingAncestorWork,
     HighestWorkBeadFetchFailed,
 }
-
+#[derive(Debug)]
+pub enum BraidRPCError {
+    RequestFailed {
+        method: String,
+        source: jsonrpsee::core::ClientError,
+    },
+}
+impl fmt::Display for BraidRPCError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BraidRPCError::RequestFailed { method, source } => {
+                write!(
+                    f,
+                    "{} error occurred while sending {} request to the server",
+                    method, source
+                )
+            }
+        }
+    }
+}
 impl fmt::Display for BraidError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {

@@ -4,8 +4,6 @@ use bitcoin::consensus::encode::Decodable;
 use bitcoin::consensus::encode::Encodable;
 use bitcoin::consensus::Error;
 use bitcoin::io::{self, BufRead, Write};
-use bitcoin::p2p::address::AddrV2;
-use bitcoin::p2p::Address as P2P_Address;
 use bitcoin::CompactTarget;
 use bitcoin::PublicKey;
 use bitcoin::Transaction;
@@ -40,21 +38,22 @@ impl Decodable for TimeVec {
         Ok(TimeVec(vec))
     }
 }
-
-#[derive(Clone, Debug, PartialEq)]
+//Changing the existing atrributes type mapping for inherit implementation of serializable and
+//deserializable trait
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CommittedMetadata {
     pub transactions: Vec<Transaction>,
     pub parents: HashSet<BeadHash>,
     pub parent_bead_timestamps: TimeVec,
-    pub payout_address: P2P_Address,
+    pub payout_address: String,
     pub start_timestamp: Time,
     pub comm_pub_key: PublicKey,
     //minimum possible target > which will be the weak target
     pub min_target: CompactTarget,
-    //the weaker target locallay apart from mainnet target ranging between the mainnet target and
+    //the weaker target locally apart from mainnet target ranging between the mainnet target and
     //minimum possible target
     pub weak_target: CompactTarget,
-    pub miner_ip: AddrV2,
+    pub miner_ip: String,
 }
 
 impl Encodable for CommittedMetadata {
@@ -82,12 +81,12 @@ impl Decodable for CommittedMetadata {
         let transactions = Vec::<Transaction>::consensus_decode(r)?;
         let parents = vec_to_hashset(Vec::<BeadHash>::consensus_decode(r)?);
         let parent_bead_timestamps = TimeVec::consensus_decode(r)?;
-        let payout_address = P2P_Address::consensus_decode(r)?;
+        let payout_address = String::consensus_decode(r)?;
         let start_timestamp = Time::from_consensus(u32::consensus_decode(r).unwrap()).unwrap();
         let comm_pub_key = PublicKey::from_slice(&Vec::<u8>::consensus_decode(r).unwrap()).unwrap();
         let min_target = CompactTarget::consensus_decode(r).unwrap();
         let weak_target = CompactTarget::consensus_decode(r).unwrap();
-        let miner_ip = AddrV2::consensus_decode(r)?;
+        let miner_ip = String::consensus_decode(r)?;
         Ok(CommittedMetadata {
             transactions,
             parents,

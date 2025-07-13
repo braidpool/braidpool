@@ -13,21 +13,17 @@ use libp2p::{
 use node::{
     bead::{self, Bead, BeadRequest},
     behaviour::{self, BEAD_ANNOUNCE_PROTOCOL},
-    braid,
+    braid, cli,
     peer_manager::PeerManager,
+    rpc_server::{parse_arguments, run_rpc_server},
+    utils::create_test_bead,
 };
+use std::error::Error;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::sync::Arc;
-use std::{collections::HashSet, error::Error};
 use std::{fs, time::Duration};
-use tokio::sync::{mpsc, RwLock};
-
-mod block_template;
-mod cli;
-mod config;
-mod rpc;
-mod zmq;
+use tokio::sync::RwLock;
 
 use behaviour::{BraidPoolBehaviour, BraidPoolBehaviourEvent};
 
@@ -58,19 +54,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             fs::create_dir_all(&*datadir)?;
         }
     }
-
-    let rpc = rpc::setup(
-        args.bitcoin.clone(),
-        args.rpcport,
-        args.rpcuser,
-        args.rpcpass,
-        args.rpccookie,
-    )?;
-    let zmq_url = format!("tcp://{}:{}", args.bitcoin, args.zmqhashblockport);
-
-    let (block_template_tx, block_template_rx) = mpsc::channel(1);
-    tokio::spawn(zmq::zmq_hashblock_listener(zmq_url, rpc, block_template_tx));
-    tokio::spawn(block_template::consumer(block_template_rx));
 
     let datadir_path = Path::new(&*datadir);
     let keystore_path = datadir_path.join("keystore");
@@ -115,8 +98,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     };
 
-    // Initializing the braid object
-    let braid = Arc::new(RwLock::new(braid::Braid::new(HashSet::new())));
+    let genesis_beads = Vec::from([]);
+    // Initializing the braid object with read write lock
+    //for supporting concurrent readers and single writer
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+
+    //spawning the rpc server
+    if let Some(rpc_command) = args.command {
+        let server_address = tokio::spawn(run_rpc_server(Arc::clone(&braid)));
+        let socket_address = server_address.await.unwrap().unwrap();
+        let parsing_handle =
+            tokio::spawn(parse_arguments(rpc_command, socket_address.clone())).await;
+    } else {
+        //running the rpc server and updating the reference counter
+        //for shared ownership
+        let server_handler = tokio::spawn(run_rpc_server(Arc::clone(&braid))).await;
+    }
     // load beads from db (if present) and insert in braid here
     // Initializing the peer manager
     let mut peer_manager = PeerManager::new(8);
@@ -136,7 +133,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_behaviour(|local_key| BraidPoolBehaviour::new(local_key).unwrap())?
         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX)))
         .build();
-    println!("Local Peerid: {}", swarm.local_peer_id());
+    log::info!("Local Peerid: {}", swarm.local_peer_id());
     let socket_addr: std::net::SocketAddr = match args.bind.parse() {
         Ok(addr) => addr,
         Err(_) => format!("{}:6680", args.bind)

@@ -1,7 +1,14 @@
 pub mod bead;
 pub mod behaviour;
+pub mod block_template;
 pub mod braid;
+pub mod cli;
 pub mod committed_metadata;
+pub mod config;
+pub mod error;
 pub mod peer_manager;
+pub mod rpc;
+pub mod rpc_server;
 pub mod uncommitted_metadata;
 pub mod utils;
+pub mod zmq;
