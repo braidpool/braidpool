@@ -7,6 +7,7 @@ export interface CardProps {
   accentColor?: string;
   headerExtra?: ReactNode;
 }
+
 export interface HeaderProps {
   title?: string;
 }

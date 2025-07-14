@@ -1,0 +1,15 @@
+services:
+  web:
+    build: ./dashboard
+    ports: 
+    - 80:80
+  simulator:
+    build: ./tests
+    ports:
+    - 65433:65433
+  api:
+    build: ./dashboard/api
+    env_file:
+      - ./dashboard/api/.env
+    ports:
+    - 5000:5000

@@ -1,93 +1,92 @@
-import React from 'react';
-import Card from '../common/Card';
-import colors from '../../theme/colors';
 import { RecentBlocksTableProps } from './Types';
-
-// Mock data for recent blocks
-const recentBlocks = [
-  {
-    height: 837192,
-    hash: '000000000000000000030f31e862f407bb97d0d299e6ae92b428b540f8d26237',
-    time: '4 hrs ago',
-  },
-  {
-    height: 837192,
-    hash: '000000000000000000023a97e8c10a8ba61827f37b019871bf3aab48015d3273',
-    time: '5 hrs ago',
-  },
-  {
-    height: 837192,
-    hash: '0000000000000000000b98c4d0ff2b7d48ab5aeadcfb94c53fef7b9e18982f34',
-    time: '6 hrs ago',
-  },
-  {
-    height: 837192,
-    hash: '00000000000000000007f3e72173d22dd9fbd000b7acb328c5559346b5f6af89',
-    time: '7 hrs ago',
-  },
-];
+import colors from '../../theme/colors';
+import { useState } from 'react';
+import BlockInfoDialog from './BlockDialog';
+import { formatUnixTimestamp } from './Utils';
+import { shortenAddress } from '../BitcoinStats/Utils';
 
 const RecentBlocksTable: React.FC<RecentBlocksTableProps> = ({
   maxHeight = 400,
+  blocks,
 }) => {
-  const truncateHash = (hash: string) => {
-    return hash.substring(0, 10) + '...' + hash.substring(hash.length - 10);
-  };
+  const [selectedBlock, setSelectedBlock] = useState<string | null>(null);
 
   return (
-    <Card
-      subtitle="Latest blocks found by the pool"
-      accentColor={colors.cardAccentSecondary}
-    >
+    <div className="max-w-screen w-full overflow-x-hidden">
       <div
-        className="overflow-auto"
-        style={{
-          maxHeight: `${maxHeight}px`,
-          scrollbarWidth: 'thin',
-          scrollbarColor: `${colors.primary} ${colors.paper}`,
-        }}
+        className="rounded-2xl border border-white/10 bg-[#1e1e1e] shadow-md p-4"
+        style={{ borderColor: colors.cardAccentSecondary }}
       >
-        <table className="w-full">
-          <thead className="sticky top-0">
-            <tr style={{ backgroundColor: colors.paper }}>
-              <th
-                className="text-left p-4 font-bold"
-                style={{ color: colors.textPrimary }}
-              >
-                Height
-              </th>
-              <th
-                className="text-left p-4 font-bold"
-                style={{ color: colors.textPrimary }}
-              >
-                Hash
-              </th>
-              <th
-                className="text-left p-4 font-bold"
-                style={{ color: colors.textPrimary }}
-              >
-                Time
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {recentBlocks.map((block, index) => (
-              <tr key={index} className="hover:bg-white/5 transition-colors">
-                <td className="p-4" style={{ color: colors.textPrimary }}>
-                  {block.height}
-                </td>
-                <td className="p-4" style={{ color: colors.accent }}>
-                  {truncateHash(block.hash)}
-                </td>
-                <td className="p-4" style={{ color: colors.textSecondary }}>
-                  {block.time}
-                </td>
+        <div className="mb-2  text-gray-400">
+          Latest blocks found by the pool
+        </div>
+        <div
+          className="overflow-auto rounded-md scrollbar-thin"
+          style={{
+            maxHeight: `${maxHeight}px`,
+            scrollbarColor: `${colors.primary} ${colors.paper}`,
+            backgroundColor: colors.paper,
+          }}
+        >
+          <table className="w-full">
+            <thead className="sticky top-0 z-10">
+              <tr style={{ backgroundColor: colors.paper }}>
+                <th
+                  className="text-left p-4 font-semibold "
+                  style={{ color: colors.textPrimary }}
+                >
+                  Height
+                </th>
+                <th
+                  className="text-left p-4 font-semibold "
+                  style={{ color: colors.textPrimary }}
+                >
+                  ID
+                </th>
+                <th
+                  className="text-left p-4 font-semibold "
+                  style={{ color: colors.textPrimary }}
+                >
+                  Time
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {blocks.map((block, index) => (
+                <tr
+                  key={index}
+                  className={`transition-colors duration-150 ${
+                    selectedBlock === block.id
+                      ? 'bg-white/10'
+                      : 'hover:bg-white/10'
+                  }`}
+                  onClick={() => setSelectedBlock(block.id)}
+                >
+                  <td className="p-4" style={{ color: colors.textPrimary }}>
+                    {block.height}
+                  </td>
+                  <td
+                    className="p-4 relative group inline-block cursor-pointer hover:underline"
+                    style={{ color: colors.accent }}
+                  >
+                    {shortenAddress(block.id)}
+                  </td>
+                  <td className="p-4 " style={{ color: colors.textSecondary }}>
+                    {formatUnixTimestamp(block.timestamp)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {selectedBlock && (
+            <BlockInfoDialog
+              hash={selectedBlock}
+              onClose={() => setSelectedBlock(null)}
+            />
+          )}
+        </div>
       </div>
-    </Card>
+    </div>
   );
 };
 

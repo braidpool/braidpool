@@ -1,34 +1,17 @@
 import { useState, useEffect } from 'react';
-import TopStatsBar from '../common/TopStatsBar';
 import Card from '../common/Card';
 import Header from '../common/Header';
 import InstallationInstructions from '../Installation/InstallationInstructions';
 import MineInventoryDashboard from '../MinerInventory/MineInventoryDashboard';
-import PoolHashrateChart from './PoolHashrateChart';
 import MempoolLatencyStats from './MempoolLatencyStats';
-import RecentBlocksTable from './RecentBlocksTable';
 import GraphVisualization from '../BraidPoolDAG/BraidPoolDAG';
 import MinedSharesExplorer from '../BeadsTab/MinedSharesExplorer';
-
-import { loadSampleBraidData } from '../../utils/braidDataTransformer';
 import BitcoinStats from '../BitcoinStats/BitcoinStats';
 import { Page } from './Types';
+import BlockViewer from './BlockViewer';
 
 const Dashboard = () => {
-  const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState<Page>(Page.DASHBOARD);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        await loadSampleBraidData();
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, []);
 
   // Render the main content based on selected page
   const renderPage = () => {
@@ -37,28 +20,12 @@ const Dashboard = () => {
         return <InstallationInstructions />;
       case Page.DASHBOARD:
         return (
-          <>
-            <TopStatsBar loading={loading} />
-            <div className="flex flex-wrap mt-2 -mx-2">
-              <div className="w-full md:w-1/2 p-2">
-                <Card title="Pool Hashrate">
-                  <PoolHashrateChart loading={loading} />
-                </Card>
-              </div>
-              <div className="w-full md:w-1/2 p-2">
-                <Card title="Mempool Activity">
-                  <MempoolLatencyStats />
-                </Card>
-              </div>
-            </div>
-            <div className="mt-2 -mx-2">
-              <div className="p-2">
-                <Card title="Recent Blocks">
-                  <RecentBlocksTable />
-                </Card>
-              </div>
-            </div>
-          </>
+          <Card
+            title="Braidpool Dashboard"
+            subtitle="Welcome to the Braidpool dashboard!"
+          >
+            <BlockViewer />
+          </Card>
         );
       case Page.MINING_INVENTORY:
         return (
