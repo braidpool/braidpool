@@ -26,56 +26,44 @@ const DeviceCard = ({
 
   return (
     <div className="relative w-full max-w-[360px] bg-[#1c1c1c] border border-gray-700 rounded-xl p-5 backdrop-blur-sm transition-transform duration-200 hover:-translate-y-1 hover:shadow-xl">
- 
-  <div className={`absolute top-3 right-3 w-3 h-3 rounded-full ${statusColor}`} />
-  {miner.alerts > 0 && (
-    <div className="absolute top-2 right-10 px-2 py-0.5 text-xs rounded-full bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300">
-      ⚠ {miner.alerts}
+      <div className={`absolute top-3 right-3 w-3 h-3 rounded-full ${statusColor}`} />
+      {miner.alerts > 0 && (
+        <div className="absolute top-2 right-10 px-2 py-0.5 text-xs rounded-full bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300">
+          ⚠ {miner.alerts}
+        </div>
+      )}
+
+      <h3 className="text-lg font-semibold text-white mb-1">{miner.name}</h3>
+      <div className="flex justify-between text-xs text-gray-400 mb-3">
+        <span>Location: {miner.location}</span>
+        <span>Last Seen: {miner.lastSeen}</span>
+      </div>
+
+      <div className="text-sm text-gray-300 space-y-2 mb-4">
+        <div className="flex justify-between">
+          <span>Hashrate: {miner.hashrate} TH/s</span>
+          <span>Temp: {miner.temp}°C</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Power: {miner.powerDraw} W</span>
+          <span>Uptime: {miner.uptime}</span>
+        </div>
+        <div>
+          <span>Efficiency: {miner.efficiency}</span>
+        </div>
+      </div>
+
+      <div className="flex justify-end mt-2">
+        
+        {/* <button
+          className="text-xs px-3 py-1 rounded border border-gray-800 text-white hover:bg-gray-800 hover:text-white transition flex items-center gap-1"
+          onClick={() => console.log(`📊 Details for ${miner.id}`)}
+          
+        >
+           Details
+        </button> */}
+      </div>
     </div>
-  )}
-
-  {/* Header */}
-  <h3 className="text-lg font-semibold text-white mb-1">{miner.name}</h3>
-  <div className="flex justify-between text-xs text-gray-400 mb-3">
-    <span>{miner.location}</span>
-    <span>{miner.lastSeen}</span>
-  </div>
-
-  {/* Stats Block  */}
-  
-<div className="text-sm text-gray-300 space-y-2 mb-4">
-  <div className="flex justify-between">
-    <span>Hashrate: {miner.hashrate} TH/s</span>
-    <span>Temp: {miner.temp}°C</span>
-  </div>
-  <div className="flex justify-between">
-    <span>Power: {miner.powerDraw} W</span>
-    <span>Uptime: {miner.uptime}</span>
-  </div>
-  <div>
-    <span>Efficiency: {miner.efficiency}</span>
-  </div>
-</div>
-
-
-
-  {/* Action Buttons */}
-  <div className="flex justify-between mt-2">
-    <button
-      className="text-xs px-3 py-1 rounded border border-blue-500 text-blue-500 hover:bg-blue-600 hover:text-white transition"
-      onClick={() => console.log(`📊 Details for ${miner.id}`)}
-    >
-      Details
-    </button>
-    <button
-      className="text-xs px-3 py-1 rounded border border-blue-500 text-blue-500 hover:bg-blue-600 hover:text-white transition flex items-center gap-1"
-      onClick={() => onActivateLight(miner.id)}
-    >
-      💡 Locate
-    </button>
-  </div>
-</div>
-
   );
 };
 
@@ -85,54 +73,51 @@ const MineInventoryDashboard = () => {
   const [error, setError] = useState<string | null>(null);
   const [activeLight, setActiveLight] = useState<string | null>(null);
   const [newMinerIP, setNewMinerIP] = useState('');
-useEffect(() => {
-  const fetchMiners = async () => {
-    try {
-      const response = await fetch('http://localhost:5000/api/miners', {
-        headers: { Accept: 'application/json' },
-      });
 
-      if (!response.ok) throw new Error('Failed to fetch miner data');
+  useEffect(() => {
+    const fetchMiners = async () => {
+      try {
+        const response = await fetch('http://localhost:5000/api/miners', {
+          headers: { Accept: 'application/json' },
+        });
 
-      const data = await response.json();
+        if (!response.ok) throw new Error('Failed to fetch miner data');
+        const data = await response.json();
 
-      const updatedMiner: Miner = {
-        id: data.macAddr || 'default',
-        name: data.hostname || 'Unknown',
-        status: data.hashRate > 0 ? 'online' : data.overheat_mode ? 'warning' : 'offline',
-        temp: data.temp || 0,
-        hashrate: (data.hashRate || 0).toFixed(2),
-        efficiency: ((data.hashRate / data.power) || 0).toFixed(2),
-        powerDraw: (data.power || 0).toFixed(2),
-        uptime: `${Math.floor((data.uptimeSeconds || 0) / 60)} min`,
-        location: 'Local Network',
-        lastSeen: new Date().toLocaleTimeString(),
-        alerts: data.overheat_mode ? 1 : 0,
-      };
+        if (!data.macAddr) return;
 
-      // Update only the matching miner or add if not present
-      setMiners((prev) => {
-        const index = prev.findIndex((m) => m.id === updatedMiner.id);
-        if (index !== -1) {
-          const updated = [...prev];
-          updated[index] = updatedMiner;
-          return updated;
-        }
-        return [...prev, updatedMiner];
-      });
+        const updatedMiner: Miner = {
+          id: data.macAddr,
+          name: data.hostname || 'Unknown',
+          status: data.hashRate > 0 ? 'online' : data.overheat_mode ? 'warning' : 'offline',
+          temp: data.temp || 0,
+          hashrate: (data.hashRate || 0).toFixed(2),
+          efficiency: ((data.hashRate / data.power) || 0).toFixed(2),
+          powerDraw: (data.power || 0).toFixed(2),
+          uptime: `${Math.floor((data.uptimeSeconds || 0) / 60)} min`,
+          location: 'Local Network',
+          lastSeen: new Date().toLocaleTimeString(),
+          alerts: data.overheat_mode ? 1 : 0,
+        };
 
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error occurred');
-    } finally {
-      setLoading(false);
-    }
-  };
+        setMiners((prev) => {
+          const exists = prev.find((m) => m.id === updatedMiner.id);
+          if (exists) {
+            return prev.map((m) => (m.id === updatedMiner.id ? updatedMiner : m));
+          }
+          return [...prev, updatedMiner];
+        });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Unknown error occurred');
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  fetchMiners();
-  const interval = setInterval(fetchMiners, 30000);
-  return () => clearInterval(interval);
-}, []);
-
+    fetchMiners();
+    const interval = setInterval(fetchMiners, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleActivateLight = (id: string) => {
     setActiveLight(id);
@@ -144,16 +129,20 @@ useEffect(() => {
     if (!newMinerIP) return;
 
     try {
-     const response = await fetch(`http://localhost:5000/api/miners?ip=${newMinerIP}`, {
+      const response = await fetch(`http://localhost:5000/api/miners?ip=${newMinerIP}`, {
         headers: { Accept: 'application/json' },
       });
 
       if (!response.ok) throw new Error('Failed to fetch from custom IP');
-
       const data = await response.json();
 
+      if (!data.macAddr) {
+        alert('Device does not provide a valid MAC address');
+        return;
+      }
+
       const newMiner: Miner = {
-        id: data.macAddr || newMinerIP,
+        id: `${data.macAddr}-${newMinerIP}`, 
         name: data.hostname || 'Unknown',
         status: data.hashRate > 0 ? 'online' : data.overheat_mode ? 'warning' : 'offline',
         temp: data.temp || 0,
@@ -166,12 +155,24 @@ useEffect(() => {
         alerts: data.overheat_mode ? 1 : 0,
       };
 
-      setMiners((prev) => [...prev, newMiner]);
+      console.log("Adding miner:", newMiner);
+
+      setMiners((prev) => {
+        const exists = prev.find((m) => m.id === newMiner.id);
+        if (exists) return prev;
+        return [...prev, newMiner];
+      });
+
       setNewMinerIP('');
     } catch (err) {
       alert('Could not connect to the miner at that IP');
       console.error(err);
     }
+  };
+
+  const clearMiners = () => {
+    setMiners([]);
+    console.log('All miners cleared.');
   };
 
   const totalMiners = miners.length;
@@ -203,47 +204,48 @@ useEffect(() => {
   return (
     <Card>
       <div className="text-center mb-8">
-        
         <p className="text-base text-gray-400 mt-1">Status of all mining devices</p>
 
-        {/* Add Miner Input */}
         <div className="flex justify-center items-center gap-2 mt-4">
           <input
             type="text"
             value={newMinerIP}
             onChange={(e) => setNewMinerIP(e.target.value)}
-            placeholder="Enter miner IP (e.g. 192.168.29.105)"
+            placeholder="Enter miner IP (e.g. xxx.xxx.xx.xxx)"
             className="px-3 py-1 text-sm bg-gray-800 border border-gray-600 rounded text-white placeholder-gray-400 w-64"
           />
           <button
             onClick={addMinerByIP}
-            className="px-3 py-1 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded"
+            className="px-3 py-1 text-sm bg-gray-800 hover:bg-gray-950 text-white rounded"
           >
             Add Miner
           </button>
+          <button
+            onClick={clearMiners}
+            className="px-3 py-1 text-sm bg-gray-800 hover:bg-gray-950 text-white rounded"
+          >
+            Clear Miners
+          </button>
         </div>
 
-        {/* Status pills */}
-        <div className="flex flex-wrap justify-center gap-3 mt-6 text-sm">
-          <div className="px-4 py-1 rounded-full border border-green-500 text-green-500">{onlineMiners} Online</div>
-          <div className="px-4 py-1 rounded-full border border-yellow-500 text-yellow-500">{warningMiners} Warning</div>
-          <div className="px-4 py-1 rounded-full border border-red-500 text-red-500">{offlineMiners} Offline</div>
-          <div className="px-4 py-1 rounded-full border border-blue-500 text-blue-500">{totalMiners} Total</div>
+        <div className="flex flex-wrap justify-center gap-3 mt-6 text-sm ">
+          <div className=" px-4 py-1 rounded-md border border-gray-600 text-green-500">{onlineMiners} Online</div>
+          <div className="px-4 py-1  rounded-md border border-gray-600 text-yellow-500">{warningMiners} Warning</div>
+          <div className="px-4 py-1 rounded-md border border-gray-600 text-red-500">{offlineMiners} Offline</div>
+          <div className="px-4 py-1  rounded-md border border-gray-600 text-blue-500">{totalMiners} Total</div>
         </div>
       </div>
 
-      {/* Device Grid */}
       {miners.length === 0 ? (
         <div className="text-center py-8 text-gray-500">
           No mining devices found. Please check your Bitaxe setup.
         </div>
       ) : (
-       <div className="flex overflow-x-auto space-x-4 pb-4 ml-6">
-  {miners.map((miner) => (
-    <DeviceCard key={miner.id} miner={miner} onActivateLight={handleActivateLight} />
-  ))}
-</div>
-
+        <div className="flex overflow-x-auto space-x-4 pb-4 ml-6">
+          {miners.map((miner) => (
+            <DeviceCard key={miner.id} miner={miner} onActivateLight={handleActivateLight} />
+          ))}
+        </div>
       )}
     </Card>
   );
