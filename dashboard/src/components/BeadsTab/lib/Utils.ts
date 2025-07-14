@@ -23,7 +23,7 @@ export function formatWork(difficulty: number): {
   };
 }
 
-export default function useCopyToClipboard(timeout = 1500) {
+export function useCopyToClipboard(timeout = 1500) {
   const [copied, setCopied] = useState<string | null>(null);
 
   const copy = (text: string) => {

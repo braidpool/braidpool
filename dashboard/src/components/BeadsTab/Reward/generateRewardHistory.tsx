@@ -1,7 +1,4 @@
-export function generateRewardHistory(
-  blockCount: number,
-  currentReward: number = 3.125
-) {
+export function generateRewardHistory(blockCount: number) {
   const rewardHistory = [];
   const maxBlocks = Math.min(blockCount, 1000);
   for (
