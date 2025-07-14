@@ -65,6 +65,11 @@ impl Braid {
     /// Attempts to extend the braid with the given bead.
     /// Returns true if the bead successfully extended the braid, false otherwise.
     pub fn extend(&mut self, bead: &Bead) -> AddBeadStatus {
+        // If the braid is empty and bead has no parents, treat as genesis bead
+        if self.beads.is_empty() && bead.committed_metadata.parents.is_empty() {
+            *self = Braid::new(vec![bead.clone()]);
+            return AddBeadStatus::BeadAdded;
+        }
         // No parents: bad block i.e. the extend will add beads after the genesis
         //bead is done and the extension of genesis beads to Braid shall be done via Braid::new
         if bead.committed_metadata.parents.is_empty() {

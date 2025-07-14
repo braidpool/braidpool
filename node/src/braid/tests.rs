@@ -1497,3 +1497,97 @@ pub fn test_check_work_files() {
         }
     }
 }
+
+#[test]
+fn test_extend_function() {
+    let ancestors = std::env::current_dir().unwrap();
+    let ancestors_directory: Vec<&Path> = ancestors.ancestors().collect();
+    let parent_directory = ancestors_directory[1];
+    let test_absolute_path = parent_directory.join(BRAIDTESTDIRECTORY);
+
+    for test_braid_file in std::fs::read_dir(test_absolute_path.as_path()).unwrap() {
+        let re = test_braid_file.unwrap().file_name();
+        let current_file_name = re.to_str().unwrap();
+        let file_path = test_absolute_path.join(current_file_name);
+        let (_, file_braid) = loading_braid_from_file(file_path.to_str().unwrap());
+
+        let mut current_braid_parents: HashMap<usize, HashSet<usize>> = HashMap::new();
+        for beads in file_braid.parents {
+            let mut current_bead_parents: HashSet<usize> = HashSet::new();
+            for parent_beads in beads.1 {
+                current_bead_parents.insert(parent_beads);
+            }
+            current_braid_parents.insert(beads.0, current_bead_parents);
+        }
+
+        let mut index_to_bead: HashMap<usize, Bead> = HashMap::new();
+        let mut max_index = 0;
+
+        // First generate all beads
+        for &index in current_braid_parents.keys() {
+            let bead = emit_bead();
+            index_to_bead.insert(index, bead);
+            max_index = max_index.max(index);
+        }
+
+        let mut parent_hashes: HashMap<usize, Vec<bitcoin::BlockHash>> = HashMap::new();
+        for (index, parents) in &current_braid_parents {
+            let mut hashes = Vec::new();
+            for &parent_idx in parents {
+                if let Some(parent_bead) = index_to_bead.get(&parent_idx) {
+                    hashes.push(parent_bead.block_header.block_hash());
+                }
+            }
+            parent_hashes.insert(*index, hashes);
+        }
+
+        // Now set up parent relationships in committed metadata
+        for (index, hashes) in parent_hashes {
+            if let Some(bead) = index_to_bead.get_mut(&index) {
+                for hash in hashes {
+                    bead.committed_metadata.parents.insert(hash);
+                }
+            }
+        }
+
+        let genesis_indices: HashSet<usize> = current_braid_parents
+            .iter()
+            .filter(|(_, parents)| parents.is_empty())
+            .map(|(&idx, _)| idx)
+            .collect();
+
+        assert_eq!(genesis_indices, HashSet::from([0]));
+
+        // Create initial braid with genesis beads
+        let mut genesis_beads = Vec::new();
+        let mut genesis_set = HashSet::new();
+        let mut bead_index_mapping = HashMap::new();
+
+        for &idx in &genesis_indices {
+            if let Some(bead) = index_to_bead.get(&idx) {
+                genesis_beads.push(bead.clone());
+                genesis_set.insert(idx);
+                bead_index_mapping.insert(bead.block_header.block_hash(), idx);
+            }
+        }
+
+        let mut test_braid = Braid {
+            beads: genesis_beads,
+            tips: genesis_set.clone(),
+            cohorts: vec![Cohort(genesis_set.clone())],
+            orphan_beads: Vec::new(),
+            genesis_beads: genesis_set,
+            bead_index_mapping,
+        };
+
+        // Extend braid with remaining beads in order of index
+        for index in 0..=max_index {
+            if !genesis_indices.contains(&index) {
+                if let Some(bead) = index_to_bead.get(&index) {
+                    test_braid.extend(bead);
+                }
+            }
+        }
+        assert_eq!(test_braid.beads.len(), current_braid_parents.len());
+    }
+}
