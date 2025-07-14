@@ -1,7 +1,5 @@
-import { NetworkInfo } from './Types';
-interface NetworkPanelProps {
-  network: NetworkInfo;
-}
+import { NetworkPanelProps} from './Types';
+
 export default function NetworkPanel({ network }: NetworkPanelProps) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

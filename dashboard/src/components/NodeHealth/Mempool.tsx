@@ -1,5 +1,4 @@
 import { MempoolInfo } from './Types';
-
 import { formatBytes } from './Utils';
 
 export default function MempoolPanel({ mempool }: { mempool: MempoolInfo }) {

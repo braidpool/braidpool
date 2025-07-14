@@ -40,7 +40,9 @@ export interface NetworkInfo {
   localaddresses: string[];
   warnings: string;
 }
-
+export interface NetworkPanelProps {
+  network: NetworkInfo;
+}
 export interface MempoolInfo {
    loaded: boolean;
   size: number;
@@ -80,11 +82,8 @@ export interface BandwidthHistoryPoint {
   timestamp: number;
   totalbytesrecv: number;
   totalbytessent: number;
-  recvRate: number;
-  sentRate: number;
 }
 
 export interface BandwidthPanelProps {
-  nettotals: NetTotals;
   bandwidthHistory: BandwidthHistoryPoint[];
 }
