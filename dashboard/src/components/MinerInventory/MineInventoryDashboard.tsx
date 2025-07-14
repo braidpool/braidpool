@@ -43,7 +43,7 @@ const DeviceCard = ({
 
       <div className="text-sm text-gray-300 space-y-2 mb-4">
         <div className="flex justify-between">
-          <span>Hashrate: {miner.hashrate} TH/s</span>
+          <span>Hashrate: {miner.hashrate} GH/s</span>
           <span>Best Difficulty {miner.bestDiff}</span>
         </div>
         <div className="flex justify-between">
@@ -56,7 +56,7 @@ const DeviceCard = ({
         </div>
         <div className="flex justify-between">
           <span>Efficiency: {miner.efficiency}</span>
-          <span>Frequency: {miner.frequency}</span>
+          <span>Frequency: {miner.frequency}MHz</span>
         </div>
         <div className="flex justify-between">
           <span>FanSpeed: {miner.fanspeed}</span>
