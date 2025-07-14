@@ -64,7 +64,7 @@ const Dashboard = () => {
         return (
           <div className="p-2">
             <Card title="Miner Inventory">
-             <MineInventoryDashboard />
+              <MineInventoryDashboard />
             </Card>
           </div>
         );
