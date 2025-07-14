@@ -53,14 +53,13 @@ async function sendDataToClients() {
     });
   }
 }
-async function sendNodeHealthData(){
-  
+async function sendNodeHealthData() {
   const nodeHealthData = await fetchAllNodeData();
-    wss.clients.forEach((client) => {
-      if (client.readyState === client.OPEN) {
-        client.send(JSON.stringify(nodeHealthData));
-      }
-    });
+  wss.clients.forEach((client) => {
+    if (client.readyState === client.OPEN) {
+      client.send(JSON.stringify(nodeHealthData));
+    }
+  });
 }
 
 setInterval(() => {
@@ -84,8 +83,8 @@ setInterval(() => {
     console.error('[Server] fetchReward failed:', err)
   );
   sendNodeHealthData().catch((err) =>
-console.error("[Server] fetchNodeHealth failed " ,err)
-  )
+    console.error('[Server] fetchNodeHealth failed ', err)
+  );
 }, 10000); // 10-second interval
 
 console.log(`WebSocket server running on ws://localhost:${PORT}`);

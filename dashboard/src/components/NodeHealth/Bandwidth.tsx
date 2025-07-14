@@ -8,8 +8,12 @@ import {
   CartesianGrid,
   ResponsiveContainer,
 } from 'recharts';
+
 import { BandwidthPanelProps } from './Types';
-const BandwidthPanel: React.FC<BandwidthPanelProps> = ({ bandwidthHistory }) => {
+import { formatBytes } from './Utils';
+const BandwidthPanel: React.FC<BandwidthPanelProps> = ({
+  bandwidthHistory,
+}) => {
   const filteredData = bandwidthHistory.length > 1 ? bandwidthHistory : [];
 
   return (
@@ -26,14 +30,21 @@ const BandwidthPanel: React.FC<BandwidthPanelProps> = ({ bandwidthHistory }) => 
             tickFormatter={(ts) => new Date(ts).toLocaleTimeString()}
             stroke="#aaa"
           />
-          <YAxis stroke="#aaa" />
+          <YAxis stroke="#aaa" tickFormatter={(value) => formatBytes(value)} />
           <Tooltip
             contentStyle={{ backgroundColor: '#222', borderColor: '#555' }}
             labelFormatter={(ts) => new Date(ts).toLocaleTimeString()}
-            formatter={(value: number, name: string) => [`${value}`, name]}
+            formatter={(value: number, name: string) => [
+              formatBytes(value),
+              name,
+            ]}
           />
-         <Line dataKey="totalbytesrecv" stroke="#4ade80" name="Bytes Received" />
-<Line dataKey="totalbytessent" stroke="#60a5fa" name="Bytes Sent" />
+          <Line
+            dataKey="totalbytesrecv"
+            stroke="#4ade80"
+            name="Bytes Received"
+          />
+          <Line dataKey="totalbytessent" stroke="#60a5fa" name="Bytes Sent" />
         </LineChart>
       </ResponsiveContainer>
     </div>

@@ -35,7 +35,12 @@ export async function handleWebSocketConnection(ws) {
           const nodeHealthData = await fetchAllNodeData();
           ws.send(JSON.stringify(nodeHealthData));
         } catch (err) {
-          ws.send(JSON.stringify({ type: 'error', message: 'Failed to fetch node health data' }));
+          ws.send(
+            JSON.stringify({
+              type: 'error',
+              message: 'Failed to fetch node health data',
+            })
+          );
         }
         return;
       }

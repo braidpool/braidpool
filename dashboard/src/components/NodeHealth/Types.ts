@@ -5,7 +5,7 @@ export interface BlockchainInfo {
   bestblockhash: string;
   difficulty: number;
   verificationprogress: number;
-  chainwork:string,
+  chainwork: string;
   pruned: boolean;
   size_on_disk: number;
 }
@@ -33,8 +33,8 @@ export interface NetworkInfo {
   timeoffset: number;
   networkactive: boolean;
   connections: number;
-  connections_in:number;
-  connections_out:number;
+  connections_in: number;
+  connections_out: number;
   relayfee: number;
   incrementalfee: number;
   localaddresses: string[];
@@ -44,7 +44,7 @@ export interface NetworkPanelProps {
   network: NetworkInfo;
 }
 export interface MempoolInfo {
-   loaded: boolean;
+  loaded: boolean;
   size: number;
   bytes: number;
   usage: number;

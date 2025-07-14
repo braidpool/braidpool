@@ -1,4 +1,4 @@
-import { NetworkPanelProps} from './Types';
+import { NetworkPanelProps } from './Types';
 
 export default function NetworkPanel({ network }: NetworkPanelProps) {
   return (

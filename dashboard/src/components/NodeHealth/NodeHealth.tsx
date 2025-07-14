@@ -15,7 +15,9 @@ import {
 
 const NodeHealth: React.FC = () => {
   const [activeTab, setActiveTab] = useState('blockchain');
-  const [blockchainInfo, setBlockchainInfo] = useState<BlockchainInfo | null>(null);
+  const [blockchainInfo, setBlockchainInfo] = useState<BlockchainInfo | null>(
+    null
+  );
   const [peerInfo, setPeerInfo] = useState<PeerInfo[]>([]);
   const [networkInfo, setNetworkInfo] = useState<NetworkInfo | null>(null);
   const [mempoolInfo, setMempoolInfo] = useState<MempoolInfo | null>(null);
@@ -24,7 +26,9 @@ const NodeHealth: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
-  const [bandwidthHistory, setBandwidthHistory] = useState<BandwidthHistoryPoint[]>([]);
+  const [bandwidthHistory, setBandwidthHistory] = useState<
+    BandwidthHistoryPoint[]
+  >([]);
 
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -59,14 +63,14 @@ const NodeHealth: React.FC = () => {
           setLoading(false);
           setError(null);
           setBandwidthHistory((prevHistory) => {
-  const timestamp = new Date(data.lastUpdated).getTime();
-  const { totalbytesrecv, totalbytessent } = data.netTotals;
+            const timestamp = new Date(data.lastUpdated).getTime();
+            const { totalbytesrecv, totalbytessent } = data.netTotals;
 
-  return [
-    ...prevHistory.slice(-10), 
-    { timestamp, totalbytesrecv, totalbytessent }
-  ];
-});
+            return [
+              ...prevHistory.slice(-10),
+              { timestamp, totalbytesrecv, totalbytessent },
+            ];
+          });
         }
       } catch (err) {
         console.error('Error parsing WebSocket message:', err);
@@ -149,28 +153,43 @@ const NodeHealth: React.FC = () => {
         {/* Sync Status */}
         <div className="bg-[#1c1c1c] border border-gray-700 rounded-xl px-2 py-2">
           <h2 className="text-xs sm:text-sm text-gray-500 mb-1">Sync Status</h2>
-          <p className={`text-lg sm:text-xl font-bold mb-1 ${headers === blocks ? 'text-green-600' : 'text-yellow-500'}`}>
+          <p
+            className={`text-lg sm:text-xl font-bold mb-1 ${headers === blocks ? 'text-green-600' : 'text-yellow-500'}`}
+          >
             {headers === blocks ? 'Synced' : 'Syncing'}
           </p>
           <div className="w-full h-4 rounded bg-gray-200">
-            <div className="h-full rounded bg-green-500" style={{ width: `${syncPercentage}%` }}></div>
+            <div
+              className="h-full rounded bg-green-500"
+              style={{ width: `${syncPercentage}%` }}
+            ></div>
           </div>
-          <p className="text-xs text-gray-500 mt-1">{syncPercentage}% complete</p>
+          <p className="text-xs text-gray-500 mt-1">
+            {syncPercentage}% complete
+          </p>
         </div>
 
         {/* Block Height */}
         <div className="bg-[#1c1c1c] border border-gray-700 rounded-xl px-2 py-2">
-          <h2 className="text-xs sm:text-sm text-gray-500 mb-1">Block Height</h2>
+          <h2 className="text-xs sm:text-sm text-gray-500 mb-1">
+            Block Height
+          </h2>
           <p className="text-lg sm:text-xl text-white font-bold">{blocks}</p>
-          <p className="text-xs text-gray-500">{(size_on_disk / (1024 ** 3)).toFixed(2)}GB</p>
+          <p className="text-xs text-gray-500">
+            {(size_on_disk / 1024 ** 3).toFixed(2)}GB
+          </p>
         </div>
 
         {/* Connections */}
         <div className="bg-[#1c1c1c] border border-gray-700 rounded-xl px-2 py-2">
           <h2 className="text-xs sm:text-sm text-gray-500 mb-1">Connections</h2>
-          <p className="text-lg sm:text-xl text-white font-bold">{networkInfo?.connections ?? '...'}</p>
+          <p className="text-lg sm:text-xl text-white font-bold">
+            {networkInfo?.connections ?? '...'}
+          </p>
           <p className="text-xs text-gray-500">
-            {networkInfo ? `${networkInfo.connections_in ?? '?'} inbound, ${networkInfo.connections_out ?? '?'} outbound` : ''}
+            {networkInfo
+              ? `${networkInfo.connections_in ?? '?'} inbound, ${networkInfo.connections_out ?? '?'} outbound`
+              : ''}
           </p>
         </div>
 
@@ -192,7 +211,9 @@ const NodeHealth: React.FC = () => {
             ></div>
           </div>
           <p className="text-xs text-gray-500 mt-1">
-            {mempoolInfo && mempoolInfo.usage ? `${(mempoolInfo.usage / (1024 * 1024)).toFixed(2)} MB` : '...'}
+            {mempoolInfo && mempoolInfo.usage
+              ? `${(mempoolInfo.usage / (1024 * 1024)).toFixed(2)} MB`
+              : '...'}
           </p>
         </div>
       </div>
@@ -217,13 +238,21 @@ const NodeHealth: React.FC = () => {
         {activeTab === 'blockchain' && blockchainInfo && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
             <div className="rounded-xl border border-gray-700 p-4 bg-[#1c1c1c]">
-              <h3 className="text-base md:text-lg text-white font-semibold text-center mb-4">Blockchain Information</h3>
+              <h3 className="text-base md:text-lg text-white font-semibold text-center mb-4">
+                Blockchain Information
+              </h3>
               <div className="space-y-2 text-xs sm:text-sm">
                 <InfoRow label="Chain" value={chain} />
                 <InfoRow label="Current Blocks" value={blocks} />
-                <InfoRow label="Synced" value={headers === blocks ? 'True' : 'False'} />
+                <InfoRow
+                  label="Synced"
+                  value={headers === blocks ? 'True' : 'False'}
+                />
                 <InfoRow label="Best Block Hash" value={bestblockhash} />
-                <InfoRow label="Verification Progress" value={`${(verificationprogress * 100).toFixed(4)}%`} />
+                <InfoRow
+                  label="Verification Progress"
+                  value={`${(verificationprogress * 100).toFixed(4)}%`}
+                />
                 <InfoRow label="Difficulty" value={difficulty} />
                 <InfoRow label="Pruned" value={pruned ? 'True' : 'False'} />
               </div>
@@ -232,26 +261,31 @@ const NodeHealth: React.FC = () => {
         )}
 
         {activeTab === 'peers' && peerInfo && <Peers peers={peerInfo} />}
-        {activeTab === 'mempool' && mempoolInfo && <MempoolPanel mempool={mempoolInfo} />}{activeTab === 'bandwidth' && (
-  <div className="space-y-4">
-    {networkInfo && <NetworkPanel network={networkInfo} />}
-    {activeTab === 'bandwidth' && (
-  <div className="space-y-6">
-    
-    <BandwidthPanel bandwidthHistory={bandwidthHistory} />
-  </div>
-)}
-
-  </div>
-)}
-
-
+        {activeTab === 'mempool' && mempoolInfo && (
+          <MempoolPanel mempool={mempoolInfo} />
+        )}
+        {activeTab === 'bandwidth' && (
+          <div className="space-y-4">
+            {networkInfo && <NetworkPanel network={networkInfo} />}
+            {activeTab === 'bandwidth' && (
+              <div className="space-y-6">
+                <BandwidthPanel bandwidthHistory={bandwidthHistory} />
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
-const InfoRow = ({ label, value }: { label: string; value: string | number }) => (
+const InfoRow = ({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number;
+}) => (
   <div className="flex justify-between">
     <span className="text-gray-500">{label}</span>
     <span className="font-medium text-white">{value}</span>

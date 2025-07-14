@@ -92,7 +92,7 @@ const Dashboard = () => {
           </div>
         );
       case Page.MINER_STATS:
-       return (
+        return (
           <div className="p-2">
             <Card title="Beads Explorer">
               <div>
@@ -101,12 +101,12 @@ const Dashboard = () => {
             </Card>
           </div>
         );
-        case Page.NODE_HEALTH:
-       return (
+      case Page.NODE_HEALTH:
+        return (
           <div className="p-2">
             <Card title="Node Health Dashboard">
               <div>
-               <NodeHealth />
+                <NodeHealth />
               </div>
             </Card>
           </div>

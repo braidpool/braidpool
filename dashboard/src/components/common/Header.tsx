@@ -41,7 +41,7 @@ const NAV_ITEMS = [
     page: Page.BITCOIN_STATS,
     icon: <Bitcoin size={18} />,
   },
-   {
+  {
     label: 'Node Health',
     page: Page.NODE_HEALTH,
     icon: <HeartPulse size={18} />,
