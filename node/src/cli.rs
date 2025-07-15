@@ -45,10 +45,10 @@ pub struct Cli {
     pub zmqhashblockport: u16,
 
     /// Use IPC Bitcoin Core communication
-    #[arg(long, default_value = "false")]
+    #[arg(long)]
     pub ipc: bool,
 
     /// Path to Bitcoin Core IPC socket (used when --ipc is enabled)
-    #[arg(long, default_value = "/tmp/bitcoin-ipc.sock")]
+    #[arg(long)]
     pub ipc_socket: String,
 }

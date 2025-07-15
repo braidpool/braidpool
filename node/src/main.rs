@@ -164,19 +164,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 }
 
-async fn ipc_template_consumer(mut template_rx: mpsc::Receiver<Vec<u8>>) {
-    while let Some(template_bytes) = template_rx.recv().await {
-        if template_bytes.len() > 0 {
-            // Process the template bytes as needed
-            // For example, you could deserialize it or log its contents
-            // let hex_string = bytes_to_hex(&template_bytes);
-            // log::info!("Template in hex: {}", hex_string);
-        } else {
-            log::warn!("IPC template too short: {} bytes", template_bytes.len());
-        }
-    }
-}
-
 fn setup_logging() {
     env_logger::init_from_env(
         env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info"),
@@ -197,4 +184,18 @@ fn setup_tracing() -> Result<(), Box<dyn Error>> {
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
     Ok(())
+}
+
+#[allow(dead_code)]
+async fn ipc_template_consumer(mut template_rx: mpsc::Receiver<Vec<u8>>) {
+    while let Some(template_bytes) = template_rx.recv().await {
+        if template_bytes.len() > 0 {
+            // Process the template bytes as needed
+            // For example, you could deserialize it or log its contents
+            // let hex_string = bytes_to_hex(&template_bytes);
+            // log::info!("Template in hex: {}", hex_string);
+        } else {
+            log::warn!("IPC template too short: {} bytes", template_bytes.len());
+        }
+    }
 }
