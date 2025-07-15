@@ -15,7 +15,6 @@ import { formatBytes } from './Utils';
 const BandwidthPanel: React.FC<BandwidthPanelProps> = ({
   bandwidthHistory,
 }) => {
- 
   if (bandwidthHistory.length === 0) {
     return (
       <div className="bg-[#1e1e1e] border border-gray-700 rounded-xl shadow-md p-4 text-center text-white">

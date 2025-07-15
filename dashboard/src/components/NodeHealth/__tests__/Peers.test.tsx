@@ -1,4 +1,3 @@
-
 import { render, screen, fireEvent } from '@testing-library/react';
 import Peers from '../Peers';
 import { PeerInfo } from '../Types';
@@ -14,7 +13,7 @@ const mockPeers: PeerInfo[] = Array.from({ length: 12 }).map((_, i) => ({
   synced_blocks: 100,
   ping: 30 + i,
   bytessent: 1048576 * (i + 1),
-  bytesrecv: 524288 * (i + 1),  
+  bytesrecv: 524288 * (i + 1),
 }));
 
 describe('Peers Component', () => {

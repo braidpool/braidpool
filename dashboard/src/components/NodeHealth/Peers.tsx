@@ -1,16 +1,16 @@
-import { useState ,useMemo} from 'react';
+import { useState, useMemo } from 'react';
 import { PeerInfo } from './Types';
-import { formatBytes,paginate ,calculateTotalPages} from './Utils';
+import { formatBytes, paginate, calculateTotalPages } from './Utils';
 
 const ITEMS_PER_PAGE = 10;
 
 export default function Peers({ peers }: { peers: PeerInfo[] }) {
   const [currentPage, setCurrentPage] = useState(1);
-const totalPages = useMemo(
+  const totalPages = useMemo(
     () => calculateTotalPages(peers.length, ITEMS_PER_PAGE),
     [peers.length]
   );
-  
+
   const paginatedPeers = paginate(peers, currentPage, ITEMS_PER_PAGE);
   const handlePrev = () => {
     setCurrentPage((prev) => Math.max(prev - 1, 1));

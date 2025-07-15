@@ -12,11 +12,18 @@ export const TABS = [
   { label: 'Network', value: 'bandwidth' },
   { label: 'Mempool', value: 'mempool' },
 ];
-export function paginate<T>(data: T[], currentPage: number, itemsPerPage: number): T[] {
+export function paginate<T>(
+  data: T[],
+  currentPage: number,
+  itemsPerPage: number
+): T[] {
   const startIndex = (currentPage - 1) * itemsPerPage;
   return data.slice(startIndex, startIndex + itemsPerPage);
 }
-export function calculateTotalPages(totalItems: number, itemsPerPage: number): number {
+export function calculateTotalPages(
+  totalItems: number,
+  itemsPerPage: number
+): number {
   return Math.ceil(totalItems / itemsPerPage);
 }
 import { useEffect, useState } from 'react';

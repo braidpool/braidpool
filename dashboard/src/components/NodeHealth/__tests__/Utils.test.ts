@@ -1,4 +1,10 @@
-import { formatBytes, TABS, paginate, calculateTotalPages, useIsSmallScreen } from '../Utils';
+import {
+  formatBytes,
+  TABS,
+  paginate,
+  calculateTotalPages,
+  useIsSmallScreen,
+} from '../Utils';
 import { renderHook, act } from '@testing-library/react';
 
 // ---- formatBytes ----

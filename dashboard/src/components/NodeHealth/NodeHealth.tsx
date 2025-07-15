@@ -4,7 +4,7 @@ import NetworkPanel from './Network';
 import MempoolPanel from './Mempool';
 import BandwidthPanel from './Bandwidth';
 import { InfoRow } from './InfoRow';
-import { TABS ,useIsSmallScreen } from './Utils';
+import { TABS, useIsSmallScreen } from './Utils';
 import { shortenHash } from '../BeadsTab/lib/Utils';
 import colors from '@/theme/colors';
 import {
@@ -35,7 +35,6 @@ const NodeHealth: React.FC = () => {
 
   const wsRef = useRef<WebSocket | null>(null);
   const isSmallScreen = useIsSmallScreen();
-
 
   useEffect(() => {
     const ws = new WebSocket('ws://localhost:5000');
@@ -107,13 +106,13 @@ const NodeHealth: React.FC = () => {
       wsRef.current.send(JSON.stringify({ action: 'refresh' }));
     }
   };
-if (
-  loading ||
-  !blockchainInfo ||
-  !networkInfo ||
-  !mempoolInfo ||
-  !netTotals
-) {
+  if (
+    loading ||
+    !blockchainInfo ||
+    !networkInfo ||
+    !mempoolInfo ||
+    !netTotals
+  ) {
     return (
       <div className="min-h-screen bg-[#1c1c1c] text-white flex items-center justify-center">
         Loading...
@@ -157,7 +156,6 @@ if (
           {`Last updated: ${lastUpdated}`}
         </p>
       </div>
-
       {/* Summary Cards */}
       <div className="grid sm:grid-cols-1  md:grid-cols-4 gap-4 md:gap-6">
         {/* Sync Status */}
@@ -227,7 +225,6 @@ if (
           </p>
         </div>
       </div>
-
       {/* Tabs */}
       <div className="mt-8 border border-gray-700 rounded-xl p-3 flex justify-center ">
         <nav className="flex gap-4 sm:gap-10 text-xs sm:text-sm font-medium whitespace-nowrap">
@@ -242,7 +239,6 @@ if (
           ))}
         </nav>
       </div>
-
       {/* Tab Content */}
       <div className="mt-6">
         {activeTab === 'blockchain' && blockchainInfo && (
@@ -259,9 +255,11 @@ if (
                   value={headers === blocks ? 'True' : 'False'}
                 />
                 <InfoRow
-  label="Best Block Hash"
-  value={isSmallScreen ? shortenHash(bestblockhash) : bestblockhash}
-/>
+                  label="Best Block Hash"
+                  value={
+                    isSmallScreen ? shortenHash(bestblockhash) : bestblockhash
+                  }
+                />
                 <InfoRow
                   label="Verification Progress"
                   value={`${(verificationprogress * 100).toFixed(4)}%`}
@@ -277,16 +275,16 @@ if (
         {activeTab === 'mempool' && mempoolInfo && (
           <MempoolPanel mempool={mempoolInfo} />
         )}
-       {activeTab === 'bandwidth' && (
-  <div className="space-y-4">
-    {networkInfo && <NetworkPanel network={networkInfo} />}
-    <div className="space-y-6">
-      <BandwidthPanel bandwidthHistory={bandwidthHistory} />
+        {activeTab === 'bandwidth' && (
+          <div className="space-y-4">
+            {networkInfo && <NetworkPanel network={networkInfo} />}
+            <div className="space-y-6">
+              <BandwidthPanel bandwidthHistory={bandwidthHistory} />
+            </div>
+          </div>
+        )}
+      </div>{' '}
     </div>
-  </div>
-)}
-
-      </div>    </div>
   );
 };
 

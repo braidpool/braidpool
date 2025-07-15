@@ -40,9 +40,7 @@ describe('BandwidthPanel', () => {
 
   it('renders the chart when bandwidth history is passed', () => {
     render(<BandwidthPanel bandwidthHistory={mockBandwidthHistory} />);
-    expect(
-      screen.getByText(/real-time bandwidth usage/i)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/real-time bandwidth usage/i)).toBeInTheDocument();
     expect(screen.getByTestId('linechart')).toBeInTheDocument();
 
     const lines = screen.getAllByTestId('line');
@@ -58,6 +56,6 @@ describe('BandwidthPanel', () => {
   it('renders both Lines: Bytes Sent and Bytes Received', () => {
     render(<BandwidthPanel bandwidthHistory={mockBandwidthHistory} />);
     const lines = screen.getAllByTestId('line');
-    expect(lines.length).toBeGreaterThanOrEqual(2); 
+    expect(lines.length).toBeGreaterThanOrEqual(2);
   });
 });
