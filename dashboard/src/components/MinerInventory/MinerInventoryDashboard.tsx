@@ -77,7 +77,7 @@ const DeviceCard = ({
   );
 };
 
-const MineInventoryDashboard = () => {
+const MinerInventoryDashboard = () => {
   const [miners, setMiners] = useState<Miner[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -217,22 +217,21 @@ const MineInventoryDashboard = () => {
 
   if (loading) {
     return (
-      <Card title="Mine Inventory" subtitle="Loading miner data...">
+      <div>
         <div className="flex justify-center py-8">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+          <h2>Loading the Miner Data </h2>
         </div>
-      </Card>
+      </div>
     );
   }
 
   if (error) {
     return (
-      <Card title="Mine Inventory" subtitle="Error loading data">
-        <div className="text-red-700 px-4 py-3 rounded relative" role="alert">
-          <strong className="font-bold">Error: </strong>
-          <span className="block sm:inline">{error}</span>
-        </div>
-      </Card>
+      <div className="text-red-700 px-4 py-3 rounded relative" role="alert">
+        <strong className="font-bold">Error: </strong>
+        <span className="block sm:inline">{error}</span>
+      </div>
     );
   }
 
@@ -300,4 +299,4 @@ const MineInventoryDashboard = () => {
   );
 };
 
-export default MineInventoryDashboard;
+export default MinerInventoryDashboard;
