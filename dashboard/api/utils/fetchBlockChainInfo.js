@@ -1,19 +1,48 @@
 import { rpcWithEnv } from './rpcWithEnv.js';
 
 async function getBlockchainInfo() {
-  return rpcWithEnv({ method: 'getblockchaininfo' });
+  try {
+    return await rpcWithEnv({ method: 'getblockchaininfo' });
+  } catch (error) {
+    console.error('Error in getBlockchainInfo:', error);
+    throw error;
+  }
 }
+
 async function getPeerInfo() {
-  return rpcWithEnv({ method: 'getpeerinfo' });
+  try {
+    return await rpcWithEnv({ method: 'getpeerinfo' });
+  } catch (error) {
+    console.error('Error in getPeerInfo:', error);
+    throw error;
+  }
 }
+
 async function getNetworkInfo() {
-  return rpcWithEnv({ method: 'getnetworkinfo' });
+  try {
+    return await rpcWithEnv({ method: 'getnetworkinfo' });
+  } catch (error) {
+    console.error('Error in getNetworkInfo:', error);
+    throw error;
+  }
 }
+
 async function getMempoolInfo() {
-  return rpcWithEnv({ method: 'getmempoolinfo' });
+  try {
+    return await rpcWithEnv({ method: 'getmempoolinfo' });
+  } catch (error) {
+    console.error('Error in getMempoolInfo:', error);
+    throw error;
+  }
 }
+
 async function getNetTotals() {
-  return rpcWithEnv({ method: 'getnettotals' });
+  try {
+    return await rpcWithEnv({ method: 'getnettotals' });
+  } catch (error) {
+    console.error('Error in getNetTotals:', error);
+    throw error;
+  }
 }
 
 export async function fetchAllNodeData() {
@@ -26,7 +55,7 @@ export async function fetchAllNodeData() {
       getNetTotals(),
     ]);
 
-    const result = {
+    return {
       type: 'node_health_data',
       data: {
         blockchainInfo: blockchain,
@@ -37,10 +66,8 @@ export async function fetchAllNodeData() {
         lastUpdated: new Date().toISOString(),
       },
     };
-
-    return result;
   } catch (error) {
-    console.error('Failed to fetch node data:', error);
+    console.error('Failed to fetch all node data:', error);
     throw error;
   }
 }
