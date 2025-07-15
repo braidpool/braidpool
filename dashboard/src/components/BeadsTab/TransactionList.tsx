@@ -1,7 +1,6 @@
-import { shortenHash } from './lib/Utils';
+import { shortenHash, useCopyToClipboard } from './lib/Utils';
 import { TransactionListProps } from './lib/Types';
 import { Activity } from 'lucide-react';
-import useCopyToClipboard from './lib/Utils';
 export default function TransactionList({
   transactions,
 }: TransactionListProps) {

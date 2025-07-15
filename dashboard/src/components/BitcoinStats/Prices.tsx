@@ -12,12 +12,23 @@ import {
   CartesianGrid,
 } from 'recharts';
 import { GlobalStats, PriceData } from './Types';
-import { formatLargeNumber, formatPrice, getCurrencySymbol } from './Utils';
+import {
+  formatLargeNumber,
+  formatPrice,
+  getCurrencySymbol,
+  getLatestTransactions,
+  latestRBFTransactions,
+} from './Utils';
+import TransactionTable from './TransactionTable';
+import RBFTransactionTable from './RBFTransactionTable';
+import { useRef } from 'react';
 
 const BitcoinPriceTracker: React.FC = () => {
   const [currency, setCurrency] = useState<'USD' | 'EUR' | 'GBP' | 'JPY'>(
     'USD'
   );
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [rbftransactions, setrbfTransactions] = useState<any[]>([]);
   const [priceData, setPriceData] = useState<PriceData | null>(null);
   const [globalStats, setGlobalStats] = useState<GlobalStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -29,38 +40,63 @@ const BitcoinPriceTracker: React.FC = () => {
   const [priceHistory, setPriceHistory] = useState<
     { price: number; time: string }[]
   >([]);
-  const MAX_HISTORY_ITEMS = 30;
+  const MAX_HISTORY_ITEMS = 10;
+  const showSkeletons = loading || !isConnected || (!priceData && !globalStats);
+  const currencyRef = useRef(currency);
 
   useEffect(() => {
-    const websocket = new WebSocket('ws://localhost:5000');
+    currencyRef.current = currency;
+  }, [currency]);
+
+  useEffect(() => {
+    const fetchTransactions = async () => {
+      const data = await getLatestTransactions();
+      setTransactions(data as any[]);
+    };
+    fetchTransactions();
+    const fetchRbfTransactions = async () => {
+      const data = await latestRBFTransactions();
+      setrbfTransactions(data as any[]);
+    };
+    fetchRbfTransactions();
+    const intervalId = setInterval(() => {
+      fetchTransactions();
+      fetchRbfTransactions();
+    }, 5000);
+    return () => clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
+    const websocket = new WebSocket('ws://localhost:5000/');
+    let isMounted = true;
 
     websocket.onopen = () => {
+      if (!isMounted) return;
       console.log('Connected to WebSocket server');
       setIsConnected(true);
       setLoading(false);
     };
 
     websocket.onmessage = (event) => {
+      if (!isMounted) return;
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'bitcoin_update') {
-          const currentPrice = data.data.price?.[currency];
-          const currencySymbol = getCurrencySymbol(currency);
+          const selectedCurrency = currencyRef.current;
+          const currentPrice = data.data.price?.[selectedCurrency]?.current;
+          const high24hPrice = data.data.price?.[selectedCurrency]?.high24h;
+          const low24hPrice = data.data.price?.[selectedCurrency]?.low24h;
+          const currencySymbol = getCurrencySymbol(selectedCurrency);
 
           setPriceData((prev) => {
             const previousPrice = prev?.current ?? currentPrice;
-            const priceChange =
-              ((currentPrice - previousPrice) / previousPrice) * 100;
             if (previousPrice !== currentPrice) {
               setPriceDirection(currentPrice > previousPrice ? 'up' : 'down');
             }
             return {
               current: currentPrice,
-              high24h: prev
-                ? Math.max(prev.high24h, currentPrice)
-                : currentPrice,
-              low24h: prev ? Math.min(prev.low24h, currentPrice) : currentPrice,
-              priceChange24h: isFinite(priceChange) ? priceChange : 0,
+              high24h: Math.max(high24hPrice, currentPrice),
+              low24h: Math.min(low24hPrice, currentPrice),
               currencySymbol,
             };
           });
@@ -76,16 +112,19 @@ const BitcoinPriceTracker: React.FC = () => {
                 data.data.global_stats.active_cryptocurrencies,
               activeMarkets: data.data.global_stats.active_markets,
               bitcoinDominance: data.data.global_stats.bitcoin_dominance * 100,
-              lastUpdated: new Date(now).toLocaleString(),
+              lastUpdated: now.toLocaleString(),
             });
           }
 
           setPriceHistory((prev) => {
-            const newHistory = [
-              ...prev,
-              { price: currentPrice, time: timeString },
-            ];
-            return newHistory.slice(-MAX_HISTORY_ITEMS);
+            if (typeof currentPrice === 'number' && !isNaN(currentPrice)) {
+              const newHistory = [
+                ...prev.slice(-MAX_HISTORY_ITEMS),
+                { price: currentPrice, time: timeString },
+              ];
+              return newHistory.slice(-MAX_HISTORY_ITEMS);
+            }
+            return prev;
           });
         }
       } catch (err) {
@@ -95,30 +134,36 @@ const BitcoinPriceTracker: React.FC = () => {
     };
 
     websocket.onclose = () => {
+      if (!isMounted) return;
       console.log('WebSocket disconnected');
       setIsConnected(false);
       setLoading(false);
     };
 
     return () => {
+      isMounted = false;
       if (websocket.readyState === WebSocket.OPEN) {
         websocket.close();
       }
     };
-  }, [currency]);
-
-  const showSkeletons = loading || !isConnected || (!priceData && !globalStats);
+  }, []);
 
   return (
     <div className="p-4">
       {/* Currency Selector */}
-      <div className="flex flew-row justify-center mb-6 min-w-[100px]">
+      <div className="flex flex-wrap justify-center items-center gap-4 md:gap-20 p-4 md:p-6 rounded-lg shadow-sm mb-6">
         <label className="block text-lg font-medium text-white mb-1">
           Currency
         </label>
         <select
           value={currency}
-          onChange={(e) => setCurrency(e.target.value as typeof currency)}
+          onChange={(e) => {
+            const newCurrency = e.target.value as typeof currency;
+            setCurrency(newCurrency);
+            setPriceData(null);
+            setPriceHistory([]);
+            setPriceDirection(null);
+          }}
           className="block py-2 px-4 ml-5 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
         >
           <option className="bg-gray-500" value="USD">
@@ -137,13 +182,13 @@ const BitcoinPriceTracker: React.FC = () => {
       </div>
 
       {/* Price Display */}
-      <div className="w-full flex flex-wrap justify-center items-center gap-4 md:gap-20 p-4 md:p-6 rounded-lg shadow-sm mb-6">
+      <div className="flex flex-wrap justify-center items-center gap-4 md:gap-20 p-4 md:p-6 rounded-lg shadow-sm mb-6">
         {error ? (
           <div className="w-full p-3 bg-red-100 text-red-700 rounded-md">
             {error}
           </div>
         ) : showSkeletons ? (
-          <div className="flex gap-6">
+          <div className="flex gap-6" data-testid="animate-pulse">
             {[...Array(3)].map((_, i) => (
               <div key={i} className="flex flex-col gap-1">
                 <div className="animate-pulse bg-gray-200 rounded h-7 w-20"></div>
@@ -153,7 +198,7 @@ const BitcoinPriceTracker: React.FC = () => {
           </div>
         ) : priceData ? (
           <>
-            <div className="flex flex-col">
+            <div className="flex flex-row justify-center items-center gap-4">
               <div className="flex items-center gap-2">
                 <h6
                   className={`font-bold text-lg ${priceDirection === 'up' ? 'text-green-500' : priceDirection === 'down' ? 'text-red-500' : ''}`}
@@ -194,21 +239,21 @@ const BitcoinPriceTracker: React.FC = () => {
                 Current Price in {currency}
               </span>
             </div>
-
-            <div className="flex flex-col">
-              <p className="text-base">
-                {priceData.currencySymbol}
-                {formatPrice(priceData.high24h)}
-              </p>
-              <span className="text-sm text-gray-500">24H High</span>
-            </div>
-
+            {/* Display 24h Low */}
             <div className="flex flex-col">
               <p className="text-base">
                 {priceData.currencySymbol}
                 {formatPrice(priceData.low24h)}
               </p>
-              <span className="text-sm text-gray-500">24H Low</span>
+              <span className="text-sm text-gray-500">24h Low</span>
+            </div>
+            {/* Display 24h High */}
+            <div className="flex flex-col">
+              <p className="text-base">
+                {priceData.currencySymbol}
+                {formatPrice(priceData.high24h)}
+              </p>
+              <span className="text-sm text-gray-500">24h High</span>
             </div>
           </>
         ) : null}
@@ -216,7 +261,7 @@ const BitcoinPriceTracker: React.FC = () => {
 
       {/* Global Stats */}
       {showSkeletons ? (
-        <div className="flex flex-wrap justify-center items-center gap-4 md:gap-20 p-4">
+        <div className="flex flex-wrap shadow-sm justify-center items-center gap-4 md:gap-20 p-4">
           {[...Array(5)].map((_, i) => (
             <div key={i} className="flex flex-col gap-1">
               <div className="animate-pulse bg-gray-200 rounded h-6 w-20"></div>
@@ -225,7 +270,7 @@ const BitcoinPriceTracker: React.FC = () => {
           ))}
         </div>
       ) : globalStats ? (
-        <div className="flex flex-wrap justify-center items-center gap-4 md:gap-20 p-4">
+        <div className="flex flex-wrap shadow-sm justify-center items-center gap-4 md:gap-20 p-4">
           <div className="flex flex-col">
             <p className="text-base">{globalStats.marketCap}</p>
             <span className="text-sm text-gray-500">Market Cap</span>
@@ -258,77 +303,103 @@ const BitcoinPriceTracker: React.FC = () => {
       ) : null}
 
       {/* Charts Section */}
-      <div className="w-full flex flex-wrap justify-center items-center gap-4 md:gap-20 p-4 md:p-6 rounded-lg mb-6">
-        <div className="grid sm:grid-cols-1 md:grid-cols-2 gap-4 md:gap-20 p-4">
-          {/* Price Range Bar Chart */}
-          <div className="flex flex-col w-full h-72">
-            <p className="font-semibold text-base">Bitcoin 24H Price Range</p>
-            <span className="text-sm text-gray-500 mb-2">
-              Displays the low, current, and high prices in {currency}
-            </span>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={[
-                  { label: 'Low', value: priceData?.low24h ?? 0 },
-                  { label: 'Current', value: priceData?.current ?? 0 },
-                  { label: 'High', value: priceData?.high24h ?? 0 },
+      <div className="w-full flex flex-wrap justify-center items-center gap-4 md:gap-20 p-4 mt-4 md:p-6 rounded-lg mb-6">
+        {/* Price Range Bar Chart */}
+        <div className="flex flex-col w-full h-80">
+          <p className="font-semibold text-base">Bitcoin Price Range (24h)</p>
+          <span className="text-sm text-gray-500 mb-2">
+            Displays the 24-hour low, current, and 24-hour high prices in{' '}
+            {currency}
+          </span>
+          <ResponsiveContainer width="99%" height="100%">
+            <BarChart
+              data={[
+                { label: '24h Low', value: priceData?.low24h ?? 0 },
+                { label: 'Current', value: priceData?.current ?? 0 },
+                { label: '24h High', value: priceData?.high24h ?? 0 },
+              ]}
+              margin={{ left: 40, right: 20, top: 20, bottom: 20 }}
+            >
+              <XAxis dataKey="label" />
+              <YAxis
+                width={80}
+                domain={[
+                  (dataMin: number) =>
+                    Math.floor(
+                      dataMin -
+                        (priceData
+                          ? (priceData.high24h - priceData.low24h) * 0.1
+                          : 0)
+                    ),
+                  (dataMax: number) =>
+                    Math.ceil(
+                      dataMax +
+                        (priceData
+                          ? (priceData.high24h - priceData.low24h) * 0.1
+                          : 0)
+                    ),
                 ]}
-              >
-                <XAxis dataKey="label" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="value" fill="#8884d8" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+                tickFormatter={(value) =>
+                  `${getCurrencySymbol(currency)}${formatPrice(value)}`
+                }
+              />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: 'black',
+                  border: '1px solid #ccc',
+                }}
+                formatter={(value) => [
+                  `${getCurrencySymbol(currency)}${formatPrice(Number(value))}`,
+                  'Price',
+                ]}
+              />
+              <Legend />
+              <Bar dataKey="value" fill="#8884d8" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
 
-          {/* Price History Line Chart */}
-          <div className="flex flex-col w-full h-72">
-            <p className="font-semibold text-base">
-              Bitcoin Price History (Live)
-            </p>
-            <span className="text-sm text-gray-500 mb-2">
-              Live updates in {currency}
-            </span>
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart
-                data={priceHistory}
-                margin={{ top: 5, right: 20, bottom: 5, left: 45 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="time"
-                  tick={{ fontSize: 10 }}
-                  interval={Math.floor(MAX_HISTORY_ITEMS / 5)}
-                />
-                <YAxis
-                  domain={['auto', 'auto']}
-                  tickFormatter={(value) =>
-                    `${getCurrencySymbol(currency)}${formatPrice(value)}`
-                  }
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'black',
-                    border: '1px solid #ccc',
-                  }}
-                  formatter={(value) => [
-                    `${getCurrencySymbol(currency)}${formatPrice(Number(value))}`,
-                    'Price',
-                  ]}
-                  labelFormatter={(label) => `Time: ${label}`}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="price"
-                  stroke="#8884d8"
-                  dot={false}
-                  isAnimationActive={false}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+        {/* Price History Line Chart */}
+        <div className="flex flex-col w-full h-80">
+          <p className="font-semibold text-base">
+            Bitcoin Price History (Live)
+          </p>
+          <span className="text-sm text-gray-500 mb-2">
+            Live updates in {currency}
+          </span>
+          <ResponsiveContainer width="99%" height="100%">
+            <LineChart
+              data={priceHistory}
+              margin={{ left: 60, right: 40, top: 20, bottom: 20 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="time" tick={{ fontSize: 10 }} interval={0} />
+              <YAxis
+                domain={['auto', 'auto']}
+                tickFormatter={(value) =>
+                  `${getCurrencySymbol(currency)}${formatPrice(value)}`
+                }
+              />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: 'black',
+                  border: '1px solid #ccc',
+                }}
+                formatter={(value) => [
+                  `${getCurrencySymbol(currency)}${formatPrice(Number(value))}`,
+                  'Price',
+                ]}
+                labelFormatter={(label) => `Time: ${label}`}
+              />
+              <Line
+                type="monotone"
+                dataKey="price"
+                stroke="#8884d8"
+                dot={false}
+                isAnimationActive={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
       </div>
 
@@ -362,6 +433,11 @@ const BitcoinPriceTracker: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Transactions Table */}
+      <TransactionTable transactions={transactions} />
+      {/* RBF Transactions Table */}
+      <RBFTransactionTable transactions={rbftransactions} />
     </div>
   );
 };
