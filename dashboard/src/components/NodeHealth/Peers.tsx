@@ -1,18 +1,17 @@
-import { useState } from 'react';
+import { useState ,useMemo} from 'react';
 import { PeerInfo } from './Types';
-import { formatBytes } from './Utils';
+import { formatBytes,paginate ,calculateTotalPages} from './Utils';
 
 const ITEMS_PER_PAGE = 10;
 
 export default function Peers({ peers }: { peers: PeerInfo[] }) {
   const [currentPage, setCurrentPage] = useState(1);
-  const totalPages = Math.ceil(peers.length / ITEMS_PER_PAGE);
-
-  const paginatedPeers = peers.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
+const totalPages = useMemo(
+    () => calculateTotalPages(peers.length, ITEMS_PER_PAGE),
+    [peers.length]
   );
-
+  
+  const paginatedPeers = paginate(peers, currentPage, ITEMS_PER_PAGE);
   const handlePrev = () => {
     setCurrentPage((prev) => Math.max(prev - 1, 1));
   };
@@ -22,7 +21,7 @@ export default function Peers({ peers }: { peers: PeerInfo[] }) {
   };
 
   return (
-    <div className="bg-[#1c1c1c] border border-gray-700 rounded-xl shadow-md">
+    <div className="bg-[#1e1e1e] border border-gray-700 rounded-xl shadow-md">
       <div className="px-6 py-4 border-b border-gray-700">
         <h2 className="text-white text-xl font-semibold">Connected Peers</h2>
         <p className="text-gray-300 text-sm">

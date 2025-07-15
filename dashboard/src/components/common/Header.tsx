@@ -75,7 +75,7 @@ const Header: React.FC<HeaderNavProps> = ({
           </div>
 
           {/* Desktop Nav */}
-          <div className="max-md:hidden md:flex lg:flex items-center ">
+          <div className="sm:hidden max-md:hidden  lg:flex items-center ">
             {NAV_ITEMS.map((item) => (
               <button
                 key={item.label}
@@ -95,7 +95,7 @@ const Header: React.FC<HeaderNavProps> = ({
 
           {/* Mobile Menu Toggle  */}
           <button
-            className="md:hidden ml-2 p-2 rounded hover:bg-white/10 text-white"
+            className="lg:hidden  ml-2 p-2 rounded hover:bg-white/10 text-white"
             onClick={() => setSidebarOpen(true)}
           >
             <Menu size={22} />

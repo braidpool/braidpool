@@ -12,3 +12,24 @@ export const TABS = [
   { label: 'Network', value: 'bandwidth' },
   { label: 'Mempool', value: 'mempool' },
 ];
+export function paginate<T>(data: T[], currentPage: number, itemsPerPage: number): T[] {
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  return data.slice(startIndex, startIndex + itemsPerPage);
+}
+export function calculateTotalPages(totalItems: number, itemsPerPage: number): number {
+  return Math.ceil(totalItems / itemsPerPage);
+}
+import { useEffect, useState } from 'react';
+
+export function useIsSmallScreen(breakpoint = 640) {
+  const [isSmallScreen, setIsSmallScreen] = useState(false);
+
+  useEffect(() => {
+    const checkSize = () => setIsSmallScreen(window.innerWidth < breakpoint);
+    checkSize();
+    window.addEventListener('resize', checkSize);
+    return () => window.removeEventListener('resize', checkSize);
+  }, [breakpoint]);
+
+  return isSmallScreen;
+}

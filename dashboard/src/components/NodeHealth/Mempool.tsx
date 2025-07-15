@@ -7,7 +7,7 @@ export default function MempoolPanel({ mempool }: { mempool: MempoolInfo }) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Stats Card */}
-      <div className="bg-[#1c1c1c] border border-gray-700 rounded-lg p-6 backdrop-blur-sm">
+      <div className="bg-[#1e1e1e] border border-gray-700 rounded-lg p-6 backdrop-blur-sm">
         <div className="mb-4">
           <h2 className="text-xl font-semibold text-white">
             Mempool Statistics

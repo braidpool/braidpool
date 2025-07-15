@@ -3,7 +3,10 @@ import Peers from './Peers';
 import NetworkPanel from './Network';
 import MempoolPanel from './Mempool';
 import BandwidthPanel from './Bandwidth';
-import { TABS } from './Utils';
+import { InfoRow } from './InfoRow';
+import { TABS ,useIsSmallScreen } from './Utils';
+import { shortenHash } from '../BeadsTab/lib/Utils';
+import colors from '@/theme/colors';
 import {
   BlockchainInfo,
   PeerInfo,
@@ -31,6 +34,8 @@ const NodeHealth: React.FC = () => {
   >([]);
 
   const wsRef = useRef<WebSocket | null>(null);
+  const isSmallScreen = useIsSmallScreen();
+
 
   useEffect(() => {
     const ws = new WebSocket('ws://localhost:5000');
@@ -102,8 +107,13 @@ const NodeHealth: React.FC = () => {
       wsRef.current.send(JSON.stringify({ action: 'refresh' }));
     }
   };
-
-  if (loading || !blockchainInfo) {
+if (
+  loading ||
+  !blockchainInfo ||
+  !networkInfo ||
+  !mempoolInfo ||
+  !netTotals
+) {
     return (
       <div className="min-h-screen bg-[#1c1c1c] text-white flex items-center justify-center">
         Loading...
@@ -141,7 +151,7 @@ const NodeHealth: React.FC = () => {
   const syncPercentage = ((blocks / headers) * 100).toFixed(2);
 
   return (
-    <div className="min-h-screen bg-[#1c1c1c] px-2 sm:px-4 md:px-6 py-6 md:py-8">
+    <div className="min-h-screen bg-[#1e1e1e] px-2 sm:px-4 md:px-6 py-6 md:py-8">
       <div>
         <p className="text-xs flex justify-end sm:text-sm text-gray-500 mb-4">
           {`Last updated: ${lastUpdated}`}
@@ -149,9 +159,9 @@ const NodeHealth: React.FC = () => {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-4 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+      <div className="grid sm:grid-cols-1  md:grid-cols-4 gap-4 md:gap-6">
         {/* Sync Status */}
-        <div className="bg-[#1c1c1c] border border-gray-700 rounded-xl px-2 py-2">
+        <div className=" border border-gray-700 rounded-xl px-2 py-2">
           <h2 className="text-xs sm:text-sm text-gray-500 mb-1">Sync Status</h2>
           <p
             className={`text-lg sm:text-xl font-bold mb-1 ${headers === blocks ? 'text-green-600' : 'text-yellow-500'}`}
@@ -170,7 +180,7 @@ const NodeHealth: React.FC = () => {
         </div>
 
         {/* Block Height */}
-        <div className="bg-[#1c1c1c] border border-gray-700 rounded-xl px-2 py-2">
+        <div className=" border border-gray-700 rounded-xl px-2 py-2">
           <h2 className="text-xs sm:text-sm text-gray-500 mb-1">
             Block Height
           </h2>
@@ -181,7 +191,7 @@ const NodeHealth: React.FC = () => {
         </div>
 
         {/* Connections */}
-        <div className="bg-[#1c1c1c] border border-gray-700 rounded-xl px-2 py-2">
+        <div className=" border border-gray-700 rounded-xl px-2 py-2">
           <h2 className="text-xs sm:text-sm text-gray-500 mb-1">Connections</h2>
           <p className="text-lg sm:text-xl text-white font-bold">
             {networkInfo?.connections ?? '...'}
@@ -194,7 +204,7 @@ const NodeHealth: React.FC = () => {
         </div>
 
         {/* Mempool */}
-        <div className="bg-[#1c1c1c] border border-gray-700 rounded-xl px-2 py-2">
+        <div className="border border-gray-700 rounded-xl px-2 py-2">
           <h2 className="text-xs sm:text-sm text-gray-500 mb-1">Mempool</h2>
           <p className="text-lg sm:text-xl text-white font-bold">
             {mempoolInfo?.size?.toLocaleString() ?? '...'}
@@ -219,7 +229,7 @@ const NodeHealth: React.FC = () => {
       </div>
 
       {/* Tabs */}
-      <div className="mt-8 border border-gray-700 rounded-xl p-3 flex justify-center bg-[#1c1c1c]">
+      <div className="mt-8 border border-gray-700 rounded-xl p-3 flex justify-center ">
         <nav className="flex gap-4 sm:gap-10 text-xs sm:text-sm font-medium whitespace-nowrap">
           {TABS.map((tab) => (
             <button
@@ -237,7 +247,7 @@ const NodeHealth: React.FC = () => {
       <div className="mt-6">
         {activeTab === 'blockchain' && blockchainInfo && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-            <div className="rounded-xl border border-gray-700 p-4 bg-[#1c1c1c]">
+            <div className="rounded-xl border border-gray-700 p-4 ">
               <h3 className="text-base md:text-lg text-white font-semibold text-center mb-4">
                 Blockchain Information
               </h3>
@@ -248,7 +258,10 @@ const NodeHealth: React.FC = () => {
                   label="Synced"
                   value={headers === blocks ? 'True' : 'False'}
                 />
-                <InfoRow label="Best Block Hash" value={bestblockhash} />
+                <InfoRow
+  label="Best Block Hash"
+  value={isSmallScreen ? shortenHash(bestblockhash) : bestblockhash}
+/>
                 <InfoRow
                   label="Verification Progress"
                   value={`${(verificationprogress * 100).toFixed(4)}%`}
@@ -264,32 +277,17 @@ const NodeHealth: React.FC = () => {
         {activeTab === 'mempool' && mempoolInfo && (
           <MempoolPanel mempool={mempoolInfo} />
         )}
-        {activeTab === 'bandwidth' && (
-          <div className="space-y-4">
-            {networkInfo && <NetworkPanel network={networkInfo} />}
-            {activeTab === 'bandwidth' && (
-              <div className="space-y-6">
-                <BandwidthPanel bandwidthHistory={bandwidthHistory} />
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+       {activeTab === 'bandwidth' && (
+  <div className="space-y-4">
+    {networkInfo && <NetworkPanel network={networkInfo} />}
+    <div className="space-y-6">
+      <BandwidthPanel bandwidthHistory={bandwidthHistory} />
     </div>
+  </div>
+)}
+
+      </div>    </div>
   );
 };
-
-const InfoRow = ({
-  label,
-  value,
-}: {
-  label: string;
-  value: string | number;
-}) => (
-  <div className="flex justify-between">
-    <span className="text-gray-500">{label}</span>
-    <span className="font-medium text-white">{value}</span>
-  </div>
-);
 
 export default NodeHealth;
