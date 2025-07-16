@@ -37,58 +37,80 @@ const NodeHealth: React.FC = () => {
   const isSmallScreen = useIsSmallScreen();
 
   useEffect(() => {
-    const ws = new WebSocket('ws://localhost:5000');
     let isMounted = true;
-    wsRef.current = ws;
+    let reconnectAttempts = 0;
+    const maxReconnectAttempts = 5;
+    let reconnectTimeout: NodeJS.Timeout;
 
-    ws.onopen = () => {
-      if (!isMounted) return;
-      setWsConnected(true);
-    };
+    const connect = () => {
+      const ws = new WebSocket('ws://localhost:5000');
+      wsRef.current = ws;
 
-    ws.onerror = (err) => {
-      setWsConnected(false);
-      console.error('WebSocket error:', err);
-      setLoading(false);
-    };
+      ws.onopen = () => {
+        if (!isMounted) return;
+        setWsConnected(true);
+        reconnectAttempts = 0;
+      };
 
-    ws.onmessage = (event) => {
-      if (!isMounted) return;
-      try {
-        const message = JSON.parse(event.data);
-        if (message.type === 'node_health_data') {
-          const data = message.data;
-          setBlockchainInfo(data.blockchainInfo);
-          setPeerInfo(data.peerInfo);
-          setNetworkInfo(data.networkInfo);
-          setMempoolInfo(data.mempoolInfo);
-          setNetTotals(data.netTotals);
-          setLastUpdated(new Date(data.lastUpdated).toLocaleTimeString());
-          setLoading(false);
-          setError(null);
-          setBandwidthHistory((prevHistory) => {
-            const timestamp = new Date(data.lastUpdated).getTime();
-            const { totalbytesrecv, totalbytessent } = data.netTotals;
-
-            return [
-              ...prevHistory.slice(-10),
-              { timestamp, totalbytesrecv, totalbytessent },
-            ];
-          });
+      ws.onerror = (err: Event) => {
+        if (!isMounted) return;
+        setWsConnected(false);
+        if (process.env.NODE_ENV !== 'test') {
+          console.error('WebSocket error:', err);
         }
-      } catch (err) {
-        console.error('Error parsing WebSocket message:', err);
-      }
+        setLoading(false);
+        setError('WebSocket connection failed');
+      };
+
+      ws.onmessage = (event) => {
+        if (!isMounted) return;
+        try {
+          const message = JSON.parse(event.data);
+          if (message.type === 'node_health_data') {
+            const data = message.data;
+            setBlockchainInfo(data.blockchainInfo);
+            setPeerInfo(data.peerInfo);
+            setNetworkInfo(data.networkInfo);
+            setMempoolInfo(data.mempoolInfo);
+            setNetTotals(data.netTotals);
+            setLastUpdated(new Date(data.lastUpdated).toLocaleTimeString());
+            setLoading(false);
+            setError(null);
+            setBandwidthHistory((prevHistory) => {
+              const timestamp = new Date(data.lastUpdated).getTime();
+              const { totalbytesrecv, totalbytessent } = data.netTotals;
+              return [
+                ...prevHistory.slice(-10),
+                { timestamp, totalbytesrecv, totalbytessent },
+              ];
+            });
+          }
+        } catch (err) {
+          console.error('Error parsing WebSocket message:', err);
+        }
+      };
+
+      ws.onclose = () => {
+        if (!isMounted) return;
+        if (process.env.NODE_ENV !== 'test') {
+          console.warn('WebSocket closed');
+        }
+        setWsConnected(false);
+
+        if (reconnectAttempts < maxReconnectAttempts) {
+          reconnectTimeout = setTimeout(() => {
+            reconnectAttempts++;
+            connect();
+          }, 1000 * reconnectAttempts);
+        }
+      };
     };
 
-    ws.onclose = () => {
-      if (!isMounted) return;
-      console.warn('WebSocket closed');
-      setWsConnected(false);
-    };
+    connect();
 
     return () => {
       isMounted = false;
+      clearTimeout(reconnectTimeout);
       if (wsRef.current) {
         wsRef.current.onopen = null;
         wsRef.current.onclose = null;
@@ -102,10 +124,30 @@ const NodeHealth: React.FC = () => {
   }, []);
 
   const handleManualRefresh = () => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ action: 'refresh' }));
+    } else if (process.env.NODE_ENV !== 'test') {
+      console.warn('WebSocket not ready for refresh');
     }
   };
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-[#1c1c1c] text-white flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-500 mb-4">{error}</p>
+          <button
+            onClick={handleManualRefresh}
+            className="bg-white text-black px-4 py-2 rounded"
+            data-testid="retry-button"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (
     loading ||
     !blockchainInfo ||
@@ -116,22 +158,6 @@ const NodeHealth: React.FC = () => {
     return (
       <div className="min-h-screen bg-[#1c1c1c] text-white flex items-center justify-center">
         Loading...
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen bg-[#1c1c1c] text-white flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-red-500 mb-4">{error}</p>
-          <button
-            onClick={handleManualRefresh}
-            className="bg-white text-black px-4 py-2 rounded"
-          >
-            Retry
-          </button>
-        </div>
       </div>
     );
   }
