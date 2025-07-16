@@ -1,6 +1,5 @@
 use std::collections::VecDeque;
 use std::error::Error;
-use std::fmt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -21,6 +20,7 @@ use crate::chain_capnp::{
     },
 };
 
+use crate::error::BraidpoolError;
 use crate::init_capnp::init::Client as InitClient;
 use crate::proxy_capnp::thread::Client as ThreadClient;
 
@@ -30,21 +30,6 @@ pub fn bytes_to_hex(bytes: &[u8]) -> String {
         .map(|b| format!("{:02x}", b))
         .collect::<String>()
 }
-
-#[derive(Debug, Clone)]
-pub enum BraidpoolError {
-    QueueFull { queue_type: String },
-}
-
-impl fmt::Display for BraidpoolError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            BraidpoolError::QueueFull { queue_type } => write!(f, "{} queue is full", queue_type),
-        }
-    }
-}
-
-impl Error for BraidpoolError {}
 
 // Bitcoin notification events
 #[derive(Debug, Clone)]

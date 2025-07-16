@@ -25,6 +25,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::{fs, time::Duration};
 use tokio::sync::RwLock;
+use tokio_util::sync::CancellationToken;
 
 use behaviour::{BraidPoolBehaviour, BraidPoolBehaviourEvent};
 
@@ -55,6 +56,10 @@ mod proxy_capnp;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    let (main_shutdown_tx, mut main_shutdown_rx) =
+        mpsc::channel::<tokio::signal::unix::SignalKind>(32);
+    let main_task_token = CancellationToken::new();
+    let ipc_task_token = main_task_token.clone();
     let args = cli::Cli::parse();
     setup_logging();
     setup_tracing()?;
@@ -191,12 +196,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         let ipc_socket_path = args.ipc_socket.clone();
 
-        tokio::task::spawn_blocking(move || {
+        let ipc_handler = tokio::task::spawn_blocking(move || {
             let rt = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
                 .expect("Failed to create tokio runtime");
-
             rt.block_on(async {
                 let local_set = tokio::task::LocalSet::new();
 
@@ -230,12 +234,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         });
 
                         let consumer_task = tokio::task::spawn_local(async move {
-                            ipc_template_consumer(ipc_template_rx).await;
+                            ipc_template_consumer(ipc_template_rx).await.unwrap();
                         });
-
                         tokio::select! {
                             _ = listener_task => log::info!("IPC listener completed"),
                             _ = consumer_task => log::info!("IPC consumer completed"),
+                            _= ipc_task_token.cancelled()=>{
+                                log::info!("Token cancelled from the parent Task, shutting down IPC task");
+                            }
                         }
                     })
                     .await;
@@ -594,15 +600,32 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     });
 
-    //gracefull shutdown
+    //gracefull shutdown via `Cancellation token`
     let shutdown_signal = tokio::signal::ctrl_c().await;
     match shutdown_signal {
         Ok(_) => {
-            println!("Shutting down...");
+            log::info!("Shutting down the Network Swarm");
             swarm_handle.abort();
+            tokio::time::sleep(Duration::from_millis(1)).await;
+            #[allow(unused)]
+            let shutdown_sub_tasks = match main_shutdown_tx
+                .send(tokio::signal::unix::SignalKind::interrupt())
+                .await
+            {
+                Ok(_) => {
+                    log::info!("Sub-tasks have been INTERRUPTED kindly wait for them to shutdown");
+                    main_task_token.cancel();
+                }
+                Err(error) => {
+                    log::error!(
+                        "An error running while sending INTERUPPT to the sub tasks - {:?}",
+                        error
+                    );
+                }
+            };
         }
         Err(error) => {
-            println!(
+            log::error!(
                 "An error occurred while shutting down the braid node {:?}",
                 error
             );
