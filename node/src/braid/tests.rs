@@ -196,6 +196,7 @@ fn loading_braid_from_file(file_path: &str) -> (Braid, FileBraid) {
             tips: current_braid_tips,
             genesis_beads: current_braid_genesis,
             cohorts: current_bead_cohorots,
+            cohort_tips: vec![HashSet::new()], // Cohorts tips are only used in extend(), so we can skip them here.
             orphan_beads: Vec::new(),
         },
         file_braid.clone(),
@@ -212,6 +213,7 @@ pub fn test_extend_functionality() {
         tips: HashSet::from([0]),
         orphan_beads: Vec::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
+        cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([(
             test_bead_0.block_header.block_hash(),
             0,
@@ -424,6 +426,7 @@ pub fn test_orphan_beads_functinality() {
         tips: HashSet::from([0]),
         orphan_beads: Vec::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
+        cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([(
             test_bead_0.block_header.block_hash(),
             0,
@@ -502,6 +505,7 @@ pub fn test_genesis1() {
         tips: HashSet::from([3]),
         orphan_beads: Vec::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
+        cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
             (test_bead_0.block_header.block_hash(), 0),
             (test_bead_1.block_header.block_hash(), 1),
@@ -551,6 +555,7 @@ pub fn test_genesis2() {
         tips: HashSet::from([3]),
         orphan_beads: Vec::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
+        cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
             (test_bead_0.block_header.block_hash(), 0),
             (test_bead_1.block_header.block_hash(), 1),
@@ -602,6 +607,7 @@ pub fn test_genesis3() {
         tips: HashSet::from([3]),
         orphan_beads: Vec::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
+        cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
             (test_bead_0.block_header.block_hash(), 0),
             (test_bead_1.block_header.block_hash(), 1),
@@ -689,6 +695,7 @@ pub fn test_tips1() {
         tips: HashSet::from([3]),
         orphan_beads: Vec::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
+        cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
             (test_bead_0.block_header.block_hash(), 0),
             (test_bead_1.block_header.block_hash(), 1),
@@ -744,6 +751,7 @@ pub fn test_tips2() {
         tips: HashSet::from([3]),
         orphan_beads: Vec::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
+        cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
             (test_bead_0.block_header.block_hash(), 0),
             (test_bead_1.block_header.block_hash(), 1),
@@ -827,6 +835,7 @@ pub fn test_tips3() {
         tips: HashSet::from([3, 4, 5]),
         orphan_beads: Vec::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
+        cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
             (test_bead_0.block_header.block_hash(), 0),
             (test_bead_1.block_header.block_hash(), 1),
@@ -914,6 +923,7 @@ pub fn test_reverse() {
         tips: HashSet::from([3, 4, 5]),
         orphan_beads: Vec::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
+        cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
             (test_bead_0.block_header.block_hash(), 0),
             (test_bead_1.block_header.block_hash(), 1),
@@ -1023,6 +1033,7 @@ pub fn test_cohorts_parents_1() {
         tips: HashSet::from([3]),
         orphan_beads: Vec::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
+        cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
             (test_bead_0.block_header.block_hash(), 0),
             (test_bead_1.block_header.block_hash(), 1),
@@ -1157,6 +1168,7 @@ pub fn test_highest_work_path_1() {
         tips: HashSet::from([3]),
         orphan_beads: Vec::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
+        cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
             (test_bead_0.block_header.block_hash(), 0),
             (test_bead_1.block_header.block_hash(), 1),
@@ -1223,6 +1235,7 @@ pub fn test_diamond_path_highest_work() {
         tips: HashSet::from([3]),
         orphan_beads: Vec::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
+        cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
             (test_bead_0.block_header.block_hash(), 0),
             (test_bead_1.block_header.block_hash(), 1),
@@ -1575,6 +1588,7 @@ fn test_extend_function() {
             beads: genesis_beads,
             tips: genesis_set.clone(),
             cohorts: vec![Cohort(genesis_set.clone())],
+            cohort_tips: vec![genesis_set.clone()],
             orphan_beads: Vec::new(),
             genesis_beads: genesis_set,
             bead_index_mapping,
@@ -1589,5 +1603,29 @@ fn test_extend_function() {
             }
         }
         assert_eq!(test_braid.beads.len(), current_braid_parents.len());
+
+        let mut computed_cohorts_by_hash: Vec<HashSet<bitcoin::BlockHash>> = Vec::new();
+        for cohort in &test_braid.cohorts {
+            let mut cohort_hashes = HashSet::new();
+            for &bead_idx in &cohort.0 {
+                let bead_hash = test_braid.beads[bead_idx].block_header.block_hash();
+                cohort_hashes.insert(bead_hash);
+            }
+            computed_cohorts_by_hash.push(cohort_hashes);
+        }
+
+        let mut file_cohorts_by_hash: Vec<HashSet<bitcoin::BlockHash>> = Vec::new();
+        for cohort in &file_braid.cohorts {
+            let mut cohort_hashes = HashSet::new();
+            for &bead_idx in cohort {
+                if let Some(bead) = index_to_bead.get(&bead_idx) {
+                    let bead_hash = bead.block_header.block_hash();
+                    cohort_hashes.insert(bead_hash);
+                }
+            }
+            file_cohorts_by_hash.push(cohort_hashes);
+        }
+
+        assert_eq!(computed_cohorts_by_hash, file_cohorts_by_hash);
     }
 }

@@ -29,6 +29,7 @@ pub struct Braid {
     pub beads: Vec<Bead>,
     pub tips: HashSet<usize>,
     pub cohorts: Vec<Cohort>,
+    pub cohort_tips: Vec<HashSet<usize>>,
     pub orphan_beads: Vec<Bead>,
     pub genesis_beads: HashSet<usize>,
     pub bead_index_mapping: HashMap<BeadHash, usize>,
@@ -54,6 +55,7 @@ impl Braid {
             beads,
             tips: bead_indices.clone(),
             cohorts: genesis_cohort,
+            cohort_tips: vec![HashSet::from(bead_indices.clone())],
             orphan_beads: Vec::new(),
             genesis_beads: bead_indices,
             bead_index_mapping,
@@ -126,8 +128,7 @@ impl Braid {
             // further back
             if !found_parent_indices.is_empty()
                 && found_parent_indices.len() == bead.committed_metadata.parents.len()
-                && (self.tips.len() == found_parent_indices.len()
-                    || cohort.0.len() == found_parent_indices.len())
+                && (self.cohort_tips[i] == found_parent_indices)
             {
                 remove_after = Some(i + 1);
                 dangling.insert(new_bead_index);
@@ -147,8 +148,10 @@ impl Braid {
         // Remove all cohorts after the found index
         if let Some(idx) = remove_after {
             self.cohorts.truncate(idx);
+            self.cohort_tips.truncate(idx);
         } else {
             self.cohorts.clear();
+            self.cohort_tips.clear();
         }
 
         // Remove parents from tips if present
@@ -166,6 +169,7 @@ impl Braid {
         // Here, we just create a new cohort with dangling beads
         if !dangling.is_empty() {
             self.cohorts.push(Cohort(dangling));
+            self.cohort_tips.push(self.tips.clone());
         }
 
         self.process_orphan_beads();
