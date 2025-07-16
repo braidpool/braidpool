@@ -24,7 +24,6 @@ use crate::chain_capnp::{
 use crate::init_capnp::init::Client as InitClient;
 use crate::proxy_capnp::thread::Client as ThreadClient;
 
-#[allow(dead_code)]
 pub fn bytes_to_hex(bytes: &[u8]) -> String {
     bytes
         .iter()

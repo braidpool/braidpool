@@ -4,6 +4,14 @@ use tokio::sync::oneshot;
 pub mod client;
 pub use client::{bytes_to_hex, BitcoinNotification, RequestPriority, SharedBitcoinClient};
 
+enum ErrorKind {
+    Temporary,
+    ConnectionBroken,
+    LogicError,
+}
+
+const MAX_BACKOFF: u64 = 300;
+
 /// Main IPC block listener that maintains connection to Bitcoin Core and forwards block templates
 ///
 /// This function implements a robust connection loop that:
@@ -19,11 +27,10 @@ pub async fn ipc_block_listener(
     log::info!("Starting IPC block listener on: {}", ipc_socket_path);
     let local = tokio::task::LocalSet::new();
     local.run_until(async move {
-        let mut health_check_interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
-        let mut detailed_stats_interval = tokio::time::interval(
-            tokio::time::Duration::from_secs(100)
-        );
         loop {
+            let mut health_check_interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
+            let mut detailed_stats_interval = tokio::time::interval(tokio::time::Duration::from_secs(100));
+            let mut backoff_seconds = 1;
             let mut shared_client = match SharedBitcoinClient::new(&ipc_socket_path).await {
                 Ok(client) => {
                     log::info!("IPC connection established");
@@ -37,30 +44,53 @@ pub async fn ipc_block_listener(
                 }
             };
 
-            let initial_sync_check = match
-                shared_client.is_recently_synced(Some(RequestPriority::High)).await
-            {
-                Ok(is_synced) => {
-                    if !is_synced {
-                        log::warn!("Node is not synced - waiting for sync to complete");
-                    } else {
-                        log::info!("Node is synced and ready to be used");
+            let initial_sync_result = loop {
+                match shared_client.is_recently_synced(Some(RequestPriority::High)).await {
+                    Ok(is_synced) => {
+                        if !is_synced {
+                            log::warn!("Node is not synced - waiting for sync to complete");
+                        } else {
+                            log::info!("Node is synced and ready to be used");
+                        }
+                        break Ok(is_synced);
                     }
-                    is_synced
+                    Err(e) => {
+                        log::error!("Initial sync check failed: {}", e);
+
+                        match classify_error(&e) {
+                            ErrorKind::Temporary => {
+                                log::warn!("Temporary error during sync check, retrying in {} seconds...", backoff_seconds);
+                                tokio::time::sleep(tokio::time::Duration::from_secs(backoff_seconds)).await;
+                                backoff_seconds = std::cmp::min(backoff_seconds * 2, MAX_BACKOFF);
+                                continue;
+                            }
+                            ErrorKind::ConnectionBroken => {
+                                log::error!("Connection broken during initial sync check - reconnecting...");
+                                break Err(ErrorKind::ConnectionBroken);
+                            }
+                            ErrorKind::LogicError => {
+                                log::warn!("Unexpected error occurred during sync check, continuing without sync check");
+                                break Ok(false);
+                            }
+                        }
+                    }
                 }
-                Err(e) => {
-                    log::error!("Initial sync check failed: {}", e);
-                    if is_connection_error(&e) {
-                        log::error!("Connection lost during initial sync check - reconnecting");
-                        continue; // Restart the main connection loop
-                    }
-                    log::warn!("Continuing without sync check");
+            };
+
+            // Handle the result properly
+            let is_synced = match initial_sync_result {
+                Ok(is_synced) => is_synced,
+                Err(ErrorKind::ConnectionBroken) => {
+                    continue; // Restart connection loop immediately
+                }
+                Err(_) => {
+                    // Handle other errors
                     false
                 }
             };
 
             // Only try to get initial template if node is synced
-            if initial_sync_check {
+            if is_synced {
                 match get_template_with_retry(
                     &mut shared_client,
                     3,
@@ -76,11 +106,16 @@ pub async fn ipc_block_listener(
                     }
                     Err(e) => {
                         log::error!("Failed to get initial template: {}", e);
-                        if is_connection_error(&e) {
-                            log::error!("Connection lost getting initial template - reconnecting");
-                            continue;
+                        match classify_error(&e) {
+                            ErrorKind::ConnectionBroken => {
+                                log::error!("Connection lost getting initial template - reconnecting...");
+                                continue; // Restart connection loop
+                            }
+                            ErrorKind::Temporary | ErrorKind::LogicError => {
+                                log::warn!("Non-connection error occurred getting initial template, continuing anyway");
+                                // Continue anyway - we'll get templates on block changes
+                            }
                         }
-                        // Continue anyway - we'll get templates on block changes
                     }
                 }
             }
@@ -122,9 +157,17 @@ pub async fn ipc_block_listener(
                                             }
                                             Err(e) => {
                                                 log::error!("Failed to get block template: {}", e);
-                                                if is_connection_error(&e) {
-                                                    log::error!("Connection lost, restarting connection loop");
-                                                    break true;
+                                                match classify_error(&e) {
+                                                    ErrorKind::ConnectionBroken => {
+                                                        log::error!("Connection lost, restarting connection loop");
+                                                        break true;
+                                                    }
+                                                    ErrorKind::Temporary => {
+                                                        log::warn!("Non critical error occurred getting template for block {}, will retry on next block", height);
+                                                    }
+                                                    ErrorKind::LogicError => {
+                                                        log::warn!("Unexpected error occurred getting template for block {}, continuing", height);
+                                                    }
                                                 }
                                             }
                                         }
@@ -134,9 +177,17 @@ pub async fn ipc_block_listener(
                                     }
                                     Err(e) => {
                                         log::error!("Sync check failed for block {}: {}", height, e);
-                                        if is_connection_error(&e) {
-                                            log::error!("Connection lost during sync check, reconnecting...");
-                                            break true;
+                                        match classify_error(&e) {
+                                            ErrorKind::ConnectionBroken => {
+                                                log::error!("Connection lost during sync check, reconnecting...");
+                                                break true;
+                                            }
+                                            ErrorKind::Temporary => {
+                                                log::warn!("Non critical error occurred during sync check for block {}, will retry on next block", height);
+                                            }
+                                            ErrorKind::LogicError => {
+                                                log::warn!("Unexpected error occurred during sync check for block {}, continuing", height);
+                                            }
                                         }
                                     }
                                 }
@@ -187,9 +238,18 @@ pub async fn ipc_block_listener(
                             }
                             Err(e) => {
                                 log::error!("Connection health check failed: {}", e);
-                                if is_connection_error(&e) {
-                                    log::error!("Dead connection detected, reconnecting...");
-                                    break true;
+                                match classify_error(&e) {
+                                    ErrorKind::ConnectionBroken => {
+                                        log::error!("Dead connection detected, reconnecting...");
+                                        break true;
+                                    }
+                                    ErrorKind::Temporary => {
+                                        log::warn!("Non critical error occurred in health check, will retry on next interval");
+                                    }
+                                    ErrorKind::LogicError => {
+                                        log::warn!("Unexpected error occurred in health check, continuing operation");
+                                        // Continue normal operation
+                                    }
                                 }
                             }
                         }
@@ -235,6 +295,9 @@ async fn get_template_with_retry(
     for attempt in 1..=max_attempts {
         match client.get_block_template(None, Some(priority)).await {
             Ok(template) => {
+                if template.is_empty() {
+                    return Err("Received empty template (0 bytes)".into());
+                }
                 last_template = template;
                 if last_template.len() >= MIN_TEMPLATE_SIZE {
                     if attempt > 1 {
@@ -266,7 +329,7 @@ async fn get_template_with_retry(
             }
             Err(e) => {
                 // Don't retry connection errors - let caller handle reconnection
-                if is_connection_error(&e) {
+                if matches!(classify_error(&e), ErrorKind::ConnectionBroken) {
                     return Err(e);
                 }
 
@@ -309,14 +372,29 @@ async fn get_template_with_retry(
 /// This function classifies errors to distinguish between:
 /// * Connection errors: Require reconnection, no point in retrying
 /// * Logic errors: May succeed on retry (temporary issues)
-fn is_connection_error(error: &Box<dyn std::error::Error>) -> bool {
-    if error.downcast_ref::<std::io::Error>().is_some()
-        || error.downcast_ref::<oneshot::error::RecvError>().is_some()
-    {
-        return true;
+fn classify_error(error: &Box<dyn std::error::Error>) -> ErrorKind {
+    if let Some(io_err) = error.downcast_ref::<std::io::Error>() {
+        match io_err.kind() {
+            std::io::ErrorKind::ConnectionReset
+            | std::io::ErrorKind::ConnectionAborted
+            | std::io::ErrorKind::BrokenPipe
+            | std::io::ErrorKind::NotConnected => return ErrorKind::ConnectionBroken,
+
+            std::io::ErrorKind::TimedOut
+            | std::io::ErrorKind::Interrupted
+            | std::io::ErrorKind::WouldBlock => return ErrorKind::Temporary,
+
+            _ => {}
+        }
     }
+
+    if error.downcast_ref::<oneshot::error::RecvError>().is_some() {
+        return ErrorKind::ConnectionBroken;
+    }
+
     let error_str = error.to_string().to_lowercase();
-    let connection_keywords = [
+
+    if [
         "connection refused",
         "connection reset",
         "connection lost",
@@ -324,18 +402,30 @@ fn is_connection_error(error: &Box<dyn std::error::Error>) -> bool {
         "no such file",
         "permission denied",
         "disconnected",
-        "channel closed",
-        "oneshot canceled",
-        "receiver dropped",
-        "invalid thread handle",
-        "null capability pointer",
-        "method not implemented",
-        "remote exception",
-        "capability disconnected",
-        "bootstrap failed",
-    ];
+        "bootstrap failed, remote exception",
+        "Method not implemented",
+    ]
+    .iter()
+    .any(|keyword| error_str.contains(keyword))
+    {
+        return ErrorKind::ConnectionBroken;
+    }
 
-    connection_keywords
-        .iter()
-        .any(|keyword| error_str.contains(keyword))
+    if [
+        "timeout",
+        "try again",
+        "temporary",
+        "interrupted",
+        "busy",
+        "unavailable",
+        "overloaded",
+    ]
+    .iter()
+    .any(|keyword| error_str.contains(keyword))
+    {
+        return ErrorKind::Temporary;
+    }
+
+    // Default to logic error
+    ErrorKind::LogicError
 }
