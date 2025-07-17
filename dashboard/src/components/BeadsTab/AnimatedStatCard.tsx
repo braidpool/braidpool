@@ -14,7 +14,7 @@ export default function AnimatedStatCard({
       <div className="flex justify-between items-start">
         <div>
           <p className="text-gray-400 text-sm">{title}</p>
-          <h3 className="text-white text-2xl font-bold mt-1">{value}</h3>
+          <h3 className="text-white text-sm font-bold mt-1">{value}</h3>
         </div>
       </div>
     </div>

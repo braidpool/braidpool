@@ -5,7 +5,7 @@ import Header from '../common/Header';
 import InstallationInstructions from '../Installation/InstallationInstructions';
 import MineInventoryDashboard from '../MinerInventory/MineInventoryDashboard';
 import PoolHashrateChart from './PoolHashrateChart';
-import MempoolLatencyStats from './MempoolLatencyStats';
+import MempoolLatencyStats from '../Mempool/MempoolLatencyStats';
 import RecentBlocksTable from './RecentBlocksTable';
 import GraphVisualization from '../BraidPoolDAG/BraidPoolDAG';
 import MinedSharesExplorer from '../BeadsTab/MinedSharesExplorer';
