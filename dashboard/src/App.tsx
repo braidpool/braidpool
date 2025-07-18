@@ -1,10 +1,8 @@
-import React, { useState } from 'react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
-import { Box, Container, Link, Typography, Button } from '@mui/material';
+import { Box } from '@mui/material';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Dashboard from './components/Dashboard/Dashboard';
-
 import MinedSharesExplorer from './components/BeadsTab/MinedSharesExplorer';
 import Footer from './components/Footer';
 
@@ -39,47 +37,12 @@ const theme = createTheme({
   },
 });
 
-function Copyright() {
-  return (
-    <Typography variant="body2" color="text.secondary" align="center">
-      {'© '}
-      <Link color="inherit" href="https://github.com/braidpool/braidpool">
-        Braidpool
-      </Link>{' '}
-      {new Date().getFullYear()}
-      {' - Built with Vite 🚀'}
-    </Typography>
-  );
-}
-
 function App() {
-  const [shareDetailsOpen, setShareDetailsOpen] = useState(false);
-
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <BrowserRouter>
         <Box sx={{ display: 'flex' }}>
-          {/* Test button for ShareDetails */}
-          {/* <Button
-            variant='contained'
-            color='primary'
-            onClick={() => setShareDetailsOpen(true)}
-            sx={{
-              position: 'fixed',
-              top: '20px',
-              right: '20px',
-              zIndex: 9999,
-            }}>
-            Test Share Details
-          </Button> */}
-
-          {/* ShareDetails component */}
-          {/* <ShareDetails
-            open={shareDetailsOpen}
-            onClose={() => setShareDetailsOpen(false)}
-          /> */}
-
           <Box
             sx={{
               display: 'flex',
@@ -95,25 +58,17 @@ function App() {
                 path="/minedsharesexplorer"
                 element={<MinedSharesExplorer />}
               />
-              {/* Add more routes as needed */}
             </Routes>
             <Box
               component="footer"
               sx={{
                 py: 3,
-                mt: 'auto',
+                mt: 3,
                 bgcolor: 'background.paper',
                 borderTop: '1px solid rgba(255,255,255,0.05)',
               }}
             >
-              {/* <Container maxWidth="lg">
-                <Typography variant="body1" align="center" gutterBottom>
-                  A visualization dashboard for the Braidpool decentralized
-                  mining pool
-                </Typography>
-                <Copyright />
-              </Container> */}
-              <Footer></Footer>
+              <Footer />
             </Box>
           </Box>
         </Box>

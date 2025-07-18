@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import TransactionList from './TransactionList';
-import { shortenHash, formatWork } from './lib/Utils';
+import { shortenHash, formatWork, useCopyToClipboard } from './lib/Utils';
 import type { BeadRowProps } from './lib/Types';
 import { BeadRewardTooltip } from './BeadRewardTooltip';
 import { ChevronDown } from 'lucide-react';
-import useCopyToClipboard from './lib/Utils';
+
 export default function BeadRow({
   bead,
   isExpanded,

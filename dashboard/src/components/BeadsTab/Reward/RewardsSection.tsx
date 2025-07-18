@@ -36,10 +36,7 @@ export function RewardsDashboard() {
         const message = JSON.parse(event.data);
         if (message.type === 'rewards_data') {
           const processed = processRewardsData(message.data);
-          const rewardHistory = generateRewardHistory(
-            processed.blockCount,
-            processed.blockReward
-          );
+          const rewardHistory = generateRewardHistory(processed.blockCount);
           setRewardData({
             totalRewards: processed.totalRewards ?? 0,
             dailyAverage: processed.rewardRate ?? 0,
