@@ -1,4 +1,4 @@
-import { getBlockchainInfo,getPeerInfo,getMempoolInfo,getNetworkInfo,getNetTotals } from "./rpcMethods";
+import { getBlockchainInfo,getPeerInfo,getMempoolInfo,getNetworkInfo,getNetTotals } from "./rpcMethods.js";
 
 
 export async function fetchAllNodeData() {

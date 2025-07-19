@@ -11,7 +11,7 @@ const mockPeers: PeerInfo[] = Array.from({ length: 12 }).map((_, i) => ({
   startingheight: 100,
   synced_headers: 100,
   synced_blocks: 100,
-  ping: 30 + i,
+  pingtime: 30 + i,
   bytessent: 1048576 * (i + 1),
   bytesrecv: 524288 * (i + 1),
 }));
