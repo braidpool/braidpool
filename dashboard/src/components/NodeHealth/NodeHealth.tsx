@@ -133,7 +133,7 @@ const NodeHealth: React.FC = () => {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-[#1c1c1c] text-white flex items-center justify-center">
+      <div className="min-h-auto bg-[#1e1e1e] text-white flex items-center justify-center">
         <div className="text-center">
           <p className="text-red-500 mb-4">{error}</p>
           <button
@@ -156,7 +156,7 @@ const NodeHealth: React.FC = () => {
     !netTotals
   ) {
     return (
-      <div className="min-h-screen bg-[#1c1c1c] text-white flex items-center justify-center">
+      <div className="min-h-auto bg-[#1e1e1e] text-white flex items-center justify-center">
         Loading...
       </div>
     );
@@ -176,7 +176,7 @@ const NodeHealth: React.FC = () => {
   const syncPercentage = ((blocks / headers) * 100).toFixed(2);
 
   return (
-    <div className="min-h-screen bg-[#1e1e1e] px-2 sm:px-4 md:px-6 py-6 md:py-8">
+    <div className="min-h-auto bg-[#1e1e1e] px-2 sm:px-4 md:px-6 py-6 md:py-8">
       <div>
         <p className="text-xs flex justify-end sm:text-sm text-gray-500 mb-4">
           {`Last updated: ${lastUpdated}`}

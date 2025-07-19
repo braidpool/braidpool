@@ -55,7 +55,7 @@ export async function fetchAllNodeData() {
       getNetTotals(),
     ]);
 
-    return {
+    const data = {
       type: 'node_health_data',
       data: {
         blockchainInfo: blockchain,
@@ -66,6 +66,8 @@ export async function fetchAllNodeData() {
         lastUpdated: new Date().toISOString(),
       },
     };
+    return data;
+
   } catch (error) {
     console.error('Failed to fetch all node data:', error);
     throw error;

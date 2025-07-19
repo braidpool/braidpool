@@ -19,7 +19,7 @@ export interface PeerInfo {
   startingheight: number;
   synced_headers: number;
   synced_blocks: number;
-  ping: number;
+  pingtime: number;
   bytessent: number;
   bytesrecv: number;
 }

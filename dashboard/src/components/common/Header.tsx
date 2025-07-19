@@ -107,7 +107,7 @@ const Header: React.FC<HeaderNavProps> = ({
       <div
         className={`fixed top-0 left-0 h-full w-64 bg-[#1a1a1a] border-r border-white/10 shadow-lg z-[9999] transform transition-transform duration-300 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        } md:hidden`}
+        } lg:hidden`}
       >
         <div className="flex items-center justify-between px-4 h-14 border-b border-white/10">
           <span className="text-white font-bold text-lg">{title}</span>

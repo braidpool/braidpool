@@ -33,7 +33,7 @@ export default function Peers({ peers }: { peers: PeerInfo[] }) {
         {paginatedPeers.map((peer) => (
           <div
             key={peer.id}
-            className="flex items-center justify-between p-4 border border-gray-700 rounded-lg bg-gray-900/30 hover:bg-gray-900/50 transition-colors"
+            className="grid max-sm:grid-cols-1 md:grid-cols-2 p-4 border border-gray-700 rounded-lg bg-gray-900/30 hover:bg-gray-900/50 transition-colors"
           >
             <div className="space-y-1">
               <p className="text-white font-medium">{peer.addr}</p>
@@ -52,7 +52,7 @@ export default function Peers({ peers }: { peers: PeerInfo[] }) {
             </div>
             <div className="text-right space-y-1">
               <p className="text-sm font-medium text-white">
-                Ping: {peer.ping}ms
+                Ping: {peer.pingtime}ms
               </p>
               <p className="text-xs text-gray-400">
                 ↑ {formatBytes(peer.bytessent)} ↓ {formatBytes(peer.bytesrecv)}

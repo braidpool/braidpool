@@ -7,7 +7,7 @@ export default function NetworkPanel({ network }: NetworkPanelProps) {
         <h2 className="text-white text-lg font-semibold mb-4">
           Network Status
         </h2>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid sm:grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <p className="text-sm font-medium text-gray-300">Network Active</p>
             <span
