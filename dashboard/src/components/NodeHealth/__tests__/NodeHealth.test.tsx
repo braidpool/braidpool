@@ -85,8 +85,7 @@ describe('NodeHealth - WebSocket', () => {
 
     expect(screen.getByText(/block height/i)).toBeInTheDocument();
   });
-
-  it('handles WebSocket error and shows retry', async () => {
+  it('handles WebSocket error ', async () => {
     render(<NodeHealth />);
     const ws = WebSocketMock.instances[0];
 
@@ -94,26 +93,6 @@ describe('NodeHealth - WebSocket', () => {
       ws.onerror?.(new Event('error'));
     });
 
-    expect(await screen.findByText(/retry/i)).toBeInTheDocument();
-  });
-
-  it('sends refresh action when Retry is clicked', async () => {
-    render(<NodeHealth />);
-    const ws = WebSocketMock.instances[0];
-
-    // Simulate error to show retry button
-    await act(() => {
-      ws.onerror?.(new Event('error'));
-    });
-
-    // Find and click retry button
-    const retryButton = await screen.findByTestId('retry-button');
-    await act(() => {
-      retryButton.click();
-    });
-
-    // Verify the send was called
-    expect(ws.send).toHaveBeenCalledWith(JSON.stringify({ action: 'refresh' }));
   });
 
   it('handles WebSocket close event', async () => {

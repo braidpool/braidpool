@@ -72,14 +72,41 @@ const NodeHealth: React.FC = () => {
             setLastUpdated(new Date(data.lastUpdated).toLocaleTimeString());
             setLoading(false);
             setError(null);
-            setBandwidthHistory((prevHistory) => {
-              const timestamp = new Date(data.lastUpdated).getTime();
-              const { totalbytesrecv, totalbytessent } = data.netTotals;
-              return [
-                ...prevHistory.slice(-10),
-                { timestamp, totalbytesrecv, totalbytessent },
-              ];
-            });
+          setBandwidthHistory((prevHistory) => {
+  const timestamp = new Date(data.lastUpdated).getTime();
+  const { totalbytesrecv, totalbytessent } = data.netTotals;
+
+  if (prevHistory.length === 0) {
+    return [{
+      timestamp,
+      totalbytesrecv,
+      totalbytessent,
+      bandwidthRecv: 0,
+      bandwidthSent:0,
+    }];
+  }
+
+  const last = prevHistory[prevHistory.length - 1];
+  const deltaTime = (timestamp - last.timestamp) / 1000;
+
+  // Avoid divide-by-zero or negative time issues
+  if (deltaTime <= 0) return prevHistory;
+
+  const bandwidthRecv = (totalbytesrecv - last.totalbytesrecv) / deltaTime;
+  const bandwidthSent = (totalbytessent - last.totalbytessent) / deltaTime;
+
+  return [
+    ...prevHistory.slice(-10), // keep last 10 entries
+    {
+      timestamp,
+      bandwidthRecv,
+      bandwidthSent,
+      totalbytesrecv,
+      totalbytessent,
+    },
+  ];
+});
+
           }
         } catch (err) {
           console.error('Error parsing WebSocket message:', err);
@@ -121,26 +148,14 @@ const NodeHealth: React.FC = () => {
     };
   }, []);
 
-  const handleManualRefresh = () => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ action: 'refresh' }));
-    } else if (process.env.NODE_ENV !== 'test') {
-      console.warn('WebSocket not ready for refresh');
-    }
-  };
+ 
 
   if (error) {
     return (
       <div className="min-h-auto bg-[#1e1e1e] text-white flex items-center justify-center">
         <div className="text-center">
           <p className="text-red-500 mb-4">{error}</p>
-          <button
-            onClick={handleManualRefresh}
-            className="bg-white text-black px-4 py-2 rounded"
-            data-testid="retry-button"
-          >
-            Retry
-          </button>
+          
         </div>
       </div>
     );

@@ -26,18 +26,18 @@ const BandwidthPanel: React.FC<BandwidthPanelProps> = ({
   return (
     <div className="bg-[#1e1e1e] border border-gray-700 rounded-xl shadow-md p-4">
       <h3 className="text-lg font-semibold text-white mb-4 text-center">
-        Real-Time Bandwidth Usage
+        Real-Time Bandwidth Usage (Bytes/sec)
       </h3>
 
-      <ResponsiveContainer width="100%" height={300}>
-        <LineChart data={bandwidthHistory}>
+      <ResponsiveContainer width="100%" height={350} >
+        <LineChart data={bandwidthHistory}  margin={{ top: 30, right: 30, left: 0, bottom: 5 }} >
           <CartesianGrid strokeDasharray="3 3" stroke="#444" />
           <XAxis
             dataKey="timestamp"
             tickFormatter={(ts) => new Date(ts).toLocaleTimeString()}
             stroke="#aaa"
           />
-          <YAxis stroke="#aaa" tickFormatter={(value) => formatBytes(value)} />
+          <YAxis stroke="#aaa" tickFormatter={(value) => formatBytes(value)}   allowDataOverflow />
           <Tooltip
             contentStyle={{ backgroundColor: '#222', borderColor: '#555' }}
             labelFormatter={(ts) => new Date(ts).toLocaleTimeString()}
@@ -46,12 +46,9 @@ const BandwidthPanel: React.FC<BandwidthPanelProps> = ({
               name,
             ]}
           />
-          <Line
-            dataKey="totalbytesrecv"
-            stroke="#4ade80"
-            name="Bytes Received"
-          />
-          <Line dataKey="totalbytessent" stroke="#60a5fa" name="Bytes Sent" />
+<Line  dataKey="bandwidthRecv"  stroke="#4ade80" name="Bytes Received/sec" />
+<Line dataKey="bandwidthSent" stroke="#60a5fa" name="Bytes Sent/sec" />
+
         </LineChart>
       </ResponsiveContainer>
     </div>
