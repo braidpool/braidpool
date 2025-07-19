@@ -92,7 +92,6 @@ describe('NodeHealth - WebSocket', () => {
     await act(() => {
       ws.onerror?.(new Event('error'));
     });
-
   });
 
   it('handles WebSocket close event', async () => {

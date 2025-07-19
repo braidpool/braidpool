@@ -1,4 +1,4 @@
-import { rpcWithEnv } from "./rpcWithEnv.js";
+import { rpcWithEnv } from './rpcWithEnv.js';
 export async function getBlockchainInfo() {
   try {
     return await rpcWithEnv({ method: 'getblockchaininfo' });

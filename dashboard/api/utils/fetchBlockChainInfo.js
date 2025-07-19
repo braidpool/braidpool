@@ -1,5 +1,10 @@
-import { getBlockchainInfo,getPeerInfo,getMempoolInfo,getNetworkInfo,getNetTotals } from "./rpcMethods.js";
-
+import {
+  getBlockchainInfo,
+  getPeerInfo,
+  getMempoolInfo,
+  getNetworkInfo,
+  getNetTotals,
+} from './rpcMethods.js';
 
 export async function fetchAllNodeData() {
   try {
@@ -23,7 +28,6 @@ export async function fetchAllNodeData() {
       },
     };
     return data;
-
   } catch (error) {
     console.error('Failed to fetch all node data:', error);
     throw error;

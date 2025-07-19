@@ -18,7 +18,9 @@ import {
 
 const NodeHealth: React.FC = () => {
   const [activeTab, setActiveTab] = useState('blockchain');
-  const [blockchainInfo, setBlockchainInfo] = useState<BlockchainInfo | null>(null);
+  const [blockchainInfo, setBlockchainInfo] = useState<BlockchainInfo | null>(
+    null
+  );
   const [peerInfo, setPeerInfo] = useState<PeerInfo[]>([]);
   const [networkInfo, setNetworkInfo] = useState<NetworkInfo | null>(null);
   const [mempoolInfo, setMempoolInfo] = useState<MempoolInfo | null>(null);
@@ -27,7 +29,9 @@ const NodeHealth: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
-  const [bandwidthHistory, setBandwidthHistory] = useState<BandwidthHistoryPoint[]>([]);
+  const [bandwidthHistory, setBandwidthHistory] = useState<
+    BandwidthHistoryPoint[]
+  >([]);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -72,41 +76,44 @@ const NodeHealth: React.FC = () => {
             setLastUpdated(new Date(data.lastUpdated).toLocaleTimeString());
             setLoading(false);
             setError(null);
-          setBandwidthHistory((prevHistory) => {
-  const timestamp = new Date(data.lastUpdated).getTime();
-  const { totalbytesrecv, totalbytessent } = data.netTotals;
+            setBandwidthHistory((prevHistory) => {
+              const timestamp = new Date(data.lastUpdated).getTime();
+              const { totalbytesrecv, totalbytessent } = data.netTotals;
 
-  if (prevHistory.length === 0) {
-    return [{
-      timestamp,
-      totalbytesrecv,
-      totalbytessent,
-      bandwidthRecv: 0,
-      bandwidthSent:0,
-    }];
-  }
+              if (prevHistory.length === 0) {
+                return [
+                  {
+                    timestamp,
+                    totalbytesrecv,
+                    totalbytessent,
+                    bandwidthRecv: 0,
+                    bandwidthSent: 0,
+                  },
+                ];
+              }
 
-  const last = prevHistory[prevHistory.length - 1];
-  const deltaTime = (timestamp - last.timestamp) / 1000;
+              const last = prevHistory[prevHistory.length - 1];
+              const deltaTime = (timestamp - last.timestamp) / 1000;
 
-  // Avoid divide-by-zero or negative time issues
-  if (deltaTime <= 0) return prevHistory;
+              // Avoid divide-by-zero or negative time issues
+              if (deltaTime <= 0) return prevHistory;
 
-  const bandwidthRecv = (totalbytesrecv - last.totalbytesrecv) / deltaTime;
-  const bandwidthSent = (totalbytessent - last.totalbytessent) / deltaTime;
+              const bandwidthRecv =
+                (totalbytesrecv - last.totalbytesrecv) / deltaTime;
+              const bandwidthSent =
+                (totalbytessent - last.totalbytessent) / deltaTime;
 
-  return [
-    ...prevHistory.slice(-10), // keep last 10 entries
-    {
-      timestamp,
-      bandwidthRecv,
-      bandwidthSent,
-      totalbytesrecv,
-      totalbytessent,
-    },
-  ];
-});
-
+              return [
+                ...prevHistory.slice(-10), // keep last 10 entries
+                {
+                  timestamp,
+                  bandwidthRecv,
+                  bandwidthSent,
+                  totalbytesrecv,
+                  totalbytessent,
+                },
+              ];
+            });
           }
         } catch (err) {
           console.error('Error parsing WebSocket message:', err);
@@ -148,20 +155,23 @@ const NodeHealth: React.FC = () => {
     };
   }, []);
 
- 
-
   if (error) {
     return (
       <div className="min-h-auto bg-[#1e1e1e] text-white flex items-center justify-center">
         <div className="text-center">
           <p className="text-red-500 mb-4">{error}</p>
-          
         </div>
       </div>
     );
   }
 
-  if (loading || !blockchainInfo || !networkInfo || !mempoolInfo || !netTotals) {
+  if (
+    loading ||
+    !blockchainInfo ||
+    !networkInfo ||
+    !mempoolInfo ||
+    !netTotals
+  ) {
     return (
       <div className="min-h-auto bg-[#1e1e1e] text-white flex items-center justify-center">
         Loading...
@@ -195,26 +205,39 @@ const NodeHealth: React.FC = () => {
         {/* Sync Status */}
         <div className=" border border-gray-700 rounded-xl px-2 py-2">
           <h2 className="text-xs sm:text-sm text-gray-500 mb-1">Sync Status</h2>
-          <p className={`text-lg sm:text-xl font-bold mb-1 ${headers === blocks ? 'text-green-600' : 'text-yellow-500'}`}>
+          <p
+            className={`text-lg sm:text-xl font-bold mb-1 ${headers === blocks ? 'text-green-600' : 'text-yellow-500'}`}
+          >
             {headers === blocks ? 'Synced' : 'Syncing'}
           </p>
           <div className="w-full h-4 rounded bg-gray-200">
-            <div className="h-full rounded bg-green-500" style={{ width: `${syncPercentage}%` }}></div>
+            <div
+              className="h-full rounded bg-green-500"
+              style={{ width: `${syncPercentage}%` }}
+            ></div>
           </div>
-          <p className="text-xs text-gray-500 mt-1">{syncPercentage}% complete</p>
+          <p className="text-xs text-gray-500 mt-1">
+            {syncPercentage}% complete
+          </p>
         </div>
 
         {/* Block Height */}
         <div className=" border border-gray-700 rounded-xl px-2 py-2">
-          <h2 className="text-xs sm:text-sm text-gray-500 mb-1">Block Height</h2>
+          <h2 className="text-xs sm:text-sm text-gray-500 mb-1">
+            Block Height
+          </h2>
           <p className="text-lg sm:text-xl text-white font-bold">{blocks}</p>
-          <p className="text-xs text-gray-500">{(size_on_disk / 1024 ** 3).toFixed(2)}GB</p>
+          <p className="text-xs text-gray-500">
+            {(size_on_disk / 1024 ** 3).toFixed(2)}GB
+          </p>
         </div>
 
         {/* Connections */}
         <div className=" border border-gray-700 rounded-xl px-2 py-2">
           <h2 className="text-xs sm:text-sm text-gray-500 mb-1">Connections</h2>
-          <p className="text-lg sm:text-xl text-white font-bold">{networkInfo?.connections ?? '...'}</p>
+          <p className="text-lg sm:text-xl text-white font-bold">
+            {networkInfo?.connections ?? '...'}
+          </p>
           <p className="text-xs text-gray-500">
             {networkInfo
               ? `${networkInfo.connections_in ?? '?'} inbound, ${networkInfo.connections_out ?? '?'} outbound`
@@ -273,9 +296,20 @@ const NodeHealth: React.FC = () => {
               <div className="space-y-2 text-xs sm:text-sm">
                 <InfoRow label="Chain" value={chain} />
                 <InfoRow label="Current Blocks" value={blocks} />
-                <InfoRow label="Synced" value={headers === blocks ? 'True' : 'False'} />
-                <InfoRow label="Best Block Hash" value={isSmallScreen ? shortenHash(bestblockhash) : bestblockhash} />
-                <InfoRow label="Verification Progress" value={`${(verificationprogress * 100).toFixed(4)}%`} />
+                <InfoRow
+                  label="Synced"
+                  value={headers === blocks ? 'True' : 'False'}
+                />
+                <InfoRow
+                  label="Best Block Hash"
+                  value={
+                    isSmallScreen ? shortenHash(bestblockhash) : bestblockhash
+                  }
+                />
+                <InfoRow
+                  label="Verification Progress"
+                  value={`${(verificationprogress * 100).toFixed(4)}%`}
+                />
                 <InfoRow label="Difficulty" value={difficulty} />
                 <InfoRow label="Pruned" value={pruned ? 'True' : 'False'} />
               </div>
@@ -284,7 +318,9 @@ const NodeHealth: React.FC = () => {
         )}
 
         {activeTab === 'peers' && peerInfo && <Peers peers={peerInfo} />}
-        {activeTab === 'mempool' && mempoolInfo && <MempoolPanel mempool={mempoolInfo} />}
+        {activeTab === 'mempool' && mempoolInfo && (
+          <MempoolPanel mempool={mempoolInfo} />
+        )}
         {activeTab === 'bandwidth' && (
           <div className="space-y-4">
             {networkInfo && <NetworkPanel network={networkInfo} />}
