@@ -40,7 +40,7 @@ const NodeHealth: React.FC = () => {
     let isMounted = true;
     let reconnectAttempts = 0;
     const maxReconnectAttempts = 5;
-    let reconnectTimeout: NodeJS.Timeout;
+  const reconnectTimeoutsRef = useRef<NodeJS.Timeout[]>([]);
 
     const connect = () => {
       const ws = new WebSocket('ws://localhost:5000');
@@ -98,11 +98,12 @@ const NodeHealth: React.FC = () => {
         setWsConnected(false);
 
         if (reconnectAttempts < maxReconnectAttempts) {
-          reconnectTimeout = setTimeout(() => {
-            reconnectAttempts++;
-            connect();
-          }, 1000 * reconnectAttempts);
-        }
+        const timeout = setTimeout(() => {
+          reconnectAttempts++;
+          connect();
+        }, 1000 * reconnectAttempts);
+        reconnectTimeoutsRef.current.push(timeout);
+      }
       };
     };
 
@@ -110,7 +111,8 @@ const NodeHealth: React.FC = () => {
 
     return () => {
       isMounted = false;
-      clearTimeout(reconnectTimeout);
+      reconnectTimeoutsRef.current.forEach(clearTimeout);
+    reconnectTimeoutsRef.current = [];
       if (wsRef.current) {
         wsRef.current.onopen = null;
         wsRef.current.onclose = null;
