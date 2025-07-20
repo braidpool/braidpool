@@ -276,7 +276,7 @@ const NodeHealth: React.FC = () => {
 
       {/* Tabs */}
       <div className="mt-8 border border-gray-700 rounded-xl p-3 flex justify-center">
-        <nav className="flex gap-4 sm:gap-10 text-xs sm:text-sm font-medium whitespace-nowrap">
+        <nav className="flex max-sm:flex-col gap-4 sm:gap-10 text-xs sm:text-sm font-medium whitespace-nowrap">
           {TABS.map((tab) => (
             <button
               key={tab.value}
