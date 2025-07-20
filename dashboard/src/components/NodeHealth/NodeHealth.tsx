@@ -6,7 +6,7 @@ import BandwidthPanel from './Bandwidth';
 import { InfoRow } from './InfoRow';
 import { TABS, useIsSmallScreen } from './Utils';
 import { shortenHash } from '../BeadsTab/lib/Utils';
-import colors from '@/theme/colors';
+
 import {
   BlockchainInfo,
   PeerInfo,
@@ -128,6 +128,10 @@ const NodeHealth: React.FC = () => {
         setWsConnected(false);
 
         if (reconnectAttempts < maxReconnectAttempts) {
+          if (reconnectTimeoutRef.current) {
+            clearTimeout(reconnectTimeoutRef.current); // ✅ prevent overlap
+          }
+
           reconnectTimeoutRef.current = setTimeout(() => {
             reconnectAttempts++;
             connect();

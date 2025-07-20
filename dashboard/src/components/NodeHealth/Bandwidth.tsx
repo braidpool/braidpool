@@ -26,7 +26,7 @@ const BandwidthPanel: React.FC<BandwidthPanelProps> = ({
   return (
     <div className="bg-[#1e1e1e] border border-gray-700 rounded-xl shadow-md p-4">
       <h3 className="text-lg font-semibold text-white mb-4 text-center">
-        Real-Time Bandwidth Usage (Bytes/sec)
+        Real-Time Bandwidth Usage
       </h3>
 
       <ResponsiveContainer width="100%" height={350}>

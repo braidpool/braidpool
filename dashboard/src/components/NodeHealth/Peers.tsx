@@ -33,11 +33,14 @@ export default function Peers({ peers }: { peers: PeerInfo[] }) {
         {paginatedPeers.map((peer) => (
           <div
             key={peer.id}
-            className="grid max-sm:grid-cols-1 md:grid-cols-2 p-4 border border-gray-700 rounded-lg bg-gray-900/30 hover:bg-gray-900/50 transition-colors"
+            className="grid max-sm:grid-cols-1 md:grid-cols-2 p-4 border border-gray-700 rounded-lg bg-gray-900/30 hover:bg-gray-900/50 transition-colors overflow-x-hidden"
           >
             <div className="space-y-1">
               <p className="text-white font-medium">{peer.addr}</p>
-              <div className="flex items-center gap-2">
+              <div
+                className="flex  max-sm:flex-col md:flex-row 
+               items-start sm:items-center gap-1 sm:gap-2"
+              >
                 <span
                   className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                     peer.inbound
@@ -47,7 +50,9 @@ export default function Peers({ peers }: { peers: PeerInfo[] }) {
                 >
                   {peer.inbound ? 'Inbound' : 'Outbound'}
                 </span>
-                <span className="text-sm text-gray-400">{peer.subver}</span>
+                <span className="text-sm text-gray-400 ">
+                  Version : {peer.subver}
+                </span>
               </div>
             </div>
             <div className="text-right space-y-1">
@@ -59,6 +64,12 @@ export default function Peers({ peers }: { peers: PeerInfo[] }) {
               </p>
             </div>
           </div>
+        ))}
+        {[...Array(ITEMS_PER_PAGE - paginatedPeers.length)].map((_, idx) => (
+          <div
+            key={`empty-${idx}`}
+            className="p-4 border border-transparent rounded-lg"
+          />
         ))}
       </div>
 
