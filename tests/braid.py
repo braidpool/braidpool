@@ -32,7 +32,7 @@ def make_dag(hashed_parents, bead_work=None, description=None):
     dag["geneses"]           = geneses(parents)
     dag["tips"]              = tips(parents, dag["children"])
     dag["cohorts"]           = list(cohorts(parents))
-    dag["bead_work"]         = bead_work if bead_work else {b:FIXED_BEAD_WORK for b in dag["parents"]}
+    dag["bead_work"]         = bead_work if bead_work else {b:FIXED_BEAD_WORK for b in dag["parents"]} # FIXME number_beads() above may have relabeled relative to what's in bead_work.
     dag["work"]              = descendant_work(parents, dag["children"], dag["bead_work"], dag["cohorts"])
     dag["highest_work_path"] = highest_work_path(parents, dag["children"], dag["work"])
     return dag
@@ -149,14 +149,11 @@ def cohorts(parents, children=None, initial_cohort=None):
                                              # new ancestors
 
             # Calculate ancestors
-            for t in tail:                   # Find all ancestors of all beads in the tail
-                if t not in ancestors:
-                    all_ancestors(t, parents, ancestors) # half the CPU time is here
+            for t in tail - set(ancestors.keys()):   # Find all ancestors of all beads in the tail
+                all_ancestors(t, parents, ancestors) # half the CPU time is here
 
             # Calculate cohort
-            cohort = set()
-            for a in ancestors:
-                cohort |= ancestors[a]       # Union all ancestors with the cohort
+            cohort = set.union(set(), *ancestors.values()) # Union all ancestors with the cohort
 
             # Check termination cases
             if dag_tips <= cohort:           # Cohort contains all tips
@@ -215,9 +212,9 @@ def descendant_work(parents, children=None, bead_work=None, in_cohorts=None):
     children        = children if children else reverse(parents)
     bead_work       = bead_work if bead_work else {b: FIXED_BEAD_WORK for b in parents}
     previous_work   = 0
-    in_cohorts      = reversed(in_cohorts) if in_cohorts else cohorts(children)
+    rev_cohorts     = reversed(in_cohorts) if in_cohorts else cohorts(children)
     retval          = {} # The cumulative work for each bead
-    for c in in_cohorts:
+    for c in rev_cohorts:
         sub_children    = sub_braid(c, children)   # children dict within the cohort
         sub_descendants = {}                       # descendants within the cohort
         for b in c:
@@ -414,15 +411,15 @@ def layout(cohort, all_parents, bead_work=None, previous_cohort_tips=None):
     pos = {bead: [proposed_x[bead], 0] for bead in hwpath}
     lines = [] # A running tally of lines on the graph
 
-    extended_children = copy(children) 
+    extended_children = copy(children)
     for key, value in prev_cohort_edges.items():
         if key not in children:
             extended_children[key] = set()
-        extended_children[key] = extended_children[key].union(value)
+        extended_children[key] |= value
     extended_parents = reverse(extended_children)
     if previous_cohort_tips:
         for key, value in previous_cohort_tips.items():
-            pos[key] = [-1, value[1]] # add the position of tips from the previous cohort as (-1, y_coord) 
+            pos[key] = [-1, value[1]] # add the position of tips from the previous cohort as (-1, y_coord)
     # Place remaining beads in work sorted order (lowest work at top)
     for bead in sorted(set(parents) - set(hwpath),
                        key=work_sort_key(parents, children, bead_work), reverse=True):

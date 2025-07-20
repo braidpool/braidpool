@@ -3,28 +3,27 @@ name = "node"
 version = "0.1.0"
 edition = "2021"
 
-[[test]]
-name = "braid_tests"
-path = "../tests/braid_tests.rs"
-
 [dependencies]
-tokio = { version = "1", features = ["rt", "net", "macros", "rt-multi-thread", "tracing", "io-util"] }
+hex = "0.4"
+capnp = "0.20.3"
+capnp-rpc = "0.20.2"
+tokio = { version = "1", features = ["signal","rt", "net", "macros", "rt-multi-thread", "tracing", "io-util", "net", "rt", "time", "signal"] }
 serde = { version = "^1.0", features = ["derive"] }
 bincode = "1.3"
-tokio-util = { version = "0.7.0", features = ["full"] }
+tokio-util = { version = "0.7.0", features = ["full", "compat"] }
 tokio-stream = { version = "0.1" }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3.1", default-features = false, features = ["fmt", "ansi", "env-filter", "tracing-log"] }
 futures = { version = "0.3.28", features = ["thread-pool"]}
 bytes = "1.4.0"
 flexbuffers = { version = "25.2", features = ["deserialize_human_readable", "serialize_human_readable"] }
-serde_json = "1.0.10"
+serde_json = "1.0.140"
 sqlite = { version = "0.36" }
 clap = { version = "4.4.2", features = ["derive", "string"] }
-bitcoin = { git = "https://github.com/braidpool/rust-bitcoin.git", branch = "cpunet" }
+bitcoin = { git = "https://github.com/braidpool/rust-bitcoin.git", branch = "cpunet",features=["serde"]}
 bitcoin_hashes = { version = "0.16" }
-bitcoincore-rpc = { version = "0.19.0-cpunet", git = "https://github.com/braidpool/rust-bitcoincore-rpc.git", branch = "cpunet" }
-bitcoincore-rpc-json = { version = "0.19.0-cpunet", git = "https://github.com/braidpool/rust-bitcoincore-rpc.git", branch = "cpunet" }
+bitcoincore-rpc = { version = "0.19.0"}
+bitcoincore-rpc-json = { version = "0.19.0"}
 bitcoincore-zmq = { version = "1.5.2", git = "https://github.com/antonilol/rust-bitcoincore-zmq.git", features = ["async"] }
 env_logger = "0.11"
 log = "0.4.16"
@@ -38,3 +37,11 @@ bimap = "0.6.3"
 ordered-float = "3.7.0"
 lazy_static = "1.4.0"
 regex = "1.11.1"
+num-bigint = "0.4.6"
+transitive = "1.1.0"
+secp256k1 = "0.30.0"
+libp2p = { version = "0.55.0", features = ["identify", "quic", "tokio","ping","macros","kad","dns","request-response","floodsub"] }
+toml = "0.8.22"
+jsonrpsee = {version = "0.25.1",features = ["full"]}
+async-trait = "0.1.88"
+
