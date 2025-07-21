@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { PeerInfo } from './Types';
 import { formatBytes, paginate, calculateTotalPages } from './Utils';
 
-const ITEMS_PER_PAGE = 10;
+const ITEMS_PER_PAGE = 5;
 
 export default function Peers({ peers }: { peers: PeerInfo[] }) {
   const [currentPage, setCurrentPage] = useState(1);
@@ -29,46 +29,45 @@ export default function Peers({ peers }: { peers: PeerInfo[] }) {
         </p>
       </div>
 
-      <div className="px-6 py-4 space-y-4">
+      <div className="px-6 py-4 space-y-4 ">
         {paginatedPeers.map((peer) => (
           <div
             key={peer.id}
-            className="grid max-sm:grid-cols-1 md:grid-cols-2 p-4 border border-gray-700 rounded-lg bg-gray-900/30 hover:bg-gray-900/50 transition-colors overflow-x-hidden"
+            className="flex max-sm:flex-col md:flex-row md:items-start md:justify-between gap-4 p-4 border border-gray-700 rounded-lg bg-gray-900/30 hover:bg-gray-900/50 transition-colors overflow-x-hidden"
           >
-            <div className="space-y-1">
+         
+            <div className="flex-1 space-y-1 min-w-0">
               <p className="text-white font-medium">{peer.addr}</p>
               <div
-                className="flex  max-sm:flex-col md:flex-row 
-               items-start sm:items-center gap-1 sm:gap-2"
+                className={`text-sm w-fit px-2 py-0.5 rounded-full font-medium ${
+                  peer.inbound
+                    ? 'text-white bg-blue-600'
+                    : 'text-gray-200 bg-gray-600'
+                }`}
               >
-                <span
-                  className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                    peer.inbound
-                      ? 'bg-gray-600 text-gray-200'
-                      : 'bg-blue-600 text-white'
-                  }`}
-                >
-                  {peer.inbound ? 'Inbound' : 'Outbound'}
-                </span>
-                <span className="text-sm text-gray-400 ">
-                  Version : {peer.subver}
-                </span>
+                {peer.inbound ? 'Inbound' : 'Outbound'}
+              </div>
+
+              <div className="flex max-sm:flex-col md:flex-row lg:gap-1">
+                <p className="text-sm text-gray-400">Version:</p>
+                <p className="text-sm text-white break-words">{peer.subver}</p>
               </div>
             </div>
-            <div className="text-right space-y-1">
-              <p className="text-sm font-medium text-white">
-                Ping: {peer.pingtime}ms
+            <div className="text-left md:text-right space-y-1 flex-shrink-0">
+              <p className="text-sm text-gray-400">
+                Ping: <span className="text-white">{peer.pingtime}ms</span>
               </p>
-              <p className="text-xs text-gray-400">
+              <p className="text-sm text-gray-400">
                 ↑ {formatBytes(peer.bytessent)} ↓ {formatBytes(peer.bytesrecv)}
               </p>
             </div>
           </div>
         ))}
+
         {[...Array(ITEMS_PER_PAGE - paginatedPeers.length)].map((_, idx) => (
           <div
             key={`empty-${idx}`}
-            className="p-4 border border-transparent rounded-lg"
+            className="grid md:grid-cols-2 p-4 border border-transparent rounded-lg h-[96px]"
           />
         ))}
       </div>
@@ -78,7 +77,11 @@ export default function Peers({ peers }: { peers: PeerInfo[] }) {
         <button
           onClick={handlePrev}
           disabled={currentPage === 1}
-          className={`px-3 py-1 rounded ${currentPage === 1 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-800'}`}
+          className={`px-3 py-1 rounded ${
+            currentPage === 1
+              ? 'opacity-50 cursor-not-allowed'
+              : 'hover:bg-gray-800'
+          }`}
         >
           Previous
         </button>
@@ -90,7 +93,11 @@ export default function Peers({ peers }: { peers: PeerInfo[] }) {
         <button
           onClick={handleNext}
           disabled={currentPage === totalPages}
-          className={`px-3 py-1 rounded ${currentPage === totalPages ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-800'}`}
+          className={`px-3 py-1 rounded ${
+            currentPage === totalPages
+              ? 'opacity-50 cursor-not-allowed'
+              : 'hover:bg-gray-800'
+          }`}
         >
           Next
         </button>
