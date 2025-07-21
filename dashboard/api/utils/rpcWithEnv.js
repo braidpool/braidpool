@@ -1,6 +1,6 @@
-import { callRpc } from './fetchRpc.js';
+const callRpc = require('./fetchRpc.js');
 
-export function rpcWithEnv({ method, params = [] }) {
+function rpcWithEnv({ method, params = [] }) {
   return callRpc({
     url: process.env.BRAIDPOOL_URL,
     user: process.env.RPC_USER,
@@ -9,3 +9,6 @@ export function rpcWithEnv({ method, params = [] }) {
     params,
   });
 }
+
+module.exports = rpcWithEnv;
+module.exports.rpcWithEnv = rpcWithEnv;

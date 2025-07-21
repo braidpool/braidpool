@@ -1,5 +1,5 @@
-import axios from 'axios';
-import fetchGlobalCryptoData from '../fetchGlobalData.js';
+const axios = require('axios');
+const fetchGlobalCryptoData = require('../fetchGlobalData.js');
 
 jest.mock('axios');
 

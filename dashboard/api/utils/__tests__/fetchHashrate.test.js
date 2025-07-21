@@ -1,4 +1,6 @@
-import WebSocket from 'ws';
+const WebSocket = require('ws');
+const { fetchHashrateStats } = require('../fetchHashrate.js');
+const { rpcWithEnv } = require('../rpcWithEnv.js');
 
 jest.mock('../rpcWithEnv', () => ({
   rpcWithEnv: jest.fn(),

@@ -1,5 +1,5 @@
-import axios from 'axios';
-import fetchBitcoinPrices from '../fetchBitcoinPrices.js';
+const axios = require('axios');
+const fetchBitcoinPrices = require('../fetchBitcoinPrices.js');
 
 jest.mock('axios');
 

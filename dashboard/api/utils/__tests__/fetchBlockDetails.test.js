@@ -1,6 +1,6 @@
-import WebSocket from 'ws';
-import { fetchBlockDetails } from '../fetchBlockDetails';
-import { rpcWithEnv } from '../rpcWithEnv';
+const WebSocket = require('ws');
+const { fetchBlockDetails } = require('../fetchBlockDetails.js');
+const { rpcWithEnv } = require('../rpcWithEnv.js');
 
 jest.mock('../rpcWithEnv', () => ({
   rpcWithEnv: jest.fn(),

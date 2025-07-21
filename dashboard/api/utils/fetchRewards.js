@@ -1,7 +1,7 @@
-import { rpcWithEnv } from './rpcWithEnv.js';
-import WebSocket from 'ws';
+const { rpcWithEnv } = require('./rpcWithEnv.js');
+const WebSocket = require('ws');
 
-export async function fetchReward(wss) {
+async function fetchReward(wss) {
   try {
     const blockchainInfo = await rpcWithEnv({ method: 'getblockchaininfo' });
     const blockCount = blockchainInfo.blocks;
@@ -55,3 +55,5 @@ export async function fetchReward(wss) {
     console.error('[Rewards] Failed to fetch/send reward data:', err.message);
   }
 }
+
+module.exports = { fetchReward };

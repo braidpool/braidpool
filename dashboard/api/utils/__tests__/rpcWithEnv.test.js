@@ -1,9 +1,7 @@
-import { rpcWithEnv } from '../rpcWithEnv';
-import { callRpc } from '../fetchRpc';
+const rpcWithEnv = require('../rpcWithEnv.js');
+const callRpc = require('../fetchRpc.js');
 
-jest.mock('../fetchRpc', () => ({
-  callRpc: jest.fn(),
-}));
+jest.mock('../fetchRpc.js', () => jest.fn());
 
 describe('rpcWithEnv', () => {
   beforeEach(() => {

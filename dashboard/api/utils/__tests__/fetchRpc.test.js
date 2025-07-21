@@ -1,5 +1,5 @@
-import axios from 'axios';
-import { callRpc } from '../fetchRpc';
+const axios = require('axios');
+const callRpc = require('../fetchRpc.js');
 
 jest.mock('axios');
 

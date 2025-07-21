@@ -1,12 +1,12 @@
-import { WebSocketServer } from 'ws';
-import dotenv from 'dotenv';
-import fetchBitcoinPrices from './utils/fetchBitcoinPrices.js';
-import fetchGlobalCryptoData from './utils/fetchGlobalData.js';
-import { fetchHashrateStats } from './utils/fetchHashrate.js';
-import { fetchLatencyData } from './utils/fetchLatency.js';
-import { fetchReward } from './utils/fetchRewards.js';
-import { handleWebSocketConnection } from './ws/handleWebSocketConnection.js';
-import { fetchBlockDetails } from './utils/fetchBlockDetails.js';
+const { WebSocketServer } = require('ws');
+const dotenv = require('dotenv');
+const fetchBitcoinPrices = require('./utils/fetchBitcoinPrices.js');
+const fetchGlobalCryptoData = require('./utils/fetchGlobalData.js');
+const { fetchHashrateStats } = require('./utils/fetchHashrate.js');
+const { fetchLatencyData } = require('./utils/fetchLatency.js');
+const { fetchReward } = require('./utils/fetchRewards.js');
+const { handleWebSocketConnection } = require('./ws/handleWebSocketConnection.js');
+const { fetchBlockDetails } = require('./utils/fetchBlockDetails.js');
 
 dotenv.config();
 

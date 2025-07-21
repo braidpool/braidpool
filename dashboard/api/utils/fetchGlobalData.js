@@ -1,4 +1,4 @@
-import axios from 'axios';
+const axios = require('axios');
 
 async function fetchGlobalCryptoData(CRYPTO_URL, currency = 'USD') {
   try {
@@ -23,4 +23,4 @@ async function fetchGlobalCryptoData(CRYPTO_URL, currency = 'USD') {
   }
 }
 
-export default fetchGlobalCryptoData;
+module.exports = fetchGlobalCryptoData;

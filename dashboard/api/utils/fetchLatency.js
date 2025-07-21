@@ -1,6 +1,6 @@
-import { rpcWithEnv } from './rpcWithEnv.js';
 
-export async function fetchLatencyData(wss) {
+const { rpcWithEnv } = require('./rpcWithEnv.js');
+async function fetchLatencyData(wss) {
   try {
     const peers = await rpcWithEnv({
       method: 'getpeerinfo',
@@ -62,3 +62,4 @@ export async function fetchLatencyData(wss) {
     console.error('[LatencyStats] Error:', err.message);
   }
 }
+module.exports = { fetchLatencyData };

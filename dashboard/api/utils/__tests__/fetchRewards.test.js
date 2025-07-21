@@ -1,4 +1,6 @@
-import WebSocket from 'ws';
+const WebSocket = require('ws');
+const { fetchReward } = require('../fetchRewards.js');
+const { rpcWithEnv } = require('../rpcWithEnv.js');
 
 jest.mock('../rpcWithEnv', () => ({
   rpcWithEnv: jest.fn(),

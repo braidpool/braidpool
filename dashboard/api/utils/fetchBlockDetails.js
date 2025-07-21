@@ -1,14 +1,14 @@
-import WebSocket from 'ws';
-import { rpcWithEnv } from './rpcWithEnv.js';
+const WebSocket = require('ws');
+const { rpcWithEnv } = require('./rpcWithEnv.js');
 
 let lastBlockHash = null;
 let blockHistory = [];
 const AVERAGING_WINDOW = 10;
 
-export let latestBlockPayload = null;
-export let latestStatsPayload = null;
+let latestBlockPayload = null;
+let latestStatsPayload = null;
 
-export async function fetchBlockDetails(wss) {
+async function fetchBlockDetails(wss) {
   try {
     const blockchainInfo = await rpcWithEnv({ method: 'getblockchaininfo' });
     const latestHeight = blockchainInfo.blocks;
@@ -206,3 +206,9 @@ function broadcastError(wss, err) {
     }
   });
 }
+
+module.exports = { 
+  fetchBlockDetails,
+  latestBlockPayload,
+  latestStatsPayload
+};
