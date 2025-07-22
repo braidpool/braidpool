@@ -1,6 +1,8 @@
 //All braidpool specific errors are defined here
 use std::fmt;
 
+use tokio::sync::oneshot;
+
 #[derive(Debug)]
 //Custom error class for handling all the braid consensus errors
 pub enum BraidError {
@@ -13,6 +15,89 @@ pub enum BraidRPCError {
         method: String,
         source: jsonrpsee::core::ClientError,
     },
+}
+#[derive(Debug)]
+pub enum IPCtemplateError {
+    TemplateConsumeError,
+}
+#[derive(Debug, Clone)]
+pub enum BraidpoolError {
+    QueueFull { queue_type: String },
+}
+pub enum ErrorKind {
+    Temporary,
+    ConnectionBroken,
+    LogicError,
+}
+/// Determines if an error indicates a connection/communication failure
+///
+/// This function classifies errors to distinguish between:
+/// * Connection errors: Require reconnection, no point in retrying
+/// * Logic errors: May succeed on retry (temporary issues)
+pub fn classify_error(error: &Box<dyn std::error::Error>) -> ErrorKind {
+    if let Some(io_err) = error.downcast_ref::<std::io::Error>() {
+        match io_err.kind() {
+            std::io::ErrorKind::ConnectionReset
+            | std::io::ErrorKind::ConnectionAborted
+            | std::io::ErrorKind::BrokenPipe
+            | std::io::ErrorKind::NotConnected => return ErrorKind::ConnectionBroken,
+
+            std::io::ErrorKind::TimedOut
+            | std::io::ErrorKind::Interrupted
+            | std::io::ErrorKind::WouldBlock => return ErrorKind::Temporary,
+
+            _ => {}
+        }
+    }
+
+    if error.downcast_ref::<oneshot::error::RecvError>().is_some() {
+        return ErrorKind::ConnectionBroken;
+    }
+
+    let error_str = error.to_string().to_lowercase();
+
+    if [
+        "connection refused",
+        "connection reset",
+        "connection lost",
+        "broken pipe",
+        "no such file",
+        "permission denied",
+        "disconnected",
+        "bootstrap failed, remote exception",
+        "Method not implemented",
+    ]
+    .iter()
+    .any(|keyword| error_str.contains(keyword))
+    {
+        return ErrorKind::ConnectionBroken;
+    }
+
+    if [
+        "timeout",
+        "try again",
+        "temporary",
+        "interrupted",
+        "busy",
+        "unavailable",
+        "overloaded",
+    ]
+    .iter()
+    .any(|keyword| error_str.contains(keyword))
+    {
+        return ErrorKind::Temporary;
+    }
+
+    // Default to logic error
+    ErrorKind::LogicError
+}
+
+impl fmt::Display for BraidpoolError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BraidpoolError::QueueFull { queue_type } => write!(f, "{} queue is full", queue_type),
+        }
+    }
 }
 impl fmt::Display for BraidRPCError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -37,5 +122,13 @@ impl fmt::Display for BraidError {
         }
     }
 }
-
+impl fmt::Display for IPCtemplateError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            IPCtemplateError::TemplateConsumeError => {
+                write!(f, "An error occurred while consuming the template")
+            }
+        }
+    }
+}
 impl std::error::Error for BraidError {}

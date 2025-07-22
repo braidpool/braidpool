@@ -7,6 +7,7 @@ import { fetchLatencyData } from './utils/fetchLatency.js';
 import { fetchReward } from './utils/fetchRewards.js';
 import { handleWebSocketConnection } from './ws/handleWebSocketConnection.js';
 import { fetchBlockDetails } from './utils/fetchBlockDetails.js';
+import { fetchAllNodeData } from './utils/fetchBlockChainInfo.js';
 
 dotenv.config();
 
@@ -52,6 +53,14 @@ async function sendDataToClients() {
     });
   }
 }
+async function sendNodeHealthData() {
+  const nodeHealthData = await fetchAllNodeData();
+  wss.clients.forEach((client) => {
+    if (client.readyState === client.OPEN) {
+      client.send(JSON.stringify(nodeHealthData));
+    }
+  });
+}
 
 setInterval(() => {
   sendDataToClients().catch((err) =>
@@ -73,6 +82,9 @@ setInterval(() => {
   fetchReward(wss).catch((err) =>
     console.error('[Server] fetchReward failed:', err)
   );
-}, 10000); // 10-second interval for better performance
+  sendNodeHealthData().catch((err) =>
+    console.error('[Server] fetchNodeHealth failed ', err)
+  );
+}, 10000); // 10-second interval
 
 console.log(`WebSocket server running on ws://localhost:${PORT}`);
