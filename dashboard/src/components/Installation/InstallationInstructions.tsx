@@ -1,6 +1,12 @@
 import Card from '../common/Card';
 import colors from '../../theme/colors';
-import { MdPlayCircleOutline, MdCode, MdCloudDownload, MdTerminal, MdArrowForward } from 'react-icons/md';
+import {
+  MdPlayCircleOutline,
+  MdCode,
+  MdCloudDownload,
+  MdTerminal,
+  MdArrowForward,
+} from 'react-icons/md';
 
 const InstallationInstructions = () => {
   return (

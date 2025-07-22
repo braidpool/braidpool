@@ -1,7 +1,15 @@
 import { useState } from 'react';
 import colors from '../../theme/colors';
 import Card from '../common/Card';
-import { MdSpeed, MdBolt, MdDeviceThermostat, MdWifi, MdError, MdCheckCircle, MdLightbulb } from 'react-icons/md';
+import {
+  MdSpeed,
+  MdBolt,
+  MdDeviceThermostat,
+  MdWifi,
+  MdError,
+  MdCheckCircle,
+  MdLightbulb,
+} from 'react-icons/md';
 
 // Mock data for mining devices
 const mockMiners = [
@@ -197,10 +205,7 @@ const DeviceCard = ({
           </span>
         </div>
         <div className="flex items-center gap-1">
-          <MdBolt
-            className="text-sm"
-            style={{ color: colors.primary }}
-          />
+          <MdBolt className="text-sm" style={{ color: colors.primary }} />
           <span className="text-sm">
             {miner.status !== 'offline' ? `${miner.powerDraw}W` : '—'}
           </span>

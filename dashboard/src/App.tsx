@@ -10,7 +10,10 @@ function App() {
         <main className="flex-grow flex flex-col">
           <Routes>
             <Route path="/" element={<Dashboard />} />
-            <Route path="/minedsharesexplorer" element={<MinedSharesExplorer />} />
+            <Route
+              path="/minedsharesexplorer"
+              element={<MinedSharesExplorer />}
+            />
           </Routes>
         </main>
         <footer className="py-6 mt-6 bg-[#1e1e1e] border-t border-white/10">

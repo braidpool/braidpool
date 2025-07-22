@@ -7,7 +7,12 @@ export function layoutNodes(
   beadWork: Record<string, number> = {},
   previousCohortTips: Record<string, Position> = {},
   width: number = 1200,
-  margin: { top: number; right: number; bottom: number; left: number } = { top: 0, right: 0, bottom: 0, left: 50 },
+  margin: { top: number; right: number; bottom: number; left: number } = {
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 50,
+  },
   COLUMN_WIDTH: number = 200,
   VERTICAL_SPACING: number = 150
 ): Record<string, Position> {
@@ -93,9 +98,7 @@ export function layoutNodes(
   };
 
   // Process non-HW nodes
-  allNodes
-    .filter((n) => !hwPathSet.has(n.id))
-    .forEach((n) => setXCoord(n.id));
+  allNodes.filter((n) => !hwPathSet.has(n.id)).forEach((n) => setXCoord(n.id));
 
   // Adjust tail nodes (no children)
   const maxX = Math.max(...Object.values(proposedX));
@@ -199,8 +202,7 @@ export function getEllipseEdgePoint(
   const ny = dy / len;
 
   // Scale using ellipse radii
-  const scale =
-    1 / Math.sqrt((nx * nx) / (rx * rx) + (ny * ny) / (ry * ry));
+  const scale = 1 / Math.sqrt((nx * nx) / (rx * rx) + (ny * ny) / (ry * ry));
 
   return {
     x: src.x + nx * scale,
@@ -228,4 +230,4 @@ export function animateLinkDirection(selection: any) {
           .on('end', repeat);
       });
     });
-} 
+}
