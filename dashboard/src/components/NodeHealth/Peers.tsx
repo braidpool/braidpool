@@ -35,7 +35,6 @@ export default function Peers({ peers }: { peers: PeerInfo[] }) {
             key={peer.id}
             className="flex max-sm:flex-col md:flex-row md:items-start md:justify-between gap-4 p-4 border border-gray-700 rounded-lg bg-gray-900/30 hover:bg-gray-900/50 transition-colors overflow-x-hidden"
           >
-            
             <div className="flex-1 space-y-1 min-w-0">
               <p className="text-white font-medium">{peer.addr}</p>
 
@@ -55,7 +54,6 @@ export default function Peers({ peers }: { peers: PeerInfo[] }) {
               </div>
             </div>
 
-          
             <div className="flex flex-col max-sm:w-full max-sm:pt-2 md:text-right gap-1">
               <p className="text-sm text-gray-400">
                 Ping:{' '}
