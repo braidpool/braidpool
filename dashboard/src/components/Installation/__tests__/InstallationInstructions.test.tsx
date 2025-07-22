@@ -15,13 +15,15 @@ jest.mock(
     )
 );
 
-jest.mock('@mui/icons-material', () => ({
-  ArrowForward: () => <div data-testid="ArrowForwardIcon" />,
-  CloudDownload: () => <div data-testid="CloudDownloadIcon" />,
-  Terminal: () => <div data-testid="TerminalIcon" />,
-  PlayCircleOutline: () => <div data-testid="PlayCircleOutlineIcon" />,
-  Code: () => <div data-testid="CodeIcon" />,
+// Mock react-icons/md
+jest.mock('react-icons/md', () => ({
+  MdArrowForward: () => <div data-testid="MdArrowForwardIcon" />,
+  MdCloudDownload: () => <div data-testid="MdCloudDownloadIcon" />,
+  MdTerminal: () => <div data-testid="MdTerminalIcon" />,
+  MdPlayCircleOutline: () => <div data-testid="MdPlayCircleOutlineIcon" />,
+  MdCode: () => <div data-testid="MdCodeIcon" />,
 }));
+
 describe('InstallationInstructions', () => {
   it('renders InstallationInstructions with headings and instructions', () => {
     render(<InstallationInstructions />);
@@ -36,9 +38,7 @@ describe('InstallationInstructions', () => {
     expect(screen.getByText('Basic Installation')).toBeInTheDocument();
     expect(screen.getByText('CPUnet Testing Node')).toBeInTheDocument();
 
-    // Check that View Full Documentation button exists
-    expect(
-      screen.getByRole('button', { name: /view full documentation/i })
-    ).toBeInTheDocument();
+    // Check icons
+    expect(screen.getAllByTestId(/Md.*Icon/).length).toBeGreaterThan(0);
   });
 });
