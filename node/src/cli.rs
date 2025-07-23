@@ -50,4 +50,12 @@ pub struct Cli {
     ///Rpc endpoints for the specific methods
     #[command(subcommand)]
     pub command: Option<RpcCommand>,
+
+    /// Use IPC Bitcoin Core communication
+    #[arg(long)]
+    pub ipc: bool,
+
+    /// Path to Bitcoin Core IPC socket (used when --ipc is enabled)
+    #[arg(long)]
+    pub ipc_socket: String,
 }

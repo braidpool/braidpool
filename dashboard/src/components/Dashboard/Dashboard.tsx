@@ -6,6 +6,7 @@ import MineInventoryDashboard from '../MinerInventory/MinerInventoryDashboard';
 import MempoolLatencyStats from './MempoolLatencyStats';
 import GraphVisualization from '../BraidPoolDAG/BraidPoolDAG';
 import MinedSharesExplorer from '../BeadsTab/MinedSharesExplorer';
+import NodeHealth from '../NodeHealth/NodeHealth';
 import BitcoinStats from '../BitcoinStats/BitcoinStats';
 import { Page } from './Types';
 import BlockViewer from './BlockViewer';
@@ -64,7 +65,26 @@ const Dashboard = () => {
           </div>
         );
       case Page.MINER_STATS:
-        return <MinedSharesExplorer />;
+        return (
+          <div className="p-2">
+            <Card title="Beads Explorer">
+              <div>
+                <MinedSharesExplorer />
+              </div>
+            </Card>
+          </div>
+        );
+      case Page.NODE_HEALTH:
+        return (
+          <div className="p-2">
+            <Card title="Node Health Dashboard">
+              <div>
+                <NodeHealth />
+              </div>
+            </Card>
+          </div>
+        );
+
       default:
         return (
           <div className="p-2">
@@ -75,7 +95,7 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#0e1621]">
+    <div className="min-h-screen bg-[#121212]">
       <Header
         title="Braidpool"
         currentPage={currentPage}
