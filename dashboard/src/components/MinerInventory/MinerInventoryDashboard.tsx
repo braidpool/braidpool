@@ -236,7 +236,7 @@ const MinerInventoryDashboard = () => {
   }
 
   return (
-    <Card>
+    <>
       <div className="text-center mb-8">
         <p className="text-base text-gray-400 mt-1">
           Status of all mining devices
@@ -295,7 +295,7 @@ const MinerInventoryDashboard = () => {
           ))}
         </div>
       )}
-    </Card>
+    </>
   );
 };
 
