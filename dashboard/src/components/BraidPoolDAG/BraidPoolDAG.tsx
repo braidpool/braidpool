@@ -21,8 +21,8 @@ const GraphVisualization: React.FC = () => {
   const [selectedCohorts, setSelectedCohorts] = useState<number | 'all'>(5);
   const nodeRadius = 30;
   const tooltipRef = useRef<HTMLDivElement>(null);
-  var COLUMN_WIDTH = 200;
-  const VERTICAL_SPACING = 150;
+  // var COLUMN_WIDTH = 200;
+  // const VERTICAL_SPACING = 150;
 
   // New state for the counter and the highlighted bead hash
   const [graphUpdateCounter, setGraphUpdateCounter] = useState(0);

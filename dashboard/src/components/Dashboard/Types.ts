@@ -9,16 +9,6 @@ export enum Page {
   NODE_HEALTH = 'node-health',
 }
 
-export interface DashboardMetricsProps {
-  loading?: boolean;
-}
-
-export interface PoolHashrateChartProps {
-  height?: number;
-  data?: Array<{ time: string; value: number }>;
-  loading?: boolean;
-}
-
 export interface RecentBlocksTableProps {
   maxHeight?: number;
   blocks: Block[];
