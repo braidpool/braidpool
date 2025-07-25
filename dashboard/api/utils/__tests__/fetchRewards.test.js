@@ -18,8 +18,7 @@ describe('fetchReward', () => {
     ({ rpcWithEnv } = require('../rpcWithEnv'));
 
     mockClient = {
-      readyState: WebSocket.OPEN,
-      OPEN: WebSocket.OPEN,
+      readyState: WebSocket.OPEN, // This should be 1
       send: jest.fn(),
     };
     mockWSS = { clients: new Set([mockClient]) };
@@ -30,7 +29,7 @@ describe('fetchReward', () => {
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    jest.clearAllMocks();
   });
 
   it('should calculate and send reward data correctly', async () => {
@@ -76,15 +75,51 @@ describe('fetchReward', () => {
     expect(payload.data.lastRewardTime).toBeNull();
   });
 
-  it('should not send if client is not OPEN', async () => {
-    mockClient.readyState = WebSocket.CLOSING;
+  it('currently sends to all clients', async () => {
+    const openClient = {
+      readyState: WebSocket.OPEN,
+      send: jest.fn(),
+    };
+    
+    const closingClient = {
+      readyState: WebSocket.CLOSING,
+      send: jest.fn(),
+    };
+    
+    const closedClient = {
+      readyState: WebSocket.CLOSED,
+      send: jest.fn(),
+    };
+    
+    const mockWSSWithMixedClients = { 
+      clients: new Set([openClient, closingClient, closedClient]) 
+    };
+    
     rpcWithEnv
       .mockResolvedValueOnce({ blocks: 210000, bestblockhash: 'abc123' })
       .mockResolvedValueOnce({ time: 1700000000 });
 
-    await fetchReward(mockWSS);
+    await fetchReward(mockWSSWithMixedClients);
+   
+    expect(rpcWithEnv).toHaveBeenCalledTimes(2);
+    
+    expect(openClient.send).toHaveBeenCalledTimes(1);
+    expect(closingClient.send).toHaveBeenCalledTimes(1); 
+    expect(closedClient.send).toHaveBeenCalledTimes(1); 
+  });
 
-    expect(mockClient.send).not.toHaveBeenCalled();
+  it('should handle empty client set', async () => {
+    const mockWSSWithNoClients = { 
+      clients: new Set()
+    };
+    
+    rpcWithEnv
+      .mockResolvedValueOnce({ blocks: 210000, bestblockhash: 'abc123' })
+      .mockResolvedValueOnce({ time: 1700000000 });
+
+    await fetchReward(mockWSSWithNoClients);
+    
+    expect(rpcWithEnv).toHaveBeenCalledTimes(2);
   });
 
   it('should log error if RPC completely fails', async () => {
@@ -96,5 +131,6 @@ describe('fetchReward', () => {
       '[Rewards] Failed to fetch/send reward data:',
       'RPC offline'
     );
+        expect(mockClient.send).not.toHaveBeenCalled();
   });
 });

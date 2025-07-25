@@ -1,7 +1,3 @@
-const WebSocket = require('ws');
-const { fetchHashrateStats } = require('../fetchHashrate.js');
-const { rpcWithEnv } = require('../rpcWithEnv.js');
-
 jest.mock('../rpcWithEnv', () => ({
   rpcWithEnv: jest.fn(),
 }));
@@ -14,19 +10,22 @@ describe('fetchHashrateStats', () => {
 
   beforeEach(() => {
     jest.resetModules();
+    delete require.cache[require.resolve('../fetchHashrate')];
+    delete require.cache[require.resolve('../rpcWithEnv')];
+    
     ({ rpcWithEnv } = require('../rpcWithEnv'));
     ({ fetchHashrateStats } = require('../fetchHashrate'));
 
     mockClient = {
-      readyState: WebSocket.OPEN, // 1
-      OPEN: WebSocket.OPEN, // 1 – required by code under test
+      readyState: 1, 
+      OPEN: 1,       
       send: jest.fn(),
     };
+    
     mockWSS = { clients: new Set([mockClient]) };
 
     rpcWithEnv.mockReset();
 
-    // 3️⃣ keep console output quiet
     jest.spyOn(console, 'log').mockImplementation(() => {});
     jest.spyOn(console, 'warn').mockImplementation(() => {});
     jest.spyOn(console, 'error').mockImplementation(() => {});
@@ -38,13 +37,13 @@ describe('fetchHashrateStats', () => {
 
   it('should fetch difficulty & hashrate then broadcast once', async () => {
     const diff = 65_000_000_000_000;
-    const hashps = 500 * 1e18; // 500 EH/s
-    const now = 1_752_000_000_000; // fake timestamp
+    const hashps = 500 * 1e18;
+    const now = 1_752_000_000_000;
 
     jest.spyOn(Date, 'now').mockReturnValue(now);
     rpcWithEnv
-      .mockResolvedValueOnce(diff) // getdifficulty
-      .mockResolvedValueOnce(hashps); // getnetworkhashps
+      .mockResolvedValueOnce(diff)
+      .mockResolvedValueOnce(hashps);
 
     await fetchHashrateStats(mockWSS);
 
@@ -58,32 +57,31 @@ describe('fetchHashrateStats', () => {
     expect(payload).toMatchObject({
       type: 'hashrate_data',
       data: {
-        hashrate: hashps / 1e18, // EH/s
+        hashrate: hashps / 1e18,
         timestamp: now,
         networkDifficulty: diff,
       },
     });
   });
 
-  it('should reuse cached difficulty within 30 s', async () => {
+  it('should reuse cached difficulty within 30 s', async () => {
     const diff = 123456789;
-    const t0 = 1_752_100_000_000; // first call
-    const t1 = t0 + 5_000; // second call ( < 30 s)
+    const t0 = 1_752_100_000_000;
+    const t1 = t0 + 5_000;
 
     jest
       .spyOn(Date, 'now')
-      .mockReturnValueOnce(t0) // for first fetch
-      .mockReturnValueOnce(t1); // for second fetch
+      .mockReturnValueOnce(t0)
+      .mockReturnValueOnce(t1);
 
     rpcWithEnv
-      .mockResolvedValueOnce(diff) // getdifficulty (1×)
-      .mockResolvedValueOnce(100 * 1e18) // hashps 1
-      .mockResolvedValueOnce(200 * 1e18); // hashps 2
+      .mockResolvedValueOnce(diff)
+      .mockResolvedValueOnce(100 * 1e18)
+      .mockResolvedValueOnce(200 * 1e18);
 
-    await fetchHashrateStats(mockWSS); // first call
-    await fetchHashrateStats(mockWSS); // second call
+    await fetchHashrateStats(mockWSS);
+    await fetchHashrateStats(mockWSS);
 
-    // exactly one difficulty query, two networkhashps queries
     expect(
       rpcWithEnv.mock.calls.filter((c) => c[0].method === 'getdifficulty')
     ).toHaveLength(1);
@@ -101,6 +99,7 @@ describe('fetchHashrateStats', () => {
   });
 
   it('should log & skip send on RPC failure', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 100000);
     rpcWithEnv.mockRejectedValueOnce(new Error('RPC down'));
 
     await fetchHashrateStats(mockWSS);
@@ -113,13 +112,15 @@ describe('fetchHashrateStats', () => {
   });
 
   it('should not send when client is not OPEN', async () => {
-    mockClient.readyState = WebSocket.CLOSING;
+    jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 200000);
+    mockClient.readyState = 2;
+    mockClient.OPEN = 1;
+    
     rpcWithEnv
-      .mockResolvedValueOnce(8888) // difficulty
-      .mockResolvedValueOnce(1e18); // hashps
-
+      .mockResolvedValueOnce(8888)
+      .mockResolvedValueOnce(1e18);
     await fetchHashrateStats(mockWSS);
-
+    expect(rpcWithEnv).toHaveBeenCalledTimes(2);
     expect(mockClient.send).not.toHaveBeenCalled();
   });
 });

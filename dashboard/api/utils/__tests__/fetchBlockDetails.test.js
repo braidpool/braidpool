@@ -160,7 +160,8 @@ describe('fetchBlockDetails', () => {
   });
 
   it('should not send when client is not OPEN', async () => {
-    mockClient.readyState = WebSocket.CLOSING; // 2
+    mockClient.readyState = 2;
+    mockClient.OPEN = 1;
     rpcWithEnv
       .mockResolvedValueOnce({ blocks: 103 })
       .mockResolvedValueOnce('0000000000000000000notopen')
@@ -178,7 +179,8 @@ describe('fetchBlockDetails', () => {
       .mockResolvedValueOnce({ size: 30 });
 
     await fetchBlockDetails(mockWSS);
-
+    
+    expect(rpcWithEnv).toHaveBeenCalledTimes(4);
     expect(mockClient.send).not.toHaveBeenCalled();
   });
 });
