@@ -6,16 +6,7 @@ export enum Page {
   DAG_VISUALIZATION = 'dag-visualization',
   MINER_STATS = 'miner-stats',
   BITCOIN_STATS = 'bitcoin-stats',
-}
-
-export interface DashboardMetricsProps {
-  loading?: boolean;
-}
-
-export interface PoolHashrateChartProps {
-  height?: number;
-  data?: Array<{ time: string; value: number }>;
-  loading?: boolean;
+  NODE_HEALTH = 'node-health',
 }
 
 export interface RecentBlocksTableProps {
