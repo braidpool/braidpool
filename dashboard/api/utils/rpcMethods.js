@@ -9,7 +9,7 @@ async function getBlockchainInfo() {
   }
 }
 
- async function getPeerInfo() {
+async function getPeerInfo() {
   try {
     return await rpcWithEnv({ method: 'getpeerinfo' });
   } catch (error) {
@@ -18,7 +18,7 @@ async function getBlockchainInfo() {
   }
 }
 
- async function getNetworkInfo() {
+async function getNetworkInfo() {
   try {
     return await rpcWithEnv({ method: 'getnetworkinfo' });
   } catch (error) {
@@ -27,7 +27,7 @@ async function getBlockchainInfo() {
   }
 }
 
- async function getMempoolInfo() {
+async function getMempoolInfo() {
   try {
     return await rpcWithEnv({ method: 'getmempoolinfo' });
   } catch (error) {
@@ -35,7 +35,7 @@ async function getBlockchainInfo() {
     throw error;
   }
 }
- async function getNetTotals() {
+async function getNetTotals() {
   try {
     return await rpcWithEnv({ method: 'getnettotals' });
   } catch (error) {
@@ -43,4 +43,10 @@ async function getBlockchainInfo() {
     throw error;
   }
 }
-module.exports ={getBlockchainInfo,getMempoolInfo,getNetworkInfo,getNetTotals,getPeerInfo}
+module.exports = {
+  getBlockchainInfo,
+  getMempoolInfo,
+  getNetworkInfo,
+  getNetTotals,
+  getPeerInfo,
+};

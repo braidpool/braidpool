@@ -22,22 +22,22 @@ describe('Peers Component', () => {
 
     expect(screen.getByText(/Connected Peers/i)).toBeInTheDocument();
 
-    // Check if 10 peers are shown on first page
+    // Check if 5 peers are shown on first page
     const peerAddresses = screen.getAllByText(/192.168.0./i);
-    expect(peerAddresses).toHaveLength(10);
+    expect(peerAddresses).toHaveLength(5);
 
     // Pagination shows current page info
-    expect(screen.getByText(/Page 1 of 2/i)).toBeInTheDocument();
+    expect(screen.getByText(/Page 1 of 3/i)).toBeInTheDocument();
   });
 
   test('pagination works', () => {
     render(<Peers peers={mockPeers} />);
 
     fireEvent.click(screen.getByText(/Next/i));
-    expect(screen.getByText(/Page 2 of 2/i)).toBeInTheDocument();
+    expect(screen.getByText(/Page 2 of 3/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByText(/Previous/i));
-    expect(screen.getByText(/Page 1 of 2/i)).toBeInTheDocument();
+    expect(screen.getByText(/Page 1 of 3/i)).toBeInTheDocument();
   });
 
   test('shows correct inbound/outbound labels', () => {

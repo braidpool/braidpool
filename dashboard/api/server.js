@@ -9,7 +9,7 @@ const {
   handleWebSocketConnection,
 } = require('./ws/handleWebSocketConnection.js');
 const { fetchBlockDetails } = require('./utils/fetchBlockDetails.js');
-const {fetchAllNodeData} = require("./utils/fetchBlockChainInfo.js")
+const { fetchAllNodeData } = require('./utils/fetchBlockChainInfo.js');
 
 dotenv.config();
 

@@ -4,9 +4,9 @@ const {
   getMempoolInfo,
   getNetworkInfo,
   getNetTotals,
-} = require("./rpcMethods")
+} = require('./rpcMethods');
 
- async function fetchAllNodeData() {
+async function fetchAllNodeData() {
   try {
     const [blockchain, peers, network, mempool, totals] = await Promise.all([
       getBlockchainInfo(),
@@ -33,4 +33,4 @@ const {
     throw error;
   }
 }
-module.exports ={fetchAllNodeData}
+module.exports = { fetchAllNodeData };
