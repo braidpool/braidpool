@@ -23,7 +23,9 @@ async function callRpc(
 
       if (!response || !response.data) {
         // Try to match the test's expected error string
-        throw new Error(JSON.stringify({ code: -32601, message: 'Method not found' }));
+        throw new Error(
+          JSON.stringify({ code: -32601, message: 'Method not found' })
+        );
       }
       if (response.data.error) {
         throw new Error(JSON.stringify(response.data.error));

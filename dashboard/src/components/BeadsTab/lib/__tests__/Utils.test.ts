@@ -110,7 +110,7 @@ describe('formatWork', () => {
   });
 
   it('correctly handles values that are just below the exponential threshold', () => {
-    const valueJustBelowExponential = 9.9999e28; 
+    const valueJustBelowExponential = 9.9999e28;
     const result = formatWork(valueJustBelowExponential);
     expect(result.value).not.toMatch(/e\+/); // Should not be exponential
     expect(result.unit).toBe('EH');
@@ -365,7 +365,7 @@ describe('processBlockData', () => {
   it('handles null/undefined values for optional properties gracefully', () => {
     const data: BlockData = {
       blockHash: 'test_null_data',
-      timestamp: null as any, 
+      timestamp: null as any,
       height: 1,
       difficulty: 1e9,
       txCount: 0,
@@ -397,7 +397,7 @@ describe('processBlockData', () => {
       {
         id: 'tx_zero_fee',
         hash: 'h_zf',
-        timestamp: '1700000000000', 
+        timestamp: '1700000000000',
         count: 1,
         blockId: 'b_zf',
         fee: 0,
@@ -428,7 +428,7 @@ describe('processBlockData', () => {
       {
         id: 'tx_ts',
         hash: 'h_ts',
-        timestamp: '1678888888888', 
+        timestamp: '1678888888888',
         count: 1,
         blockId: 'b_ts',
         fee: 0.1,

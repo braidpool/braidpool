@@ -64,7 +64,7 @@ describe('<LatencyTab />', () => {
     };
 
     act(() => {
-      jest.advanceTimersByTime(10); 
+      jest.advanceTimersByTime(10);
     });
 
     act(() => {
@@ -80,7 +80,7 @@ describe('<LatencyTab />', () => {
 
   it('does not update UI if duplicate timestamp is received', async () => {
     jest.useFakeTimers();
-    
+
     const timestamp = new Date('2024-01-01T10:00:00.000Z').toISOString();
 
     render(<LatencyTab timeRange="24h" />);
@@ -107,7 +107,7 @@ describe('<LatencyTab />', () => {
         peakLatency: 999,
         peerCount: 1,
         validPings: 1,
-        timestamp, 
+        timestamp,
       },
     };
 

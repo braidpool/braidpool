@@ -45,7 +45,7 @@ describe('<BeadRewardTooltip />', () => {
     render(<BeadRewardTooltip reward={reward} />);
     const trigger = screen.getByText(`${mBTC} mBTC`);
     fireEvent.mouseEnter(trigger);
-        const tooltips = screen.getAllByText(`${mBTC} mBTC`);
+    const tooltips = screen.getAllByText(`${mBTC} mBTC`);
     const tooltip = tooltips[1];
     expect(tooltip.parentElement).toHaveClass('absolute');
     expect(tooltip.parentElement).toHaveClass('bg-gray-900/95');

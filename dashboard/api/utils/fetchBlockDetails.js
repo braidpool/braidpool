@@ -20,6 +20,9 @@ async function fetchBlockDetails(wss) {
 
     // Skip if no new block
     if (blockHash === lastBlockHash && lastBlockHash !== null) {
+      console.log(
+        `[${new Date().toISOString()}] Skipping block (already processed): ${blockHash}`
+      );
       return;
     }
 
@@ -207,8 +210,8 @@ function broadcastError(wss, err) {
   });
 }
 
-module.exports = { 
+module.exports = {
   fetchBlockDetails,
   latestBlockPayload,
-  latestStatsPayload
+  latestStatsPayload,
 };

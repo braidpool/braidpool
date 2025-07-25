@@ -1,4 +1,3 @@
-
 const { rpcWithEnv } = require('./rpcWithEnv.js');
 async function fetchLatencyData(wss) {
   try {

@@ -17,7 +17,6 @@ describe('fetchLatencyData', () => {
 
     mockClient = {
       readyState: WebSocket.OPEN,
-      OPEN: WebSocket.OPEN,
       send: jest.fn(),
     };
 
@@ -41,7 +40,7 @@ describe('fetchLatencyData', () => {
       { pingtime: 0.3 },
       { pingtime: 0.1 },
       { pingtime: null },
-      { pingtime: -1 }, 
+      { pingtime: -1 },
     ]);
 
     await fetchLatencyData(mockWSS);
@@ -95,15 +94,15 @@ describe('fetchLatencyData', () => {
     });
   });
 
-  // it('should not send if client is not OPEN', async () => {
-  //   mockClient.readyState = WebSocket.CLOSING;
+  it('should not send if client is not OPEN', async () => {
+    mockClient.readyState = 2;
 
-  //   rpcWithEnv.mockResolvedValue([{ pingtime: 0.12 }]);
+    rpcWithEnv.mockResolvedValue([{ pingtime: 0.12 }]);
 
-  //   await fetchLatencyData(mockWSS);
+    await fetchLatencyData(mockWSS);
 
-  //   expect(mockClient.send).not.toHaveBeenCalled();
-  // });
+    expect(mockClient.send).not.toHaveBeenCalled();
+  });
 
   it('should log errors when RPC call fails', async () => {
     rpcWithEnv.mockRejectedValue(new Error('RPC crashed'));

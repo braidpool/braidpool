@@ -60,8 +60,14 @@ describe('<TrendsTab />', () => {
 
   it('renders all tab buttons correctly', () => {
     render(<TrendsTab timeRange="24h" />);
-    expect(screen.getByRole('button', { name: /hashrate/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /latency/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /transactions/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /hashrate/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /latency/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /transactions/i })
+    ).toBeInTheDocument();
   });
 });

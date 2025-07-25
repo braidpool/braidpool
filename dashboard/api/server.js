@@ -5,7 +5,9 @@ const fetchGlobalCryptoData = require('./utils/fetchGlobalData.js');
 const { fetchHashrateStats } = require('./utils/fetchHashrate.js');
 const { fetchLatencyData } = require('./utils/fetchLatency.js');
 const { fetchReward } = require('./utils/fetchRewards.js');
-const { handleWebSocketConnection } = require('./ws/handleWebSocketConnection.js');
+const {
+  handleWebSocketConnection,
+} = require('./ws/handleWebSocketConnection.js');
 const { fetchBlockDetails } = require('./utils/fetchBlockDetails.js');
 
 dotenv.config();

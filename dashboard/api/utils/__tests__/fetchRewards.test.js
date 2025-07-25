@@ -80,45 +80,45 @@ describe('fetchReward', () => {
       readyState: WebSocket.OPEN,
       send: jest.fn(),
     };
-    
+
     const closingClient = {
       readyState: WebSocket.CLOSING,
       send: jest.fn(),
     };
-    
+
     const closedClient = {
       readyState: WebSocket.CLOSED,
       send: jest.fn(),
     };
-    
-    const mockWSSWithMixedClients = { 
-      clients: new Set([openClient, closingClient, closedClient]) 
+
+    const mockWSSWithMixedClients = {
+      clients: new Set([openClient, closingClient, closedClient]),
     };
-    
+
     rpcWithEnv
       .mockResolvedValueOnce({ blocks: 210000, bestblockhash: 'abc123' })
       .mockResolvedValueOnce({ time: 1700000000 });
 
     await fetchReward(mockWSSWithMixedClients);
-   
+
     expect(rpcWithEnv).toHaveBeenCalledTimes(2);
-    
+
     expect(openClient.send).toHaveBeenCalledTimes(1);
-    expect(closingClient.send).toHaveBeenCalledTimes(1); 
-    expect(closedClient.send).toHaveBeenCalledTimes(1); 
+    expect(closingClient.send).toHaveBeenCalledTimes(1);
+    expect(closedClient.send).toHaveBeenCalledTimes(1);
   });
 
   it('should handle empty client set', async () => {
-    const mockWSSWithNoClients = { 
-      clients: new Set()
+    const mockWSSWithNoClients = {
+      clients: new Set(),
     };
-    
+
     rpcWithEnv
       .mockResolvedValueOnce({ blocks: 210000, bestblockhash: 'abc123' })
       .mockResolvedValueOnce({ time: 1700000000 });
 
     await fetchReward(mockWSSWithNoClients);
-    
+
     expect(rpcWithEnv).toHaveBeenCalledTimes(2);
   });
 
@@ -131,6 +131,6 @@ describe('fetchReward', () => {
       '[Rewards] Failed to fetch/send reward data:',
       'RPC offline'
     );
-        expect(mockClient.send).not.toHaveBeenCalled();
+    expect(mockClient.send).not.toHaveBeenCalled();
   });
 });

@@ -179,7 +179,7 @@ describe('fetchBlockDetails', () => {
       .mockResolvedValueOnce({ size: 30 });
 
     await fetchBlockDetails(mockWSS);
-    
+
     expect(rpcWithEnv).toHaveBeenCalledTimes(4);
     expect(mockClient.send).not.toHaveBeenCalled();
   });
