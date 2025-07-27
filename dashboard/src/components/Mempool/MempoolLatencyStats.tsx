@@ -41,6 +41,7 @@ const MempoolLatencyStats = () => {
   const [selectedView, setSelectedView] = useState<'btc' | 'usd' | 'both'>(
     'both'
   );
+  const [blockFeeHistory, setBlockFeeHistory] = useState<any[]>([]);
 
   useEffect(() => {
     const ws = new WebSocket('ws://localhost:5000');
@@ -52,7 +53,16 @@ const MempoolLatencyStats = () => {
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
       if (msg.type === 'mempool_update') {
-        setMempoolData(msg.data);
+        const data = msg.data;
+        setMempoolData(data);
+
+        const latest = data?.block_fee_history?.[0];
+        if(latest){
+          setBlockFeeHistory((prev)=>{
+            const isDuplicate = prev.some((item)=> item.time ===latest.time);
+            return isDuplicate ? prev : [...prev.slice(-49),latest]
+          })
+        }
       }
     };
 
@@ -80,14 +90,13 @@ const MempoolLatencyStats = () => {
   const fees = mempoolData?.fees || {};
   const next = mempoolData?.next_block_fees || {};
   const feeDist = mempoolData?.fee_distribution || {};
-  const block_fee_history = mempoolData?.block_fee_history || [];
 
   const feeDistChartData = Object.entries(feeDist).map(([label, value]) => ({
     name: label,
     value: value || 0,
   }));
 
-  const blockFeeChartData = block_fee_history.map((item: any) => ({
+  const blockFeeChartData = blockFeeHistory.map((item: any) => ({
     time: item.time || item.timestamp,
     btc: isNaN(item.btc) ? 0 : item.btc,
     usd: isNaN(item.usd) ? 0 : item.usd,
@@ -192,7 +201,7 @@ const MempoolLatencyStats = () => {
       {/* --- Block Fee Chart --- */}
       <section className="shadow p-6">
         <h2 className="text-lg font-semibold text-center mb-4">
-          Block Fees Over Time (1 Week)
+          Live Block Fees 
         </h2>
 
         {/* Toggle Buttons */}

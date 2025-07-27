@@ -34,7 +34,7 @@ export async function fetchMempoolStats() {
 
     const convertFee = (sats) => {
       const feeBtc = sats / 1e8;
-      const feeUsd = (sats / 1e8) * btcPriceUSD;
+      const feeUsd = feeBtc * btcPriceUSD;
 
       return {
         sats_per_vbyte: sats,
@@ -46,17 +46,24 @@ export async function fetchMempoolStats() {
     console.log('[blockfeesRes.data sample]', blockfeesRes.data?.[0]);
     console.log('[btcPriceUSD]', btcPriceUSD);
 
-    const blockfeeHistory = blockfeesRes.data.map((block) => {
-      const btcAmount = block.avgFees ? block.avgFees / 1e8 : 0;
-      const usdAmount = btcAmount * btcPriceUSD;
+    const blockFeesArray = blockfeesRes.data;
+    const latestBlockFeeRaw =
+      Array.isArray(blockFeesArray) && blockFeesArray.length > 0
+        ? blockFeesArray[blockFeesArray.length - 1]
+        : null;
 
-      return {
-        height: block.avgHeight,
-        time: new Date((block.timestamp || 0) * 1000).toLocaleString(),
-        btc: btcAmount,
-        usd: usdAmount,
-      };
-    });
+    const blockfeeHistory = latestBlockFeeRaw
+      ? [
+          {
+            height: latestBlockFeeRaw.avgHeight,
+            time: new Date(
+              (latestBlockFeeRaw.timestamp || 0) * 1000
+            ).toLocaleTimeString(),
+            btc: latestBlockFeeRaw.avgFees / 1e8,
+            usd: latestBlockFeeRaw.USD,
+          },
+        ]
+      : [];
 
     return {
       mempool: {
@@ -75,7 +82,7 @@ export async function fetchMempoolStats() {
       },
       btc_price_usd: btcPriceUSD,
       fee_distribution: feeDistribution,
-      block_fee_history: blockfeeHistory,
+      block_fee_history: blockfeeHistory, // ✅ Only contains the latest block
     };
   } catch (error) {
     console.error('[fetchMempoolStats] Failed to fetch:', error.message);
