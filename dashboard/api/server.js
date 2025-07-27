@@ -8,6 +8,7 @@ import { fetchReward } from './utils/fetchRewards.js';
 import { handleWebSocketConnection } from './ws/handleWebSocketConnection.js';
 import { fetchBlockDetails } from './utils/fetchBlockDetails.js';
 import { fetchAllNodeData } from './utils/fetchBlockChainInfo.js';
+import { fetchMempoolStats } from './utils/fetchMempoolStats.js';
 
 dotenv.config();
 
@@ -61,7 +62,27 @@ async function sendNodeHealthData() {
     }
   });
 }
+async function sendMempoolData() {
+  try {
+    const stats = await fetchMempoolStats();
 
+    if (stats) {
+      const mempoolData = {
+        type: 'mempool_update',
+        data: stats,
+        time: new Date().toLocaleString(),
+      };
+
+      wss.clients.forEach((client) => {
+        if (client.readyState === client.OPEN) {
+          client.send(JSON.stringify(mempoolData));
+        }
+      });
+    }
+  } catch (err) {
+    console.error('[Server] fetchMempoolStats failed:', err.message);
+  }
+}
 setInterval(() => {
   sendDataToClients().catch((err) =>
     console.error('[Server] sendDataToClients failed:', err)
@@ -85,6 +106,7 @@ setInterval(() => {
   sendNodeHealthData().catch((err) =>
     console.error('[Server] fetchNodeHealth failed ', err)
   );
+  sendMempoolData();
 }, 10000); // 10-second interval
 
 console.log(`WebSocket server running on ws://localhost:${PORT}`);
