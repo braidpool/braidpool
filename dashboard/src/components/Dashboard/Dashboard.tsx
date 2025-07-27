@@ -3,7 +3,7 @@ import Card from '../common/Card';
 import Header from '../common/Header';
 import InstallationInstructions from '../Installation/InstallationInstructions';
 import MineInventoryDashboard from '../MinerInventory/MineInventoryDashboard';
-import MempoolLatencyStats from '../Mempool/MempoolLatencyStats';
+import Mempool from '../Mempool/Mempool';
 import GraphVisualization from '../BraidPoolDAG/BraidPoolDAG';
 import MinedSharesExplorer from '../BeadsTab/MinedSharesExplorer';
 import BitcoinStats from '../BitcoinStats/BitcoinStats';
@@ -33,7 +33,7 @@ const Dashboard = () => {
         return (
           <div className="p-2">
             <Card title="Mempool Statistics">
-              <MempoolLatencyStats />
+              <Mempool />
             </Card>
           </div>
         );

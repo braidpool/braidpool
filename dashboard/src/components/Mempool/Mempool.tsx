@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import colors from '../../theme/colors';
 import AnimatedStatCard from '../BeadsTab/AnimatedStatCard';
 import {
@@ -13,69 +13,70 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from 'recharts';
+import {
+  Fee,
+  BlockFeeHistoryItem,
+  MempoolData,
+  FeeDistributionItem,
+} from './Types';
 
-const StatItem = ({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: string | number;
-  color?: string;
-}) => (
-  <div className="mb-4">
-    <p className="text-xs mb-1" style={{ color: colors.textSecondary }}>
-      {label}
-    </p>
-    <p
-      className="text-lg font-medium"
-      style={{ color: color || colors.textPrimary }}
-    >
-      {value}
-    </p>
-  </div>
-);
+const Mempool = () => {
+  const wsRef = useRef<WebSocket | null>(null);
 
-const MempoolLatencyStats = () => {
-  const [mempoolData, setMempoolData] = useState<any>(null);
+  const [mempoolData, setMempoolData] = useState<MempoolData | null>(null);
   const [selectedView, setSelectedView] = useState<'btc' | 'usd' | 'both'>(
     'both'
   );
-  const [blockFeeHistory, setBlockFeeHistory] = useState<any[]>([]);
+  const [blockFeeHistory, setBlockFeeHistory] = useState<BlockFeeHistoryItem[]>(
+    []
+  );
+  const [wsConnected, setWsConnected] = useState(false);
 
   useEffect(() => {
     const ws = new WebSocket('ws://localhost:5000');
-
+    wsRef.current = ws;
     ws.onopen = () => {
+      setWsConnected(true);
       console.log('[WebSocket] Connected');
     };
-
+    ws.onerror = (err) => {
+      setWsConnected(false);
+      console.error('[WebSocket] Error:', err);
+    };
     ws.onmessage = (event) => {
-      const msg = JSON.parse(event.data);
-      if (msg.type === 'mempool_update') {
-        const data = msg.data;
-        setMempoolData(data);
-
-        const latest = data?.block_fee_history?.[0];
-        if(latest){
-          setBlockFeeHistory((prev)=>{
-            const isDuplicate = prev.some((item)=> item.time ===latest.time);
-            return isDuplicate ? prev : [...prev.slice(-49),latest]
-          })
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'mempool_update') {
+          const data = msg.data;
+          setMempoolData(data);
+          const latest = data?.block_fee_history?.[0];
+          if (latest) {
+            setBlockFeeHistory((prev) => {
+              const isDuplicate = prev.some(
+                (item) => item.time === latest.time
+              );
+              return isDuplicate ? prev : [...prev.slice(-49), latest];
+            });
+          }
         }
+      } catch (e) {
+        console.error('WebSocket message parse error:', e);
       }
     };
 
-    ws.onerror = (err) => {
-      console.error('[WebSocket] Error:', err);
-    };
-
     ws.onclose = () => {
+      setWsConnected(false);
       console.log('[WebSocket] Disconnected');
     };
 
     return () => {
-      ws.close();
+      ws.onopen = null;
+      ws.onclose = null;
+      ws.onerror = null;
+      ws.onmessage = null;
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
     };
   }, []);
 
@@ -88,13 +89,16 @@ const MempoolLatencyStats = () => {
   }
 
   const fees = mempoolData?.fees || {};
-  const next = mempoolData?.next_block_fees || {};
+  const next: Fee | undefined = mempoolData?.next_block_fees;
+
   const feeDist = mempoolData?.fee_distribution || {};
 
-  const feeDistChartData = Object.entries(feeDist).map(([label, value]) => ({
-    name: label,
-    value: value || 0,
-  }));
+  const feeDistChartData: FeeDistributionItem[] = Object.entries(feeDist).map(
+    ([label, value]) => ({
+      name: label,
+      value: value || 0,
+    })
+  );
 
   const blockFeeChartData = blockFeeHistory.map((item: any) => ({
     time: item.time || item.timestamp,
@@ -109,11 +113,11 @@ const MempoolLatencyStats = () => {
         <div className="grid sm:grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <AnimatedStatCard
             title="Size (vB)"
-            value={mempoolData?.mempool?.vsize || '--'}
+            value={String(mempoolData?.mempool?.vsize || '--')}
           />
           <AnimatedStatCard
             title="Transactions"
-            value={mempoolData?.mempool?.count || '--'}
+            value={String(mempoolData?.mempool?.count || '--')}
           />
           <AnimatedStatCard
             title="Total Fees (BTC | USD)"
@@ -123,8 +127,8 @@ const MempoolLatencyStats = () => {
           />
           <AnimatedStatCard
             title="Next Block Fees"
-            value={`${next?.sats_per_vbyte || '--'} sats/vB | $${Number(
-              next?.fee_usd
+            value={`${next?.sats_per_vbyte ?? '--'} sats/vB | $${Number(
+              next?.fee_usd ?? 0
             ).toFixed(4)}`}
             color={colors.warning}
           />
@@ -201,7 +205,7 @@ const MempoolLatencyStats = () => {
       {/* --- Block Fee Chart --- */}
       <section className="shadow p-6">
         <h2 className="text-lg font-semibold text-center mb-4">
-          Live Block Fees 
+          Live Block Fees
         </h2>
 
         {/* Toggle Buttons */}
@@ -284,4 +288,4 @@ const MempoolLatencyStats = () => {
   );
 };
 
-export default MempoolLatencyStats;
+export default Mempool;
