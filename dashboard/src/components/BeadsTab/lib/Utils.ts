@@ -18,7 +18,7 @@ export function formatWork(difficulty: number): {
     work /= 1000;
     i++;
   }
-  const shouldUseExponential = work >= 1e20;
+  const shouldUseExponential = work >= 1e21;
 
   return {
     value: shouldUseExponential ? work.toExponential(4) : work.toFixed(2),

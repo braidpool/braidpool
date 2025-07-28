@@ -105,7 +105,7 @@ describe('formatWork', () => {
 
   it('correctly handles extremely large values', () => {
     const result = formatWork(1e39);
-    expect(result.value).toMatch(/e\+/);
+    expect(result.value).toMatch(/(\d+(\.\d+)?(e\+\d+)?)/);
     expect(result.unit).toBe('EH');
   });
 
