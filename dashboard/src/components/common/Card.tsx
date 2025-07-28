@@ -1,13 +1,5 @@
-import React, { ReactNode } from 'react';
-import { Box, Paper, Typography } from '@mui/material';
-
-interface CardProps {
-  title?: ReactNode;
-  subtitle?: ReactNode;
-  children: ReactNode;
-  accentColor?: string;
-  headerExtra?: ReactNode;
-}
+import React from 'react';
+import { CardProps } from './Types';
 
 /**
  * A reusable card component with a standard styling pattern
@@ -21,61 +13,34 @@ const Card: React.FC<CardProps> = ({
   headerExtra,
 }) => {
   return (
-    <Paper
-      elevation={0}
-      sx={{
-        p: 0,
-        borderRadius: 1,
-        border: '1px solid rgba(0,0,0,0.05)',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.03)',
-        overflow: 'hidden',
-        height: '100%',
-        ...(accentColor && {
-          position: 'relative',
-          '&::after': {
-            content: '""',
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '4px',
-            height: '100%',
-            backgroundColor: accentColor,
-          },
-        }),
-      }}
+    <div
+      className="relative px-3 rounded border border-black/5 overflow-hidden h-full shadow-sm pb-3"
+      style={{ backgroundColor: 'rgba(30, 30, 30, 1)' }}
     >
-      {(title || subtitle || headerExtra) && (
-        <Box
-          sx={{
-            px: 2,
-            py: 1.5,
-            borderBottom: '1px solid rgba(0,0,0,0.05)',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            bgcolor: 'rgba(0,0,0,0.01)',
-          }}
-        >
-          <Box>
-            {title && (
-              <Typography
-                variant="subtitle1"
-                sx={{ fontWeight: 500, color: 'text.primary' }}
-              >
-                {title}
-              </Typography>
-            )}
-            {subtitle && (
-              <Typography variant="caption" color="text.secondary">
-                {subtitle}
-              </Typography>
-            )}
-          </Box>
-          {headerExtra && <Box>{headerExtra}</Box>}
-        </Box>
+      {/* Accent color border */}
+      {accentColor && (
+        <div
+          className="absolute top-0 left-0 w-1 h-full"
+          style={{ backgroundColor: accentColor }}
+        />
       )}
-      <Box sx={{ p: 0 }}>{children}</Box>
-    </Paper>
+
+      {/* Header section */}
+      {(title || subtitle || headerExtra) && (
+        <div className="px-3 py-3 border-b border-black/5 flex justify-between items-center bg-black/[0.01]">
+          <div>
+            {title && (
+              <h3 className="text-base font-medium text-white">{title}</h3>
+            )}
+            {subtitle && <p className="text-xs text-gray-300">{subtitle}</p>}
+          </div>
+          {headerExtra && <div>{headerExtra}</div>}
+        </div>
+      )}
+
+      {/* Content */}
+      <div className="p-0">{children}</div>
+    </div>
   );
 };
 

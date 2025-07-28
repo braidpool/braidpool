@@ -1,0 +1,31 @@
+[braidnetwork_config]
+#binding address to which the current
+#node binds to 
+listen_address = "/ip4/127.0.0.1/tcp/6885"
+#add peers to the p2p network other than the boot nodes
+peer_nodes = ["/ip4/127.0.0.1/tcp/1234","/ip4/127.0.0.1/tcp/5678"]
+
+[braid_directory]
+path = "~/.braidpool"
+
+#public key belonging to the current miner
+[miner_config]
+miner_pubkey = ""
+
+[bitcoin_config]
+# The network can be "main", "testnet4" or "signet or cpunet(preferred)"
+network = "cpunet"
+#rpcuser
+username = "username"
+#rpc password
+password = "password"
+#cookie authentication file 
+cookie_path="~/.bitcoin/regtest/.cookie"
+#port specific where to listen for the bitcoind 
+port="18443"
+#ip of the bitcoind node
+bitcoind_ip = "0.0.0.0"
+
+#rpc server configuration
+[braid_rpc_config]
+rpc_server_addr="127.0.0.1:6682"
