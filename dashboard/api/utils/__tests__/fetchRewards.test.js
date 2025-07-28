@@ -74,16 +74,16 @@ describe('fetchReward', () => {
     expect(payload.data.lastRewardTime).toBeNull();
   });
 
-  // it('should not send if client is not OPEN', async () => {
-  //   mockClient.readyState = WebSocket.CLOSING;
-  //   rpcWithEnv
-  //     .mockResolvedValueOnce({ blocks: 210000, bestblockhash: 'abc123' })
-  //     .mockResolvedValueOnce({ time: 1700000000 });
+  it('should not send if client is not OPEN', async () => {
+    mockClient.readyState =2;
+    rpcWithEnv
+      .mockResolvedValueOnce({ blocks: 210000, bestblockhash: 'abc123' })
+      .mockResolvedValueOnce({ time: 1700000000 });
 
-  //   await fetchReward(mockWSS);
+    await fetchReward(mockWSS);
 
-  //   expect(mockClient.send).not.toHaveBeenCalled();
-  // });
+    expect(mockClient.send).not.toHaveBeenCalled();
+  });
 
   it('should log error if RPC completely fails', async () => {
     rpcWithEnv.mockRejectedValueOnce(new Error('RPC offline'));
