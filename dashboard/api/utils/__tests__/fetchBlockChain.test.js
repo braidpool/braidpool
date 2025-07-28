@@ -1,4 +1,4 @@
-import { fetchAllNodeData } from "../fetchBlockChainInfo";
+import { fetchAllNodeData } from '../fetchBlockChainInfo';
 import {
   getBlockchainInfo,
   getPeerInfo,
@@ -19,9 +19,11 @@ describe('fetchAllNodeData', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.spyOn(console, 'error').mockImplementation(() => {});
-    
+
     // Mock Date to ensure consistent timestamps in tests
-    jest.spyOn(Date.prototype, 'toISOString').mockReturnValue('2024-01-15T10:30:00.000Z');
+    jest
+      .spyOn(Date.prototype, 'toISOString')
+      .mockReturnValue('2024-01-15T10:30:00.000Z');
   });
 
   afterEach(() => {
@@ -34,32 +36,32 @@ describe('fetchAllNodeData', () => {
       chain: 'main',
       blocks: 820000,
       difficulty: 62463471666532.41,
-      verificationprogress: 0.999999
+      verificationprogress: 0.999999,
     };
 
     const mockPeerInfo = [
       { id: 1, addr: '192.168.1.100:8333', version: 70016 },
-      { id: 2, addr: '10.0.0.50:8333', version: 70016 }
+      { id: 2, addr: '10.0.0.50:8333', version: 70016 },
     ];
 
     const mockNetworkInfo = {
       version: 250000,
       subversion: '/Satoshi:25.0.0/',
       protocolversion: 70016,
-      connections: 8
+      connections: 8,
     };
 
     const mockMempoolInfo = {
       size: 2500,
       bytes: 15000000,
       usage: 32000000,
-      maxmempool: 300000000
+      maxmempool: 300000000,
     };
 
     const mockNetTotals = {
       totalbytesrecv: 125000000,
       totalbytessent: 98000000,
-      timemillis: 1705317000000
+      timemillis: 1705317000000,
     };
 
     // Set up mocks
@@ -94,11 +96,26 @@ describe('fetchAllNodeData', () => {
 
   it('should call all RPC methods concurrently using Promise.all', async () => {
     // Mock all methods to resolve after different delays to test concurrency
-    getBlockchainInfo.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve({ blocks: 1 }), 50)));
-    getPeerInfo.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve([]), 30)));
-    getNetworkInfo.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve({ version: 1 }), 40)));
-    getMempoolInfo.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve({ size: 0 }), 20)));
-    getNetTotals.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve({ totalbytesrecv: 0 }), 10)));
+    getBlockchainInfo.mockImplementation(
+      () =>
+        new Promise((resolve) => setTimeout(() => resolve({ blocks: 1 }), 50))
+    );
+    getPeerInfo.mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve([]), 30))
+    );
+    getNetworkInfo.mockImplementation(
+      () =>
+        new Promise((resolve) => setTimeout(() => resolve({ version: 1 }), 40))
+    );
+    getMempoolInfo.mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve({ size: 0 }), 20))
+    );
+    getNetTotals.mockImplementation(
+      () =>
+        new Promise((resolve) =>
+          setTimeout(() => resolve({ totalbytesrecv: 0 }), 10)
+        )
+    );
 
     const startTime = Date.now();
     await fetchAllNodeData();
@@ -147,7 +164,10 @@ describe('fetchAllNodeData', () => {
 
     await expect(fetchAllNodeData()).rejects.toThrow('Blockchain RPC failed');
 
-    expect(console.error).toHaveBeenCalledWith('Failed to fetch all node data:', blockchainError);
+    expect(console.error).toHaveBeenCalledWith(
+      'Failed to fetch all node data:',
+      blockchainError
+    );
   });
 
   it('should throw error when getPeerInfo fails', async () => {
@@ -160,7 +180,10 @@ describe('fetchAllNodeData', () => {
 
     await expect(fetchAllNodeData()).rejects.toThrow('Peer info unavailable');
 
-    expect(console.error).toHaveBeenCalledWith('Failed to fetch all node data:', peerError);
+    expect(console.error).toHaveBeenCalledWith(
+      'Failed to fetch all node data:',
+      peerError
+    );
   });
 
   it('should throw error when getNetworkInfo fails', async () => {
@@ -173,7 +196,10 @@ describe('fetchAllNodeData', () => {
 
     await expect(fetchAllNodeData()).rejects.toThrow('Network info error');
 
-    expect(console.error).toHaveBeenCalledWith('Failed to fetch all node data:', networkError);
+    expect(console.error).toHaveBeenCalledWith(
+      'Failed to fetch all node data:',
+      networkError
+    );
   });
 
   it('should throw error when getMempoolInfo fails', async () => {
@@ -186,7 +212,10 @@ describe('fetchAllNodeData', () => {
 
     await expect(fetchAllNodeData()).rejects.toThrow('Mempool data corrupt');
 
-    expect(console.error).toHaveBeenCalledWith('Failed to fetch all node data:', mempoolError);
+    expect(console.error).toHaveBeenCalledWith(
+      'Failed to fetch all node data:',
+      mempoolError
+    );
   });
 
   it('should throw error when getNetTotals fails', async () => {
@@ -197,15 +226,20 @@ describe('fetchAllNodeData', () => {
     getMempoolInfo.mockResolvedValue({});
     getNetTotals.mockRejectedValue(netTotalsError);
 
-    await expect(fetchAllNodeData()).rejects.toThrow('Network totals unavailable');
+    await expect(fetchAllNodeData()).rejects.toThrow(
+      'Network totals unavailable'
+    );
 
-    expect(console.error).toHaveBeenCalledWith('Failed to fetch all node data:', netTotalsError);
+    expect(console.error).toHaveBeenCalledWith(
+      'Failed to fetch all node data:',
+      netTotalsError
+    );
   });
 
   it('should throw error when multiple RPC methods fail', async () => {
     const error1 = new Error('Multiple failures');
     const error2 = new Error('Another failure');
-    
+
     getBlockchainInfo.mockRejectedValue(error1);
     getPeerInfo.mockRejectedValue(error2);
     getNetworkInfo.mockResolvedValue({});
@@ -213,13 +247,15 @@ describe('fetchAllNodeData', () => {
     getNetTotals.mockResolvedValue({});
     await expect(fetchAllNodeData()).rejects.toThrow('Multiple failures');
 
-    expect(console.error).toHaveBeenCalledWith('Failed to fetch all node data:', error1);
+    expect(console.error).toHaveBeenCalledWith(
+      'Failed to fetch all node data:',
+      error1
+    );
   });
 
   it('should generate current timestamp for lastUpdated', async () => {
-
     Date.prototype.toISOString.mockRestore();
-    
+
     getBlockchainInfo.mockResolvedValue({});
     getPeerInfo.mockResolvedValue([]);
     getNetworkInfo.mockResolvedValue({});
@@ -230,7 +266,9 @@ describe('fetchAllNodeData', () => {
     const result = await fetchAllNodeData();
     const afterTime = new Date().toISOString();
 
-    expect(result.data.lastUpdated).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    expect(result.data.lastUpdated).toMatch(
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
+    );
     expect(result.data.lastUpdated >= beforeTime).toBe(true);
     expect(result.data.lastUpdated <= afterTime).toBe(true);
   });

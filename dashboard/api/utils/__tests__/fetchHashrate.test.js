@@ -115,7 +115,7 @@ describe('fetchHashrateStats', () => {
     const hashps = 500 * 1e18;
 
     mockWSS.clients = new Set();
-    
+
     rpcWithEnv
       .mockResolvedValueOnce(diff) // getdifficulty
       .mockResolvedValueOnce(hashps); // getnetworkhashps
@@ -123,6 +123,6 @@ describe('fetchHashrateStats', () => {
     await fetchHashrateStats(mockWSS);
 
     expect(rpcWithEnv).toHaveBeenCalledTimes(2);
-    expect(mockClient.send).not.toHaveBeenCalled(); 
+    expect(mockClient.send).not.toHaveBeenCalled();
   });
 });

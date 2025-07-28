@@ -95,7 +95,6 @@ describe('fetchLatencyData', () => {
     });
   });
 
-  
   it('should not send if client is not OPEN', async () => {
     mockClient.readyState = 2;
 

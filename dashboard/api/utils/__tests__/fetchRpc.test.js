@@ -49,7 +49,7 @@ describe('callRpc', () => {
       statusText: 'OK',
       headers: {},
       config: {},
-    };    
+    };
     mockAxios.post.mockImplementation((url, payload, config) => {
       return Promise.resolve(mockResponse);
     });
@@ -119,7 +119,7 @@ describe('callRpc', () => {
     // Test case where axios fails but doesn't have response.data
     const axiosError = new Error('Network Error');
     axiosError.response = undefined; // No response object
-    
+
     mockAxios.post.mockRejectedValueOnce(axiosError);
 
     await expect(callRpc(mockArgs, 1)).rejects.toThrow('Network Error');
@@ -132,7 +132,7 @@ describe('callRpc', () => {
     // Test case where axios returns a response but without data
     const axiosError = new Error('Request failed');
     axiosError.response = {}; // Empty response object
-    
+
     mockAxios.post.mockRejectedValueOnce(axiosError);
 
     await expect(callRpc(mockArgs, 1)).rejects.toThrow('Request failed');

@@ -12,7 +12,7 @@ describe('rpcWithEnv', () => {
     jest.clearAllMocks();
     // Reset environment variables
     process.env = { ...originalEnv };
-    
+
     // Set up default valid environment variables
     process.env.BRAIDPOOL_URL = 'http://localhost:8332';
     process.env.RPC_USER = 'braiduser';
@@ -45,7 +45,10 @@ describe('rpcWithEnv', () => {
     });
 
     it('defaults params to empty array if not provided', async () => {
-      const mockResponse = { chainwork: '000000000000000000000000000000000000000007616e2e2fdc5aa9153' };
+      const mockResponse = {
+        chainwork:
+          '000000000000000000000000000000000000000007616e2e2fdc5aa9153',
+      };
       callRpc.mockResolvedValueOnce(mockResponse);
 
       const result = await rpcWithEnv({
@@ -88,8 +91,9 @@ describe('rpcWithEnv', () => {
     it('throws error when BRAIDPOOL_URL is missing', () => {
       delete process.env.BRAIDPOOL_URL;
 
-      expect(() => rpcWithEnv({ method: 'getblockchaininfo' }))
-        .toThrow('Missing BRAIDPOOL_URL, RPC_USER, or RPC_PASS');
+      expect(() => rpcWithEnv({ method: 'getblockchaininfo' })).toThrow(
+        'Missing BRAIDPOOL_URL, RPC_USER, or RPC_PASS'
+      );
 
       expect(callRpc).not.toHaveBeenCalled();
     });
@@ -97,8 +101,9 @@ describe('rpcWithEnv', () => {
     it('throws error when RPC_USER is missing', () => {
       delete process.env.RPC_USER;
 
-      expect(() => rpcWithEnv({ method: 'getblockchaininfo' }))
-        .toThrow('Missing BRAIDPOOL_URL, RPC_USER, or RPC_PASS');
+      expect(() => rpcWithEnv({ method: 'getblockchaininfo' })).toThrow(
+        'Missing BRAIDPOOL_URL, RPC_USER, or RPC_PASS'
+      );
 
       expect(callRpc).not.toHaveBeenCalled();
     });
@@ -106,8 +111,9 @@ describe('rpcWithEnv', () => {
     it('throws error when RPC_PASS is missing', () => {
       delete process.env.RPC_PASS;
 
-      expect(() => rpcWithEnv({ method: 'getblockchaininfo' }))
-        .toThrow('Missing BRAIDPOOL_URL, RPC_USER, or RPC_PASS');
+      expect(() => rpcWithEnv({ method: 'getblockchaininfo' })).toThrow(
+        'Missing BRAIDPOOL_URL, RPC_USER, or RPC_PASS'
+      );
 
       expect(callRpc).not.toHaveBeenCalled();
     });
@@ -115,8 +121,9 @@ describe('rpcWithEnv', () => {
     it('throws error when BRAIDPOOL_URL is empty string', () => {
       process.env.BRAIDPOOL_URL = '';
 
-      expect(() => rpcWithEnv({ method: 'getblockchaininfo' }))
-        .toThrow('Missing BRAIDPOOL_URL, RPC_USER, or RPC_PASS');
+      expect(() => rpcWithEnv({ method: 'getblockchaininfo' })).toThrow(
+        'Missing BRAIDPOOL_URL, RPC_USER, or RPC_PASS'
+      );
 
       expect(callRpc).not.toHaveBeenCalled();
     });
@@ -125,8 +132,9 @@ describe('rpcWithEnv', () => {
       delete process.env.BRAIDPOOL_URL;
       delete process.env.RPC_USER;
 
-      expect(() => rpcWithEnv({ method: 'getblockchaininfo' }))
-        .toThrow('Missing BRAIDPOOL_URL, RPC_USER, or RPC_PASS');
+      expect(() => rpcWithEnv({ method: 'getblockchaininfo' })).toThrow(
+        'Missing BRAIDPOOL_URL, RPC_USER, or RPC_PASS'
+      );
 
       expect(callRpc).not.toHaveBeenCalled();
     });
@@ -137,8 +145,9 @@ describe('rpcWithEnv', () => {
       const rpcError = new Error('Connection refused');
       callRpc.mockRejectedValueOnce(rpcError);
 
-      await expect(rpcWithEnv({ method: 'getblockchaininfo' }))
-        .rejects.toThrow('Connection refused');
+      await expect(rpcWithEnv({ method: 'getblockchaininfo' })).rejects.toThrow(
+        'Connection refused'
+      );
 
       expect(callRpc).toHaveBeenCalledWith({
         url: 'http://localhost:8332',
@@ -153,10 +162,12 @@ describe('rpcWithEnv', () => {
       const rpcError = new Error('Method not found');
       callRpc.mockRejectedValueOnce(rpcError);
 
-      await expect(rpcWithEnv({ 
-        method: 'invalidmethod',
-        params: ['test']
-      })).rejects.toThrow('Method not found');
+      await expect(
+        rpcWithEnv({
+          method: 'invalidmethod',
+          params: ['test'],
+        })
+      ).rejects.toThrow('Method not found');
 
       expect(callRpc).toHaveBeenCalledWith({
         url: 'http://localhost:8332',
@@ -182,10 +193,11 @@ describe('rpcWithEnv', () => {
     it('logs error when environment variables are missing', () => {
       delete process.env.BRAIDPOOL_URL;
 
-      expect(() => rpcWithEnv({ method: 'getblockchaininfo' }))
-        .toThrow();
+      expect(() => rpcWithEnv({ method: 'getblockchaininfo' })).toThrow();
 
-      expect(consoleSpy).toHaveBeenCalledWith('Missing required RPC environment variables');
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'Missing required RPC environment variables'
+      );
     });
 
     it('logs error when callRpc fails', async () => {
@@ -200,7 +212,10 @@ describe('rpcWithEnv', () => {
         // Expected to throw
       }
 
-      expect(consoleSpy).toHaveBeenCalledWith('RPC call failed: getblockchaininfo', rpcError);
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'RPC call failed: getblockchaininfo',
+        rpcError
+      );
     });
   });
 
@@ -211,12 +226,14 @@ describe('rpcWithEnv', () => {
 
       await rpcWithEnv({
         method: 'getblock',
-        params: ['000000000000000000']
+        params: ['000000000000000000'],
       });
 
-      expect(callRpc).toHaveBeenCalledWith(expect.objectContaining({
-        params: ['000000000000000000']
-      }));
+      expect(callRpc).toHaveBeenCalledWith(
+        expect.objectContaining({
+          params: ['000000000000000000'],
+        })
+      );
     });
 
     it('handles mixed parameter types', async () => {
@@ -225,12 +242,14 @@ describe('rpcWithEnv', () => {
 
       await rpcWithEnv({
         method: 'getrawtransaction',
-        params: ['txhash', true, 'blockhash']
+        params: ['txhash', true, 'blockhash'],
       });
 
-      expect(callRpc).toHaveBeenCalledWith(expect.objectContaining({
-        params: ['txhash', true, 'blockhash']
-      }));
+      expect(callRpc).toHaveBeenCalledWith(
+        expect.objectContaining({
+          params: ['txhash', true, 'blockhash'],
+        })
+      );
     });
 
     it('handles numeric parameters', async () => {
@@ -239,12 +258,14 @@ describe('rpcWithEnv', () => {
 
       await rpcWithEnv({
         method: 'getblockhash',
-        params: [123456]
+        params: [123456],
       });
 
-      expect(callRpc).toHaveBeenCalledWith(expect.objectContaining({
-        params: [123456]
-      }));
+      expect(callRpc).toHaveBeenCalledWith(
+        expect.objectContaining({
+          params: [123456],
+        })
+      );
     });
   });
 });

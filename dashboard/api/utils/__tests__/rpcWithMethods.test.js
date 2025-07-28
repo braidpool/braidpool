@@ -1,4 +1,10 @@
-import { getBlockchainInfo, getPeerInfo, getNetworkInfo, getMempoolInfo, getNetTotals } from "../rpcMethods"
+import {
+  getBlockchainInfo,
+  getPeerInfo,
+  getNetworkInfo,
+  getMempoolInfo,
+  getNetTotals,
+} from '../rpcMethods';
 import { rpcWithEnv } from '../rpcWithEnv';
 
 jest.mock('../rpcWithEnv', () => ({
