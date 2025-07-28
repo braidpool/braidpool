@@ -1,4 +1,4 @@
-const WebSocket = require('ws');
+import WebSocket from 'ws';
 
 jest.mock('../rpcWithEnv', () => ({
   rpcWithEnv: jest.fn(),
@@ -17,6 +17,7 @@ describe('fetchLatencyData', () => {
 
     mockClient = {
       readyState: WebSocket.OPEN,
+      OPEN: WebSocket.OPEN,
       send: jest.fn(),
     };
 
@@ -39,8 +40,8 @@ describe('fetchLatencyData', () => {
       { pingtime: 0.15 },
       { pingtime: 0.3 },
       { pingtime: 0.1 },
-      { pingtime: null },
-      { pingtime: -1 },
+      { pingtime: null }, // ignored
+      { pingtime: -1 }, // ignored
     ]);
 
     await fetchLatencyData(mockWSS);
@@ -94,6 +95,7 @@ describe('fetchLatencyData', () => {
     });
   });
 
+  
   it('should not send if client is not OPEN', async () => {
     mockClient.readyState = 2;
 

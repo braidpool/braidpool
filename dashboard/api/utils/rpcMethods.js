@@ -1,6 +1,5 @@
-const { rpcWithEnv } = require('./rpcWithEnv.js');
-
-async function getBlockchainInfo() {
+import { rpcWithEnv } from './rpcWithEnv.js';
+export async function getBlockchainInfo() {
   try {
     return await rpcWithEnv({ method: 'getblockchaininfo' });
   } catch (error) {
@@ -9,7 +8,7 @@ async function getBlockchainInfo() {
   }
 }
 
-async function getPeerInfo() {
+export async function getPeerInfo() {
   try {
     return await rpcWithEnv({ method: 'getpeerinfo' });
   } catch (error) {
@@ -18,7 +17,7 @@ async function getPeerInfo() {
   }
 }
 
-async function getNetworkInfo() {
+export async function getNetworkInfo() {
   try {
     return await rpcWithEnv({ method: 'getnetworkinfo' });
   } catch (error) {
@@ -27,7 +26,7 @@ async function getNetworkInfo() {
   }
 }
 
-async function getMempoolInfo() {
+export async function getMempoolInfo() {
   try {
     return await rpcWithEnv({ method: 'getmempoolinfo' });
   } catch (error) {
@@ -35,7 +34,8 @@ async function getMempoolInfo() {
     throw error;
   }
 }
-async function getNetTotals() {
+
+export async function getNetTotals() {
   try {
     return await rpcWithEnv({ method: 'getnettotals' });
   } catch (error) {
@@ -43,10 +43,3 @@ async function getNetTotals() {
     throw error;
   }
 }
-module.exports = {
-  getBlockchainInfo,
-  getMempoolInfo,
-  getNetworkInfo,
-  getNetTotals,
-  getPeerInfo,
-};

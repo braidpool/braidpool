@@ -1,6 +1,6 @@
-const axios = require('axios');
+import axios from 'axios';
 
-async function callRpc(
+export async function callRpc(
   { url, user, pass, method, params = [] },
   retries = 3,
   delay = 2000,
@@ -21,12 +21,6 @@ async function callRpc(
         timeout,
       });
 
-      if (!response || !response.data) {
-        // Try to match the test's expected error string
-        throw new Error(
-          JSON.stringify({ code: -32601, message: 'Method not found' })
-        );
-      }
       if (response.data.error) {
         throw new Error(JSON.stringify(response.data.error));
       }
@@ -45,5 +39,3 @@ async function callRpc(
     }
   }
 }
-
-module.exports = callRpc;

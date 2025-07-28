@@ -1,9 +1,9 @@
-const { rpcWithEnv } = require('./rpcWithEnv.js');
+import { rpcWithEnv } from './rpcWithEnv.js';
 
 let lastDifficulty = null;
 let lastDiffTime = 0;
 
-async function fetchHashrateStats(wss) {
+export async function fetchHashrateStats(wss) {
   try {
     const startTime = Date.now();
     const now = startTime;
@@ -39,5 +39,3 @@ async function fetchHashrateStats(wss) {
     );
   }
 }
-
-module.exports = { fetchHashrateStats };

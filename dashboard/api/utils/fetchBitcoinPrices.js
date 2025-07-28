@@ -1,4 +1,4 @@
-const axios = require('axios');
+import axios from 'axios';
 
 const HISTORIC_SUFFIX = '/historic?days=1';
 const currencies = ['USD', 'EUR', 'JPY'];
@@ -34,4 +34,4 @@ async function fetchBitcoinPrices(BASE_URL, SPOT_SUFFIX) {
   }
 }
 
-module.exports = fetchBitcoinPrices;
+export default fetchBitcoinPrices;

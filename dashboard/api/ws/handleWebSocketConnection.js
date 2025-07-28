@@ -1,9 +1,9 @@
-const { callRpc } = require('../utils/fetchRpc.js');
-const {
+import { callRpc } from '../utils/fetchRpc.js';
+import {
   latestBlockPayload,
   latestStatsPayload,
-} = require('../utils/fetchBlockDetails.js');
-const { fetchAllNodeData } = require('../utils/fetchBlockChainInfo.js');
+} from '../utils/fetchBlockDetails.js';
+import { fetchAllNodeData } from '../utils/fetchBlockChainInfo.js';
 
 const ALLOWED_RPC_METHODS = new Set([
   'getblock',
@@ -15,7 +15,7 @@ const ALLOWED_RPC_METHODS = new Set([
   'getblockchaininfo',
 ]);
 
-async function handleWebSocketConnection(ws) {
+export async function handleWebSocketConnection(ws) {
   console.log('Client connected');
   ws.send(JSON.stringify({ type: 'connection', status: 'connected' }));
 
@@ -88,5 +88,3 @@ async function handleWebSocketConnection(ws) {
     console.log('Client disconnected');
   });
 }
-
-module.exports = { handleWebSocketConnection };

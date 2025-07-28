@@ -1,12 +1,12 @@
-const {
+import {
   getBlockchainInfo,
   getPeerInfo,
   getMempoolInfo,
   getNetworkInfo,
   getNetTotals,
-} = require('./rpcMethods');
+} from './rpcMethods.js';
 
-async function fetchAllNodeData() {
+export async function fetchAllNodeData() {
   try {
     const [blockchain, peers, network, mempool, totals] = await Promise.all([
       getBlockchainInfo(),
@@ -33,4 +33,3 @@ async function fetchAllNodeData() {
     throw error;
   }
 }
-module.exports = { fetchAllNodeData };

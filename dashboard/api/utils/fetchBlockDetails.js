@@ -1,14 +1,14 @@
-const WebSocket = require('ws');
-const { rpcWithEnv } = require('./rpcWithEnv.js');
+import WebSocket from 'ws';
+import { rpcWithEnv } from './rpcWithEnv.js';
 
 let lastBlockHash = null;
 let blockHistory = [];
 const AVERAGING_WINDOW = 10;
 
-let latestBlockPayload = null;
-let latestStatsPayload = null;
+export let latestBlockPayload = null;
+export let latestStatsPayload = null;
 
-async function fetchBlockDetails(wss) {
+export async function fetchBlockDetails(wss) {
   try {
     const blockchainInfo = await rpcWithEnv({ method: 'getblockchaininfo' });
     const latestHeight = blockchainInfo.blocks;
@@ -20,9 +20,6 @@ async function fetchBlockDetails(wss) {
 
     // Skip if no new block
     if (blockHash === lastBlockHash && lastBlockHash !== null) {
-      console.log(
-        `[${new Date().toISOString()}] Skipping block (already processed): ${blockHash}`
-      );
       return;
     }
 
@@ -209,9 +206,3 @@ function broadcastError(wss, err) {
     }
   });
 }
-
-module.exports = {
-  fetchBlockDetails,
-  latestBlockPayload,
-  latestStatsPayload,
-};

@@ -1,5 +1,5 @@
-const { handleWebSocketConnection } = require('../handleWebSocketConnection');
-const { callRpc } = require('../../utils/fetchRpc');
+import { handleWebSocketConnection } from '../handleWebSocketConnection';
+import { callRpc } from '../../utils/fetchRpc';
 
 jest.mock('../../utils/fetchRpc', () => ({
   callRpc: jest.fn(),
