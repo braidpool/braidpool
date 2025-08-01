@@ -20,7 +20,7 @@ import {
   FeeDistributionItem,
 } from './Types';
 
-const Mempool = () => {
+const MempoolLatencyStats = () => {
   const wsRef = useRef<WebSocket | null>(null);
 
   const [mempoolData, setMempoolData] = useState<MempoolData | null>(null);
@@ -288,4 +288,4 @@ const Mempool = () => {
   );
 };
 
-export default Mempool;
+export default MempoolLatencyStats;
