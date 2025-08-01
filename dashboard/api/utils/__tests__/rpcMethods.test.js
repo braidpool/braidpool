@@ -44,12 +44,11 @@ describe('Blockchain Functions', () => {
       expect(result).toEqual([{ id: 1 }]);
     });
     it('propagates errors', async () => {
-  const error = new Error('RPC error');
-  rpcWithEnv.mockRejectedValueOnce(error);
+      const error = new Error('RPC error');
+      rpcWithEnv.mockRejectedValueOnce(error);
 
-  await expect(getPeerInfo()).rejects.toThrow('RPC error');
-});
-
+      await expect(getPeerInfo()).rejects.toThrow('RPC error');
+    });
   });
 
   describe('getNetworkInfo', () => {
@@ -62,12 +61,11 @@ describe('Blockchain Functions', () => {
       expect(result).toEqual({ version: 220000 });
     });
     it('propagates errors', async () => {
-  const error = new Error('RPC error');
-  rpcWithEnv.mockRejectedValueOnce(error);
+      const error = new Error('RPC error');
+      rpcWithEnv.mockRejectedValueOnce(error);
 
-  await expect(getNetworkInfo()).rejects.toThrow('RPC error');
-});
-
+      await expect(getNetworkInfo()).rejects.toThrow('RPC error');
+    });
   });
 
   describe('getMempoolInfo', () => {
@@ -80,12 +78,11 @@ describe('Blockchain Functions', () => {
       expect(result).toEqual({ size: 10 });
     });
     it('propagates errors', async () => {
-  const error = new Error('RPC error');
-  rpcWithEnv.mockRejectedValueOnce(error);
+      const error = new Error('RPC error');
+      rpcWithEnv.mockRejectedValueOnce(error);
 
-  await expect(getMempoolInfo()).rejects.toThrow('RPC error');
-});
-
+      await expect(getMempoolInfo()).rejects.toThrow('RPC error');
+    });
   });
 
   describe('getNetTotals', () => {
@@ -98,11 +95,10 @@ describe('Blockchain Functions', () => {
       expect(result).toEqual({ totalbytesrecv: 1000 });
     });
     it('propagates errors', async () => {
-  const error = new Error('RPC error');
-  rpcWithEnv.mockRejectedValueOnce(error);
+      const error = new Error('RPC error');
+      rpcWithEnv.mockRejectedValueOnce(error);
 
-  await expect(getNetTotals()).rejects.toThrow('RPC error');
-});
-
+      await expect(getNetTotals()).rejects.toThrow('RPC error');
+    });
   });
 });

@@ -11,11 +11,11 @@ describe('fetchLatencyData', () => {
   let mockWSS;
 
   beforeAll(() => {
-  WebSocket.CONNECTING = 0;
-  WebSocket.OPEN = 1;
-  WebSocket.CLOSING = 2;
-  WebSocket.CLOSED = 3;
-});
+    WebSocket.CONNECTING = 0;
+    WebSocket.OPEN = 1;
+    WebSocket.CLOSING = 2;
+    WebSocket.CLOSED = 3;
+  });
   beforeEach(() => {
     jest.resetModules();
     ({ fetchLatencyData } = require('../fetchLatency'));
