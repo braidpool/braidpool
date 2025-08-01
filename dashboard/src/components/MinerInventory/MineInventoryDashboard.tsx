@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import colors from '../../theme/colors';
 import Card from '../common/Card';
-import SpeedIcon from '@mui/icons-material/Speed';
-import ThunderstormIcon from '@mui/icons-material/Thunderstorm';
-import ThermostatIcon from '@mui/icons-material/Thermostat';
-import WifiIcon from '@mui/icons-material/Wifi';
-import ErrorIcon from '@mui/icons-material/Error';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import LightbulbIcon from '@mui/icons-material/Lightbulb';
+import {
+  MdSpeed,
+  MdBolt,
+  MdDeviceThermostat,
+  MdWifi,
+  MdError,
+  MdCheckCircle,
+  MdLightbulb,
+} from 'react-icons/md';
 
 // Mock data for mining devices
 const mockMiners = [
@@ -162,7 +164,7 @@ const DeviceCard = ({
           className="absolute top-2 right-12 flex items-center gap-1 px-2 py-0.5 rounded-full text-xs"
           style={{ backgroundColor: colors.error + '20', color: colors.error }}
         >
-          <ErrorIcon className="text-sm" />
+          <MdError size={16} className="text-sm" />
           {miner.alerts}
         </div>
       )}
@@ -188,13 +190,13 @@ const DeviceCard = ({
       {/* Metrics */}
       <div className="grid grid-cols-2 gap-2 mb-4">
         <div className="flex items-center gap-1">
-          <SpeedIcon className="text-sm" style={{ color: colors.primary }} />
+          <MdSpeed className="text-sm" style={{ color: colors.primary }} />
           <span className="text-sm">
             {miner.status !== 'offline' ? `${miner.hashrate} TH/s` : '—'}
           </span>
         </div>
         <div className="flex items-center gap-1">
-          <ThermostatIcon
+          <MdDeviceThermostat
             className="text-sm"
             style={{ color: colors.primary }}
           />
@@ -203,16 +205,13 @@ const DeviceCard = ({
           </span>
         </div>
         <div className="flex items-center gap-1">
-          <ThunderstormIcon
-            className="text-sm"
-            style={{ color: colors.primary }}
-          />
+          <MdBolt className="text-sm" style={{ color: colors.primary }} />
           <span className="text-sm">
             {miner.status !== 'offline' ? `${miner.powerDraw}W` : '—'}
           </span>
         </div>
         <div className="flex items-center gap-1">
-          <WifiIcon className="text-sm" style={{ color: colors.primary }} />
+          <MdWifi className="text-sm" style={{ color: colors.primary }} />
           <span className="text-sm">{miner.uptime}</span>
         </div>
       </div>
@@ -239,7 +238,7 @@ const DeviceCard = ({
           }}
           onClick={() => onActivateLight(miner.id)}
         >
-          <LightbulbIcon className="text-sm" />
+          <MdLightbulb size={16} className="text-sm" />
           Locate
         </button>
       </div>
@@ -271,21 +270,21 @@ const MineInventoryDashboard = () => {
           className="flex items-center gap-1 px-3 py-1 rounded-full border text-sm"
           style={{ borderColor: colors.success, color: colors.success }}
         >
-          <CheckCircleIcon className="text-sm" />
+          <MdCheckCircle size={16} className="text-sm" />
           {onlineMiners} Online
         </div>
         <div
           className="flex items-center gap-1 px-3 py-1 rounded-full border text-sm"
           style={{ borderColor: colors.warning, color: colors.warning }}
         >
-          <ErrorIcon className="text-sm" />
+          <MdError size={16} className="text-sm" />
           {warningMiners} Warning
         </div>
         <div
           className="flex items-center gap-1 px-3 py-1 rounded-full border text-sm"
           style={{ borderColor: colors.error, color: colors.error }}
         >
-          <ErrorIcon className="text-sm" />
+          <MdError size={16} className="text-sm" />
           {offlineMiners} Offline
         </div>
         <div

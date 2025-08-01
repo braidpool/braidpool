@@ -1,10 +1,12 @@
 import Card from '../common/Card';
 import colors from '../../theme/colors';
-import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
-import CodeIcon from '@mui/icons-material/Code';
-import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
-import TerminalIcon from '@mui/icons-material/Terminal';
-import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import {
+  MdPlayCircleOutline,
+  MdCode,
+  MdCloudDownload,
+  MdTerminal,
+  MdArrowForward,
+} from 'react-icons/md';
 
 const InstallationInstructions = () => {
   return (
@@ -13,8 +15,8 @@ const InstallationInstructions = () => {
       subtitle="How to install and set up Braidpool"
       accentColor={colors.cardAccentPrimary}
     >
-      <div className="flex-col gap-12">
-        <div className="flex-1">
+      <div className="flex flex-col gap-12 md:flex-row md:gap-8">
+        <div className="flex-1 min-w-0">
           <div
             className="p-4 rounded h-full"
             style={{
@@ -28,75 +30,18 @@ const InstallationInstructions = () => {
               system. Make sure you have the prerequisites installed before
               proceeding.
             </p>
-
-            <ul className="pl-0">
-              {[
-                {
-                  icon: <CloudDownloadIcon fontSize="small" />,
-                  primary: 'Clone the repository',
-                  secondary:
-                    'git clone https://github.com/braidpool/braidpool.git',
-                },
-                {
-                  icon: <TerminalIcon fontSize="small" />,
-                  primary: 'Build the node',
-                  secondary: 'cd node && cargo build',
-                },
-                {
-                  icon: <PlayCircleOutlineIcon fontSize="small" />,
-                  primary: 'Run the first seed node',
-                  secondary:
-                    'cargo run -- --bind=localhost:8989 --bitcoin=0.0.0.0 --rpcport=8332 --rpcuser=xxxx --rpcpass=yyyy --zmqhashblockport=28332',
-                },
-              ].map((item, index) => (
-                <li key={index} className="px-0 py-1">
-                  <div className="flex items-start">
-                    <div
-                      className="min-w-[36px] pt-1"
-                      style={{ color: colors.primary }}
-                    >
-                      {item.icon}
-                    </div>
-                    <div className="flex-1">
-                      <p
-                        className="text-sm font-medium mb-1"
-                        style={{ color: colors.textPrimary }}
-                      >
-                        {item.primary}
-                      </p>
-                      <div
-                        className="text-xs bg-black/10 px-2 py-1 rounded font-mono overflow-x-auto"
-                        style={{ color: colors.textSecondary }}
-                      >
-                        {item.secondary}
-                      </div>
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-
-            <div className="mt-6 flex justify-center">
-              <a href="https://github.com/braidpool/braidpool?tab=readme-ov-file#running-the-node">
-                <button
-                  className="flex items-center gap-2 px-4 py-2 rounded normal-case"
-                  style={{
-                    backgroundColor: colors.primary,
-                    color: 'white',
-                  }}
-                  onClick={() =>
-                    console.log('📝 Opening full documentation...')
-                  }
-                >
-                  <CodeIcon fontSize="small" />
-                  View Full Documentation
-                </button>
-              </a>
+            {/* Example usage of icons */}
+            <div className="flex gap-4 items-center">
+              <MdPlayCircleOutline size={24} color={colors.primary} />
+              <MdCode size={24} color={colors.primary} />
+              <MdCloudDownload size={24} color={colors.primary} />
+              <MdTerminal size={24} color={colors.primary} />
+              <MdArrowForward size={24} color={colors.primary} />
             </div>
           </div>
         </div>
 
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           <div
             className="p-4 rounded h-full"
             style={{
@@ -113,23 +58,23 @@ const InstallationInstructions = () => {
             <ul className="pl-0">
               {[
                 {
-                  icon: <TerminalIcon fontSize="small" />,
+                  icon: <MdTerminal size={20} />,
                   primary: 'Build the nix-script',
                   secondary: 'nix-build cpunet_node.nix',
                 },
                 {
-                  icon: <ArrowForwardIcon fontSize="small" />,
+                  icon: <MdArrowForward size={20} />,
                   primary: 'Navigate to result directory',
                   secondary: 'cd result',
                 },
                 {
-                  icon: <PlayCircleOutlineIcon fontSize="small" />,
+                  icon: <MdPlayCircleOutline size={20} />,
                   primary: 'Run the CPUnet node',
                   secondary:
                     './bin/bitcoind -cpunet -zmqpubsequence=tcp://127.0.0.1:28338',
                 },
                 {
-                  icon: <TerminalIcon fontSize="small" />,
+                  icon: <MdTerminal size={20} />,
                   primary: 'Generate blocks',
                   secondary:
                     "./contrib/cpunet/miner --cli=./bin/bitcoin-cli --ongoing --address `./bin/bitcoin-cli -cpunet getnewaddress` --grind-cmd='./bin/bitcoin-util -cpunet -ntasks=1 grind'",
@@ -143,7 +88,7 @@ const InstallationInstructions = () => {
                     >
                       {item.icon}
                     </div>
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       <p
                         className="text-sm font-medium mb-1"
                         style={{ color: colors.textPrimary }}
@@ -151,7 +96,7 @@ const InstallationInstructions = () => {
                         {item.primary}
                       </p>
                       <div
-                        className="text-xs bg-black/10 px-2 py-1 rounded font-mono overflow-x-auto"
+                        className="text-xs bg-black/10 px-2 py-1 rounded font-mono overflow-x-auto whitespace-pre-wrap break-all"
                         style={{ color: colors.textSecondary }}
                       >
                         {item.secondary}

@@ -3,6 +3,7 @@ import {
   latestBlockPayload,
   latestStatsPayload,
 } from '../utils/fetchBlockDetails.js';
+import { fetchAllNodeData } from '../utils/fetchBlockChainInfo.js';
 
 const ALLOWED_RPC_METHODS = new Set([
   'getblock',
@@ -28,6 +29,21 @@ export async function handleWebSocketConnection(ws) {
   ws.on('message', async (message) => {
     try {
       const data = JSON.parse(message);
+
+      if (data.action === 'refresh') {
+        try {
+          const nodeHealthData = await fetchAllNodeData();
+          ws.send(JSON.stringify(nodeHealthData));
+        } catch (err) {
+          ws.send(
+            JSON.stringify({
+              type: 'error',
+              message: 'Failed to fetch node health data',
+            })
+          );
+        }
+        return;
+      }
 
       if (data.type === 'rpc_call') {
         if (!data.method || typeof data.method !== 'string') {

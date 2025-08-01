@@ -8,6 +8,7 @@ import {
   Layers,
   Menu,
   X,
+  HeartPulse,
 } from 'lucide-react';
 import { Page } from '../Dashboard/Types';
 import { HeaderNavProps } from './Types';
@@ -40,6 +41,11 @@ const NAV_ITEMS = [
     page: Page.BITCOIN_STATS,
     icon: <Bitcoin size={18} />,
   },
+  {
+    label: 'Node Health',
+    page: Page.NODE_HEALTH,
+    icon: <HeartPulse size={18} />,
+  },
 ];
 
 const Header: React.FC<HeaderNavProps> = ({
@@ -69,7 +75,7 @@ const Header: React.FC<HeaderNavProps> = ({
           </div>
 
           {/* Desktop Nav */}
-          <div className="max-md:hidden md:flex lg:flex items-center ">
+          <div className="sm:hidden max-md:hidden  lg:flex items-center ">
             {NAV_ITEMS.map((item) => (
               <button
                 key={item.label}
@@ -89,7 +95,7 @@ const Header: React.FC<HeaderNavProps> = ({
 
           {/* Mobile Menu Toggle  */}
           <button
-            className="md:hidden ml-2 p-2 rounded hover:bg-white/10 text-white"
+            className="lg:hidden  ml-2 p-2 rounded hover:bg-white/10 text-white"
             onClick={() => setSidebarOpen(true)}
           >
             <Menu size={22} />
@@ -101,7 +107,7 @@ const Header: React.FC<HeaderNavProps> = ({
       <div
         className={`fixed top-0 left-0 h-full w-64 bg-[#1a1a1a] border-r border-white/10 shadow-lg z-[9999] transform transition-transform duration-300 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        } md:hidden`}
+        } lg:hidden`}
       >
         <div className="flex items-center justify-between px-4 h-14 border-b border-white/10">
           <span className="text-white font-bold text-lg">{title}</span>
