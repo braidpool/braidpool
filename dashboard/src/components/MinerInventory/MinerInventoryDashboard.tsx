@@ -1,10 +1,8 @@
 import { useState, useEffect } from 'react';
-import Card from '../common/Card';
 import { Miner, MinerStatus } from './Types';
-
+import { API_BASE_URL } from '@/config/api';
 const DeviceCard = ({
   miner,
-  onActivateLight,
 }: {
   miner: Miner;
   onActivateLight: (id: string) => void;
@@ -87,7 +85,7 @@ const MinerInventoryDashboard = () => {
   useEffect(() => {
     const fetchMiners = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/miners', {
+        const response = await fetch(`${API_BASE_URL}/api/miners`, {
           headers: { Accept: 'application/json' },
         });
 
@@ -152,7 +150,7 @@ const MinerInventoryDashboard = () => {
 
     try {
       const response = await fetch(
-        `http://localhost:5000/api/miners?ip=${newMinerIP}`,
+        `${API_BASE_URL}/api/miners?ip=${newMinerIP}`,
         {
           headers: { Accept: 'application/json' },
         }
@@ -179,14 +177,14 @@ const MinerInventoryDashboard = () => {
         hashrate: (data.hashRate || 0).toFixed(2),
         efficiency: (data.hashRate / data.power || 0).toFixed(2),
         powerDraw: (data.power || 0).toFixed(2),
-        maxPower: data.power,
+        maxPower: data.maxPower,
+        bestDiff: data.bestDiff,
         uptime: `${Math.floor((data.uptimeSeconds || 0) / 60)} min`,
         location: `IP: ${newMinerIP}`,
         lastSeen: new Date().toLocaleTimeString(),
         alerts: data.overheat_mode ? 1 : 0,
         frequency: data.frequency,
         fanspeed: data.fanspeed,
-        bestDiff: data.bestdiff,
         ASICModel: data.ASICModel,
       };
 

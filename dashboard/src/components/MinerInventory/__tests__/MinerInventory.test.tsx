@@ -1,15 +1,5 @@
-import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import MinerInventoryDashboard from '../MinerInventoryDashboard';
-
-jest.mock(
-  '../../common/Card',
-  () =>
-    ({ children }: { children: React.ReactNode }) => (
-      <div data-testid="mock-card">{children}</div>
-    )
-);
-
 describe('MinerInventoryDashboard', () => {
   const mockMinerData = {
     macAddr: 'abc123',
