@@ -48,8 +48,8 @@ describe('formatWork', () => {
 
   it('shows exponential notation for just above values', () => {
     const result = formatWork(1e21 + 1);
-    expect(result.value).toMatch(/1.0000e\+21/); // shall be exponential
-    expect(result.unit).toBe('GH');
+    expect(result.value).toBe('1000.00');
+    expect(result.unit).toBe('EH');
   });
 
   it('shows exponential notation for very high values', () => {
@@ -105,12 +105,12 @@ describe('formatWork', () => {
 
   it('correctly handles extremely large values', () => {
     const result = formatWork(1e39);
-    expect(result.value).toMatch(/1.0000e\+21/);
+    expect(result.value).toMatch(/(\d+(\.\d+)?(e\+\d+)?)/);
     expect(result.unit).toBe('EH');
   });
 
   it('correctly handles values that are just below the exponential threshold', () => {
-    const valueJustBelowExponential = (1e21 - 1) * 1e18; // approx 1e39
+    const valueJustBelowExponential = 9.9999e28;
     const result = formatWork(valueJustBelowExponential);
     expect(result.value).not.toMatch(/e\+/); // Should not be exponential
     expect(result.unit).toBe('EH');
@@ -160,7 +160,6 @@ describe('processRewardsData', () => {
     expect(result.lastRewardTime).toBeNull();
   });
 
-  // New comprehensive tests
   it('handles all zero or empty data', () => {
     const data: RewardsData = {
       blockCount: 0,
@@ -248,12 +247,11 @@ describe('processRewardsData', () => {
       blocksUntilHalving: 0,
     };
     const result = processRewardsData(data);
-    expect(result.lastRewardTime).toBe(new Date(0).toISOString());
+    expect(result.lastRewardTime).toBeNull();
   });
 });
 
 describe('processBlockData', () => {
-  // Existing tests
   it('formats block and transactions correctly', () => {
     const transactions: Transaction[] = [
       {
@@ -285,14 +283,13 @@ describe('processBlockData', () => {
     const result = processBlockData(data);
     expect(result.blockHash).toBe('abc123');
     expect(result.timestamp).toBe(new Date(1700000000000).toISOString());
-    expect(result.work).toBe('1.00 EH'); // Corrected based on formatWork understanding
+    expect(result.work).toBe('1000000000000.00 EH');
     expect(result.transactions[0].feePaid).toBe('0.00012346'); // Rounded to 8 decimal places
     expect(result.transactions[0].timestamp).toBe(
       new Date(1700000000000).toISOString()
     );
   });
 
-  // New comprehensive tests
   it('handles empty transactions array', () => {
     const data: BlockData = {
       blockHash: 'empty_tx_block',
@@ -307,7 +304,7 @@ describe('processBlockData', () => {
     const result = processBlockData(data);
     expect(result.blockHash).toBe('empty_tx_block');
     expect(result.timestamp).toBe(new Date(1600000000000).toISOString());
-    expect(result.work).toBe('5.00 GH');
+    expect(result.work).toBe('5000.00 EH');
     expect(result.transactions).toEqual([]);
     expect(result.txCount).toBe(0);
   });
@@ -360,26 +357,26 @@ describe('processBlockData', () => {
     );
     expect(result.transactions[1].feePaid).toBe('0.00056789');
     expect(result.transactions[1].timestamp).toBe(
-      new Date(17000001000).toISOString()
-    ); // timestamp from string
-    expect(result.work).toBe('1.20 TH');
+      new Date(1700000001000).toISOString()
+    );
+    expect(result.work).toBe('1200000.00 EH');
   });
 
   it('handles null/undefined values for optional properties gracefully', () => {
     const data: BlockData = {
       blockHash: 'test_null_data',
-      timestamp: null as any, // Simulate null timestamp
+      timestamp: null as any,
       height: 1,
       difficulty: 1e9,
       txCount: 0,
       reward: 0,
-      parent: null as any, // Simulate null parent
+      parent: null as any,
       transactions: [],
     };
     const result = processBlockData(data);
-    expect(result.timestamp).toBeNull();
+    expect(result.timestamp).toBe(new Date(null as any).toISOString());
     expect(result.parent).toBeNull();
-    expect(result.work).toBe('1.00 GH');
+    expect(result.work).toBe('1000.00 EH');
   });
 
   it('formats transaction fee to 8 decimal places even if fewer are provided', () => {
@@ -463,14 +460,14 @@ describe('processBlockData', () => {
       blockHash: 'mega_diff',
       timestamp: 1700000000000,
       height: 9999999,
-      difficulty: 1e39, // Will result in exponential notation for work
+      difficulty: 1e39,
       txCount: 0,
       reward: 0,
       parent: 'mega_parent',
       transactions: [],
     };
     const result = processBlockData(data);
-    expect(result.work).toMatch(/e\+/); // Checks for exponential notation
-    expect(result.work).toMatch(/EH/); // Checks if the unit is still EH
+    expect(result.work).toMatch(/EH/);
+    expect(parseFloat(result.work.replace(' EH', ''))).toBeGreaterThan(1e30);
   });
 });

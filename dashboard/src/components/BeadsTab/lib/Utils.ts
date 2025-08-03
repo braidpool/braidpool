@@ -13,12 +13,15 @@ export function formatWork(difficulty: number): {
   const units = ['GH', 'TH', 'PH', 'EH'];
   let work = difficulty / 1e9;
   let i = 0;
+
   while (work >= 1000 && i < units.length - 1) {
     work /= 1000;
     i++;
   }
+  const shouldUseExponential = work >= 1e21;
+
   return {
-    value: work >= 1e21 ? work.toExponential(4) : work.toFixed(2),
+    value: shouldUseExponential ? work.toExponential(4) : work.toFixed(2),
     unit: units[i],
   };
 }
@@ -77,7 +80,7 @@ export function processBlockData(data: BlockData) {
   const work = `${(difficulty / 1e6).toFixed(2)} EH`;
   const formattedTransactions = transactions.map((tx: any) => ({
     ...tx,
-    timestamp: new Date(tx.timestamp).toISOString(),
+    timestamp: new Date(parseInt(tx.timestamp)).toISOString(),
     feePaid: tx.fee.toFixed(8),
   }));
   return {

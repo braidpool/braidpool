@@ -1,9 +1,12 @@
 import axios from 'axios';
 import { callRpc } from '../fetchRpc';
 
-jest.mock('axios');
+jest.mock('axios', () => ({
+  post: jest.fn(),
+}));
 
 describe('callRpc', () => {
+  const mockAxios = axios;
   const mockArgs = {
     url: 'http://localhost:8332',
     user: 'rpcuser',
@@ -23,7 +26,7 @@ describe('callRpc', () => {
   });
 
   it('should return result on success', async () => {
-    axios.post.mockResolvedValueOnce({
+    mockAxios.post.mockResolvedValueOnce({
       data: {
         result: { chain: 'main' },
         error: null,
@@ -33,15 +36,22 @@ describe('callRpc', () => {
     const result = await callRpc(mockArgs);
 
     expect(result).toEqual({ chain: 'main' });
-    expect(axios.post).toHaveBeenCalledTimes(1);
+    expect(mockAxios.post).toHaveBeenCalledTimes(1);
   });
 
   it('should throw if response has an error field', async () => {
-    axios.post.mockResolvedValueOnce({
+    const mockResponse = {
       data: {
         result: null,
         error: { code: -32601, message: 'Method not found' },
       },
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config: {},
+    };
+    mockAxios.post.mockImplementation((url, payload, config) => {
+      return Promise.resolve(mockResponse);
     });
 
     const expectedError = JSON.stringify({
@@ -49,11 +59,17 @@ describe('callRpc', () => {
       message: 'Method not found',
     });
 
-    await expect(callRpc(mockArgs)).rejects.toThrow(expectedError);
+    try {
+      await callRpc(mockArgs);
+      throw new Error('Expected callRpc to throw, but it did not');
+    } catch (error) {
+      console.log('Caught error:', error.message);
+      expect(error.message).toBe(expectedError);
+    }
   });
 
   it('should retry on failure and succeed eventually', async () => {
-    axios.post
+    mockAxios.post
       .mockRejectedValueOnce(new Error('Temporary network error'))
       .mockResolvedValueOnce({
         data: { result: { synced: true }, error: null },
@@ -65,11 +81,11 @@ describe('callRpc', () => {
     expect(console.warn).toHaveBeenCalledWith(
       'RPC call failed (attempt 1): Retrying in 10ms...'
     );
-    expect(axios.post).toHaveBeenCalledTimes(2);
+    expect(mockAxios.post).toHaveBeenCalledTimes(2);
   });
 
   it('should retry and fail after max retries', async () => {
-    axios.post.mockRejectedValue(new Error('Server not responding'));
+    mockAxios.post.mockRejectedValue(new Error('Server not responding'));
 
     await expect(callRpc(mockArgs, 2, 5)).rejects.toThrow(
       'Server not responding'
@@ -78,17 +94,17 @@ describe('callRpc', () => {
     expect(console.error).toHaveBeenCalledWith(
       'RPC call failed after 2 attempts.'
     );
-    expect(axios.post).toHaveBeenCalledTimes(2);
+    expect(mockAxios.post).toHaveBeenCalledTimes(2);
   });
 
   it('should respect custom timeout value', async () => {
-    axios.post.mockResolvedValueOnce({
+    mockAxios.post.mockResolvedValueOnce({
       data: { result: 'test', error: null },
     });
 
     await callRpc({ ...mockArgs }, 1, 10, 3000); // 1 retry, 10ms delay, 3s timeout
 
-    expect(axios.post).toHaveBeenCalledWith(
+    expect(mockAxios.post).toHaveBeenCalledWith(
       mockArgs.url,
       expect.anything(), // payload
       expect.objectContaining({
@@ -97,5 +113,28 @@ describe('callRpc', () => {
         headers: { 'Content-Type': 'application/json' },
       })
     );
+  });
+
+  it('should handle axios error with no response data', async () => {
+    // Test case where axios fails but doesn't have response.data
+    const axiosError = new Error('Network Error');
+    axiosError.response = undefined; // No response object
+
+    mockAxios.post.mockRejectedValueOnce(axiosError);
+
+    await expect(callRpc(mockArgs, 1)).rejects.toThrow('Network Error');
+    expect(console.error).toHaveBeenCalledWith(
+      'RPC call failed after 1 attempts.'
+    );
+  });
+
+  it('should handle axios error with empty response', async () => {
+    // Test case where axios returns a response but without data
+    const axiosError = new Error('Request failed');
+    axiosError.response = {}; // Empty response object
+
+    mockAxios.post.mockRejectedValueOnce(axiosError);
+
+    await expect(callRpc(mockArgs, 1)).rejects.toThrow('Request failed');
   });
 });

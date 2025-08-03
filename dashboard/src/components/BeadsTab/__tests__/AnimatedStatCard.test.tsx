@@ -18,14 +18,17 @@ describe('<AnimatedStatCard />', () => {
   });
 
   it('renders with empty title and value safely', () => {
-    render(<AnimatedStatCard title="" value="" />);
-    expect(screen.getByText('')).toBeInTheDocument();
+    const { container } = render(<AnimatedStatCard title="" value="" />);
+    expect(container.querySelector('.rounded-xl')).toBeInTheDocument();
+    expect(container.querySelector('p')?.textContent).toBe('');
+    expect(container.querySelector('h3')?.textContent).toBe('');
   });
 
   it('handles null or undefined props gracefully in case data is still loading', () => {
-    render(<AnimatedStatCard title={null as any} value={undefined as any} />);
-    const card = screen.getByRole('generic'); // fallback match
-    expect(card).toBeInTheDocument();
+    const { container } = render(
+      <AnimatedStatCard title={null as any} value={undefined as any} />
+    );
+    expect(container.querySelector('.rounded-xl')).toBeInTheDocument();
   });
 
   it('renders long strings correctly', () => {

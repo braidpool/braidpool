@@ -33,7 +33,7 @@ jobs:
       - name: Build project
         run: npm run build --if-present
         working-directory: dashboard
-      #TO BE REINSTATED 
-      # - name: Run tests
-      #   run: npm test
-      #   working-directory: dashboard
+     
+      - name: Run tests
+        run: npm test
+        working-directory: dashboard

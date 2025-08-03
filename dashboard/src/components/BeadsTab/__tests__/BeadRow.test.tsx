@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import BeadRow from '../BeadRow';
 import { Bead, Transaction } from '../lib/Types';
 
@@ -27,6 +27,14 @@ const mockTransactions: Transaction[] = [
     outputs: 2,
   },
 ];
+
+beforeAll(() => {
+  Object.assign(navigator, {
+    clipboard: {
+      writeText: jest.fn().mockResolvedValue(undefined),
+    },
+  });
+});
 
 describe('<BeadRow />', () => {
   const onToggleMock = jest.fn();
@@ -62,8 +70,8 @@ describe('<BeadRow />', () => {
         isActive={false}
       />
     );
-
-    fireEvent.click(screen.getByRole('button'));
+    const buttons = screen.getAllByRole('button');
+    fireEvent.click(buttons[0]);
     expect(onToggleMock).toHaveBeenCalledWith(mockBead.id);
   });
 
@@ -85,7 +93,7 @@ describe('<BeadRow />', () => {
     expect(onToggleMock).not.toHaveBeenCalled(); // no parent toggle
   });
 
-  it('shows "Copied!" when parent hash is clicked', () => {
+  it('shows "Copied!" when parent hash is clicked', async () => {
     render(
       <BeadRow
         bead={mockBead}
@@ -97,9 +105,10 @@ describe('<BeadRow />', () => {
     );
 
     const parentBtn = screen.getByText(/parenthash1/i);
-    fireEvent.click(parentBtn);
-
-    expect(screen.getByText('Copied!')).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(parentBtn);
+    });
+    expect(await screen.findByText('Copied!')).toBeInTheDocument();
   });
 
   it('renders transaction list when expanded', () => {
@@ -127,12 +136,10 @@ describe('<BeadRow />', () => {
       />
     );
 
-    const row = screen.getByRole('button');
-
-    fireEvent.keyDown(row, { key: 'Enter' });
+    const buttons = screen.getAllByRole('button');
+    fireEvent.keyDown(buttons[0], { key: 'Enter' });
     expect(onToggleMock).toHaveBeenCalledWith(mockBead.id);
-
-    fireEvent.keyDown(row, { key: ' ' });
+    fireEvent.keyDown(buttons[0], { key: ' ' });
     expect(onToggleMock).toHaveBeenCalledTimes(2);
   });
 
