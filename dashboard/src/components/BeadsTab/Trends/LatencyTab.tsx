@@ -141,7 +141,7 @@ export default function LatencyTab({ timeRange }: { timeRange: string }) {
 
   // ✅ Render UI
   return (
-    <div className="space-y-6 bg-[#1c1c1c]">
+    <div className="space-y-4 ">
       <div className="flex justify-between items-center">
         <div>
           <h3 className="text-xl font-bold text-blue-300">Network Latency</h3>

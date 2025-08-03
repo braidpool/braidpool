@@ -3,6 +3,7 @@ import { TrendsTABS } from '../lib/Constants';
 import HashrateTab from './HashrateTab';
 import LatencyTab from './LatencyTab';
 import TransactionsTab from './TransactionsTab';
+import { Difficulty } from './Difficulty';
 
 export function TrendsTab({ timeRange }: { timeRange: string }) {
   const [activeSubTab, setActiveSubTab] = useState('hashrate');
@@ -12,7 +13,7 @@ export function TrendsTab({ timeRange }: { timeRange: string }) {
     <div className="space-y-8">
       {/* Subtabs */}
       <div className="border-b border-gray-800">
-        <nav className="-mb-px flex flex-wrap gap-x-6" aria-label="Tabs">
+        <nav className="-mb-px flex flex-wrap justify-center gap-x-10" aria-label="Tabs">
           {TrendsTABS.map((tab) => (
             <button
               key={tab.id}
@@ -23,7 +24,7 @@ export function TrendsTab({ timeRange }: { timeRange: string }) {
                 ${
                   activeSubTab === tab.id
                     ? 'border-blue-500 text-blue-400'
-                    : 'border-transparent text-gray-400 hover:text-white hover:border-gray-300'
+                    : 'border-transparent text-white hover:border-gray-300'
                 }
               `}
             >
@@ -51,6 +52,7 @@ export function TrendsTab({ timeRange }: { timeRange: string }) {
           timeRange={timeRange}
         />
       )}
+      {activeSubTab === 'difficulty' && <Difficulty />}
     </div>
   );
 }

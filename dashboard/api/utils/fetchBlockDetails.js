@@ -30,9 +30,10 @@ export async function fetchBlockDetails(wss) {
       method: 'getblock',
       params: [blockHash, 2],
     });
-
-    const coinbaseTx = blockData.tx[0];
-    const rewardBTC = coinbaseTx.vout.reduce((acc, out) => acc + out.value, 0);
+    const block = await rpcWithEnv({ method: 'getblock', params: [blockHash, 2] });
+const coinbaseTx = block.tx[0]; // first transaction
+const reward = coinbaseTx.vout.reduce((acc, vout) => acc + vout.value, 0);
+console.log(`Reward: ${reward} BTC`);
 
     const transactions = blockData.tx.slice(1).map((tx, index) => ({
       id: `${blockHash}_tx_${index}`,
@@ -107,7 +108,7 @@ export async function fetchBlockDetails(wss) {
         difficulty: blockData.difficulty,
         txCount: blockData.tx.length,
         nonCoinbaseTxCount: blockData.tx.length - 1,
-        reward: rewardBTC,
+        reward ,
         parent: blockData.previousblockhash,
         transactions,
       },

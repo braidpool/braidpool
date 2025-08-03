@@ -17,7 +17,7 @@ export default function AdvancedChart({
   lineColor = '#3b82f6',
 }: AdvancedchartProps) {
   return (
-    <div className=" relative border border-gray-800/50 rounded-xl p-4 h-auto bg-[#1c1c1c] backdrop-blur-md overflow-hidden  ">
+    <div className=" relative border border-gray-800/50 rounded-xl p-4 h-auto backdrop-blur-md overflow-hidden  ">
       <ResponsiveContainer width="100%" height={350}>
         <LineChart data={data}>
           <CartesianGrid stroke="#444" />

@@ -22,7 +22,7 @@ export async function fetchHashrateStats(wss) {
       data: {
         hashrate: hashrateEH,
         timestamp: timestamp,
-        networkDifficulty: lastDifficulty,
+        networkDifficulty: lastDifficulty / 1e12,
       },
     };
     console.log('Hashrate', payload.data);

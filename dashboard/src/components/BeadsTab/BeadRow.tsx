@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import TransactionList from './TransactionList';
 import { shortenHash, formatWork, useCopyToClipboard } from './lib/Utils';
 import type { BeadRowProps } from './lib/Types';
-import { BeadRewardTooltip } from './BeadRewardTooltip';
+
 import { ChevronDown } from 'lucide-react';
 
 export default function BeadRow({
@@ -23,7 +23,7 @@ export default function BeadRow({
   return (
     <div className="border-b border-gray-800/80">
       <div
-        className="grid max-sm:grid-cols-3 md:grid-cols-5 gap-2 t p-4 cursor-pointer hover:bg-gray-600"
+        className="grid max-sm:grid-cols-3 md:grid-cols-7 gap-2 t p-4 cursor-pointer hover:bg-gray-600"
         onClick={() => onToggle(bead.id)}
         onKeyDown={handleKeyToggle}
         role="button"
@@ -37,11 +37,12 @@ export default function BeadRow({
             <ChevronDown className="h-5 w-5 text-blue-400" />{' '}
           </div>
           <span
-            className={`text-sm sm:text-base truncate ${isExpanded ? 'text-white' : 'text-blue-200'}
-             font-medium font-mono`}
-          >
-            {bead.name}
-          </span>
+  className={`text-sm sm:text-base truncate ${isExpanded ? 'text-white' : 'text-blue-200'}
+   font-medium font-mono`}
+>
+  {bead.name.replace(/^#/, '')}
+</span>
+
         </div>
 
         {/* Timestamp */}
@@ -59,18 +60,8 @@ export default function BeadRow({
         </div>
 
         {/* Reward */}
-        <div
-          className={`text-white font-medium text-sm sm:text-base ${
-            isRewardOpen ? 'pb-6' : ''
-          }`}
-          onClick={(e) => {
-            e.stopPropagation();
-            setIsRewardOpen(!isRewardOpen);
-          }}
-        >
-          <div className="cursor-pointer">
-            <BeadRewardTooltip reward={bead.reward} isOpen={isRewardOpen} />
-          </div>
+         <div className="text-white font-medium text-sm sm:text-base">
+          {`${bead.reward.toFixed(2)} BTC` }
         </div>
       </div>
 
