@@ -5,7 +5,7 @@ import { TrendsTab } from './Trends/TrendsTab';
 import { RewardsDashboard } from './Reward/RewardsSection';
 import { Transaction, Bead, BeadId } from './lib/Types';
 import { processBlockData } from './lib/Utils';
-import {PoolDominance} from './PoolDominance/PoolDominance';
+import { PoolDominance } from './PoolDominance/PoolDominance';
 
 export default function MinedSharesExplorer() {
   const [expandedBeads, setExpandedBeads] = useState<Record<BeadId, boolean>>({
@@ -127,7 +127,7 @@ export default function MinedSharesExplorer() {
       }
     };
 
-     ws.onclose = () => {
+    ws.onclose = () => {
       if (!isMounted) return;
       console.log('WebSocket disconnected');
       setWsConnected(false);
@@ -159,15 +159,13 @@ export default function MinedSharesExplorer() {
             <div className="space-y-8">
               <div className=" rounded-sm overflow-hidden">
                 {/* Table header */}
-                <div className="grid max-sm:grid-cols-3  md:grid-cols-7 p-4 border-b text-sm border-gray-800/80 font-medium">
+                <div className="grid max-sm:grid-cols-3  md:grid-cols-5 p-4 border-b text-sm border-gray-800/80 font-medium ml-3">
                   {[
                     'Bead Hash',
-                    'Timestamp',             
-               'Work',
+                    'Timestamp',
+                    'Work',
                     'Transactions',
                     'Rewards',
-                     'Miner',
-                    'Health',
                   ].map((label) => (
                     <div key={label} className="text-white font-semibold">
                       {label}
@@ -246,7 +244,7 @@ export default function MinedSharesExplorer() {
               <RewardsDashboard />
             </div>
           )}
-          {activeTab ==='pool' &&  <PoolDominance />}
+          {activeTab === 'pool' && <PoolDominance />}
         </div>
       </div>
     </div>

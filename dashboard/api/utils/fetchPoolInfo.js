@@ -4,7 +4,9 @@ export async function fetchPoolInfo() {
   try {
     const [poolInfoResponse, poolHashResponse] = await Promise.all([
       axios.get(`${process.env.MEMPOOL_API_URL}/api/v1/mining/pools/1w`),
-      axios.get(`${process.env.MEMPOOL_API_URL}/api/v1/mining/hashrate/pools/1w`), 
+      axios.get(
+        `${process.env.MEMPOOL_API_URL}/api/v1/mining/hashrate/pools/1w`
+      ),
     ]);
 
     const poolInfoData = poolInfoResponse.data.pools;
@@ -23,12 +25,10 @@ export async function fetchPoolInfo() {
         avgHealth: `${pool.avgMatchRate}%`,
         avgBlockFees: `${parseFloat(pool.avgFeeDelta).toFixed(8)} BTC`,
         emptyBlocks: pool.emptyBlocks,
-        
       };
     });
 
     return structuredData;
-    
   } catch (error) {
     console.error('Failed to fetch pool info:', error.message);
     return null;

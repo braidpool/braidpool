@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import {  BlockData ,RewardPoint } from './Types';
+import { BlockData, RewardPoint } from './Types';
 
 export function shortenHash(hash: string, start = 6, end = 6): string {
   if (hash.length <= start + end) return hash;
@@ -36,7 +36,6 @@ export function useCopyToClipboard(timeout = 1500) {
   return { copied, copy };
 }
 
-
 export function processBlockData(data: BlockData) {
   const {
     blockHash,
@@ -58,7 +57,7 @@ export function processBlockData(data: BlockData) {
     blockHash,
     timestamp: new Date(timestamp).toISOString(),
     height,
-    work:workInGH,
+    work: workInGH,
     txCount,
     reward,
     parent,
@@ -72,7 +71,7 @@ export function calculateRewardAnalytics(rewardHistory: RewardPoint[]) {
       avgUSD: 0,
       rewardsPerHour: { BTC: 0, USD: 0, blocks: 0 },
       rewardsPerWeek: { BTC: 0, USD: 0, blocks: 0 },
-      rewardsPerMonth: { BTC: 0, USD: 0, blocks: 0 }
+      rewardsPerMonth: { BTC: 0, USD: 0, blocks: 0 },
     };
   }
 
@@ -97,9 +96,15 @@ export function calculateRewardAnalytics(rewardHistory: RewardPoint[]) {
     return new Date(timestamp);
   };
 
-  const blocksLastHour = rewardHistory.filter(r => parseTimestamp(r.timestamp) >= oneHourAgo);
-  const blocksLastWeek = rewardHistory.filter(r => parseTimestamp(r.timestamp) >= oneWeekAgo);
-  const blocksLastMonth = rewardHistory.filter(r => parseTimestamp(r.timestamp) >= oneMonthAgo);
+  const blocksLastHour = rewardHistory.filter(
+    (r) => parseTimestamp(r.timestamp) >= oneHourAgo
+  );
+  const blocksLastWeek = rewardHistory.filter(
+    (r) => parseTimestamp(r.timestamp) >= oneWeekAgo
+  );
+  const blocksLastMonth = rewardHistory.filter(
+    (r) => parseTimestamp(r.timestamp) >= oneMonthAgo
+  );
 
   return {
     avgBTC: parseFloat(avgBTC.toFixed(8)),
@@ -107,18 +112,18 @@ export function calculateRewardAnalytics(rewardHistory: RewardPoint[]) {
     rewardsPerHour: {
       BTC: blocksLastHour.reduce((sum, r) => sum + r.rewardBTC, 0),
       USD: blocksLastHour.reduce((sum, r) => sum + r.rewardUSD, 0),
-      blocks: blocksLastHour.length
+      blocks: blocksLastHour.length,
     },
     rewardsPerWeek: {
       BTC: blocksLastWeek.reduce((sum, r) => sum + r.rewardBTC, 0),
       USD: blocksLastWeek.reduce((sum, r) => sum + r.rewardUSD, 0),
-      blocks: blocksLastWeek.length
+      blocks: blocksLastWeek.length,
     },
     rewardsPerMonth: {
       BTC: blocksLastMonth.reduce((sum, r) => sum + r.rewardBTC, 0),
       USD: blocksLastMonth.reduce((sum, r) => sum + r.rewardUSD, 0),
-      blocks: blocksLastMonth.length
-    }
+      blocks: blocksLastMonth.length,
+    },
   };
 }
 
@@ -126,9 +131,9 @@ export function formatValue(value: number, type: 'BTC' | 'USD'): string {
   if (type === 'BTC') {
     return value.toFixed(2);
   } else {
-    return value.toLocaleString('en-US', { 
-      minimumFractionDigits: 2, 
-      maximumFractionDigits: 2 
+    return value.toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     });
   }
 }

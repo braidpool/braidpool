@@ -13,7 +13,10 @@ export function TrendsTab({ timeRange }: { timeRange: string }) {
     <div className="space-y-8">
       {/* Subtabs */}
       <div className="border-b border-gray-800">
-        <nav className="-mb-px flex flex-wrap justify-center gap-x-10" aria-label="Tabs">
+        <nav
+          className="-mb-px flex flex-wrap justify-center gap-x-10"
+          aria-label="Tabs"
+        >
           {TrendsTABS.map((tab) => (
             <button
               key={tab.id}

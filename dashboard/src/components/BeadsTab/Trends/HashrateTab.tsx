@@ -166,7 +166,7 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
         />
         <AnimatedStatCard
           title="Network Difficulty"
-          value={hashrateData.networkDifficulty.toFixed(2)+ "T"}
+          value={hashrateData.networkDifficulty.toFixed(2) + 'T'}
         />
       </div>
     </div>

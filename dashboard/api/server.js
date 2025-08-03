@@ -64,7 +64,7 @@ async function sendNodeHealthData() {
 }
 async function sendPoolInfo() {
   try {
-    const stats = await fetchPoolInfo()
+    const stats = await fetchPoolInfo();
 
     if (stats) {
       const mempoolData = {
@@ -85,7 +85,7 @@ async function sendPoolInfo() {
 }
 async function sendReward() {
   try {
-    const stats = await fetchReward()
+    const stats = await fetchReward();
 
     if (stats) {
       const mempoolData = {
@@ -122,11 +122,11 @@ setInterval(() => {
     console.error('[Server] fetchLatencyData failed:', err)
   );
 
- sendReward();
+  sendReward();
   sendNodeHealthData().catch((err) =>
     console.error('[Server] fetchNodeHealth failed ', err)
   );
-  sendPoolInfo()
+  sendPoolInfo();
 }, 30000); // 30-second interval
 
 console.log(`WebSocket server running on ws://localhost:${PORT}`);

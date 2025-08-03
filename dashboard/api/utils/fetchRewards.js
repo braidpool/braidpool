@@ -4,11 +4,18 @@ let rewardHistory = [];
 
 export async function fetchReward() {
   try {
-    const { data: blocks } = await axios.get(`${process.env.MEMPOOL_API_URL}/api/blocks`);
+    const { data: blocks } = await axios.get(
+      `${process.env.MEMPOOL_API_URL}/api/blocks`
+    );
     const latestBlock = blocks[0];
-    const { data: txs } = await axios.get(`${process.env.MEMPOOL_API_URL}/api/block/${latestBlock.id}/txs`);
+    const { data: txs } = await axios.get(
+      `${process.env.MEMPOOL_API_URL}/api/block/${latestBlock.id}/txs`
+    );
     const coinbaseTx = txs[0];
-    const rewardSats = coinbaseTx.vout.reduce((sum, vout) => sum + vout.value, 0);
+    const rewardSats = coinbaseTx.vout.reduce(
+      (sum, vout) => sum + vout.value,
+      0
+    );
     const rewardBTC = rewardSats / 1e8;
     const { data: priceData } = await axios.get(
       'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd'
@@ -26,14 +33,13 @@ export async function fetchReward() {
       if (rewardHistory.length > 30) {
         rewardHistory = rewardHistory.slice(-30);
       }
-      console.log("NEW Block added to history:", rewardInfo);
+      console.log('NEW Block added to history:', rewardInfo);
     } else {
-      console.log("Block already in history, skipping duplicate");
+      console.log('Block already in history, skipping duplicate');
     }
     return rewardHistory;
-    
   } catch (err) {
     console.error('Error fetching latest block reward:', err.message);
-    return rewardHistory; 
+    return rewardHistory;
   }
 }

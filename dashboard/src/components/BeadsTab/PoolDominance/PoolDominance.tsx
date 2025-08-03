@@ -1,14 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { formatWork } from '../lib/Utils';
 import { PoolData } from '../lib/Types';
-import {
-  PieChart,
-  Pie,
-  Cell,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts';
-
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
+import { COLORS } from '../lib/Constants';
 export function PoolDominance() {
   const [activeTab, setActiveTab] = useState<'overview' | 'visualize'>(
     'overview'
@@ -17,16 +11,6 @@ export function PoolDominance() {
 
   const wsRef = useRef<WebSocket | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
-  const COLORS = [
-    '#003A6B',
-    '#1B5886',
-    '#3776A1',
-    ' #5293BB',
-    '#6EB1D6',
-    '#89CFF1',
-    '#91A6FF',
-  ];
-
   const pieData = (() => {
     if (!poolDominance || poolDominance.length === 0) return [];
 
@@ -67,7 +51,7 @@ export function PoolDominance() {
       } catch (err) {
         console.error('Error parsing websocket message :', err);
       }
-      console.log("pool dominance" , event.data)
+      console.log('pool dominance', event.data);
     };
 
     ws.onclose = () => {
@@ -90,10 +74,12 @@ export function PoolDominance() {
   return (
     <div className=" ">
       <div className="flex justify-between items-center mt-4">
-         <div className="flex items-center gap-4">
-            <h2 className="text-white text-xl font-semibold">Pool Dominance</h2>
-            <span className="bg-gray-700 text-gray-300 px-2 py-1 rounded text-xs mt-2">1 Week</span>
-          </div>
+        <div className="flex items-center gap-4">
+          <h2 className="text-white text-xl font-semibold">Pool Dominance</h2>
+          <span className="bg-gray-700 text-gray-300 px-2 py-1 rounded text-xs mt-2">
+            1 Week
+          </span>
+        </div>
         <div className="flex space-x-4 mb-4">
           {['overview', 'visualize'].map((tab) => (
             <button
@@ -184,31 +170,38 @@ export function PoolDominance() {
                 labelLine={false}
                 animationBegin={0}
                 animationDuration={0}
-                
-               
-                label= {({ cx, cy, midAngle, innerRadius, outerRadius, percent, name }) => {
-    if (percent < 0.03) return null; // Hide labels for very small slices
-    
-    const RADIAN = Math.PI / 180;
-    const radius = innerRadius + (outerRadius - innerRadius) * 1.2;
-    const x = cx + radius * Math.cos(-midAngle * RADIAN);
-    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                label={({
+                  cx,
+                  cy,
+                  midAngle,
+                  innerRadius,
+                  outerRadius,
+                  percent,
+                  name,
+                }) => {
+                  if (percent < 0.03) return null; // Hide labels for very small slices
 
-    return (
-      <text
-        x={x}
-        y={y}
-        fill="white"
-        textAnchor={x > cx ? 'start' : 'end'}
-        dominantBaseline="central"
-        fontSize={12}
-        fontWeight="500"
-        className="drop-shadow-lg"
-      >
-        {`${name}`}
-      </text>
-    );
-  }}
+                  const RADIAN = Math.PI / 180;
+                  const radius =
+                    innerRadius + (outerRadius - innerRadius) * 1.2;
+                  const x = cx + radius * Math.cos(-midAngle * RADIAN);
+                  const y = cy + radius * Math.sin(-midAngle * RADIAN);
+
+                  return (
+                    <text
+                      x={x}
+                      y={y}
+                      fill="white"
+                      textAnchor={x > cx ? 'start' : 'end'}
+                      dominantBaseline="central"
+                      fontSize={12}
+                      fontWeight="500"
+                      className="drop-shadow-lg"
+                    >
+                      {`${name}`}
+                    </text>
+                  );
+                }}
               >
                 {poolDominance.map((_, index) => (
                   <Cell
@@ -220,66 +213,79 @@ export function PoolDominance() {
                 ))}
               </Pie>
               <Tooltip
-  content={({ active, payload }) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      return (
-        <div className="bg-black border border-gray-700 rounded-lg p-4 shadow-lg">
-          <h3 className="text-white font-semibold text-lg mb-2">{data.pool}</h3>
-          <div className="space-y-1 text-sm">
-            <div className="flex justify-between items-center">
-              <span className="text-gray-300">Hashrate:</span>
-              <span className="text-white font-medium">
-                {formatWork(data.hashrate).value} {formatWork(data.hashrate).unit}
-              </span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-gray-300">Share:</span>
-              <span className="text-white font-medium">
-                {data.percentage
-                  ? data.percentage.toFixed(2)
-                  : ((data.hashrate /
-                      poolDominance.reduce((sum, p) => sum + p.hashrate, 0)) *
-                    100
-                    ).toFixed(2)}
-                %
-              </span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-gray-300">Blocks:</span>
-              <span className="text-white font-medium">{data.blocks}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-gray-300">Health:</span>
-              <span className="text-white font-medium">{data.avgHealth}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-gray-300">Block Fees:</span>
-              <span
-                className={`font-medium ${
-                  typeof data.avgBlockFees === 'string' &&
-                  data.avgBlockFees.startsWith('-')
-                    ? 'text-red-400'
-                    : 'text-green-400'
-                }`}
-              >
-                {(parseFloat(String(data.avgBlockFees)) * 100).toFixed(3)}%
-              </span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-gray-300">Empty Blocks:</span>
-              <span className="text-white font-medium">
-                {data.emptyBlocks}
-              </span>
-            </div>
-          </div>
-        </div>
-      );
-    }
-    return null;
-  }}
-/>
-
+                content={({ active, payload }) => {
+                  if (active && payload && payload.length) {
+                    const data = payload[0].payload;
+                    return (
+                      <div className="bg-black border border-gray-700 rounded-lg p-4 shadow-lg">
+                        <h3 className="text-white font-semibold text-lg mb-2">
+                          {data.pool}
+                        </h3>
+                        <div className="space-y-1 text-sm">
+                          <div className="flex justify-between items-center">
+                            <span className="text-gray-300">Hashrate:</span>
+                            <span className="text-white font-medium">
+                              {formatWork(data.hashrate).value}{' '}
+                              {formatWork(data.hashrate).unit}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-gray-300">Share:</span>
+                            <span className="text-white font-medium">
+                              {data.percentage
+                                ? data.percentage.toFixed(2)
+                                : (
+                                    (data.hashrate /
+                                      poolDominance.reduce(
+                                        (sum, p) => sum + p.hashrate,
+                                        0
+                                      )) *
+                                    100
+                                  ).toFixed(2)}
+                              %
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-gray-300">Blocks:</span>
+                            <span className="text-white font-medium">
+                              {data.blocks}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-gray-300">Health:</span>
+                            <span className="text-white font-medium">
+                              {data.avgHealth}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-gray-300">Block Fees:</span>
+                            <span
+                              className={`font-medium ${
+                                typeof data.avgBlockFees === 'string' &&
+                                data.avgBlockFees.startsWith('-')
+                                  ? 'text-red-400'
+                                  : 'text-green-400'
+                              }`}
+                            >
+                              {(
+                                parseFloat(String(data.avgBlockFees)) * 100
+                              ).toFixed(3)}
+                              %
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-gray-300">Empty Blocks:</span>
+                            <span className="text-white font-medium">
+                              {data.emptyBlocks}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                }}
+              />
             </PieChart>
           </ResponsiveContainer>
         </div>

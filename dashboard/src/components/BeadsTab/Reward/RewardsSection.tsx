@@ -1,21 +1,33 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { calculateRewardAnalytics,formatValue } from '../lib/Utils';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  CartesianGrid,
+} from 'recharts';
+import { calculateRewardAnalytics, formatValue } from '../lib/Utils';
 import { RewardPoint } from '../lib/Types';
 
-export  function RewardsDashboard() {
+export function RewardsDashboard() {
   const [rewardHistory, setRewardHistory] = useState<RewardPoint[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     const ws = new WebSocket('ws://localhost:5000');
     wsRef.current = ws;
+    let isMounted = true;
 
     ws.onopen = () => {
+      if (!isMounted) return;
       console.log('WebSocket connected');
     };
 
     ws.onmessage = (event) => {
+      if (!isMounted) return;
       try {
         const message = JSON.parse(event.data);
         if (message.type === 'reward_update') {
@@ -29,15 +41,14 @@ export  function RewardsDashboard() {
               rewardUSD: Number(d.rewardUSD),
             }));
 
-            console.log("Parsed reward data:", parsedData);
             setRewardHistory(parsedData);
           } else {
             console.error('Expected array but got:', typeof rawData, rawData);
           }
         }
-        console.log("Rewards received:", event.data);
+        console.log('Rewards received:', event.data);
       } catch (err) {
-        console.error("WebSocket JSON error:", err);
+        console.error('WebSocket JSON error:', err);
       }
     };
 
@@ -46,19 +57,31 @@ export  function RewardsDashboard() {
     };
 
     ws.onclose = () => {
+      if (!isMounted) return;
       console.log('WebSocket disconnected');
     };
 
     return () => {
-      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        wsRef.current.close();
+      isMounted = false;
+      ws.onopen = null;
+      ws.onclose = null;
+      ws.onerror = null;
+      ws.onmessage = null;
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close();
       }
     };
   }, []);
 
   const analytics = calculateRewardAnalytics(rewardHistory);
 
-  const StatCard = ({ title, btcValue, usdValue, blocks, timeframe }: {
+  const StatCard = ({
+    title,
+    btcValue,
+    usdValue,
+    blocks,
+    timeframe,
+  }: {
     title: string;
     btcValue: number;
     usdValue: number;
@@ -87,8 +110,10 @@ export  function RewardsDashboard() {
     <div className="space-y-6">
       {/* Analytics Cards */}
       <div className="w-full  p-6 rounded-xl border border-gray-700">
-        <h2 className="text-white text-lg font-semibold mb-4">Reward Analytics</h2>
-        
+        <h2 className="text-white text-lg font-semibold mb-4">
+          Reward Analytics
+        </h2>
+
         {rewardHistory.length === 0 ? (
           <div className="flex items-center justify-center h-32">
             <div className="text-gray-400">Waiting for reward data...</div>
@@ -100,7 +125,7 @@ export  function RewardsDashboard() {
               btcValue={analytics.avgBTC}
               usdValue={analytics.avgUSD}
             />
-            
+
             <StatCard
               title="Last Hour"
               btcValue={analytics.rewardsPerHour.BTC}
@@ -108,7 +133,7 @@ export  function RewardsDashboard() {
               blocks={analytics.rewardsPerHour.blocks}
               timeframe="in last hour"
             />
-            
+
             <StatCard
               title="Last Week"
               btcValue={analytics.rewardsPerWeek.BTC}
@@ -116,7 +141,7 @@ export  function RewardsDashboard() {
               blocks={analytics.rewardsPerWeek.blocks}
               timeframe="in last week"
             />
-            
+
             <StatCard
               title="Last Month"
               btcValue={analytics.rewardsPerMonth.BTC}
@@ -131,10 +156,14 @@ export  function RewardsDashboard() {
       {/* Chart */}
       <div className="w-full h-[400px]  p-6 rounded-xl border border-gray-700">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-white text-lg font-semibold">BTC vs USD Block Rewards</h2>
-          <span className="text-gray-400 text-sm">({rewardHistory.length} blocks)</span>
+          <h2 className="text-white text-lg font-semibold">
+            BTC vs USD Block Rewards
+          </h2>
+          <span className="text-gray-400 text-sm">
+            ({rewardHistory.length} blocks)
+          </span>
         </div>
-        
+
         {rewardHistory.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-gray-400">Waiting for block data...</div>
@@ -144,12 +173,35 @@ export  function RewardsDashboard() {
             <LineChart data={rewardHistory}>
               <CartesianGrid strokeDasharray="3 3" stroke="#333" />
               <XAxis dataKey="height" stroke="#aaa" />
-              <YAxis yAxisId="left" stroke="#fbbf24" domain={['auto', 'auto']} />
-              <YAxis yAxisId="right" orientation="right" stroke="#60a5fa" domain={['auto', 'auto']} />
+              <YAxis
+                yAxisId="left"
+                stroke="#fbbf24"
+                domain={['auto', 'auto']}
+              />
+              <YAxis
+                yAxisId="right"
+                orientation="right"
+                stroke="#60a5fa"
+                domain={['auto', 'auto']}
+              />
               <Tooltip />
               <Legend />
-              <Line yAxisId="left" type="monotone" dataKey="rewardBTC" stroke="#fbbf24" name="BTC Reward" dot={false} />
-              <Line yAxisId="right" type="monotone" dataKey="rewardUSD" stroke="#60a5fa" name="USD Reward" dot={false} />
+              <Line
+                yAxisId="left"
+                type="monotone"
+                dataKey="rewardBTC"
+                stroke="#fbbf24"
+                name="BTC Reward"
+                dot={false}
+              />
+              <Line
+                yAxisId="right"
+                type="monotone"
+                dataKey="rewardUSD"
+                stroke="#60a5fa"
+                name="USD Reward"
+                dot={false}
+              />
             </LineChart>
           </ResponsiveContainer>
         )}
