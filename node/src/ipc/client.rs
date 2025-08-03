@@ -1,24 +1,15 @@
+use capnp_rpc::{rpc_twoparty_capnp, twoparty, RpcSystem};
+use futures::FutureExt;
 use std::collections::VecDeque;
 use std::error::Error;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-
-use capnp_rpc::{pry, rpc_twoparty_capnp, twoparty, RpcSystem};
-use futures::FutureExt;
+use std::vec;
 use tokio::net::UnixStream;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::{self, JoinHandle};
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
-
-use crate::chain_capnp::{
-    chain::Client as ChainClient,
-    chain_notifications::{
-        BlockConnectedParams, BlockConnectedResults, ChainStateFlushedParams,
-        ChainStateFlushedResults, DestroyParams, DestroyResults, UpdatedBlockTipParams,
-        UpdatedBlockTipResults,
-    },
-};
 
 use crate::error::BraidpoolError;
 use crate::init_capnp::init::Client as InitClient;
@@ -31,12 +22,27 @@ pub fn bytes_to_hex(bytes: &[u8]) -> String {
         .collect::<String>()
 }
 
+#[derive(Debug, Clone)]
+pub struct CheckBlockResult {
+    pub reason: String,
+    pub debug: String,
+    pub result: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct BlockTemplateComponents {
+    pub header: Vec<u8>,
+    pub coinbase_transaction: Vec<u8>,
+    pub fees: Vec<u64>,
+    pub coinbase_merkle_path: Vec<Vec<u8>>,
+    pub coinbase_commitment: Vec<u8>,
+    pub block_hex: Vec<u8>,
+}
+
 // Bitcoin notification events
 #[derive(Debug, Clone)]
 pub enum BitcoinNotification {
-    BlockConnected { height: u32, hash: Vec<u8> },
-    UpdatedBlockTip,
-    ChainStateFlushed,
+    TipChanged { height: u32, hash: Vec<u8> },
     ConnectionLost { reason: String },
 }
 
@@ -58,12 +64,24 @@ enum BitcoinRequest {
         response: oneshot::Sender<Result<Vec<u8>, String>>,
         priority: RequestPriority,
     },
+    GetBlockTemplateComponents {
+        rules: Option<Vec<String>>,
+        response: oneshot::Sender<Result<BlockTemplateComponents, String>>,
+        priority: RequestPriority,
+    },
     IsInitialBlockDownload {
         response: oneshot::Sender<Result<bool, String>>,
         priority: RequestPriority,
     },
-    IsRecentlySynced {
-        response: oneshot::Sender<Result<bool, String>>,
+    GetMiningTipInfo {
+        response: oneshot::Sender<Result<(u32, Vec<u8>), String>>,
+        priority: RequestPriority,
+    },
+    CheckBlock {
+        block_data: Vec<u8>,
+        check_merkle_root: bool,
+        check_pow: bool,
+        response: oneshot::Sender<Result<CheckBlockResult, String>>,
         priority: RequestPriority,
     },
 }
@@ -133,11 +151,13 @@ impl PriorityRequestQueue {
 
     fn enqueue(&mut self, request: BitcoinRequest) -> Result<(), BraidpoolError> {
         let priority = match &request {
-            BitcoinRequest::IsRecentlySynced { priority, .. } => *priority,
             BitcoinRequest::RemoveTransaction { priority, .. } => *priority,
             BitcoinRequest::RemoveMultipleTransactions { priority, .. } => *priority,
             BitcoinRequest::GetBlockTemplate { priority, .. } => *priority,
+            BitcoinRequest::GetBlockTemplateComponents { priority, .. } => *priority,
             BitcoinRequest::IsInitialBlockDownload { priority, .. } => *priority,
+            BitcoinRequest::CheckBlock { priority, .. } => *priority,
+            BitcoinRequest::GetMiningTipInfo { priority, .. } => *priority,
         };
 
         let result = match priority {
@@ -204,9 +224,6 @@ impl PriorityRequestQueue {
 
     fn send_queue_full_error(&self, dropped_request: BitcoinRequest) {
         match dropped_request {
-            BitcoinRequest::IsRecentlySynced { response, .. } => {
-                let _ = response.send(Err("Queue full - request dropped".to_string()));
-            }
             BitcoinRequest::RemoveTransaction { response, .. } => {
                 let _ = response.send(Err("Queue full - request dropped".to_string()));
             }
@@ -216,7 +233,16 @@ impl PriorityRequestQueue {
             BitcoinRequest::GetBlockTemplate { response, .. } => {
                 let _ = response.send(Err("Queue full - request dropped".to_string()));
             }
+            BitcoinRequest::GetBlockTemplateComponents { response, .. } => {
+                let _ = response.send(Err("Queue full - request dropped".to_string()));
+            }
             BitcoinRequest::IsInitialBlockDownload { response, .. } => {
+                let _ = response.send(Err("Queue full - request dropped".to_string()));
+            }
+            BitcoinRequest::CheckBlock { response, .. } => {
+                let _ = response.send(Err("Queue full - request dropped".to_string()));
+            }
+            BitcoinRequest::GetMiningTipInfo { response, .. } => {
                 let _ = response.send(Err("Queue full - request dropped".to_string()));
             }
         }
@@ -260,96 +286,9 @@ impl PriorityRequestQueue {
     }
 }
 
-// Notification handler
-pub struct BraidpoolNotificationHandler {
-    notification_sender: mpsc::UnboundedSender<BitcoinNotification>,
-}
-
-impl BraidpoolNotificationHandler {
-    fn new(notification_sender: mpsc::UnboundedSender<BitcoinNotification>) -> Self {
-        Self {
-            notification_sender,
-        }
-    }
-}
-
-impl crate::chain_capnp::chain_notifications::Server for BraidpoolNotificationHandler {
-    fn destroy(
-        &mut self,
-        _: DestroyParams,
-        _: DestroyResults,
-    ) -> ::capnp::capability::Promise<(), ::capnp::Error> {
-        ::capnp::capability::Promise::ok(())
-    }
-
-    fn block_connected(
-        &mut self,
-        params: BlockConnectedParams,
-        _: BlockConnectedResults,
-    ) -> ::capnp::capability::Promise<(), ::capnp::Error> {
-        if let Ok(info) = pry!(params.get()).get_block() {
-            let height = info.get_height() as u32;
-            let hash = info.get_hash().map(|h| h.to_vec()).unwrap_or_default();
-            let notification = BitcoinNotification::BlockConnected { height, hash };
-            let _ = self.notification_sender.send(notification);
-        }
-        ::capnp::capability::Promise::ok(())
-    }
-
-    fn transaction_added_to_mempool(
-        &mut self,
-        _: crate::chain_capnp::chain_notifications::TransactionAddedToMempoolParams,
-        _: crate::chain_capnp::chain_notifications::TransactionAddedToMempoolResults,
-    ) -> ::capnp::capability::Promise<(), ::capnp::Error> {
-        // No-op: We don't want to handle mempool transactions
-        ::capnp::capability::Promise::ok(())
-    }
-
-    fn transaction_removed_from_mempool(
-        &mut self,
-        _: crate::chain_capnp::chain_notifications::TransactionRemovedFromMempoolParams,
-        _: crate::chain_capnp::chain_notifications::TransactionRemovedFromMempoolResults,
-    ) -> ::capnp::capability::Promise<(), ::capnp::Error> {
-        // No-op: We don't want to handle mempool transactions
-        ::capnp::capability::Promise::ok(())
-    }
-
-    fn block_disconnected(
-        &mut self,
-        _: crate::chain_capnp::chain_notifications::BlockDisconnectedParams,
-        _: crate::chain_capnp::chain_notifications::BlockDisconnectedResults,
-    ) -> ::capnp::capability::Promise<(), ::capnp::Error> {
-        // No-op: We don't need to handle block disconnections
-        ::capnp::capability::Promise::ok(())
-    }
-
-    fn updated_block_tip(
-        &mut self,
-        _: UpdatedBlockTipParams,
-        _: UpdatedBlockTipResults,
-    ) -> ::capnp::capability::Promise<(), ::capnp::Error> {
-        let _ = self
-            .notification_sender
-            .send(BitcoinNotification::UpdatedBlockTip);
-        ::capnp::capability::Promise::ok(())
-    }
-
-    fn chain_state_flushed(
-        &mut self,
-        _: ChainStateFlushedParams,
-        _: ChainStateFlushedResults,
-    ) -> ::capnp::capability::Promise<(), ::capnp::Error> {
-        let _ = self
-            .notification_sender
-            .send(BitcoinNotification::ChainStateFlushed);
-        ::capnp::capability::Promise::ok(())
-    }
-}
-
 // Bitcoin RPC client with both chain and mining interfaces
 pub struct BitcoinRpcClient {
     ipc_task: JoinHandle<Result<(), capnp::Error>>,
-    chain_interface: ChainClient,
     mining_interface: crate::mining_capnp::mining::Client,
     thread_client: ThreadClient,
     disconnector: capnp_rpc::Disconnector<twoparty::VatId>,
@@ -378,12 +317,6 @@ impl BitcoinRpcClient {
         let response = mk_thread_req.send().promise.await?;
         let thread = response.get()?.get_result()?;
 
-        // Create chain interface
-        let mut mk_chain_req = init_interface.make_chain_request();
-        mk_chain_req.get().get_context()?.set_thread(thread.clone());
-        let response = mk_chain_req.send().promise.await?;
-        let chain_interface = response.get()?.get_result()?;
-
         // Create mining interface
         let mut mk_mining_req = init_interface.make_mining_request();
         mk_mining_req
@@ -396,7 +329,6 @@ impl BitcoinRpcClient {
         Ok(Self {
             ipc_task,
             thread_client: thread,
-            chain_interface,
             mining_interface,
             disconnector,
         })
@@ -406,7 +338,7 @@ impl BitcoinRpcClient {
         &self,
         txid: &[u8],
     ) -> Result<bool, Box<dyn Error>> {
-        let mut delete_req = self.chain_interface.remove_tx_from_mempool_request();
+        let mut delete_req = self.mining_interface.remove_tx_from_mempool_request();
         delete_req
             .get()
             .get_context()?
@@ -438,86 +370,8 @@ impl BitcoinRpcClient {
         Ok((height, hash))
     }
 
-    pub async fn get_block_timestamp_by_height(&self, height: u32) -> Result<u64, Box<dyn Error>> {
-        let mut hash_req = self.chain_interface.get_block_hash_request();
-        hash_req
-            .get()
-            .get_context()?
-            .set_thread(self.thread_client.clone());
-        hash_req.get().set_height(height as i32);
-
-        let hash_response = hash_req.send().promise.await?;
-        let hash_result = hash_response.get()?;
-        if !hash_result.has_result() {
-            return Err(format!("Block hash at height {} not found", height).into());
-        }
-        let block_hash = hash_result.get_result()?.to_vec();
-        let mut find_block_req = self.chain_interface.find_block_request();
-        find_block_req
-            .get()
-            .get_context()?
-            .set_thread(self.thread_client.clone());
-        find_block_req.get().init_block().set_want_time(true);
-        find_block_req.get().set_hash(&block_hash);
-
-        let response = find_block_req.send().promise.await?;
-        let block_result = response.get()?;
-        if !block_result.get_result() {
-            return Err(format!("Block at height {} not found", height).into());
-        }
-        let found_block = block_result.get_block()?;
-        let timestamp = found_block.get_time() as u64;
-        Ok(timestamp)
-    }
-
-    pub async fn is_recently_synced(&self) -> Result<bool, Box<dyn Error>> {
-        let ibd = self.is_initial_block_download().await?;
-        if ibd {
-            log::info!("Node is in initial block download - not synced");
-            return Ok(false);
-        }
-        let (tip_height, _tip_hash) = match self.get_mining_tip_info().await {
-            Ok(info) => info,
-            Err(e) => {
-                log::warn!("Failed to get mining tip info: {} - aborting", e);
-                return Ok(false); // If we can't get tip but not in IBD, abort
-            }
-        };
-        let tip_timestamp = match self.get_block_timestamp_by_height(tip_height).await {
-            Ok(timestamp) => timestamp,
-            Err(e) => {
-                log::warn!(
-                    "Failed to get timestamp for block #{}: {} - using IBD check only",
-                    tip_height,
-                    e
-                );
-                return Ok(false); // If we can't get timestamp but not in IBD, abort
-            }
-        };
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-
-        let time_diff_seconds = now.saturating_sub(tip_timestamp);
-        let time_diff_minutes = time_diff_seconds / 60;
-
-        // Consider synced if latest block is within 150 minutes (worst case 2.5 hours)
-        let is_recent = time_diff_seconds < 9000;
-        log::info!(
-            "Sync check - Block #{}, timestamp: {}, now: {}, diff: {}min, synced: {}",
-            tip_height,
-            tip_timestamp,
-            now,
-            time_diff_minutes,
-            is_recent
-        );
-
-        Ok(is_recent)
-    }
-
     pub async fn is_initial_block_download(&self) -> Result<bool, Box<dyn Error>> {
-        let mut ibd_req = self.chain_interface.is_initial_block_download_request();
+        let mut ibd_req = self.mining_interface.is_initial_block_download_request();
         ibd_req
             .get()
             .get_context()?
@@ -551,20 +405,175 @@ impl BitcoinRpcClient {
         Ok(template_data.to_vec())
     }
 
-    pub async fn register_notifications(
+    pub async fn get_block_template_components(
         &self,
-        notification_sender: mpsc::UnboundedSender<BitcoinNotification>,
-    ) -> Result<(), Box<dyn Error>> {
-        let notif_handler =
-            capnp_rpc::new_client(BraidpoolNotificationHandler::new(notification_sender));
-        let mut register_req = self.chain_interface.handle_notifications_request();
-        register_req
+        _rules: Option<Vec<String>>,
+    ) -> Result<BlockTemplateComponents, Box<dyn Error>> {
+        let mut create_block_req = self.mining_interface.create_new_block_request();
+        let mut options = create_block_req.get().init_options();
+        options.set_block_reserved_weight(4000);
+        options.set_use_mempool(true);
+
+        let response = create_block_req.send().promise.await?;
+        let block_template_interface = response.get()?.get_result()?;
+
+        let mut block_req = block_template_interface.get_block_request();
+        block_req
             .get()
             .get_context()?
             .set_thread(self.thread_client.clone());
-        register_req.get().set_notifications(notif_handler);
-        register_req.send().promise.await?;
-        Ok(())
+        let block_response = block_req.send().promise.await?;
+        let full_block_data = block_response.get()?.get_result()?.to_vec();
+
+        let mut header_req = block_template_interface.get_block_header_request();
+        header_req
+            .get()
+            .get_context()?
+            .set_thread(self.thread_client.clone());
+        let header_response = header_req.send().promise.await?;
+        let header_data = header_response.get()?.get_result()?.to_vec();
+
+        let mut coinbase_req = block_template_interface.get_coinbase_tx_request();
+        coinbase_req
+            .get()
+            .get_context()?
+            .set_thread(self.thread_client.clone());
+        let coinbase_response = coinbase_req.send().promise.await?;
+        let coinbase_data = coinbase_response.get()?.get_result()?.to_vec();
+
+        let mut fees_req = block_template_interface.get_tx_fees_request();
+        fees_req
+            .get()
+            .get_context()?
+            .set_thread(self.thread_client.clone());
+        let fees_response = fees_req.send().promise.await?;
+        let fees_result = fees_response.get()?;
+        let fees_list = fees_result.get_result()?;
+        let mut fees_vec = Vec::new();
+        let mut fees_total: u64 = 0;
+        for i in 0..fees_list.len() {
+            let fee_value = fees_list.get(i);
+            fees_total = fees_total + fee_value as u64;
+            fees_vec.push(fee_value as u64);
+        }
+
+        let mut merkle_path_req = block_template_interface.get_coinbase_merkle_path_request();
+        merkle_path_req
+            .get()
+            .get_context()?
+            .set_thread(self.thread_client.clone());
+        let merkle_path_response = merkle_path_req.send().promise.await?;
+        let merkle_path_result = merkle_path_response.get()?;
+        let merkle_list = merkle_path_result.get_result()?;
+
+        let mut coinbase_merkle_path = Vec::new();
+        for i in 0..merkle_list.len() {
+            match merkle_list.get(i) {
+                Ok(hash_data) => {
+                    let hash_bytes = hash_data.to_vec();
+                    coinbase_merkle_path.push(hash_bytes);
+                }
+                Err(e) => {
+                    log::error!("Failed to get merkle[{}]: {}", i, e);
+                    break;
+                }
+            }
+        }
+
+        let mut commitment_req = block_template_interface.get_coinbase_commitment_request();
+        commitment_req
+            .get()
+            .get_context()?
+            .set_thread(self.thread_client.clone());
+        let commitment_response = commitment_req.send().promise.await?;
+        let commitment_data = commitment_response.get()?.get_result()?.to_vec();
+
+        Ok(BlockTemplateComponents {
+            header: header_data,
+            coinbase_transaction: coinbase_data,
+            fees: fees_vec,
+            coinbase_merkle_path,
+            coinbase_commitment: commitment_data,
+            block_hex: full_block_data,
+        })
+    }
+
+    pub async fn check_block(
+        &self,
+        block_data: &[u8],
+        check_merkle_root: bool,
+        check_pow: bool,
+    ) -> Result<CheckBlockResult, Box<dyn Error>> {
+        let mut check_block_req = self.mining_interface.check_block_request();
+
+        check_block_req.get().set_block(block_data);
+
+        let mut options = check_block_req.get().init_options();
+        options.set_check_merkle_root(check_merkle_root);
+        options.set_check_pow(check_pow);
+
+        let response = check_block_req.send().promise.await?;
+        let result = response.get()?;
+
+        let reason = result.get_reason()?.to_string().unwrap_or_default();
+        let debug = result.get_debug()?.to_string().unwrap_or_default();
+        let check_result = result.get_result();
+
+        Ok(CheckBlockResult {
+            reason,
+            debug,
+            result: check_result,
+        })
+    }
+
+    pub async fn wait_for_tip_change(
+        &self,
+        mut current_tip: Vec<u8>,
+        timeout: f64,
+        notification_sender: mpsc::UnboundedSender<BitcoinNotification>,
+    ) -> Result<(), Box<dyn Error>> {
+        loop {
+            let mut wait_req = self.mining_interface.wait_tip_changed_request();
+            wait_req
+                .get()
+                .get_context()?
+                .set_thread(self.thread_client.clone());
+            wait_req.get().set_current_tip(&current_tip);
+            wait_req.get().set_timeout(timeout);
+
+            match wait_req.send().promise.await {
+                Ok(response) => {
+                    let result = response.get()?;
+                    let new_tip = result.get_result()?;
+                    let height = new_tip.get_height() as u32;
+                    let hash = new_tip.get_hash()?.to_vec();
+
+                    if hash != current_tip {
+                        let notification = BitcoinNotification::TipChanged {
+                            height,
+                            hash: hash.clone(),
+                        };
+                        if let Err(e) = notification_sender.send(notification) {
+                            log::error!("Failed to send tip change notification: {}", e);
+                            if notification_sender.is_closed() {
+                                log::error!("Notification channel closed, stopping tip monitoring");
+                                return Err("Notification channel closed".into());
+                            }
+                        }
+                        current_tip = hash;
+                    } else {
+                        log::debug!("waitTipChanged returned same tip, maybe a timeout)");
+                    }
+                }
+                Err(e) => {
+                    log::error!("waitTipChanged failed: {}", e);
+                    let _ = notification_sender.send(BitcoinNotification::ConnectionLost {
+                        reason: format!("waitTipChanged error: {}", e),
+                    });
+                    return Err(Box::new(e));
+                }
+            }
+        }
     }
 
     pub async fn disconnect(self) -> Result<(), capnp::Error> {
@@ -619,6 +628,7 @@ pub struct SharedBitcoinClient {
     request_sender: mpsc::UnboundedSender<QueuedRequest>,
     notification_receiver: Option<mpsc::UnboundedReceiver<BitcoinNotification>>,
     processor_task: Option<JoinHandle<()>>,
+    tip_watcher_task: Option<JoinHandle<()>>,
     shutdown_sender: Option<mpsc::UnboundedSender<()>>,
     metrics: Arc<QueueMetrics>,
 }
@@ -640,12 +650,36 @@ impl SharedBitcoinClient {
 
         let stream = UnixStream::connect(socket_path).await?;
         let bitcoin_client = BitcoinRpcClient::new(stream).await?;
-        bitcoin_client
-            .register_notifications(notification_sender)
-            .await?;
+
+        let (_, initial_tip_hash) = bitcoin_client
+            .get_mining_tip_info()
+            .await
+            .unwrap_or((0, vec![]));
 
         let metrics = Arc::new(QueueMetrics::default());
         let queue_limits = config.queue_limits.clone();
+
+        let tip_watcher_task = tokio::task::spawn_local({
+            let bitcoin_client_clone = UnixStream::connect(socket_path).await?;
+            let bitcoin_client_for_watcher = BitcoinRpcClient::new(bitcoin_client_clone).await?;
+            let notification_sender_clone = notification_sender.clone();
+
+            async move {
+                if let Err(e) = bitcoin_client_for_watcher
+                    .wait_for_tip_change(
+                        initial_tip_hash,
+                        1728000.0, // 8 hours
+                        notification_sender_clone.clone(),
+                    )
+                    .await
+                {
+                    log::error!("Tip watcher failed: {}", e);
+                    let _ = notification_sender_clone.send(BitcoinNotification::ConnectionLost {
+                        reason: format!("Tip watcher error: {}", e),
+                    });
+                }
+            }
+        });
 
         let processor_task = tokio::task::spawn_local({
             let metrics = metrics.clone();
@@ -701,7 +735,8 @@ impl SharedBitcoinClient {
                             match notification {
                                 Some(notif) => {
                                     if let Some(ref sender) = external_notification_sender {
-                                        if sender.send(notif).is_err() {
+                                        if let Err(e) = sender.send(notif) {
+                                            log::error!("Failed to forward notification to external receiver: {}", e);
                                             break;
                                         }
                                     }
@@ -731,6 +766,7 @@ impl SharedBitcoinClient {
             request_sender,
             notification_receiver: Some(external_notification_receiver),
             processor_task: Some(processor_task),
+            tip_watcher_task: Some(tip_watcher_task),
             shutdown_sender: Some(shutdown_sender),
             metrics,
         })
@@ -739,16 +775,6 @@ impl SharedBitcoinClient {
     async fn process_single_request(bitcoin_client: &BitcoinRpcClient, request: BitcoinRequest) {
         let processing_start = Instant::now();
         match request {
-            BitcoinRequest::IsRecentlySynced { response, .. } => {
-                match bitcoin_client.is_recently_synced().await {
-                    Ok(is_synced) => {
-                        let _ = response.send(Ok(is_synced));
-                    }
-                    Err(e) => {
-                        let _ = response.send(Err(e.to_string()));
-                    }
-                }
-            }
             BitcoinRequest::IsInitialBlockDownload { response, .. } => {
                 match bitcoin_client.is_initial_block_download().await {
                     Ok(is_ibd) => {
@@ -780,6 +806,16 @@ impl SharedBitcoinClient {
                     let _ = response.send(Err(e.to_string()));
                 }
             },
+            BitcoinRequest::GetBlockTemplateComponents {
+                rules, response, ..
+            } => match bitcoin_client.get_block_template_components(rules).await {
+                Ok(components) => {
+                    let _ = response.send(Ok(components));
+                }
+                Err(e) => {
+                    let _ = response.send(Err(e.to_string()));
+                }
+            },
             BitcoinRequest::RemoveMultipleTransactions {
                 txids, response, ..
             } => {
@@ -796,6 +832,35 @@ impl SharedBitcoinClient {
                     }
                 }
                 let _ = response.send(Ok(results));
+            }
+            BitcoinRequest::GetMiningTipInfo { response, .. } => {
+                match bitcoin_client.get_mining_tip_info().await {
+                    Ok(info) => {
+                        let _ = response.send(Ok(info));
+                    }
+                    Err(e) => {
+                        let _ = response.send(Err(e.to_string()));
+                    }
+                }
+            }
+            BitcoinRequest::CheckBlock {
+                block_data,
+                check_merkle_root,
+                check_pow,
+                response,
+                ..
+            } => {
+                match bitcoin_client
+                    .check_block(&block_data, check_merkle_root, check_pow)
+                    .await
+                {
+                    Ok(check_result) => {
+                        let _ = response.send(Ok(check_result));
+                    }
+                    Err(e) => {
+                        let _ = response.send(Err(e.to_string()));
+                    }
+                }
             }
         }
 
@@ -830,23 +895,6 @@ impl SharedBitcoinClient {
             && stats.queue_sizes.critical < 50
     }
 
-    pub async fn is_recently_synced(
-        &self,
-        priority: Option<RequestPriority>,
-    ) -> Result<bool, Box<dyn std::error::Error>> {
-        let (response_sender, response_receiver) = oneshot::channel();
-        let request = BitcoinRequest::IsRecentlySynced {
-            response: response_sender,
-            priority: priority.unwrap_or(RequestPriority::High),
-        };
-        self.request_sender.send(QueuedRequest {
-            request,
-            enqueue_time: Instant::now(),
-        })?;
-        let result = response_receiver.await??;
-        Ok(result)
-    }
-
     pub async fn get_block_template(
         &self,
         rules: Option<Vec<String>>,
@@ -857,7 +905,48 @@ impl SharedBitcoinClient {
         let request = BitcoinRequest::GetBlockTemplate {
             rules,
             response: response_sender,
-            priority: priority.unwrap_or(RequestPriority::Critical),
+            priority: priority.unwrap_or(RequestPriority::High),
+        };
+
+        self.request_sender.send(QueuedRequest {
+            request,
+            enqueue_time: Instant::now(),
+        })?;
+
+        let result = response_receiver.await??;
+        Ok(result)
+    }
+
+    pub async fn get_block_template_components(
+        &self,
+        rules: Option<Vec<String>>,
+        priority: Option<RequestPriority>,
+    ) -> Result<BlockTemplateComponents, Box<dyn std::error::Error>> {
+        let (response_sender, response_receiver) = oneshot::channel();
+
+        let request = BitcoinRequest::GetBlockTemplateComponents {
+            rules,
+            response: response_sender,
+            priority: priority.unwrap_or(RequestPriority::High),
+        };
+
+        self.request_sender.send(QueuedRequest {
+            request,
+            enqueue_time: Instant::now(),
+        })?;
+
+        let result = response_receiver.await??;
+        Ok(result)
+    }
+
+    pub async fn get_mining_tip_info(
+        &self,
+        priority: Option<RequestPriority>,
+    ) -> Result<(u32, Vec<u8>), Box<dyn std::error::Error>> {
+        let (response_sender, response_receiver) = oneshot::channel();
+        let request = BitcoinRequest::GetMiningTipInfo {
+            response: response_sender,
+            priority: priority.unwrap_or(RequestPriority::High),
         };
 
         self.request_sender.send(QueuedRequest {
@@ -886,6 +975,32 @@ impl SharedBitcoinClient {
         Ok(result)
     }
 
+    pub async fn check_block(
+        &self,
+        block_data: Vec<u8>,
+        check_merkle_root: bool,
+        check_pow: bool,
+        priority: Option<RequestPriority>,
+    ) -> Result<CheckBlockResult, Box<dyn std::error::Error>> {
+        let (response_sender, response_receiver) = oneshot::channel();
+
+        let request = BitcoinRequest::CheckBlock {
+            block_data,
+            check_merkle_root,
+            check_pow,
+            response: response_sender,
+            priority: priority.unwrap_or(RequestPriority::High),
+        };
+
+        self.request_sender.send(QueuedRequest {
+            request,
+            enqueue_time: Instant::now(),
+        })?;
+
+        let result = response_receiver.await??;
+        Ok(result)
+    }
+
     pub fn report_metrics(metrics: &QueueMetrics, queue: &PriorityRequestQueue) {
         let total = metrics.total_requests.load(Ordering::Relaxed);
         let processed = metrics.processed_requests.load(Ordering::Relaxed);
@@ -907,6 +1022,12 @@ impl SharedBitcoinClient {
         }
     }
 
+    pub fn take_notification_receiver(
+        &mut self,
+    ) -> Option<mpsc::UnboundedReceiver<BitcoinNotification>> {
+        self.notification_receiver.take()
+    }
+
     pub async fn shutdown(mut self) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(shutdown_sender) = self.shutdown_sender.take() {
             let _ = shutdown_sender.send(());
@@ -916,6 +1037,9 @@ impl SharedBitcoinClient {
             let _ = task.await;
         }
 
+        if let Some(tip_task) = self.tip_watcher_task.take() {
+            let _ = tip_task.await;
+        }
         Ok(())
     }
 
@@ -964,11 +1088,5 @@ impl SharedBitcoinClient {
 
         let result = response_receiver.await??;
         Ok(result)
-    }
-
-    pub fn take_notification_receiver(
-        &mut self,
-    ) -> Option<mpsc::UnboundedReceiver<BitcoinNotification>> {
-        self.notification_receiver.take()
     }
 }
