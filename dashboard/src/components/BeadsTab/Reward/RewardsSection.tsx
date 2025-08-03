@@ -5,6 +5,7 @@ import { RewardData } from '../lib/Types';
 import { generateRewardHistory } from './generateRewardHistory';
 import AnimatedStatCard from '../AnimatedStatCard';
 import { processRewardsData } from '../lib/Utils';
+import { WEBSOCKET_URLS } from '../../../URLs';
 
 export function RewardsDashboard() {
   const [rewardData, setRewardData] = useState<RewardData | null>(null);
@@ -16,7 +17,7 @@ export function RewardsDashboard() {
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    const ws = new WebSocket('ws://localhost:5000');
+    const ws = new WebSocket(WEBSOCKET_URLS.MAIN_WEBSOCKET);
     let isMounted = true;
     wsRef.current = ws;
     ws.onopen = () => {

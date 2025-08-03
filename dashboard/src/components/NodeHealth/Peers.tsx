@@ -1,8 +1,7 @@
 import { useState, useMemo } from 'react';
 import { PeerInfo } from './Types';
 import { formatBytes, paginate, calculateTotalPages } from './Utils';
-
-const ITEMS_PER_PAGE = 5;
+import { ITEMS_PER_PAGE } from './Constants';
 
 export default function Peers({ peers }: { peers: PeerInfo[] }) {
   const [currentPage, setCurrentPage] = useState(1);

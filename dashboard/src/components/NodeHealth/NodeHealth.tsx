@@ -6,6 +6,8 @@ import BandwidthPanel from './Bandwidth';
 import { InfoRow } from './InfoRow';
 import { TABS, useIsSmallScreen } from './Utils';
 import { shortenHash } from '../BeadsTab/lib/Utils';
+import { WEBSOCKET_URLS } from '../../URLs';
+import { MAX_RECONNECT_ATTEMPTS } from './Constants';
 
 import {
   BlockchainInfo,
@@ -40,10 +42,10 @@ const NodeHealth: React.FC = () => {
   useEffect(() => {
     let isMounted = true;
     let reconnectAttempts = 0;
-    const maxReconnectAttempts = 5;
+    const maxReconnectAttempts = MAX_RECONNECT_ATTEMPTS;
 
     const connect = () => {
-      const ws = new WebSocket('ws://localhost:5000');
+      const ws = new WebSocket(WEBSOCKET_URLS.MAIN_WEBSOCKET);
       wsRef.current = ws;
 
       ws.onopen = () => {

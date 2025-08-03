@@ -1,12 +1,11 @@
 import axios from 'axios';
 import { useState } from 'react';
+import { getBraidPoolBlockUrl, getBraidPoolBlocksUrl } from '../../URLs';
 
 // via mempool api
 export const getBlockInfo = async (hash: string): Promise<any> => {
   try {
-    const response = await axios.get(
-      `http://localhost:8999/api/v1/block/${hash}`
-    );
+    const response = await axios.get(getBraidPoolBlockUrl(hash));
     console.log(response.data);
     return response.data;
   } catch (error) {
@@ -17,7 +16,7 @@ export const getBlockInfo = async (hash: string): Promise<any> => {
 
 export const fetchPreviousBlocks = async () => {
   try {
-    const response = await fetch('http://localhost:8999/api/v1/blocks');
+    const response = await fetch(getBraidPoolBlocksUrl());
     if (!response.ok) throw new Error('Network response was not ok');
     const data = await response.json();
     return data;

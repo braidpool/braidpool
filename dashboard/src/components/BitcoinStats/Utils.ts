@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { useState } from 'react';
+import { getMempoolRecentUrl, getMempoolTransactionUrl, getBraidPoolReplacementsUrl } from '../../URLs';
 
 export const getCurrencySymbol = (curr: string) => {
   switch (curr) {
@@ -39,7 +40,7 @@ export const shortenAddress = (value: string): string => {
 // via esplora
 export const getLatestTransactions = async (): Promise<any> => {
   try {
-    const response = await axios.get('http://localhost:3002/mempool/recent');
+    const response = await axios.get(getMempoolRecentUrl());
     console.log(response.data);
     return response.data;
   } catch (error) {
@@ -51,7 +52,7 @@ export const getLatestTransactions = async (): Promise<any> => {
 // via esplora
 export const getTxInfo = async (txid: string): Promise<any> => {
   try {
-    const response = await axios.get(`http://localhost:3002/tx/${txid}`);
+    const response = await axios.get(getMempoolTransactionUrl(txid));
     console.log(response.data);
     return response.data;
   } catch (error) {
@@ -63,9 +64,7 @@ export const getTxInfo = async (txid: string): Promise<any> => {
 // via mempool api
 export const latestRBFTransactions = async (): Promise<any> => {
   try {
-    const response = await axios.get(
-      `http://localhost:8999/api/v1/replacements`
-    );
+    const response = await axios.get(getBraidPoolReplacementsUrl());
     console.log(response.data);
     return response.data;
   } catch (error) {

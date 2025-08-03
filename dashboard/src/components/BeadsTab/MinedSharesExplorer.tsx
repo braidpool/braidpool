@@ -5,6 +5,8 @@ import { TrendsTab } from './Trends/TrendsTab';
 import { RewardsDashboard } from './Reward/RewardsSection';
 import { Transaction, Bead, BeadId } from './lib/Types';
 import { processBlockData } from './lib/Utils';
+import { WEBSOCKET_URLS } from '../../URLs';
+import { ITEMS_PER_PAGE, DEFAULT_TIME_RANGE } from './Constants';
 
 export default function MinedSharesExplorer() {
   const [expandedBeads, setExpandedBeads] = useState<Record<BeadId, boolean>>({
@@ -16,10 +18,10 @@ export default function MinedSharesExplorer() {
   const [activeBead, setActiveBead] = useState<BeadId | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
-  const timeRange = 'month';
+  const timeRange = DEFAULT_TIME_RANGE;
 
   // Pagination state
-  const itemsPerPage = 5;
+  const itemsPerPage = ITEMS_PER_PAGE;
   const [currentPage, setCurrentPage] = useState(1);
 
   const totalPages = Math.ceil(liveBeads.length / itemsPerPage);
@@ -30,7 +32,7 @@ export default function MinedSharesExplorer() {
   );
 
   useEffect(() => {
-    const ws = new WebSocket('ws://localhost:5000');
+    const ws = new WebSocket(WEBSOCKET_URLS.MAIN_WEBSOCKET);
     let isMounted = true;
     wsRef.current = ws;
 
