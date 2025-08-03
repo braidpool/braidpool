@@ -1,6 +1,7 @@
 //All braidpool specific errors are defined here
 use std::fmt;
 
+use crate::stratum::{BlockTemplate, JobDetails};
 use bitcoin::address::ParseError as AddressParseError;
 use tokio::sync::oneshot;
 
@@ -30,6 +31,61 @@ pub enum ErrorKind {
     ConnectionBroken,
     LogicError,
 }
+#[derive(Debug)]
+pub enum StratumErrors {
+    InvalidMethod { method: String },
+    InvalidMethodParams { method: String },
+    MiningJobNotFound { job_id: u64 },
+    MiningJobInsertError { mining_job: JobDetails },
+    JobNotificationNotConstructed { job_template: BlockTemplate },
+    ResponseWriteError { error: std::io::Error },
+    InvalidCoinbase,
+}
+pub enum StratumResponseErrors {}
+impl fmt::Display for StratumErrors {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            StratumErrors::InvalidCoinbase => {
+                write!(f, "Provided coinbase is invalid")
+            }
+            StratumErrors::ResponseWriteError { error } => {
+                write!(f, "{:?}", error)
+            }
+            StratumErrors::JobNotificationNotConstructed { job_template } => {
+                write!(
+                    f,
+                    "The job notification for the given template could not be constructed - {:?}",
+                    job_template
+                )
+            }
+            StratumErrors::InvalidMethod { method } => {
+                write!(
+                    f,
+                    "Invalid method received from downstream namely - {:?}",
+                    method
+                )
+            }
+            StratumErrors::InvalidMethodParams { method } => {
+                write!(
+                    f,
+                    "Invalid params passed to the stratum method - {:?}",
+                    method
+                )
+            }
+            StratumErrors::MiningJobNotFound { job_id } => {
+                write!(
+                    f,
+                    "No mining job found with the provided job id - {:?}",
+                    job_id
+                )
+            }
+            StratumErrors::MiningJobInsertError { mining_job } => {
+                write!(f,"An error occurred while inserting the following job into the mining map - {:?}",mining_job)
+            }
+        }
+    }
+}
+
 /// Determines if an error indicates a connection/communication failure
 ///
 /// This function classifies errors to distinguish between:

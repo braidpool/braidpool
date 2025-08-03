@@ -1,6 +1,7 @@
 use bitcoin::consensus::encode::deserialize;
 use bitcoin::Network;
 use clap::Parser;
+use futures::lock::Mutex;
 use futures::StreamExt;
 use libp2p::{
     core::multiaddr::Multiaddr,
@@ -19,13 +20,13 @@ use node::{
     ipc,
     peer_manager::PeerManager,
     rpc_server::{parse_arguments, run_rpc_server},
+    stratum::{BlockTemplate, ConnectionMapping, Notifier, NotifyCmd, Server, StratumServerConfig},
 };
-use std::error::Error;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::sync::Arc;
+use std::{collections::HashMap, error::Error};
 use std::{fs, time::Duration};
-use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 
 use behaviour::{BraidPoolBehaviour, BraidPoolBehaviourEvent};
@@ -38,7 +39,7 @@ const SEED_DNS: &str = "/dnsaddr/french.braidpool.net";
 //combined addr for dns resolution and dialing of boot for peer discovery
 const ADDR_REFRENCE: &str =
     "/dnsaddr/french.braidpool.net/p2p/12D3KooWCXH2BiENJ7NkFUBSavd8Ed4ZSYKNdiFnYP5abSo36rGL";
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, RwLock};
 
 mod block_template;
 mod rpc;
@@ -55,6 +56,27 @@ mod proxy_capnp;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    //One will go into the IPC and the other will go to the `notifier`
+    let (notification_tx, notification_rx) = mpsc::channel::<NotifyCmd>(1024);
+    //connection mapping for all the downstream connection connected to the stratum server
+    let connection_mapping = Arc::new(Mutex::new(ConnectionMapping::new()));
+    //Mining job map keeping all the jobs provided to the downstream
+    let mut mining_job_map = Arc::new(Mutex::new(HashMap::new()));
+    //Intializing `notifier` for mining.notify
+    let mut notifier: Notifier = Notifier::new(notification_rx, Arc::clone(&mining_job_map));
+    //Stratum configuration initialization
+    let stratum_config: StratumServerConfig = StratumServerConfig::default();
+    //Initializing stratum server
+    let mut stratum_server = Server::new(stratum_config, connection_mapping.clone());
+    //Running the notification service
+    tokio::spawn(async move {
+        notifier.run_notifier(connection_mapping.clone()).await;
+    });
+    //Running the stratum service
+    tokio::spawn(async move {
+        stratum_server.run_stratum_service(mining_job_map).await;
+    });
+
     let (main_shutdown_tx, _main_shutdown_rx) =
         mpsc::channel::<tokio::signal::unix::SignalKind>(32);
     let main_task_token = CancellationToken::new();
@@ -210,7 +232,27 @@ async fn main() -> Result<(), Box<dyn Error>> {
             Network::Bitcoin
         };
 
-        let (ipc_template_tx, ipc_template_rx) = mpsc::channel::<Vec<u8>>(1);
+        let network = if let Some(network_name) = &args.network {
+            println!("The specified network is: {}", network_name);
+            match network_name.as_str() {
+                "main" | "mainnet" => Network::Bitcoin,
+                "testnet" | "testnet4" => Network::Testnet(bitcoin::TestnetVersion::V4),
+                "signet" => Network::Signet,
+                "regtest" => Network::Regtest,
+                "cpunet" => Network::Regtest,
+                _ => {
+                    log::error!("Invalid network specified: {}", network_name);
+                    log::info!("Valid options: main, testnet, testnet4, signet, regtest, cpunet");
+                    log::info!("Falling back to regtest");
+                    Network::Regtest
+                }
+            }
+        } else {
+            Network::Bitcoin
+        };
+
+
+        let (ipc_template_tx, ipc_template_rx) = mpsc::channel::<(Vec<u8>, Vec<Vec<u8>>)>(1);
 
         let ipc_socket_path = args.ipc_socket.clone();
 
@@ -253,7 +295,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         });
 
                         let consumer_task = tokio::task::spawn_local(async move {
-                            ipc_template_consumer(ipc_template_rx).await.unwrap();
+                            ipc_template_consumer(ipc_template_rx,notification_tx).await.unwrap();
                         });
                         tokio::select! {
                             _ = listener_task => log::info!("IPC listener completed"),
@@ -655,14 +697,61 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 
 async fn ipc_template_consumer(
-    mut template_rx: mpsc::Receiver<Vec<u8>>,
+    mut template_rx: mpsc::Receiver<(Vec<u8>, Vec<Vec<u8>>)>,
+    notifier_tx: mpsc::Sender<NotifyCmd>,
 ) -> Result<(), IPCtemplateError> {
     while let Some(template_bytes) = template_rx.recv().await {
-        if template_bytes.len() > 0 {
-            // Process the template bytes as needed
-            // For example, you could deserialize it or log its contents
-            // let hex_string = bytes_to_hex(&template_bytes);
-            // log::info!("Template in hex: {}", hex_string);
+        if template_bytes.0.len() > 0 {
+            let candidate_block: Result<
+                bitcoin::blockdata::block::Block,
+                bitcoin::consensus::DeserializeError,
+            > = deserialize(&template_bytes.0);
+            let merkel_branch_coinbase = template_bytes.1;
+            let (template_header, template_transactions) = candidate_block.unwrap().into_parts();
+            let coinbase_transaction = template_transactions.get(0);
+            log::info!("Coinbase transaction is - {:?}", coinbase_transaction);
+            log::info!(
+                "The block header for the given template is - {:?}",
+                template_header
+            );
+            log::info!("Transactions count is - {}", template_transactions.len());
+            let template: BlockTemplate = BlockTemplate {
+                version: template_header.version.to_consensus(),
+                rules: None,
+                vbavailable: None,
+                vbrequired: None,
+                previousblockhash: template_header.prev_blockhash.to_string(),
+                transactions: template_transactions.clone(),
+                coinbaseaux: None,
+                coinbasevalue: None,
+                longpollid: None,
+                target: "1".to_string(),
+                mintime: None,
+                mutable: None,
+                noncerange: None,
+                sigoplimit: None,
+                sizelimit: None,
+                weightlimit: None,
+                curtime: template_header.time.to_u32(),
+                bits: template_header.bits.to_hex(),
+                height: 1,
+                default_witness_commitment: None,
+            };
+
+            let notification_sent_or_not = notifier_tx
+                .send(NotifyCmd::SendToAll {
+                    template: template,
+                    merkel_branch_coinbase,
+                })
+                .await;
+            match notification_sent_or_not {
+                Ok(_) => {
+                    log::info!("Template has been sent to the notifier");
+                }
+                Err(error) => {
+                    log::error!("An error occurred while sending notification - {:?}", error);
+                }
+            }
         } else {
             log::warn!("IPC template too short: 0 bytes");
         }

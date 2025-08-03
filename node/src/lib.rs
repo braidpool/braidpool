@@ -19,3 +19,4 @@ pub mod template_creator;
 pub mod uncommitted_metadata;
 pub mod utils;
 pub mod zmq;
+pub mod stratum;
