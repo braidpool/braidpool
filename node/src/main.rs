@@ -44,10 +44,8 @@ mod rpc;
 mod zmq;
 
 #[allow(dead_code)]
-mod chain_capnp;
 mod common_capnp;
 mod echo_capnp;
-mod handler_capnp;
 #[allow(dead_code)]
 mod init_capnp;
 mod mining_capnp;
@@ -645,7 +643,7 @@ async fn ipc_template_consumer(
             // let hex_string = bytes_to_hex(&template_bytes);
             // log::info!("Template in hex: {}", hex_string);
         } else {
-            log::warn!("IPC template too short: {} bytes", template_bytes.len());
+            log::warn!("IPC template too short: 0 bytes");
         }
     }
 
