@@ -8,19 +8,19 @@ export const WEBSOCKET_URLS = {
   // Main WebSocket for general real-time updates (used in multiple components)
   MAIN_WEBSOCKET: 'ws://localhost:5000',
   
-  // WebSocket for BraidPool DAG visualization
+  // WebSocket for BraidPool DAG visualization (simulator API)
   BRAIDPOOL_DAG_WEBSOCKET: 'ws://localhost:65433/',
   
-  // WebSocket for block viewer updates
+  // WebSocket for block viewer updates (mempool)
   BLOCK_VIEWER_WEBSOCKET: 'http://localhost:8080/api/v1/ws',
 } as const;
 
 // HTTP API URLs for data fetching
 export const API_URLS = {
-  // BraidPool API endpoints
+  // API endpoints (mempool api backend for now)
   BRAIDPOOL_API_BASE: 'http://localhost:8999/api/v1',
   
-  // Bitcoin mempool API endpoints
+  // Bitcoin mempool API endpoints (blockstream)
   MEMPOOL_API_BASE: 'http://localhost:3002',
 } as const;
 
