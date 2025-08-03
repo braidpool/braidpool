@@ -1,6 +1,10 @@
 import axios from 'axios';
 import { useState } from 'react';
-import { getMempoolRecentUrl, getMempoolTransactionUrl, getBraidPoolReplacementsUrl } from '../../URLs';
+import {
+  getMempoolRecentUrl,
+  getMempoolTransactionUrl,
+  getBraidPoolReplacementsUrl,
+} from '../../URLs';
 
 export const getCurrencySymbol = (curr: string) => {
   switch (curr) {

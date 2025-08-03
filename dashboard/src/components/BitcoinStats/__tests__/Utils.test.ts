@@ -98,9 +98,7 @@ describe('Utility Functions', () => {
       const data = [{ id: 1 }, { id: 2 }];
       mockedAxios.get.mockResolvedValueOnce({ data });
       const result = await getLatestTransactions();
-      expect(mockedAxios.get).toHaveBeenCalledWith(
-        getMempoolRecentUrl()
-      );
+      expect(mockedAxios.get).toHaveBeenCalledWith(getMempoolRecentUrl());
       expect(result).toEqual(data);
     });
 

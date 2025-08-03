@@ -11,4 +11,4 @@ export const COLORS = [
 ];
 
 // Layout constants (commented out but preserved for reference)
-// export const VERTICAL_SPACING = 150; 
+// export const VERTICAL_SPACING = 150;

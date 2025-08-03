@@ -13,9 +13,7 @@ describe('Utility Functions', () => {
       mockedAxios.get.mockResolvedValueOnce({ data: resp });
       const result = await getBlockInfo(hash);
 
-      expect(mockedAxios.get).toHaveBeenCalledWith(
-        getBraidPoolBlockUrl(hash)
-      );
+      expect(mockedAxios.get).toHaveBeenCalledWith(getBraidPoolBlockUrl(hash));
       expect(result).toEqual(resp);
     });
 
@@ -44,9 +42,7 @@ describe('Utility Functions', () => {
 
       const result = await fetchPreviousBlocks();
 
-      expect(global.fetch).toHaveBeenCalledWith(
-        getBraidPoolBlocksUrl()
-      );
+      expect(global.fetch).toHaveBeenCalledWith(getBraidPoolBlocksUrl());
       expect(result).toEqual(data);
     });
 

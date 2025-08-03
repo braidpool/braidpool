@@ -1,4 +1,9 @@
-import { INITIAL_BLOCK_REWARD, HALVING_INTERVAL, MAX_BLOCKS_HISTORY, HISTORY_SAMPLE_RATE } from './Constants';
+import {
+  INITIAL_BLOCK_REWARD,
+  HALVING_INTERVAL,
+  MAX_BLOCKS_HISTORY,
+  HISTORY_SAMPLE_RATE,
+} from './Constants';
 
 export function generateRewardHistory(blockCount: number) {
   const rewardHistory = [];

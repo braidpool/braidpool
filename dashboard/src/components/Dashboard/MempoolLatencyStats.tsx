@@ -224,7 +224,9 @@ const MempoolLatencyStats = () => {
                     ${latencyData
                       .map((point, i) => {
                         const x = i * (100 / (latencyData.length - 1));
-                        const y = CHART_Y_OFFSET - ((point.value - 190) / CHART_Y_SCALE) * 100;
+                        const y =
+                          CHART_Y_OFFSET -
+                          ((point.value - 190) / CHART_Y_SCALE) * 100;
                         return `L ${x},${y}`;
                       })
                       .join(' ')}`}
@@ -234,7 +236,9 @@ const MempoolLatencyStats = () => {
                 />
                 {latencyData.map((point, i) => {
                   const x = i * (100 / (latencyData.length - 1));
-                  const y = CHART_Y_OFFSET - ((point.value - 190) / CHART_Y_SCALE) * 100;
+                  const y =
+                    CHART_Y_OFFSET -
+                    ((point.value - 190) / CHART_Y_SCALE) * 100;
                   return (
                     <circle
                       key={i}
