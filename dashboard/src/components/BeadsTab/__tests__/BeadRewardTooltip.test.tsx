@@ -41,14 +41,14 @@ describe('<BeadRewardTooltip />', () => {
     expect(screen.getAllByText(`${mBTC} mBTC`).length).toBe(1);
   });
 
-  it('renders tooltip with correct styling class', () => {
+  it('renders tooltip with correct styling class', async () => {
     render(<BeadRewardTooltip reward={reward} />);
     const trigger = screen.getByText(`${mBTC} mBTC`);
     fireEvent.mouseEnter(trigger);
-
-    const tooltip = screen.getAllByText(`${mBTC} mBTC`)[1];
-    expect(tooltip).toHaveClass('absolute');
-    expect(tooltip).toHaveClass('bg-gray-900/95');
-    expect(tooltip).toHaveClass('rounded-lg');
+    const tooltips = screen.getAllByText(`${mBTC} mBTC`);
+    const tooltip = tooltips[1];
+    expect(tooltip.parentElement).toHaveClass('absolute');
+    expect(tooltip.parentElement).toHaveClass('bg-gray-900/95');
+    expect(tooltip.parentElement).toHaveClass('rounded-lg');
   });
 });
