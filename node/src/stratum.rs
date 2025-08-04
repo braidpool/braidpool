@@ -32,9 +32,12 @@ use tokio::{
 use tokio_stream::StreamExt;
 use tokio_util::codec::{FramedRead, LinesCodec};
 
+//4 byte extranonce prefix
 pub const EXTRANONCE1_SIZE: usize = 4;
-pub const EXTRANONCE2_SIZE: usize = 8;
-const EXTRANONCE_SEPARATOR: [u8; EXTRANONCE1_SIZE + EXTRANONCE2_SIZE] =
+//8 byte extranonce suffix just for testing it is set to 4 bytes reset accordingly 
+pub const EXTRANONCE2_SIZE: usize = 4;
+//Total extranonce length to be kept as testing = 8 bytes 
+pub const EXTRANONCE_SEPARATOR: [u8; EXTRANONCE1_SIZE + EXTRANONCE2_SIZE] =
     [1u8; EXTRANONCE1_SIZE + EXTRANONCE2_SIZE];
 /*
 1)Creating a `notifier` struct that will contain a notification sender along with another attribute of `notification` which will contain all the fields related to mining.notify endpoint from server2client method in stratumcontaining functions such as building
@@ -628,7 +631,8 @@ impl DownstreamClient {
 impl Default for DownstreamClient {
     fn default() -> Self {
         //ExtraNonce1. - Hex-encoded, per-connection unique string which will be used for creating generation transactions later.
-        let mut extranonce1_bytes = [0; 32];
+        //4 bytes
+        let mut extranonce1_bytes = [0; 4];
         rand::thread_rng().fill_bytes(&mut extranonce1_bytes);
         log::info!(
             "Extranonce1 generated for a new downstream connection is following {:?}",
@@ -769,6 +773,11 @@ impl Notifier {
         //which is retreived during the `mining.submit` as client2server call .
         let coinbase_transaction = notified_template.transactions.get(0).unwrap();
         let deserialized_coinbase = serialize::<Transaction>(coinbase_transaction);
+        log::info!(
+            "Deserialized coinbase length is - {:?} \n and the coinbase tx is - {:?}",
+            deserialized_coinbase.len(),
+            coinbase_transaction
+        );
         let separator_pos = match deserialized_coinbase
             .as_slice()
             .windows(EXTRANONCE1_SIZE + EXTRANONCE2_SIZE)

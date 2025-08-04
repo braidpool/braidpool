@@ -13,6 +13,7 @@ use bitcoin::{
     hashes::sha256d,
     Address, Amount, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Txid,
 };
+use crate::stratum::EXTRANONCE_SEPARATOR;
 use std::convert::TryFrom;
 use std::str::FromStr;
 
@@ -297,8 +298,11 @@ fn build_coinbase_input(
     let mut script_data = Vec::new();
     script_data.push(height_bytes.len() as u8);
     script_data.extend_from_slice(&height_bytes);
-    script_data.push(extranonce.len() as u8);
-    script_data.extend_from_slice(extranonce);
+    //extranonce starts with 8 assigned to extranonce bytes
+    //therefore the extranonce separator must be before this
+    //TODO KINDLY REVERT IF NOT WORKS 
+    script_data.push(EXTRANONCE_SEPARATOR.len() as u8);
+    script_data.extend_from_slice(&EXTRANONCE_SEPARATOR);
     script_data.push(pool_bytes.len() as u8);
     script_data.extend_from_slice(pool_bytes);
 

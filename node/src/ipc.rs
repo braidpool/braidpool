@@ -428,6 +428,7 @@ fn create_braidpool_template(
     nonce: u32,
 ) -> Result<FinalTemplate, CoinbaseError> {
     let braidpool_commitment = b"braidpool_bead_metadata_hash_32b";
+    //8 bytes that is extranonce has a size of 32 bits
     let extranonce = &[0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08];
     create_block_template(
         components,
