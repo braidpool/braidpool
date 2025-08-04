@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Miner, MinerStatus } from './Types';
-import { API_BASE_URL } from '@/config/api';
+
 const DeviceCard = ({
   miner,
 }: {
@@ -65,7 +65,7 @@ const DeviceCard = ({
       <div className="flex justify-end mt-2">
         {/* <button
           className="text-xs px-3 py-1 rounded border border-gray-800 text-white hover:bg-gray-800 hover:text-white transition flex items-center gap-1"
-          onClick={() => console.log(`Details for ${miner.id}`)}
+          onClick={() => console.log(`📊 Details for ${miner.id}`)}
           
         >
            Details
@@ -82,6 +82,7 @@ const MinerInventoryDashboard = () => {
   const [activeLight, setActiveLight] = useState<string | null>(null);
   const [newMinerIP, setNewMinerIP] = useState('');
 
+  const API_BASE_URL = 'http://localhost:5001';
   useEffect(() => {
     const fetchMiners = async () => {
       try {
