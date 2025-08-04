@@ -65,7 +65,7 @@ const DeviceCard = ({
       <div className="flex justify-end mt-2">
         {/* <button
           className="text-xs px-3 py-1 rounded border border-gray-800 text-white hover:bg-gray-800 hover:text-white transition flex items-center gap-1"
-          onClick={() => console.log(`📊 Details for ${miner.id}`)}
+          onClick={() => console.log(`Details for ${miner.id}`)}
           
         >
            Details
@@ -89,7 +89,6 @@ const MinerInventoryDashboard = () => {
           headers: { Accept: 'application/json' },
         });
 
-        if (!response.ok) throw new Error('Failed to fetch miner data');
         const data = await response.json();
 
         if (!data.macAddr) return;

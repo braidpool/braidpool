@@ -1,18 +1,17 @@
 import express from 'express';
 import fetch from 'node-fetch';
 import cors from 'cors';
-import dotenv from 'dotenv';
-
-dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
-const MINER_DEVICE_URL = process.env.MINER_DEVICE_URL;
-
+const PORT = 5001;
 app.use(cors());
 
 app.get('/api/miners', async (req, res) => {
-  const ip = req.query.ip || MINER_DEVICE_URL;
+  const ip = req.query.ip;
+  if (!ip) {
+    return res.status(400).json({ error: 'Miner IP address is required' });
+  }
+
   const url = `http://${ip}/api/system/info`;
 
   try {
@@ -25,9 +24,7 @@ app.get('/api/miners', async (req, res) => {
     res.json(json);
   } catch (err) {
     console.error(`Failed to fetch from ${ip}:`, err);
-    res
-      .status(500)
-      .json({ error: 'Could not connect to the miner at that IP' });
+    res.status(500).json({ error: `Could not connect to the miner at ${ip}` });
   }
 });
 
