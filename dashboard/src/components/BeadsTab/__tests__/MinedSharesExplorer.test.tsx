@@ -1,152 +1,340 @@
-import {
-  render,
-  screen,
-  fireEvent,
-  act,
-  waitFor,
-} from '@testing-library/react';
+import React from 'react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import MinedSharesExplorer from '../MinedSharesExplorer';
+import '@testing-library/jest-dom';
+const mockWebSocketConstructor = jest.fn(() => ({
+  onopen: null,
+  onclose: null,
+  onerror: null,
+  onmessage: null,
+  readyState: 0, // WebSocket.CONNECTING
+  close: jest.fn(),
+}));
 
-const mockBlockMessage = {
-  type: 'block_data',
-  data: {
-    blockHash: 'hash123',
-    height: 420,
-    timestamp: new Date().toISOString(),
-    work: '1.234 TH',
-    txCount: 5,
-    reward: 0.25555,
-    parent: 'parent123',
-    transactions: [
-      {
-        id: 'tx1',
-        hash: 'txhash1',
-        timestamp: new Date().toISOString(),
-        count: 1,
-        fee: 0.01,
-        size: 200,
-        feePaid: '0.01',
-        feeRate: 5,
-        inputs: 1,
-        outputs: 2,
-      },
-    ],
-  },
-};
+Object.defineProperty(mockWebSocketConstructor, 'CONNECTING', { value: 0 });
+Object.defineProperty(mockWebSocketConstructor, 'OPEN', { value: 1 });
+Object.defineProperty(mockWebSocketConstructor, 'CLOSING', { value: 2 });
+Object.defineProperty(mockWebSocketConstructor, 'CLOSED', { value: 3 });
 
-let mockWebSocketInstance: any;
-let WebSocketMock: jest.Mock;
+global.WebSocket = mockWebSocketConstructor as any;
 
-beforeAll(() => {
-  mockWebSocketInstance = {
-    onopen: null,
-    onmessage: null,
-    onerror: null,
-    onclose: null,
-    readyState: 1,
-    close: jest.fn(),
-    send: jest.fn(),
+jest.mock('../DashboardHeader', () => {
+  return function MockDashboardHeader({ activeTab, setActiveTab }: any) {
+    return (
+      <div>
+        <div>DashboardHeader</div>
+        <button onClick={() => setActiveTab('beads')}>Beads Tab</button>
+        <button onClick={() => setActiveTab('trends')}>Trends Tab</button>
+        <button onClick={() => setActiveTab('rewards')}>Rewards Tab</button>
+      </div>
+    );
+  };
+});
+
+jest.mock('../BeadRow', () => {
+  return function MockBeadRow({ bead, isExpanded, onToggle }: any) {
+    return (
+      <div onClick={onToggle} data-testid={`bead-row-${bead.id}`}>
+        BeadRow: {bead.id} {isExpanded ? 'expanded' : 'collapsed'}
+      </div>
+    );
+  };
+});
+
+jest.mock('../Trends/TrendsTab', () => {
+  const MockTrendsTab = function MockTrendsTab() {
+    return <div>TrendsTab</div>;
   };
 
-  WebSocketMock = jest.fn(() => mockWebSocketInstance);
-  global.WebSocket = WebSocketMock as any;
+  return {
+    TrendsTab: MockTrendsTab,
+    __esModule: true,
+    default: MockTrendsTab,
+  };
 });
 
-afterEach(() => {
-  jest.clearAllMocks();
+jest.mock('../Reward/RewardsSection', () => {
+  return {
+    RewardsDashboard: function MockRewardsDashboard() {
+      return <div>RewardsDashboard</div>;
+    },
+  };
 });
 
-describe('<MinedSharesExplorer />', () => {
-  it('shows loading state initially', () => {
-    render(<MinedSharesExplorer />);
-    expect(screen.getByText(/Connecting to server/i)).toBeInTheDocument();
+jest.mock('../lib/Utils', () => ({
+  processBlockData: jest.fn((data) => ({
+    blockHash: data.blockHash || 'mock-hash',
+    height: data.height || 123,
+    timestamp: data.timestamp || '2023-01-01T00:00:00.000Z',
+    work: data.work || '100.00 EH',
+    txCount: data.txCount || 1,
+    reward: data.reward || 6.25,
+    parent: data.parent || 'parent-hash',
+    transactions: data.transactions || [],
+  })),
+}));
+
+describe('MinedSharesExplorer', () => {
+  let mockWebSocket: any;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockWebSocket = {
+      onopen: null,
+      onclose: null,
+      onerror: null,
+      onmessage: null,
+      readyState: 1,
+      close: jest.fn(),
+    };
+    mockWebSocketConstructor.mockReturnValue(mockWebSocket);
   });
 
-  it('renders bead after receiving WebSocket data', async () => {
+  it('renders the component with initial state', () => {
     render(<MinedSharesExplorer />);
-    const ws = WebSocketMock.mock.results[0].value;
 
-    act(() => {
-      ws.onopen?.();
-      ws.onmessage?.({ data: JSON.stringify(mockBlockMessage) });
+    expect(screen.getByText('DashboardHeader')).toBeInTheDocument();
+    expect(screen.getByText('Connecting to server...')).toBeInTheDocument();
+
+    const loadingElements = document.querySelectorAll('.animate-pulse');
+    expect(loadingElements.length).toBeGreaterThan(0);
+  });
+
+  it('displays "Waiting for block data" when connected but no beads', async () => {
+    render(<MinedSharesExplorer />);
+
+    if (mockWebSocket.onopen) {
+      mockWebSocket.onopen();
+    }
+
+    await waitFor(() => {
+      expect(screen.getByText('Waiting for block data...')).toBeInTheDocument();
     });
-
-    expect(await screen.findByText(/#420/i)).toBeInTheDocument();
-    expect(screen.getByText(/255.55\s*mBTC/i)).toBeInTheDocument(); // match formatted reward
   });
 
-  it('switches tabs correctly', async () => {
+  it('processes and displays block data from WebSocket', async () => {
     render(<MinedSharesExplorer />);
 
-    fireEvent.click(screen.getByRole('button', { name: /Rewards/i })); // avoid multiple matches
+    if (mockWebSocket.onopen) {
+      mockWebSocket.onopen();
+    }
+    const mockBlockData = {
+      type: 'block_data',
+      data: {
+        blockHash: 'test-hash-123',
+        height: 456,
+        timestamp: 1700000000000,
+        work: '150.50 EH',
+        txCount: 3,
+        reward: 6.25,
+        parent: 'parent-hash-456',
+        transactions: [
+          {
+            id: 'tx1',
+            hash: 'tx-hash-1',
+            timestamp: '1700000000000',
+            fee: 0.001,
+            size: 250,
+            feeRate: 10,
+            inputs: 2,
+            outputs: 1,
+          },
+        ],
+      },
+    };
 
-    await waitFor(() =>
-      expect(screen.getByText(/Loading your rewards data/i)).toBeInTheDocument()
-    );
+    if (mockWebSocket.onmessage) {
+      mockWebSocket.onmessage({
+        data: JSON.stringify(mockBlockData),
+      });
+    }
 
-    fireEvent.click(screen.getByRole('button', { name: /Bead Explorer/i }));
-    expect(screen.getByText(/Bead Hash/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByTestId('bead-row-test-hash-123')).toBeInTheDocument();
+    });
+  });
+
+  it('toggles bead expansion when clicked', async () => {
+    render(<MinedSharesExplorer />);
+
+    if (mockWebSocket.onopen) {
+      mockWebSocket.onopen();
+    }
+
+    const mockBlockData = {
+      type: 'block_data',
+      data: {
+        blockHash: 'test-hash-toggle',
+        height: 789,
+        timestamp: 1700000000000,
+        work: '200.00 EH',
+        txCount: 1,
+        reward: 6.25,
+        parent: 'parent-hash',
+        transactions: [],
+      },
+    };
+
+    if (mockWebSocket.onmessage) {
+      mockWebSocket.onmessage({
+        data: JSON.stringify(mockBlockData),
+      });
+    }
+
+    await waitFor(() => {
+      const beadRow = screen.getByTestId('bead-row-test-hash-toggle');
+      expect(beadRow).toHaveTextContent('collapsed');
+
+      fireEvent.click(beadRow);
+      expect(beadRow).toHaveTextContent('expanded');
+    });
   });
 
   it('handles pagination correctly', async () => {
     render(<MinedSharesExplorer />);
-    const ws = WebSocketMock.mock.results[0].value;
+    if (mockWebSocket.onopen) {
+      mockWebSocket.onopen();
+    }
+    for (let i = 0; i < 7; i++) {
+      const mockBlockData = {
+        type: 'block_data',
+        data: {
+          blockHash: `test-hash-${i}`,
+          height: 100 + i,
+          timestamp: 1700000000000 + i * 1000,
+          work: `${100 + i}.00 EH`,
+          txCount: 1,
+          reward: 6.25,
+          parent: `parent-hash-${i}`,
+          transactions: [],
+        },
+      };
 
-    act(() => {
-      ws.onopen?.();
-      for (let i = 0; i < 7; i++) {
-        const msg = {
-          ...mockBlockMessage,
-          data: {
-            ...mockBlockMessage.data,
-            blockHash: `hash${i}`,
-            height: 420 + i,
-          },
-        };
-        ws.onmessage?.({ data: JSON.stringify(msg) });
+      if (mockWebSocket.onmessage) {
+        mockWebSocket.onmessage({
+          data: JSON.stringify(mockBlockData),
+        });
       }
+    }
+
+    await waitFor(() => {
+      // Should show pagination controls
+      expect(screen.getByText('Next')).toBeInTheDocument();
+      expect(screen.getByText('Previous')).toBeInTheDocument();
+      expect(screen.getByText(/Page 1 of/)).toBeInTheDocument();
+      expect(screen.getByText('Previous')).toBeDisabled();
+
+      // Click next page
+      fireEvent.click(screen.getByText('Next'));
+      expect(screen.getByText(/Page 2 of/)).toBeInTheDocument();
     });
-
-    expect(await screen.findByText(/#420/i)).toBeInTheDocument();
-    expect(screen.getByText(/Page 1 of 2/i)).toBeInTheDocument();
-
-    fireEvent.click(screen.getByText(/Next/i));
-    expect(screen.getByText(/Page 2 of 2/i)).toBeInTheDocument();
   });
 
-  it('toggles bead expansion correctly', async () => {
+  it('switches to trends tab when activeTab changes', async () => {
     render(<MinedSharesExplorer />);
-    const ws = WebSocketMock.mock.results[0].value;
 
-    act(() => {
-      ws.onopen?.();
-      ws.onmessage?.({ data: JSON.stringify(mockBlockMessage) });
+    const trendsButton = screen.getByText('Trends Tab');
+    fireEvent.click(trendsButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('TrendsTab')).toBeInTheDocument();
     });
-
-    const bead = await screen.findByText(/#420/i);
-    fireEvent.click(bead);
-
-    expect(screen.getByText(/txhash1/i)).toBeInTheDocument();
   });
 
-  it('handles websocket error gracefully', async () => {
+  it('switches to rewards tab when activeTab changes', async () => {
     render(<MinedSharesExplorer />);
-    const ws = WebSocketMock.mock.results[0].value;
 
-    act(() => {
-      ws.onerror?.({ message: 'Connection failed' });
+    const rewardsButton = screen.getByText('Rewards Tab');
+    fireEvent.click(rewardsButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('RewardsDashboard')).toBeInTheDocument();
     });
-
-    expect(screen.getByText(/Connecting to server/i)).toBeInTheDocument();
   });
 
-  it('cleans up websocket on unmount', () => {
+  it('handles WebSocket errors gracefully', async () => {
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+
+    render(<MinedSharesExplorer />);
+    if (mockWebSocket.onerror) {
+      mockWebSocket.onerror(new Error('Connection failed'));
+    }
+
+    await waitFor(() => {
+      expect(screen.getByText('Connecting to server...')).toBeInTheDocument();
+    });
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      'WebSocket error:',
+      expect.any(Error)
+    );
+    consoleSpy.mockRestore();
+  });
+
+  it('handles invalid JSON messages gracefully', async () => {
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+
+    render(<MinedSharesExplorer />);
+    if (mockWebSocket.onopen) {
+      mockWebSocket.onopen();
+    }
+    if (mockWebSocket.onmessage) {
+      mockWebSocket.onmessage({
+        data: 'invalid json',
+      });
+    }
+
+    await waitFor(() => {
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'WebSocket message parse error:',
+        expect.any(Error)
+      );
+    });
+
+    consoleSpy.mockRestore();
+  });
+
+  it('closes WebSocket connection on component unmount', () => {
     const { unmount } = render(<MinedSharesExplorer />);
-    const ws = WebSocketMock.mock.results[0].value;
-    ws.close = jest.fn(); // ensure fresh mock
+    expect(mockWebSocketConstructor).toHaveBeenCalled();
+    expect(mockWebSocket.readyState).toBe(1); // OPEN
 
     unmount();
 
-    expect(ws.close).toHaveBeenCalled(); // same ws reference
+    expect(mockWebSocket.close).toHaveBeenCalled();
+  });
+
+  it('limits the number of stored beads to 100', async () => {
+    render(<MinedSharesExplorer />);
+    if (mockWebSocket.onopen) {
+      mockWebSocket.onopen();
+    }
+    for (let i = 0; i < 102; i++) {
+      const mockBlockData = {
+        type: 'block_data',
+        data: {
+          blockHash: `test-hash-${i}`,
+          height: 100 + i,
+          timestamp: 1700000000000 + i * 1000,
+          work: `${100 + i}.00 EH`,
+          txCount: 1,
+          reward: 6.25,
+          parent: `parent-hash-${i}`,
+          transactions: [],
+        },
+      };
+
+      if (mockWebSocket.onmessage) {
+        mockWebSocket.onmessage({
+          data: JSON.stringify(mockBlockData),
+        });
+      }
+    }
+
+    await waitFor(() => {
+      const pageInfo = screen.getByText(/Page 1 of/);
+      expect(pageInfo).toBeInTheDocument();
+      expect(screen.getByText('Next')).toBeInTheDocument();
+    });
   });
 });

@@ -75,7 +75,7 @@ describe('fetchReward', () => {
   });
 
   it('should not send if client is not OPEN', async () => {
-    mockClient.readyState = WebSocket.CLOSING;
+    mockClient.readyState = 2;
     rpcWithEnv
       .mockResolvedValueOnce({ blocks: 210000, bestblockhash: 'abc123' })
       .mockResolvedValueOnce({ time: 1700000000 });

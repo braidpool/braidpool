@@ -16,7 +16,6 @@ export async function getPeerInfo() {
     throw error;
   }
 }
-
 export async function getNetworkInfo() {
   try {
     return await rpcWithEnv({ method: 'getnetworkinfo' });
@@ -25,7 +24,6 @@ export async function getNetworkInfo() {
     throw error;
   }
 }
-
 export async function getMempoolInfo() {
   try {
     return await rpcWithEnv({ method: 'getmempoolinfo' });
