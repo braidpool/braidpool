@@ -27,7 +27,7 @@ export async function fetchPoolInfo() {
         emptyBlocks: pool.emptyBlocks,
       };
     });
-
+ console.log(structuredData)
     return structuredData;
   } catch (error) {
     console.error('Failed to fetch pool info:', error.message);

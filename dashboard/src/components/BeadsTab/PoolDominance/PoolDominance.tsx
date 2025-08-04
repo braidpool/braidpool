@@ -3,6 +3,7 @@ import { formatWork } from '../lib/Utils';
 import { PoolData } from '../lib/Types';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { COLORS } from '../lib/Constants';
+
 export function PoolDominance() {
   const [activeTab, setActiveTab] = useState<'overview' | 'visualize'>(
     'overview'
@@ -51,7 +52,6 @@ export function PoolDominance() {
       } catch (err) {
         console.error('Error parsing websocket message :', err);
       }
-      console.log('pool dominance', event.data);
     };
 
     ws.onclose = () => {

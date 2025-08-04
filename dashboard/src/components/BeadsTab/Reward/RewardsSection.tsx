@@ -9,8 +9,9 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from 'recharts';
-import { calculateRewardAnalytics, formatValue } from '../lib/Utils';
+import { calculateRewardAnalytics} from '../lib/Utils';
 import { RewardPoint } from '../lib/Types';
+import { StatCard } from './RewardStats';
 
 export function RewardsDashboard() {
   const [rewardHistory, setRewardHistory] = useState<RewardPoint[]>([]);
@@ -75,36 +76,7 @@ export function RewardsDashboard() {
 
   const analytics = calculateRewardAnalytics(rewardHistory);
 
-  const StatCard = ({
-    title,
-    btcValue,
-    usdValue,
-    blocks,
-    timeframe,
-  }: {
-    title: string;
-    btcValue: number;
-    usdValue: number;
-    blocks?: number;
-    timeframe?: string;
-  }) => (
-    <div className=" p-4 rounded-lg border border-gray-600">
-      <h3 className="text-gray-300 text-sm font-medium mb-2">{title}</h3>
-      <div className="space-y-1">
-        <div className="text-white text-lg font-semibold">
-          {formatValue(btcValue, 'BTC')} BTC
-        </div>
-        <div className="text-white text-lg font-semibold">
-          ${formatValue(usdValue, 'USD')}
-        </div>
-        {blocks !== undefined && timeframe && (
-          <div className="text-gray-400 text-xs">
-            {blocks} blocks {timeframe}
-          </div>
-        )}
-      </div>
-    </div>
-  );
+ 
 
   return (
     <div className="space-y-6">
@@ -184,7 +156,25 @@ export function RewardsDashboard() {
                 stroke="#60a5fa"
                 domain={['auto', 'auto']}
               />
-              <Tooltip />
+              <Tooltip  content={ ({ active, payload, label }) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className=' text-gray-400 border border-xl border-gray-500 p-[10px] rounded-sm'
+        
+      >
+        <p>Height:{label}</p>
+        {payload.map((item, index) => (
+          <p key={index} >
+            {item.name}: {item.value}
+          </p>
+        ))}
+      </div>
+    );
+  }
+
+  return null;
+}}
+ />
               <Legend />
               <Line
                 yAxisId="left"
