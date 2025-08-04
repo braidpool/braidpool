@@ -53,11 +53,19 @@ mod init_capnp;
 mod mining_capnp;
 #[allow(dead_code)]
 mod proxy_capnp;
-
+#[allow(unused)]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    //latest available template to be cached for the newest connection until new job is received
+    let mut latest_template = Arc::new(Mutex::new(BlockTemplate::default()));
+    //latest available template merkel branch
+    let mut latest_template_merkel_branch = Arc::new(Mutex::new(Vec::new()));
+    let mut latest_template_ref = latest_template.clone();
+    let mut latest_template_merkel_branch_ref = latest_template_merkel_branch.clone();
     //One will go into the IPC and the other will go to the `notifier`
     let (notification_tx, notification_rx) = mpsc::channel::<NotifyCmd>(1024);
+    //cloning the channel to be sent across different interfaces
+    let notification_tx_clone = notification_tx.clone();
     //connection mapping for all the downstream connection connected to the stratum server
     let connection_mapping = Arc::new(Mutex::new(ConnectionMapping::new()));
     //Mining job map keeping all the jobs provided to the downstream
@@ -70,11 +78,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut stratum_server = Server::new(stratum_config, connection_mapping.clone());
     //Running the notification service
     tokio::spawn(async move {
-        notifier.run_notifier(connection_mapping.clone()).await;
+        notifier
+            .run_notifier(
+                connection_mapping.clone(),
+                &mut latest_template_ref,
+                &mut latest_template_merkel_branch_ref,
+            )
+            .await;
     });
     //Running the stratum service
     tokio::spawn(async move {
-        stratum_server.run_stratum_service(mining_job_map).await;
+        stratum_server
+            .run_stratum_service(mining_job_map, notification_tx_clone)
+            .await;
     });
 
     let (main_shutdown_tx, _main_shutdown_rx) =
@@ -295,7 +311,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         });
 
                         let consumer_task = tokio::task::spawn_local(async move {
-                            ipc_template_consumer(ipc_template_rx,notification_tx).await.unwrap();
+                            ipc_template_consumer(ipc_template_rx,notification_tx,&mut latest_template.clone(),
+                                &mut latest_template_merkel_branch.clone(),).await.unwrap();
                         });
                         tokio::select! {
                             _ = listener_task => log::info!("IPC listener completed"),
@@ -699,14 +716,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
 async fn ipc_template_consumer(
     mut template_rx: mpsc::Receiver<(Vec<u8>, Vec<Vec<u8>>)>,
     notifier_tx: mpsc::Sender<NotifyCmd>,
+    latest_template_arc: &mut Arc<Mutex<BlockTemplate>>,
+    latest_template_merkel_branch_arc: &mut Arc<Mutex<Vec<Vec<u8>>>>,
 ) -> Result<(), IPCtemplateError> {
     while let Some(template_bytes) = template_rx.recv().await {
         if template_bytes.0.len() > 0 {
             let candidate_block: Result<
                 bitcoin::blockdata::block::Block,
                 bitcoin::consensus::DeserializeError,
-            > = deserialize(&template_bytes.0);
-            let merkel_branch_coinbase = template_bytes.1;
+            > = deserialize(&template_bytes.0.clone());
+            let merkel_branch_coinbase = template_bytes.1.clone();
             let (template_header, template_transactions) = candidate_block.unwrap().into_parts();
             let coinbase_transaction = template_transactions.get(0);
             log::info!("Coinbase transaction is - {:?}", coinbase_transaction);
@@ -737,6 +756,36 @@ async fn ipc_template_consumer(
                 height: 1,
                 default_witness_commitment: None,
             };
+            let mut latest_template = latest_template_arc.lock().await;
+            latest_template.version = template.version;
+            latest_template.rules = template.rules.clone();
+            latest_template.vbavailable = template.vbavailable.clone();
+            latest_template.vbrequired = template.vbrequired;
+            latest_template.previousblockhash = template.previousblockhash.clone();
+            latest_template.transactions = template.transactions.clone();
+            latest_template.coinbaseaux = template.coinbaseaux.clone();
+            latest_template.coinbasevalue = template.coinbasevalue;
+            latest_template.longpollid = template.longpollid.clone();
+            latest_template.target = template.target.clone();
+            latest_template.mintime = template.mintime;
+            latest_template.mutable = template.mutable.clone();
+            latest_template.noncerange = template.noncerange.clone();
+            latest_template.sigoplimit = template.sigoplimit;
+            latest_template.sizelimit = template.sizelimit;
+            latest_template.weightlimit = template.weightlimit;
+            latest_template.curtime = template.curtime;
+            latest_template.bits = template.bits.clone();
+            latest_template.height = template.height;
+            latest_template.default_witness_commitment =
+                template.default_witness_commitment.clone();
+            let mut latest_template_merkel_branch = latest_template_merkel_branch_arc.lock().await;
+            latest_template_merkel_branch.clear();
+            for branch in template_bytes.1.into_iter() {
+                latest_template_merkel_branch.push(branch);
+            }
+            log::info!(
+                "Latest template has been updated with the most recently received template from IPC"
+            );
 
             let notification_sent_or_not = notifier_tx
                 .send(NotifyCmd::SendToAll {

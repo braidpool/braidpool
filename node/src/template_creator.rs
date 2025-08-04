@@ -2,16 +2,12 @@ use crate::config::CoinbaseConfig;
 use crate::error::CoinbaseError;
 use crate::ipc::client::BlockTemplateComponents;
 use bitcoin::{
-    absolute::LockTime,
-    blockdata::{
+    absolute::LockTime, amount::serde::as_sat::deserialize, blockdata::{
         opcodes,
         script::{Builder, PushBytesBuf},
         transaction::Version,
         witness::Witness,
-    },
-    consensus::{self, Decodable},
-    hashes::sha256d,
-    Address, Amount, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Txid,
+    }, consensus::{self, Decodable}, hashes::sha256d, Address, Amount, BlockHeader, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Txid
 };
 use crate::stratum::EXTRANONCE_SEPARATOR;
 use std::convert::TryFrom;

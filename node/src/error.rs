@@ -40,11 +40,19 @@ pub enum StratumErrors {
     JobNotificationNotConstructed { job_template: BlockTemplate },
     ResponseWriteError { error: std::io::Error },
     InvalidCoinbase,
+    PeerNotFoundInConnectionMapping { peer_addr: String },
 }
 pub enum StratumResponseErrors {}
 impl fmt::Display for StratumErrors {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            StratumErrors::PeerNotFoundInConnectionMapping { peer_addr } => {
+                write!(
+                    f,
+                    "The following peer with socket addr {:?} not found in the connection mapping ",
+                    peer_addr
+                )
+            }
             StratumErrors::InvalidCoinbase => {
                 write!(f, "Provided coinbase is invalid")
             }
