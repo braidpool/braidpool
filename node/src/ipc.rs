@@ -23,7 +23,7 @@ const MAX_BACKOFF: u64 = 300;
 /// * Handles graceful degradation when Bitcoin Core is not fully synced
 pub async fn ipc_block_listener(
     ipc_socket_path: String,
-    block_template_tx: Sender<(Vec<u8>,Vec<Vec<u8>>)>,
+    block_template_tx: Sender<(Vec<u8>, Vec<Vec<u8>>)>,
     network: Network,
 ) -> Result<(), Box<dyn std::error::Error>> {
     log::info!("Starting IPC block listener on: {}", ipc_socket_path);
@@ -308,6 +308,7 @@ async fn get_template_with_retry(
     const MIN_TEMPLATE_SIZE: usize = 512;
     let config = CoinbaseConfig::for_network(network);
     let mut last_template = Vec::new();
+    let mut last_template_merkel_branch: Vec<Vec<u8>> = Vec::new();
 
     for attempt in 1..=max_attempts {
         match client
@@ -317,13 +318,13 @@ async fn get_template_with_retry(
             Ok(components) => {
                 match create_braidpool_template(&components, &config, block_height, initial_nonce) {
                     Ok(final_template) => {
-                        let merkel_branch = components.coinbase_merkle_path;
                         let complete_block_bytes = final_template.complete_block_hex;
                         if complete_block_bytes.is_empty() {
                             return Err("Received empty template (0 bytes)".into());
                         }
 
                         last_template = complete_block_bytes;
+                        last_template_merkel_branch = components.coinbase_merkle_path;
                         if last_template.len() >= MIN_TEMPLATE_SIZE {
                             if attempt > 1 {
                                 log::info!(
@@ -333,7 +334,7 @@ async fn get_template_with_retry(
                                     attempt
                                 );
                             }
-                            return Ok((last_template, merkel_branch));
+                            return Ok((last_template, last_template_merkel_branch));
                         } else if attempt == max_attempts {
                             log::warn!(
                                 "{}: Template too small ({} bytes) after {} attempts, using anyway",
@@ -341,7 +342,7 @@ async fn get_template_with_retry(
                                 last_template.len(),
                                 max_attempts
                             );
-                            return Ok((last_template, merkel_branch));
+                            return Ok((last_template, last_template_merkel_branch));
                         } else {
                             log::warn!(
                                 "{}: Template too small ({} bytes), retrying... (attempt {}/{})",
@@ -367,7 +368,7 @@ async fn get_template_with_retry(
                                     context,
                                     last_template.len()
                                 );
-                                return Ok((last_template, Vec::new()));
+                                return Ok((last_template, last_template_merkel_branch));
                             }
                             return Err(Box::new(e));
                         }
@@ -395,7 +396,7 @@ async fn get_template_with_retry(
                             context,
                             last_template.len()
                         );
-                        return Ok((last_template, Vec::new()));
+                        return Ok((last_template, last_template_merkel_branch));
                     }
                     return Err(e);
                 }

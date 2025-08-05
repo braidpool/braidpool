@@ -237,23 +237,42 @@ pub struct StandardRequest {
     pub method: String,
     pub params: serde_json::Value,
 }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum StratumResponses {
+    StandardResponse {
+        std_response: StandardResponse,
+    },
+    SuggestDifficultyResponse {
+        suggest_difficulty_resp: SuggestDifficultyResponse,
+    },
+}
 /// Response represents a Stratum response message from the server to the client
 /// We use Value in result to allow for different types of responses.
 /// TODO: Consider using various Response types to avoing using Value (which will result in memory allocations)
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Response {
+pub struct StandardResponse {
     pub id: Option<u64>,
     pub result: Option<Value>,
     pub error: Option<String>,
 }
-impl Response {
+impl StandardResponse {
     pub fn new_ok(id: Option<u64>, result: Value) -> Self {
-        Response {
+        StandardResponse {
             id,
             result: Some(result),
             error: None,
         }
     }
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JobNotificationResponse {
+    pub method: String,
+    pub params: serde_json::Value,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SuggestDifficultyResponse {
+    pub method: String,
+    pub params: Vec<u64>,
 }
 /// Target is a 256-bit unsigned integer in little-endian
 /// instead of using `BigUint` i have taken into account u128 for respective MSB and LSB
@@ -294,7 +313,7 @@ impl DownstreamClient {
         response_message_sender: mpsc::Sender<String>,
         notification_sender: mpsc::Sender<NotifyCmd>,
         peer_addr: String,
-    ) -> Result<Response, StratumErrors> {
+    ) -> Result<StratumResponses, StratumErrors> {
         let req_params = client_request.params;
         let method = client_request.method.clone();
         let client_request_id = client_request.id;
@@ -316,10 +335,16 @@ impl DownstreamClient {
             }),
         };
         match response_or_error {
-            Ok(response) => {
-                //FIXME
-                let response_json_string = serde_json::to_string(&response).unwrap();
-                log::info!("Response received is - {:?}", response);
+            Ok(stratum_response) => {
+                let response_json_string = match stratum_response.clone() {
+                    StratumResponses::StandardResponse { std_response } => {
+                        serde_json::to_string(&std_response).unwrap()
+                    }
+                    StratumResponses::SuggestDifficultyResponse {
+                        suggest_difficulty_resp,
+                    } => serde_json::to_string(&suggest_difficulty_resp).unwrap(),
+                };
+                log::info!("Response received is - {:?}", response_json_string);
                 log::info!(
                     "Sending response of the request {:?} to the downstream",
                     client_request.method
@@ -361,7 +386,7 @@ impl DownstreamClient {
                 // } else {
                 //     log::info!("Response has been written to the TcpStream successfully");
                 // }
-                Ok(response)
+                Ok(stratum_response)
             }
             Err(error) => {
                 log::error!("{}", error);
@@ -369,12 +394,13 @@ impl DownstreamClient {
             }
         }
     }
+    // (46733) stratum_api: tx: {"id": 5, "method": "mining.submit", "params": ["bc1qnp980s5fpp8l94p5cvttmtdqy8rvrq74qly2yrfmzkdsntqzlc5qkc4rkq.bitaxe", "2", "09000000", "6891e02b", "91e70222", "034ea000"]}
     pub async fn handle_submit(
         &mut self,
         submit_work_params: &Value,
         mut mining_job_map: Arc<Mutex<MiningJobMap>>,
         client_request_id: u64,
-    ) -> Result<Response, StratumErrors> {
+    ) -> Result<StratumResponses, StratumErrors> {
         let param_array = submit_work_params.as_array().unwrap();
         if param_array.len() < 5 {
             return Err(StratumErrors::InvalidMethodParams {
@@ -391,15 +417,8 @@ impl DownstreamClient {
             Ok(name) => name,
             Err(error) => return Err(error),
         };
-        let job_id: u64 = match param_array.get(1).and_then(|v| v.as_u64()) {
-            Some(id) => id,
-            None => {
-                return Err(StratumErrors::InvalidMethodParams {
-                    method: "mining.submit".to_string(),
-                })
-            }
-        };
-
+        let job_id_str: &Value = param_array.get(1).unwrap();
+        let job_id = u64::from_str_radix(job_id_str.as_str().unwrap(), 16).unwrap();
         let extranonce2: &str = match param_array.get(2).and_then(|v| v.as_str()) {
             Some(extra) => extra,
             None => {
@@ -483,29 +502,36 @@ impl DownstreamClient {
             Ok(_) => log::info!("Header meets the target"),
             Err(e) => {
                 log::info!("Header does not meet the target: {}", e);
-                return Ok(Response::new_ok(Some(client_request_id), json!(false)));
+
+                return Ok(StratumResponses::StandardResponse {
+                    std_response: StandardResponse::new_ok(Some(client_request_id), json!(false)),
+                });
             }
         }
 
-        Ok(Response::new_ok(Some(client_request_id), json!(true)))
+        Ok(StratumResponses::StandardResponse {
+            std_response: StandardResponse::new_ok(Some(client_request_id), json!(true)),
+        })
     }
     pub async fn suggest_difficulty(
         &mut self,
         suggest_difficulty_params: &Value,
         client_request_id: u64,
-    ) -> Result<Response, StratumErrors> {
+    ) -> Result<StratumResponses, StratumErrors> {
         if let Some(difficulty) = suggest_difficulty_params.get(0) {
             log::info!(
                 "Handling suggested difficulty - {}",
                 suggest_difficulty_params
             );
-            Ok(Response::new_ok(
-                Some(client_request_id),
-                json!({"params":[difficulty.as_u64()]}),
-            ))
+            Ok(StratumResponses::SuggestDifficultyResponse {
+                suggest_difficulty_resp: SuggestDifficultyResponse {
+                    method: "mining.set_difficulty".to_string(),
+                    params: vec![difficulty.as_u64().unwrap()],
+                },
+            })
         } else {
             return Err(StratumErrors::InvalidMethodParams {
-                method: "mining.difficulty".to_string(),
+                method: "mining.set_difficulty".to_string(),
             });
         }
     }
@@ -514,7 +540,7 @@ impl DownstreamClient {
         &mut self,
         authorize_request_params: &Value,
         client_request_id: u64,
-    ) -> Result<Response, StratumErrors> {
+    ) -> Result<StratumResponses, StratumErrors> {
         log::info!(
             "Authorization is taking place -- {:?}",
             authorize_request_params
@@ -551,10 +577,12 @@ impl DownstreamClient {
         };
         self.authorized = true;
         log::info!("username {}, password {}", username, password);
-        Ok(Response {
-            id: Some(client_request_id),
-            result: Some(json!(true)),
-            error: None,
+        Ok(StratumResponses::StandardResponse {
+            std_response: (StandardResponse {
+                id: Some(client_request_id),
+                result: Some(json!(true)),
+                error: None,
+            }),
         })
     }
     /// Handle the "mining.configure" message ) which handles the initial configuration/negotiation of features in a generic way. So that adding features in the future can be done without a necessity to add new messages to stratum protocol. as per introduced in BIP 310 - https://en.bitcoin.it/wiki/BIP_0310#Request_%22mining.configure%22 .
@@ -567,7 +595,7 @@ impl DownstreamClient {
         &mut self,
         config_req_params: &Value,
         client_request_id: u64,
-    ) -> Result<Response, StratumErrors> {
+    ) -> Result<StratumResponses, StratumErrors> {
         log::info!(
             "{:?} configuration handling is taking place",
             config_req_params
@@ -623,16 +651,18 @@ impl DownstreamClient {
             self.version_rolling_min_bit = Some(u32::from_be_bytes(mask_bytes));
         }
 
-        Ok(Response {
-            id: Some(client_request_id),
-            result: Some(json!({
-                "minimum-difficulty":false,
-                "version-rolling": true,
-                "version-rolling.mask":self.version_rolling_mask.clone().unwrap_or("1fffe000".to_string()),
-                "version-rolling.min-bit-count":self.version_rolling_min_bit.unwrap_or(0)
+        Ok(StratumResponses::StandardResponse {
+            std_response: StandardResponse {
+                id: Some(client_request_id),
+                result: Some(json!({
+                    "minimum-difficulty":false,
+                    "version-rolling": true,
+                    "version-rolling.mask":self.version_rolling_mask.clone().unwrap_or("1fffe000".to_string()),
+                    "version-rolling.min-bit-count":self.version_rolling_min_bit.unwrap_or(0)
 
-            })),
-            error: None,
+                })),
+                error: None,
+            },
         })
     }
     ///The optional second parameter specifies a mining.notify subscription id the client wishes to resume working with (possibly due to a dropped connection). If provided, a server MAY (at its option) issue the connection the same extranonce1. Note that the extranonce1 may be the same (allowing a resumed connection) even if the subscription id is changed!
@@ -645,7 +675,7 @@ impl DownstreamClient {
         &mut self,
         subscribe_req_params: &Value,
         client_request_id: u64,
-    ) -> Result<Response, StratumErrors> {
+    ) -> Result<StratumResponses, StratumErrors> {
         log::info!("Subscribing is taking place -- {:?}", subscribe_req_params);
         //FIXME dummy testing subscription IDs must be unique though
         let subscriptions: Vec<(String, String)> = vec![
@@ -656,10 +686,12 @@ impl DownstreamClient {
         /* 16 is the default since that is the only value the
          * pool supports currently  As per SV2 */
         let extranonce1_hex_str = hex::encode(self.extranonce1.clone());
-        Ok(Response::new_ok(
-            Some(client_request_id),
-            json!([subscriptions, extranonce1_hex_str, self.extranonce2_len]),
-        ))
+        Ok(StratumResponses::StandardResponse {
+            std_response: StandardResponse::new_ok(
+                Some(client_request_id),
+                json!([subscriptions, extranonce1_hex_str, self.extranonce2_len]),
+            ),
+        })
     }
 
     // Server response is result: true for accepted, false for rejected (or you may get an error with more details).
@@ -942,7 +974,22 @@ impl Notifier {
                                     curr_peer_mining_job_map
                                         .insert_mining_job(job_details)
                                         .await;
-                                    Ok(serde_json::to_string(&job).unwrap())
+                                    //this will change
+                                    let job_notification_response = JobNotificationResponse {
+                                        method: "mining.notify".to_string(),
+                                        params: json!([
+                                            job.job_id,
+                                            job.prevhash,
+                                            job.coinbase1,
+                                            job.coinbase2,
+                                            job.merkle_branches,
+                                            job.version,
+                                            job.nbits,
+                                            job.ntime,
+                                            job.clean_jobs
+                                        ]),
+                                    };
+                                    Ok(serde_json::to_string(&job_notification_response).unwrap())
                                 }
                                 Err(error) => Err(error),
                             };
@@ -1029,7 +1076,22 @@ impl Notifier {
                                 curr_peer_mining_job_map
                                     .insert_mining_job(job_details)
                                     .await;
-                                Ok(serde_json::to_string(&job).unwrap())
+                                //this will change
+                                let job_notification_response = JobNotificationResponse {
+                                    method: "mining.notify".to_string(),
+                                    params: json!([
+                                        job.job_id,
+                                        job.prevhash,
+                                        job.coinbase1,
+                                        job.coinbase2,
+                                        job.merkle_branches,
+                                        job.version,
+                                        job.nbits,
+                                        job.ntime,
+                                        job.clean_jobs
+                                    ]),
+                                };
+                                Ok(serde_json::to_string(&job_notification_response).unwrap())
                             }
                             Err(error) => Err(error),
                         };
