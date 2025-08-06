@@ -6,8 +6,8 @@ import {
   TransactionDataItem,
   TransactionStats,
 } from '../lib/Types';
-
-const MAX_HISTORY_LENGTH = 50;
+import { WEBSOCKET_URLS } from '../../../URLs';
+import { MAX_HISTORY_LENGTH } from '../Constants';
 
 export default function TransactionsTab({ timeRange }: TransactionTabProps) {
   const [chartData, setChartData] = useState<TransactionDataItem[]>([]);
@@ -25,7 +25,7 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    const ws = new WebSocket('ws://localhost:5000');
+    const ws = new WebSocket(WEBSOCKET_URLS.MAIN_WEBSOCKET);
     let isMounted = true;
     wsRef.current = ws;
 

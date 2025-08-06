@@ -2,12 +2,14 @@ import React, { useRef, useEffect, useState } from 'react';
 import * as d3 from 'd3';
 import '../../App.css';
 import { Loader } from 'lucide-react';
-import { COLORS, GraphData, GraphNode, NodeIdMapping, Position } from './Types';
+import { GraphData, GraphNode, NodeIdMapping, Position } from './Types';
 import {
   layoutNodes,
   getEllipseEdgePoint,
   animateLinkDirection,
 } from './BraidPoolDAGUtils';
+import { WEBSOCKET_URLS } from '../../URLs';
+import { NODE_RADIUS, PADDING, COLORS } from './Constants';
 
 const GraphVisualization: React.FC = () => {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -19,7 +21,7 @@ const GraphVisualization: React.FC = () => {
   const height = window.innerHeight - margin.top - margin.bottom;
   const [nodeIdMap, setNodeIdMap] = useState<NodeIdMapping>({});
   const [selectedCohorts, setSelectedCohorts] = useState<number | 'all'>(5);
-  const nodeRadius = 30;
+  const nodeRadius = NODE_RADIUS;
   const tooltipRef = useRef<HTMLDivElement>(null);
   // var COLUMN_WIDTH = 200;
   // const VERTICAL_SPACING = 150;
@@ -45,7 +47,7 @@ const GraphVisualization: React.FC = () => {
   );
 
   useEffect(() => {
-    const url = 'ws://localhost:65433/';
+    const url = WEBSOCKET_URLS.BRAIDPOOL_DAG_WEBSOCKET;
     const socket = new WebSocket(url);
     let isMounted = true;
 
@@ -311,7 +313,7 @@ const GraphVisualization: React.FC = () => {
     const allY = Object.values(positions).map((pos) => pos.y);
     // const minY = Math.min(...allY);
     // const maxY = Math.max(...allY);
-    const padding = 100; // Additional padding
+    const padding = PADDING; // Additional padding
     const dynamicHeight = height / 2 + margin.top + margin.bottom + padding;
     setSvgHeight(dynamicHeight);
 

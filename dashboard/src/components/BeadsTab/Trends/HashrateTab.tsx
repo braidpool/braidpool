@@ -6,8 +6,8 @@ import {
   HashrateWebSocketMessage,
   HashrateHistoryEntry,
 } from '../lib/Types';
-
-const MAX_HISTORY_LENGTH = 288;
+import { WEBSOCKET_URLS } from '../../../URLs';
+import { MAX_HASHRATE_HISTORY } from '../Constants';
 
 export default function HashrateTab({ timeRange }: { timeRange: string }) {
   const [hashrateData, setHashrateData] = useState<HashrateData>({
@@ -48,7 +48,7 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
       };
     }
 
-    if (hashrateHistory.current.length >= MAX_HISTORY_LENGTH) {
+    if (hashrateHistory.current.length >= MAX_HASHRATE_HISTORY) {
       hashrateHistory.current.shift();
     }
 
@@ -70,7 +70,7 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
     hashrateHistory.current = [];
     peakHashrate.current = 0;
 
-    const ws = new WebSocket('ws://localhost:5000');
+    const ws = new WebSocket(WEBSOCKET_URLS.MAIN_WEBSOCKET);
     let isMounted = true;
     wsRef.current = ws;
 

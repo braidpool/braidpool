@@ -4,6 +4,7 @@ import colors from '../../theme/colors';
 import { Block } from './Types';
 import { fetchPreviousBlocks } from './Utils';
 import BlockInfoDialog from './BlockDialog';
+import { WEBSOCKET_URLS } from '../../URLs';
 
 const BlockViewer: React.FC = () => {
   const [nextBlock, setNextBlock] = useState<Block | null>(null);
@@ -30,7 +31,7 @@ const BlockViewer: React.FC = () => {
 
   // Setup WebSocket for next block updates via mempool API - Note - it shows 8080but works as backend for API's websocket
   useEffect(() => {
-    const socket = new WebSocket('http://localhost:8080/api/v1/ws');
+    const socket = new WebSocket(WEBSOCKET_URLS.BLOCK_VIEWER_WEBSOCKET);
 
     socket.onopen = () => {
       setIsConnected(true);
