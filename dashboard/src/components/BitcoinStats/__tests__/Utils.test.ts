@@ -7,6 +7,7 @@ import {
   getLatestTransactions,
   getTxInfo,
 } from '../Utils';
+import { getMempoolRecentUrl, getMempoolTransactionUrl } from '../../../URLs';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -97,9 +98,7 @@ describe('Utility Functions', () => {
       const data = [{ id: 1 }, { id: 2 }];
       mockedAxios.get.mockResolvedValueOnce({ data });
       const result = await getLatestTransactions();
-      expect(mockedAxios.get).toHaveBeenCalledWith(
-        'http://localhost:3002/mempool/recent'
-      );
+      expect(mockedAxios.get).toHaveBeenCalledWith(getMempoolRecentUrl());
       expect(result).toEqual(data);
     });
 
@@ -116,7 +115,7 @@ describe('Utility Functions', () => {
       mockedAxios.get.mockResolvedValueOnce({ data });
       const result = await getTxInfo(txid);
       expect(mockedAxios.get).toHaveBeenCalledWith(
-        `http://localhost:3002/tx/${txid}`
+        getMempoolTransactionUrl(txid)
       );
       expect(result).toEqual(data);
     });

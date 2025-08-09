@@ -10,6 +10,11 @@ describe('fetchBlockDetails', () => {
   let mockWSS, mockClient;
 
   beforeEach(() => {
+    WebSocket.CONNECTING = 0;
+    WebSocket.OPEN = 1;
+    WebSocket.CLOSING = 2;
+    WebSocket.CLOSED = 3;
+
     mockClient = {
       readyState: WebSocket.OPEN,
       send: jest.fn(),
@@ -160,7 +165,7 @@ describe('fetchBlockDetails', () => {
   });
 
   it('should not send when client is not OPEN', async () => {
-    mockClient.readyState = WebSocket.CLOSING; // 2
+    mockClient.readyState = WebSocket.CLOSING; // websocket closing
     rpcWithEnv
       .mockResolvedValueOnce({ blocks: 103 })
       .mockResolvedValueOnce('0000000000000000000notopen')

@@ -1,6 +1,7 @@
 //All braidpool specific errors are defined here
 use std::fmt;
 
+use bitcoin::address::ParseError as AddressParseError;
 use tokio::sync::oneshot;
 
 #[derive(Debug)]
@@ -132,3 +133,44 @@ impl fmt::Display for IPCtemplateError {
     }
 }
 impl std::error::Error for BraidError {}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CoinbaseError {
+    InvalidExtranonceLength,
+    InvalidBitcoinAddress(String),
+    AddressNetworkMismatch,
+    ScriptCreationError,
+    InvalidBlockTemplateData,
+    ConsensusDecodeError,
+    InvalidCommitmentLength,
+    OpReturnTooLarge,
+    PushBytesError(bitcoin::script::PushBytesError),
+    AddressError(AddressParseError),
+    TemplateMissingOutputs,
+}
+
+impl fmt::Display for CoinbaseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CoinbaseError::InvalidExtranonceLength => write!(f, "Invalid extranonce length"),
+            CoinbaseError::InvalidBitcoinAddress(addr) => {
+                write!(f, "Invalid Bitcoin address: {}", addr)
+            }
+            CoinbaseError::AddressNetworkMismatch => {
+                write!(f, "Address is not for the Bitcoin network")
+            }
+            CoinbaseError::ScriptCreationError => write!(f, "Failed to create script"),
+            CoinbaseError::InvalidBlockTemplateData => write!(f, "Invalid block template data"),
+            CoinbaseError::ConsensusDecodeError => write!(f, "Failed to decode transaction"),
+            CoinbaseError::InvalidCommitmentLength => write!(f, "Invalid commitment length"),
+            CoinbaseError::OpReturnTooLarge => write!(f, "OP_RETURN data exceeds 80 bytes"),
+            CoinbaseError::PushBytesError(e) => write!(f, "Push bytes error: {}", e),
+            CoinbaseError::AddressError(e) => write!(f, "Address error: {}", e),
+            CoinbaseError::TemplateMissingOutputs => {
+                write!(f, "Original coinbase template is missing expected outputs")
+            }
+        }
+    }
+}
+
+impl std::error::Error for CoinbaseError {}

@@ -1,3 +1,4 @@
+use bitcoin::Network;
 use core::panic;
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -100,6 +101,23 @@ impl BraidpoolConfig {
     pub fn with_braid_store_path(mut self, path: String) -> Self {
         self.braid_directory.path = path;
         self
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CoinbaseConfig {
+    pub network: Network,
+    pub pool_payout_address: String,
+    pub pool_identifier: String,
+}
+
+impl Default for CoinbaseConfig {
+    fn default() -> Self {
+        Self {
+            network: Network::Bitcoin,
+            pool_payout_address: "bc1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
+            pool_identifier: "Braidpool".to_string(),
+        }
     }
 }
 

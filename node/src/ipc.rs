@@ -1,8 +1,14 @@
 //! Listens for block notifications and fetches new block templates via IPC
+use crate::config::CoinbaseConfig;
+use crate::error::CoinbaseError;
 use crate::error::{classify_error, ErrorKind};
 use tokio::sync::mpsc::Sender;
 pub mod client;
-pub use client::{bytes_to_hex, BitcoinNotification, RequestPriority, SharedBitcoinClient};
+use crate::template_creator::{create_block_template, FinalTemplate};
+pub use client::{
+    bytes_to_hex, BitcoinNotification, BlockTemplateComponents, CheckBlockResult, RequestPriority,
+    SharedBitcoinClient,
+};
 
 const MAX_BACKOFF: u64 = 300;
 
@@ -39,14 +45,16 @@ pub async fn ipc_block_listener(
             };
 
             let initial_sync_result = loop {
-                match shared_client.is_recently_synced(Some(RequestPriority::High)).await {
-                    Ok(is_synced) => {
-                        if !is_synced {
-                            log::warn!("Node is not synced - waiting for sync to complete");
+                match shared_client.is_initial_block_download(Some(RequestPriority::High)).await {
+                   Ok(in_ibd) => {
+                        if in_ibd {
+                            log::warn!("Node is in IBD (not synced) - proceeding anyway for now");
+                            let result = Ok(false); // Not synced, but continue
+                            break result;
                         } else {
                             log::info!("Node is synced and ready to be used");
+                            break Ok(true);
                         }
-                        break Ok(is_synced);
                     }
                     Err(e) => {
                         log::error!("Initial sync check failed: {}", e);
@@ -70,7 +78,13 @@ pub async fn ipc_block_listener(
                     }
                 }
             };
-
+            let tip_height = match shared_client.get_mining_tip_info(Some(RequestPriority::High)).await {
+                    Ok((height, _hash)) => height,
+                    Err(e) => {
+                        log::error!("Failed to get mining tip info: {}", e);
+                        continue;
+                    }
+            };
             // Handle the result properly
             let is_synced = match initial_sync_result {
                 Ok(is_synced) => is_synced,
@@ -89,10 +103,12 @@ pub async fn ipc_block_listener(
                     &mut shared_client,
                     3,
                     RequestPriority::High,
-                    "initial template"
+                    "initial template",
+                    tip_height,
+                    0
                 ).await {
                     Ok(template) => {
-                        log::info!("Got initial block template: {} bytes", template.len());
+                        log::info!("Got initial block template: {} bytes - Height: {}", template.len(), tip_height);
                         if let Err(e) = block_template_tx.send(template).await {
                             log::error!("Failed to send initial template: {}", e);
                             continue;
@@ -130,44 +146,47 @@ pub async fn ipc_block_listener(
                 tokio::select! {
                     notification = notification_receiver.recv() => {
                         match notification {
-                            Some(BitcoinNotification::BlockConnected { height, hash, .. }) => {
+                            Some(BitcoinNotification::TipChanged { height, hash, .. }) => {
                                 let mut hash_reversed = hash.clone();
                                 hash_reversed.reverse();
                                 log::info!("New block #{} - Hash: {}", height, bytes_to_hex(&hash_reversed));
-                                match shared_client.is_recently_synced(Some(RequestPriority::Critical)).await {
-                                    Ok(true) => {
-                                        match get_template_with_retry(
-                                            &mut shared_client,
-                                            2,
-                                            RequestPriority::Critical,
-                                            &format!("block {}", height)
-                                        ).await {
-                                            Ok(template) => {
-                                                log::info!("Got block template data: {} bytes", template.len());
-                                                if let Err(e) = block_template_tx.send(template).await {
-                                                    log::error!("Failed to send template: {}", e);
-                                                    break true;
-                                                }
-                                            }
-                                            Err(e) => {
-                                                log::error!("Failed to get block template: {}", e);
-                                                match classify_error(&e) {
-                                                    ErrorKind::ConnectionBroken => {
-                                                        log::error!("Connection lost, restarting connection loop");
+                                match shared_client.is_initial_block_download(Some(RequestPriority::High)).await {
+                                    Ok(in_ibd) => {
+                                        if !in_ibd { // Node is synced (not in IBD)
+                                            match get_template_with_retry(
+                                                &mut shared_client,
+                                                2,
+                                                RequestPriority::High,
+                                                &format!("block {}", height),
+                                                height,
+                                                0
+                                            ).await {
+                                                Ok(template) => {
+                                                    log::info!("Got block template data: {} bytes", template.len());
+                                                    if let Err(e) = block_template_tx.send(template).await {
+                                                        log::error!("Failed to send template: {}", e);
                                                         break true;
                                                     }
-                                                    ErrorKind::Temporary => {
-                                                        log::warn!("Non critical error occurred getting template for block {}, will retry on next block", height);
-                                                    }
-                                                    ErrorKind::LogicError => {
-                                                        log::warn!("Unexpected error occurred getting template for block {}, continuing", height);
+                                                }
+                                                Err(e) => {
+                                                    log::error!("Failed to get block template: {}", e);
+                                                    match classify_error(&e) {
+                                                        ErrorKind::ConnectionBroken => {
+                                                            log::error!("Connection lost, restarting connection loop");
+                                                            break true;
+                                                        }
+                                                        ErrorKind::Temporary => {
+                                                            log::warn!("Non critical error occurred getting template for block {}, will retry on next block", height);
+                                                        }
+                                                        ErrorKind::LogicError => {
+                                                            log::warn!("Unexpected error occurred getting template for block {}, continuing", height);
+                                                        }
                                                     }
                                                 }
                                             }
+                                        } else {
+                                            log::warn!("Node was in IBD at block {}, skipping template request", height);
                                         }
-                                    }
-                                    Ok(false) => {
-                                        log::warn!("Node was not synced at block {}, skipping template request", height);
                                     }
                                     Err(e) => {
                                         log::error!("Sync check failed for block {}: {}", height, e);
@@ -195,10 +214,6 @@ pub async fn ipc_block_listener(
                             None => {
                                 log::error!("Failed to receive notifications. Maybe the connection was lost");
                                 break true;
-                            }
-
-                            _ => {
-                                // Ignore other notifications
                             }
                         }
                     }
@@ -282,43 +297,82 @@ async fn get_template_with_retry(
     max_attempts: u32,
     priority: RequestPriority,
     context: &str,
+    block_height: u32,
+    initial_nonce: u32,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     const MIN_TEMPLATE_SIZE: usize = 512;
+    let config = CoinbaseConfig::default();
     let mut last_template = Vec::new();
 
     for attempt in 1..=max_attempts {
-        match client.get_block_template(None, Some(priority)).await {
-            Ok(template) => {
-                if template.is_empty() {
-                    return Err("Received empty template (0 bytes)".into());
-                }
-                last_template = template;
-                if last_template.len() >= MIN_TEMPLATE_SIZE {
-                    if attempt > 1 {
-                        log::info!(
-                            "{}: Got valid template {} bytes (attempt {})",
+        match client
+            .get_block_template_components(None, Some(priority))
+            .await
+        {
+            Ok(components) => {
+                match create_braidpool_template(&components, &config, block_height, initial_nonce) {
+                    Ok(final_template) => {
+                        let complete_block_bytes = final_template.complete_block_hex;
+                        if complete_block_bytes.is_empty() {
+                            return Err("Received empty template (0 bytes)".into());
+                        }
+
+                        last_template = complete_block_bytes;
+                        if last_template.len() >= MIN_TEMPLATE_SIZE {
+                            if attempt > 1 {
+                                log::info!(
+                                    "{}: Got valid template {} bytes (attempt {})",
+                                    context,
+                                    last_template.len(),
+                                    attempt
+                                );
+                            }
+                            return Ok(last_template);
+                        } else if attempt == max_attempts {
+                            log::warn!(
+                                "{}: Template too small ({} bytes) after {} attempts, using anyway",
+                                context,
+                                last_template.len(),
+                                max_attempts
+                            );
+                            return Ok(last_template);
+                        } else {
+                            log::warn!(
+                                "{}: Template too small ({} bytes), retrying... (attempt {}/{})",
+                                context,
+                                last_template.len(),
+                                attempt,
+                                max_attempts
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        // Don't retry connection errors - let caller handle reconnection
+                        let boxed_err: Box<dyn std::error::Error> = Box::new(e.clone());
+                        if matches!(classify_error(&boxed_err), ErrorKind::ConnectionBroken) {
+                            return Err(Box::new(e));
+                        }
+
+                        if attempt == max_attempts {
+                            // If we have a previous template, use it
+                            if !last_template.is_empty() {
+                                log::warn!(
+                                    "{}: Final attempt failed, using last template: {} bytes",
+                                    context,
+                                    last_template.len()
+                                );
+                                return Ok(last_template);
+                            }
+                            return Err(Box::new(e));
+                        }
+
+                        log::warn!(
+                            "{}: Attempt {} failed: {}, retrying...",
                             context,
-                            last_template.len(),
-                            attempt
+                            attempt,
+                            e
                         );
                     }
-                    return Ok(last_template);
-                } else if attempt == max_attempts {
-                    log::warn!(
-                        "{}: Template too small ({} bytes) after {} attempts, using anyway",
-                        context,
-                        last_template.len(),
-                        max_attempts
-                    );
-                    return Ok(last_template);
-                } else {
-                    log::warn!(
-                        "{}: Template too small ({} bytes), retrying... (attempt {}/{})",
-                        context,
-                        last_template.len(),
-                        attempt,
-                        max_attempts
-                    );
                 }
             }
             Err(e) => {
@@ -359,4 +413,22 @@ async fn get_template_with_retry(
     } else {
         Err("All attempts failed and no template available".into())
     }
+}
+
+fn create_braidpool_template(
+    components: &BlockTemplateComponents,
+    config: &CoinbaseConfig,
+    block_height: u32,
+    nonce: u32,
+) -> Result<FinalTemplate, CoinbaseError> {
+    let braidpool_commitment = b"braidpool_bead_metadata_hash_32b";
+    let extranonce = &[0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08];
+    create_block_template(
+        components,
+        braidpool_commitment,
+        extranonce,
+        block_height,
+        nonce,
+        config,
+    )
 }

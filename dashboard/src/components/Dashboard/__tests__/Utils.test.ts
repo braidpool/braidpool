@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { getBlockInfo, fetchPreviousBlocks } from '../Utils';
+import { getBraidPoolBlockUrl, getBraidPoolBlocksUrl } from '../../../URLs';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -12,9 +13,7 @@ describe('Utility Functions', () => {
       mockedAxios.get.mockResolvedValueOnce({ data: resp });
       const result = await getBlockInfo(hash);
 
-      expect(mockedAxios.get).toHaveBeenCalledWith(
-        `http://localhost:8999/api/v1/block/${hash}`
-      );
+      expect(mockedAxios.get).toHaveBeenCalledWith(getBraidPoolBlockUrl(hash));
       expect(result).toEqual(resp);
     });
 
@@ -43,9 +42,7 @@ describe('Utility Functions', () => {
 
       const result = await fetchPreviousBlocks();
 
-      expect(global.fetch).toHaveBeenCalledWith(
-        'http://localhost:8999/api/v1/blocks'
-      );
+      expect(global.fetch).toHaveBeenCalledWith(getBraidPoolBlocksUrl());
       expect(result).toEqual(data);
     });
 

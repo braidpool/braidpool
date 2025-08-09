@@ -1,5 +1,6 @@
 import Card from '../common/Card';
 import colors from '../../theme/colors';
+import { CHART_Y_OFFSET, CHART_Y_SCALE } from './Constants';
 
 // Mock data for latency stats
 const latencyData = [
@@ -219,11 +220,13 @@ const MempoolLatencyStats = () => {
 
               <svg className="w-full h-full">
                 <path
-                  d={`M 0,${100 - ((latencyData[0].value - 190) / 50) * 100} 
+                  d={`M 0,${CHART_Y_OFFSET - ((latencyData[0].value - 190) / CHART_Y_SCALE) * 100} 
                     ${latencyData
                       .map((point, i) => {
                         const x = i * (100 / (latencyData.length - 1));
-                        const y = 100 - ((point.value - 190) / 50) * 100;
+                        const y =
+                          CHART_Y_OFFSET -
+                          ((point.value - 190) / CHART_Y_SCALE) * 100;
                         return `L ${x},${y}`;
                       })
                       .join(' ')}`}
@@ -233,7 +236,9 @@ const MempoolLatencyStats = () => {
                 />
                 {latencyData.map((point, i) => {
                   const x = i * (100 / (latencyData.length - 1));
-                  const y = 100 - ((point.value - 190) / 50) * 100;
+                  const y =
+                    CHART_Y_OFFSET -
+                    ((point.value - 190) / CHART_Y_SCALE) * 100;
                   return (
                     <circle
                       key={i}

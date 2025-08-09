@@ -6,8 +6,8 @@ import {
   LatencyWebSocketMessage,
   LatencyHistoryEntry,
 } from '../lib/Types';
-
-const MAX_LATENCY_HISTORY = 100;
+import { WEBSOCKET_URLS } from '../../../URLs';
+import { MAX_LATENCY_HISTORY } from '../Constants';
 
 export default function LatencyTab({ timeRange }: { timeRange: string }) {
   const [latencyData, setLatencyData] = useState<LatencyData>({
@@ -75,7 +75,7 @@ export default function LatencyTab({ timeRange }: { timeRange: string }) {
   useEffect(() => {
     latencyHistory.current = [];
 
-    const ws = new WebSocket('ws://localhost:5000');
+    const ws = new WebSocket(WEBSOCKET_URLS.MAIN_WEBSOCKET);
     let isMounted = true;
     wsRef.current = ws;
 

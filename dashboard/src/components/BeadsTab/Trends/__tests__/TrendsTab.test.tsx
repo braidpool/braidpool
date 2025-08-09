@@ -35,16 +35,15 @@ describe('<TrendsTab />', () => {
 
   it('renders the initial hashrate tab by default', () => {
     render(<TrendsTab timeRange="24h" />);
-
-    expect(screen.getByText(/Hashrate Content/i)).toBeInTheDocument();
+    expect(screen.getByTestId('hashrate-tab')).toBeInTheDocument();
     expect(screen.queryByTestId('latency-tab')).not.toBeInTheDocument();
     expect(screen.queryByTestId('transactions-tab')).not.toBeInTheDocument();
   });
 
   it('switches to latency tab when clicked', () => {
     render(<TrendsTab timeRange="24h" />);
-
-    fireEvent.click(screen.getByText('Latency'));
+    const latencyBtn = screen.getByRole('button', { name: /latency/i });
+    fireEvent.click(latencyBtn);
     expect(screen.getByTestId('latency-tab')).toBeInTheDocument();
     expect(screen.queryByTestId('hashrate-tab')).not.toBeInTheDocument();
     expect(screen.queryByTestId('transactions-tab')).not.toBeInTheDocument();
@@ -52,9 +51,8 @@ describe('<TrendsTab />', () => {
 
   it('switches to transactions tab and passes props', () => {
     render(<TrendsTab timeRange="24h" />);
-
-    fireEvent.click(screen.getByText('Transactions'));
-
+    const txBtn = screen.getByRole('button', { name: /transactions/i });
+    fireEvent.click(txBtn);
     const transactionsTab = screen.getByTestId('transactions-tab');
     expect(transactionsTab).toBeInTheDocument();
     expect(transactionsTab.textContent).toContain('hovered: false');
@@ -62,8 +60,14 @@ describe('<TrendsTab />', () => {
 
   it('renders all tab buttons correctly', () => {
     render(<TrendsTab timeRange="24h" />);
-    expect(screen.getByText('Hashrate')).toBeInTheDocument();
-    expect(screen.getByText('Latency')).toBeInTheDocument();
-    expect(screen.getByText('Transactions')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /hashrate/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /latency/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /transactions/i })
+    ).toBeInTheDocument();
   });
 });

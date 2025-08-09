@@ -22,6 +22,8 @@ import {
 import TransactionTable from './TransactionTable';
 import RBFTransactionTable from './RBFTransactionTable';
 import { useRef } from 'react';
+import { WEBSOCKET_URLS } from '../../URLs';
+import { MAX_HISTORY_ITEMS } from './Constants';
 
 const BitcoinPriceTracker: React.FC = () => {
   const [currency, setCurrency] = useState<'USD' | 'EUR' | 'GBP' | 'JPY'>(
@@ -40,7 +42,7 @@ const BitcoinPriceTracker: React.FC = () => {
   const [priceHistory, setPriceHistory] = useState<
     { price: number; time: string }[]
   >([]);
-  const MAX_HISTORY_ITEMS = 10;
+  // MAX_HISTORY_ITEMS is imported from BeadsTab/Constants
   const showSkeletons = loading || !isConnected || (!priceData && !globalStats);
   const currencyRef = useRef(currency);
 
@@ -67,7 +69,7 @@ const BitcoinPriceTracker: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const websocket = new WebSocket('ws://localhost:5000/');
+    const websocket = new WebSocket(WEBSOCKET_URLS.MAIN_WEBSOCKET);
     let isMounted = true;
 
     websocket.onopen = () => {
