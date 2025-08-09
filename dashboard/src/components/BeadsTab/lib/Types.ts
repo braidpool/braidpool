@@ -35,7 +35,6 @@ export interface BeadRowProps {
   transactions: Transaction[];
 }
 
-
 //annimatedstats
 export interface AnimatedStatCardProps {
   title: string;
@@ -162,6 +161,6 @@ export interface PoolData {
   avgHealth: string | number;
   avgBlockFees: string | number;
   emptyBlocks: number;
-  latestBlockHeight:number;
-  poolLink:string;
+  latestBlockHeight: number;
+  poolLink: string;
 }

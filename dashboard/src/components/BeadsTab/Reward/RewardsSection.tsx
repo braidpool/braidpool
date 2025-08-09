@@ -9,16 +9,17 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from 'recharts';
-import { calculateRewardAnalytics} from '../lib/Utils';
+import { calculateRewardAnalytics } from '../lib/Utils';
 import { RewardPoint } from '../lib/Types';
 import { StatCard } from './RewardStats';
+import { WEBSOCKET_URLS } from '@/URLs';
 
 export function RewardsDashboard() {
   const [rewardHistory, setRewardHistory] = useState<RewardPoint[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    const ws = new WebSocket('ws://localhost:5000');
+    const ws = new WebSocket(WEBSOCKET_URLS.MAIN_WEBSOCKET);
     wsRef.current = ws;
     let isMounted = true;
 
@@ -75,8 +76,6 @@ export function RewardsDashboard() {
   }, []);
 
   const analytics = calculateRewardAnalytics(rewardHistory);
-
- 
 
   return (
     <div className="space-y-6">
@@ -156,25 +155,24 @@ export function RewardsDashboard() {
                 stroke="#60a5fa"
                 domain={['auto', 'auto']}
               />
-              <Tooltip  content={ ({ active, payload, label }) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className=' text-gray-400 border border-xl border-gray-500 p-[10px] rounded-sm'
-        
-      >
-        <p>Height:{label}</p>
-        {payload.map((item, index) => (
-          <p key={index} >
-            {item.name}: {item.value}
-          </p>
-        ))}
-      </div>
-    );
-  }
+              <Tooltip
+                content={({ active, payload, label }) => {
+                  if (active && payload && payload.length) {
+                    return (
+                      <div className=" text-gray-400 border border-xl border-gray-500 p-[10px] rounded-sm">
+                        <p>Height:{label}</p>
+                        {payload.map((item, index) => (
+                          <p key={index}>
+                            {item.name}: {item.value}
+                          </p>
+                        ))}
+                      </div>
+                    );
+                  }
 
-  return null;
-}}
- />
+                  return null;
+                }}
+              />
               <Legend />
               <Line
                 yAxisId="left"

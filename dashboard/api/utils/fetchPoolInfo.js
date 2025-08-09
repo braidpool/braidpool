@@ -4,16 +4,15 @@ export async function fetchPoolInfo() {
   try {
     const [poolInfoResponse, poolHashResponse] = await Promise.all([
       axios.get(`${process.env.MEMPOOL_API_URL}/api/v1/mining/pools/1w`),
-      axios.get(`${process.env.MEMPOOL_API_URL}/api/v1/mining/hashrate/pools/1w`),
+      axios.get(
+        `${process.env.MEMPOOL_API_URL}/api/v1/mining/hashrate/pools/1w`
+      ),
     ]);
 
     const poolInfoData = poolInfoResponse.data.pools;
     const poolHashData = poolHashResponse.data;
     const formatPoolSlug = (name) => {
-      return name
-        .toLowerCase()
-        .replace(/\s+/g, '') 
-        .replace(/\./g, ''); 
+      return name.toLowerCase().replace(/\s+/g, '').replace(/\./g, '');
     };
 
     const structuredData = await Promise.all(
@@ -22,7 +21,7 @@ export async function fetchPoolInfo() {
         const matchingHash = poolHashData.find(
           (hash) => hash.poolName.toLowerCase() === pool.name.toLowerCase()
         );
-        let latestBlockHeight = 'N/A';    
+        let latestBlockHeight = 'N/A';
         let poolLink = 'N/A';
         try {
           const blockRes = await axios.get(
@@ -33,7 +32,9 @@ export async function fetchPoolInfo() {
             latestBlockHeight = blocks[0].height;
           }
         } catch (err) {
-          console.warn(`Block fetch failed for "${pool.name}" [${slug}]: ${err.message}`);
+          console.warn(
+            `Block fetch failed for "${pool.name}" [${slug}]: ${err.message}`
+          );
         }
 
         try {
@@ -42,10 +43,10 @@ export async function fetchPoolInfo() {
           );
           const extraData = extraRes.data;
           poolLink = extraData.pool?.link ?? 'N/A';
-          
-          
         } catch (err) {
-          console.warn(`Extra info fetch failed for "${pool.name}" [${slug}]: ${err.message}`);
+          console.warn(
+            `Extra info fetch failed for "${pool.name}" [${slug}]: ${err.message}`
+          );
         }
 
         return {
@@ -56,8 +57,8 @@ export async function fetchPoolInfo() {
           avgHealth: `${pool.avgMatchRate}%`,
           avgBlockFees: `${parseFloat(pool.avgFeeDelta).toFixed(8)} BTC`,
           emptyBlocks: pool.emptyBlocks,
-          latestBlockHeight,   
-          poolLink,        
+          latestBlockHeight,
+          poolLink,
         };
       })
     );

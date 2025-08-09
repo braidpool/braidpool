@@ -109,7 +109,7 @@ export function PoolDominance() {
                 'Blocks',
                 'Avg Health',
                 'Avg Block Fees',
-                'Empty Blocks',     
+                'Empty Blocks',
               ].map((label) => (
                 <div key={label} className="text-white font-semibold">
                   {label}
@@ -122,14 +122,17 @@ export function PoolDominance() {
                 key={index}
                 className="grid grid-cols-8 gap-4 text-sm text-gray-300 py-5"
               >
-                
                 <div className="ml-6">{pool.rank}</div>
-                <div className='hover:text-blue-400'>
-  <a href={pool.poolLink} target="_blank" rel="noopener noreferrer">
-    {pool.pool}
-  </a>
-</div>
- <div className='lg:ml-4'>{pool.latestBlockHeight}</div>
+                <div className="hover:text-blue-400">
+                  <a
+                    href={pool.poolLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {pool.pool}
+                  </a>
+                </div>
+                <div className="lg:ml-4">{pool.latestBlockHeight}</div>
 
                 <div>
                   {formatWork(pool.hashrate).value}{' '}
@@ -155,7 +158,6 @@ export function PoolDominance() {
                       )}%`}
                 </div>
                 <div>{pool.emptyBlocks}</div>
-               
               </div>
             ))}
           </>
@@ -260,9 +262,6 @@ export function PoolDominance() {
                               {data.blocks}
                             </span>
                           </div>
-                          
-                          
-                          
                         </div>
                       </div>
                     );
