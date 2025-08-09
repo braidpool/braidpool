@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import TransactionList from './TransactionList';
 import { shortenHash, formatWork, useCopyToClipboard } from './lib/Utils';
 import type { BeadRowProps } from './lib/Types';

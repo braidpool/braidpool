@@ -24,7 +24,7 @@ export default function TransactionList({
       <div className="overflow-x-auto">
         <div className="min-w-[700px]">
           {/* Table header */}
-          <div className="grid  grid-cols-6 text-sm text-blue-300 font-semibold ml-4 mb-2 px-2">
+          <div className="grid sm:grid-cols-3  md:grid-cols-6 text-sm text-blue-300 font-semibold ml-4 mb-2 px-2">
             <div>Hash</div>
             <div>Size</div>
             <div>Fee</div>
@@ -37,7 +37,7 @@ export default function TransactionList({
           {limitedTransactions.map((transaction) => (
             <div
               key={transaction.id}
-              className="grid grid-cols-6 gap-2 py-2.5 px-2 rounded-lg transition-all duration-300  group relative text-sm sm:text-sm"
+              className="grid sm:grid-cols-3 md:grid-cols-6 gap-2 py-2.5 px-2 rounded-lg transition-all duration-300  group relative text-sm sm:text-sm"
             >
               <div className="flex flex-wrap gap-2">
                 <div className="relative">

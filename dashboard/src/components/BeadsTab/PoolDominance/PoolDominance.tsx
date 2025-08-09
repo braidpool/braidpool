@@ -100,15 +100,16 @@ export function PoolDominance() {
       <div className=" gap-6">
         {activeTab === 'overview' && (
           <>
-            <div className="grid max-sm:grid-cols-3  md:grid-cols-7 p-4 border-b text-sm border-gray-800/80 font-medium">
+            <div className="grid max-sm:grid-cols-3  md:grid-cols-8 p-4 border-b text-sm border-gray-800/80 font-medium">
               {[
                 'Rank',
                 'Pool',
+                'Recent Block',
                 'Hashrate',
                 'Blocks',
                 'Avg Health',
                 'Avg Block Fees',
-                'Empty Blocks',
+                'Empty Blocks',     
               ].map((label) => (
                 <div key={label} className="text-white font-semibold">
                   {label}
@@ -119,10 +120,17 @@ export function PoolDominance() {
             {poolDominance.map((pool, index) => (
               <div
                 key={index}
-                className="grid grid-cols-7 gap-4 text-sm text-gray-300 py-5"
+                className="grid grid-cols-8 gap-4 text-sm text-gray-300 py-5"
               >
+                
                 <div className="ml-6">{pool.rank}</div>
-                <div>{pool.pool}</div>
+                <div className='hover:text-blue-400'>
+  <a href={pool.poolLink} target="_blank" rel="noopener noreferrer">
+    {pool.pool}
+  </a>
+</div>
+ <div className='lg:ml-4'>{pool.latestBlockHeight}</div>
+
                 <div>
                   {formatWork(pool.hashrate).value}{' '}
                   {formatWork(pool.hashrate).unit}
@@ -147,6 +155,7 @@ export function PoolDominance() {
                       )}%`}
                 </div>
                 <div>{pool.emptyBlocks}</div>
+               
               </div>
             ))}
           </>
@@ -217,7 +226,7 @@ export function PoolDominance() {
                   if (active && payload && payload.length) {
                     const data = payload[0].payload;
                     return (
-                      <div className="bg-black border border-gray-700 rounded-lg p-4 shadow-lg">
+                      <div className="bg-[#1a1a1a] border border-gray-700 rounded-lg p-4 shadow-lg">
                         <h3 className="text-white font-semibold text-lg mb-2">
                           {data.pool}
                         </h3>
@@ -251,34 +260,9 @@ export function PoolDominance() {
                               {data.blocks}
                             </span>
                           </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-gray-300">Health:</span>
-                            <span className="text-white font-medium">
-                              {data.avgHealth}
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-gray-300">Block Fees:</span>
-                            <span
-                              className={`font-medium ${
-                                typeof data.avgBlockFees === 'string' &&
-                                data.avgBlockFees.startsWith('-')
-                                  ? 'text-red-400'
-                                  : 'text-green-400'
-                              }`}
-                            >
-                              {(
-                                parseFloat(String(data.avgBlockFees)) * 100
-                              ).toFixed(3)}
-                              %
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-gray-300">Empty Blocks:</span>
-                            <span className="text-white font-medium">
-                              {data.emptyBlocks}
-                            </span>
-                          </div>
+                          
+                          
+                          
                         </div>
                       </div>
                     );

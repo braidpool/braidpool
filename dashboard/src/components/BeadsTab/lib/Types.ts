@@ -35,10 +35,7 @@ export interface BeadRowProps {
   transactions: Transaction[];
 }
 
-export interface BeadRewardTooltipProps {
-  reward: number; // in BTC
-  isOpen?: boolean;
-}
+
 //annimatedstats
 export interface AnimatedStatCardProps {
   title: string;
@@ -165,4 +162,6 @@ export interface PoolData {
   avgHealth: string | number;
   avgBlockFees: string | number;
   emptyBlocks: number;
+  latestBlockHeight:number;
+  poolLink:string;
 }
