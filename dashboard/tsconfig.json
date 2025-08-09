@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "lib": ["dom", "dom.iterable", "esnext", "ES2020", "DOM", "DOM.Iterable"],
+    "lib": ["esnext", "ES2020", "DOM", "DOM.Iterable"],
     "allowJs": true,
     "target": "ES6",
     "useDefineForClassFields": true,

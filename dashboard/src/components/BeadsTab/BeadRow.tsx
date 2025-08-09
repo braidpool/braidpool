@@ -21,22 +21,22 @@ export default function BeadRow({
   return (
     <div className="border-b border-gray-800/80">
       <div
-        className="grid max-sm:grid-cols-3 md:grid-cols-5 gap-2 t p-4 cursor-pointer hover:bg-gray-600"
+        className="grid sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 p-4 cursor-pointer hover:bg-gray-600"
         onClick={() => onToggle(bead.id)}
         onKeyDown={handleKeyToggle}
         role="button"
         tabIndex={0}
       >
         {/* Bead Name */}
-        <div className="flex items-center col-span-1 md:col-span-1">
+        <div className="flex items-center col-span-1">
           <div
             className={`mr-2 flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`}
           >
-            <ChevronDown className="h-5 w-5 text-blue-400" />{' '}
+            <ChevronDown className="h-5 w-5 text-blue-400" />
           </div>
           <span
             className={`text-sm sm:text-base truncate ${isExpanded ? 'text-white' : 'text-blue-200'}
-   font-medium font-mono`}
+        font-medium font-mono`}
           >
             {bead.name.replace(/^#/, '')}
           </span>
@@ -51,7 +51,6 @@ export default function BeadRow({
         </div>
 
         {/* Transactions */}
-
         <div className="text-white font-medium text-sm sm:text-base">
           {bead.transactions}
         </div>

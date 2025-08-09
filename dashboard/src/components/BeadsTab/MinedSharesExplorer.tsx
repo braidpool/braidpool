@@ -161,7 +161,7 @@ export default function MinedSharesExplorer() {
             <div className="space-y-8">
               <div className=" rounded-sm overflow-hidden">
                 {/* Table header */}
-                <div className="grid max-sm:grid-cols-3 md:grid-cols-5  p-4 border-b text-sm border-gray-800/80 font-medium ml-3">
+                <div className="grid  sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-5 p-4 border-b text-sm border-gray-800/80 font-medium ml-3">
                   {[
                     'Bead Hash',
                     'Timestamp',
