@@ -33,19 +33,39 @@ pub enum ErrorKind {
 }
 #[derive(Debug)]
 pub enum StratumErrors {
-    InvalidMethod { method: String },
-    InvalidMethodParams { method: String },
-    MiningJobNotFound { job_id: u64 },
-    MiningJobInsertError { mining_job: JobDetails },
-    JobNotificationNotConstructed { job_template: BlockTemplate },
-    ResponseWriteError { error: std::io::Error },
+    InvalidMethod {
+        method: String,
+    },
+    InvalidMethodParams {
+        method: String,
+    },
+    MiningJobNotFound {
+        job_id: u64,
+    },
+    MiningJobInsertError {
+        mining_job: JobDetails,
+    },
+    JobNotificationNotConstructed {
+        job_template: BlockTemplate,
+    },
+    ResponseWriteError {
+        error: std::io::Error,
+    },
     InvalidCoinbase,
-    PeerNotFoundInConnectionMapping { peer_addr: String },
+    PeerNotFoundInConnectionMapping {
+        peer_addr: String,
+    },
+    UnableToReadStream {
+        error: tokio_util::codec::LinesCodecError,
+    },
 }
 pub enum StratumResponseErrors {}
 impl fmt::Display for StratumErrors {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            StratumErrors::UnableToReadStream { error } => {
+                write!(f, "Unable to fetch stream - {}", error)
+            }
             StratumErrors::PeerNotFoundInConnectionMapping { peer_addr } => {
                 write!(
                     f,

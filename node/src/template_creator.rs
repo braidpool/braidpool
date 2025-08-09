@@ -1,15 +1,20 @@
 use crate::config::CoinbaseConfig;
 use crate::error::CoinbaseError;
 use crate::ipc::client::BlockTemplateComponents;
+use crate::stratum::EXTRANONCE_SEPARATOR;
 use bitcoin::{
-    absolute::LockTime, amount::serde::as_sat::deserialize, blockdata::{
+    absolute::LockTime,
+    amount::serde::as_sat::deserialize,
+    blockdata::{
         opcodes,
         script::{Builder, PushBytesBuf},
         transaction::Version,
         witness::Witness,
-    }, consensus::{self, Decodable}, hashes::sha256d, Address, Amount, BlockHeader, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Txid
+    },
+    consensus::{self, Decodable},
+    hashes::sha256d,
+    Address, Amount, BlockHeader, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Txid,
 };
-use crate::stratum::EXTRANONCE_SEPARATOR;
 use std::convert::TryFrom;
 use std::str::FromStr;
 
@@ -296,7 +301,7 @@ fn build_coinbase_input(
     script_data.extend_from_slice(&height_bytes);
     //extranonce starts with 8 assigned to extranonce bytes
     //therefore the extranonce separator must be before this
-    //TODO KINDLY REVERT IF NOT WORKS 
+    //TODO KINDLY REVERT IF NOT WORKS
     script_data.push(EXTRANONCE_SEPARATOR.len() as u8);
     script_data.extend_from_slice(&EXTRANONCE_SEPARATOR);
     script_data.push(pool_bytes.len() as u8);

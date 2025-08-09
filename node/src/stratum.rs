@@ -20,7 +20,9 @@ use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::str::FromStr;
+use std::time::Duration;
 use std::{borrow::Cow, collections::HashMap, net::SocketAddr, sync::Arc};
+use tokio::io::AsyncBufReadExt;
 use tokio::{
     io::{AsyncWriteExt, BufReader},
     net::{
@@ -326,10 +328,7 @@ impl DownstreamClient {
             "mining.submit" => {
                 Self::handle_submit(self, &req_params, mining_job_map, client_request_id).await
             }
-            "mining.suggest_difficulty" => {
-                self.suggest_difficulty(&req_params, client_request_id)
-                    .await
-            }
+            "mining.set_difficulty" => self.set_difficulty(&req_params, client_request_id).await,
             method => Err(StratumErrors::InvalidMethod {
                 method: method.to_string(),
             }),
@@ -377,15 +376,6 @@ impl DownstreamClient {
                         }
                     }
                 }
-                // if let Err(e) = stream_writer
-                //     .write_all(format!("{}\n", response_json_string).as_bytes())
-                //     .await
-                // {
-                //     log::error!("Error while writing to TCP stream");
-                //     return Err(StratumErrors::ResponseWriteError { error: e });
-                // } else {
-                //     log::info!("Response has been written to the TcpStream successfully");
-                // }
                 Ok(stratum_response)
             }
             Err(error) => {
@@ -394,7 +384,7 @@ impl DownstreamClient {
             }
         }
     }
-    // (46733) stratum_api: tx: {"id": 5, "method": "mining.submit", "params": ["bc1qnp980s5fpp8l94p5cvttmtdqy8rvrq74qly2yrfmzkdsntqzlc5qkc4rkq.bitaxe", "2", "09000000", "6891e02b", "91e70222", "034ea000"]}
+    // Example request - {"id": 5, "method": "mining.submit", "params": ["bc1qnp980s5fpp8l94p5cvttmtdqy8rvrq74qly2yrfmzkdsntqzlc5qkc4rkq.bitaxe", "2", "09000000", "6891e02b", "91e70222", "034ea000"]}
     pub async fn handle_submit(
         &mut self,
         submit_work_params: &Value,
@@ -513,7 +503,7 @@ impl DownstreamClient {
             std_response: StandardResponse::new_ok(Some(client_request_id), json!(true)),
         })
     }
-    pub async fn suggest_difficulty(
+    pub async fn set_difficulty(
         &mut self,
         suggest_difficulty_params: &Value,
         client_request_id: u64,
@@ -785,6 +775,7 @@ impl MiningJobMap {
             self.latest_job_id + 1
         );
         self.mining_jobs.insert(self.latest_job_id + 1, job_details);
+        self.latest_job_id += 1;
     }
     ///Getting a mining job from the existing jobs upto a given timestamp t used by the downstream node for mining
     /// also served as the response for mining.getjob method from client2server in stratum
@@ -799,9 +790,8 @@ impl MiningJobMap {
     }
     /// Get the next job id to be used while constructing `Jobs` from the `templates` received via IPC
     pub fn get_next_job_id(&mut self) -> u64 {
-        self.latest_job_id = self.latest_job_id + 1;
         log::info!("Generated next job_id: {}", self.latest_job_id);
-        self.latest_job_id
+        self.latest_job_id + 1
     }
 }
 pub struct Notifier {
@@ -1212,7 +1202,7 @@ impl Server {
         mining_job_map: Arc<Mutex<MiningJobMap>>,
         downstream_message_sender: mpsc::Sender<String>,
         notification_sender: mpsc::Sender<NotifyCmd>,
-    ) -> Result<(), Box<tokio_util::codec::LinesCodecError>> {
+    ) -> Result<(), Box<StratumErrors>> {
         const MAX_LINE_LENGTH: usize = 2_usize.pow(16);
         ///It can be excessively inefficient to work directly with a AsyncRead instance. A BufReader performs large, infrequent reads on the underlying AsyncRead and maintains an in-memory buffer of the results.
         let reader = BufReader::new(stream_reader);
@@ -1243,13 +1233,30 @@ impl Server {
                                 continue;
                             }
                             log::info!("Read line {:?} from {}...", line, peer_addr);
+                        //Parsing the lines read from buffer to find out whether they are valid JSON request type to be server as per
+                        //stratum or not
+                        match serde_json::from_str::<StandardRequest>(&line) {
+                                Ok(request) => {
+                         let server_request_res:Result<StratumResponses, StratumErrors> = downstream_client.lock().await.handle_client_to_server_request(serde_json::from_str(&line).unwrap(),mining_job_map.clone(),downstream_message_sender.clone(),notification_sender.clone(),peer_addr.to_string()).await;
+                         match server_request_res{
+                            Ok(_)=>{
 
-                             downstream_client.lock().await.handle_client_to_server_request(serde_json::from_str(&line).unwrap(),mining_job_map.clone(),downstream_message_sender.clone(),notification_sender.clone(),peer_addr.to_string()).await;
+                            },
+                            Err(error)=>{
+                                return Err(Box::new(error))
+                            }
+                         }
+                                }
+                                Err(e) => {
+                                    log::error!("Failed to parse JSON from {}: {}. Line: '{}'", peer_addr, e, line);
+                                }
+                            }
+
 
                         }
                         Some(Err(e)) => {
                             log::error!("Error reading line from {}: {}", peer_addr, e);
-                            return Err(Box::new(e));
+                            return Err(Box::new(StratumErrors::UnableToReadStream { error: e }));
                         }
                         None => {
                             log::info!("Connection closed by client: {}", peer_addr);
@@ -1263,4 +1270,203 @@ impl Server {
         }
         Ok(())
     }
+}
+#[tokio::test]
+pub async fn server_start_test() {
+    let connection_mapping = Arc::new(Mutex::new(ConnectionMapping::new()));
+    let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
+    let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
+
+    let config = StratumServerConfig {
+        hostname: "127.0.0.1".to_string(),
+        port: 3353,
+        ..Default::default()
+    };
+
+    let mut server = Server::new(config.clone(), connection_mapping.clone());
+
+    let server_task = tokio::spawn(async move {
+        let _ = server.run_stratum_service(mining_job_map, notify_tx).await;
+    });
+
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    let addr = format!("{}:{}", config.hostname, config.port);
+    let mut mock_connection_handles = Vec::new();
+    for i in 0..3 {
+        let addr_clone = addr.clone();
+        mock_connection_handles.push(tokio::spawn(async move {
+            let mut stream = TcpStream::connect(&addr_clone).await.unwrap();
+            let msg = format!(
+                r#"{{"id":{},"method":"mining.subscribe","params":[]}}"#,
+                i + 1
+            );
+            stream.write_all(msg.as_bytes()).await.unwrap();
+            stream.write_all(b"\n").await.unwrap();
+            stream
+        }));
+    }
+
+    let streams: Vec<TcpStream> = futures::future::join_all(mock_connection_handles)
+        .await
+        .into_iter()
+        .map(|r| r.unwrap())
+        .collect();
+
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    let conn_map = connection_mapping.lock().await;
+    assert_eq!(conn_map.downstream_channel_mapping.len(), 3);
+    drop(streams);
+    drop(server_task);
+}
+
+#[tokio::test]
+pub async fn server_subscribe_response() {
+    let connection_mapping = Arc::new(Mutex::new(ConnectionMapping::new()));
+    let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
+    let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
+
+    let config = StratumServerConfig {
+        hostname: "127.0.0.1".to_string(),
+        port: 3356,
+        ..Default::default()
+    };
+
+    let mut server = Server::new(config.clone(), connection_mapping.clone());
+
+    let server_task = tokio::spawn(async move {
+        let _ = server.run_stratum_service(mining_job_map, notify_tx).await;
+    });
+
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    let addr = format!("{}:{}", config.hostname, config.port);
+    let mut stream = TcpStream::connect(&addr).await.unwrap();
+
+    let msg = r#"{"id":1,"method":"mining.subscribe","params":[]}"#;
+    stream.write_all(msg.as_bytes()).await.unwrap();
+    stream.write_all(b"\n").await.unwrap();
+
+    let mut reader = BufReader::new(stream);
+    let mut response_line = String::new();
+    reader.read_line(&mut response_line).await.unwrap();
+
+    let parsed: serde_json::Value = serde_json::from_str(response_line.trim()).unwrap();
+    println!("{:?}", parsed);
+}
+#[tokio::test]
+async fn test_mining_authorize_response() {
+    let connection_mapping = Arc::new(Mutex::new(ConnectionMapping::new()));
+    let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
+    let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
+
+    let config = StratumServerConfig {
+        hostname: "127.0.0.1".to_string(),
+        port: 3357,
+        ..Default::default()
+    };
+
+    let port = config.port;
+    let mut server = Server::new(config, connection_mapping);
+    tokio::spawn(async move {
+        let _ = server.run_stratum_service(mining_job_map, notify_tx).await;
+    });
+
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    let addr = format!("127.0.0.1:{}", port);
+    let mut stream = TcpStream::connect(&addr).await.unwrap();
+
+    let request = r#"{"id":2,"method":"mining.authorize","params":["satoshi","braidpool"]}"#;
+    stream.write_all(request.as_bytes()).await.unwrap();
+    stream.write_all(b"\n").await.unwrap();
+    let mut reader = BufReader::new(stream);
+
+    let mut line = String::new();
+    reader.read_line(&mut line).await.unwrap();
+    let response: serde_json::Value = serde_json::from_str(line.trim()).unwrap();
+
+    assert_eq!(response["id"], 2);
+    assert!(response["result"].is_boolean());
+    assert_eq!(response["result"], true);
+}
+#[tokio::test]
+async fn test_mining_set_difficulty_response() {
+    let connection_mapping = Arc::new(Mutex::new(ConnectionMapping::new()));
+    let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
+    let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
+
+    let config = StratumServerConfig {
+        hostname: "127.0.0.1".to_string(),
+        port: 3358,
+        ..Default::default()
+    };
+    let port = config.port;
+    let mut server = Server::new(config, connection_mapping);
+    tokio::spawn(async move {
+        let _ = server.run_stratum_service(mining_job_map, notify_tx).await;
+    });
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let addr = format!("127.0.0.1:{}", port);
+    let mut stream = TcpStream::connect(&addr).await.unwrap();
+    let request = r#"{"id":3,"method":"mining.set_difficulty","params":[1000]}"#;
+    stream.write_all(request.as_bytes()).await.unwrap();
+    stream.write_all(b"\n").await.unwrap();
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    reader.read_line(&mut line).await.unwrap();
+    let response: serde_json::Value = serde_json::from_str(line.trim()).unwrap();
+    assert!(response["result"].is_array());
+}
+#[tokio::test]
+async fn test_invalid_json() {
+    let connection_mapping = Arc::new(Mutex::new(ConnectionMapping::new()));
+    let mining_job_map: Arc<Mutex<HashMap<String, Arc<Mutex<MiningJobMap>>>>> =
+        Arc::new(Mutex::new(HashMap::new()));
+    let (notify_tx, _notify_rx) = mpsc::channel::<NotifyCmd>(32);
+
+    let config = StratumServerConfig {
+        hostname: "127.0.0.1".to_string(),
+        port: 5050,
+        ..Default::default()
+    };
+
+    let mut server = Server::new(config, connection_mapping.clone());
+    let mining_job_map_clone = mining_job_map.clone();
+    let notify_tx_clone = notify_tx.clone();
+    tokio::spawn(async move {
+        server
+            .run_stratum_service(mining_job_map_clone, notify_tx_clone)
+            .await
+            .unwrap();
+    });
+
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+    let mut stream = TcpStream::connect("127.0.0.1:5050").await.unwrap();
+
+    stream
+        .write_all(b"{\"method\":\"mining.subscribe\", \"params\": [\"test\", 1]\n")
+        .await
+        .unwrap();
+    stream.flush().await.unwrap();
+
+    stream.write_all(b"not a json at all\n").await.unwrap();
+    stream.flush().await.unwrap();
+
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+    let valid_msg = r#"{"id": 1, "method": "mining.subscribe", "params": []}"#;
+    stream
+        .write_all(format!("{}\n", valid_msg).as_bytes())
+        .await
+        .unwrap();
+    stream.flush().await.unwrap();
+
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    let bytes_read = reader.read_line(&mut line).await.unwrap();
+    let response: serde_json::Value = serde_json::from_str(line.trim()).unwrap();
+    assert_eq!(response["id"], 1);
 }
