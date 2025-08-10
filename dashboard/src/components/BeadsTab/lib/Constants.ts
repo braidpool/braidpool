@@ -13,12 +13,4 @@ export const TABS = [
   { id: 'rewards', label: 'Rewards' },
   { id: 'pool', label: 'Pool Dominance' },
 ];
-export const COLORS = [
-  '#003A6B',
-  '#1B5886',
-  '#3776A1',
-  '#5293BB',
-  '#6EB1D6',
-  '#89CFF1',
-  '#91A6FF',
-];
+

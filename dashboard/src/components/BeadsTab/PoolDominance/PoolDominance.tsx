@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { formatWork } from '../lib/Utils';
 import { PoolData } from '../lib/Types';
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
-import { COLORS } from '../lib/Constants';
+
 
 export function PoolDominance() {
   const [activeTab, setActiveTab] = useState<'overview' | 'visualize'>(
@@ -12,22 +11,6 @@ export function PoolDominance() {
 
   const wsRef = useRef<WebSocket | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
-  const pieData = (() => {
-    if (!poolDominance || poolDominance.length === 0) return [];
-
-    const sorted = [...poolDominance].sort((a, b) => b.hashrate - a.hashrate);
-    const top9 = sorted.slice(0, 9);
-    const others = sorted.slice(9);
-
-    const othersHashrate = others.reduce((sum, item) => sum + item.hashrate, 0);
-
-    return [
-      ...top9,
-      ...(others.length > 0
-        ? [{ pool: 'Others', hashrate: othersHashrate }]
-        : []),
-    ];
-  })();
 
   useEffect(() => {
     const ws = new WebSocket('ws://localhost:5000');
@@ -72,207 +55,156 @@ export function PoolDominance() {
   }, []);
 
   return (
-    <div className=" ">
+    <div >
       <div className="flex justify-between items-center mt-4">
-        <div className="flex items-center gap-4">
-          <h2 className="text-white text-xl font-semibold">Pool Dominance</h2>
-          <span className="bg-gray-700 text-gray-300 px-2 py-1 rounded text-xs mt-2">
+        <div className="flex items-center gap-2">
+          <h2 className="text-white text-xl font-semibold">
+            Pool Ranking
+          </h2>
+          <span className="bg-gray-700 text-gray-300 px-2 py-1 rounded text-xs w-fit mt-2">
             1 Week
           </span>
         </div>
-        <div className="flex space-x-4 mb-4">
-          {['overview', 'visualize'].map((tab) => (
-            <button
-              key={tab}
-              className={`px-4 py-2 rounded-lg ${
-                activeTab === tab
-                  ? 'bg-gray-700 text-white'
-                  : 'bg-black text-gray-300'
-              }`}
-              onClick={() => setActiveTab(tab as 'overview' | 'visualize')}
-            >
-              {tab.charAt(0).toUpperCase() + tab.slice(1)}
-            </button>
-          ))}
-        </div>
+        
+      
       </div>
-      {/* overview */}
-      <div className=" gap-6">
-        {activeTab === 'overview' && (
-          <>
-            <div className="grid max-sm:grid-cols-3  md:grid-cols-8 p-4 border-b text-sm border-gray-800/80 font-medium">
-              {[
-                'Rank',
-                'Pool',
-                'Recent Block',
-                'Hashrate',
-                'Blocks',
-                'Avg Health',
-                'Avg Block Fees',
-                'Empty Blocks',
-              ].map((label) => (
-                <div key={label} className="text-white font-semibold">
-                  {label}
+
+      <div className="mt-6">
+       
+          <div className="w-full">
+     
+            <div className="sm:hidden max-md:hidden  lg:block ">
+              {/* Table Header */}
+              <div className="grid grid-cols-8 gap-2 lg:gap-4 p-3 lg:p-4 border-b text-sm border-gray-800/80 font-medium">
+                {[
+                  'Rank',
+                  'Pool',
+                  'Recent Block',
+                  'Hashrate',
+                  'Blocks',
+                  'Avg Health',
+                  'Avg Block Fees',
+                  'Empty Blocks',
+                ].map((label) => (
+                  <div key={label} className="text-white font-semibold text-xs lg:text-sm">
+                    {label}
+                  </div>
+                ))}
+              </div>
+
+              {/* Table Rows */}
+              {poolDominance.map((pool, index) => (
+                <div
+                  key={index}
+                  className="grid grid-cols-8 gap-2 lg:gap-4 text-xs lg:text-sm text-gray-300 py-3 lg:py-5 px-3 lg:px-4 hover:bg-gray-900/30 transition-colors"
+                >
+                  <div>{pool.rank}</div>
+                  <div className="hover:text-blue-400 truncate">
+                    <a
+                      href={pool.poolLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={pool.pool}
+                    >
+                      {pool.pool}
+                    </a>
+                  </div>
+                  <div>{pool.latestBlockHeight}</div>
+                  <div className="truncate">
+                    {formatWork(pool.hashrate).value}{' '}
+                    {formatWork(pool.hashrate).unit}
+                  </div>
+                  <div>{pool.blocks}</div>
+                  <div>{pool.avgHealth}</div>
+                  <div
+                    className={
+                      typeof pool.avgBlockFees === 'string' &&
+                      pool.avgBlockFees.startsWith('-')
+                        ? 'text-red-500'
+                        : 'text-green-400'
+                    }
+                  >
+                    {parseFloat(String(pool.avgBlockFees)) * 100 < 0
+                      ? `${(parseFloat(String(pool.avgBlockFees)) * -100).toFixed(2)}%`
+                      : `${(parseFloat(String(pool.avgBlockFees)) * 100).toFixed(2)}%`}
+                  </div>
+                  <div>{pool.emptyBlocks}</div>
                 </div>
               ))}
             </div>
 
-            {poolDominance.map((pool, index) => (
-              <div
-                key={index}
-                className="grid grid-cols-8 gap-4 text-sm text-gray-300 py-5"
-              >
-                <div className="ml-6">{pool.rank}</div>
-                <div className="hover:text-blue-400">
-                  <a
-                    href={pool.poolLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
+            {/* Mobile/Small Tablet Card View (sm and below) */}
+            <div className=" lg:hidden px-2 sm:px-4">
+              <div className="space-y-3 sm:space-y-4">
+                {poolDominance.map((pool, index) => (
+                  <div
+                    key={index}
+                    className=" border border-gray-800 rounded-lg p-3 sm:p-4 space-y-2 sm:space-y-3"
                   >
-                    {pool.pool}
-                  </a>
-                </div>
-                <div className="lg:ml-4">{pool.latestBlockHeight}</div>
-
-                <div>
-                  {formatWork(pool.hashrate).value}{' '}
-                  {formatWork(pool.hashrate).unit}
-                </div>
-
-                <div>{pool.blocks}</div>
-                <div>{pool.avgHealth}</div>
-                <div
-                  className={
-                    typeof pool.avgBlockFees === 'string' &&
-                    pool.avgBlockFees.startsWith('-')
-                      ? 'text-red-500'
-                      : 'text-green-400'
-                  }
-                >
-                  {parseFloat(String(pool.avgBlockFees)) * 100 < 0
-                    ? `${(parseFloat(String(pool.avgBlockFees)) * -100).toFixed(
-                        2
-                      )}%`
-                    : `${(parseFloat(String(pool.avgBlockFees)) * 100).toFixed(
-                        2
-                      )}%`}
-                </div>
-                <div>{pool.emptyBlocks}</div>
-              </div>
-            ))}
-          </>
-        )}
-      </div>
-      {/* visualize */}
-      {activeTab === 'visualize' && (
-        <div>
-          <ResponsiveContainer width="100%" height={400}>
-            <PieChart>
-              <Pie
-                data={pieData}
-                dataKey="hashrate"
-                nameKey="pool"
-                cx="50%"
-                cy="50%"
-                outerRadius={160}
-                innerRadius={60}
-                paddingAngle={2}
-                isAnimationActive={false}
-                labelLine={false}
-                animationBegin={0}
-                animationDuration={0}
-                label={({
-                  cx,
-                  cy,
-                  midAngle,
-                  innerRadius,
-                  outerRadius,
-                  percent,
-                  name,
-                }) => {
-                  if (percent < 0.03) return null; // Hide labels for very small slices
-
-                  const RADIAN = Math.PI / 180;
-                  const radius =
-                    innerRadius + (outerRadius - innerRadius) * 1.2;
-                  const x = cx + radius * Math.cos(-midAngle * RADIAN);
-                  const y = cy + radius * Math.sin(-midAngle * RADIAN);
-
-                  return (
-                    <text
-                      x={x}
-                      y={y}
-                      fill="white"
-                      textAnchor={x > cx ? 'start' : 'end'}
-                      dominantBaseline="central"
-                      fontSize={12}
-                      fontWeight="500"
-                      className="drop-shadow-lg"
-                    >
-                      {`${name}`}
-                    </text>
-                  );
-                }}
-              >
-                {poolDominance.map((_, index) => (
-                  <Cell
-                    key={`cell-${index}`}
-                    fill={COLORS[index % COLORS.length]}
-                    stroke="#1c1c1c"
-                    strokeWidth={2}
-                  />
-                ))}
-              </Pie>
-              <Tooltip
-                content={({ active, payload }) => {
-                  if (active && payload && payload.length) {
-                    const data = payload[0].payload;
-                    return (
-                      <div className="bg-[#1a1a1a] border border-gray-700 rounded-lg p-4 shadow-lg">
-                        <h3 className="text-white font-semibold text-lg mb-2">
-                          {data.pool}
+                    {/* Pool Header */}
+                    <div className="flex justify-between items-start">
+                      <div className="flex items-center gap-2">
+                        <span className="bg-gray-700 text-white text-xs px-2 py-1 rounded font-medium">
+                          #{pool.rank}
+                        </span>
+                        <h3 className="text-white font-semibold text-sm sm:text-base hover:text-blue-400">
+                          <a
+                            href={pool.poolLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            {pool.pool}
+                          </a>
                         </h3>
-                        <div className="space-y-1 text-sm">
-                          <div className="flex justify-between items-center">
-                            <span className="text-gray-300">Hashrate:</span>
-                            <span className="text-white font-medium">
-                              {formatWork(data.hashrate).value}{' '}
-                              {formatWork(data.hashrate).unit}
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-gray-300">Share:</span>
-                            <span className="text-white font-medium">
-                              {data.percentage
-                                ? data.percentage.toFixed(2)
-                                : (
-                                    (data.hashrate /
-                                      poolDominance.reduce(
-                                        (sum, p) => sum + p.hashrate,
-                                        0
-                                      )) *
-                                    100
-                                  ).toFixed(2)}
-                              %
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-gray-300">Blocks:</span>
-                            <span className="text-white font-medium">
-                              {data.blocks}
-                            </span>
-                          </div>
+                      </div>
+                    </div>
+
+                    {/* Pool Stats Grid */}
+                    <div className="grid grid-cols-2 gap-2 sm:gap-3 text-xs sm:text-sm">
+                      <div>
+                        <span className="text-gray-400">Recent Block:</span>
+                        <div className="text-white font-medium">{pool.latestBlockHeight}</div>
+                      </div>
+                      <div>
+                        <span className="text-gray-400">Hashrate:</span>
+                        <div className="text-white font-medium">
+                          {formatWork(pool.hashrate).value} {formatWork(pool.hashrate).unit}
                         </div>
                       </div>
-                    );
-                  }
-                  return null;
-                }}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-      )}
+                      <div>
+                        <span className="text-gray-400">Blocks:</span>
+                        <div className="text-white font-medium">{pool.blocks}</div>
+                      </div>
+                      <div>
+                        <span className="text-gray-400">Avg Health:</span>
+                        <div className="text-white font-medium">{pool.avgHealth}</div>
+                      </div>
+                      <div>
+                        <span className="text-gray-400">Avg Block Fees:</span>
+                        <div
+                          className={`font-medium ${
+                            typeof pool.avgBlockFees === 'string' &&
+                            pool.avgBlockFees.startsWith('-')
+                              ? 'text-red-500'
+                              : 'text-green-400'
+                          }`}
+                        >
+                          {parseFloat(String(pool.avgBlockFees)) * 100 < 0
+                            ? `${(parseFloat(String(pool.avgBlockFees)) * -100).toFixed(2)}%`
+                            : `${(parseFloat(String(pool.avgBlockFees)) * 100).toFixed(2)}%`}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-gray-400">Empty Blocks:</span>
+                        <div className="text-white font-medium">{pool.emptyBlocks}</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+      </div>
     </div>
   );
 }
