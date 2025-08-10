@@ -58,7 +58,7 @@ describe('fetchHashrateStats', () => {
       data: {
         hashrate: hashps / 1e18, // EH/s
         timestamp: now,
-        networkDifficulty: diff / 1e12, 
+        networkDifficulty: diff / 1e12,
       },
     });
   });
@@ -94,7 +94,7 @@ describe('fetchHashrateStats', () => {
       .networkDifficulty;
     const secondDiff = JSON.parse(mockClient.send.mock.calls[1][0]).data
       .networkDifficulty;
-    expect(firstDiff).toBe(diff / 1e12); 
+    expect(firstDiff).toBe(diff / 1e12);
     expect(secondDiff).toBe(diff / 1e12);
   });
 
@@ -125,4 +125,4 @@ describe('fetchHashrateStats', () => {
     expect(rpcWithEnv).toHaveBeenCalledTimes(2);
     expect(mockClient.send).not.toHaveBeenCalled();
   });
-})
+});

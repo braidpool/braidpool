@@ -1,10 +1,6 @@
-import {
-  shortenHash,
-  formatWork,
-  processBlockData,
-} from '../Utils';
+import { shortenHash, formatWork, processBlockData } from '../Utils';
 
-import {  BlockData, Transaction } from '../Types';
+import { BlockData, Transaction } from '../Types';
 import { describe, it, expect } from '@jest/globals';
 
 describe('shortenHash', () => {

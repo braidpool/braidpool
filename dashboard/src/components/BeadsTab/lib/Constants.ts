@@ -13,4 +13,3 @@ export const TABS = [
   { id: 'rewards', label: 'Rewards' },
   { id: 'pool', label: 'Pool Dominance' },
 ];
-
