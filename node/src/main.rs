@@ -1,4 +1,5 @@
 use bitcoin::consensus::encode::deserialize;
+use bitcoin::Network;
 use clap::Parser;
 use futures::StreamExt;
 use libp2p::{
@@ -54,7 +55,7 @@ mod proxy_capnp;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let (main_shutdown_tx, mut main_shutdown_rx) =
+    let (main_shutdown_tx, _main_shutdown_rx) =
         mpsc::channel::<tokio::signal::unix::SignalKind>(32);
     let main_task_token = CancellationToken::new();
     let ipc_task_token = main_task_token.clone();
@@ -127,12 +128,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if let Some(rpc_command) = args.command {
         let server_address = tokio::spawn(run_rpc_server(Arc::clone(&braid)));
         let socket_address = server_address.await.unwrap().unwrap();
-        let parsing_handle =
+        let _parsing_handle =
             tokio::spawn(parse_arguments(rpc_command, socket_address.clone())).await;
     } else {
         //running the rpc server and updating the reference counter
         //for shared ownership
-        let server_handler = tokio::spawn(run_rpc_server(Arc::clone(&braid))).await;
+        let _server_handler = tokio::spawn(run_rpc_server(Arc::clone(&braid))).await;
     }
     // load beads from db (if present) and insert in braid here
     // Initializing the peer manager
@@ -190,11 +191,30 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if args.ipc {
         log::info!("Socket path: {}", args.ipc_socket);
 
+        let network = if let Some(network_name) = &args.network {
+            println!("The specified network is: {}", network_name);
+            match network_name.as_str() {
+                "main" | "mainnet" => Network::Bitcoin,
+                "testnet" | "testnet4" => Network::Testnet(bitcoin::TestnetVersion::V4),
+                "signet" => Network::Signet,
+                "regtest" => Network::Regtest,
+                "cpunet" => Network::Regtest,
+                _ => {
+                    log::error!("Invalid network specified: {}", network_name);
+                    log::info!("Valid options: main, testnet, testnet4, signet, regtest, cpunet");
+                    log::info!("Falling back to regtest");
+                    Network::Regtest
+                }
+            }
+        } else {
+            Network::Bitcoin
+        };
+
         let (ipc_template_tx, ipc_template_rx) = mpsc::channel::<Vec<u8>>(1);
 
         let ipc_socket_path = args.ipc_socket.clone();
 
-        let ipc_handler = tokio::task::spawn_blocking(move || {
+        let _ipc_handler = tokio::task::spawn_blocking(move || {
             let rt = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
@@ -212,6 +232,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     match ipc::ipc_block_listener(
                                         ipc_socket_path.clone(),
                                         ipc_template_tx.clone(),
+                                        network,
                                     )
                                     .await
                                     {
