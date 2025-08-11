@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import AdvancedChart from '../AdvancedChart';
+import { WEBSOCKET_URLS } from '@/URLs';
 
 export const Difficulty = () => {
   const [isConnected, setIsConnected] = useState(false);
@@ -10,7 +11,7 @@ export const Difficulty = () => {
 
   useEffect(() => {
     let isMounted = true;
-    const ws = new WebSocket('ws://localhost:5000');
+    const ws = new WebSocket(WEBSOCKET_URLS.MAIN_WEBSOCKET);
     wsRef.current = ws;
 
     ws.onopen = () => {

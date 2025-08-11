@@ -48,7 +48,6 @@ export function RewardsDashboard() {
             console.error('Expected array but got:', typeof rawData, rawData);
           }
         }
-        console.log('Rewards received:', event.data);
       } catch (err) {
         console.error('WebSocket JSON error:', err);
       }
@@ -90,7 +89,7 @@ export function RewardsDashboard() {
             <div className="text-gray-400">Waiting for reward data...</div>
           </div>
         ) : (
-          <div className="grid sm:grid-cols-1 max-md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard
               title="Average Per Block"
               btcValue={analytics.avgBTC}
@@ -127,9 +126,7 @@ export function RewardsDashboard() {
       {/* Chart */}
       <div className="w-full h-[400px]  p-6 rounded-xl border border-gray-700">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-white text-lg font-semibold">
-            BTC vs USD Block Rewards
-          </h2>
+          <h2 className="text-white text-lg font-semibold">Block Rewards</h2>
           <span className="text-gray-400 text-sm">
             ({rewardHistory.length} blocks)
           </span>
@@ -159,7 +156,7 @@ export function RewardsDashboard() {
                 content={({ active, payload, label }) => {
                   if (active && payload && payload.length) {
                     return (
-                      <div className=" text-gray-400 border border-xl border-gray-500 p-[10px] rounded-sm">
+                      <div className=" bg-[#1a1a1a] text-gray-400 border border-xl border-gray-500 p-[10px] rounded-sm">
                         <p>Height:{label}</p>
                         {payload.map((item, index) => (
                           <p key={index}>
@@ -169,7 +166,6 @@ export function RewardsDashboard() {
                       </div>
                     );
                   }
-
                   return null;
                 }}
               />

@@ -18,7 +18,7 @@ export const StatCard = ({
       <div className="text-white text-lg font-semibold">
         {formatValue(btcValue, 'BTC')} BTC
       </div>
-      <div className="text-white text-lg font-semibold">
+      <div className="text-white text-xs  font-semibold  overflow-x-hidden">
         ${formatValue(usdValue, 'USD')}
       </div>
       {blocks !== undefined && timeframe && (

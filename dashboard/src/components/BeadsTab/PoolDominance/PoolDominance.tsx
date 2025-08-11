@@ -1,18 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { formatWork } from '../lib/Utils';
 import { PoolData } from '../lib/Types';
+import { WEBSOCKET_URLS } from '@/URLs';
 
 export function PoolDominance() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'visualize'>(
-    'overview'
-  );
   const [poolDominance, setPoolDominance] = useState<PoolData[]>([]);
 
   const wsRef = useRef<WebSocket | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
 
   useEffect(() => {
-    const ws = new WebSocket('ws://localhost:5000');
+    const ws = new WebSocket(WEBSOCKET_URLS.MAIN_WEBSOCKET);
     let isMounted = true;
     wsRef.current = ws;
 
