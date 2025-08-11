@@ -106,7 +106,14 @@ describe('<BeadRow />', () => {
       />
     );
 
-    expect(screen.getByText(/abc123hash/)).toBeInTheDocument(); // transaction hash
+    // Use getAllByText to handle multiple elements with the same text
+    const transactionHashes = screen.getAllByText(/abc123hash/);
+    expect(transactionHashes.length).toBeGreaterThan(0);
+
+    // Or check for the transaction list container
+    expect(
+      screen.getByText(/Showing.*1.*of.*1.*Transactions/)
+    ).toBeInTheDocument();
   });
 
   it('handles keyboard interaction for toggle', () => {
