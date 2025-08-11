@@ -184,9 +184,9 @@ async fn test_bead_request_handling() {
                                         .bead_sync
                                         .send_response(
                                             channel,
-                                            BeadResponse::Error(
+                                            BeadResponse::Error(BeadSyncError::Other(
                                                 "Bead retrieval not implemented yet".to_string(),
-                                            ),
+                                            )),
                                         )
                                         .unwrap();
                                 }
@@ -241,10 +241,10 @@ async fn test_bead_request_handling() {
                                             .bead_sync
                                             .send_response(
                                                 channel,
-                                                BeadResponse::Error(
+                                                BeadResponse::Error(BeadSyncError::Other(
                                                     "Bead retrieval not implemented yet"
                                                         .to_string(),
-                                                ),
+                                                )),
                                             )
                                             .unwrap();
                                     }
@@ -255,8 +255,13 @@ async fn test_bead_request_handling() {
                                     response,
                                 } => {
                                     if let BeadResponse::Error(error) = response {
-                                        println!("Swarm2: Received error response: {}", error);
-                                        assert_eq!(error, "Bead retrieval not implemented yet");
+                                        println!("Swarm2: Received error response: {:?}", error);
+                                        assert_eq!(
+                                            error,
+                                            BeadSyncError::Other(String::from(
+                                                "Bead retrieval not implemented yet"
+                                            ))
+                                        );
                                         break;
                                     }
                                 }

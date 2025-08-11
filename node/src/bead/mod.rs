@@ -17,7 +17,8 @@ const GET_BEADS: u8 = 0;
 const GET_TIPS: u8 = 1;
 const GET_GENESIS: u8 = 2;
 const GET_ALL_BEADS: u8 = 3;
-const BEAD_RESPONSE_ERROR: u8 = 4;
+const GET_BEADS_AFTER: u8 = 4;
+const BEAD_RESPONSE_ERROR: u8 = 5;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Bead {
@@ -74,6 +75,7 @@ pub enum BeadRequest {
     GetTips,
     GetGenesis,
     GetAllBeads,
+    GetBeadsAfter(Vec<BeadHash>),
 }
 
 // Response types for bead download
@@ -87,8 +89,47 @@ pub enum BeadResponse {
     Genesis(Vec<BeadHash>),
     // Get all beads for IBD
     GetAllBeads(Vec<Bead>),
+    // Get beads after a specific set of hashes
+    GetBeadsAfter(Vec<Bead>),
     // Error response
-    Error(String),
+    Error(BeadSyncError),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum BeadSyncError {
+    GenesisMismatch,
+    Other(String),
+}
+
+impl Encodable for BeadSyncError {
+    fn consensus_encode<W: Write + ?Sized>(&self, w: &mut W) -> Result<usize, io::Error> {
+        match self {
+            BeadSyncError::GenesisMismatch => 0u8.consensus_encode(w),
+            BeadSyncError::Other(message) => {
+                let mut written = 0;
+                written += 1u8.consensus_encode(w)?;
+                written += message.consensus_encode(w)?;
+                Ok(written)
+            }
+        }
+    }
+}
+
+impl Decodable for BeadSyncError {
+    fn consensus_decode<D: BufRead + ?Sized>(d: &mut D) -> Result<Self, Error> {
+        let error_type = u8::consensus_decode(d)?;
+        match error_type {
+            0 => Ok(BeadSyncError::GenesisMismatch),
+            1 => {
+                let message = String::consensus_decode(d)?;
+                Ok(BeadSyncError::Other(message))
+            }
+            _ => Err(Error::from(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Invalid BeadSyncError type",
+            ))),
+        }
+    }
 }
 
 impl Encodable for BeadRequest {
@@ -113,6 +154,15 @@ impl Encodable for BeadRequest {
             BeadRequest::GetAllBeads => {
                 GET_ALL_BEADS.consensus_encode(writer) // 3 for GetAllBeads
             }
+            BeadRequest::GetBeadsAfter(hashes) => {
+                let mut written = 0;
+                written += GET_BEADS_AFTER.consensus_encode(writer)?;
+                written += (hashes.len() as u32).consensus_encode(writer)?;
+                for hash in hashes {
+                    written += hash.consensus_encode(writer)?;
+                }
+                Ok(written)
+            }
         }
     }
 }
@@ -133,6 +183,15 @@ impl Decodable for BeadRequest {
             GET_TIPS => Ok(BeadRequest::GetTips),
             GET_GENESIS => Ok(BeadRequest::GetGenesis),
             GET_ALL_BEADS => Ok(BeadRequest::GetAllBeads),
+            GET_BEADS_AFTER => {
+                let count = u32::consensus_decode(d)?;
+                let mut hashes = Vec::new();
+                for _ in 0..count {
+                    let hash = BeadHash::consensus_decode(d)?;
+                    hashes.push(hash);
+                }
+                Ok(BeadRequest::GetBeadsAfter(hashes))
+            }
             _ => Err(Error::from(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "Invalid BeadRequest type",
@@ -182,8 +241,17 @@ impl Encodable for BeadResponse {
             }
             BeadResponse::Error(error) => {
                 let mut written = 0;
-                written += BEAD_RESPONSE_ERROR.consensus_encode(writer)?; // 4 for Error
+                written += BEAD_RESPONSE_ERROR.consensus_encode(writer)?;
                 written += error.consensus_encode(writer)?;
+                Ok(written)
+            }
+            BeadResponse::GetBeadsAfter(beads) => {
+                let mut written = 0;
+                written += GET_BEADS_AFTER.consensus_encode(writer)?;
+                written += (beads.len() as u32).consensus_encode(writer)?;
+                for bead in beads {
+                    written += bead.consensus_encode(writer)?;
+                }
                 Ok(written)
             }
         }
@@ -231,8 +299,17 @@ impl Decodable for BeadResponse {
                 Ok(BeadResponse::GetAllBeads(beads))
             }
             BEAD_RESPONSE_ERROR => {
-                let error = String::consensus_decode(d)?;
+                let error = BeadSyncError::consensus_decode(d)?;
                 Ok(BeadResponse::Error(error))
+            }
+            GET_BEADS_AFTER => {
+                let count = u32::consensus_decode(d)?;
+                let mut beads = Vec::new();
+                for _ in 0..count {
+                    let bead = Bead::consensus_decode(d)?;
+                    beads.push(bead);
+                }
+                Ok(BeadResponse::GetBeadsAfter(beads))
             }
             _ => Err(Error::from(io::Error::new(
                 io::ErrorKind::InvalidData,

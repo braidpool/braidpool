@@ -60,6 +60,15 @@ impl Braid {
             bead_index_mapping,
         }
     }
+    pub fn reset(&mut self) {
+        self.beads.clear();
+        self.tips.clear();
+        self.cohorts.clear();
+        self.cohort_tips.clear();
+        self.orphan_beads.clear();
+        self.genesis_beads.clear();
+        self.bead_index_mapping.clear();
+    }
 }
 #[allow(unused)]
 impl Braid {
@@ -248,7 +257,34 @@ impl Braid {
             }
         }
     }
+
+    /// utility function for GetBeadsAfter request
+    pub fn get_beads_after(&self, old_tips_and_genesis: Vec<BeadHash>) -> Option<Vec<Bead>> {
+        let old_tips_and_genesis: HashSet<BeadHash> = old_tips_and_genesis.into_iter().collect();
+        let mut response_beads = Vec::new();
+        let mut flag = false;
+        for genesis_index in &self.genesis_beads {
+            let genesis_bead = &self.beads[*genesis_index];
+            let genesis_hash = genesis_bead.block_header.block_hash();
+            if !old_tips_and_genesis.contains(&genesis_hash) {
+                return None;
+            }
+        }
+        for bead in &self.beads {
+            let bead_hash = bead.block_header.block_hash();
+            if flag {
+                response_beads.push(bead.clone());
+            } else {
+                if old_tips_and_genesis.contains(&bead_hash) {
+                    flag = true;
+                    continue;
+                }
+            }
+        }
+        Some(response_beads)
+    }
 }
+
 #[allow(unused)]
 pub mod consensus_functions {
     use num::{One, Zero};

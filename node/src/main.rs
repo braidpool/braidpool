@@ -17,7 +17,7 @@ use libp2p::{
 use node::db::db_handlers::fetch_beads_in_batch;
 use node::SwarmHandler;
 use node::{
-    bead::{self, Bead, BeadRequest},
+    bead::{self, Bead, BeadRequest, BeadSyncError},
     behaviour::{self, BEAD_ANNOUNCE_PROTOCOL, BRAIDPOOL_TOPIC},
     braid, cli,
     db::db_handlers::DBHandler,
@@ -31,7 +31,7 @@ use node::{
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::sync::Arc;
-use std::{collections::HashMap, error::Error};
+use std::{collections::{HashMap,HashSet}, error::Error};
 use std::{fs, time::Duration};
 use tokio_util::sync::CancellationToken;
 #[allow(unused_imports)]
@@ -604,12 +604,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
                              connection_id,
                          },
                      )) => {
-                         info!(
-                             peer = %peer,
-                             message = ?message,
-                             connection = ?connection_id,
-                             "Bead sync message received"
-                         );
+                        info!(
+                            peer = %peer,
+                            message = ?message,
+                            connection = ?connection_id,
+                            "Bead sync message received"
+                        );
                          match message {
                              request_response::Message::Request {
                                  request,
@@ -670,6 +670,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                          }
                                          swarm.behaviour_mut().respond_with_beads(channel, all_beads);
                                      }
+                                     bead::BeadRequest::GetBeadsAfter(hashes) => {
+                                        let beads = braid.read().await.get_beads_after(hashes);
+                                        if let Some(response_beads) = beads {
+                                            swarm
+                                                .behaviour_mut()
+                                                .respond_with_beads(channel, response_beads);
+                                        } else {
+                                            swarm.behaviour_mut().respond_with_error(
+                                                channel,
+                                                BeadSyncError::GenesisMismatch,
+                                            );
+                                        }
+                                    }
                                  }
                              }
                              request_response::Message::Response {
@@ -678,7 +691,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                              } => {
                                  match response {
                                      bead::BeadResponse::Beads(beads)
-                                     | bead::BeadResponse::GetAllBeads(beads) => {
+                                     | bead::BeadResponse::GetAllBeads(beads)
+                                     | bead::BeadResponse::GetBeadsAfter(beads) => {
                                          let mut braid_lock = braid.write().await;
                                          for bead in beads {
                                              let status = braid_lock.extend(&bead);
@@ -693,34 +707,44 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                      }
                                      // no use of this arm as of now
                                      bead::BeadResponse::Tips(tips) => {
-                                         info!(tips = ?tips, tip_count = %tips.len(), "Received braid tips");
+                                        info!(tips = ?tips, tip_count = %tips.len(), "Received braid tips");
                                      }
                                      bead::BeadResponse::Genesis(genesis) => {
-                                         info!(genesis = ?genesis, genesis_count = %genesis.len(), "Received genesis beads");
+                                         info!(genesis=?genesis,"Received genesis beads: ");
                                          let status = {
                                              let braid_lock = braid.read().await;
                                              braid_lock.check_genesis_beads(&genesis)
                                          };
                                          match status {
                                              braid::GenesisCheckStatus::GenesisBeadsValid => {
-                                                 info!(count = %genesis.len(), "Genesis beads validated");
+                                                 info!("Genesis beads are valid");
                                              }
                                              braid::GenesisCheckStatus::MissingGenesisBead => {
-                                                 warn!(peer = %peer, "Missing genesis bead");
+                                                let genesis_hashes =
+                                                genesis.into_iter().collect::<HashSet<_>>();
+                                                warn!(peer = %peer, "Missing genesis bead");
+                                            swarm
+                                                .behaviour_mut()
+                                                .request_beads(peer, genesis_hashes);
                                              }
                                              braid::GenesisCheckStatus::GenesisBeadsCountMismatch => {
-                                                 warn!(
-                                                     received = %genesis.len(),
-                                                     peer = %peer,
-                                                     "Genesis bead count mismatch"
-                                                 );
+                                                warn!(
+                                                    received = %genesis.len(),
+                                                    peer = %peer,
+                                                    "Genesis bead count mismatch"
+                                                );
                                              }
                                          }
                                      }
-                                     bead::BeadResponse::Error(error) => {
-                                         error!(error = ?error, "Bead sync response error");
-                                         peer_manager.update_score(&peer, -1.0);
-                                     }
+                                     bead::BeadResponse::Error(error) => match error {
+                                        BeadSyncError::GenesisMismatch => {
+                                            warn!("Genesis mismatch error received");
+                                            swarm.behaviour_mut().request_genesis(peer.clone());
+                                        }
+                                        BeadSyncError::Other(ref err_msg) => {
+                                            error!(err_msg=?err_msg,"Error in bead sync response:");
+                                        }
+                                    },
                                  };
                              }
                          }

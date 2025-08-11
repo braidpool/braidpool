@@ -1,4 +1,4 @@
-use crate::bead::{Bead, BeadCodec, BeadRequest, BeadResponse};
+use crate::bead::{Bead, BeadCodec, BeadRequest, BeadResponse, BeadSyncError};
 use crate::utils::BeadHash;
 use libp2p::floodsub;
 use libp2p::{
@@ -135,7 +135,11 @@ impl BraidPoolBehaviour {
     }
 
     // Respond with an error
-    pub fn respond_with_error(&mut self, channel: ResponseChannel<BeadResponse>, error: String) {
+    pub fn respond_with_error(
+        &mut self,
+        channel: ResponseChannel<BeadResponse>,
+        error: BeadSyncError,
+    ) {
         self.bead_sync
             .send_response(channel, BeadResponse::Error(error))
             .expect("Failed to send response");
