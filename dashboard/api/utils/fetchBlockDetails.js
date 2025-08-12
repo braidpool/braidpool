@@ -101,18 +101,18 @@ export async function fetchBlockDetails(wss) {
               validTransactions.length
           )
         : 0;
-
+    const { difficulty, tx, previousblockhash, hash, time } = blockData;
     const blockPayload = {
       type: 'block_data',
       data: {
-        blockHash: blockData.hash,
-        timestamp: blockData.time * 1000,
+        blockHash: hash,
+        timestamp: time * 1000,
         height: latestHeight,
-        difficulty: blockData.difficulty,
-        txCount: blockData.tx.length,
-        nonCoinbaseTxCount: blockData.tx.length - 1,
+        difficulty,
+        txCount: tx.length,
+        nonCoinbaseTxCount: tx.length - 1,
         reward,
-        parent: blockData.previousblockhash,
+        parent: previousblockhash,
         transactions,
       },
     };

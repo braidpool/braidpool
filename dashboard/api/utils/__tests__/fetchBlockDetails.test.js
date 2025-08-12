@@ -85,7 +85,7 @@ describe('fetchBlockDetails', () => {
     expect(statsMsg.type).toBe('transaction_stats');
   });
 
-  it('should not fetch again if block hash hasnt changed', async () => {
+  it('should not fetch again if block hash hasn’t changed', async () => {
     const hash =
       '000000000000000000051da0d0ae87f8e58b1e03e4e0872f9b1d80e4fa0a6cb1';
     const timestamp = 1720000000;
