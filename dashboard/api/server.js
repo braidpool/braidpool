@@ -84,28 +84,28 @@ async function sendMempoolData() {
   }
 }
 setInterval(() => {
-  sendDataToClients().catch((err) =>
-    console.error('[Server] sendDataToClients failed:', err)
-  );
+  // sendDataToClients().catch((err) =>
+  //   console.error('[Server] sendDataToClients failed:', err)
+  // );
 
-  fetchBlockDetails(wss).catch((err) =>
-    console.error('[Server] fetchBlockDetails failed:', err)
-  );
+  // fetchBlockDetails(wss).catch((err) =>
+  //   console.error('[Server] fetchBlockDetails failed:', err)
+  // );
 
-  fetchHashrateStats(wss).catch((err) =>
-    console.error('[Server] fetchHashrateStats failed:', err)
-  );
+  // fetchHashrateStats(wss).catch((err) =>
+  //   console.error('[Server] fetchHashrateStats failed:', err)
+  // );
 
-  fetchLatencyData(wss).catch((err) =>
-    console.error('[Server] fetchLatencyData failed:', err)
-  );
+  // fetchLatencyData(wss).catch((err) =>
+  //   console.error('[Server] fetchLatencyData failed:', err)
+  // );
 
-  fetchReward(wss).catch((err) =>
-    console.error('[Server] fetchReward failed:', err)
-  );
-  sendNodeHealthData().catch((err) =>
-    console.error('[Server] fetchNodeHealth failed ', err)
-  );
+  // fetchReward(wss).catch((err) =>
+  //   console.error('[Server] fetchReward failed:', err)
+  // );
+  // sendNodeHealthData().catch((err) =>
+  //   console.error('[Server] fetchNodeHealth failed ', err)
+  // );
   sendMempoolData();
 }, 10000); // 10-second interval
 

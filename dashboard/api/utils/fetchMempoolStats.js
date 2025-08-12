@@ -2,14 +2,18 @@ import axios from 'axios';
 
 export async function fetchMempoolStats() {
   try {
-    const statsRes = await axios.get(`${process.env.MEMPOOL_STATS_URL}`);
-    const feesRes = await axios.get(`${process.env.FEE_RECOMMENDED_URL}`);
-    const priceRes = await axios.get(`${process.env.BTC_PRICE_URL}`);
+    const statsRes = await axios.get(`${process.env.MEMPOOL_URL}/api/mempool`);
+    const feesRes = await axios.get(
+      `${process.env.MEMPOOL_URL}/api/v1/fees/recommended`
+    );
+    const priceRes = await axios.get(
+      `${process.env.BINANCE_URL}/api/v3/ticker/price?symbol=BTCUSDT`
+    );
     const oneMinuteBlockDataRes = await axios.get(
-      `${process.env.ONE_MIN_BLOCK_FEE_URL}`
+      `${process.env.MEMPOOL_URL}/api/v1/mining/blocks/fee-rates/1m`
     );
     const blockfeesRes = await axios.get(
-      `${process.env.BLOCK_FEES_HISTORY_URL}`
+      `${process.env.MEMPOOL_URL}/api/v1/mining/blocks/fees/1w`
     );
 
     const data = oneMinuteBlockDataRes.data;
