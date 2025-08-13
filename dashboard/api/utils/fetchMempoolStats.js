@@ -1,5 +1,28 @@
 import axios from 'axios';
 
+async function getBlockFeeCurrencyRates() {
+  try {
+    const usdRes = await axios.get(
+      `${process.env.BITCOIN_PRICE_URL}USD${process.env.BITCOIN_PRICE_URL_SUFFIX}`
+    );
+    const eurRes = await axios.get(
+      `${process.env.BITCOIN_PRICE_URL}USD${process.env.BITCOIN_PRICE_URL_SUFFIX}`
+    );
+    const jpyRes = await axios.get(
+      `${process.env.BITCOIN_PRICE_URL}JPY${process.env.BITCOIN_PRICE_URL_SUFFIX}`
+    );
+
+    return {
+      USD: parseFloat(usdRes.data.data.amount),
+      EUR: parseFloat(eurRes.data.data.amount),
+      JPY: parseFloat(jpyRes.data.data.amount),
+    };
+  } catch (err) {
+    console.error('[getBlockFeeCurrencyRates] Failed:', err.message);
+    return { USD: null, EUR: null, JPY: null };
+  }
+}
+
 export async function fetchMempoolStats() {
   try {
     const statsRes = await axios.get(`${process.env.MEMPOOL_URL}/api/mempool`);
@@ -15,7 +38,7 @@ export async function fetchMempoolStats() {
     const blockfeesRes = await axios.get(
       `${process.env.MEMPOOL_URL}/api/v1/mining/blocks/fees/1w`
     );
-
+    const btcRates = getBlockFeeCurrencyRates();
     const data = oneMinuteBlockDataRes.data;
     const latestBlock =
       Array.isArray(data) && data.length > 0 ? data[data.length - 1] : null;
@@ -39,14 +62,12 @@ export async function fetchMempoolStats() {
     const convertFee = (sats) => {
       const feeBtc = sats / 1e8;
       const feeUsd = feeBtc * btcPriceUSD;
-
       return {
         sats_per_vbyte: sats,
         fee_btc: feeBtc,
         fee_usd: feeUsd,
       };
     };
-
     console.log('[blockfeesRes.data sample]', blockfeesRes.data?.[0]);
     console.log('[btcPriceUSD]', btcPriceUSD);
 
@@ -65,6 +86,14 @@ export async function fetchMempoolStats() {
             ).toLocaleTimeString(),
             btc: latestBlockFeeRaw.avgFees / 1e8,
             usd: latestBlockFeeRaw.USD,
+            eur:
+              btcRates.EUR && btcRates.USD
+                ? latestBlockFeeRaw.USD * (btcRates.EUR / btcRates.USD)
+                : null,
+            jpy:
+              btcRates.JPY && btcRates.USD
+                ? latestBlockFeeRaw.USD * (btcRates.JPY / btcRates.USD)
+                : null,
           },
         ]
       : [];

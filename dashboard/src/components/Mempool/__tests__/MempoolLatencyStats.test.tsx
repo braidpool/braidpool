@@ -112,6 +112,25 @@ jest.mock(
   { virtual: true }
 );
 
+jest.mock(
+  '../Constants',
+  () => ({
+    currencyLabels: {
+      btc: 'BTC',
+      usd: 'USD',
+      eur: 'EUR',
+      jpy: 'JPY',
+    },
+    currencyColors: {
+      btc: '#f7931a',
+      usd: '#4ade80',
+      eur: '#3b82f6',
+      jpy: '#ef4444',
+    },
+  }),
+  { virtual: true }
+);
+
 interface MockWebSocketEventHandlers {
   onopen: ((event: Event) => void) | null;
   onclose: ((event: CloseEvent) => void) | null;
@@ -200,47 +219,85 @@ const mockMempoolData: MempoolData = {
     count: 50000,
     total_fee_btc: 1.23456789,
     total_fee_usd: 45000.5,
+    total_fee_eur: 42000.0,
+    total_fee_jpy: 5000000,
   },
-
+  next_block_fees: {
+    sats_per_vbyte: 25,
+    fee_btc: 0.00010345,
+    fee_usd: 3.8901,
+    fee_eur: 3.6234,
+    fee_jpy: 420.5,
+  },
   fees: {
     high_priority: {
       sats_per_vbyte: 30,
       fee_btc: 0.00012345,
       fee_usd: 4.5678,
+      fee_eur: 4.2567,
+      fee_jpy: 460.8,
     },
     medium_priority: {
       sats_per_vbyte: 20,
       fee_btc: 0.00008234,
       fee_usd: 3.0456,
+      fee_eur: 2.8401,
+      fee_jpy: 307.2,
     },
     standard_priority: {
       sats_per_vbyte: 15,
       fee_btc: 0.00006178,
       fee_usd: 2.2834,
+      fee_eur: 2.1301,
+      fee_jpy: 230.4,
     },
     economy: {
       sats_per_vbyte: 10,
       fee_btc: 0.00004123,
       fee_usd: 1.5267,
+      fee_eur: 1.4234,
+      fee_jpy: 153.6,
+    },
+    minimum: {
+      sats_per_vbyte: 5,
+      fee_btc: 0.00002061,
+      fee_usd: 0.7634,
+      fee_eur: 0.7117,
+      fee_jpy: 76.8,
     },
   },
+  currency_rates: {
+    USD: 37000,
+    EUR: 34500,
+    JPY: 4000000,
+  },
   fee_distribution: {
-    '1-5': 1000,
-    '5-10': 2500,
-    '10-20': 5000,
-    '20-30': 3000,
-    '30+': 1500,
+    min: 5,
+    '10th': 8,
+    '25th': 12,
+    median: 18,
+    '75th': 25,
+    '90th': 35,
+    max: 50,
   },
   block_fee_history: [
     {
-      time: '2023-01-01T12:00:00Z',
+      height: 908901,
+      time: '1:25:15 AM',
+      timestamp: 1754510115,
       btc: 0.5,
       usd: 18500,
+      eur: 17250,
+      jpy: 2000000,
     },
     {
-      time: '2023-01-01T12:10:00Z',
+      height: 908902,
+      time: '1:28:22 AM',
+      timestamp: 1754510302,
       btc: 0.6,
       usd: 22200,
+      eur: 20700,
+      jpy: 2400000,
     },
   ],
 };
@@ -251,6 +308,8 @@ const mockPartialData: Partial<MempoolData> = {
     count: 25000,
     total_fee_btc: 0.5,
     total_fee_usd: 18500,
+    total_fee_eur: 17250,
+    total_fee_jpy: 2000000,
   },
 };
 
@@ -449,41 +508,79 @@ describe('MempoolLatencyStats', () => {
       });
     });
 
-    test('renders view toggle buttons', async () => {
+    test('renders currency select dropdown', async () => {
       await waitFor(() => {
-        expect(screen.getByText('BTC')).toBeInTheDocument();
-        expect(screen.getByText('USD')).toBeInTheDocument();
-        expect(screen.getByText('BOTH')).toBeInTheDocument();
+        const selectElement = screen.getByRole('combobox');
+        expect(selectElement).toBeInTheDocument();
+        expect(selectElement).toHaveValue('all');
       });
     });
 
-    test('BTC button toggles view correctly', async () => {
-      const btcButton = screen.getByText('BTC');
-
-      fireEvent.click(btcButton);
-
+    test('contains all currency options in dropdown', async () => {
       await waitFor(() => {
-        expect(btcButton).toHaveClass('bg-blue-600 text-white');
+        expect(screen.getByDisplayValue('ALL')).toBeInTheDocument();
+      });
+
+      const selectElement = screen.getByRole('combobox');
+
+      // Check all options exist
+      const options = selectElement.querySelectorAll('option');
+      const optionValues = Array.from(options).map((option) =>
+        option.getAttribute('value')
+      );
+
+      expect(optionValues).toContain('btc');
+      expect(optionValues).toContain('usd');
+      expect(optionValues).toContain('eur');
+      expect(optionValues).toContain('jpy');
+      expect(optionValues).toContain('all');
+    });
+
+    test('changes view when selecting different currency', async () => {
+      await waitFor(() => {
+        const selectElement = screen.getByRole('combobox');
+        fireEvent.change(selectElement, { target: { value: 'usd' } });
+        expect(selectElement).toHaveValue('usd');
       });
     });
 
-    test('USD button toggles view correctly', async () => {
-      const usdButton = screen.getByText('USD');
+    test('defaults to "all" view initially', async () => {
+      await waitFor(() => {
+        const selectElement = screen.getByRole('combobox');
+        expect(selectElement).toHaveValue('all');
+      });
+    });
+  });
 
-      fireEvent.click(usdButton);
+  describe('Component Rendering with Data', () => {
+    beforeEach(async () => {
+      render(<MempoolLatencyStats />);
 
       await waitFor(() => {
-        expect(usdButton).toHaveClass('bg-blue-600 text-white');
+        if (mockWebSocketInstance?.onmessage) {
+          const messageEvent = new MessageEvent('message', {
+            data: JSON.stringify({
+              type: 'mempool_update',
+              data: mockMempoolData,
+            }),
+          });
+          mockWebSocketInstance.onmessage(messageEvent);
+        }
+      });
+    });
+    test('renders fee distribution chart', async () => {
+      await waitFor(() => {
+        expect(
+          screen.getByText('Live Fee Rate Distribution')
+        ).toBeInTheDocument();
+        expect(screen.getByTestId('bar-chart')).toBeInTheDocument();
       });
     });
 
-    test('BOTH button toggles view correctly', async () => {
-      const bothButton = screen.getByText('BOTH');
-
-      fireEvent.click(bothButton);
-
+    test('renders block fee chart', async () => {
       await waitFor(() => {
-        expect(bothButton).toHaveClass('bg-blue-600 text-white');
+        expect(screen.getByText('Live Block Fees')).toBeInTheDocument();
+        expect(screen.getByTestId('line-chart')).toBeInTheDocument();
       });
     });
   });

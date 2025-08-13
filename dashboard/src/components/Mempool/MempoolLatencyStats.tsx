@@ -19,14 +19,15 @@ import {
   MempoolData,
   FeeDistributionItem,
 } from './Types';
+import { currencyLabels, currencyColors } from './Constants';
 
 const MempoolLatencyStats = () => {
   const wsRef = useRef<WebSocket | null>(null);
 
   const [mempoolData, setMempoolData] = useState<MempoolData | null>(null);
-  const [selectedView, setSelectedView] = useState<'btc' | 'usd' | 'both'>(
-    'both'
-  );
+  const [selectedView, setSelectedView] = useState<
+    'btc' | 'usd' | 'eur' | 'jpy' | 'all'
+  >('all');
   const [blockFeeHistory, setBlockFeeHistory] = useState<BlockFeeHistoryItem[]>(
     []
   );
@@ -53,9 +54,16 @@ const MempoolLatencyStats = () => {
           if (latest) {
             setBlockFeeHistory((prev) => {
               const isDuplicate = prev.some(
-                (item) => item.time === latest.time
+                (item) => item.height === latest.height
               );
-              return isDuplicate ? prev : [...prev.slice(-49), latest];
+              if (isDuplicate) return prev;
+
+              const newHistory = [...prev, latest];
+              return newHistory.slice(-50).sort((a, b) => {
+                const aTime = a.timestamp || new Date(a.time).getTime() / 1000;
+                const bTime = b.timestamp || new Date(b.time).getTime() / 1000;
+                return aTime - bTime;
+              });
             });
           }
         }
@@ -90,7 +98,6 @@ const MempoolLatencyStats = () => {
 
   const fees = mempoolData?.fees || {};
   const next: Fee | undefined = mempoolData?.next_block_fees;
-
   const feeDist = mempoolData?.fee_distribution || {};
 
   const feeDistChartData: FeeDistributionItem[] = Object.entries(feeDist).map(
@@ -100,11 +107,15 @@ const MempoolLatencyStats = () => {
     })
   );
 
-  const blockFeeChartData = blockFeeHistory.map((item: any) => ({
-    time: item.time || item.timestamp,
-    btc: isNaN(item.btc) ? 0 : item.btc,
-    usd: isNaN(item.usd) ? 0 : item.usd,
-  }));
+  const blockFeeChartData = blockFeeHistory.map(
+    (item: BlockFeeHistoryItem) => ({
+      time: item.time || String(item.timestamp || ''),
+      btc: isNaN(Number(item.btc)) ? 0 : Number(item.btc),
+      usd: isNaN(Number(item.usd)) ? 0 : Number(item.usd),
+      eur: isNaN(Number(item.eur)) ? 0 : Number(item.eur),
+      jpy: isNaN(Number(item.jpy)) ? 0 : Number(item.jpy),
+    })
+  );
 
   return (
     <div className="flex flex-col gap-8 p-6 text-gray-100">
@@ -176,7 +187,6 @@ const MempoolLatencyStats = () => {
         {/* --- Fee Rate Distribution --- */}
         <div className="shadow p-6">
           <h3 className="text-lg font-semibold text-center mb-4">
-            {' '}
             Live Fee Rate Distribution
           </h3>
           <div className="h-64">
@@ -204,81 +214,93 @@ const MempoolLatencyStats = () => {
 
       {/* --- Block Fee Chart --- */}
       <section className="shadow p-6">
-        <h2 className="text-lg font-semibold text-center mb-4">
-          Live Block Fees
-        </h2>
+        <div className="flex justify-between items-center mb-4 flex-wrap">
+          <h2 className="text-lg font-semibold">Live Block Fees</h2>
 
-        {/* Toggle Buttons */}
-        <div className="flex justify-center gap-4 mb-4">
-          {['btc', 'usd', 'both'].map((view) => (
-            <button
-              key={view}
-              onClick={() => setSelectedView(view as any)}
-              className={`px-4 py-1 rounded-full text-sm ${
-                selectedView === view
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-            >
-              {view.toUpperCase()}
-            </button>
-          ))}
+          <select
+            value={selectedView}
+            onChange={(e) =>
+              setSelectedView(
+                e.target.value as 'btc' | 'usd' | 'eur' | 'jpy' | 'all'
+              )
+            }
+            className="bg-[#1a1a1a] text-gray-300 px-4 py-2 rounded-md shadow-md border border-white"
+          >
+            {['btc', 'usd', 'eur', 'jpy', 'all'].map((view) => (
+              <option key={view} value={view}>
+                {view.toUpperCase()}
+              </option>
+            ))}
+          </select>
         </div>
 
-        <ResponsiveContainer width="100%" height={300}>
+        <ResponsiveContainer width="100%" height={400}>
           <LineChart data={blockFeeChartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
             <XAxis dataKey="time" stroke="#9ca3af" />
-            <YAxis
-              yAxisId="left"
-              stroke="#9ca3af"
-              label={{
-                value: 'BTC',
-                angle: -90,
-                position: 'insideLeft',
-                fill: '#9ca3af',
-              }}
-            />
-            <YAxis
-              yAxisId="right"
-              orientation="right"
-              stroke="#9ca3af"
-              label={{
-                value: 'USD',
-                angle: -90,
-                position: 'insideRight',
-                fill: '#9ca3af',
-              }}
-            />
+            <YAxis stroke="#9ca3af" />
             <Tooltip
               contentStyle={{
                 backgroundColor: '#1f2937',
                 borderRadius: '8px',
                 border: 'none',
                 color: '#ffffff',
-                padding: '10px',
+                padding: '15px',
                 fontSize: '14px',
               }}
+              formatter={(value: number, name: string) => [
+                name === 'btc'
+                  ? `${Number(value).toFixed(6)} BTC`
+                  : name === 'jpy'
+                    ? `¥${Number(value).toFixed(0)}`
+                    : name === 'eur'
+                      ? `€${Number(value).toFixed(2)}`
+                      : name === 'usd'
+                        ? `${Number(value).toFixed(2)}`
+                        : `${Number(value).toFixed(2)}`,
+                currencyLabels[name] || name,
+              ]}
             />
             <Legend />
-            {(selectedView === 'btc' || selectedView === 'both') && (
+
+            {(selectedView === 'btc' || selectedView === 'all') && (
               <Line
-                yAxisId="left"
                 type="monotone"
                 dataKey="btc"
-                stroke="#4ade80"
-                dot={false}
+                stroke={currencyColors.btc}
+                strokeWidth={2}
+                dot={{ r: 4 }}
                 name="BTC"
               />
             )}
-            {(selectedView === 'usd' || selectedView === 'both') && (
+            {(selectedView === 'usd' || selectedView === 'all') && (
               <Line
-                yAxisId="right"
                 type="monotone"
                 dataKey="usd"
-                stroke={colors.primary}
-                dot={false}
+                stroke={currencyColors.usd}
+                strokeWidth={2}
+                dot={{ r: 4 }}
                 name="USD"
+              />
+            )}
+            {(selectedView === 'eur' || selectedView === 'all') && (
+              <Line
+                type="monotone"
+                dataKey="eur"
+                stroke={currencyColors.eur}
+                strokeWidth={2}
+                dot={{ r: 4 }}
+                name="EUR"
+              />
+            )}
+            {(selectedView === 'jpy' || selectedView === 'all') && (
+              <Line
+                type="monotone"
+                dataKey="jpy"
+                stroke={currencyColors.jpy}
+                strokeWidth={2}
+                dot={{ r: 4 }}
+                name="JPY"
               />
             )}
           </LineChart>
