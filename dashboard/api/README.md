@@ -5,10 +5,12 @@
 3. Set all env vars
 
    BITCOIN_PRICE_URL
-
    BITCOIN_PRICE_URL_SUFFIX
-
    CRYPTO_URL
+   RPC_USER
+   RPC_PASS
+   BRAIDPOOL_URL
+   MEMPOOL_URL
 
 4. Run
 
