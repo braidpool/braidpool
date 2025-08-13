@@ -1,5 +1,7 @@
 #![allow(unused)]
 use crate::error::StratumErrors;
+use crate::ipc::ipc_block_listener;
+use crate::{ipc, ipc_template_consumer, setup_logging, setup_tracing};
 use bitcoin::block::HeaderExt;
 use bitcoin::blockdata::block::Block;
 use bitcoin::consensus::serialize;
@@ -14,12 +16,17 @@ use bitcoin::{
 };
 use bitcoin::{merkle_tree, BlockHeader, BlockTime, TxMerkleNode, Txid};
 use bitcoincore_rpc::bitcoin::block::Header;
+use core::panic;
 use futures::channel;
 use futures::{lock::Mutex, FutureExt};
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::io::Read;
+use std::path::Path;
+use std::process::{Command, Stdio};
 use std::str::FromStr;
+use std::sync::Once;
 use std::time::Duration;
 use std::{borrow::Cow, collections::HashMap, net::SocketAddr, sync::Arc};
 use tokio::io::AsyncBufReadExt;
@@ -1417,7 +1424,7 @@ async fn test_mining_set_difficulty_response() {
     let mut line = String::new();
     reader.read_line(&mut line).await.unwrap();
     let response: serde_json::Value = serde_json::from_str(line.trim()).unwrap();
-    assert!(response["result"].is_array());
+    assert_eq!(response["method"], "mining.set_difficulty");
 }
 #[tokio::test]
 async fn test_invalid_json() {
@@ -1469,4 +1476,162 @@ async fn test_invalid_json() {
     let bytes_read = reader.read_line(&mut line).await.unwrap();
     let response: serde_json::Value = serde_json::from_str(line.trim()).unwrap();
     assert_eq!(response["id"], 1);
+}
+//TOFIX : Functional automated test for braidpool stratum server
+#[tokio::test]
+pub async fn test_script() {
+    setup_logging();
+    setup_tracing();
+    //fetching and building the `minerd` for dynamic testing instead of hardcoded requests
+    let mock_miner_handle = tokio::task::spawn_blocking(|| {
+        let cwd = std::env::current_dir()
+            .unwrap()
+            .join(Path::new("src/mock_miner.sh"));
+        let mut child_res = Command::new(cwd).spawn().unwrap();
+        let output = child_res.wait_with_output();
+    })
+    .await
+    .expect("Failed");
+
+    println!("Minerd fetched from git");
+    let minerd_path = std::env::current_dir()
+        .unwrap()
+        .join(Path::new("cpuminer/minerd"));
+    println!("Starting miner from path: {:?}", minerd_path);
+
+    let miner_handle = tokio::spawn(async move {
+        let mut child = match Command::new(minerd_path)
+            .arg("-a")
+            .arg("sha256d")
+            .arg("-o")
+            .arg("stratum+tcp://192.168.1.7:3333")
+            .arg("-q")
+            .arg("-D")
+            .arg("-P")
+            .stdout(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::inherit())
+            .spawn()
+        {
+            Ok(c) => c,
+            Err(e) => {
+                panic!(
+                    "minerd process could not be started: {}. Stopping thread.",
+                    e
+                );
+            }
+        };
+
+        println!("Miner process started!");
+    })
+    .await
+    .expect("Failed again");
+    println!("Starting server");
+    let mut latest_template = Arc::new(Mutex::new(BlockTemplate::default()));
+    let mut latest_template_merkel_branch = Arc::new(Mutex::new(Vec::new()));
+    let mut latest_template_ref = latest_template.clone();
+    let mut latest_template_merkel_branch_ref = latest_template_merkel_branch.clone();
+    let (notification_tx, notification_rx) = mpsc::channel::<NotifyCmd>(1024);
+    let notification_tx_clone = notification_tx.clone();
+    let connection_mapping = Arc::new(Mutex::new(ConnectionMapping::new()));
+    let mut mining_job_map = Arc::new(Mutex::new(HashMap::new()));
+    let mut notifier: Notifier = Notifier::new(notification_rx, Arc::clone(&mining_job_map));
+    let stratum_config: StratumServerConfig = StratumServerConfig::default();
+    let mut stratum_server = Server::new(stratum_config, connection_mapping.clone());
+    tokio::spawn(async move {
+        notifier
+            .run_notifier(
+                connection_mapping.clone(),
+                &mut latest_template_ref,
+                &mut latest_template_merkel_branch_ref,
+            )
+            .await;
+    });
+    //Running the stratum service
+    tokio::spawn(async move {
+        stratum_server
+            .run_stratum_service(mining_job_map, notification_tx_clone)
+            .await;
+    });
+    // Spawn miner in a separate async task
+
+    tokio::time::sleep(Duration::from_secs(30));
+    let (ipc_template_tx, ipc_template_rx) = mpsc::channel::<(Vec<u8>, Vec<Vec<u8>>)>(1);
+    let ipc_socket_path = "/tmp/bitcoin-ipc.sock".to_string();
+    let ipc_handler = tokio::task::spawn_blocking(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("Failed to create tokio runtime");
+        rt.block_on(async {
+            let local_set = tokio::task::LocalSet::new();
+
+            local_set
+                .run_until(async {
+                    let listener_task = tokio::task::spawn_local({
+                        let ipc_socket_path = ipc_socket_path.clone();
+                        let ipc_template_tx = ipc_template_tx.clone();
+                        async move {
+                            loop {
+                                match ipc::ipc_block_listener(
+                                    ipc_socket_path.clone(),
+                                    ipc_template_tx.clone(),
+                                )
+                                .await
+                                {
+                                    Ok(_) => {
+                                        break;
+                                    }
+                                    Err(e) => {
+                                        log::error!("IPC block listener failed: {}", e);
+                                        log::info!("Restarting IPC listener in 10 seconds...");
+                                        tokio::time::sleep(tokio::time::Duration::from_secs(10))
+                                            .await;
+                                    }
+                                }
+                            }
+                        }
+                    });
+
+                    let consumer_task = tokio::task::spawn_local(async move {
+                        ipc_template_consumer(
+                            ipc_template_rx,
+                            notification_tx,
+                            &mut latest_template.clone(),
+                            &mut latest_template_merkel_branch.clone(),
+                        )
+                        .await
+                        .unwrap();
+                    });
+                    tokio::select! {
+                        _ = listener_task => log::info!("IPC listener completed"),
+                        _ = consumer_task => log::info!("IPC consumer completed"),
+
+                    }
+                })
+                .await;
+        });
+    });
+    let mut stream = TcpStream::connect("127.0.0.1:3333").await.unwrap();
+    let (reader, _writer) = stream.into_split();
+
+    tokio::spawn(async move {
+        let mut buf_reader = BufReader::new(reader);
+        let mut line = String::new();
+
+        loop {
+            line.clear();
+            match buf_reader.read_line(&mut line).await {
+                Ok(0) => {
+                    break;
+                }
+                Ok(_) => {
+                    println!(" Message from server: {}", line.trim());
+                }
+                Err(e) => {
+                    eprintln!(" Error reading from server: {}", e);
+                    break;
+                }
+            }
+        }
+    });
 }

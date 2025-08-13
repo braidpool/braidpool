@@ -13,4 +13,3 @@ cd cpuminer
 ./configure CFLAGS="-O3"
 make
 
-./minerd -a sha256d -o stratum+tcp://localhost:3333 -q -D -P
