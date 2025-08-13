@@ -88,9 +88,9 @@ export async function fetchMempoolStats() {
               (latestBlockFeeRaw.timestamp || 0) * 1000
             ).toLocaleTimeString(),
             btc: latestBlockFeeRaw.avgFees / 1e8,
-            usd: latestBlockFeeRaw.USD,
-            eur: btcRates.EUR,
-            jpy: btcRates.JPY,
+            usd: latestBlockFeeRaw.USD / 100,
+            eur: (latestBlockFeeRaw.avgFees / 1e8) * btcRates.EUR,
+            jpy: (latestBlockFeeRaw.avgFees / 1e8) * btcRates.JPY,
           },
         ]
       : [];
