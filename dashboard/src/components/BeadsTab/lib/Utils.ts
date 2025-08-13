@@ -50,7 +50,8 @@ export function processBlockData(data: BlockData) {
     parent,
     transactions,
   } = data;
-  const workInGH = ((difficulty * 2 ** 32) / 1e9).toFixed(2);
+  const DIFFICULTY_ONE = 2 ** 32;
+  const workInGH = ((difficulty * DIFFICULTY_ONE) / 1e9).toFixed(2);
   const formattedTransactions = transactions.map((tx: any) => ({
     ...tx,
     timestamp: new Date(parseInt(tx.timestamp)).toISOString(),
@@ -139,4 +140,8 @@ export function formatValue(value: number, type: 'BTC' | 'USD'): string {
       maximumFractionDigits: 2,
     });
   }
+}
+export function formatFeePercentage(fees: string | number): string {
+  const value = parseFloat(String(fees)) * 100;
+  return `${Math.abs(value).toFixed(2)}%`;
 }

@@ -5,11 +5,11 @@ let rewardHistory = [];
 export async function fetchReward() {
   try {
     const { data: blocks } = await axios.get(
-      `${process.env.MEMPOOL_API_URL}/api/blocks`
+      `${process.env.MEMPOOL_URL}/api/blocks`
     );
     const latestBlock = blocks[0];
     const { data: txs } = await axios.get(
-      `${process.env.MEMPOOL_API_URL}/api/block/${latestBlock.id}/txs`
+      `${process.env.MEMPOOL_URL}/api/block/${latestBlock.id}/txs`
     );
     const coinbaseTx = txs[0];
     const rewardSats = coinbaseTx.vout.reduce(

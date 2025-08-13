@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { formatWork } from '../lib/Utils';
 import { PoolData } from '../lib/Types';
 import { WEBSOCKET_URLS } from '@/URLs';
+import { formatFeePercentage } from '../lib/Utils';
 
 export function PoolDominance() {
   const [poolDominance, setPoolDominance] = useState<PoolData[]>([]);
@@ -118,9 +119,7 @@ export function PoolDominance() {
                       : 'text-green-400'
                   }
                 >
-                  {parseFloat(String(pool.avgBlockFees)) * 100 < 0
-                    ? `${(parseFloat(String(pool.avgBlockFees)) * -100).toFixed(2)}%`
-                    : `${(parseFloat(String(pool.avgBlockFees)) * 100).toFixed(2)}%`}
+                  {formatFeePercentage(pool.avgBlockFees)}
                 </div>
                 <div>{pool.emptyBlocks}</div>
               </div>

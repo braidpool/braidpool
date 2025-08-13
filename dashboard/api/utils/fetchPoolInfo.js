@@ -3,10 +3,8 @@ import axios from 'axios';
 export async function fetchPoolInfo() {
   try {
     const [poolInfoResponse, poolHashResponse] = await Promise.all([
-      axios.get(`${process.env.MEMPOOL_API_URL}/api/v1/mining/pools/1w`),
-      axios.get(
-        `${process.env.MEMPOOL_API_URL}/api/v1/mining/hashrate/pools/1w`
-      ),
+      axios.get(`${process.env.MEMPOOL_URL}/api/v1/mining/pools/1w`),
+      axios.get(`${process.env.MEMPOOL_URL}/api/v1/mining/hashrate/pools/1w`),
     ]);
 
     const poolInfoData = poolInfoResponse.data.pools;
@@ -25,7 +23,7 @@ export async function fetchPoolInfo() {
         let poolLink = 'N/A';
         try {
           const blockRes = await axios.get(
-            `${process.env.MEMPOOL_API_URL}/api/v1/mining/pool/${slug}/blocks`
+            `${process.env.MEMPOOL_URL}/api/v1/mining/pool/${slug}/blocks`
           );
           const blocks = blockRes.data;
           if (blocks.length > 0) {
@@ -39,7 +37,7 @@ export async function fetchPoolInfo() {
 
         try {
           const extraRes = await axios.get(
-            `${process.env.MEMPOOL_API_URL}/api/v1/mining/pool/${slug}`
+            `${process.env.MEMPOOL_URL}/api/v1/mining/pool/${slug}`
           );
           const extraData = extraRes.data;
           poolLink = extraData.pool?.link ?? 'N/A';
