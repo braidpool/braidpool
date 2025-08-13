@@ -54,7 +54,13 @@ export const Difficulty = () => {
 
     return () => {
       isMounted = false;
-      ws.close();
+      ws.onopen = null;
+      ws.onclose = null;
+      ws.onerror = null;
+      ws.onmessage = null;
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
     };
   }, []);
 

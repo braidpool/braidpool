@@ -243,13 +243,18 @@ export default function MinedSharesExplorer() {
             </div>
           )}
 
-          {activeTab === 'trends' && <TrendsTab timeRange={timeRange} />}
-          {activeTab === 'rewards' && (
-            <div className="border border-gray-800/50 rounded-xl p-6 ">
-              <RewardsDashboard />
-            </div>
-          )}
-          {activeTab === 'pool' && <PoolDominance />}
+          <div style={{ display: activeTab === 'trends' ? 'block' : 'none' }}>
+            <TrendsTab timeRange={timeRange} />
+          </div>
+          <div
+            style={{ display: activeTab === 'rewards' ? 'block' : 'none' }}
+            className="border border-gray-800/50 rounded-xl p-6"
+          >
+            <RewardsDashboard />
+          </div>
+          <div style={{ display: activeTab === 'pool' ? 'block' : 'none' }}>
+            <PoolDominance />
+          </div>
         </div>
       </div>
     </div>
