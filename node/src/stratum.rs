@@ -1,53 +1,33 @@
-#![allow(unused)]
 use crate::error::StratumErrors;
-use crate::ipc::ipc_block_listener;
-use crate::{ipc, ipc_template_consumer, setup_logging, setup_tracing};
+use crate::{EXTRANONCE1_SIZE, EXTRANONCE2_SIZE, EXTRANONCE_SEPARATOR};
 use bitcoin::block::HeaderExt;
-use bitcoin::blockdata::block::Block;
 use bitcoin::consensus::serialize;
 use bitcoin::io::Cursor;
 use bitcoin::merkle_tree::MerkleNode;
 use bitcoin::pow::CompactTargetExt;
 use bitcoin::{
     absolute::{Decodable, Encodable},
-    consensus::deserialize,
-    io::{self, BufRead, Write},
+    io::{self, Write},
     Transaction,
 };
-use bitcoin::{merkle_tree, BlockHeader, BlockTime, TxMerkleNode, Txid};
-use bitcoincore_rpc::bitcoin::block::Header;
+use bitcoin::{BlockHeader, BlockTime, TxMerkleNode, Txid};
 use core::panic;
-use futures::channel;
 use futures::{lock::Mutex, FutureExt};
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::io::Read;
-use std::path::Path;
-use std::process::{Command, Stdio};
 use std::str::FromStr;
-use std::sync::Once;
-use std::time::Duration;
-use std::{borrow::Cow, collections::HashMap, net::SocketAddr, sync::Arc};
-use tokio::io::AsyncBufReadExt;
+use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use tokio::{
     io::{AsyncWriteExt, BufReader},
     net::{
-        tcp::{self, OwnedReadHalf, OwnedWriteHalf},
-        TcpListener, TcpStream,
+        tcp::{OwnedReadHalf, OwnedWriteHalf},
+        TcpListener,
     },
     sync::mpsc,
 };
 use tokio_stream::StreamExt;
 use tokio_util::codec::{FramedRead, LinesCodec};
-
-//4 byte extranonce prefix
-pub const EXTRANONCE1_SIZE: usize = 4;
-//8 byte extranonce suffix just for testing it is set to 4 bytes reset accordingly
-pub const EXTRANONCE2_SIZE: usize = 4;
-//Total extranonce length to be kept as testing = 8 bytes
-pub const EXTRANONCE_SEPARATOR: [u8; EXTRANONCE1_SIZE + EXTRANONCE2_SIZE] =
-    [1u8; EXTRANONCE1_SIZE + EXTRANONCE2_SIZE];
 /*
 1)Creating a `notifier` struct that will contain a notification sender along with another attribute of `notification` which will contain all the fields related to mining.notify endpoint from server2client method in stratumcontaining functions such as building
 notification for a given block template received
@@ -60,9 +40,14 @@ weak_share or `Bead` in case of braidpool is concerned hence a mapping required 
 node . Which further can be accessed by all the downstream nodes for methods such as mining.getjob(job_id) .
 */
 
-/// Struct representing the getblocktemplate response from Bitcoin Core
-/// as provided under BIPS-0022 - https://github.com/bitcoin/bips/blob/master/bip-0022.mediawiki
-/// https://github.com/bitcoin/bitcoin/blob/master/src/rpc/mining.cpp#L610
+/// Represents the `getblocktemplate` RPC response from Bitcoin Core.
+///
+/// Based on [BIP-0022](https://github.com/bitcoin/bips/blob/master/bip-0022.mediawiki) and
+/// [Bitcoin Core implementation](https://github.com/bitcoin/bitcoin/blob/master/src/rpc/mining.cpp).
+///
+/// Contains all fields necessary for constructing a valid mining job, including
+/// block version, previous block hash, transactions, coinbase data, target, and
+/// various consensus limits.
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct BlockTemplate {
     pub version: i32,
@@ -219,12 +204,22 @@ impl Default for BlockTemplate {
     }
 }
 #[derive(Debug, Clone)]
+/// Configuration parameters for the Stratum server.
+///
+/// Defines network binding details, difficulty settings,
+/// and optional solo mining payout address.
 pub struct StratumServerConfig {
+    /// Hostname or IP address to bind the Stratum server.
     pub hostname: String,
+    /// TCP port for incoming Stratum connections.
     pub port: u16,
+    /// Initial mining difficulty assigned to new clients as per in the `braidpool_spec.md`.
     pub start_difficulty: u64,
+    /// Minimum allowed mining difficulty as per in the `braidpool_spec.md`.
     pub minimum_difficulty: u64,
+    /// Optional maximum allowed mining difficulty.
     pub maximum_difficulty: Option<u64>,
+    /// Optional payout address for solo mining mode.
     pub solo_address: Option<String>,
 }
 
@@ -233,6 +228,7 @@ impl Default for StratumServerConfig {
         Self {
             hostname: String::from("0.0.0.0"),
             port: 3333,
+            //Placeholders can be changed in default
             start_difficulty: 1,
             minimum_difficulty: 1,
             maximum_difficulty: None,
@@ -240,24 +236,35 @@ impl Default for StratumServerConfig {
         }
     }
 }
+/// Represents a standard `Client → Server` Stratum request.
+///
+/// Covers common methods such as:
+/// - `mining.authorize`
+/// - `mining.configure`
+/// - `mining.set_difficulty`
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct StandardRequest {
     pub id: u64,
     pub method: String,
     pub params: serde_json::Value,
 }
+/// Possible responses from the Stratum server.
+///
+/// Encapsulates both standard JSON-RPC responses and
+/// protocol-specific responses such as difficulty suggestions.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum StratumResponses {
+    //For standard requests
     StandardResponse {
         std_response: StandardResponse,
     },
+    //For difficulty request since it is `notified request` not necessarily and stratum supported method
     SuggestDifficultyResponse {
         suggest_difficulty_resp: SuggestDifficultyResponse,
     },
 }
 /// Response represents a Stratum response message from the server to the client
 /// We use Value in result to allow for different types of responses.
-/// TODO: Consider using various Response types to avoing using Value (which will result in memory allocations)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StandardResponse {
     pub id: Option<u64>,
@@ -273,6 +280,7 @@ impl StandardResponse {
         }
     }
 }
+///`Notfication` method responses specific to `mining.notify` and `mining.set_difficulty` responses
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JobNotificationResponse {
     pub method: String,
@@ -285,11 +293,15 @@ pub struct SuggestDifficultyResponse {
 }
 /// Target is a 256-bit unsigned integer in little-endian
 /// instead of using `BigUint` i have taken into account u128 for respective MSB and LSB
+/// this is only because u256 is not supported by default in rust so for storing u256 i have split into
+/// `MSB` and `LSB` respectively
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Target {
     lsb: u128,
     msb: u128,
 }
+///This will persist the client specific information for each of the new downstream connected
+/// to the stratum service which are setup during either `mining.subscribe` or `mining.configure` or `mining.authorize`
 #[derive(Debug, Clone)]
 pub struct DownstreamClient {
     ///Authorized or not
@@ -299,6 +311,7 @@ pub struct DownstreamClient {
     /// Did the mine subscribe already?
     pub subscribed: bool,
     /// The unique identifier assigned to this downstream connection/channel.
+    #[allow(unused)]
     pub(super) connection_id: u32,
     /// The extranonce1 value assigned to this downstream miner.
     extranonce1: Vec<u8>,
@@ -315,6 +328,21 @@ pub struct DownstreamClient {
     pub target: Target,
 }
 impl DownstreamClient {
+    /// Handles an incoming Stratum `Client2Server` request from a downstream miner.
+    ///
+    /// Routes the request to the appropriate handler based on its `method`:
+    /// - `mining.configure`
+    /// - `mining.subscribe`
+    /// - `mining.authorize`
+    /// - `mining.submit`
+    /// - `mining.set_difficulty`
+    ///
+    /// Sends the corresponding response back to the client and, if the client
+    /// has been both authorized and subscribed, triggers sending the latest
+    /// block template via the `notification_sender`.
+    ///
+    /// # Returns
+    /// A `StratumResponses` variant on success, or a `StratumErrors` on failure.
     pub async fn handle_client_to_server_request(
         &mut self,
         client_request: StandardRequest,
@@ -335,7 +363,7 @@ impl DownstreamClient {
             "mining.submit" => {
                 Self::handle_submit(self, &req_params, mining_job_map, client_request_id).await
             }
-            "mining.set_difficulty" => self.set_difficulty(&req_params, client_request_id).await,
+            "mining.suggest_difficulty" => self.suggest_difficulty(&req_params).await,
             method => Err(StratumErrors::InvalidMethod {
                 method: method.to_string(),
             }),
@@ -379,7 +407,7 @@ impl DownstreamClient {
                             log::info!("Notification requesting latest available template sent successfully to the notifier by a new peer {:?}",peer_addr);
                         }
                         Err(error) => {
-                            log::error!("An error occurred while requesting latest template by a newly authorized downstream node");
+                            log::error!("An error occurred while requesting latest template by a newly authorized downstream node - {}",error);
                         }
                     }
                 }
@@ -391,14 +419,44 @@ impl DownstreamClient {
             }
         }
     }
-    // Example request - {"id": 5, "method": "mining.submit", "params": ["bc1qnp980s5fpp8l94p5cvttmtdqy8rvrq74qly2yrfmzkdsntqzlc5qkc4rkq.bitaxe", "2", "09000000", "6891e02b", "91e70222", "034ea000"]}
+    /// Handles a `mining.submit` request from a downstream miner.
+    ///
+    /// Validates the submitted share by:
+    /// 1. Extracting and parsing worker name, job ID, extranonce2, ntime, and nonce.
+    /// 2. Looking up the corresponding mining job from the shared `MiningJobMap`.
+    /// 3. Rebuilding the coinbase transaction and computing the updated Merkle root.
+    /// 4. Constructing the block header from the submitted values.
+    /// 5. Verifying the header against the required PoW target.
+    /// # Example Request
+    /// ```
+    /// use serde_json::json;
+    /// let sample_request = json!({"id": 5, "method": "mining.submit",
+    ///  "params": [
+    ///      "bc1qnp980s5fpp8l94p5cvttmtdqy8rvrq74qly2yrfmzkdsntqzlc5qkc4rkq.bitaxe",
+    ///      "2",
+    ///      "09000000",
+    ///      "6891e02b",
+    ///      "91e70222",
+    ///      "034ea000"
+    ///  ]});
+    /// ```
+    ///
+    /// # Return
+    ///  `StratumError` or `Stratum Response`
     pub async fn handle_submit(
         &mut self,
         submit_work_params: &Value,
-        mut mining_job_map: Arc<Mutex<MiningJobMap>>,
+        mining_job_map: Arc<Mutex<MiningJobMap>>,
         client_request_id: u64,
     ) -> Result<StratumResponses, StratumErrors> {
-        let param_array = submit_work_params.as_array().unwrap();
+        let param_array = match submit_work_params.as_array() {
+            Some(param_array) => param_array,
+            None => {
+                return Err(StratumErrors::InvalidMethodParams {
+                    method: "mining.submit".to_string(),
+                });
+            }
+        };
         if param_array.len() < 5 {
             return Err(StratumErrors::InvalidMethodParams {
                 method: "mining.submit".to_string(),
@@ -406,7 +464,8 @@ impl DownstreamClient {
         }
         let worker_name_res: Result<&str, StratumErrors> = match param_array.get(0) {
             Some(worker_name) => Ok(worker_name.as_str().unwrap()),
-            None => Err(StratumErrors::InvalidMethodParams {
+            None => Err(StratumErrors::ParamNotFound {
+                param: "worker_name".to_string(),
                 method: "mining.submit".to_string(),
             }),
         };
@@ -414,12 +473,36 @@ impl DownstreamClient {
             Ok(name) => name,
             Err(error) => return Err(error),
         };
-        let job_id_str: &Value = param_array.get(1).unwrap();
-        let job_id = u64::from_str_radix(job_id_str.as_str().unwrap(), 16).unwrap();
+        log::info!("Worker name connected to the downstream {}", worker_name);
+        let job_id_str: &Value = match param_array.get(1) {
+            Some(job_id) => job_id,
+            None => {
+                return Err(StratumErrors::ParamNotFound {
+                    param: "job_id".to_string(),
+                    method: "mining.submit".to_string(),
+                });
+            }
+        };
+        let job_id_str_res = job_id_str
+            .as_str()
+            .ok_or("Job ID is not a string".to_string())
+            .and_then(|s| {
+                u64::from_str_radix(s, 16).map_err(|e| format!("Invalid Job ID format: {e}"))
+            });
+        let job_id = match job_id_str_res {
+            Ok(job_id) => job_id,
+            Err(error) => {
+                return Err(StratumErrors::JobIdCouldNotBeParsed {
+                    method: "mining.submit".to_string(),
+                    error: error,
+                });
+            }
+        };
         let extranonce2: &str = match param_array.get(2).and_then(|v| v.as_str()) {
             Some(extra) => extra,
             None => {
-                return Err(StratumErrors::InvalidMethodParams {
+                return Err(StratumErrors::ParamNotFound {
+                    param: "extranonce2".to_string(),
                     method: "mining.submit".to_string(),
                 })
             }
@@ -428,7 +511,8 @@ impl DownstreamClient {
         let ntime: &str = match param_array.get(3).and_then(|v| v.as_str()) {
             Some(nt) => nt,
             None => {
-                return Err(StratumErrors::InvalidMethodParams {
+                return Err(StratumErrors::ParamNotFound {
+                    param: "ntime".to_string(),
                     method: "mining.submit".to_string(),
                 })
             }
@@ -437,23 +521,25 @@ impl DownstreamClient {
         let nonce: &str = match param_array.get(4).and_then(|v| v.as_str()) {
             Some(n) => n,
             None => {
-                return Err(StratumErrors::InvalidMethodParams {
+                return Err(StratumErrors::ParamNotFound {
+                    param: "nonce".to_string(),
                     method: "mining.submit".to_string(),
                 })
             }
         };
-        //acquring lock on the mining map and fetching the submitted job from the memory
+        //Acquiring lock on the mining map and fetching the submitted job from the memory
         let mut job_mapping = mining_job_map.lock().await;
         let job_r = job_mapping.get_mining_job(job_id).await;
         let submitted_job = match job_r {
             Ok(job) => job,
             Err(error) => {
-                return Err(StratumErrors::MiningJobNotFound { job_id: job_id });
+                return Err(error);
             }
         };
-        //building the coinbase and then eventually the block and testing for the validation against the
-        //mainnet difficulty or the weakshare local difficulty
+        //Building the coinbase and then eventually the block and testing for the validation against the
+        //mainnet/regtest/cpunet/testnet difficulty or the weakshare local difficulty .
         let extranonce_1_hex = hex::encode(self.extranonce1.clone());
+        //Reconstructing the entire coinbase with miner submission and extranonce 1
         let coinbase_tx_hex = format!(
             "{}{}{}{}",
             submitted_job.coinbase1,
@@ -466,17 +552,18 @@ impl DownstreamClient {
         let coinbase_tx: Transaction =
             bitcoin::Transaction::consensus_decode(&mut coinbase_cursor).unwrap();
 
-        //computing merkel new merkel path due to updated coinbase transaction
+        //computing merkle new merkle path due to updated coinbase transaction
         let txs = submitted_job.blocktemplate.transactions.clone();
         let mut txids: Vec<Txid> = vec![coinbase_tx.compute_txid()];
         for tx in txs.iter() {
             txids.push(tx.compute_txid());
         }
+        //Computing the newly constructed merkle root via the merkle path
         let merkle_root: TxMerkleNode = TxMerkleNode::calculate_root(txids.into_iter()).unwrap();
 
-        //applying version mask received during mining.configure or not TODO
+        //Applying version mask received during mining.configure or not TODO
         let version = submitted_job.blocktemplate.version.clone();
-        //computing the block header
+        //Computing the block header
         let header = BlockHeader {
             version: bitcoin::blockdata::block::Version::from_consensus(version),
             prev_blockhash: bitcoin::BlockHash::from_str(
@@ -494,7 +581,7 @@ impl DownstreamClient {
         let compact_target =
             bitcoin::CompactTarget::from_unprefixed_hex(&submitted_job.blocktemplate.bits).unwrap();
         let target = bitcoin::Target::from_compact(compact_target);
-        //checking with PoW of the target whether the block sent by downstream is below that or not
+        //Checking with PoW of the target whether the block sent by downstream is below that or not
         match header.validate_pow(target) {
             Ok(_) => log::info!("Header meets the target"),
             Err(e) => {
@@ -510,10 +597,19 @@ impl DownstreamClient {
             std_response: StandardResponse::new_ok(Some(client_request_id), json!(true)),
         })
     }
-    pub async fn set_difficulty(
+    /// Processes a `mining.set_difficulty` request from the client.
+    ///
+    /// Attempts to read a new difficulty value from the first element of the
+    /// provided `suggest_difficulty_params` JSON array. The value must be a valid `u64`.
+    ///
+    ///  # Arguments
+    /// * `suggest_difficulty_params` – JSON array of method parameters, expected format: `[new_difficulty]`.
+    ///  # Returns
+    /// * `Ok(StratumResponses::SuggestDifficultyResponse)` with the parsed difficulty value.
+    /// * `Err(StratumErrors::InvalidMethodParams)` if the parameter is missing or not a `u64`.
+    pub async fn suggest_difficulty(
         &mut self,
         suggest_difficulty_params: &Value,
-        client_request_id: u64,
     ) -> Result<StratumResponses, StratumErrors> {
         if let Some(difficulty) = suggest_difficulty_params.get(0) {
             log::info!(
@@ -533,6 +629,14 @@ impl DownstreamClient {
         }
     }
     ///The result from an authorize request is usually true (successful), or false. The password may be omitted if the server does not require passwords.
+    /// Handles the `mining.authorize` request from a downstream client.
+    ///
+    /// This method attempts to extract a username and password from the incoming
+    /// JSON parameters array. If both values are present and valid, the client is
+    /// marked as authorized and a positive (`true`) `StandardResponse` is returned.
+    /// # Returns
+    /// * `Ok(StratumResponses::StandardResponse)` with `true` if authorization succeeds.
+    /// * `Err(StratumErrors::InvalidMethodParams)` if either parameter is missing or invalid.
     pub async fn handle_authorize(
         &mut self,
         authorize_request_params: &Value,
@@ -542,11 +646,19 @@ impl DownstreamClient {
             "Authorization is taking place -- {:?}",
             authorize_request_params
         );
-        let param_array = authorize_request_params.as_array().unwrap();
+        let param_array = match authorize_request_params.as_array() {
+            Some(param_array) => param_array,
+            None => {
+                return Err(StratumErrors::InvalidMethodParams {
+                    method: "mining.authorize".to_string(),
+                });
+            }
+        };
         let username_res: Result<&str, StratumErrors> = match param_array.get(0) {
             Some(user) => Ok(user.as_str().unwrap()),
             None => {
-                return Err(StratumErrors::InvalidMethodParams {
+                return Err(StratumErrors::ParamNotFound {
+                    param: "username".to_string(),
                     method: "mining.authorize".to_string(),
                 });
             }
@@ -559,11 +671,10 @@ impl DownstreamClient {
         };
         let password_res: Result<&str, StratumErrors> = match param_array.get(1) {
             Some(pass) => Ok(pass.as_str().unwrap()),
-            None => {
-                return Err(StratumErrors::InvalidMethodParams {
-                    method: "mining.authorize".to_string(),
-                });
-            }
+            None => Err(StratumErrors::ParamNotFound {
+                param: "password".to_string(),
+                method: "mining.authorize".to_string(),
+            }),
         };
 
         let password = match password_res {
@@ -597,44 +708,76 @@ impl DownstreamClient {
             "{:?} configuration handling is taking place",
             config_req_params
         );
-        let params = config_req_params
-            .as_array()
-            .ok_or("Expected params to be an array")
-            .unwrap();
-
+        let params = match config_req_params.as_array() {
+            Some(param_array) => param_array,
+            None => {
+                return Err(StratumErrors::InvalidMethodParams {
+                    method: "mining.configure".to_string(),
+                });
+            }
+        };
         if params.len() != 2 {
             return Err(StratumErrors::InvalidMethodParams {
                 method: "mining.configure".to_string(),
             });
         }
 
-        let features = params[0]
-            .as_array()
-            .ok_or("Expected first param to be an array of feature names")
-            .unwrap();
-
-        let feature_names: Vec<String> = features
+        let features = match params[0].as_array() {
+            Some(feature_arr) => feature_arr,
+            None => {
+                return Err(StratumErrors::ParamNotFound {
+                    param: "feature_array".to_string(),
+                    method: "mining.configure".to_string(),
+                })
+            }
+        };
+        let feature_names: Vec<String> = match features
             .iter()
             .map(|f| f.as_str().map(|s| s.to_string()))
-            .collect::<Option<Vec<String>>>()
-            .ok_or("Invalid feature name in features array")
-            .unwrap();
+            .collect::<Option<Vec<String>>>(){
+                Some(feature_arr)=>feature_arr,
+                None=>{
+                    return Err(StratumErrors::ConfigureFeatureStringConversion { error: "Json value could not be converted to string in while handling mining.configure ".to_string() })
+                }
+            };
         log::info!("{:?}", feature_names);
-        let config_map = params[1]
-            .as_object()
-            .ok_or("Expected second param to be an object with feature configurations")
-            .unwrap();
+        let config_map = match params[1].as_object() {
+            Some(con_map) => con_map,
+            None => {
+                return Err(StratumErrors::ParamNotFound {
+                    param: "configuration_map".to_string(),
+                    method: "mining.config".to_string(),
+                });
+            }
+        };
         log::info!("{:?}", config_map);
-
+        //Possible `req_params` under the request sent to server via client
+        #[allow(unused)]
         let minimum_difficulty = config_map.get("minimum-difficulty.value").or(None);
+        //Rollable version bits required by downstream
         let version_rolling_mask = config_map.get("version-rolling.mask").or(None);
+        //Minimum bits rollable of version
         let version_rolling_min_bit_count =
             config_map.get("version-rolling.min-bit-count").or(None);
         if version_rolling_mask.is_none() == false {
             let mut mask_bytes: [u8; 4] = [0u8; 4];
-            let version_rolling_mask_str = version_rolling_mask.unwrap().as_str().unwrap();
-            hex::decode_to_slice(version_rolling_mask_str, &mut mask_bytes);
-
+            let version_rolling_mask_str = match version_rolling_mask.unwrap().as_str() {
+                Some(version_str) => version_str,
+                None => {
+                    return Err(StratumErrors::VersionRollingStringParseError {
+                        error: "Version rolling mask could not be converted to string from provided bytes".to_string(),
+                    });
+                }
+            };
+            match hex::decode_to_slice(version_rolling_mask_str, &mut mask_bytes) {
+                Ok(_) => {}
+                Err(error) => {
+                    return Err(StratumErrors::VersionRollingHexParseError {
+                        error: error.to_string(),
+                    });
+                }
+            };
+            //Intersecting with the bits provided by the pool and miner's suggested one
             let final_rollable_version_bits = u32::from_be_bytes(mask_bytes) & 0x1FFFE000;
             // `0x1FFFE000` is a reasonable default as it allows all 16 version bits to be used
             let hex_str = u32::to_string(&final_rollable_version_bits);
@@ -644,7 +787,14 @@ impl DownstreamClient {
             let mut mask_bytes: [u8; 4] = [0u8; 4];
             let version_rolling_min_bit_count_str =
                 version_rolling_min_bit_count.unwrap().as_str().unwrap();
-            hex::decode_to_slice(version_rolling_min_bit_count_str, &mut mask_bytes);
+            match hex::decode_to_slice(version_rolling_min_bit_count_str, &mut mask_bytes) {
+                Ok(_) => {}
+                Err(error) => {
+                    return Err(StratumErrors::VersionrollingMinBitCountHexParseError {
+                        error: error.to_string(),
+                    });
+                }
+            };
             self.version_rolling_min_bit = Some(u32::from_be_bytes(mask_bytes));
         }
 
@@ -662,19 +812,38 @@ impl DownstreamClient {
             },
         })
     }
-    ///The optional second parameter specifies a mining.notify subscription id the client wishes to resume working with (possibly due to a dropped connection). If provided, a server MAY (at its option) issue the connection the same extranonce1. Note that the extranonce1 may be the same (allowing a resumed connection) even if the subscription id is changed!
-    /// The result contains three items:
-
-    /// Subscriptions. - An array of 2-item tuples, each with a subscription type and id.
-    /// ExtraNonce1. - Hex-encoded, per-connection unique string which will be used for creating generation transactions later.
-    /// ExtraNonce2_size. - The number of bytes that the miner users for its ExtraNonce2 counter.
+    /// Handles the `mining.subscribe` request as per the Stratum protocol specification.
+    ///
+    /// This request is used by a mining client to subscribe to a Stratum server
+    /// and obtain session-specific identifiers for further communication.  
+    /// Optionally, the client may pass a subscription ID to resume a previous
+    /// session, potentially reusing the same `extranonce1`.
+    /// # Request Format
+    /// ```json
+    /// ["<optional-subscription-id>"]
+    /// ```
+    ///
+    /// # Response Format
+    /// Returns a JSON array containing:
+    /// 1. **Subscriptions** – An array of `(method, subscription_id)` tuples defining active subscriptions.
+    /// 2. **ExtraNonce1** – Hex-encoded, per-connection unique string used in coinbase transaction construction.
+    /// 3. **ExtraNonce2_size** – The number of bytes reserved for the client's `ExtraNonce2` counter.
+    ///
+    /// Example Response:
+    /// ```json
+    /// [
+    ///   [["mining.set_difficulty", "34"], ["mining.notify", "12"]],
+    ///   "1a2b3c4d",
+    ///   16
+    /// ]
+    /// ```
     pub async fn handle_subscribe(
         &mut self,
         subscribe_req_params: &Value,
         client_request_id: u64,
     ) -> Result<StratumResponses, StratumErrors> {
         log::info!("Subscribing is taking place -- {:?}", subscribe_req_params);
-        //FIXME dummy testing subscription IDs must be unique though
+        //TODO: dummy testing subscription IDs must be unique though can be changed accordingly these are just dummy values
         let subscriptions: Vec<(String, String)> = vec![
             (String::from("mining.set_difficulty"), String::from("34")),
             (String::from("mining.notify"), String::from("12")),
@@ -690,13 +859,6 @@ impl DownstreamClient {
             ),
         })
     }
-
-    // Server response is result: true for accepted, false for rejected (or you may get an error with more details).
-    // pub async fn handle_submit(
-    //     submit_job_request: &Value,
-    //     req_id: u64,
-    // ) -> Result<Response, StratumErrors> {
-    // }
 }
 
 impl Default for DownstreamClient {
@@ -723,23 +885,48 @@ impl Default for DownstreamClient {
         }
     }
 }
-
+/// Represents the Stratum server instance, which maintains configuration
+/// and manages downstream client connections.
+///
+/// # Fields
+/// * `stratum_config` - The configuration settings for the Stratum server.
+/// * `downstream_connection_mapping` - Thread-safe mapping of downstream
+///   miner connections, wrapped in `Arc<Mutex<...>>` to allow concurrent access
+///   across async tasks and threads.
 #[derive(Debug)]
 pub struct Server {
     stratum_config: StratumServerConfig,
-    downstream_connection_mapping: Arc<Mutex<ConnectionMapping>>, // downstream_miner: Arc<Mutex<DownstreamClient>>,
-                                                                  // pub downstream_sender: mpsc::Sender<String>,
-                                                                  // pub downstream_receiver: mpsc::Receiver<String>,
+    downstream_connection_mapping: Arc<Mutex<ConnectionMapping>>,
 }
+///Types for the `mining.notify` jobs to be sent to the fellow connected downstream nodes
+/// `SendToAll` broadcasts the most recently received `job` to the downstream nodes .
+/// `SendLatestTemplateToNewDownstream` sends the latest available template to the most recent connected node so that
+/// it can start working as soon as it is connected to the stratum service via `braidpool` .
 pub enum NotifyCmd {
     SendToAll {
         template: BlockTemplate,
-        merkel_branch_coinbase: Vec<Vec<u8>>,
+        merkle_branch_coinbase: Vec<Vec<u8>>,
     },
     SendLatestTemplateToNewDownstream {
         new_downstream_addr: String,
     },
 }
+/// Represents a `mining.notify` job message in the Stratum protocol.
+///
+/// This struct contains all the parameters sent by the mining pool to a miner
+/// when a new mining job is assigned. Miners use these values to construct
+/// a candidate block header and start hashing.
+///
+/// # Fields
+/// - `job_id` — Unique identifier for the mining job.
+/// - `prevhash` — Hash of the previous block header (in reversed byte order).
+/// - `coinbase1` — First half of the coinbase transaction before the extranonce.
+/// - `coinbase2` — Second half of the coinbase transaction after the extranonce.
+/// - `merkle_branches` — List of Merkle branches used to compute the Merkle root.
+/// - `version` — Block version in hex.
+/// - `nbits` — Compact target representation in hex.
+/// - `ntime` — Current time in seconds since epoch (in hex).
+/// - `clean_jobs` — If `true`, miner should drop all previous jobs and start fresh.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct JobNotification {
     pub job_id: String,
@@ -752,6 +939,8 @@ pub struct JobNotification {
     pub ntime: String,
     pub clean_jobs: bool,
 }
+///`JobDetails` which are required for tracking of the jobs available to each downstream node
+/// which is required during the job validation during `mining.submit` from the downstream node .
 #[derive(Debug, Clone)]
 pub struct JobDetails {
     pub blocktemplate: BlockTemplate,
@@ -775,7 +964,7 @@ impl MiningJobMap {
             latest_job_id: 0,
         }
     }
-    ///Inserting a suitable mining job which has been passed to the downstream being constructed from a suitable block template
+    ///Inserting a suitable mining job which has been passed to the downstream being constructed from a suitable block template .
     pub async fn insert_mining_job(&mut self, job_details: JobDetails) {
         log::info!(
             "Inserting new mining job with job_id: {}",
@@ -785,7 +974,8 @@ impl MiningJobMap {
         self.latest_job_id += 1;
     }
     ///Getting a mining job from the existing jobs upto a given timestamp t used by the downstream node for mining
-    /// also served as the response for mining.getjob method from client2server in stratum
+    ///
+    /// also served as the response for mining.getjob method from client2server in stratum .
     pub async fn get_mining_job(&mut self, job_id: u64) -> Result<&JobDetails, StratumErrors> {
         log::info!("Retrieving mining job with job_id: {}", job_id);
         if let Some(current_job) = self.mining_jobs.get(&job_id) {
@@ -801,10 +991,16 @@ impl MiningJobMap {
         self.latest_job_id + 1
     }
 }
+///`Notifier` that will serve the purpose of notifying the downstream nodes with the lates available jobs
+/// for mining to take place via `mining.notify`.
+///
 pub struct Notifier {
+    ///`IpcGBT` notification receiver whenever new `template` is fethced or tip is updated .
     notification_receiver: mpsc::Receiver<NotifyCmd>,
+    ///`JobMap` associated with each `peer_addr` and the jobs associated with it .
     pub job_map_arc: Arc<Mutex<HashMap<String, Arc<Mutex<MiningJobMap>>>>>,
 }
+///Since the prev_block_hash received in `gbt` is in BigEndian format it must be converted to `Little endian`.
 fn to_little_endian(hex_str: &str) -> String {
     hex_str
         .as_bytes()
@@ -815,6 +1011,7 @@ fn to_little_endian(hex_str: &str) -> String {
         .join("")
 }
 impl Notifier {
+    ///Spawning a new notifier instance .
     pub fn new(
         notification_rx: mpsc::Receiver<NotifyCmd>,
         job_map_arc: Arc<Mutex<HashMap<String, Arc<Mutex<MiningJobMap>>>>>,
@@ -824,24 +1021,32 @@ impl Notifier {
             job_map_arc: job_map_arc,
         }
     }
-    //Constructing the mining.notify template following the corrsponding attributes to be sent as a job to the downstream miner for
-    //mining to take place .
-    /*
-    Job ID. This is included when miners submit a results so work can be matched with proper transactions.
-    Hash of previous block. Used to build the header.
-    Generation transaction (part 1). The miner inserts ExtraNonce1 and ExtraNonce2 after this section of the transaction data.
-    Generation transaction (part 2). The miner appends this after the first part of the transaction data and the two ExtraNonce values.
-    List of merkle branches. The generation transaction is hashed against the merkle branches to build the final merkle root.
-    Bitcoin block version. Used in the block header.
-    nBits. The encoded network difficulty. Used in the block header.
-    nTime. The current time. nTime rolling should be supported, but should not increase faster than actual time.
-    Clean Jobs. If true, miners should abort their current work and immediately use the new job, even if it degrades hashrate in the short term. If false, they can still use the current job, but should move to the new one as soon as possible without impacting hashrate.
-     */
+    ///Constructing the mining.notify template following the corrsponding attributes to be sent as a job to the downstream miner for
+    ///mining to take place .
+    ///
+    /// **Job ID**. This is included when miners submit a results so work can be matched with proper transactions.
+    ///
+    /// **Hash of previous block**. Used to build the header.
+    ///
+    /// **Generation transaction (part 1)**. The miner inserts ExtraNonce1 and ExtraNonce2 after this section of the transaction data.
+    ///
+    /// **Generation transaction (part 2)**. The miner appends this after the first part of the transaction data and the two ExtraNonce values.
+    ///
+    /// **List of merkle branches**. The generation transaction is hashed against the merkle branches to build the final merkle root.
+    ///
+    /// **Bitcoin block version**. Used in the block header.
+    ///
+    /// **nBits**. The encoded network difficulty. Used in the block header.
+    ///
+    /// **nTime**. The current time. nTime rolling should be supported, but should not increase faster than actual time.
+    ///
+    /// **Clean Jobs**. If true, miners should abort their current work and immediately use the new job, even if it degrades hashrate in the short term. If false, they can still use the current job, but should move to the new one as soon as possible without impacting hashrate.
+
     pub async fn construct_job_notification(
         clean_job: bool,
         notified_template: BlockTemplate,
         new_job_id: u64,
-        merkel_coinbase_branch: Vec<Vec<u8>>,
+        merkle_coinbase_branch: Vec<Vec<u8>>,
     ) -> Result<JobNotification, StratumErrors> {
         log::info!(
             "Constructing JobNotification for job_id: {} with clean_job: {}",
@@ -849,11 +1054,6 @@ impl Notifier {
             clean_job
         );
 
-        //PLACEHOLDERS FOR VALID COINBASE ALONG WITH VALID MERKEL BRANCHES TO BE PROVIDED IN JOB
-        //WILL HAVE TO BE REPLACED WITH construct_coinbase and construct_merkel_branches functions respectively .
-        //Splitting the coinbase according to the `coinbase_prefix` and `coinbase_suffix` for
-        //providing the valid bits to be rolled as per the `extranonce` value by the downstream and then appended
-        //which is retreived during the `mining.submit` as client2server call .
         let coinbase_transaction = notified_template.transactions.get(0).unwrap();
         let deserialized_coinbase = serialize::<Transaction>(coinbase_transaction);
         log::info!(
@@ -861,6 +1061,8 @@ impl Notifier {
             deserialized_coinbase.len(),
             coinbase_transaction
         );
+        //For splitting of the coinbase we check for the extranonce_seperator we had inserted while resonstructing the coinbase during the
+        //fetching of the template via IPC .
         let separator_pos = match deserialized_coinbase
             .as_slice()
             .windows(EXTRANONCE1_SIZE + EXTRANONCE2_SIZE)
@@ -870,32 +1072,31 @@ impl Notifier {
             None => return Err(StratumErrors::InvalidCoinbase),
         };
 
-        //PLACEHOLDERS FOR VALID COINBASE ALONG WITH VALID MERKEL BRANCHES TO BE PROVIDED IN JOB
-        //WILL HAVE TO BE REPLACED WITH construct_coinbase and construct_merkel_branches functions respectively .
         let coinbase_1 = hex::encode(&deserialized_coinbase[..separator_pos]);
         let coinbase_2 = hex::encode(
             &deserialized_coinbase[separator_pos + (EXTRANONCE1_SIZE + EXTRANONCE2_SIZE)..],
         );
         log::info!("Coinbase splitted with coinbase_prefix and coinbase suffix respectively as -- {:?} {:?}",coinbase_1,coinbase_2);
-        let mut merkel_branches: Vec<String> = Vec::new();
+        //Constructing merkel root via merkel path .
+        let mut merkle_branches: Vec<String> = Vec::new();
         let mut txids_hashes: Vec<Txid> = vec![];
         for tx in notified_template.transactions {
             txids_hashes.push(tx.compute_txid());
         }
-        if merkel_coinbase_branch.len() == 0 {
+        if merkle_coinbase_branch.len() == 0 {
             log::info!("Empty branch hence previous template was being used and hence saving has to be done !");
         } else {
-            for sibling_node in merkel_coinbase_branch.iter() {
+            for sibling_node in merkle_coinbase_branch.iter() {
                 let sibling_hex = hex::encode(sibling_node);
-                merkel_branches.push(sibling_hex);
+                merkle_branches.push(sibling_hex);
             }
         }
         log::info!(
-            "Merkel branches for the given template's coinbase are respectively - {:?}",
-            merkel_branches
+            "merkle branches for the given template's coinbase are respectively - {:?}",
+            merkle_branches
         );
-        //stratum accepts the prev block hash to be in little endian instead of big endian
-        //therefore byte by byte reversal is required here
+        //Stratum accepts the prev block hash to be in little endian instead of big endian
+        //therefore byte by byte reversal is required here .
         let mut prev_block_hash = notified_template.previousblockhash.as_str();
         let prev_block_hash_little_endian = to_little_endian(prev_block_hash);
         log::info!(
@@ -910,7 +1111,7 @@ impl Notifier {
             prevhash: prev_block_hash_little_endian,
             coinbase1: coinbase_1,
             coinbase2: coinbase_2,
-            merkle_branches: merkel_branches,
+            merkle_branches: merkle_branches,
             //converting the i32 version to hex string
             version: hex::encode(bitcoin_block_version.to_be_bytes()),
             //String is acceptable
@@ -920,21 +1121,36 @@ impl Notifier {
             clean_jobs: clean_job,
         })
     }
-    ///Will run a notifier that will serve the purpose of mining.notify to provide the downstream nodes with valid jobs on the basis
-    /// of the latest block template recieved/present via the template_receiver
+    /// Runs the Stratum notifier task that handles broadcasting mining jobs to downstream miners.
+    ///
+    /// This asynchronous function continuously listens for notification commands and performs
+    /// one of the following actions:
+    /// 1. **Broadcast a new template to all connected miners**:
+    ///    - Constructs a new mining job from the latest `BlockTemplate`.
+    ///    - Updates the `JobMap` for each downstream connection with the new job details.
+    ///    - Serializes the `JobNotification` and sends it to each miner via their respective channels.
+    /// 2. **Send the latest available template to a newly connected miner**:
+    ///    - Constructs a mining job from the current latest template.
+    ///    - Updates the `JobMap` for the newly authorized and subscribed miner.
+    ///    - Sends the serialized `JobNotification` to the new miner's channel.
+    ///
+    /// # Returns
+    /// * `Ok(())` on successful completion (runs indefinitely unless an error occurs).
+    /// * `Err(StratumErrors)` if an error occurs while constructing or sending a job notification.
+    ///
     pub async fn run_notifier(
         &mut self,
         downstream_connection_map: Arc<Mutex<ConnectionMapping>>,
         latest_template_arc: &mut Arc<Mutex<BlockTemplate>>,
-        latest_template_merkel_branch_arc: &mut Arc<Mutex<Vec<Vec<u8>>>>,
+        latest_template_merkle_branch_arc: &mut Arc<Mutex<Vec<Vec<u8>>>>,
     ) -> Result<(), StratumErrors> {
         log::info!("Notifier task has  started");
         while let Some(notification_command) = self.notification_receiver.recv().await {
             match notification_command {
-                //Whenever a new template is received it is broadcasted across all the downstream nodes connected
+                //Whenever a new template is received it is broadcasted across all the downstream nodes connected .
                 NotifyCmd::SendToAll {
                     template,
-                    merkel_branch_coinbase,
+                    merkle_branch_coinbase,
                 } => {
                     log::info!("Received new template to broadcast to all clients");
                     let template_ref = template.clone();
@@ -943,7 +1159,7 @@ impl Notifier {
                     // downstream communication to take place.
                     for (peer_adr, mining_job_arc) in self.job_map_arc.lock().await.iter() {
                         let mut curr_peer_mining_job_map = mining_job_arc.lock().await;
-                        //The new job id to be provided while constructing the new job
+                        //The new job id to be provided while constructing the new job .
                         let next_job_id = curr_peer_mining_job_map.get_next_job_id();
                         //Clean Jobs. If true, miners should abort their current work and immediately use the new job, even if it degrades hashrate in the short term. If false, they can still use the current job, but should move to the new one as soon as possible without impacting hashrate.
                         let clean_job = false;
@@ -951,7 +1167,7 @@ impl Notifier {
                             clean_job,
                             template_ref.clone(),
                             next_job_id,
-                            merkel_branch_coinbase.clone(),
+                            merkle_branch_coinbase.clone(),
                         )
                         .await;
                         let serialized_notification: Result<String, StratumErrors> =
@@ -971,7 +1187,7 @@ impl Notifier {
                                     curr_peer_mining_job_map
                                         .insert_mining_job(job_details)
                                         .await;
-                                    //this will change
+                                    //Constructing Server2Client response.
                                     let job_notification_response = JobNotificationResponse {
                                         method: "mining.notify".to_string(),
                                         params: json!([
@@ -1001,31 +1217,38 @@ impl Notifier {
                             }
                         };
                         //Sending the notification for broadcasting it across all the downstream
-                        //nodes that is write to `TcpStream`
+                        //nodes that is write to `TcpStream` .
                         let downstream_channel_mapping = downstream_connection_map
                             .lock()
                             .await
                             .downstream_channel_mapping
                             .clone();
-                        for (downstream_addr, downstream_channel) in
-                            downstream_channel_mapping.iter()
-                        {
-                            log::info!(
-                                "Sending template to downstream at address {}",
-                                downstream_addr
-                            );
-                            downstream_channel.send(job_notification.clone()).await;
+                        //Fetching the downstream miner message sender via the `[Connection Mapping]`
+                        if let Some(downstream_channel) = downstream_channel_mapping.get(peer_adr) {
+                            log::info!("Sending template to downstream at address {}", peer_adr);
+                            #[allow(unused)]
+                            let msg_sent_result =
+                                match downstream_channel.send(job_notification.clone()).await {
+                                    Ok(_) => {}
+                                    Err(error) => {
+                                        return Err(StratumErrors::NotifyMessageNotSent {
+                                            error: error.to_string(),
+                                            msg: error.0,
+                                            msg_type: "SendToAll".to_string(),
+                                        })
+                                    }
+                                };
                         }
                     }
                 }
                 //Another notification event to provide the latest possible template available whenever a new peer
-                // is connected `subscribed` and `authorized` via stratum protocol
+                // is connected `subscribed` and `authorized` via stratum protocol.
                 NotifyCmd::SendLatestTemplateToNewDownstream {
                     new_downstream_addr,
                 } => {
                     let latest_template = latest_template_arc.lock().await.to_owned();
-                    let latest_template_merkel_branch =
-                        latest_template_merkel_branch_arc.lock().await.to_owned();
+                    let latest_template_merkle_branch =
+                        latest_template_merkle_branch_arc.lock().await.to_owned();
                     let current_downstream_mapping = downstream_connection_map.lock().await;
                     let current_downstream_message_sender_res = current_downstream_mapping
                         .downstream_channel_mapping
@@ -1053,7 +1276,7 @@ impl Notifier {
                         clean_job,
                         latest_template.clone(),
                         next_job_id,
-                        latest_template_merkel_branch,
+                        latest_template_merkle_branch,
                     )
                     .await;
                     let serialized_notification: Result<String, StratumErrors> =
@@ -1073,7 +1296,6 @@ impl Notifier {
                                 curr_peer_mining_job_map
                                     .insert_mining_job(job_details)
                                     .await;
-                                //this will change
                                 let job_notification_response = JobNotificationResponse {
                                     method: "mining.notify".to_string(),
                                     params: json!([
@@ -1102,15 +1324,26 @@ impl Notifier {
                             return Err(error);
                         }
                     };
-                    current_downstream_message_sender
+                    match current_downstream_message_sender
                         .send(job_notification)
-                        .await;
+                        .await
+                    {
+                        Ok(_) => {}
+                        Err(error) => {
+                            return Err(StratumErrors::NotifyMessageNotSent {
+                                error: error.to_string(),
+                                msg: error.0,
+                                msg_type: "LatestTemplateSent".to_string(),
+                            })
+                        }
+                    };
                 }
             }
         }
         Ok(())
     }
 }
+///Connection information associated with each downstream peer associated along with the mapped `Sender_channel` for sending downstream responses and communication.
 #[derive(Debug, Clone)]
 pub struct ConnectionMapping {
     downstream_channel_mapping: HashMap<String, mpsc::Sender<String>>,
@@ -1121,6 +1354,7 @@ impl ConnectionMapping {
             downstream_channel_mapping: HashMap::new(),
         }
     }
+    ///Inserting new connction along with its `peer_socket_address` and `Sender_channel` associated with the client.
     pub fn new_connection(
         &mut self,
         peer_addr: String,
@@ -1132,21 +1366,27 @@ impl ConnectionMapping {
 }
 //Containing all the functionality for a stratum service
 impl Server {
+    ///`Spawning` new stratum server along with custom_config or default config .
     pub fn new(
         server_config: StratumServerConfig,
         connection_mapping_arc: Arc<Mutex<ConnectionMapping>>,
     ) -> Self {
         log::info!("Initializing server with config: {:?}", server_config);
-        let (downstream_tx, downstream_rx) = mpsc::channel::<String>(32);
 
         Self {
             stratum_config: server_config,
             downstream_connection_mapping: connection_mapping_arc,
-            // downstream_miner: Arc::new(Mutex::new(DownstreamClient::default())),
-            // downstream_receiver: downstream_rx,
-            // downstream_sender: downstream_tx.clone(),
         }
     }
+    /// Starts and runs the Stratum server, handling incoming miner connections.
+    ///
+    /// This asynchronous function continuously listens on the configured hostname and port
+    /// for new TCP connections from downstream miners. Each connection is managed in a separate
+    /// task, allowing concurrent processing of multiple miners.
+    ///
+    /// # Returns
+    /// * `Ok(())` – Runs indefinitely; returns only if the listener loop is broken or an unrecoverable error occurs.
+    /// * `Err(Box<std::io::Error>)` – If binding to the server address fails.
     pub async fn run_stratum_service(
         &mut self,
         mining_job_map: Arc<Mutex<HashMap<String, Arc<Mutex<MiningJobMap>>>>>,
@@ -1197,21 +1437,37 @@ impl Server {
                 }
             }
         }
-
-        Ok(())
     }
+    /// Handles an individual downstream miner connection over TCP.
+    ///
+    /// This function manages both reading requests from the miner and sending server messages or job
+    /// notifications back to the miner. Each connection runs in its own asynchronous task, enabling
+    /// concurrent handling of multiple miners.
+    ///
+    /// # Functionality
+    /// 1. Wraps the TCP reader in a `BufReader` and `FramedRead` to efficiently read lines with a maximum length.
+    /// 2. Uses `tokio::select!` to concurrently:
+    ///    - Listen for server-to-client messages from `downstream_receiver` and write them to the TCP stream.
+    ///    - Read miner requests line by line from the TCP stream, parse them as JSON, and forward to
+    ///      `handle_client_to_server_request`.
+    /// 3. Logs important events such as received messages, connection closures, or errors.
+    ///
+    /// # Returns
+    /// * `Ok(())` – Connection terminated normally (client closed the connection).
+    /// * `Err(Box<StratumErrors>)` – On stream reading/writing errors or if the request handling fails.
+    ///
     pub async fn handle_connection(
         downstream_client: Arc<Mutex<DownstreamClient>>,
         peer_addr: SocketAddr,
         stream_reader: OwnedReadHalf,
         mut stream_writer: OwnedWriteHalf,
-        mut downstream_receiver: &mut mpsc::Receiver<String>,
+        downstream_receiver: &mut mpsc::Receiver<String>,
         mining_job_map: Arc<Mutex<MiningJobMap>>,
         downstream_message_sender: mpsc::Sender<String>,
         notification_sender: mpsc::Sender<NotifyCmd>,
     ) -> Result<(), Box<StratumErrors>> {
         const MAX_LINE_LENGTH: usize = 2_usize.pow(16);
-        ///It can be excessively inefficient to work directly with a AsyncRead instance. A BufReader performs large, infrequent reads on the underlying AsyncRead and maintains an in-memory buffer of the results.
+        //It can be excessively inefficient to work directly with a AsyncRead instance. A BufReader performs large, infrequent reads on the underlying AsyncRead and maintains an in-memory buffer of the results.
         let reader = BufReader::new(stream_reader);
         //reading incoming stream frame by frame
         let mut framed = FramedRead::new(reader, LinesCodec::new_with_max_length(MAX_LINE_LENGTH));
@@ -1229,7 +1485,7 @@ impl Server {
 
                         },
                         Err(error)=>{
-                            log::error!("An error occurred while writing to the stream");
+                            log::error!("An error occurred while writing to the stream - {}",error);
                         }
                     }
                 }
@@ -1241,7 +1497,7 @@ impl Server {
                             }
                             log::info!("Read line {:?} from {}...", line, peer_addr);
                         //Parsing the lines read from buffer to find out whether they are valid JSON request type to be server as per
-                        //stratum or not
+                        //stratum or not .
                         match serde_json::from_str::<StandardRequest>(&line) {
                                 Ok(request) => {
                          let server_request_res:Result<StratumResponses, StratumErrors> = downstream_client.lock().await.handle_client_to_server_request(serde_json::from_str(&line).unwrap(),mining_job_map.clone(),downstream_message_sender.clone(),notification_sender.clone(),peer_addr.to_string()).await;
@@ -1278,360 +1534,218 @@ impl Server {
         Ok(())
     }
 }
-#[tokio::test]
-pub async fn server_start_test() {
-    let connection_mapping = Arc::new(Mutex::new(ConnectionMapping::new()));
-    let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
-    let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
+#[allow(dead_code, unused)]
+#[cfg(test)]
+//Unit tests specific to stratum service
+mod test {
+    use std::{collections::HashMap, sync::Arc, time::Duration};
 
-    let config = StratumServerConfig {
-        hostname: "127.0.0.1".to_string(),
-        port: 3353,
-        ..Default::default()
+    use futures::lock::Mutex;
+    use tokio::{
+        io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+        net::TcpStream,
+        sync::mpsc,
     };
 
-    let mut server = Server::new(config.clone(), connection_mapping.clone());
+    use crate::stratum::{ConnectionMapping, MiningJobMap, NotifyCmd, Server, StratumServerConfig};
 
-    let server_task = tokio::spawn(async move {
-        let _ = server.run_stratum_service(mining_job_map, notify_tx).await;
-    });
+    #[tokio::test]
+    pub async fn server_start_test() {
+        let connection_mapping = Arc::new(Mutex::new(ConnectionMapping::new()));
+        let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
+        let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
 
-    tokio::time::sleep(Duration::from_millis(300)).await;
-
-    let addr = format!("{}:{}", config.hostname, config.port);
-    let mut mock_connection_handles = Vec::new();
-    for i in 0..3 {
-        let addr_clone = addr.clone();
-        mock_connection_handles.push(tokio::spawn(async move {
-            let mut stream = TcpStream::connect(&addr_clone).await.unwrap();
-            let msg = format!(
-                r#"{{"id":{},"method":"mining.subscribe","params":[]}}"#,
-                i + 1
-            );
-            stream.write_all(msg.as_bytes()).await.unwrap();
-            stream.write_all(b"\n").await.unwrap();
-            stream
-        }));
-    }
-
-    let streams: Vec<TcpStream> = futures::future::join_all(mock_connection_handles)
-        .await
-        .into_iter()
-        .map(|r| r.unwrap())
-        .collect();
-
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
-    let conn_map = connection_mapping.lock().await;
-    assert_eq!(conn_map.downstream_channel_mapping.len(), 3);
-    drop(streams);
-    drop(server_task);
-}
-
-#[tokio::test]
-pub async fn server_subscribe_response() {
-    let connection_mapping = Arc::new(Mutex::new(ConnectionMapping::new()));
-    let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
-    let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
-
-    let config = StratumServerConfig {
-        hostname: "127.0.0.1".to_string(),
-        port: 3356,
-        ..Default::default()
-    };
-
-    let mut server = Server::new(config.clone(), connection_mapping.clone());
-
-    let server_task = tokio::spawn(async move {
-        let _ = server.run_stratum_service(mining_job_map, notify_tx).await;
-    });
-
-    tokio::time::sleep(Duration::from_millis(300)).await;
-
-    let addr = format!("{}:{}", config.hostname, config.port);
-    let mut stream = TcpStream::connect(&addr).await.unwrap();
-
-    let msg = r#"{"id":1,"method":"mining.subscribe","params":[]}"#;
-    stream.write_all(msg.as_bytes()).await.unwrap();
-    stream.write_all(b"\n").await.unwrap();
-
-    let mut reader = BufReader::new(stream);
-    let mut response_line = String::new();
-    reader.read_line(&mut response_line).await.unwrap();
-
-    let parsed: serde_json::Value = serde_json::from_str(response_line.trim()).unwrap();
-    println!("{:?}", parsed);
-}
-#[tokio::test]
-async fn test_mining_authorize_response() {
-    let connection_mapping = Arc::new(Mutex::new(ConnectionMapping::new()));
-    let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
-    let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
-
-    let config = StratumServerConfig {
-        hostname: "127.0.0.1".to_string(),
-        port: 3357,
-        ..Default::default()
-    };
-
-    let port = config.port;
-    let mut server = Server::new(config, connection_mapping);
-    tokio::spawn(async move {
-        let _ = server.run_stratum_service(mining_job_map, notify_tx).await;
-    });
-
-    tokio::time::sleep(Duration::from_millis(300)).await;
-
-    let addr = format!("127.0.0.1:{}", port);
-    let mut stream = TcpStream::connect(&addr).await.unwrap();
-
-    let request = r#"{"id":2,"method":"mining.authorize","params":["satoshi","braidpool"]}"#;
-    stream.write_all(request.as_bytes()).await.unwrap();
-    stream.write_all(b"\n").await.unwrap();
-    let mut reader = BufReader::new(stream);
-
-    let mut line = String::new();
-    reader.read_line(&mut line).await.unwrap();
-    let response: serde_json::Value = serde_json::from_str(line.trim()).unwrap();
-
-    assert_eq!(response["id"], 2);
-    assert!(response["result"].is_boolean());
-    assert_eq!(response["result"], true);
-}
-#[tokio::test]
-async fn test_mining_set_difficulty_response() {
-    let connection_mapping = Arc::new(Mutex::new(ConnectionMapping::new()));
-    let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
-    let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
-
-    let config = StratumServerConfig {
-        hostname: "127.0.0.1".to_string(),
-        port: 3358,
-        ..Default::default()
-    };
-    let port = config.port;
-    let mut server = Server::new(config, connection_mapping);
-    tokio::spawn(async move {
-        let _ = server.run_stratum_service(mining_job_map, notify_tx).await;
-    });
-    tokio::time::sleep(Duration::from_millis(300)).await;
-    let addr = format!("127.0.0.1:{}", port);
-    let mut stream = TcpStream::connect(&addr).await.unwrap();
-    let request = r#"{"id":3,"method":"mining.set_difficulty","params":[1000]}"#;
-    stream.write_all(request.as_bytes()).await.unwrap();
-    stream.write_all(b"\n").await.unwrap();
-    let mut reader = BufReader::new(stream);
-    let mut line = String::new();
-    reader.read_line(&mut line).await.unwrap();
-    let response: serde_json::Value = serde_json::from_str(line.trim()).unwrap();
-    assert_eq!(response["method"], "mining.set_difficulty");
-}
-#[tokio::test]
-async fn test_invalid_json() {
-    let connection_mapping = Arc::new(Mutex::new(ConnectionMapping::new()));
-    let mining_job_map: Arc<Mutex<HashMap<String, Arc<Mutex<MiningJobMap>>>>> =
-        Arc::new(Mutex::new(HashMap::new()));
-    let (notify_tx, _notify_rx) = mpsc::channel::<NotifyCmd>(32);
-
-    let config = StratumServerConfig {
-        hostname: "127.0.0.1".to_string(),
-        port: 5050,
-        ..Default::default()
-    };
-
-    let mut server = Server::new(config, connection_mapping.clone());
-    let mining_job_map_clone = mining_job_map.clone();
-    let notify_tx_clone = notify_tx.clone();
-    tokio::spawn(async move {
-        server
-            .run_stratum_service(mining_job_map_clone, notify_tx_clone)
-            .await
-            .unwrap();
-    });
-
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    let mut stream = TcpStream::connect("127.0.0.1:5050").await.unwrap();
-
-    stream
-        .write_all(b"{\"method\":\"mining.subscribe\", \"params\": [\"test\", 1]\n")
-        .await
-        .unwrap();
-    stream.flush().await.unwrap();
-
-    stream.write_all(b"not a json at all\n").await.unwrap();
-    stream.flush().await.unwrap();
-
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-    let valid_msg = r#"{"id": 1, "method": "mining.subscribe", "params": []}"#;
-    stream
-        .write_all(format!("{}\n", valid_msg).as_bytes())
-        .await
-        .unwrap();
-    stream.flush().await.unwrap();
-
-    let mut reader = BufReader::new(stream);
-    let mut line = String::new();
-    let bytes_read = reader.read_line(&mut line).await.unwrap();
-    let response: serde_json::Value = serde_json::from_str(line.trim()).unwrap();
-    assert_eq!(response["id"], 1);
-}
-//TOFIX : Functional automated test for braidpool stratum server
-#[tokio::test]
-pub async fn test_script() {
-    setup_logging();
-    setup_tracing();
-    //fetching and building the `minerd` for dynamic testing instead of hardcoded requests
-    let mock_miner_handle = tokio::task::spawn_blocking(|| {
-        let cwd = std::env::current_dir()
-            .unwrap()
-            .join(Path::new("src/mock_miner.sh"));
-        let mut child_res = Command::new(cwd).spawn().unwrap();
-        let output = child_res.wait_with_output();
-    })
-    .await
-    .expect("Failed");
-
-    println!("Minerd fetched from git");
-    let minerd_path = std::env::current_dir()
-        .unwrap()
-        .join(Path::new("cpuminer/minerd"));
-    println!("Starting miner from path: {:?}", minerd_path);
-
-    let miner_handle = tokio::spawn(async move {
-        let mut child = match Command::new(minerd_path)
-            .arg("-a")
-            .arg("sha256d")
-            .arg("-o")
-            .arg("stratum+tcp://192.168.1.7:3333")
-            .arg("-q")
-            .arg("-D")
-            .arg("-P")
-            .stdout(std::process::Stdio::inherit())
-            .stderr(std::process::Stdio::inherit())
-            .spawn()
-        {
-            Ok(c) => c,
-            Err(e) => {
-                panic!(
-                    "minerd process could not be started: {}. Stopping thread.",
-                    e
-                );
-            }
+        let config = StratumServerConfig {
+            hostname: "127.0.0.1".to_string(),
+            port: 3353,
+            ..Default::default()
         };
 
-        println!("Miner process started!");
-    })
-    .await
-    .expect("Failed again");
-    println!("Starting server");
-    let mut latest_template = Arc::new(Mutex::new(BlockTemplate::default()));
-    let mut latest_template_merkel_branch = Arc::new(Mutex::new(Vec::new()));
-    let mut latest_template_ref = latest_template.clone();
-    let mut latest_template_merkel_branch_ref = latest_template_merkel_branch.clone();
-    let (notification_tx, notification_rx) = mpsc::channel::<NotifyCmd>(1024);
-    let notification_tx_clone = notification_tx.clone();
-    let connection_mapping = Arc::new(Mutex::new(ConnectionMapping::new()));
-    let mut mining_job_map = Arc::new(Mutex::new(HashMap::new()));
-    let mut notifier: Notifier = Notifier::new(notification_rx, Arc::clone(&mining_job_map));
-    let stratum_config: StratumServerConfig = StratumServerConfig::default();
-    let mut stratum_server = Server::new(stratum_config, connection_mapping.clone());
-    tokio::spawn(async move {
-        notifier
-            .run_notifier(
-                connection_mapping.clone(),
-                &mut latest_template_ref,
-                &mut latest_template_merkel_branch_ref,
-            )
-            .await;
-    });
-    //Running the stratum service
-    tokio::spawn(async move {
-        stratum_server
-            .run_stratum_service(mining_job_map, notification_tx_clone)
-            .await;
-    });
-    // Spawn miner in a separate async task
+        let mut server = Server::new(config.clone(), connection_mapping.clone());
 
-    tokio::time::sleep(Duration::from_secs(30));
-    let (ipc_template_tx, ipc_template_rx) = mpsc::channel::<(Vec<u8>, Vec<Vec<u8>>)>(1);
-    let ipc_socket_path = "/tmp/bitcoin-ipc.sock".to_string();
-    let ipc_handler = tokio::task::spawn_blocking(move || {
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .expect("Failed to create tokio runtime");
-        rt.block_on(async {
-            let local_set = tokio::task::LocalSet::new();
-
-            local_set
-                .run_until(async {
-                    let listener_task = tokio::task::spawn_local({
-                        let ipc_socket_path = ipc_socket_path.clone();
-                        let ipc_template_tx = ipc_template_tx.clone();
-                        async move {
-                            loop {
-                                match ipc::ipc_block_listener(
-                                    ipc_socket_path.clone(),
-                                    ipc_template_tx.clone(),
-                                )
-                                .await
-                                {
-                                    Ok(_) => {
-                                        break;
-                                    }
-                                    Err(e) => {
-                                        log::error!("IPC block listener failed: {}", e);
-                                        log::info!("Restarting IPC listener in 10 seconds...");
-                                        tokio::time::sleep(tokio::time::Duration::from_secs(10))
-                                            .await;
-                                    }
-                                }
-                            }
-                        }
-                    });
-
-                    let consumer_task = tokio::task::spawn_local(async move {
-                        ipc_template_consumer(
-                            ipc_template_rx,
-                            notification_tx,
-                            &mut latest_template.clone(),
-                            &mut latest_template_merkel_branch.clone(),
-                        )
-                        .await
-                        .unwrap();
-                    });
-                    tokio::select! {
-                        _ = listener_task => log::info!("IPC listener completed"),
-                        _ = consumer_task => log::info!("IPC consumer completed"),
-
-                    }
-                })
-                .await;
+        let server_task = tokio::spawn(async move {
+            let _ = server.run_stratum_service(mining_job_map, notify_tx).await;
         });
-    });
-    let mut stream = TcpStream::connect("127.0.0.1:3333").await.unwrap();
-    let (reader, _writer) = stream.into_split();
 
-    tokio::spawn(async move {
-        let mut buf_reader = BufReader::new(reader);
-        let mut line = String::new();
+        tokio::time::sleep(Duration::from_millis(300)).await;
 
-        loop {
-            line.clear();
-            match buf_reader.read_line(&mut line).await {
-                Ok(0) => {
-                    break;
-                }
-                Ok(_) => {
-                    println!(" Message from server: {}", line.trim());
-                }
-                Err(e) => {
-                    eprintln!(" Error reading from server: {}", e);
-                    break;
-                }
-            }
+        let addr = format!("{}:{}", config.hostname, config.port);
+        let mut mock_connection_handles = Vec::new();
+        for i in 0..3 {
+            let addr_clone = addr.clone();
+            mock_connection_handles.push(tokio::spawn(async move {
+                let mut stream = TcpStream::connect(&addr_clone).await.unwrap();
+                let msg = format!(
+                    r#"{{"id":{},"method":"mining.subscribe","params":[]}}"#,
+                    i + 1
+                );
+                stream.write_all(msg.as_bytes()).await.unwrap();
+                stream.write_all(b"\n").await.unwrap();
+                stream
+            }));
         }
-    });
+
+        let streams: Vec<TcpStream> = futures::future::join_all(mock_connection_handles)
+            .await
+            .into_iter()
+            .map(|r| r.unwrap())
+            .collect();
+
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        let conn_map = connection_mapping.lock().await;
+        assert_eq!(conn_map.downstream_channel_mapping.len(), 3);
+        drop(streams);
+        drop(server_task);
+    }
+
+    #[tokio::test]
+    pub async fn server_subscribe_response() {
+        let connection_mapping = Arc::new(Mutex::new(ConnectionMapping::new()));
+        let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
+        let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
+
+        let config = StratumServerConfig {
+            hostname: "127.0.0.1".to_string(),
+            port: 3356,
+            ..Default::default()
+        };
+
+        let mut server = Server::new(config.clone(), connection_mapping.clone());
+
+        let server_task = tokio::spawn(async move {
+            let _ = server.run_stratum_service(mining_job_map, notify_tx).await;
+        });
+
+        tokio::time::sleep(Duration::from_millis(300)).await;
+
+        let addr = format!("{}:{}", config.hostname, config.port);
+        let mut stream = TcpStream::connect(&addr).await.unwrap();
+
+        let msg = r#"{"id":1,"method":"mining.subscribe","params":[]}"#;
+        stream.write_all(msg.as_bytes()).await.unwrap();
+        stream.write_all(b"\n").await.unwrap();
+
+        let mut reader = BufReader::new(stream);
+        let mut response_line = String::new();
+        reader.read_line(&mut response_line).await.unwrap();
+
+        let parsed: serde_json::Value = serde_json::from_str(response_line.trim()).unwrap();
+        println!("{:?}", parsed);
+    }
+    #[tokio::test]
+    async fn test_mining_authorize_response() {
+        let connection_mapping = Arc::new(Mutex::new(ConnectionMapping::new()));
+        let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
+        let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
+
+        let config = StratumServerConfig {
+            hostname: "127.0.0.1".to_string(),
+            port: 3357,
+            ..Default::default()
+        };
+
+        let port = config.port;
+        let mut server = Server::new(config, connection_mapping);
+        tokio::spawn(async move {
+            let _ = server.run_stratum_service(mining_job_map, notify_tx).await;
+        });
+
+        tokio::time::sleep(Duration::from_millis(300)).await;
+
+        let addr = format!("127.0.0.1:{}", port);
+        let mut stream = TcpStream::connect(&addr).await.unwrap();
+
+        let request = r#"{"id":2,"method":"mining.authorize","params":["satoshi","braidpool"]}"#;
+        stream.write_all(request.as_bytes()).await.unwrap();
+        stream.write_all(b"\n").await.unwrap();
+        let mut reader = BufReader::new(stream);
+
+        let mut line = String::new();
+        reader.read_line(&mut line).await.unwrap();
+        let response: serde_json::Value = serde_json::from_str(line.trim()).unwrap();
+
+        assert_eq!(response["id"], 2);
+        assert!(response["result"].is_boolean());
+        assert_eq!(response["result"], true);
+    }
+    #[tokio::test]
+    async fn test_mining_set_difficulty_response() {
+        let connection_mapping = Arc::new(Mutex::new(ConnectionMapping::new()));
+        let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
+        let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
+
+        let config = StratumServerConfig {
+            hostname: "127.0.0.1".to_string(),
+            port: 3358,
+            ..Default::default()
+        };
+        let port = config.port;
+        let mut server = Server::new(config, connection_mapping);
+        tokio::spawn(async move {
+            let _ = server.run_stratum_service(mining_job_map, notify_tx).await;
+        });
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        let addr = format!("127.0.0.1:{}", port);
+        let mut stream = TcpStream::connect(&addr).await.unwrap();
+        let request = r#"{"id":3,"method":"mining.suggest_difficulty","params":[1000]}"#;
+        stream.write_all(request.as_bytes()).await.unwrap();
+        stream.write_all(b"\n").await.unwrap();
+        let mut reader = BufReader::new(stream);
+        let mut line = String::new();
+        reader.read_line(&mut line).await.unwrap();
+        let response: serde_json::Value = serde_json::from_str(line.trim()).unwrap();
+        assert_eq!(response["method"], "mining.set_difficulty");
+    }
+    #[tokio::test]
+    async fn test_invalid_json() {
+        let connection_mapping = Arc::new(Mutex::new(ConnectionMapping::new()));
+        let mining_job_map: Arc<Mutex<HashMap<String, Arc<Mutex<MiningJobMap>>>>> =
+            Arc::new(Mutex::new(HashMap::new()));
+        let (notify_tx, _notify_rx) = mpsc::channel::<NotifyCmd>(32);
+
+        let config = StratumServerConfig {
+            hostname: "127.0.0.1".to_string(),
+            port: 5050,
+            ..Default::default()
+        };
+
+        let mut server = Server::new(config, connection_mapping.clone());
+        let mining_job_map_clone = mining_job_map.clone();
+        let notify_tx_clone = notify_tx.clone();
+        tokio::spawn(async move {
+            server
+                .run_stratum_service(mining_job_map_clone, notify_tx_clone)
+                .await
+                .unwrap();
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+        let mut stream = TcpStream::connect("127.0.0.1:5050").await.unwrap();
+
+        stream
+            .write_all(b"{\"method\":\"mining.subscribe\", \"params\": [\"test\", 1]\n")
+            .await
+            .unwrap();
+        stream.flush().await.unwrap();
+
+        stream.write_all(b"not a json at all\n").await.unwrap();
+        stream.flush().await.unwrap();
+
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+        let valid_msg = r#"{"id": 1, "method": "mining.subscribe", "params": []}"#;
+        stream
+            .write_all(format!("{}\n", valid_msg).as_bytes())
+            .await
+            .unwrap();
+        stream.flush().await.unwrap();
+
+        let mut reader = BufReader::new(stream);
+        let mut line = String::new();
+        let bytes_read = reader.read_line(&mut line).await.unwrap();
+        let response: serde_json::Value = serde_json::from_str(line.trim()).unwrap();
+        assert_eq!(response["id"], 1);
+    }
 }

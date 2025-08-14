@@ -58,11 +58,85 @@ pub enum StratumErrors {
     UnableToReadStream {
         error: tokio_util::codec::LinesCodecError,
     },
+    ParamNotFound {
+        param: String,
+        method: String,
+    },
+    JobIdCouldNotBeParsed {
+        method: String,
+        error: String,
+    },
+    ConfigureFeatureStringConversion {
+        error: String,
+    },
+    VersionRollingStringParseError {
+        error: String,
+    },
+    VersionRollingHexParseError {
+        error: String,
+    },
+    VersionrollingMinBitCountHexParseError {
+        error: String,
+    },
+    NotifyMessageNotSent {
+        error: String,
+        msg: String,
+        msg_type: String,
+    },
 }
 pub enum StratumResponseErrors {}
 impl fmt::Display for StratumErrors {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            StratumErrors::NotifyMessageNotSent {
+                error,
+                msg,
+                msg_type,
+            } => {
+                write!(
+                    f,
+                    "{} occurred while sending the following message - {} to downstream node in message type - {}",
+                    error, msg,msg_type
+                )
+            }
+            StratumErrors::VersionrollingMinBitCountHexParseError { error } => {
+                write!(
+                    f,
+                    "{} occurred while parsing Version rolling min bit in mining.configure",
+                    error
+                )
+            }
+            StratumErrors::VersionRollingStringParseError { error } => {
+                write!(
+                    f,
+                    "{} occurred while parsing the version rolling to string type",
+                    error
+                )
+            }
+            StratumErrors::VersionRollingHexParseError { error } => {
+                write!(
+                    f,
+                    "{} occurred while parsing Version rolling in mining.configure",
+                    error
+                )
+            }
+            StratumErrors::ConfigureFeatureStringConversion { error } => {
+                write!(f, "{}", error)
+            }
+            StratumErrors::JobIdCouldNotBeParsed { method, error } => {
+                write!(
+                    f,
+                    "Job id could not be parsed due to the error - {} in the method - {}",
+                    error, method
+                )
+            }
+            StratumErrors::ParamNotFound { param, method } => {
+                write!(
+                    f,
+                    "Required param {} for the following method {} not found ",
+                    param, method
+                )
+            }
             StratumErrors::UnableToReadStream { error } => {
                 write!(f, "Unable to fetch stream - {}", error)
             }

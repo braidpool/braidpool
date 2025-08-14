@@ -57,10 +57,10 @@ mod proxy_capnp;
 async fn main() -> Result<(), Box<dyn Error>> {
     //latest available template to be cached for the newest connection until new job is received
     let mut latest_template = Arc::new(Mutex::new(BlockTemplate::default()));
-    //latest available template merkel branch
-    let mut latest_template_merkel_branch = Arc::new(Mutex::new(Vec::new()));
+    //latest available template merkle branch
+    let mut latest_template_merkle_branch = Arc::new(Mutex::new(Vec::new()));
     let mut latest_template_ref = latest_template.clone();
-    let mut latest_template_merkel_branch_ref = latest_template_merkel_branch.clone();
+    let mut latest_template_merkle_branch_ref = latest_template_merkle_branch.clone();
     //One will go into the IPC and the other will go to the `notifier`
     let (notification_tx, notification_rx) = mpsc::channel::<NotifyCmd>(1024);
     //cloning the channel to be sent across different interfaces
@@ -81,7 +81,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .run_notifier(
                 connection_mapping.clone(),
                 &mut latest_template_ref,
-                &mut latest_template_merkel_branch_ref,
+                &mut latest_template_merkle_branch_ref,
             )
             .await;
     });
@@ -266,7 +266,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             Network::Bitcoin
         };
 
-
         let (ipc_template_tx, ipc_template_rx) = mpsc::channel::<(Vec<u8>, Vec<Vec<u8>>)>(1);
 
         let ipc_socket_path = args.ipc_socket.clone();
@@ -311,7 +310,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
                         let consumer_task = tokio::task::spawn_local(async move {
                             ipc_template_consumer(ipc_template_rx,notification_tx,&mut latest_template.clone(),
-                                &mut latest_template_merkel_branch.clone(),).await.unwrap();
+                                &mut latest_template_merkle_branch.clone(),).await.unwrap();
                         });
                         tokio::select! {
                             _ = listener_task => log::info!("IPC listener completed"),
@@ -711,78 +710,3 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     Ok(())
 }
-
-// pub async fn ipc_template_consumer(
-//     mut template_rx: mpsc::Receiver<(Vec<u8>, Vec<Vec<u8>>)>,
-//     notifier_tx: mpsc::Sender<NotifyCmd>,
-//     latest_template_arc: &mut Arc<Mutex<BlockTemplate>>,
-//     latest_template_merkel_branch_arc: &mut Arc<Mutex<Vec<Vec<u8>>>>,
-// ) -> Result<(), IPCtemplateError> {
-//     while let Some(template_bytes) = template_rx.recv().await {
-//         if template_bytes.0.len() > 0 {
-//             let candidate_block: Result<
-//                 bitcoin::blockdata::block::Block,
-//                 bitcoin::consensus::DeserializeError,
-//             > = deserialize(&template_bytes.0.clone());
-//             let merkel_branch_coinbase = template_bytes.1.clone();
-//             let (template_header, template_transactions) = candidate_block.unwrap().into_parts();
-//             let coinbase_transaction = template_transactions.get(0);
-//             log::info!("Coinbase transaction is - {:?}", coinbase_transaction);
-//             log::info!(
-//                 "The block header for the given template is - {:?}",
-//                 template_header
-//             );
-//             log::info!("Transactions count is - {}", template_transactions.len());
-//             let template: BlockTemplate = BlockTemplate::default();
-//             let mut latest_template = latest_template_arc.lock().await;
-//             latest_template.version = template.version;
-//             latest_template.rules = template.rules.clone();
-//             latest_template.vbavailable = template.vbavailable.clone();
-//             latest_template.vbrequired = template.vbrequired;
-//             latest_template.previousblockhash = template.previousblockhash.clone();
-//             latest_template.transactions = template.transactions.clone();
-//             latest_template.coinbaseaux = template.coinbaseaux.clone();
-//             latest_template.coinbasevalue = template.coinbasevalue;
-//             latest_template.longpollid = template.longpollid.clone();
-//             latest_template.target = template.target.clone();
-//             latest_template.mintime = template.mintime;
-//             latest_template.mutable = template.mutable.clone();
-//             latest_template.noncerange = template.noncerange.clone();
-//             latest_template.sigoplimit = template.sigoplimit;
-//             latest_template.sizelimit = template.sizelimit;
-//             latest_template.weightlimit = template.weightlimit;
-//             latest_template.curtime = template.curtime;
-//             latest_template.bits = template.bits.clone();
-//             latest_template.height = template.height;
-//             latest_template.default_witness_commitment =
-//                 template.default_witness_commitment.clone();
-//             let mut latest_template_merkel_branch = latest_template_merkel_branch_arc.lock().await;
-//             latest_template_merkel_branch.clear();
-//             for branch in template_bytes.1.into_iter() {
-//                 latest_template_merkel_branch.push(branch);
-//             }
-//             log::info!(
-//                 "Latest template has been updated with the most recently received template from IPC"
-//             );
-
-//             let notification_sent_or_not = notifier_tx
-//                 .send(NotifyCmd::SendToAll {
-//                     template: template,
-//                     merkel_branch_coinbase,
-//                 })
-//                 .await;
-//             match notification_sent_or_not {
-//                 Ok(_) => {
-//                     log::info!("Template has been sent to the notifier");
-//                 }
-//                 Err(error) => {
-//                     log::error!("An error occurred while sending notification - {:?}", error);
-//                 }
-//             }
-//         } else {
-//             log::warn!("IPC template too short: 0 bytes");
-//         }
-//     }
-
-//     Ok(())
-// }

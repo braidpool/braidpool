@@ -308,7 +308,7 @@ async fn get_template_with_retry(
     const MIN_TEMPLATE_SIZE: usize = 512;
     let config = CoinbaseConfig::for_network(network);
     let mut last_template = Vec::new();
-    let mut last_template_merkel_branch: Vec<Vec<u8>> = Vec::new();
+    let mut last_template_merkle_branch: Vec<Vec<u8>> = Vec::new();
 
     for attempt in 1..=max_attempts {
         match client
@@ -324,7 +324,7 @@ async fn get_template_with_retry(
                         }
 
                         last_template = complete_block_bytes;
-                        last_template_merkel_branch = components.coinbase_merkle_path;
+                        last_template_merkle_branch = components.coinbase_merkle_path;
                         if last_template.len() >= MIN_TEMPLATE_SIZE {
                             if attempt > 1 {
                                 log::info!(
@@ -334,7 +334,7 @@ async fn get_template_with_retry(
                                     attempt
                                 );
                             }
-                            return Ok((last_template, last_template_merkel_branch));
+                            return Ok((last_template, last_template_merkle_branch));
                         } else if attempt == max_attempts {
                             log::warn!(
                                 "{}: Template too small ({} bytes) after {} attempts, using anyway",
@@ -342,7 +342,7 @@ async fn get_template_with_retry(
                                 last_template.len(),
                                 max_attempts
                             );
-                            return Ok((last_template, last_template_merkel_branch));
+                            return Ok((last_template, last_template_merkle_branch));
                         } else {
                             log::warn!(
                                 "{}: Template too small ({} bytes), retrying... (attempt {}/{})",
@@ -368,7 +368,7 @@ async fn get_template_with_retry(
                                     context,
                                     last_template.len()
                                 );
-                                return Ok((last_template, last_template_merkel_branch));
+                                return Ok((last_template, last_template_merkle_branch));
                             }
                             return Err(Box::new(e));
                         }
@@ -396,7 +396,7 @@ async fn get_template_with_retry(
                             context,
                             last_template.len()
                         );
-                        return Ok((last_template, last_template_merkel_branch));
+                        return Ok((last_template, last_template_merkle_branch));
                     }
                     return Err(e);
                 }
