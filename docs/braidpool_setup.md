@@ -8,6 +8,7 @@ Braidpool uses Inter-Process Communication (IPC) to connect with Bitcoin Core us
 - Unix-domain socket support (Linux/macOS)
 - Cap'n Proto development libraries
 - libmultiprocess library
+- cpuminer for downstream connection (if no external ASIC).
 
 ## Building Bitcoin
 First to connect with Braidpool you need to build your Bitcoin node with IPC enabled build configurations. Check out bitcoin [multiprocess](https://github.com/bitcoin/bitcoin/blob/master/doc/multiprocess.md) doc to get the information about building with IPC.
@@ -62,3 +63,17 @@ You can find all available command-line arguments in [node/src/cli.rs](https://g
 -   `--ipc`: Enables IPC communication mode.
 -   `--ipc-socket <PATH>`: Specifies the path to the UNIX domain socket file (should be the same as bitcoin node).
 -   `--network <NETWORK>`: Sets the network. Valid options are `mainnet`, `testnet4`, `signet`, and `cpunet`. The default is `mainnet`.
+
+## Setting up cpuminer for downstream connection
+  - If you don't have a physical miner, you can do tests with CPUMiner.
+  - Firstly installation of `cpuminer` for connecting a downstream to the stratum service (can be done by any external ASIC device or cpu based).
+
+  - Run the `node/src/mock_miner.sh` script for the installation in the cwd for cpuminerd setup.
+
+  - Execute the `minerd` process via console/terminal by 
+    `./minerd -a sha256d -o stratum+tcp://localhost:3333 -q -D -P`.
+
+  - Password and downstream device name are optional paramateres can be sent if required for more information  check the source repository 
+  `https://github.com/pooler/cpuminer` .
+
+  - Run the `braidpool-binary` as stated above via `cargo run` for the logs to be seen in the console.
