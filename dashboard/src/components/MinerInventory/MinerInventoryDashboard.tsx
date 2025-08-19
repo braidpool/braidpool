@@ -128,7 +128,7 @@ const MinerInventoryDashboard = () => {
 
   const addMinerByIP = async () => {
     if (!newMinerIP.trim()) {
-      alert('Please enter a valid IP address');
+      setError('Please enter a valid IP address');
       return;
     }
 
@@ -152,7 +152,6 @@ const MinerInventoryDashboard = () => {
     } else {
       const errorMsg = `Could not connect to miner at ${newMinerIP.trim()}`;
       setError(errorMsg);
-      alert(errorMsg);
     }
 
     setLoading(false);
