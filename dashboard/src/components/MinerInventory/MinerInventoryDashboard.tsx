@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import {Miner} from "./Types"
+import { Miner } from './Types';
 import { DeviceCard } from './Card';
-
+import { API_URLS } from '../../URLs';
 const MinerInventoryDashboard = () => {
   const [miners, setMiners] = useState<Miner[]>([]);
   const [loading, setLoading] = useState(false);
@@ -11,12 +11,15 @@ const MinerInventoryDashboard = () => {
   const [refreshInterval, setRefreshInterval] = useState(30);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
 
-  const API_BASE_URL = 'http://localhost:5001';
-
   // Helper functions
   const determineStatus = (data: any): 'online' | 'warning' | 'offline' => {
     if (!data.is_mining || (data.hashrate_current || 0) === 0) return 'offline';
-    if ((data.temperature || 0) > 80 || (data.vr_temperature || 0) > 85 || data.errors?.length > 0) return 'warning';
+    if (
+      (data.temperature || 0) > 80 ||
+      (data.vr_temperature || 0) > 85 ||
+      data.errors?.length > 0
+    )
+      return 'warning';
     return 'online';
   };
 
@@ -32,21 +35,21 @@ const MinerInventoryDashboard = () => {
   const fetchMinerData = async (ip: string): Promise<Miner | null> => {
     try {
       const response = await fetch(
-        `${API_BASE_URL}/api/miners?ip=${ip}`,
+        `${API_URLS.MINER_DEVICE_URL}/api/miners?ip=${ip}`,
         {
           headers: { Accept: 'application/json' },
         }
       );
 
       const responseData = await response.json();
-      
+
       if (!response.ok || !responseData.success) {
         console.error(`Failed to fetch data for ${ip}:`, responseData.error);
         return null;
       }
-      
+
       const data = responseData.data;
-      
+
       const miner: Miner = {
         id: data.mac || ip + '_' + Date.now(),
         ip: data.ip || ip,
@@ -55,30 +58,30 @@ const MinerInventoryDashboard = () => {
         make: data.make || 'Unknown',
         model: data.model || 'Unknown',
         firmware: data.firmware || 'Unknown',
-        
+
         status: determineStatus(data),
         is_mining: data.is_mining || false,
         uptime: data.uptime || 0,
         errors: data.errors || [],
         alerts: countAlerts(data),
         lastSeen: new Date().toLocaleTimeString(),
-        
+
         hashrate_current: data.hashrate_current || 0,
         hashrate_avg: data.hashrate_avg || 0,
         expected_hashrate: data.expected_hashrate || 0,
-        
+
         temperature: data.temperature || 0,
         temperature_max: data.temperature_max || 0,
         vr_temperature: data.vr_temperature || 0,
-        
+
         power_usage: data.power_usage || 0,
         power_limit: data.power_limit || 0,
         efficiency: data.efficiency || 0,
         voltage: data.voltage || 0,
-        
+
         fan_speeds: data.fan_speeds || [],
         chip_count: data.chip_count || 0,
-        
+
         primary_pool: data.primary_pool || 'No Pool',
         pools: data.pools || [],
       };
@@ -92,36 +95,33 @@ const MinerInventoryDashboard = () => {
 
   const refreshAllMiners = async () => {
     if (miners.length === 0) return;
-    
+
     setLoading(true);
     const updatedMiners: Miner[] = [];
-    
+
     for (const miner of miners) {
       const updatedMiner = await fetchMinerData(miner.ip);
       if (updatedMiner) {
-        // Preserve the original ID and maintain the position
         updatedMiner.id = miner.id;
         updatedMiners.push(updatedMiner);
       } else {
-        // If fetch failed, keep the old data but mark as offline
         updatedMiners.push({
           ...miner,
           status: 'offline' as const,
           lastSeen: new Date().toLocaleTimeString(),
-          alerts: miner.alerts + 1
+          alerts: miner.alerts + 1,
         });
       }
     }
-    
+
     setMiners(updatedMiners);
     setLastUpdate(new Date());
     setLoading(false);
   };
 
-  // Auto-refresh effect
   useEffect(() => {
     if (!autoRefresh || miners.length === 0) return;
-    
+
     const interval = setInterval(refreshAllMiners, refreshInterval * 1000);
     return () => clearInterval(interval);
   }, [autoRefresh, refreshInterval, miners.length]);
@@ -136,12 +136,14 @@ const MinerInventoryDashboard = () => {
     setError(null);
 
     const newMiner = await fetchMinerData(newMinerIP.trim());
-    
+
     if (newMiner) {
-      setMiners(prev => {
-        const exists = prev.find(m => m.ip === newMiner.ip);
+      setMiners((prev) => {
+        const exists = prev.find((m) => m.ip === newMiner.ip);
         if (exists) {
-          return prev.map(m => m.ip === newMiner.ip ? { ...newMiner, id: m.id } : m);
+          return prev.map((m) =>
+            m.ip === newMiner.ip ? { ...newMiner, id: m.id } : m
+          );
         }
         return [...prev, newMiner];
       });
@@ -152,30 +154,33 @@ const MinerInventoryDashboard = () => {
       setError(errorMsg);
       alert(errorMsg);
     }
-    
+
     setLoading(false);
   };
 
- 
-
-  const handleRefreshNow = () => {
-    refreshAllMiners();
-  };
-
-  // Calculate statistics
   const totalMiners = miners.length;
-  const onlineMiners = miners.filter(m => m.status === 'online').length;
-  const warningMiners = miners.filter(m => m.status === 'warning').length;
-  const offlineMiners = miners.filter(m => m.status === 'offline').length;
-  const totalHashrate = miners.reduce((sum, m) => sum + (m.hashrate_current || 0), 0);
+  const onlineMiners = miners.filter((m) => m.status === 'online').length;
+  const warningMiners = miners.filter((m) => m.status === 'warning').length;
+  const offlineMiners = miners.filter((m) => m.status === 'offline').length;
+  const totalHashrate = miners.reduce(
+    (sum, m) => sum + (m.hashrate_current || 0),
+    0
+  );
   const totalPower = miners.reduce((sum, m) => sum + (m.power_usage || 0), 0);
-  const avgEfficiency = totalMiners > 0 ? 
-    miners.reduce((sum, m) => sum + (m.efficiency || 0), 0) / totalMiners * 1000 : 0;
+  const avgEfficiency =
+    totalMiners > 0
+      ? (miners.reduce((sum, m) => sum + (m.efficiency || 0), 0) /
+          totalMiners) *
+        1000
+      : 0;
 
   return (
     <div className="min-h-screen  text-white p-6">
       <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2"> Mining Dashboard</h1>
+        <h1 className="text-3xl font-bold text-white mb-2">
+          {' '}
+          Mining Dashboard
+        </h1>
 
         {error && (
           <div className="text-red-400 border  px-4 py-3 rounded mt-4 max-w-md mx-auto ">
@@ -200,10 +205,7 @@ const MinerInventoryDashboard = () => {
           >
             {loading ? 'Adding...' : 'Add Miner'}
           </button>
-        
         </div>
-
-       
 
         {/* Summary Stats */}
         <div className="flex flex-wrap justify-center gap-3 mt-6 text-sm">
@@ -217,25 +219,26 @@ const MinerInventoryDashboard = () => {
             {offlineMiners} Offline
           </div>
           <div className="px-4 py-2 rounded-md border border-gray-600 text-gray-400 ">
-         Total Miner :   {totalMiners} Total
+            Total Miner : {totalMiners} Total
           </div>
           <div className="px-4 py-2 rounded-md border border-gray-600 text-gray-400 ">
-           Total Hahrate : {totalHashrate.toFixed(3)} TH/s Total
+            Total Hahrate : {totalHashrate.toFixed(3)} TH/s Total
           </div>
           <div className="px-4 py-2 rounded-md border border-gray-600 text-gray-400 ">
-           Total Power: {totalPower}W Total
+            Total Power: {totalPower}W Total
           </div>
           <div className="px-4 py-2 rounded-md border border-gray-600 text-gray-400 ">
-           Total Efiiciency : {avgEfficiency.toFixed(1)} W/TH Avg
+            Total Efiiciency : {avgEfficiency.toFixed(1)} W/TH Avg
           </div>
         </div>
       </div>
 
       {miners.length === 0 ? (
         <div className="text-center py-12 text-gray-400">
-          
           <p className="text-lg">No miners found</p>
-          <p className="text-sm mt-2">Add your miner by entering its IP address above</p>
+          <p className="text-sm mt-2">
+            Add your miner by entering its IP address above
+          </p>
         </div>
       ) : (
         <div className="flex overflow-x-auto space-x-4 pb-4">
