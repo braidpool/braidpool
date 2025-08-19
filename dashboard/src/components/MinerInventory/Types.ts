@@ -1,26 +1,41 @@
-export type MinerStatus = 'online' | 'warning' | 'offline';
-
 export interface Miner {
   id: string;
-  name: string;
-  status: 'online' | 'warning' | 'offline';
-  temp: number;
-  hashrate: string;
-  efficiency: string;
-  powerDraw: string;
-  maxPower: string;
-  uptime: string;
-  location: string;
-  lastSeen: string;
-  alerts: number;
-  frequency: string;
-  fanspeed: string;
-  bestDiff: string;
-  ASICModel: string;
-  chipTemp: number;
-  voltage: string;
-  firmware: string;
-  pools: string;
+  ip: string;
+  hostname: string;
   mac: string;
-  ismining: boolean;
+  make: string;
+  model: string;
+  firmware: string;
+  
+  // Status
+  status: 'online' | 'warning' | 'offline';
+  is_mining: boolean;
+  uptime: number;
+  errors: any[];
+  alerts: number;
+  lastSeen: string;
+  
+  // Hashrate
+  hashrate_current: number;
+  hashrate_avg: number;
+  expected_hashrate: number;
+  
+  // Temperature
+  temperature: number;
+  temperature_max: number;
+  vr_temperature: number;
+  
+  // Power
+  power_usage: number;
+  power_limit: number;
+  efficiency: number;
+  voltage: number;
+  
+  // Hardware
+  fan_speeds: number[];
+  chip_count: number;
+  
+  // Pool
+  primary_pool: string;
+  pools: any[];
 }
