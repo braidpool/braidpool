@@ -630,6 +630,7 @@ pub struct SharedBitcoinClient {
     processor_task: Option<JoinHandle<()>>,
     tip_watcher_task: Option<JoinHandle<()>>,
     shutdown_sender: Option<mpsc::UnboundedSender<()>>,
+    tip_shutdown_sender: Option<mpsc::UnboundedSender<()>>,
     metrics: Arc<QueueMetrics>,
 }
 
@@ -643,58 +644,102 @@ impl SharedBitcoinClient {
         config: ClientConfig,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let (request_sender, mut request_receiver) = mpsc::unbounded_channel::<QueuedRequest>();
-        let (notification_sender, internal_notification_receiver) = mpsc::unbounded_channel();
+        let (notification_sender, mut internal_notification_receiver) = mpsc::unbounded_channel();
         let (external_notification_sender, external_notification_receiver) =
             mpsc::unbounded_channel();
         let (shutdown_sender, mut shutdown_receiver) = mpsc::unbounded_channel();
-
-        let stream = UnixStream::connect(socket_path).await?;
-        let bitcoin_client = BitcoinRpcClient::new(stream).await?;
-
-        let (_, initial_tip_hash) = bitcoin_client
-            .get_mining_tip_info()
-            .await
-            .unwrap_or((0, vec![]));
-
         let metrics = Arc::new(QueueMetrics::default());
         let queue_limits = config.queue_limits.clone();
+        let (tip_shutdown_sender, mut tip_shutdown_receiver) = mpsc::unbounded_channel::<()>();
 
         let tip_watcher_task = tokio::task::spawn_local({
-            let bitcoin_client_clone = UnixStream::connect(socket_path).await?;
-            let bitcoin_client_for_watcher = BitcoinRpcClient::new(bitcoin_client_clone).await?;
+            let socket_path = socket_path.to_string();
             let notification_sender_clone = notification_sender.clone();
-
             async move {
-                if let Err(e) = bitcoin_client_for_watcher
-                    .wait_for_tip_change(
+                let watcher_stream = match UnixStream::connect(&socket_path).await {
+                    Ok(stream) => stream,
+                    Err(e) => {
+                        log::error!("Failed to connect tip watcher: {}", e);
+                        return;
+                    }
+                };
+
+                let bitcoin_client = match BitcoinRpcClient::new(watcher_stream).await {
+                    Ok(client) => client,
+                    Err(e) => {
+                        log::error!("Failed to create tip watcher client: {}", e);
+                        return;
+                    }
+                };
+
+                let initial_tip_hash = match bitcoin_client.get_mining_tip_info().await {
+                    Ok((_, hash)) => hash,
+                    Err(e) => {
+                        log::error!("Failed to get initial tip hash: {}", e);
+                        vec![] // Empty hash will trigger immediate tip change detection
+                    }
+                };
+
+                let _result = tokio::select! {
+                    _ = tip_shutdown_receiver.recv() => {
+                        log::info!("Tip watcher received shutdown signal");
+                        Ok(())
+                    }
+                    result = bitcoin_client.wait_for_tip_change(
                         initial_tip_hash,
                         1728000.0, // 8 hours
                         notification_sender_clone.clone(),
-                    )
-                    .await
-                {
-                    log::error!("Tip watcher failed: {}", e);
-                    let _ = notification_sender_clone.send(BitcoinNotification::ConnectionLost {
-                        reason: format!("Tip watcher error: {}", e),
-                    });
+                    ) => {
+                        if let Err(e) = &result {
+                            log::error!("Tip watcher failed: {}", e);
+                            let _ = notification_sender_clone.send(BitcoinNotification::ConnectionLost {
+                                reason: format!("Tip watcher error: {}", e),
+                            });
+                        }
+                        result
+                    }
+                };
+
+                // Always cleanup bitcoin client
+                if let Err(e) = bitcoin_client.disconnect().await {
+                    log::error!("Error disconnecting tip watcher bitcoin client: {}", e);
                 }
             }
         });
 
         let processor_task = tokio::task::spawn_local({
+            let socket_path = socket_path.to_string();
             let metrics = metrics.clone();
             let config = config.clone();
 
             async move {
+                let processor_stream = match UnixStream::connect(&socket_path).await {
+                    Ok(stream) => stream,
+                    Err(e) => {
+                        log::error!("Failed to connect processor: {}", e);
+                        return;
+                    }
+                };
+
+                let bitcoin_client = match BitcoinRpcClient::new(processor_stream).await {
+                    Ok(client) => client,
+                    Err(e) => {
+                        log::error!("Failed to create processor client: {}", e);
+                        return;
+                    }
+                };
+
                 let mut priority_queue = PriorityRequestQueue::new(queue_limits, metrics.clone());
-                let mut notification_receiver = internal_notification_receiver;
                 let external_notification_sender = Some(external_notification_sender);
                 let mut metrics_interval =
                     tokio::time::interval(Duration::from_secs(config.metrics_interval_secs));
 
                 loop {
                     tokio::select! {
-                        _ = shutdown_receiver.recv() => break,
+                        _ = shutdown_receiver.recv() => {
+                            log::info!("Processor received shutdown signal");
+                            break;
+                        }
 
                         queued_request = request_receiver.recv() => {
                             if let Some(QueuedRequest { request, enqueue_time}) = queued_request {
@@ -703,9 +748,9 @@ impl SharedBitcoinClient {
                                     log::warn!("Request spent {:?} in queue before processing", queue_wait_time);
                                 }
                                 if let Err(e) = priority_queue.enqueue(request) {
-                                    eprintln!("Failed to enqueue request: {}", e);
+                                    log::error!("Failed to enqueue request: {}", e);
                                 }
-                                // Process immediately if critical or high priority
+                                // Process all queued requests
                                 while let Some(next_request) = priority_queue.dequeue() {
                                     let processing_start = Instant::now();
                                     Self::process_single_request(&bitcoin_client, next_request).await;
@@ -727,11 +772,12 @@ impl SharedBitcoinClient {
                                     }
                                 }
                             } else {
+                                log::info!("Request receiver closed, processor shutting down");
                                 break;
                             }
                         }
 
-                        notification = notification_receiver.recv() => {
+                        notification = internal_notification_receiver.recv() => {
                             match notification {
                                 Some(notif) => {
                                     if let Some(ref sender) = external_notification_sender {
@@ -758,7 +804,10 @@ impl SharedBitcoinClient {
                     }
                 }
 
-                let _ = bitcoin_client.disconnect().await;
+                // Always cleanup bitcoin client
+                if let Err(e) = bitcoin_client.disconnect().await {
+                    log::error!("Error disconnecting processor bitcoin client: {}", e);
+                }
             }
         });
 
@@ -768,6 +817,7 @@ impl SharedBitcoinClient {
             processor_task: Some(processor_task),
             tip_watcher_task: Some(tip_watcher_task),
             shutdown_sender: Some(shutdown_sender),
+            tip_shutdown_sender: Some(tip_shutdown_sender),
             metrics,
         })
     }
@@ -1029,17 +1079,28 @@ impl SharedBitcoinClient {
     }
 
     pub async fn shutdown(mut self) -> Result<(), Box<dyn std::error::Error>> {
+        // Send shutdown signals
         if let Some(shutdown_sender) = self.shutdown_sender.take() {
             let _ = shutdown_sender.send(());
         }
 
+        if let Some(tip_shutdown_sender) = self.tip_shutdown_sender.take() {
+            let _ = tip_shutdown_sender.send(());
+        }
+
+        // Wait for tasks to complete gracefully
         if let Some(task) = self.processor_task.take() {
-            let _ = task.await;
+            if let Err(e) = task.await {
+                log::error!("Processor task join error: {}", e);
+            }
         }
 
         if let Some(tip_task) = self.tip_watcher_task.take() {
-            let _ = tip_task.await;
+            if let Err(e) = tip_task.await {
+                log::error!("Tip watcher task join error: {}", e);
+            }
         }
+        log::info!("SharedBitcoinClient shutdown complete");
         Ok(())
     }
 
@@ -1088,5 +1149,29 @@ impl SharedBitcoinClient {
 
         let result = response_receiver.await??;
         Ok(result)
+    }
+}
+
+impl Drop for SharedBitcoinClient {
+    fn drop(&mut self) {
+        // Send shutdown signals to both processor and tip-watcher
+        if let Some(shutdown_sender) = self.shutdown_sender.take() {
+            let _ = shutdown_sender.send(());
+        }
+        if let Some(tip_shutdown_sender) = self.tip_shutdown_sender.take() {
+            let _ = tip_shutdown_sender.send(());
+        }
+
+        // Abort tasks if they're still running
+        if let Some(task) = self.processor_task.take() {
+            if !task.is_finished() {
+                task.abort();
+            }
+        }
+        if let Some(tip_task) = self.tip_watcher_task.take() {
+            if !tip_task.is_finished() {
+                tip_task.abort();
+            }
+        }
     }
 }
