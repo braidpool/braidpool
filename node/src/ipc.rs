@@ -5,6 +5,7 @@ use crate::error::{classify_error, ErrorKind};
 use tokio::sync::mpsc::Sender;
 pub mod client;
 use crate::template_creator::{create_block_template, FinalTemplate};
+use bitcoin::Network;
 pub use client::{
     bytes_to_hex, BitcoinNotification, BlockTemplateComponents, CheckBlockResult, RequestPriority,
     SharedBitcoinClient,
@@ -23,6 +24,7 @@ const MAX_BACKOFF: u64 = 300;
 pub async fn ipc_block_listener(
     ipc_socket_path: String,
     block_template_tx: Sender<Vec<u8>>,
+    network: Network,
 ) -> Result<(), Box<dyn std::error::Error>> {
     log::info!("Starting IPC block listener on: {}", ipc_socket_path);
     let local = tokio::task::LocalSet::new();
@@ -105,7 +107,8 @@ pub async fn ipc_block_listener(
                     RequestPriority::High,
                     "initial template",
                     tip_height,
-                    0
+                    0,
+                    network,
                 ).await {
                     Ok(template) => {
                         log::info!("Got initial block template: {} bytes - Height: {}", template.len(), tip_height);
@@ -159,7 +162,8 @@ pub async fn ipc_block_listener(
                                                 RequestPriority::High,
                                                 &format!("block {}", height),
                                                 height,
-                                                0
+                                                0,
+                                                network,
                                             ).await {
                                                 Ok(template) => {
                                                     log::info!("Got block template data: {} bytes", template.len());
@@ -299,9 +303,10 @@ async fn get_template_with_retry(
     context: &str,
     block_height: u32,
     initial_nonce: u32,
+    network: Network,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     const MIN_TEMPLATE_SIZE: usize = 512;
-    let config = CoinbaseConfig::default();
+    let config = CoinbaseConfig::for_network(network);
     let mut last_template = Vec::new();
 
     for attempt in 1..=max_attempts {
