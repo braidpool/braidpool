@@ -31,9 +31,6 @@ export async function fetchMempoolStats() {
     const feesRes = await axios.get(
       `${process.env.MEMPOOL_URL}/api/v1/fees/recommended`
     );
-    const priceRes = await axios.get(
-      `${process.env.BINANCE_URL}/api/v3/ticker/price?symbol=BTCUSDT`
-    );
     const oneMinuteBlockDataRes = await axios.get(
       `${process.env.MEMPOOL_URL}/api/v1/mining/blocks/fee-rates/1m`
     );
@@ -60,7 +57,7 @@ export async function fetchMempoolStats() {
     const { fastestFee, halfHourFee, hourFee, economyFee, minimumFee } =
       feesRes.data;
 
-    const btcPriceUSD = parseFloat(priceRes.data.price);
+    const btcPriceUSD = btcRates["USD"];
 
     const convertFee = (sats) => {
       const feeBtc = sats / 1e8;
