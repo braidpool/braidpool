@@ -111,11 +111,19 @@ pub struct CoinbaseConfig {
     pub pool_identifier: String,
 }
 
-impl Default for CoinbaseConfig {
-    fn default() -> Self {
+impl CoinbaseConfig {
+    pub fn for_network(network: Network) -> Self {
+        let pool_payout_address = match network {
+            Network::Bitcoin => "bc1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
+            Network::Testnet(_) => "tb1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
+            Network::Signet => "tb1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
+            Network::Regtest => "bcrt1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
+            _ => "tb1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
+        };
+
         Self {
-            network: Network::Bitcoin,
-            pool_payout_address: "bc1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
+            network,
+            pool_payout_address,
             pool_identifier: "Braidpool".to_string(),
         }
     }
