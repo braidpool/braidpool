@@ -62,10 +62,10 @@ describe('fetchMempoolStats', () => {
   ];
 
   const mockCurrencyRates = {
-    data: { 
-      data: { 
-        amount: '45000.50' 
-      } 
+    data: {
+      data: {
+        amount: '45000.50',
+      },
     },
   };
 

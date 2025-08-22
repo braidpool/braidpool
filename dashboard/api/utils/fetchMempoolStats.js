@@ -57,7 +57,7 @@ export async function fetchMempoolStats() {
     const { fastestFee, halfHourFee, hourFee, economyFee, minimumFee } =
       feesRes.data;
 
-    const btcPriceUSD = btcRates["USD"];
+    const btcPriceUSD = btcRates['USD'];
 
     const convertFee = (sats) => {
       const feeBtc = sats / 1e8;
@@ -68,7 +68,7 @@ export async function fetchMempoolStats() {
         fee_usd: feeUsd,
       };
     };
-    
+
     const blockFeesArray = blockfeesRes.data;
     const latestBlockFeeRaw =
       Array.isArray(blockFeesArray) && blockFeesArray.length > 0
