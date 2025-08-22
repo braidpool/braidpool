@@ -1,4 +1,3 @@
-import React from 'react';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import MinedSharesExplorer from '../MinedSharesExplorer';
 import '@testing-library/jest-dom';
@@ -53,7 +52,7 @@ jest.mock('../Trends/TrendsTab', () => {
   };
 });
 
-jest.mock('../Reward/RewardsSection', () => {
+jest.mock('../Reward/RewardsDashboard', () => {
   return {
     RewardsDashboard: function MockRewardsDashboard() {
       return <div>RewardsDashboard</div>;
