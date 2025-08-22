@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import Card from '../common/Card';
 import Header from '../common/Header';
 import InstallationInstructions from '../Installation/InstallationInstructions';
-import MineInventoryDashboard from '../MinerInventory/MineInventoryDashboard';
-import MempoolLatencyStats from './MempoolLatencyStats';
+import MinerInventoryDashboard from '../MinerInventory/MinerInventoryDashboard';
+import MempoolLatencyStats from '../Mempool/MempoolLatencyStats';
 import GraphVisualization from '../BraidPoolDAG/BraidPoolDAG';
 import MinedSharesExplorer from '../BeadsTab/MinedSharesExplorer';
 import NodeHealth from '../NodeHealth/NodeHealth';
@@ -29,7 +29,13 @@ const Dashboard = () => {
           </Card>
         );
       case Page.MINING_INVENTORY:
-        return <MineInventoryDashboard />;
+        return (
+          <div className="p-2">
+            <Card title="Miner Inventory">
+              <MinerInventoryDashboard />
+            </Card>
+          </div>
+        );
       case Page.MEMPOOL:
         return (
           <div className="p-2">
