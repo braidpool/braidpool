@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import Card from '../common/Card';
 import Header from '../common/Header';
-import InstallationInstructions from '../Installation/InstallationInstructions';
 import MinerInventoryDashboard from '../MinerInventory/MinerInventoryDashboard';
 import MempoolLatencyStats from '../Mempool/MempoolLatencyStats';
 import GraphVisualization from '../BraidPoolDAG/BraidPoolDAG';
