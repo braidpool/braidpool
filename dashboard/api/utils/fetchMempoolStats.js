@@ -21,7 +21,7 @@ async function getBlockFeeCurrencyRates() {
     };
   } catch (err) {
     console.error('[getBlockFeeCurrencyRates] Failed:', err.message);
-    return { USD: null, EUR: null, JPY: null };
+    throw err;
   }
 }
 
@@ -68,9 +68,11 @@ export async function fetchMempoolStats() {
         fee_usd: feeUsd,
       };
     };
+
     console.log('[blockfeesRes.data sample]', blockfeesRes.data?.[0]);
     console.log('[btcPriceUSD]', btcPriceUSD);
     console.log('[fetchMempoolStats] BTC Rates:', btcRates);
+    
     const blockFeesArray = blockfeesRes.data;
     const latestBlockFeeRaw =
       Array.isArray(blockFeesArray) && blockFeesArray.length > 0
@@ -109,7 +111,7 @@ export async function fetchMempoolStats() {
       },
       btc_price_usd: btcPriceUSD,
       fee_distribution: feeDistribution,
-      block_fee_history: blockfeeHistory, // ✅ Only contains the latest block
+      block_fee_history: blockfeeHistory,
     };
   } catch (error) {
     console.error('[fetchMempoolStats] Failed to fetch:', error.message);

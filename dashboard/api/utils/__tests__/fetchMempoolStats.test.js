@@ -14,7 +14,6 @@ beforeEach(() => {
     BITCOIN_PRICE_URL:
       'https://api.coinbase.com/v2/exchange-rates?currency=BTC&rates=',
     BITCOIN_PRICE_URL_SUFFIX: '',
-    BINANCE_URL: 'https://api.binance.com',
   };
 });
 
@@ -63,19 +62,11 @@ describe('fetchMempoolStats', () => {
   ];
 
   const mockCurrencyRates = {
-    data: { amount: '45000.50' },
-  };
-
-  const setupSuccessfulMocks = () => {
-    axios.get
-      .mockResolvedValueOnce({ data: mockStatsData })
-      .mockResolvedValueOnce({ data: mockFeesData })
-      .mockResolvedValueOnce({ data: mockOneMinuteBlockData })
-      .mockResolvedValueOnce({ data: mockBlockFeesData })
-      .mockResolvedValueOnce(mockCurrencyRates) // USD rate
-      .mockResolvedValueOnce(mockCurrencyRates) // EUR rate
-      .mockResolvedValueOnce(mockCurrencyRates) // JPY rate
-      .mockResolvedValueOnce({ data: mockBinancePriceData });
+    data: { 
+      data: { 
+        amount: '45000.50' 
+      } 
+    },
   };
 
   it('should handle empty one minute block data array', async () => {
@@ -84,10 +75,9 @@ describe('fetchMempoolStats', () => {
       .mockResolvedValueOnce({ data: mockFeesData })
       .mockResolvedValueOnce({ data: [] }) // Empty array
       .mockResolvedValueOnce({ data: mockBlockFeesData })
-      .mockResolvedValueOnce(mockCurrencyRates)
-      .mockResolvedValueOnce(mockCurrencyRates)
-      .mockResolvedValueOnce(mockCurrencyRates)
-      .mockResolvedValueOnce({ data: mockBinancePriceData });
+      .mockResolvedValueOnce(mockCurrencyRates) // USD
+      .mockResolvedValueOnce(mockCurrencyRates) // EUR
+      .mockResolvedValueOnce(mockCurrencyRates); // JPY
 
     const result = await fetchMempoolStats();
 

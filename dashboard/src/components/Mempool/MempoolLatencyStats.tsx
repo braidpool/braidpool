@@ -20,6 +20,7 @@ import {
   FeeDistributionItem,
 } from './Types';
 import { currencyLabels, currencyColors } from './Constants';
+import { WEBSOCKET_URLS } from '@/URLs';
 
 const MempoolLatencyStats = () => {
   const wsRef = useRef<WebSocket | null>(null);
@@ -34,7 +35,7 @@ const MempoolLatencyStats = () => {
   const [wsConnected, setWsConnected] = useState(false);
 
   useEffect(() => {
-    const ws = new WebSocket('ws://localhost:5000');
+    const ws = new WebSocket(WEBSOCKET_URLS.MAIN_WEBSOCKET);
     wsRef.current = ws;
     ws.onopen = () => {
       setWsConnected(true);
