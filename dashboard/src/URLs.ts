@@ -22,6 +22,8 @@ export const API_URLS = {
 
   // Bitcoin mempool API endpoints (blockstream)
   MEMPOOL_API_BASE: 'http://localhost:3002',
+  // Miner Device Api endpoints
+  MINER_DEVICE_URL: 'http://localhost:5001',
 } as const;
 
 // Specific API endpoint functions for better type safety
