@@ -157,18 +157,24 @@ export function RewardsDashboard() {
                   if (active && payload && payload.length) {
                     const timestamp = payload[0]?.payload?.timestamp;
                     const formattedTime = timestamp
-                      ? new Date(timestamp).toLocaleString()
+                      ? new Date(timestamp).toLocaleTimeString()
                       : 'N/A';
 
                     return (
-                      <div className=" bg-[#1a1a1a] text-gray-400 border border-xl border-gray-500 p-[10px] rounded-sm">
+                      <div className=" bg-[#1a1a1a] text-gray-400 sm:text-xs md:text-base border border-xl border-gray-500 p-2 rounded-sm">
                         <p>Height: {label}</p>
                         <p>Time: {formattedTime}</p>
-                        {payload.map((item, index) => (
-                          <p key={index}>
-                            {item.name}: {item.value}
-                          </p>
-                        ))}
+                        {payload.map((item, index) => {
+                          const value =
+                            typeof item.value === 'number'
+                              ? item.value.toFixed(2)
+                              : item.value;
+                          return (
+                            <p key={index}>
+                              {item.name}: {value}
+                            </p>
+                          );
+                        })}
                       </div>
                     );
                   }
