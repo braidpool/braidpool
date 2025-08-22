@@ -24,7 +24,7 @@ describe('fetchHashrateStats', () => {
 
     rpcWithEnv.mockReset();
 
-    // 3️⃣ keep console output quiet
+    // keep console output quiet
     jest.spyOn(console, 'log').mockImplementation(() => {});
     jest.spyOn(console, 'warn').mockImplementation(() => {});
     jest.spyOn(console, 'error').mockImplementation(() => {});
@@ -58,7 +58,7 @@ describe('fetchHashrateStats', () => {
       data: {
         hashrate: hashps / 1e18, // EH/s
         timestamp: now,
-        networkDifficulty: diff,
+        networkDifficulty: diff / 1e12,
       },
     });
   });
@@ -94,8 +94,8 @@ describe('fetchHashrateStats', () => {
       .networkDifficulty;
     const secondDiff = JSON.parse(mockClient.send.mock.calls[1][0]).data
       .networkDifficulty;
-    expect(firstDiff).toBe(diff);
-    expect(secondDiff).toBe(diff);
+    expect(firstDiff).toBe(diff / 1e12);
+    expect(secondDiff).toBe(diff / 1e12);
   });
 
   it('should log & skip send on RPC failure', async () => {

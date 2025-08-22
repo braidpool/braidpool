@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   Bitcoin,
-  Wrench,
   LayoutDashboard,
   Package,
   MemoryStick,
@@ -14,11 +13,6 @@ import { Page } from '../Dashboard/Types';
 import { HeaderNavProps } from './Types';
 
 const NAV_ITEMS = [
-  {
-    label: 'Installation',
-    page: Page.INSTALLATION,
-    icon: <Wrench size={18} />,
-  },
   {
     label: 'Dashboard',
     page: Page.DASHBOARD,

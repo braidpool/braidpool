@@ -35,10 +35,6 @@ export interface BeadRowProps {
   transactions: Transaction[];
 }
 
-export interface BeadRewardTooltipProps {
-  reward: number; // in BTC
-  isOpen?: boolean;
-}
 //annimatedstats
 export interface AnimatedStatCardProps {
   title: string;
@@ -149,28 +145,22 @@ export interface AdvancedchartProps {
 }
 //Reward section
 
-export interface RewardHistoryChartProps {
-  rewardHistory: { height: number; reward: number; label: string }[];
-}
-
-export interface RewardData {
-  totalRewards: number;
-  dailyAverage: number;
-  weeklyProjection: number;
-  monthlyProjection: number;
-  lastReward: number;
-  lastRewardTime: string;
-  rewardHistory: { height: number; reward: number; label: string }[];
-}
-
-export interface RewardsData {
-  blockCount: number;
-  blockReward: number;
-  totalRewards: number;
-  rewardRate: number;
-  lastRewardTime: number | null;
-  halvings: number;
-  nextHalving: number;
-  blocksUntilHalving: number;
+export interface RewardPoint {
+  height: number;
+  timestamp: string;
+  rewardBTC: number;
+  rewardUSD: number;
 }
 export type BeadId = string;
+
+export interface PoolData {
+  rank: number;
+  pool: string;
+  hashrate: number;
+  blocks: number;
+  avgHealth: string | number;
+  avgBlockFees: string | number;
+  emptyBlocks: number;
+  latestBlockHeight: number;
+  poolLink: string;
+}

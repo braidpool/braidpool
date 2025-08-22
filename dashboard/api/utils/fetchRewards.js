@@ -1,57 +1,45 @@
-import { rpcWithEnv } from './rpcWithEnv.js';
-import WebSocket from 'ws';
+import axios from 'axios';
 
-export async function fetchReward(wss) {
+let rewardHistory = [];
+
+export async function fetchReward() {
   try {
-    const blockchainInfo = await rpcWithEnv({ method: 'getblockchaininfo' });
-    const blockCount = blockchainInfo.blocks;
-
-    const halvings = Math.floor(blockCount / 210000);
-    const blockReward = 50 / Math.pow(2, halvings);
-
-    let totalRewards = 0;
-    let remainingBlocks = blockCount;
-    let reward = 50;
-    let halvingHeight = 210000;
-    while (remainingBlocks > 0 && reward > 0) {
-      const blocksThisEra = Math.min(remainingBlocks, halvingHeight);
-      totalRewards += blocksThisEra * reward;
-      remainingBlocks -= blocksThisEra;
-      reward /= 2;
-    }
-    const rewardRate = blockReward * 144;
-
-    let lastRewardTime = null;
-    try {
-      const recentBlock = await rpcWithEnv({
-        method: 'getblock',
-        params: [blockchainInfo.bestblockhash, 1],
-      });
-      lastRewardTime = recentBlock.time * 1000;
-    } catch (err) {
-      console.warn('[Rewards] Could not fetch recent block info:', err.message);
-    }
-
-    const payload = {
-      type: 'rewards_data',
-      data: {
-        blockCount,
-        blockReward,
-        totalRewards,
-        rewardRate,
-        lastRewardTime,
-        halvings,
-        nextHalving: (halvings + 1) * 210000,
-        blocksUntilHalving: (halvings + 1) * 210000 - blockCount,
-      },
+    const { data: blocks } = await axios.get(
+      `${process.env.MEMPOOL_URL}/api/blocks`
+    );
+    const latestBlock = blocks[0];
+    const { data: txs } = await axios.get(
+      `${process.env.MEMPOOL_URL}/api/block/${latestBlock.id}/txs`
+    );
+    const coinbaseTx = txs[0];
+    const rewardSats = coinbaseTx.vout.reduce(
+      (sum, vout) => sum + vout.value,
+      0
+    );
+    const rewardBTC = rewardSats / 1e8;
+    const { data: priceData } = await axios.get(
+      'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd'
+    );
+    const btcPriceUSD = priceData.bitcoin.usd;
+    const rewardInfo = {
+      height: latestBlock.height,
+      timestamp: new Date(latestBlock.timestamp * 1000).toISOString(),
+      rewardBTC,
+      rewardUSD: parseFloat((rewardBTC * btcPriceUSD).toFixed(2)), // Convert to number
     };
-
-    wss.clients.forEach((client) => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify(payload));
+    const lastEntry = rewardHistory[rewardHistory.length - 1];
+    if (!lastEntry || lastEntry.height !== rewardInfo.height) {
+      rewardHistory.push(rewardInfo);
+      if (rewardHistory.length > 30) {
+        rewardHistory = rewardHistory.slice(-30);
       }
-    });
+      console.log('NEW Block added to history:', rewardInfo);
+    } else {
+      console.log('Block already in history, skipping duplicate');
+    }
+    return rewardHistory;
   } catch (err) {
-    console.error('[Rewards] Failed to fetch/send reward data:', err.message);
+    console.error('Error fetching latest block reward:', err.message);
+    return rewardHistory;
   }
 }

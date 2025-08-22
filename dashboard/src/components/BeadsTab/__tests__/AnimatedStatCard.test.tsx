@@ -45,8 +45,13 @@ describe('<AnimatedStatCard />', () => {
     );
     const rootDiv = container.firstChild as HTMLElement;
     expect(rootDiv.className).toMatch(/rounded-xl/);
-    expect(rootDiv.className).toMatch(/bg-\[#1c1c1c\]/);
+    expect(rootDiv.className).toMatch(/p-5/);
+    expect(rootDiv.className).toMatch(/overflow-hidden/);
+    expect(rootDiv.className).toMatch(/border/);
     expect(rootDiv.className).toMatch(/border-gray-700/);
+    expect(rootDiv.className).toMatch(/backdrop-blur-sm/);
+    expect(rootDiv.className).toMatch(/shadow-lg/);
     expect(rootDiv.className).toMatch(/hover:shadow-2xl/);
+    expect(rootDiv.className).toMatch(/transition-shadow/);
   });
 });

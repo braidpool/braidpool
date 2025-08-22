@@ -2,11 +2,12 @@ import { useState, useEffect, useRef } from 'react';
 import DashboardHeader from './DashboardHeader';
 import BeadRow from './BeadRow';
 import { TrendsTab } from './Trends/TrendsTab';
-import { RewardsDashboard } from './Reward/RewardsSection';
+import { RewardsDashboard } from './Reward/RewardsDashboard';
 import { Transaction, Bead, BeadId } from './lib/Types';
 import { processBlockData } from './lib/Utils';
 import { WEBSOCKET_URLS } from '../../URLs';
 import { ITEMS_PER_PAGE, DEFAULT_TIME_RANGE } from './Constants';
+import { PoolDominance } from './PoolDominance/PoolDominance';
 
 export default function MinedSharesExplorer() {
   const [expandedBeads, setExpandedBeads] = useState<Record<BeadId, boolean>>({
@@ -151,16 +152,19 @@ export default function MinedSharesExplorer() {
   };
 
   return (
-    <div className="min-h-screen bg-[#1c1c1c] text-white relative">
+    <div className="min-h-screen  text-white relative">
       <div className="container mx-auto px-2 sm:px-4 py-8">
         <DashboardHeader activeTab={activeTab} setActiveTab={setActiveTab} />
 
         <div className="relative">
           {activeTab === 'beads' && (
             <div className="space-y-8">
-              <div className="bg-[#1c1c1c] rounded-sm overflow-hidden">
+              <div className=" rounded-sm overflow-hidden">
                 {/* Table header */}
-                <div className="grid max-sm:grid-cols-3  md:grid-cols-5 p-4 border-b text-sm border-gray-800/80 font-medium">
+                <div
+                  className="grid max-sm:grid-cols-3 md:grid-cols-5  p-4 border-b text-xs sm:text-sm md:text-base
+ gap-4 border-gray-800/80 font-medium"
+                >
                   {[
                     'Bead Hash',
                     'Timestamp',
@@ -239,12 +243,18 @@ export default function MinedSharesExplorer() {
             </div>
           )}
 
-          {activeTab === 'trends' && <TrendsTab timeRange={timeRange} />}
-          {activeTab === 'rewards' && (
-            <div className="border border-gray-800/50 rounded-xl p-6 bg-[#1c1c1c]">
-              <RewardsDashboard />
-            </div>
-          )}
+          <div style={{ display: activeTab === 'trends' ? 'block' : 'none' }}>
+            <TrendsTab timeRange={timeRange} />
+          </div>
+          <div
+            style={{ display: activeTab === 'rewards' ? 'block' : 'none' }}
+            className="border border-gray-800/50 rounded-xl p-6"
+          >
+            <RewardsDashboard />
+          </div>
+          <div style={{ display: activeTab === 'pool' ? 'block' : 'none' }}>
+            <PoolDominance />
+          </div>
         </div>
       </div>
     </div>

@@ -120,7 +120,7 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
     `Moving Avg (${stats?.averagingWindow || 0} blocks)`;
 
   return (
-    <div className="space-y-6 bg-[#1c1c1c]">
+    <div className="space-y-4 ">
       <div className="flex justify-between items-center">
         <div>
           <h3 className="text-xl font-bold text-blue-300">

@@ -6,7 +6,7 @@ export default function DashboardHeader({
   setActiveTab,
 }: DashboardHeaderProps) {
   return (
-    <header className="mb-8">
+    <header>
       <div className="border-b border-gray-700">
         <nav className="mb-px  flex flex-wrap gap-x-6" aria-label="Tabs">
           {TABS.map((tab) => (

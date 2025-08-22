@@ -1,98 +1,166 @@
-import WebSocket from 'ws';
+import axios from 'axios';
+import { fetchReward } from '../fetchRewards.js';
 
-jest.mock('../rpcWithEnv', () => ({
-  rpcWithEnv: jest.fn(),
-}));
+jest.mock('axios');
 
 describe('fetchReward', () => {
-  let fetchReward;
-  let rpcWithEnv;
-  let mockClient;
-  let mockWSS;
-
-  beforeEach(() => {
-    jest.resetModules();
-    ({ fetchReward } = require('../fetchRewards'));
-    ({ rpcWithEnv } = require('../rpcWithEnv'));
-
-    mockClient = {
-      readyState: WebSocket.OPEN,
-      OPEN: WebSocket.OPEN,
-      send: jest.fn(),
-    };
-    mockWSS = { clients: new Set([mockClient]) };
-
-    jest.spyOn(console, 'log').mockImplementation(() => {});
-    jest.spyOn(console, 'warn').mockImplementation(() => {});
-    jest.spyOn(console, 'error').mockImplementation(() => {});
+  const originalEnv = process.env.MEMPOOL_API_URL;
+  beforeAll(() => {
+    process.env.api_test = 'https://api_test.space';
+  });
+  afterAll(() => {
+    process.env.api_test = originalEnv;
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    jest.clearAllMocks();
   });
 
-  it('should calculate and send reward data correctly', async () => {
-    rpcWithEnv
-      .mockResolvedValueOnce({ blocks: 735000, bestblockhash: 'abc123' }) // getblockchaininfo
-      .mockResolvedValueOnce({ time: 1752000000 }); // getblock
+  it('should not add duplicate blocks to history', async () => {
+    axios.get.mockImplementation((url) => {
+      if (url.includes('/api/blocks')) {
+        return Promise.resolve({
+          data: [
+            {
+              id: 'block123',
+              height: 800000,
+              timestamp: 1700000000,
+            },
+          ],
+        });
+      }
+      if (url.includes('/api/block/block123/txs')) {
+        return Promise.resolve({
+          data: [
+            {
+              vout: [{ value: 625000000 }],
+            },
+          ],
+        });
+      }
+      if (url.includes('coingecko.com')) {
+        return Promise.resolve({
+          data: {
+            bitcoin: { usd: 45000 },
+          },
+        });
+      }
+      return Promise.reject(new Error('Unexpected URL'));
+    });
 
-    await fetchReward(mockWSS);
+    const firstResult = await fetchReward();
+    const secondResult = await fetchReward();
 
-    expect(rpcWithEnv).toHaveBeenCalledTimes(2);
-    expect(mockClient.send).toHaveBeenCalledTimes(1);
-
-    const payload = JSON.parse(mockClient.send.mock.calls[0][0]);
-
-    expect(payload.type).toBe('rewards_data');
-    expect(payload.data.blockCount).toBe(735000);
-    expect(payload.data.halvings).toBe(Math.floor(735000 / 210000));
-    expect(payload.data.blockReward).toBe(
-      50 / Math.pow(2, payload.data.halvings)
-    );
-    expect(payload.data.rewardRate).toBeCloseTo(payload.data.blockReward * 144);
-    expect(payload.data.lastRewardTime).toBe(1752000000 * 1000);
-    expect(payload.data.nextHalving).toBe((payload.data.halvings + 1) * 210000);
-    expect(payload.data.blocksUntilHalving).toBe(
-      payload.data.nextHalving - 735000
-    );
-    expect(payload.data.totalRewards).toBeGreaterThan(0);
+    expect(firstResult).toHaveLength(1);
+    expect(secondResult).toHaveLength(1);
+    expect(firstResult[0].height).toBe(secondResult[0].height);
+    expect(firstResult[0].height).toBe(800000);
   });
 
-  it('should set lastRewardTime null if block fetch fails', async () => {
-    rpcWithEnv
-      .mockResolvedValueOnce({ blocks: 100, bestblockhash: 'xyz999' }) // getblockchaininfo
-      .mockRejectedValueOnce(new Error('Block not found')); // getblock fails
+  it('should maintain maximum history length of 30 blocks', async () => {
+    let blockCounter = 1;
 
-    await fetchReward(mockWSS);
+    axios.get.mockImplementation((url) => {
+      if (url.includes('/api/blocks')) {
+        const currentBlock = {
+          id: `block${blockCounter}`,
+          height: 800000 + blockCounter,
+          timestamp: 1700000000 + blockCounter,
+        };
+        return Promise.resolve({
+          data: [currentBlock],
+        });
+      }
+      if (url.includes('/api/block/')) {
+        return Promise.resolve({
+          data: [
+            {
+              vout: [{ value: 625000000 }],
+            },
+          ],
+        });
+      }
+      if (url.includes('coingecko.com')) {
+        return Promise.resolve({
+          data: {
+            bitcoin: { usd: 45000 },
+          },
+        });
+      }
+      return Promise.reject(new Error('Unexpected URL'));
+    });
 
-    expect(console.warn).toHaveBeenCalledWith(
-      '[Rewards] Could not fetch recent block info:',
-      'Block not found'
-    );
+    let finalResult;
+    for (let i = 1; i <= 32; i++) {
+      blockCounter = i;
+      finalResult = await fetchReward();
+    }
 
-    const payload = JSON.parse(mockClient.send.mock.calls[0][0]);
-    expect(payload.data.lastRewardTime).toBeNull();
+    expect(finalResult).toHaveLength(30);
+
+    // Should contain blocks 800003 to 800032 (latest 30)
+    expect(finalResult[0].height).toBe(800003); // oldest kept
+    expect(finalResult[29].height).toBe(800032); // newest
   });
 
-  it('should not send if client is not OPEN', async () => {
-    mockClient.readyState = 2;
-    rpcWithEnv
-      .mockResolvedValueOnce({ blocks: 210000, bestblockhash: 'abc123' })
-      .mockResolvedValueOnce({ time: 1700000000 });
+  it('should handle API errors gracefully', async () => {
+    axios.get.mockRejectedValueOnce(new Error('Network error'));
 
-    await fetchReward(mockWSS);
+    const consoleSpy = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
 
-    expect(mockClient.send).not.toHaveBeenCalled();
+    const result = await fetchReward();
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      'Error fetching latest block reward:',
+      'Network error'
+    );
+    // Should return the current (empty) history
+    expect(Array.isArray(result)).toBe(true);
+
+    consoleSpy.mockRestore();
   });
 
-  it('should log error if RPC completely fails', async () => {
-    rpcWithEnv.mockRejectedValueOnce(new Error('RPC offline'));
+  it('should handle zero or empty vouts', async () => {
+    axios.get.mockImplementation((url) => {
+      if (url.includes('/api/blocks')) {
+        return Promise.resolve({
+          data: [
+            {
+              id: 'block789',
+              height: 800002,
+              timestamp: 1700000200,
+            },
+          ],
+        });
+      }
+      if (url.includes('/api/block/block789/txs')) {
+        return Promise.resolve({
+          data: [
+            {
+              vout: [],
+            },
+          ],
+        });
+      }
+      if (url.includes('coingecko.com')) {
+        return Promise.resolve({
+          data: {
+            bitcoin: { usd: 40000 },
+          },
+        });
+      }
+      return Promise.reject(new Error('Unexpected URL'));
+    });
 
-    await fetchReward(mockWSS);
+    const result = await fetchReward();
 
-    expect(console.error).toHaveBeenCalledWith(
-      '[Rewards] Failed to fetch/send reward data:',
-      'RPC offline'
-    );
+    expect(result[result.length - 1]).toEqual({
+      height: 800002,
+      timestamp: new Date(1700000200 * 1000).toISOString(),
+      rewardBTC: 0,
+      rewardUSD: 0,
+    });
   });
 });

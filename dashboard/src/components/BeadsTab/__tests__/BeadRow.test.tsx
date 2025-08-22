@@ -56,8 +56,10 @@ describe('<BeadRow />', () => {
 
     expect(screen.getByText('Bead A')).toBeInTheDocument();
     expect(screen.getByText('2025-07-08 10:30:00')).toBeInTheDocument();
-    expect(screen.getByText(/mBTC/)).toBeInTheDocument();
+    expect(screen.getByText(/0\.01/)).toBeInTheDocument(); // The formatted work value
+    expect(screen.getByText(/GH/)).toBeInTheDocument(); // The work unit
     expect(screen.getByText('2')).toBeInTheDocument(); // transaction count
+    expect(screen.getByText('0.02 BTC')).toBeInTheDocument(); // reward
   });
 
   it('calls onToggle when row is clicked', () => {
@@ -73,24 +75,6 @@ describe('<BeadRow />', () => {
     const buttons = screen.getAllByRole('button');
     fireEvent.click(buttons[0]);
     expect(onToggleMock).toHaveBeenCalledWith(mockBead.id);
-  });
-
-  it('toggles reward tooltip on click without toggling parent', () => {
-    render(
-      <BeadRow
-        bead={mockBead}
-        isExpanded={false}
-        onToggle={onToggleMock}
-        transactions={mockTransactions}
-        isActive={false}
-      />
-    );
-
-    const rewardEl = screen.getByText(/mBTC/);
-    fireEvent.click(rewardEl);
-
-    expect(screen.getAllByText(/mBTC/).length).toBeGreaterThan(1); // tooltip visible
-    expect(onToggleMock).not.toHaveBeenCalled(); // no parent toggle
   });
 
   it('shows "Copied!" when parent hash is clicked', async () => {
@@ -122,7 +106,14 @@ describe('<BeadRow />', () => {
       />
     );
 
-    expect(screen.getByText(/abc123hash/)).toBeInTheDocument(); // transaction hash
+    // Use getAllByText to handle multiple elements with the same text
+    const transactionHashes = screen.getAllByText(/abc123hash/);
+    expect(transactionHashes.length).toBeGreaterThan(0);
+
+    // Or check for the transaction list container
+    expect(
+      screen.getByText(/Showing.*1.*of.*1.*Transactions/)
+    ).toBeInTheDocument();
   });
 
   it('handles keyboard interaction for toggle', () => {

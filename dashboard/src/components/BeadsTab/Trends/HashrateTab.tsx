@@ -131,7 +131,7 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
   }
 
   return (
-    <div className="space-y-6 bg-[#1c1c1c] mt-5">
+    <div className="space-y-4  ">
       <div className="flex justify-between items-center">
         <div>
           <h3 className="text-xl font-bold text-blue-300">Pool Hashrate</h3>
@@ -166,7 +166,7 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
         />
         <AnimatedStatCard
           title="Network Difficulty"
-          value={hashrateData.networkDifficulty.toExponential(2)}
+          value={hashrateData.networkDifficulty.toFixed(2) + 'T'}
         />
       </div>
     </div>

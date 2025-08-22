@@ -1,5 +1,4 @@
 export enum Page {
-  INSTALLATION = 'installation',
   DASHBOARD = 'dashboard',
   MINING_INVENTORY = 'mining-inventory',
   MEMPOOL = 'mempool',

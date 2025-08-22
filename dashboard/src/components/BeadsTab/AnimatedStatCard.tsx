@@ -9,7 +9,7 @@ export default function AnimatedStatCard({
   return (
     <div
       ref={cardRef}
-      className={`rounded-xl p-5 overflow-hidden bg-[#1c1c1c] border border-gray-700  backdrop-blur-sm shadow-lg hover:shadow-2xl transition-shadow`}
+      className={`rounded-xl p-5 overflow-hidden  border border-gray-700  backdrop-blur-sm shadow-lg hover:shadow-2xl transition-shadow`}
     >
       <div className="flex justify-between items-start">
         <div>

@@ -221,13 +221,13 @@ const MinerInventoryDashboard = () => {
             Total Miner : {totalMiners} Total
           </div>
           <div className="px-4 py-2 rounded-md border border-gray-600 text-gray-400 ">
-            Total Hahrate : {totalHashrate.toFixed(3)} TH/s Total
+            Total Hashrate : {totalHashrate.toFixed(3)} TH/s Total
           </div>
           <div className="px-4 py-2 rounded-md border border-gray-600 text-gray-400 ">
             Total Power: {totalPower}W Total
           </div>
           <div className="px-4 py-2 rounded-md border border-gray-600 text-gray-400 ">
-            Total Efiiciency : {avgEfficiency.toFixed(1)} W/TH Avg
+            Total Efficiency : {avgEfficiency.toFixed(1)} W/TH Avg
           </div>
         </div>
       </div>

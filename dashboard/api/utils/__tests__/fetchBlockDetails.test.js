@@ -17,6 +17,7 @@ describe('fetchBlockDetails', () => {
 
     mockClient = {
       readyState: WebSocket.OPEN,
+      OPEN: WebSocket.OPEN,
       send: jest.fn(),
     };
 
@@ -29,6 +30,10 @@ describe('fetchBlockDetails', () => {
     jest.spyOn(console, 'error').mockImplementation(() => {});
     jest.spyOn(console, 'warn').mockImplementation(() => {});
     jest.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it('should fetch and broadcast block + stats payloads', async () => {
@@ -54,11 +59,22 @@ describe('fetchBlockDetails', () => {
         previousblockhash:
           '0000000000000000000e1a8c5e0571b58c3d1ebd1f48e6c191e3c3195d68dcb9',
       }) // getblock
+      .mockResolvedValueOnce({
+        hash: fakeHash,
+        time: timestamp,
+        tx: [
+          { vout: [{ value: 6.25 }], txid: coinbaseTxId },
+          { txid: txId, fee: 0.001, vsize: 200, vin: [{}], vout: [{}] },
+        ],
+        difficulty: 500000,
+        previousblockhash:
+          '0000000000000000000e1a8c5e0571b58c3d1ebd1f48e6c191e3c3195d68dcb9',
+      })
       .mockResolvedValueOnce({ size: 10 }); // getmempoolinfo
 
     await fetchBlockDetails(mockWSS);
 
-    expect(rpcWithEnv).toHaveBeenCalledTimes(4);
+    expect(rpcWithEnv).toHaveBeenCalledTimes(5);
     expect(mockClient.send).toHaveBeenCalledTimes(2);
 
     const blockMsg = JSON.parse(mockClient.send.mock.calls[0][0]);
@@ -88,6 +104,17 @@ describe('fetchBlockDetails', () => {
         previousblockhash:
           '0000000000000000000d5e7d2d3c1b1a1e0f5c3d2e4f6b7a8c9d0e1f2a3b4c5d',
       })
+      .mockResolvedValueOnce({
+        hash,
+        time: timestamp,
+        tx: [
+          { vout: [{ value: 6.25 }], txid: 'cb1coinbase' },
+          { txid: 'cb1tx', fee: 0.001, vsize: 200, vin: [{}], vout: [{}] },
+        ],
+        difficulty: 500000,
+        previousblockhash:
+          '0000000000000000000d5e7d2d3c1b1a1e0f5c3d2e4f6b7a8c9d0e1f2a3b4c5d',
+      })
       .mockResolvedValueOnce({ size: 10 });
 
     await fetchBlockDetails(mockWSS);
@@ -98,7 +125,7 @@ describe('fetchBlockDetails', () => {
 
     await fetchBlockDetails(mockWSS);
 
-    expect(rpcWithEnv).toHaveBeenCalledTimes(6);
+    expect(rpcWithEnv).toHaveBeenCalledTimes(7);
     expect(mockClient.send).toHaveBeenCalledTimes(2);
   });
 
@@ -119,10 +146,22 @@ describe('fetchBlockDetails', () => {
         previousblockhash:
           '0000000000000000000f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f',
       })
+      .mockResolvedValueOnce({
+        hash,
+        time: 1720000200,
+        tx: [
+          { vout: [{ value: 6.25 }], txid: 'cba' },
+          { txid: 'tx1', fee: 0.002, vsize: 300, vin: [{}], vout: [{}] },
+        ],
+        difficulty: 700000,
+        previousblockhash:
+          '0000000000000000000f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f',
+      })
       .mockRejectedValueOnce(new Error('mempool down'));
 
     await fetchBlockDetails(mockWSS);
 
+    expect(mockClient.send).toHaveBeenCalledTimes(2);
     const statsMsg = JSON.parse(mockClient.send.mock.calls[1][0]);
     expect(statsMsg.data.mempoolSize).toBe(-1);
   });
@@ -155,10 +194,22 @@ describe('fetchBlockDetails', () => {
         previousblockhash:
           '0000000000000000000aabbccddeeff00112233445566778899aabbccddeeff0',
       })
+      .mockResolvedValueOnce({
+        hash,
+        time: 1720000300,
+        tx: [
+          { vout: [{ value: 6.25 }], txid: 'coinbase' },
+          { txid: 'tx2', vin: [{}], vout: [{}] }, // missing fee/size
+        ],
+        difficulty: 80000,
+        previousblockhash:
+          '0000000000000000000aabbccddeeff00112233445566778899aabbccddeeff0',
+      }) // duplicate getblock call
       .mockResolvedValueOnce({ size: 20 });
 
     await fetchBlockDetails(mockWSS);
 
+    expect(mockClient.send).toHaveBeenCalledTimes(2);
     const statsMsg = JSON.parse(mockClient.send.mock.calls[1][0]);
     expect(statsMsg.data.totalFees).toBe(0);
     expect(statsMsg.data.avgTxSize).toBe(0);
@@ -169,6 +220,17 @@ describe('fetchBlockDetails', () => {
     rpcWithEnv
       .mockResolvedValueOnce({ blocks: 103 })
       .mockResolvedValueOnce('0000000000000000000notopen')
+      .mockResolvedValueOnce({
+        hash: '0000000000000000000notopen',
+        time: 1720000400,
+        tx: [
+          { vout: [{ value: 6.25 }], txid: 'coinbase' },
+          { txid: 'tx3', fee: 0.001, vsize: 250, vin: [{}], vout: [{}] },
+        ],
+        difficulty: 90000,
+        previousblockhash:
+          '0000000000000000000ffeeddccbbaa99887766554433221100ffeeddccbbaa99',
+      })
       .mockResolvedValueOnce({
         hash: '0000000000000000000notopen',
         time: 1720000400,

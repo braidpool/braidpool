@@ -1,8 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import TransactionList from './TransactionList';
 import { shortenHash, formatWork, useCopyToClipboard } from './lib/Utils';
 import type { BeadRowProps } from './lib/Types';
-import { BeadRewardTooltip } from './BeadRewardTooltip';
 import { ChevronDown } from 'lucide-react';
 
 export default function BeadRow({
@@ -12,7 +11,6 @@ export default function BeadRow({
   transactions,
 }: BeadRowProps) {
   const { value: formattedWork, unit: workUnit } = formatWork(bead.difficulty);
-  const [isRewardOpen, setIsRewardOpen] = useState(false);
   const handleKeyToggle = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'Enter' || e.key === ' ') {
       onToggle(bead.id);
@@ -23,24 +21,24 @@ export default function BeadRow({
   return (
     <div className="border-b border-gray-800/80">
       <div
-        className="grid max-sm:grid-cols-3 md:grid-cols-5 gap-2 t p-4 cursor-pointer hover:bg-gray-600"
+        className="grid max-sm:grid-cols-3 md:grid-cols-5 gap-2 p-4 cursor-pointer hover:bg-gray-600"
         onClick={() => onToggle(bead.id)}
         onKeyDown={handleKeyToggle}
         role="button"
         tabIndex={0}
       >
         {/* Bead Name */}
-        <div className="flex items-center col-span-1 md:col-span-1">
+        <div className="flex items-center col-span-1">
           <div
             className={`mr-2 flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`}
           >
-            <ChevronDown className="h-5 w-5 text-blue-400" />{' '}
+            <ChevronDown className="h-5 w-5 text-blue-400" />
           </div>
           <span
             className={`text-sm sm:text-base truncate ${isExpanded ? 'text-white' : 'text-blue-200'}
-             font-medium font-mono`}
+        font-medium font-mono`}
           >
-            {bead.name}
+            {bead.name.replace(/^#/, '')}
           </span>
         </div>
 
@@ -53,24 +51,13 @@ export default function BeadRow({
         </div>
 
         {/* Transactions */}
-
         <div className="text-white font-medium text-sm sm:text-base">
           {bead.transactions}
         </div>
 
         {/* Reward */}
-        <div
-          className={`text-white font-medium text-sm sm:text-base ${
-            isRewardOpen ? 'pb-6' : ''
-          }`}
-          onClick={(e) => {
-            e.stopPropagation();
-            setIsRewardOpen(!isRewardOpen);
-          }}
-        >
-          <div className="cursor-pointer">
-            <BeadRewardTooltip reward={bead.reward} isOpen={isRewardOpen} />
-          </div>
+        <div className="text-white font-medium text-sm sm:text-base">
+          {`${bead.reward.toFixed(2)} BTC`}
         </div>
       </div>
 
