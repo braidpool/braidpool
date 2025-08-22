@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import DashboardHeader from './DashboardHeader';
 import BeadRow from './BeadRow';
 import { TrendsTab } from './Trends/TrendsTab';
-import { RewardsDashboard } from './Reward/RewardsSection';
+import { RewardsDashboard } from './Reward/RewardsDashboard';
 import { Transaction, Bead, BeadId } from './lib/Types';
 import { processBlockData } from './lib/Utils';
 import { WEBSOCKET_URLS } from '../../URLs';
