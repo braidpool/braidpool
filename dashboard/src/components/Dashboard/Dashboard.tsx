@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import Card from '../common/Card';
 import Header from '../common/Header';
-import MineInventoryDashboard from '../MinerInventory/MineInventoryDashboard';
+import MinerInventoryDashboard from '../MinerInventory/MinerInventoryDashboard';
 import MempoolLatencyStats from './MempoolLatencyStats';
 import GraphVisualization from '../BraidPoolDAG/BraidPoolDAG';
 import MinedSharesExplorer from '../BeadsTab/MinedSharesExplorer';
@@ -29,7 +29,7 @@ const Dashboard = () => {
         return (
           <div className="p-2">
             <Card title="Miner Inventory">
-              <MineInventoryDashboard />
+              <MinerInventoryDashboard />
             </Card>
           </div>
         );
