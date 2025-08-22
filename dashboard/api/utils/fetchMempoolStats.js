@@ -68,10 +68,6 @@ export async function fetchMempoolStats() {
         fee_usd: feeUsd,
       };
     };
-
-    console.log('[blockfeesRes.data sample]', blockfeesRes.data?.[0]);
-    console.log('[btcPriceUSD]', btcPriceUSD);
-    console.log('[fetchMempoolStats] BTC Rates:', btcRates);
     
     const blockFeesArray = blockfeesRes.data;
     const latestBlockFeeRaw =
