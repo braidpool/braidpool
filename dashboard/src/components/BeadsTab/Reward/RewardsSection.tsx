@@ -155,9 +155,15 @@ export function RewardsDashboard() {
               <Tooltip
                 content={({ active, payload, label }) => {
                   if (active && payload && payload.length) {
+                    const timestamp = payload[0]?.payload?.timestamp;
+                    const formattedTime = timestamp
+                      ? new Date(timestamp).toLocaleString()
+                      : 'N/A';
+
                     return (
                       <div className=" bg-[#1a1a1a] text-gray-400 border border-xl border-gray-500 p-[10px] rounded-sm">
-                        <p>Height:{label}</p>
+                        <p>Height: {label}</p>
+                        <p>Time: {formattedTime}</p>
                         {payload.map((item, index) => (
                           <p key={index}>
                             {item.name}: {item.value}
@@ -169,6 +175,7 @@ export function RewardsDashboard() {
                   return null;
                 }}
               />
+
               <Legend />
               <Line
                 yAxisId="left"

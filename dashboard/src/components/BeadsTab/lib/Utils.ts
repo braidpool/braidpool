@@ -89,16 +89,7 @@ export function calculateRewardAnalytics(rewardHistory: RewardPoint[]) {
   const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-  const parseTimestamp = (timestamp: string) => {
-    const parts = timestamp.split(', ');
-    if (parts.length === 2) {
-      const [datePart, timePart] = parts;
-      const [day, month, year] = datePart.split('/');
-      const standardFormat = `${month}/${day}/${year}, ${timePart}`;
-      return new Date(standardFormat);
-    }
-    return new Date(timestamp);
-  };
+  const parseTimestamp = (timestamp: string) => new Date(timestamp);
 
   const blocksLastHour = rewardHistory.filter(
     (r) => parseTimestamp(r.timestamp) >= oneHourAgo

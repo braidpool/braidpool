@@ -189,9 +189,7 @@ export function PoolDominance() {
                             : 'text-green-400'
                         }`}
                       >
-                        {parseFloat(String(pool.avgBlockFees)) * 100 < 0
-                          ? `${(parseFloat(String(pool.avgBlockFees)) * -100).toFixed(2)}%`
-                          : `${(parseFloat(String(pool.avgBlockFees)) * 100).toFixed(2)}%`}
+                        {formatFeePercentage(pool.avgBlockFees)}
                       </div>
                     </div>
                     <div>

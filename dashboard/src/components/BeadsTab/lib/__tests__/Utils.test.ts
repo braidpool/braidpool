@@ -140,11 +140,11 @@ describe('processBlockData', () => {
       parent: 'def456',
       transactions,
     };
-
+    const DIFFICULTY_ONE = 2 ** 32;
     const result = processBlockData(data);
     expect(result.blockHash).toBe('abc123');
     expect(result.timestamp).toBe(new Date(1700000000000).toISOString());
-    const expectedWork = ((1e18 * Math.pow(2, 32)) / 1e9).toFixed(2);
+    const expectedWork = ((1e18 * DIFFICULTY_ONE) / 1e9).toFixed(2);
     expect(result.work).toBe(expectedWork);
     expect(result.transactions[0].feePaid).toBe('0.00012346'); // Rounded to 8 decimal places
     expect(result.transactions[0].timestamp).toBe(

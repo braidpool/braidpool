@@ -158,7 +158,7 @@ describe('fetchReward', () => {
 
     expect(result[result.length - 1]).toEqual({
       height: 800002,
-      timestamp: new Date(1700000200 * 1000).toLocaleString(),
+      timestamp: new Date(1700000200 * 1000).toISOString(),
       rewardBTC: 0,
       rewardUSD: 0,
     });

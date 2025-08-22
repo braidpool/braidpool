@@ -23,7 +23,7 @@ export async function fetchReward() {
     const btcPriceUSD = priceData.bitcoin.usd;
     const rewardInfo = {
       height: latestBlock.height,
-      timestamp: new Date(latestBlock.timestamp * 1000).toLocaleString(),
+      timestamp: new Date(latestBlock.timestamp * 1000).toISOString(),
       rewardBTC,
       rewardUSD: parseFloat((rewardBTC * btcPriceUSD).toFixed(2)), // Convert to number
     };
