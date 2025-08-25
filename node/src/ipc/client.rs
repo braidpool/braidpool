@@ -664,7 +664,7 @@ impl SharedBitcoinClient {
         let tip_watcher_task = tokio::task::spawn_local({
             let socket_path = socket_path.to_string();
             let notification_sender_clone = notification_sender.clone();
-            let initial_tip_hash = initial_tip_hash.clone();
+            let initial_tip_hash = initial_tip_hash;
 
             async move {
                 let watcher_stream = match UnixStream::connect(&socket_path).await {
