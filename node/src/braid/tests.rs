@@ -1446,3 +1446,461 @@ fn test_extend_function() {
         assert_eq!(computed_cohorts_by_hash, file_cohorts_by_hash);
     }
 }
+
+#[test]
+fn test_get_beads_after() {
+    // Test Case 1: Simple linear chain
+    // Genesis -> Bead1 -> Bead2 -> Bead3
+    // Test getting beads after genesis, after bead1, etc.
+
+    let mut beads = Vec::new();
+    let mut parent_relationships = HashMap::new();
+
+    // Create 4 beads for a linear chain
+    for _i in 0..4 {
+        beads.push(emit_bead());
+    }
+
+    // Set up parent relationships for linear chain
+    parent_relationships.insert(0, HashSet::new()); // Genesis has no parents
+    parent_relationships.insert(1, HashSet::from([0])); // Bead1 -> Genesis
+    parent_relationships.insert(2, HashSet::from([1])); // Bead2 -> Bead1
+    parent_relationships.insert(3, HashSet::from([2])); // Bead3 -> Bead2
+
+    // Collect parent hashes first to avoid borrowing issues
+    let mut parent_hashes: HashMap<usize, Vec<bitcoin::BlockHash>> = HashMap::new();
+    for (index, parents) in &parent_relationships {
+        let mut hashes = Vec::new();
+        for &parent_idx in parents {
+            hashes.push(beads[parent_idx].block_header.block_hash());
+        }
+        parent_hashes.insert(*index, hashes);
+    }
+
+    // Update parent hashes in committed metadata
+    for (index, hashes) in parent_hashes {
+        for hash in hashes {
+            beads[index].committed_metadata.parents.insert(hash);
+        }
+    }
+
+    // Create braid with genesis
+    let genesis_set = HashSet::from([0]);
+    let mut bead_index_mapping = HashMap::new();
+    bead_index_mapping.insert(beads[0].block_header.block_hash(), 0);
+
+    let mut test_braid = Braid {
+        beads: vec![beads[0].clone()],
+        tips: genesis_set.clone(),
+        cohorts: vec![Cohort(genesis_set.clone())],
+        cohort_tips: vec![genesis_set.clone()],
+        orphan_beads: Vec::new(),
+        genesis_beads: genesis_set,
+        bead_index_mapping,
+    };
+
+    // Extend braid with remaining beads
+    for i in 1..4 {
+        test_braid.extend(&beads[i]);
+    }
+
+    // Test 1: Get beads after genesis (should return beads 1, 2, 3)
+    let genesis_hash = beads[0].block_header.block_hash();
+    let result = test_braid.get_beads_after(vec![genesis_hash]);
+    assert!(result.is_some());
+    let returned_beads = result.unwrap();
+
+    // Should return beads from cohort containing genesis onwards
+    // In a linear chain, each bead is in its own cohort after genesis
+    assert!(
+        returned_beads.len() >= 3,
+        "Should return at least 3 beads after genesis"
+    );
+
+    // Verify the returned beads contain the expected hashes
+    let returned_hashes: HashSet<_> = returned_beads
+        .iter()
+        .map(|b| b.block_header.block_hash())
+        .collect();
+    assert!(returned_hashes.contains(&beads[1].block_header.block_hash()));
+    assert!(returned_hashes.contains(&beads[2].block_header.block_hash()));
+    assert!(returned_hashes.contains(&beads[3].block_header.block_hash()));
+
+    // Test 2: Get beads after bead1 (should return beads 2, 3)
+    let bead1_hash = beads[1].block_header.block_hash();
+    let result = test_braid.get_beads_after(vec![bead1_hash]);
+    assert!(result.is_some());
+    let returned_beads = result.unwrap();
+
+    let returned_hashes: HashSet<_> = returned_beads
+        .iter()
+        .map(|b| b.block_header.block_hash())
+        .collect();
+    assert!(returned_hashes.contains(&beads[2].block_header.block_hash()));
+    assert!(returned_hashes.contains(&beads[3].block_header.block_hash()));
+
+    // Test 3: Get beads after the last bead (should return empty or just that bead)
+    let last_hash = beads[3].block_header.block_hash();
+    let result = test_braid.get_beads_after(vec![last_hash]);
+    assert!(result.is_some());
+
+    println!("✅ Linear chain tests passed");
+}
+
+#[test]
+fn test_get_beads_after_diamond_structure() {
+    // Test Case 2: Diamond structure
+    //     Genesis (0)
+    //    /           \
+    //   Bead1(1)    Bead2(2)
+    //    \           /
+    //     Bead3(3)
+
+    let mut beads = Vec::new();
+    let mut parent_relationships = HashMap::new();
+
+    // Create 4 beads for diamond structure
+    for _i in 0..4 {
+        beads.push(emit_bead());
+    }
+
+    // Set up parent relationships for diamond
+    parent_relationships.insert(0, HashSet::new()); // Genesis
+    parent_relationships.insert(1, HashSet::from([0])); // Bead1 -> Genesis
+    parent_relationships.insert(2, HashSet::from([0])); // Bead2 -> Genesis
+    parent_relationships.insert(3, HashSet::from([1, 2])); // Bead3 -> Bead1, Bead2
+
+    // Collect parent hashes first to avoid borrowing issues
+    let mut parent_hashes: HashMap<usize, Vec<bitcoin::BlockHash>> = HashMap::new();
+    for (index, parents) in &parent_relationships {
+        let mut hashes = Vec::new();
+        for &parent_idx in parents {
+            hashes.push(beads[parent_idx].block_header.block_hash());
+        }
+        parent_hashes.insert(*index, hashes);
+    }
+
+    // Update parent hashes in committed metadata
+    for (index, hashes) in parent_hashes {
+        for hash in hashes {
+            beads[index].committed_metadata.parents.insert(hash);
+        }
+    }
+
+    // Create braid with genesis
+    let genesis_set = HashSet::from([0]);
+    let mut bead_index_mapping = HashMap::new();
+    bead_index_mapping.insert(beads[0].block_header.block_hash(), 0);
+
+    let mut test_braid = Braid {
+        beads: vec![beads[0].clone()],
+        tips: genesis_set.clone(),
+        cohorts: vec![Cohort(genesis_set.clone())],
+        cohort_tips: vec![genesis_set.clone()],
+        orphan_beads: Vec::new(),
+        genesis_beads: genesis_set,
+        bead_index_mapping,
+    };
+
+    // Extend braid with remaining beads
+    for i in 1..4 {
+        test_braid.extend(&beads[i]);
+    }
+
+    // Test 1: Get beads after genesis
+    let genesis_hash = beads[0].block_header.block_hash();
+    let result = test_braid.get_beads_after(vec![genesis_hash]);
+    assert!(result.is_some());
+    let returned_beads = result.unwrap();
+
+    // Should include all beads after genesis
+    let returned_hashes: HashSet<_> = returned_beads
+        .iter()
+        .map(|b| b.block_header.block_hash())
+        .collect();
+    assert!(returned_hashes.contains(&beads[1].block_header.block_hash()));
+    assert!(returned_hashes.contains(&beads[2].block_header.block_hash()));
+    assert!(returned_hashes.contains(&beads[3].block_header.block_hash()));
+
+    // Test 2: Get beads after both middle beads (should return bead3)
+    let bead1_hash = beads[1].block_header.block_hash();
+    let bead2_hash = beads[2].block_header.block_hash();
+    let result = test_braid.get_beads_after(vec![bead1_hash, bead2_hash]);
+    assert!(result.is_some());
+    let returned_beads = result.unwrap();
+
+    let returned_hashes: HashSet<_> = returned_beads
+        .iter()
+        .map(|b| b.block_header.block_hash())
+        .collect();
+    assert!(returned_hashes.contains(&beads[3].block_header.block_hash()));
+
+    println!("✅ Diamond structure tests passed");
+}
+
+#[test]
+fn test_get_beads_after_complex_braid() {
+    // Test Case 3: More complex braid structure
+    //     Genesis(0)
+    //    /     |     \
+    //   B1(1)  B2(2)  B3(3)
+    //   |      |      |
+    //   B4(4)  B5(5)  B6(6)
+    //    \     |     /
+    //      B7(7)
+
+    let mut beads = Vec::new();
+    let mut parent_relationships = HashMap::new();
+
+    // Create 8 beads
+    for _i in 0..8 {
+        beads.push(emit_bead());
+    }
+
+    // Set up parent relationships
+    parent_relationships.insert(0, HashSet::new()); // Genesis
+    parent_relationships.insert(1, HashSet::from([0])); // B1 -> Genesis
+    parent_relationships.insert(2, HashSet::from([0])); // B2 -> Genesis
+    parent_relationships.insert(3, HashSet::from([0])); // B3 -> Genesis
+    parent_relationships.insert(4, HashSet::from([1])); // B4 -> B1
+    parent_relationships.insert(5, HashSet::from([2])); // B5 -> B2
+    parent_relationships.insert(6, HashSet::from([3])); // B6 -> B3
+    parent_relationships.insert(7, HashSet::from([4, 5, 6])); // B7 -> B4, B5, B6
+
+    // Collect parent hashes first to avoid borrowing issues
+    let mut parent_hashes: HashMap<usize, Vec<bitcoin::BlockHash>> = HashMap::new();
+    for (index, parents) in &parent_relationships {
+        let mut hashes = Vec::new();
+        for &parent_idx in parents {
+            hashes.push(beads[parent_idx].block_header.block_hash());
+        }
+        parent_hashes.insert(*index, hashes);
+    }
+
+    // Update parent hashes in committed metadata
+    for (index, hashes) in parent_hashes {
+        for hash in hashes {
+            beads[index].committed_metadata.parents.insert(hash);
+        }
+    }
+
+    // Create braid with genesis
+    let genesis_set = HashSet::from([0]);
+    let mut bead_index_mapping = HashMap::new();
+    bead_index_mapping.insert(beads[0].block_header.block_hash(), 0);
+
+    let mut test_braid = Braid {
+        beads: vec![beads[0].clone()],
+        tips: genesis_set.clone(),
+        cohorts: vec![Cohort(genesis_set.clone())],
+        cohort_tips: vec![genesis_set.clone()],
+        orphan_beads: Vec::new(),
+        genesis_beads: genesis_set,
+        bead_index_mapping,
+    };
+
+    // Extend braid with remaining beads
+    for i in 1..8 {
+        test_braid.extend(&beads[i]);
+    }
+
+    // Test 1: Get beads after genesis (should return all other beads)
+    let genesis_hash = beads[0].block_header.block_hash();
+    let result = test_braid.get_beads_after(vec![genesis_hash]);
+    assert!(result.is_some());
+    let returned_beads = result.unwrap();
+    assert!(
+        returned_beads.len() >= 7,
+        "Should return at least 7 beads after genesis"
+    );
+
+    // Test 2: Get beads after first cohort (B1, B2, B3)
+    let b1_hash = beads[1].block_header.block_hash();
+    let result = test_braid.get_beads_after(vec![b1_hash]);
+    assert!(result.is_some());
+    let returned_beads = result.unwrap();
+
+    let returned_hashes: HashSet<_> = returned_beads
+        .iter()
+        .map(|b| b.block_header.block_hash())
+        .collect();
+
+    // Should include beads from the cohort containing B1 onwards
+    assert!(
+        returned_hashes.contains(&beads[4].block_header.block_hash())
+            || returned_hashes.contains(&beads[5].block_header.block_hash())
+            || returned_hashes.contains(&beads[6].block_header.block_hash())
+            || returned_hashes.contains(&beads[7].block_header.block_hash())
+    );
+
+    // Test 3: Get beads after multiple tips from second level
+    let b4_hash = beads[4].block_header.block_hash();
+    let b5_hash = beads[5].block_header.block_hash();
+    let result = test_braid.get_beads_after(vec![b4_hash, b5_hash]);
+    assert!(result.is_some());
+    let returned_beads = result.unwrap();
+
+    let returned_hashes: HashSet<_> = returned_beads
+        .iter()
+        .map(|b| b.block_header.block_hash())
+        .collect();
+    assert!(returned_hashes.contains(&beads[7].block_header.block_hash()));
+
+    println!("✅ Complex braid tests passed");
+}
+
+#[test]
+fn test_get_beads_after_edge_cases() {
+    // Test Case 4: Edge cases
+
+    // Create a simple braid for edge case testing
+    let mut beads = Vec::new();
+    for _i in 0..3 {
+        beads.push(emit_bead());
+    }
+
+    // Simple chain: Genesis -> Bead1 -> Bead2
+    // Collect parent hashes first to avoid borrowing issues
+    let parent0_hash = beads[0].block_header.block_hash();
+    let parent1_hash = beads[1].block_header.block_hash();
+    beads[1].committed_metadata.parents.insert(parent0_hash);
+    beads[2].committed_metadata.parents.insert(parent1_hash);
+
+    let genesis_set = HashSet::from([0]);
+    let mut bead_index_mapping = HashMap::new();
+    bead_index_mapping.insert(beads[0].block_header.block_hash(), 0);
+
+    let mut test_braid = Braid {
+        beads: vec![beads[0].clone()],
+        tips: genesis_set.clone(),
+        cohorts: vec![Cohort(genesis_set.clone())],
+        cohort_tips: vec![genesis_set.clone()],
+        orphan_beads: Vec::new(),
+        genesis_beads: genesis_set,
+        bead_index_mapping,
+    };
+
+    test_braid.extend(&beads[1]);
+    test_braid.extend(&beads[2]);
+
+    // Test 1: Empty input vector
+    let _result = test_braid.get_beads_after(vec![]);
+    // Function should handle empty input gracefully
+
+    // Test 2: Non-existent hash
+    let fake_hash =
+        BeadHash::from_str("0000000000000000000000000000000000000000000000000000000000000001")
+            .unwrap();
+    let _result = test_braid.get_beads_after(vec![fake_hash]);
+    // Should handle non-existent hash gracefully
+
+    // Test 3: Mix of valid and invalid hashes
+    let genesis_hash = beads[0].block_header.block_hash();
+    let result = test_braid.get_beads_after(vec![genesis_hash, fake_hash]);
+    assert!(result.is_some());
+    let returned_beads = result.unwrap();
+
+    // Should still work with valid hash and ignore invalid one
+    let returned_hashes: HashSet<_> = returned_beads
+        .iter()
+        .map(|b| b.block_header.block_hash())
+        .collect();
+    assert!(
+        returned_hashes.contains(&beads[1].block_header.block_hash())
+            || returned_hashes.contains(&beads[2].block_header.block_hash())
+    );
+
+    // Test 4: Get beads after the tip (last bead)
+    let tip_hash = beads[2].block_header.block_hash();
+    let result = test_braid.get_beads_after(vec![tip_hash]);
+    assert!(result.is_some());
+    // Should return at least the tip bead itself or beads from its cohort
+}
+
+#[test]
+fn test_get_beads_after_multiple_tips() {
+    // Test Case 5: Multiple tips scenario
+    // Test with multiple valid tips to ensure function finds smallest index correctly
+
+    let mut beads = Vec::new();
+    for _i in 0..6 {
+        beads.push(emit_bead());
+    }
+
+    // Create a structure:
+    //   Genesis(0)
+    //   /        \
+    //  B1(1)    B2(2)
+    //  |        |
+    //  B3(3)    B4(4)
+    //           |
+    //           B5(5)
+
+    let mut parent_relationships = HashMap::new();
+    parent_relationships.insert(0, HashSet::new());
+    parent_relationships.insert(1, HashSet::from([0]));
+    parent_relationships.insert(2, HashSet::from([0]));
+    parent_relationships.insert(3, HashSet::from([1]));
+    parent_relationships.insert(4, HashSet::from([2]));
+    parent_relationships.insert(5, HashSet::from([4]));
+
+    // Collect parent hashes first to avoid borrowing issues
+    let mut parent_hashes: HashMap<usize, Vec<bitcoin::BlockHash>> = HashMap::new();
+    for (index, parents) in &parent_relationships {
+        let mut hashes = Vec::new();
+        for &parent_idx in parents {
+            hashes.push(beads[parent_idx].block_header.block_hash());
+        }
+        parent_hashes.insert(*index, hashes);
+    }
+
+    // Update parent hashes in committed metadata
+    for (index, hashes) in parent_hashes {
+        for hash in hashes {
+            beads[index].committed_metadata.parents.insert(hash);
+        }
+    }
+
+    // Create and build braid
+    let genesis_set = HashSet::from([0]);
+    let mut bead_index_mapping = HashMap::new();
+    bead_index_mapping.insert(beads[0].block_header.block_hash(), 0);
+
+    let mut test_braid = Braid {
+        beads: vec![beads[0].clone()],
+        tips: genesis_set.clone(),
+        cohorts: vec![Cohort(genesis_set.clone())],
+        cohort_tips: vec![genesis_set.clone()],
+        orphan_beads: Vec::new(),
+        genesis_beads: genesis_set,
+        bead_index_mapping,
+    };
+
+    for i in 1..6 {
+        test_braid.extend(&beads[i]);
+    }
+
+    // Test: Get beads after multiple tips with different indices
+    let b3_hash = beads[3].block_header.block_hash(); // Index 3
+    let b5_hash = beads[5].block_header.block_hash(); // Index 5
+
+    let result = test_braid.get_beads_after(vec![b3_hash, b5_hash]);
+    assert!(result.is_some());
+    let returned_beads = result.unwrap();
+
+    // Should start from the cohort containing the smallest index (B3 at index 3)
+    // and return beads from that cohort onwards
+    assert!(!returned_beads.is_empty(), "Should return some beads");
+
+    // Test with tips in reverse order (larger index first)
+    let result2 = test_braid.get_beads_after(vec![b5_hash, b3_hash]);
+    assert!(result2.is_some());
+    let returned_beads2 = result2.unwrap();
+
+    // Should return the same result regardless of order
+    assert_eq!(
+        returned_beads.len(),
+        returned_beads2.len(),
+        "Order of input tips should not affect result"
+    );
+}

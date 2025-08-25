@@ -3,9 +3,11 @@ use super::BeadCodec;
 use super::BeadHash;
 use super::BeadRequest;
 use super::BeadResponse;
+use super::BeadSyncError;
 use super::CommittedMetadata;
 use super::UnCommittedMetadata;
 use crate::committed_metadata::TimeVec;
+use crate::utils::create_test_bead;
 use crate::utils::test_utils::test_utility_functions::*;
 use bitcoin::absolute::Time;
 use bitcoin::consensus::encode::deserialize;
@@ -273,4 +275,115 @@ fn test_codec_response_roundtrip() {
     let decoded_response =
         block_on(codec.read_response(&protocol, &mut futures::io::AllowStdIo::new(io))).unwrap();
     assert_eq!(response, decoded_response);
+}
+
+#[test]
+fn test_get_beads_after_serialization() {
+    let mut codec = BeadCodec::default();
+    let request = BeadRequest::GetBeadsAfter(
+        vec![BeadHash::from_byte_array([0u8; 32])]
+            .into_iter()
+            .collect(),
+    );
+
+    // Serialize
+    let mut buffer = Vec::new();
+    request.consensus_encode(&mut buffer).unwrap();
+    let io = Cursor::new(buffer);
+
+    // Deserialize
+    let protocol = libp2p::StreamProtocol::new("/braidpool/1.0.0");
+    let decoded_request =
+        block_on(codec.read_request(&protocol, &mut futures::io::AllowStdIo::new(io))).unwrap();
+    assert_eq!(request, decoded_request);
+}
+
+// test codec for all bead request types
+#[test]
+fn test_bead_request_codec() {
+    let mut codec = BeadCodec::default();
+
+    for request in vec![
+        BeadRequest::GetTips,
+        BeadRequest::GetBeads(Vec::from([BeadHash::from_byte_array([0u8; 32])])),
+        BeadRequest::GetGenesis,
+        BeadRequest::GetAllBeads,
+        BeadRequest::GetBeadsAfter(vec![BeadHash::from_byte_array([0u8; 32])]),
+    ] {
+        // Serialize
+        let mut buffer = Vec::new();
+        request.consensus_encode(&mut buffer).unwrap();
+        let io = Cursor::new(buffer);
+
+        // Deserialize
+        let protocol = libp2p::StreamProtocol::new("/braidpool/1.0.0");
+        let decoded_request =
+            block_on(codec.read_request(&protocol, &mut futures::io::AllowStdIo::new(io))).unwrap();
+        assert_eq!(request, decoded_request);
+    }
+}
+
+#[test]
+fn test_bead_response_codec() {
+    let mut codec = BeadCodec::default();
+
+    // Create test bead for responses that need beads
+    let test_bead = create_test_bead(1, None);
+    let test_hash = BeadHash::from_byte_array([1u8; 32]);
+    let test_hash2 = BeadHash::from_byte_array([2u8; 32]);
+
+    // Test all BeadResponse variants
+    let responses = vec![
+        BeadResponse::Beads(vec![test_bead.clone()]),
+        BeadResponse::Tips(vec![test_hash, test_hash2]),
+        BeadResponse::Genesis(vec![test_hash]),
+        BeadResponse::GetAllBeads(vec![test_bead.clone(), test_bead.clone()]),
+        BeadResponse::GetBeadsAfter(vec![test_bead.clone()]),
+        BeadResponse::Error(BeadSyncError::GenesisMismatch),
+        BeadResponse::Error(BeadSyncError::Other("Test error message".to_string())),
+    ];
+
+    for response in responses {
+        // Serialize
+        let mut buffer = Vec::new();
+        response.consensus_encode(&mut buffer).unwrap();
+        let io = Cursor::new(buffer);
+
+        // Deserialize
+        let protocol = libp2p::StreamProtocol::new("/braidpool/1.0.0");
+        let decoded_response =
+            block_on(codec.read_response(&protocol, &mut futures::io::AllowStdIo::new(io)))
+                .unwrap();
+        assert_eq!(response, decoded_response);
+    }
+}
+
+#[test]
+fn test_bead_sync_error_codec() {
+    // Test BeadSyncError encoding/decoding directly (not through codec)
+    let errors = vec![
+        BeadSyncError::GenesisMismatch,
+        BeadSyncError::Other("Network timeout".to_string()),
+        BeadSyncError::Other("Invalid bead format".to_string()),
+        BeadSyncError::Other("".to_string()), // Empty string edge case
+        BeadSyncError::Other("Very long error message that tests the string encoding and decoding with special characters: !@#$%^&*()_+-=[]{}|;':,.<>?".to_string()),
+    ];
+
+    for error in errors {
+        // Serialize
+        let mut buffer = Vec::new();
+        error.consensus_encode(&mut buffer).unwrap();
+
+        // Deserialize
+        let mut cursor = Cursor::new(buffer);
+        let decoded_error = BeadSyncError::consensus_decode(&mut cursor).unwrap();
+        assert_eq!(error, decoded_error);
+    }
+
+    // Test invalid error type decoding
+    let mut invalid_buffer = Vec::new();
+    255u8.consensus_encode(&mut invalid_buffer).unwrap(); // Invalid error type
+    let mut cursor = Cursor::new(invalid_buffer);
+    let result = BeadSyncError::consensus_decode(&mut cursor);
+    assert!(result.is_err(), "Should fail to decode invalid error type");
 }

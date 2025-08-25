@@ -259,29 +259,39 @@ impl Braid {
     }
 
     /// utility function for GetBeadsAfter request
-    pub fn get_beads_after(&self, old_tips_and_genesis: Vec<BeadHash>) -> Option<Vec<Bead>> {
-        let old_tips_and_genesis: HashSet<BeadHash> = old_tips_and_genesis.into_iter().collect();
+    pub fn get_beads_after(&self, old_tips: Vec<BeadHash>) -> Option<Vec<Bead>> {
+        let old_tips: HashSet<BeadHash> = old_tips.into_iter().collect();
         let mut response_beads = Vec::new();
-        let mut flag = false;
-        for genesis_index in &self.genesis_beads {
-            let genesis_bead = &self.beads[*genesis_index];
-            let genesis_hash = genesis_bead.block_header.block_hash();
-            if !old_tips_and_genesis.contains(&genesis_hash) {
-                return None;
-            }
-        }
-        for bead in &self.beads {
-            let bead_hash = bead.block_header.block_hash();
-            if flag {
-                response_beads.push(bead.clone());
-            } else {
-                if old_tips_and_genesis.contains(&bead_hash) {
-                    flag = true;
-                    continue;
+        let mut found_start = false;
+        let mut smallest_index = usize::MAX;
+        for hash in old_tips {
+            if let Some(&index) = self.bead_index_mapping.get(&hash) {
+                if index < smallest_index {
+                    smallest_index = index;
                 }
+                found_start = true;
             }
         }
-        Some(response_beads)
+        // just iterating over the vector of cohorts for now, this needs to be changed to use a more efficient retrieval of cohort index given bead hash
+        let mut smallest_cohort_index = usize::MAX;
+        for (idx, cohort) in self.cohorts.iter().enumerate() {
+            if cohort.0.contains(&smallest_index) {
+                smallest_cohort_index = idx;
+                break;
+            }
+        }
+        while (smallest_cohort_index < self.cohorts.len()) {
+            let cohort = &self.cohorts[smallest_cohort_index];
+            for bead_index in &cohort.0 {
+                response_beads.push(self.beads[*bead_index].clone());
+            }
+            smallest_cohort_index += 1;
+        }
+        if (response_beads.is_empty()) {
+            None
+        } else {
+            Some(response_beads)
+        }
     }
 }
 

@@ -70,7 +70,7 @@ impl Decodable for Bead {
 #[derive(Debug, Clone, PartialEq)]
 pub enum BeadRequest {
     // Request beads from a specific set of hashes
-    GetBeads(HashSet<BeadHash>),
+    GetBeads(Vec<BeadHash>),
     // Request the latest tips from a peer
     GetTips,
     GetGenesis,
@@ -138,9 +138,8 @@ impl Encodable for BeadRequest {
             BeadRequest::GetBeads(hashes) => {
                 let mut written = 0;
                 written += GET_BEADS.consensus_encode(writer)?; // 0 for GetBeads
-                let hashes_vec = hashset_to_vec_deterministic(hashes);
-                written += (hashes_vec.len() as u32).consensus_encode(writer)?;
-                for hash in hashes_vec {
+                written += (hashes.len() as u32).consensus_encode(writer)?;
+                for hash in hashes {
                     written += hash.consensus_encode(writer)?;
                 }
                 Ok(written)
@@ -173,10 +172,10 @@ impl Decodable for BeadRequest {
         match request_type {
             GET_BEADS => {
                 let count = u32::consensus_decode(d)?;
-                let mut hashes = HashSet::new();
+                let mut hashes = Vec::new();
                 for _ in 0..count {
                     let hash = BeadHash::consensus_decode(d)?;
-                    hashes.insert(hash);
+                    hashes.push(hash);
                 }
                 Ok(BeadRequest::GetBeads(hashes))
             }

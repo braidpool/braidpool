@@ -90,7 +90,7 @@ impl BraidPoolBehaviour {
     }
 
     // Request beads from a peer
-    pub fn request_beads(&mut self, peer: PeerId, hashes: HashSet<BeadHash>) -> OutboundRequestId {
+    pub fn request_beads(&mut self, peer: PeerId, hashes: Vec<BeadHash>) -> OutboundRequestId {
         self.bead_sync
             .send_request(&peer, BeadRequest::GetBeads(hashes))
     }

@@ -211,8 +211,8 @@ async fn test_bead_request_handling() {
             match swarm.next().await {
                 Some(SwarmEvent::ConnectionEstablished { peer_id, .. }) => {
                     println!("Swarm2: Connection established with {}", peer_id);
-                    let mut hashes = HashSet::new();
-                    hashes.insert(bead_hash);
+                    let mut hashes = Vec::new();
+                    hashes.push(bead_hash);
                     swarm.behaviour_mut().request_beads(local_peer_id, hashes);
                 }
                 Some(SwarmEvent::IncomingConnection { .. }) => {
