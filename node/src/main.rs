@@ -198,7 +198,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 "testnet" | "testnet4" => Network::Testnet(bitcoin::TestnetVersion::V4),
                 "signet" => Network::Signet,
                 "regtest" => Network::Regtest,
-                "cpunet" => Network::Regtest,
+                "cpunet" => Network::CPUNet,
                 _ => {
                     log::error!("Invalid network specified: {}", network_name);
                     log::info!("Valid options: main, testnet, testnet4, signet, regtest, cpunet");

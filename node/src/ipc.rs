@@ -26,7 +26,11 @@ pub async fn ipc_block_listener(
     block_template_tx: Sender<Vec<u8>>,
     network: Network,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    log::info!("Starting IPC block listener on: {}", ipc_socket_path);
+    log::info!(
+        "Starting IPC block listener on: {} for network: {}",
+        ipc_socket_path,
+        network
+    );
     let local = tokio::task::LocalSet::new();
     local.run_until(async move {
         loop {
@@ -226,7 +230,7 @@ pub async fn ipc_block_listener(
                         let stats = shared_client.get_queue_stats();
 
                         if !shared_client.is_healthy() {
-                            log::warn!("IPC queue unhealthy - Pending: {}, Avg time: {}ms, Critical queue: {}", 
+                            log::warn!("IPC queue unhealthy - Pending: {}, Avg time: {}ms, Critical queue: {}",
                               stats.pending_requests,
                                 stats.avg_processing_time_ms,
                                 stats.queue_sizes.critical);
@@ -235,7 +239,7 @@ pub async fn ipc_block_listener(
 
                     _ = detailed_stats_interval.tick() => {
                         let stats = shared_client.get_queue_stats();
-                        log::info!("IPC Stats - Failed: {}, Avg: {}ms, Queues: C:{} H:{} N:{} L:{}", 
+                        log::info!("IPC Stats - Failed: {}, Avg: {}ms, Queues: C:{} H:{} N:{} L:{}",
                             stats.failed_requests,
                             stats.avg_processing_time_ms,
                             stats.queue_sizes.critical,
