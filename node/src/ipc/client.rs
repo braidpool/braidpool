@@ -648,6 +648,15 @@ impl SharedBitcoinClient {
         let (external_notification_sender, external_notification_receiver) =
             mpsc::unbounded_channel();
         let (shutdown_sender, mut shutdown_receiver) = mpsc::unbounded_channel();
+
+        let temp_stream = UnixStream::connect(socket_path).await?;
+        let temp_client = BitcoinRpcClient::new(temp_stream).await?;
+        let (_, initial_tip_hash) = temp_client
+            .get_mining_tip_info()
+            .await
+            .unwrap_or((0, vec![]));
+        temp_client.disconnect().await?;
+
         let metrics = Arc::new(QueueMetrics::default());
         let queue_limits = config.queue_limits.clone();
         let (tip_shutdown_sender, mut tip_shutdown_receiver) = mpsc::unbounded_channel::<()>();
@@ -655,6 +664,8 @@ impl SharedBitcoinClient {
         let tip_watcher_task = tokio::task::spawn_local({
             let socket_path = socket_path.to_string();
             let notification_sender_clone = notification_sender.clone();
+            let initial_tip_hash = initial_tip_hash;
+
             async move {
                 let watcher_stream = match UnixStream::connect(&socket_path).await {
                     Ok(stream) => stream,
@@ -669,14 +680,6 @@ impl SharedBitcoinClient {
                     Err(e) => {
                         log::error!("Failed to create tip watcher client: {}", e);
                         return;
-                    }
-                };
-
-                let initial_tip_hash = match bitcoin_client.get_mining_tip_info().await {
-                    Ok((_, hash)) => hash,
-                    Err(e) => {
-                        log::error!("Failed to get initial tip hash: {}", e);
-                        vec![] // Empty hash will trigger immediate tip change detection
                     }
                 };
 
