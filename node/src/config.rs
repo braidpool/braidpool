@@ -118,6 +118,7 @@ impl CoinbaseConfig {
             Network::Testnet(_) => "tb1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
             Network::Signet => "tb1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
             Network::Regtest => "bcrt1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
+            Network::CPUNet => "tc1qu3cdq9unyhdc3d2hw8mvpfgnnhvp6ucckkl6ft".to_string(),
             _ => "tb1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
         };
 
