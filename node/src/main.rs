@@ -247,25 +247,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             Network::Bitcoin
         };
 
-        let network = if let Some(network_name) = &args.network {
-            println!("The specified network is: {}", network_name);
-            match network_name.as_str() {
-                "main" | "mainnet" => Network::Bitcoin,
-                "testnet" | "testnet4" => Network::Testnet(bitcoin::TestnetVersion::V4),
-                "signet" => Network::Signet,
-                "regtest" => Network::Regtest,
-                "cpunet" => Network::Regtest,
-                _ => {
-                    log::error!("Invalid network specified: {}", network_name);
-                    log::info!("Valid options: main, testnet, testnet4, signet, regtest, cpunet");
-                    log::info!("Falling back to regtest");
-                    Network::Regtest
-                }
-            }
-        } else {
-            Network::Bitcoin
-        };
-
         let (ipc_template_tx, ipc_template_rx) = mpsc::channel::<(Vec<u8>, Vec<Vec<u8>>)>(1);
 
         let ipc_socket_path = args.ipc_socket.clone();

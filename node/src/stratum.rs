@@ -310,6 +310,10 @@ pub struct DownstreamClient {
     pub downstream_ip: String,
     /// Did the mine subscribe already?
     pub subscribed: bool,
+    ///Diffculty suggested or not
+    pub suggest_difficulty_done: bool,
+    ///Configuration done so that all the phases are tracked and thus template can be supplied to downstream
+    pub channel_configured: bool,
     /// The unique identifier assigned to this downstream connection/channel.
     #[allow(unused)]
     pub(super) connection_id: u32,
@@ -396,7 +400,12 @@ impl DownstreamClient {
                 };
                 //Sending the initial latest avaialble template to the recently subscribed and authorized
                 //downstream connection
-                if self.authorized == true && self.subscribed == true {
+                if self.authorized == true
+                    && self.subscribed == true
+                    && self.channel_configured == true
+                    && self.suggest_difficulty_done == true
+                    && method != "mining.submit"
+                {
                     let notification_sent_res = notification_sender
                         .send(NotifyCmd::SendLatestTemplateToNewDownstream {
                             new_downstream_addr: peer_addr.clone(),
@@ -616,6 +625,7 @@ impl DownstreamClient {
                 "Handling suggested difficulty - {}",
                 suggest_difficulty_params
             );
+            self.suggest_difficulty_done = true;
             Ok(StratumResponses::SuggestDifficultyResponse {
                 suggest_difficulty_resp: SuggestDifficultyResponse {
                     method: "mining.set_difficulty".to_string(),
@@ -797,7 +807,7 @@ impl DownstreamClient {
             };
             self.version_rolling_min_bit = Some(u32::from_be_bytes(mask_bytes));
         }
-
+        self.channel_configured = true;
         Ok(StratumResponses::StandardResponse {
             std_response: StandardResponse {
                 id: Some(client_request_id),
@@ -875,6 +885,8 @@ impl Default for DownstreamClient {
             authorized: false,
             downstream_ip: "0.0.0.0".to_string(),
             subscribed: false,
+            suggest_difficulty_done: false,
+            channel_configured: false,
             //generating a random u32 client connection id
             connection_id: rand::thread_rng().next_u32(),
             extranonce1: Vec::from(extranonce1_bytes),
@@ -1427,7 +1439,7 @@ impl Server {
                             self_.lock().await.downstream_ip = peer_addr.to_string();
                             //catering each new connection as seperate process
                              tokio::spawn(async move{
-                                Self::handle_connection(self_.clone(),peer_addr,reader,writer,&mut downstream_rx,self_mining_map.clone(),downstream_tx,notification_sender).await;
+                              let _=  Self::handle_connection(self_.clone(),peer_addr,reader,writer,&mut downstream_rx,self_mining_map.clone(),downstream_tx,notification_sender).await;
                              });
                         }
                         Err(error)=>{
