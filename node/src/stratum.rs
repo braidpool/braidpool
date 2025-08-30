@@ -536,6 +536,16 @@ impl DownstreamClient {
                 })
             }
         };
+        //rolling the version bits only if they have been supplied during the configuration phase
+        let rolled_version_bits: &str = match param_array.get(5).and_then(|v| v.as_str()) {
+            Some(n) => n,
+            None => {
+                return Err(StratumErrors::ParamNotFound {
+                    param: "rolled_version".to_string(),
+                    method: "mining.submit".to_string(),
+                })
+            }
+        };
         //Acquiring lock on the mining map and fetching the submitted job from the memory
         let mut job_mapping = mining_job_map.lock().await;
         let job_r = job_mapping.get_mining_job(job_id).await;
@@ -570,11 +580,61 @@ impl DownstreamClient {
         //Computing the newly constructed merkle root via the merkle path
         let merkle_root: TxMerkleNode = TxMerkleNode::calculate_root(txids.into_iter()).unwrap();
 
-        //Applying version mask received during mining.configure or not TODO
-        let version = submitted_job.blocktemplate.version.clone();
+        //Applying version mask received during mining.configure
+        // Job version
+        let header_version = submitted_job.blocktemplate.version.clone();
+
+        // Miner received version
+        let mut rolled_version = [0u8; 4];
+        match hex::decode_to_slice(rolled_version_bits, &mut rolled_version) {
+            Ok(_) => (),
+            Err(e) => {
+                log::error!("Failed to decode rolled_version_bits: {:?}", e);
+                return Err(StratumErrors::VersionRollingHexParseError {
+                    error: e.to_string(),
+                });
+            }
+        }
+        let version_bits = i32::from_be_bytes(rolled_version);
+
+        // Mask set during mining.configure
+        let mut mask_bytes = [0u8; 4];
+        let version_rolling_mask = match self.version_rolling_mask.clone().unwrap().parse::<u32>() {
+            Ok(version_mask) => version_mask,
+            Err(error) => {
+                return Err(StratumErrors::ParsingVersionMask {
+                    error: error.to_string(),
+                });
+            }
+        };
+
+        let version_rolling_mask_bytes = version_rolling_mask.to_be_bytes();
+        let version_rolling_mask_hex = hex::encode(version_rolling_mask_bytes);
+
+        log::info!("CONVERTED VERSION MASK --- {:?}", version_rolling_mask_hex);
+
+        match hex::decode_to_slice(version_rolling_mask_hex, &mut mask_bytes) {
+            Ok(_) => (),
+            Err(e) => {
+                log::error!("Failed to decode version_rolling_mask_hex: {:?}", e);
+                return Err(StratumErrors::VersionRollingHexParseError {
+                    error: e.to_string(),
+                });
+            }
+        }
+        let mask_version_bits = i32::from_be_bytes(mask_bytes);
+        let precondition = version_bits & !mask_version_bits;
+        if precondition != 0 {
+            return Err(StratumErrors::MaskNotValid {
+                error: "version_bits & !mask_version_bits must be equal to Zero".to_string(),
+            });
+        }
+        //According to BIP 310 can be seen from extended configurations to downstream during mining.configure
+        let final_masked_version =
+            (header_version & !mask_version_bits) | (version_bits & mask_version_bits);
         //Computing the block header
         let header = BlockHeader {
-            version: bitcoin::blockdata::block::Version::from_consensus(version),
+            version: bitcoin::blockdata::block::Version::from_consensus(final_masked_version),
             prev_blockhash: bitcoin::BlockHash::from_str(
                 &submitted_job.blocktemplate.previousblockhash,
             )

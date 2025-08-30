@@ -83,11 +83,23 @@ pub enum StratumErrors {
         msg: String,
         msg_type: String,
     },
+    ParsingVersionMask {
+        error: String,
+    },
+    MaskNotValid {
+        error: String,
+    },
 }
 pub enum StratumResponseErrors {}
 impl fmt::Display for StratumErrors {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            StratumErrors::MaskNotValid { error } => {
+                write!(f, "{}", error)
+            }
+            StratumErrors::ParsingVersionMask { error } => {
+                write!(f, "{}", error)
+            }
             StratumErrors::NotifyMessageNotSent {
                 error,
                 msg,
