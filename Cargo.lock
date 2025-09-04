@@ -274,10 +274,10 @@ dependencies = [
 [[package]]
 name = "base58ck"
 version = "0.2.0"
-source = "git+https://github.com/braidpool/rust-bitcoin.git?branch=bech32_fix#1354692e64e74d5c667c62303a85c51f3fdb0ba7"
+source = "git+https://github.com/braidpool/rust-bitcoin.git?branch=cpunet#d7f1c9219aae185226d977c991d42fc3f2eeb513"
 dependencies = [
- "bitcoin-internals 0.4.0 (git+https://github.com/braidpool/rust-bitcoin.git?branch=bech32_fix)",
- "bitcoin_hashes 0.16.0 (git+https://github.com/braidpool/rust-bitcoin.git?branch=bech32_fix)",
+ "bitcoin-internals 0.4.0 (git+https://github.com/braidpool/rust-bitcoin.git?branch=cpunet)",
+ "bitcoin_hashes 0.16.0 (git+https://github.com/braidpool/rust-bitcoin.git?branch=cpunet)",
 ]
 
 [[package]]
@@ -327,16 +327,16 @@ dependencies = [
 [[package]]
 name = "bitcoin"
 version = "0.32.7-pre-cpunet"
-source = "git+https://github.com/braidpool/rust-bitcoin.git?branch=bech32_fix#1354692e64e74d5c667c62303a85c51f3fdb0ba7"
+source = "git+https://github.com/braidpool/rust-bitcoin.git?branch=cpunet#d7f1c9219aae185226d977c991d42fc3f2eeb513"
 dependencies = [
  "base58ck 0.2.0",
  "base64 0.22.1",
  "bech32 0.11.0 (git+https://github.com/braidpool/rust-bech32.git?branch=cpunet)",
- "bitcoin-internals 0.4.0 (git+https://github.com/braidpool/rust-bitcoin.git?branch=bech32_fix)",
- "bitcoin-io 0.2.0 (git+https://github.com/braidpool/rust-bitcoin.git?branch=bech32_fix)",
+ "bitcoin-internals 0.4.0 (git+https://github.com/braidpool/rust-bitcoin.git?branch=cpunet)",
+ "bitcoin-io 0.2.0 (git+https://github.com/braidpool/rust-bitcoin.git?branch=cpunet)",
  "bitcoin-primitives",
  "bitcoin-units 0.2.0",
- "bitcoin_hashes 0.16.0 (git+https://github.com/braidpool/rust-bitcoin.git?branch=bech32_fix)",
+ "bitcoin_hashes 0.16.0 (git+https://github.com/braidpool/rust-bitcoin.git?branch=cpunet)",
  "bitcoinconsensus",
  "hex-conservative 0.3.0",
  "secp256k1 0.30.0",
@@ -379,7 +379,7 @@ checksum = "2b854212e29b96c8f0fe04cab11d57586c8f3257de0d146c76cb3b42b3eb9118"
 [[package]]
 name = "bitcoin-internals"
 version = "0.4.0"
-source = "git+https://github.com/braidpool/rust-bitcoin.git?branch=bech32_fix#1354692e64e74d5c667c62303a85c51f3fdb0ba7"
+source = "git+https://github.com/braidpool/rust-bitcoin.git?branch=cpunet#d7f1c9219aae185226d977c991d42fc3f2eeb513"
 dependencies = [
  "hex-conservative 0.3.0",
  "serde",
@@ -403,21 +403,21 @@ dependencies = [
 [[package]]
 name = "bitcoin-io"
 version = "0.2.0"
-source = "git+https://github.com/braidpool/rust-bitcoin.git?branch=bech32_fix#1354692e64e74d5c667c62303a85c51f3fdb0ba7"
+source = "git+https://github.com/braidpool/rust-bitcoin.git?branch=cpunet#d7f1c9219aae185226d977c991d42fc3f2eeb513"
 dependencies = [
- "bitcoin-internals 0.4.0 (git+https://github.com/braidpool/rust-bitcoin.git?branch=bech32_fix)",
- "bitcoin_hashes 0.16.0 (git+https://github.com/braidpool/rust-bitcoin.git?branch=bech32_fix)",
+ "bitcoin-internals 0.4.0 (git+https://github.com/braidpool/rust-bitcoin.git?branch=cpunet)",
+ "bitcoin_hashes 0.16.0 (git+https://github.com/braidpool/rust-bitcoin.git?branch=cpunet)",
 ]
 
 [[package]]
 name = "bitcoin-primitives"
 version = "0.101.0"
-source = "git+https://github.com/braidpool/rust-bitcoin.git?branch=bech32_fix#1354692e64e74d5c667c62303a85c51f3fdb0ba7"
+source = "git+https://github.com/braidpool/rust-bitcoin.git?branch=cpunet#d7f1c9219aae185226d977c991d42fc3f2eeb513"
 dependencies = [
  "arrayvec",
- "bitcoin-internals 0.4.0 (git+https://github.com/braidpool/rust-bitcoin.git?branch=bech32_fix)",
+ "bitcoin-internals 0.4.0 (git+https://github.com/braidpool/rust-bitcoin.git?branch=cpunet)",
  "bitcoin-units 0.2.0",
- "bitcoin_hashes 0.16.0 (git+https://github.com/braidpool/rust-bitcoin.git?branch=bech32_fix)",
+ "bitcoin_hashes 0.16.0 (git+https://github.com/braidpool/rust-bitcoin.git?branch=cpunet)",
  "hex-conservative 0.3.0",
  "serde",
 ]
@@ -435,9 +435,9 @@ dependencies = [
 [[package]]
 name = "bitcoin-units"
 version = "0.2.0"
-source = "git+https://github.com/braidpool/rust-bitcoin.git?branch=bech32_fix#1354692e64e74d5c667c62303a85c51f3fdb0ba7"
+source = "git+https://github.com/braidpool/rust-bitcoin.git?branch=cpunet#d7f1c9219aae185226d977c991d42fc3f2eeb513"
 dependencies = [
- "bitcoin-internals 0.4.0 (git+https://github.com/braidpool/rust-bitcoin.git?branch=bech32_fix)",
+ "bitcoin-internals 0.4.0 (git+https://github.com/braidpool/rust-bitcoin.git?branch=cpunet)",
  "serde",
 ]
 
@@ -465,9 +465,9 @@ dependencies = [
 [[package]]
 name = "bitcoin_hashes"
 version = "0.16.0"
-source = "git+https://github.com/braidpool/rust-bitcoin.git?branch=bech32_fix#1354692e64e74d5c667c62303a85c51f3fdb0ba7"
+source = "git+https://github.com/braidpool/rust-bitcoin.git?branch=cpunet#d7f1c9219aae185226d977c991d42fc3f2eeb513"
 dependencies = [
- "bitcoin-internals 0.4.0 (git+https://github.com/braidpool/rust-bitcoin.git?branch=bech32_fix)",
+ "bitcoin-internals 0.4.0 (git+https://github.com/braidpool/rust-bitcoin.git?branch=cpunet)",
  "hex-conservative 0.3.0",
  "serde",
 ]

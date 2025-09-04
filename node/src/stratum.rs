@@ -10,7 +10,10 @@ use bitcoin::{
     io::{self, Write},
     Transaction,
 };
-use bitcoin::{BlockHeader, BlockTime, TxMerkleNode, Txid};
+use bitcoin::{
+    locktime::absolute::LockTime, witness, Amount, BlockHash, BlockHeader, BlockTime, BlockVersion,
+    OutPoint, ScriptBuf, Sequence, TxIn, TxMerkleNode, TxOut, Txid, Witness,
+};
 use core::panic;
 use futures::{lock::Mutex, FutureExt};
 use rand::RngCore;
@@ -1082,6 +1085,22 @@ fn to_little_endian(hex_str: &str) -> String {
         .collect::<Vec<&str>>()
         .join("")
 }
+///Since the prev_block_hash received in `gbt` is in BigEndian format it must be converted to `Little endian`.
+pub fn reverse_four_byte_chunks(hash_hex: &str) -> Result<String, StratumErrors> {
+    if hash_hex.len() != 64 {
+        return Err(StratumErrors::PrevHashNotReversed {
+            error: "Hash length is incorrect".to_string(),
+        });
+    }
+    let bytes = hex::decode(hash_hex).unwrap();
+    // Reverse the byte order in 4-byte chunks
+    let mut reversed_bytes = Vec::with_capacity(bytes.len());
+    for chunk in bytes.chunks(4).rev() {
+        reversed_bytes.extend_from_slice(chunk);
+    }
+
+    Ok(hex::encode(reversed_bytes))
+}
 impl Notifier {
     ///Spawning a new notifier instance .
     pub fn new(
@@ -1170,7 +1189,12 @@ impl Notifier {
         //Stratum accepts the prev block hash to be in little endian instead of big endian
         //therefore byte by byte reversal is required here .
         let mut prev_block_hash = notified_template.previousblockhash.as_str();
-        let prev_block_hash_little_endian = to_little_endian(prev_block_hash);
+        let prev_block_hash_little_endian = match reverse_four_byte_chunks(prev_block_hash) {
+            Ok(reversed_hash) => reversed_hash,
+            Err(error) => {
+                return Err(error);
+            }
+        };
         log::info!(
             "Converting the prev block hash to little endian done -- {:?}",
             prev_block_hash_little_endian
@@ -1225,7 +1249,7 @@ impl Notifier {
                     merkle_branch_coinbase,
                 } => {
                     log::info!("Received new template to broadcast to all clients");
-                    let template_ref = template.clone();
+                    let mut template_ref = template.clone();
                     //We will receive the template from the IPC channel and construct a valid job
                     //from the provided template and pass onto the message_reciver in the handle connection for
                     // downstream communication to take place.
@@ -1251,6 +1275,8 @@ impl Notifier {
                                     );
                                     //Updating the existing `JobMap` with the new job constructed from the newly generated
                                     //template received from IPC .
+                                    //Removing the stale coinbase
+                                    template_ref.transactions.remove(0);
                                     let job_details = JobDetails {
                                         blocktemplate: template_ref.clone(),
                                         coinbase1: job.coinbase1.clone(),
@@ -1360,8 +1386,11 @@ impl Notifier {
                                 );
                                 //Updating the existing `JobMap` with the new job constructed from the newly generated
                                 //template received from IPC .
+                                //Removing stale coinbase
+                                let mut latest_template_ref = latest_template.clone();
+                                latest_template_ref.transactions.remove(0);
                                 let job_details = JobDetails {
-                                    blocktemplate: latest_template,
+                                    blocktemplate: latest_template_ref,
                                     coinbase1: job.coinbase1.clone(),
                                     coinbase2: job.coinbase2.clone(),
                                 };
@@ -1612,14 +1641,15 @@ impl Server {
 mod test {
     use std::{collections::HashMap, sync::Arc, time::Duration};
 
+    use super::*;
+    use crate::stratum::{ConnectionMapping, MiningJobMap, NotifyCmd, Server, StratumServerConfig};
+    use bitcoin::script::ScriptBufExt;
     use futures::lock::Mutex;
     use tokio::{
         io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
         net::TcpStream,
         sync::mpsc,
     };
-
-    use crate::stratum::{ConnectionMapping, MiningJobMap, NotifyCmd, Server, StratumServerConfig};
 
     #[tokio::test]
     pub async fn server_start_test() {
@@ -1819,5 +1849,120 @@ mod test {
         let bytes_read = reader.read_line(&mut line).await.unwrap();
         let response: serde_json::Value = serde_json::from_str(line.trim()).unwrap();
         assert_eq!(response["id"], 1);
+    }
+
+    //TODO: this test is currently conditional wrt to master branch for our forked rust-bitcoin hence commented out
+
+    // #[tokio::test]
+    // async fn submit_work_no_version_rolling() {
+    //     let test_merkel_bytes: [u8; 32] = [0u8; 32];
+    //     //Little more doubt in construction of initial coinbase only and in merkel which can be due to coinbase only
+    //     //There is a case in prevblockhash too but it can be discussed afterwards
+    //     //Cleaning up connection channels from connection mapping as well as from global map arc of stratum server
+    //     let test_coinbase_transaction: Transaction = Transaction {
+    //         version: bitcoin::TransactionVersion::ONE,
+    //         input: vec![TxIn {
+    //             previous_output: OutPoint {
+    //                 txid: Txid::from_str(
+    //                     "0000000000000000000000000000000000000000000000000000000000000000",
+    //                 )
+    //                 .unwrap(),
+    //                 vout: OutPoint::COINBASE_PREVOUT.vout,
+    //             },
+    //             //023c01000402b6786804209eec010c03b6786800000000000000000a636b706f6f6c0a2f7032706f6f6c76322f
+    //             script_sig: ScriptBuf::from_hex(
+    //                 "023c01000402b6786804209eec010c0101010101010101010101010a636b706f6f6c0a2f7032706f6f6c76322f",
+    //             )
+    //             .unwrap(),
+    //             sequence: Sequence::MAX,
+    //             witness: Witness::new(),
+    //         }],
+    //         output: vec![
+    //             TxOut {
+    //                 value: Amount::from_sat(4900000000).unwrap(),
+    //                 script_pubkey: ScriptBuf::from_hex("0014274466e754a1c12d0a2d2cc34ceb70d8e017053a")
+    //                     .unwrap(),
+    //             },
+    //             TxOut {
+    //                 value: Amount::from_sat(100000000).unwrap(),
+    //                 script_pubkey: ScriptBuf::from_hex("0014a248cf2f99f449511b22bab1a3d001719f84cd09")
+    //                     .unwrap(),
+    //             },
+    //             TxOut {
+    //                 value: Amount::from_sat(0).unwrap(),
+    //                 script_pubkey: ScriptBuf::from_hex(
+    //                     "6a24aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf9",
+    //                 )
+    //                 .unwrap(),
+    //             },
+    //         ],
+    //         lock_time: LockTime::ZERO,
+    //     };
+    //     let test_template_header = bitcoin::block::Header {
+    //         bits: bitcoin::pow::CompactTarget::from_unprefixed_hex(
+    //             "1e0377ae",
+    //         )
+    //         .unwrap(),
+    //         nonce: 2,
+    //         version: BlockVersion::from_consensus(536870912),
+    //         time: BlockTime::from_u32(1752741378),
+    //         prev_blockhash: BlockHash::from_str(
+    //             "00000000002bfbde338ade6514af8b63bb564065051038ba745ea34087f914a7",
+    //         )
+    //         .unwrap(),
+    //         merkle_root: TxMerkleNode::from_byte_array(test_merkel_bytes),
+    //     };
+    //     let mut test_template = BlockTemplate {
+    //         version: test_template_header.version.to_consensus(),
+    //         previousblockhash: test_template_header.prev_blockhash.to_string(),
+    //         transactions: vec![test_coinbase_transaction],
+    //         curtime: test_template_header.time.to_u32(),
+    //         bits: test_template_header.bits.to_hex(),
+    //         ..Default::default()
+    //     };
+    //     let  mut constructed_test_notification =
+    //         Notifier::construct_job_notification(false, test_template.clone(), 1, vec![]).await.unwrap();
+    //         constructed_test_notification.prevhash = "87f914a7745ea340051038babb56406514af8b63338ade65002bfbde00000000".to_string();
+    //         let constructed_test_notification_ref = constructed_test_notification.clone();
+    //     let mut mock_downstream_handler = DownstreamClient::default();
+    //     let mock_mining_job_map: Arc<Mutex<MiningJobMap>>  = Arc::new(Mutex::new(MiningJobMap::new()));
+    //     test_template.transactions.remove(0);
+    //     let job_details = JobDetails {
+    //         blocktemplate: test_template,
+    //         coinbase1: constructed_test_notification_ref.clone().coinbase1.clone(),
+    //         coinbase2: constructed_test_notification_ref.clone().coinbase2.clone(),
+    //     };
+    //     mock_mining_job_map.lock().await.insert_mining_job(job_details.clone()).await;
+    //     let test_submit_request_params = json!( [
+    //         "bitaxe",
+    //         "1",
+    //         "0000000000000000",
+    //         "6878b602",
+    //         "58f90070",
+    //         "083ac000"
+    //     ]);
+    //     let configure_test_request = json!([
+    //         [
+    //             "version-rolling"
+    //         ],
+    //         {
+    //             "version-rolling.mask": "ffffffff"
+    //         }
+    //     ]);
+    //     let test_extranonce_1 = hex::decode("03b67868").unwrap();
+    //     mock_downstream_handler.extranonce1=test_extranonce_1;
+    //     let configure_response = mock_downstream_handler.handle_configure(&configure_test_request, 1).await;
+    //     let submit_response = mock_downstream_handler.handle_submit(&test_submit_request_params, mock_mining_job_map.clone(),2).await.unwrap();
+
+    // }
+    #[test]
+    fn prev_hash_test() {
+        let prev_test_hash = "00000000cbdd48c69c45ffd07dc26fc3668bb70870374354535061f8f5304c7c";
+        let reversed_hash = reverse_four_byte_chunks(prev_test_hash).unwrap();
+
+        assert_eq!(
+            reversed_hash,
+            "f5304c7c535061f870374354668bb7087dc26fc39c45ffd0cbdd48c600000000".to_string()
+        );
     }
 }

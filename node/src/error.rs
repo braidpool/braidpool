@@ -89,11 +89,21 @@ pub enum StratumErrors {
     MaskNotValid {
         error: String,
     },
+    PrevHashNotReversed {
+        error: String,
+    },
 }
 pub enum StratumResponseErrors {}
 impl fmt::Display for StratumErrors {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            StratumErrors::PrevHashNotReversed { error } => {
+                write!(
+                    f,
+                    "An error occurred while reversing the prev hash in 4 word size length - {}",
+                    error
+                )
+            }
             StratumErrors::MaskNotValid { error } => {
                 write!(f, "{}", error)
             }
