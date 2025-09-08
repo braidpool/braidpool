@@ -1,4 +1,5 @@
 use crate::error::StratumErrors;
+use crate::template_creator::calculate_merkle_root;
 use crate::{EXTRANONCE1_SIZE, EXTRANONCE2_SIZE, EXTRANONCE_SEPARATOR};
 use bitcoin::block::HeaderExt;
 use bitcoin::consensus::serialize;
@@ -539,16 +540,6 @@ impl DownstreamClient {
                 })
             }
         };
-        //rolling the version bits only if they have been supplied during the configuration phase
-        let rolled_version_bits: &str = match param_array.get(5).and_then(|v| v.as_str()) {
-            Some(n) => n,
-            None => {
-                return Err(StratumErrors::ParamNotFound {
-                    param: "rolled_version".to_string(),
-                    method: "mining.submit".to_string(),
-                })
-            }
-        };
         //Acquiring lock on the mining map and fetching the submitted job from the memory
         let mut job_mapping = mining_job_map.lock().await;
         let job_r = job_mapping.get_mining_job(job_id).await;
@@ -575,66 +566,83 @@ impl DownstreamClient {
             bitcoin::Transaction::consensus_decode(&mut coinbase_cursor).unwrap();
 
         //computing merkle new merkle path due to updated coinbase transaction
-        let txs = submitted_job.blocktemplate.transactions.clone();
-        let mut txids: Vec<Txid> = vec![coinbase_tx.compute_txid()];
-        for tx in txs.iter() {
-            txids.push(tx.compute_txid());
+        let mut merkel_branches_bytes: Vec<Vec<u8>> = Vec::new();
+        for merkel_branch in submitted_job.coinbase_merkel_path.clone() {
+            let mut merkel_branch_bytes: [u8; 32] = [0u8; 32];
+            //Computing hex of merkel branch in big-endian as expected by the miner
+            hex::decode_to_slice(merkel_branch, &mut merkel_branch_bytes).unwrap();
+            merkel_branches_bytes.push(Vec::from(merkel_branch_bytes));
         }
+        let merkel_root_bytes =
+            calculate_merkle_root(coinbase_tx.compute_txid(), merkel_branches_bytes.as_slice());
         //Computing the newly constructed merkle root via the merkle path
-        let merkle_root: TxMerkleNode = TxMerkleNode::calculate_root(txids.into_iter()).unwrap();
+        let merkle_root = TxMerkleNode::from_byte_array(merkel_root_bytes);
 
         //Applying version mask received during mining.configure
         // Job version
         let header_version = submitted_job.blocktemplate.version.clone();
+        let mut final_masked_version = submitted_job.blocktemplate.version;
+        if param_array.len() >= 6 {
+            //rolling the version bits only if they have been supplied during the configuration phase
+            let rolled_version_bits: &str = match param_array.get(5).and_then(|v| v.as_str()) {
+                Some(n) => n,
+                None => {
+                    return Err(StratumErrors::ParamNotFound {
+                        param: "rolled_version".to_string(),
+                        method: "mining.submit".to_string(),
+                    })
+                }
+            };
+            // Miner received version
+            let mut rolled_version = [0u8; 4];
+            match hex::decode_to_slice(rolled_version_bits, &mut rolled_version) {
+                Ok(_) => (),
+                Err(e) => {
+                    log::error!("Failed to decode rolled_version_bits: {:?}", e);
+                    return Err(StratumErrors::VersionRollingHexParseError {
+                        error: e.to_string(),
+                    });
+                }
+            }
+            let version_bits = i32::from_be_bytes(rolled_version);
 
-        // Miner received version
-        let mut rolled_version = [0u8; 4];
-        match hex::decode_to_slice(rolled_version_bits, &mut rolled_version) {
-            Ok(_) => (),
-            Err(e) => {
-                log::error!("Failed to decode rolled_version_bits: {:?}", e);
-                return Err(StratumErrors::VersionRollingHexParseError {
-                    error: e.to_string(),
+            // Mask set during mining.configure
+            let mut mask_bytes = [0u8; 4];
+            let version_rolling_mask =
+                match self.version_rolling_mask.clone().unwrap().parse::<u32>() {
+                    Ok(version_mask) => version_mask,
+                    Err(error) => {
+                        return Err(StratumErrors::ParsingVersionMask {
+                            error: error.to_string(),
+                        });
+                    }
+                };
+
+            let version_rolling_mask_bytes = version_rolling_mask.to_be_bytes();
+            let version_rolling_mask_hex = hex::encode(version_rolling_mask_bytes);
+
+            log::info!("CONVERTED VERSION MASK --- {:?}", version_rolling_mask_hex);
+
+            match hex::decode_to_slice(version_rolling_mask_hex, &mut mask_bytes) {
+                Ok(_) => (),
+                Err(e) => {
+                    log::error!("Failed to decode version_rolling_mask_hex: {:?}", e);
+                    return Err(StratumErrors::VersionRollingHexParseError {
+                        error: e.to_string(),
+                    });
+                }
+            }
+            let mask_version_bits = i32::from_be_bytes(mask_bytes);
+            let precondition = version_bits & !mask_version_bits;
+            if precondition != 0 {
+                return Err(StratumErrors::MaskNotValid {
+                    error: "version_bits & !mask_version_bits must be equal to Zero".to_string(),
                 });
             }
+            //According to BIP 310 can be seen from extended configurations to downstream during mining.configure
+            final_masked_version =
+                (header_version & !mask_version_bits) | (version_bits & mask_version_bits);
         }
-        let version_bits = i32::from_be_bytes(rolled_version);
-
-        // Mask set during mining.configure
-        let mut mask_bytes = [0u8; 4];
-        let version_rolling_mask = match self.version_rolling_mask.clone().unwrap().parse::<u32>() {
-            Ok(version_mask) => version_mask,
-            Err(error) => {
-                return Err(StratumErrors::ParsingVersionMask {
-                    error: error.to_string(),
-                });
-            }
-        };
-
-        let version_rolling_mask_bytes = version_rolling_mask.to_be_bytes();
-        let version_rolling_mask_hex = hex::encode(version_rolling_mask_bytes);
-
-        log::info!("CONVERTED VERSION MASK --- {:?}", version_rolling_mask_hex);
-
-        match hex::decode_to_slice(version_rolling_mask_hex, &mut mask_bytes) {
-            Ok(_) => (),
-            Err(e) => {
-                log::error!("Failed to decode version_rolling_mask_hex: {:?}", e);
-                return Err(StratumErrors::VersionRollingHexParseError {
-                    error: e.to_string(),
-                });
-            }
-        }
-        let mask_version_bits = i32::from_be_bytes(mask_bytes);
-        let precondition = version_bits & !mask_version_bits;
-        if precondition != 0 {
-            return Err(StratumErrors::MaskNotValid {
-                error: "version_bits & !mask_version_bits must be equal to Zero".to_string(),
-            });
-        }
-        //According to BIP 310 can be seen from extended configurations to downstream during mining.configure
-        let final_masked_version =
-            (header_version & !mask_version_bits) | (version_bits & mask_version_bits);
         //Computing the block header
         let header = BlockHeader {
             version: bitcoin::blockdata::block::Version::from_consensus(final_masked_version),
@@ -1021,6 +1029,7 @@ pub struct JobDetails {
     pub blocktemplate: BlockTemplate,
     pub coinbase1: String,
     pub coinbase2: String,
+    pub coinbase_merkel_path: Vec<String>,
 }
 ///Struct storing all the jobs mapped accroding to the job id
 /// it will serve the purpose for maintaining the details received from the downstream as well as other
@@ -1281,6 +1290,7 @@ impl Notifier {
                                         blocktemplate: template_ref.clone(),
                                         coinbase1: job.coinbase1.clone(),
                                         coinbase2: job.coinbase2.clone(),
+                                        coinbase_merkel_path: job.merkle_branches.clone(),
                                     };
                                     curr_peer_mining_job_map
                                         .insert_mining_job(job_details)
@@ -1393,6 +1403,7 @@ impl Notifier {
                                     blocktemplate: latest_template_ref,
                                     coinbase1: job.coinbase1.clone(),
                                     coinbase2: job.coinbase2.clone(),
+                                    coinbase_merkel_path: job.merkle_branches.clone(),
                                 };
                                 curr_peer_mining_job_map
                                     .insert_mining_job(job_details)
@@ -1963,6 +1974,38 @@ mod test {
         assert_eq!(
             reversed_hash,
             "f5304c7c535061f870374354668bb7087dc26fc39c45ffd0cbdd48c600000000".to_string()
+        );
+    }
+    #[test]
+    fn test_merkel_root_construction() {
+        let coinbase_string_non_segwit = "02000000010000000000000000000000000000000000000000000000000000000000000000ffffffff170305190408ac53db1b00000000094272616964706f6f6cffffffff03c81d039500000000160014af0ce4a33e61762bde14de428440a9def7acc9310000000000000000266a24aa21a9edac3e72f41e3e7cda29fa3e372e7209108db9c2b2bff9e7b51fdffb10b89a9e4300000000000000002a6a286272616964706f6f6c5f626561645f6d657461646174615f686173685f333262010203040506070800000000";
+        let coinbase_bytes = hex::decode(coinbase_string_non_segwit).unwrap();
+        let mut cursor = Cursor::new(coinbase_bytes);
+        let coinbase_tx = Transaction::consensus_decode(&mut cursor).unwrap();
+        let coinbase_wtxid = coinbase_tx.compute_wtxid();
+        let coinbase_txid = coinbase_tx.compute_txid();
+        assert_eq!(coinbase_txid.to_string(), coinbase_wtxid.to_string());
+        let test_merkel_branches = [
+            "0ce0d53011438c88cdff30f6312ca67d87bf14fb39e449a5cf90cd369d750e21",
+            "562d5094b1362ac66b126a910908eea2a17b06891483ee90447914dcad65c96b",
+            "d485ae53320318f499c91e3b8899c004d10ba358aa143ace70aab9f4448aac0e",
+            "37aabcd6778b0a07f06c7d9f5f12ca156b679bdf69f1c6327a06d30c0002b49d",
+            "408040846f74ad0a82e58a17431b8fde5f62e5e913f34ffe21e29b907eda7e0f",
+        ];
+        let mut merkel_branches_serialized: Vec<Vec<u8>> = Vec::new();
+        for merkle_branch_str in test_merkel_branches {
+            let mut merkel_branch_bytes: [u8; 32] = [0u8; 32];
+            hex::decode_to_slice(merkle_branch_str, &mut merkel_branch_bytes).unwrap();
+            merkel_branches_serialized.push(Vec::from(merkel_branch_bytes));
+        }
+        println!("Merkel branches bytes - {:?}", merkel_branches_serialized);
+        let merkel_root_bytes =
+            calculate_merkle_root(coinbase_txid, &merkel_branches_serialized.as_slice());
+        let mr = TxMerkleNode::from_byte_array(merkel_root_bytes);
+        println!("Merkel root - {:?}", mr.to_string());
+        assert_eq!(
+            mr.to_string(),
+            "690699e45d09d84d81cb58a4f8ba734e7fc90856d8b24524797f9a54ff57b1a1".to_string()
         );
     }
 }
