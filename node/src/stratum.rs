@@ -4,17 +4,13 @@ use crate::{EXTRANONCE1_SIZE, EXTRANONCE2_SIZE, EXTRANONCE_SEPARATOR};
 use bitcoin::block::HeaderExt;
 use bitcoin::consensus::serialize;
 use bitcoin::io::Cursor;
-use bitcoin::merkle_tree::MerkleNode;
 use bitcoin::pow::CompactTargetExt;
 use bitcoin::{
     absolute::{Decodable, Encodable},
     io::{self, Write},
     Transaction,
 };
-use bitcoin::{
-    locktime::absolute::LockTime, witness, Amount, BlockHash, BlockHeader, BlockTime, BlockVersion,
-    OutPoint, ScriptBuf, Sequence, TxIn, TxMerkleNode, TxOut, Txid, Witness,
-};
+use bitcoin::{Block, BlockHeader, BlockTime, TxMerkleNode, Txid};
 use core::panic;
 use futures::{lock::Mutex, FutureExt};
 use rand::RngCore;
@@ -71,7 +67,7 @@ pub struct BlockTemplate {
     pub sizelimit: Option<u32>,
     pub weightlimit: Option<u32>,
     pub curtime: u32,
-    pub bits: String,
+    pub bits: bitcoin::CompactTarget,
     pub height: u32,
     pub default_witness_commitment: Option<String>,
 }
@@ -201,7 +197,7 @@ impl Default for BlockTemplate {
             sizelimit: None,
             weightlimit: None,
             curtime: 0,
-            bits: String::new(),
+            bits: bitcoin::CompactTarget::from_consensus(0),
             height: 0,
             default_witness_commitment: None,
         }
@@ -295,15 +291,6 @@ pub struct SuggestDifficultyResponse {
     pub method: String,
     pub params: Vec<u64>,
 }
-/// Target is a 256-bit unsigned integer in little-endian
-/// instead of using `BigUint` i have taken into account u128 for respective MSB and LSB
-/// this is only because u256 is not supported by default in rust so for storing u256 i have split into
-/// `MSB` and `LSB` respectively
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Target {
-    lsb: u128,
-    msb: u128,
-}
 ///This will persist the client specific information for each of the new downstream connected
 /// to the stratum service which are setup during either `mining.subscribe` or `mining.configure` or `mining.authorize`
 #[derive(Debug, Clone)]
@@ -332,8 +319,9 @@ pub struct DownstreamClient {
     version_rolling_min_bit: Option<u32>,
     /// The expected size of the extranonce2 field provided by the miner.
     extranonce2_len: usize,
-    // Current target
-    pub target: Target,
+    /// Optional per-connection monitoring target (stricter than share/weak target).
+    /// Used to sample miner health at a higher rate than the share target.
+    pub monitor_target: Option<bitcoin::Target>,
 }
 impl DownstreamClient {
     /// Handles an incoming Stratum `Client2Server` request from a downstream miner.
@@ -561,6 +549,10 @@ impl DownstreamClient {
             submitted_job.coinbase2
         );
         let coinbase_bytes = hex::decode(coinbase_tx_hex).unwrap();
+
+        // Log the coinbase transaction in hex
+        log::info!("Coinbase transaction hex: {}", hex::encode(&coinbase_bytes));
+
         let mut coinbase_cursor = Cursor::new(coinbase_bytes);
         let coinbase_tx: Transaction =
             bitcoin::Transaction::consensus_decode(&mut coinbase_cursor).unwrap();
@@ -652,15 +644,50 @@ impl DownstreamClient {
             .unwrap(),
             merkle_root: merkle_root,
             time: BlockTime::from_u32(u32::from_str_radix(ntime, 16).unwrap()),
-            bits: bitcoin::pow::CompactTarget::from_unprefixed_hex(
-                &submitted_job.blocktemplate.bits,
-            )
-            .unwrap(),
+            bits: submitted_job.blocktemplate.bits,
             nonce: u32::from_str_radix(nonce, 16).unwrap(),
         };
-        let compact_target =
-            bitcoin::CompactTarget::from_unprefixed_hex(&submitted_job.blocktemplate.bits).unwrap();
+        let compact_target = submitted_job.blocktemplate.bits;
         let target = bitcoin::Target::from_compact(compact_target);
+        log::info!("target    : {}", target.to_hex());
+        log::info!(
+            "block_hash: {}",
+            hex::encode(header.block_hash().to_byte_array())
+        );
+
+        // Print each header field in big-endian hex just before PoW validation
+        let coinbase_txid_be_hex = hex::encode(coinbase_tx.compute_txid().to_byte_array());
+        let version_be_hex = {
+            let v = header.version.to_consensus() as u32;
+            hex::encode(v.to_be_bytes())
+        };
+        let prevhash_be_hex = hex::encode(header.prev_blockhash.to_byte_array());
+        let merkle_root_be_hex = hex::encode(header.merkle_root.to_byte_array());
+        let time_be_hex = hex::encode(header.time.to_u32().to_be_bytes());
+        let bits_be_hex = hex::encode(header.bits.to_consensus().to_be_bytes());
+        let nonce_be_hex = hex::encode(header.nonce.to_be_bytes());
+
+        log::info!("coinbase_txid: {}", coinbase_txid_be_hex);
+        log::info!("header.version: {}", version_be_hex);
+        log::info!("header.prev_blockhash: {}", prevhash_be_hex);
+        log::info!("header.merkle_root: {}", merkle_root_be_hex);
+        log::info!("header.time: {}", time_be_hex);
+        log::info!("header.bits: {}", bits_be_hex);
+        log::info!("header.nonce: {}", nonce_be_hex);
+
+        // Construct and log the complete block using rust-bitcoin's Block struct
+        let mut block_transactions = vec![coinbase_tx];
+        block_transactions.extend(submitted_job.blocktemplate.transactions.clone());
+
+        let complete_block = bitcoin::Block::new_unchecked(header, block_transactions);
+
+        let complete_block_bytes = bitcoin::consensus::serialize(&complete_block);
+        log::info!("Complete block hex: {}", hex::encode(&complete_block_bytes));
+        log::info!(
+            "block_hash: {}",
+            hex::encode(complete_block.block_hash().to_byte_array())
+        );
+
         //Checking with PoW of the target whether the block sent by downstream is below that or not
         match header.validate_pow(target) {
             Ok(_) => log::info!("Header meets the target"),
@@ -896,7 +923,7 @@ impl DownstreamClient {
     /// Handles the `mining.subscribe` request as per the Stratum protocol specification.
     ///
     /// This request is used by a mining client to subscribe to a Stratum server
-    /// and obtain session-specific identifiers for further communication.  
+    /// and obtain session-specific identifiers for further communication.
     /// Optionally, the client may pass a subscription ID to resume a previous
     /// session, potentially reusing the same `extranonce1`.
     /// # Request Format
@@ -964,7 +991,7 @@ impl Default for DownstreamClient {
             version_rolling_mask: None,
             version_rolling_min_bit: None,
             extranonce2_len: EXTRANONCE2_SIZE,
-            target: Target { lsb: 1, msb: 2 },
+            monitor_target: None,
         }
     }
 }
@@ -1220,7 +1247,7 @@ impl Notifier {
             //converting the i32 version to hex string
             version: hex::encode(bitcoin_block_version.to_be_bytes()),
             //String is acceptable
-            nbits: bits,
+            nbits: format!("{:08x}", bits.to_consensus()),
             //ntime is to be hex encoded
             ntime: hex::encode(time.to_be_bytes()),
             clean_jobs: clean_job,

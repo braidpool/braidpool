@@ -101,7 +101,7 @@ pub async fn ipc_template_consumer(
                 previousblockhash: template_header.prev_blockhash.to_string(),
                 transactions: template_transactions.clone(),
                 curtime: template_header.time.to_u32(),
-                bits: template_header.bits.to_hex(),
+                bits: template_header.bits,
                 ..Default::default()
             };
 
@@ -123,7 +123,7 @@ pub async fn ipc_template_consumer(
             latest_template.sizelimit = template.sizelimit;
             latest_template.weightlimit = template.weightlimit;
             latest_template.curtime = template.curtime;
-            latest_template.bits = template.bits.clone();
+            latest_template.bits = template.bits;
             latest_template.height = template.height;
             latest_template.default_witness_commitment =
                 template.default_witness_commitment.clone();
