@@ -1,6 +1,7 @@
 //All braidpool specific errors are defined here
 use std::fmt;
 
+use crate::stratum::{BlockTemplate, JobDetails};
 use bitcoin::address::ParseError as AddressParseError;
 use tokio::sync::oneshot;
 
@@ -30,6 +31,185 @@ pub enum ErrorKind {
     ConnectionBroken,
     LogicError,
 }
+#[derive(Debug)]
+pub enum StratumErrors {
+    InvalidMethod {
+        method: String,
+    },
+    InvalidMethodParams {
+        method: String,
+    },
+    MiningJobNotFound {
+        job_id: u64,
+    },
+    MiningJobInsertError {
+        mining_job: JobDetails,
+    },
+    JobNotificationNotConstructed {
+        job_template: BlockTemplate,
+    },
+    ResponseWriteError {
+        error: std::io::Error,
+    },
+    InvalidCoinbase,
+    PeerNotFoundInConnectionMapping {
+        peer_addr: String,
+    },
+    UnableToReadStream {
+        error: tokio_util::codec::LinesCodecError,
+    },
+    ParamNotFound {
+        param: String,
+        method: String,
+    },
+    JobIdCouldNotBeParsed {
+        method: String,
+        error: String,
+    },
+    ConfigureFeatureStringConversion {
+        error: String,
+    },
+    VersionRollingStringParseError {
+        error: String,
+    },
+    VersionRollingHexParseError {
+        error: String,
+    },
+    VersionrollingMinBitCountHexParseError {
+        error: String,
+    },
+    NotifyMessageNotSent {
+        error: String,
+        msg: String,
+        msg_type: String,
+    },
+    ParsingVersionMask {
+        error: String,
+    },
+    MaskNotValid {
+        error: String,
+    },
+    PrevHashNotReversed {
+        error: String,
+    },
+}
+pub enum StratumResponseErrors {}
+impl fmt::Display for StratumErrors {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            StratumErrors::PrevHashNotReversed { error } => {
+                write!(
+                    f,
+                    "An error occurred while reversing the prev hash in 4 word size length - {}",
+                    error
+                )
+            }
+            StratumErrors::MaskNotValid { error } => {
+                write!(f, "{}", error)
+            }
+            StratumErrors::ParsingVersionMask { error } => {
+                write!(f, "{}", error)
+            }
+            StratumErrors::NotifyMessageNotSent {
+                error,
+                msg,
+                msg_type,
+            } => {
+                write!(
+                    f,
+                    "{} occurred while sending the following message - {} to downstream node in message type - {}",
+                    error, msg,msg_type
+                )
+            }
+            StratumErrors::VersionrollingMinBitCountHexParseError { error } => {
+                write!(
+                    f,
+                    "{} occurred while parsing Version rolling min bit in mining.configure",
+                    error
+                )
+            }
+            StratumErrors::VersionRollingStringParseError { error } => {
+                write!(
+                    f,
+                    "{} occurred while parsing the version rolling to string type",
+                    error
+                )
+            }
+            StratumErrors::VersionRollingHexParseError { error } => {
+                write!(
+                    f,
+                    "{} occurred while parsing Version rolling in mining.configure",
+                    error
+                )
+            }
+            StratumErrors::ConfigureFeatureStringConversion { error } => {
+                write!(f, "{}", error)
+            }
+            StratumErrors::JobIdCouldNotBeParsed { method, error } => {
+                write!(
+                    f,
+                    "Job id could not be parsed due to the error - {} in the method - {}",
+                    error, method
+                )
+            }
+            StratumErrors::ParamNotFound { param, method } => {
+                write!(
+                    f,
+                    "Required param {} for the following method {} not found ",
+                    param, method
+                )
+            }
+            StratumErrors::UnableToReadStream { error } => {
+                write!(f, "Unable to fetch stream - {}", error)
+            }
+            StratumErrors::PeerNotFoundInConnectionMapping { peer_addr } => {
+                write!(
+                    f,
+                    "The following peer with socket addr {:?} not found in the connection mapping ",
+                    peer_addr
+                )
+            }
+            StratumErrors::InvalidCoinbase => {
+                write!(f, "Provided coinbase is invalid")
+            }
+            StratumErrors::ResponseWriteError { error } => {
+                write!(f, "{:?}", error)
+            }
+            StratumErrors::JobNotificationNotConstructed { job_template } => {
+                write!(
+                    f,
+                    "The job notification for the given template could not be constructed - {:?}",
+                    job_template
+                )
+            }
+            StratumErrors::InvalidMethod { method } => {
+                write!(
+                    f,
+                    "Invalid method received from downstream namely - {:?}",
+                    method
+                )
+            }
+            StratumErrors::InvalidMethodParams { method } => {
+                write!(
+                    f,
+                    "Invalid params passed to the stratum method - {:?}",
+                    method
+                )
+            }
+            StratumErrors::MiningJobNotFound { job_id } => {
+                write!(
+                    f,
+                    "No mining job found with the provided job id - {:?}",
+                    job_id
+                )
+            }
+            StratumErrors::MiningJobInsertError { mining_job } => {
+                write!(f,"An error occurred while inserting the following job into the mining map - {:?}",mining_job)
+            }
+        }
+    }
+}
+
 /// Determines if an error indicates a connection/communication failure
 ///
 /// This function classifies errors to distinguish between:

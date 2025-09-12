@@ -1,6 +1,7 @@
 use bitcoin::consensus::encode::deserialize;
 use bitcoin::Network;
 use clap::Parser;
+use futures::lock::Mutex;
 use futures::StreamExt;
 use libp2p::{
     core::multiaddr::Multiaddr,
@@ -14,18 +15,17 @@ use libp2p::{
 use node::{
     bead::{self, Bead, BeadRequest},
     behaviour::{self, BEAD_ANNOUNCE_PROTOCOL},
-    braid, cli,
-    error::IPCtemplateError,
-    ipc,
+    braid, cli, ipc, ipc_template_consumer,
     peer_manager::PeerManager,
     rpc_server::{parse_arguments, run_rpc_server},
+    setup_logging, setup_tracing,
+    stratum::{BlockTemplate, ConnectionMapping, Notifier, NotifyCmd, Server, StratumServerConfig},
 };
-use std::error::Error;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::sync::Arc;
+use std::{collections::HashMap, error::Error};
 use std::{fs, time::Duration};
-use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 
 use behaviour::{BraidPoolBehaviour, BraidPoolBehaviourEvent};
@@ -38,7 +38,7 @@ const SEED_DNS: &str = "/dnsaddr/french.braidpool.net";
 //combined addr for dns resolution and dialing of boot for peer discovery
 const ADDR_REFRENCE: &str =
     "/dnsaddr/french.braidpool.net/p2p/12D3KooWCXH2BiENJ7NkFUBSavd8Ed4ZSYKNdiFnYP5abSo36rGL";
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, RwLock};
 
 mod block_template;
 mod rpc;
@@ -52,9 +52,46 @@ mod init_capnp;
 mod mining_capnp;
 #[allow(dead_code)]
 mod proxy_capnp;
-
+#[allow(unused)]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    //latest available template to be cached for the newest connection until new job is received
+    let mut latest_template = Arc::new(Mutex::new(BlockTemplate::default()));
+    //latest available template merkle branch
+    let mut latest_template_merkle_branch = Arc::new(Mutex::new(Vec::new()));
+    let mut latest_template_ref = latest_template.clone();
+    let mut latest_template_merkle_branch_ref = latest_template_merkle_branch.clone();
+    //One will go into the IPC and the other will go to the `notifier`
+    let (notification_tx, notification_rx) = mpsc::channel::<NotifyCmd>(1024);
+    //cloning the channel to be sent across different interfaces
+    let notification_tx_clone = notification_tx.clone();
+    //connection mapping for all the downstream connection connected to the stratum server
+    let connection_mapping = Arc::new(Mutex::new(ConnectionMapping::new()));
+    //Mining job map keeping all the jobs provided to the downstream
+    let mut mining_job_map = Arc::new(Mutex::new(HashMap::new()));
+    //Intializing `notifier` for mining.notify
+    let mut notifier: Notifier = Notifier::new(notification_rx, Arc::clone(&mining_job_map));
+    //Stratum configuration initialization
+    let stratum_config: StratumServerConfig = StratumServerConfig::default();
+    //Initializing stratum server
+    let mut stratum_server = Server::new(stratum_config, connection_mapping.clone());
+    //Running the notification service
+    tokio::spawn(async move {
+        notifier
+            .run_notifier(
+                connection_mapping.clone(),
+                &mut latest_template_ref,
+                &mut latest_template_merkle_branch_ref,
+            )
+            .await;
+    });
+    //Running the stratum service
+    tokio::spawn(async move {
+        stratum_server
+            .run_stratum_service(mining_job_map, notification_tx_clone)
+            .await;
+    });
+
     let (main_shutdown_tx, _main_shutdown_rx) =
         mpsc::channel::<tokio::signal::unix::SignalKind>(32);
     let main_task_token = CancellationToken::new();
@@ -210,7 +247,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             Network::Bitcoin
         };
 
-        let (ipc_template_tx, ipc_template_rx) = mpsc::channel::<Vec<u8>>(1);
+        let (ipc_template_tx, ipc_template_rx) = mpsc::channel::<(Vec<u8>, Vec<Vec<u8>>)>(1);
 
         let ipc_socket_path = args.ipc_socket.clone();
 
@@ -253,7 +290,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         });
 
                         let consumer_task = tokio::task::spawn_local(async move {
-                            ipc_template_consumer(ipc_template_rx).await.unwrap();
+                            ipc_template_consumer(ipc_template_rx,notification_tx,&mut latest_template.clone(),
+                                &mut latest_template_merkle_branch.clone(),).await.unwrap();
                         });
                         tokio::select! {
                             _ = listener_task => log::info!("IPC listener completed"),
@@ -650,45 +688,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             );
         }
     }
-
-    Ok(())
-}
-
-async fn ipc_template_consumer(
-    mut template_rx: mpsc::Receiver<Vec<u8>>,
-) -> Result<(), IPCtemplateError> {
-    while let Some(template_bytes) = template_rx.recv().await {
-        if template_bytes.len() > 0 {
-            // Process the template bytes as needed
-            // For example, you could deserialize it or log its contents
-            // let hex_string = bytes_to_hex(&template_bytes);
-            // log::info!("Template in hex: {}", hex_string);
-        } else {
-            log::warn!("IPC template too short: 0 bytes");
-        }
-    }
-
-    Ok(())
-}
-
-fn setup_logging() {
-    env_logger::init_from_env(
-        env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info"),
-    );
-}
-
-fn setup_tracing() -> Result<(), Box<dyn Error>> {
-    // Create a filter for controlling the verbosity of tracing output
-    let filter =
-        tracing_subscriber::EnvFilter::from_default_env().add_directive("chat=info".parse()?);
-
-    // Build a `tracing` subscriber with the specified filter
-    let subscriber = tracing_subscriber::FmtSubscriber::builder()
-        .with_env_filter(filter)
-        .finish();
-
-    // Set the subscriber as the global default for tracing
-    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
     Ok(())
 }

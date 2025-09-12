@@ -23,7 +23,7 @@ const MAX_BACKOFF: u64 = 300;
 /// * Handles graceful degradation when Bitcoin Core is not fully synced
 pub async fn ipc_block_listener(
     ipc_socket_path: String,
-    block_template_tx: Sender<Vec<u8>>,
+    block_template_tx: Sender<(Vec<u8>, Vec<Vec<u8>>)>,
     network: Network,
 ) -> Result<(), Box<dyn std::error::Error>> {
     log::info!(
@@ -115,7 +115,7 @@ pub async fn ipc_block_listener(
                     network,
                 ).await {
                     Ok(template) => {
-                        log::info!("Got initial block template: {} bytes - Height: {}", template.len(), tip_height);
+                        log::info!("Got initial block template: {} bytes - Height: {}", template.0.len(), tip_height);
                         if let Err(e) = block_template_tx.send(template).await {
                             log::error!("Failed to send initial template: {}", e);
                             continue;
@@ -170,7 +170,7 @@ pub async fn ipc_block_listener(
                                                 network,
                                             ).await {
                                                 Ok(template) => {
-                                                    log::info!("Got block template data: {} bytes", template.len());
+                                                    log::info!("Got block template data: {} bytes", template.0.len());
                                                     if let Err(e) = block_template_tx.send(template).await {
                                                         log::error!("Failed to send template: {}", e);
                                                         break true;
@@ -308,10 +308,11 @@ async fn get_template_with_retry(
     block_height: u32,
     initial_nonce: u32,
     network: Network,
-) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+) -> Result<(Vec<u8>, Vec<Vec<u8>>), Box<dyn std::error::Error>> {
     const MIN_TEMPLATE_SIZE: usize = 512;
     let config = CoinbaseConfig::for_network(network);
     let mut last_template = Vec::new();
+    let mut last_template_merkle_branch: Vec<Vec<u8>> = Vec::new();
 
     for attempt in 1..=max_attempts {
         match client
@@ -327,6 +328,7 @@ async fn get_template_with_retry(
                         }
 
                         last_template = complete_block_bytes;
+                        last_template_merkle_branch = components.coinbase_merkle_path;
                         if last_template.len() >= MIN_TEMPLATE_SIZE {
                             if attempt > 1 {
                                 log::info!(
@@ -336,7 +338,7 @@ async fn get_template_with_retry(
                                     attempt
                                 );
                             }
-                            return Ok(last_template);
+                            return Ok((last_template, last_template_merkle_branch));
                         } else if attempt == max_attempts {
                             log::warn!(
                                 "{}: Template too small ({} bytes) after {} attempts, using anyway",
@@ -344,7 +346,7 @@ async fn get_template_with_retry(
                                 last_template.len(),
                                 max_attempts
                             );
-                            return Ok(last_template);
+                            return Ok((last_template, last_template_merkle_branch));
                         } else {
                             log::warn!(
                                 "{}: Template too small ({} bytes), retrying... (attempt {}/{})",
@@ -370,7 +372,7 @@ async fn get_template_with_retry(
                                     context,
                                     last_template.len()
                                 );
-                                return Ok(last_template);
+                                return Ok((last_template, last_template_merkle_branch));
                             }
                             return Err(Box::new(e));
                         }
@@ -398,7 +400,7 @@ async fn get_template_with_retry(
                             context,
                             last_template.len()
                         );
-                        return Ok(last_template);
+                        return Ok((last_template, last_template_merkle_branch));
                     }
                     return Err(e);
                 }
@@ -418,7 +420,7 @@ async fn get_template_with_retry(
 
     // This should never be reached due to the logic above, but just in case
     if !last_template.is_empty() {
-        Ok(last_template)
+        Ok((last_template, Vec::new()))
     } else {
         Err("All attempts failed and no template available".into())
     }
@@ -431,6 +433,7 @@ fn create_braidpool_template(
     nonce: u32,
 ) -> Result<FinalTemplate, CoinbaseError> {
     let braidpool_commitment = b"braidpool_bead_metadata_hash_32b";
+    //8 bytes that is extranonce has a size of 32 bits
     let extranonce = &[0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08];
     create_block_template(
         components,
