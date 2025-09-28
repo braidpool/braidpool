@@ -1,4 +1,8 @@
-1. **All children of the given parent**  
+# SQLite Query Examples for Braidpool Database
+
+## Basic DAG Navigation
+
+### 1. **All children of the given parent**
    (parent id = :pid)
 
 ```sql
@@ -9,7 +13,7 @@ WHERE r.parent = :pid
 ORDER BY b.id;
 ```
 
-2. **All ancestors of a bead (recursive)**  
+### 2. **All ancestors of a bead (recursive)**
    (child id = :cid)
 
 ```sql
@@ -23,7 +27,7 @@ WITH RECURSIVE ancestors(id) AS (
 SELECT * FROM Bead WHERE id IN (SELECT id FROM ancestors);
 ```
 
-3. **All descendants of a bead (recursive)**  
+### 3. **All descendants of a bead (recursive)**
    (parent id = :pid)
 
 ```sql
@@ -37,21 +41,8 @@ WITH RECURSIVE descendants(id) AS (
 SELECT * FROM Bead WHERE id IN (SELECT id FROM descendants);
 ```
 
-4. **Longest chain length (height) from a bead**  
-   (parent id = :pid)
 
-```sql
-WITH RECURSIVE height(id, lvl) AS (
-    SELECT :pid, 0
-    UNION ALL
-    SELECT r.child, h.lvl + 1
-    FROM Relatives r
-    JOIN height h ON h.id = r.parent
-)
-SELECT MAX(lvl) AS max_height FROM height;
-```
-
-5. **Beads that have no parents (genesis beads)**
+### 4. **Beads that have no parents (genesis beads)**
 
 ```sql
 SELECT b.*
@@ -60,7 +51,7 @@ LEFT JOIN Relatives r ON r.child = b.id
 WHERE r.child IS NULL;
 ```
 
-6. **Beads that have no children (leaf beads)**
+### 5. **Beads that have no children (leaf beads)**
 
 ```sql
 SELECT b.*
@@ -69,76 +60,175 @@ LEFT JOIN Relatives r ON r.parent = b.id
 WHERE r.parent IS NULL;
 ```
 
-7. **Average time between parent and child**  
-   (micro-seconds)
+## Time-Based Queries
+
+### 6. **Beads created within time range**
+   (start_time = :start, end_time = :end)
 
 ```sql
-SELECT AVG(c_um.broadcast_timestamp - p_um.broadcast_timestamp) AS avg_microseconds
+SELECT *
+FROM Bead
+WHERE start_timestamp BETWEEN :start AND :end
+ORDER BY start_timestamp;
+```
+
+### 7. **Beads broadcast within time range**
+   (start_time = :start, end_time = :end)
+
+```sql
+SELECT *
+FROM Bead
+WHERE broadcast_timestamp BETWEEN :start AND :end
+ORDER BY broadcast_timestamp;
+```
+
+### 8. **Parent-witness timestamps within time range**
+   (start_time = :start, end_time = :end)
+
+```sql
+SELECT pt.*, b_child.hash as child_hash, b_parent.hash as parent_hash
+FROM ParentTimestamps pt
+JOIN Bead b_child ON b_child.id = pt.child
+JOIN Bead b_parent ON b_parent.id = pt.parent
+WHERE pt.timestamp BETWEEN :start AND :end
+ORDER BY pt.timestamp;
+```
+
+### 9. **Average time between parent and child witnessing**
+    (micro-seconds)
+
+```sql
+SELECT AVG(c.broadcast_timestamp - p.broadcast_timestamp) AS avg_microseconds
 FROM Relatives r
-JOIN Bead child   ON child.id   = r.child
-JOIN Bead parent  ON parent.id  = r.parent
-JOIN UnCommittedMetadata c_um ON c_um.id  = child.uncommitted_metadata_id
-JOIN UnCommittedMetadata p_um ON p_um.id = parent.uncommitted_metadata_id
+JOIN Bead child ON child.id = r.child
+JOIN Bead parent ON parent.id = r.parent
 WHERE r.child = :cid;
 ```
 
-8. **Top-10 parents with the most children**
+### 10. **Average witnessing delay**
+    (time from bead creation to witnessing parents)
 
 ```sql
-SELECT parent, COUNT(*) AS child_cnt
-FROM Relatives
-GROUP BY parent
-ORDER BY child_cnt DESC
-LIMIT 10;
+SELECT AVG(pt.timestamp - child.start_timestamp) AS avg_witnessing_delay
+FROM ParentTimestamps pt
+JOIN Bead child ON child.id = pt.child
+WHERE pt.parent = :pid;
 ```
 
-9. **Top-10 children with the most parents (merge points)**
+## Transaction Queries
 
-```sql
-SELECT child, COUNT(*) AS parent_cnt
-FROM Relatives
-GROUP BY child
-ORDER BY parent_cnt DESC
-LIMIT 10;
-```
-
-10. **Distribution of chain lengths (histogram)**
-
-```sql
-WITH RECURSIVE chain_len(id, len) AS (
-    SELECT parent, 0 FROM Relatives
-    UNION ALL
-    SELECT r.child, c.len + 1
-    FROM Relatives r
-    JOIN chain_len c ON c.id = r.parent
-)
-SELECT len, COUNT(*) AS cnt
-FROM chain_len
-GROUP BY len
-ORDER BY len;
-```
-
-11. **Beads whose committed metadata contains a specific TXID**  
-   (txid = :txid)
+### 11. **Beads containing a specific TXID**
+    (txid = :txid)
 
 ```sql
 SELECT b.*
 FROM Bead b
-JOIN CommittedMetadata cm ON cm.id = b.committed_metadata_id
-WHERE EXISTS (
-    SELECT 1
-    FROM json_each(cm.transactions)
-    WHERE value = :txid
-);
+JOIN Transactions t ON t.bead_id = b.id
+WHERE t.txid = :txid;
 ```
 
-12. **Latest bead (highest broadcast timestamp)**
+### 12. **All TXIDs for a specific bead**
+    (bead_id = :bid)
 
 ```sql
-SELECT b.*
-FROM Bead b
-JOIN UnCommittedMetadata um ON um.id = b.uncommitted_metadata_id
-ORDER BY um.broadcast_timestamp DESC
+SELECT txid
+FROM Transactions
+WHERE bead_id = :bid
+ORDER BY txid;
+```
+
+## Timestamp Analysis
+
+### 13. **Latest bead (highest broadcast timestamp)**
+
+```sql
+SELECT *
+FROM Bead
+ORDER BY broadcast_timestamp DESC
 LIMIT 1;
 ```
 
+### 14. **Beads with oldest parent timestamps**
+
+```sql
+SELECT b.*, pt.timestamp as parent_witness_time
+FROM Bead b
+JOIN ParentTimestamps pt ON pt.child = b.id
+ORDER BY pt.timestamp ASC
+LIMIT 10;
+```
+
+## Mining and Target Analysis
+
+### 15. **Beads with specific difficulty range**
+    (min_target = :min_target, max_target = :max_target)
+
+```sql
+SELECT *
+FROM Bead
+WHERE min_target BETWEEN :min_target AND :max_target
+ORDER BY min_target;
+```
+
+### 16. **Average mining time**
+    (time from start to broadcast)
+
+```sql
+SELECT AVG(broadcast_timestamp - start_timestamp) AS avg_mining_time
+FROM Bead
+WHERE broadcast_timestamp > start_timestamp;
+```
+
+### 17. **Top miners by bead count**
+
+```sql
+SELECT miner_ip, COUNT(*) AS bead_count
+FROM Bead
+GROUP BY miner_ip
+ORDER BY bead_count DESC
+LIMIT 10;
+```
+
+## Complex Multi-Table Queries
+
+### 18. **Full bead details with all parents and transactions**
+
+```sql
+SELECT b.*,
+       GROUP_CONCAT(DISTINCT p.hash) as parent_hashes,
+       GROUP_CONCAT(DISTINCT t.txid) as txids
+FROM Bead b
+LEFT JOIN Relatives r ON r.child = b.id
+LEFT JOIN Bead p ON p.id = r.parent
+LEFT JOIN Transactions t ON t.bead_id = b.id
+WHERE b.id = :bid
+GROUP BY b.id;
+```
+
+### 19. **Find all ancestors of a specific bead**
+    (tip_id = :tip_id)
+
+```sql
+WITH RECURSIVE ancestors(id) AS (
+    SELECT :tip_id
+    UNION
+    SELECT r.parent
+    FROM Relatives r
+    JOIN ancestors a ON a.id = r.child
+)
+SELECT b.* FROM Bead b
+JOIN ancestors a ON b.id = a.id
+ORDER BY b.start_timestamp;
+```
+
+### 20. **Detect potential orphan branches**
+    (beads that haven't been witnessed recently)
+
+```sql
+SELECT b.*
+FROM Bead b
+LEFT JOIN ParentTimestamps pt ON pt.parent = b.id
+WHERE b.broadcast_timestamp < :cutoff_time
+  AND pt.parent IS NULL
+  AND EXISTS (SELECT 1 FROM Relatives r WHERE r.parent = b.id);
+```
