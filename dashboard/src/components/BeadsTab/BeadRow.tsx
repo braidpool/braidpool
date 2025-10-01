@@ -21,7 +21,7 @@ export default function BeadRow({
   return (
     <div className="border-b border-gray-800/80">
       <div
-        className="grid max-sm:grid-cols-3 md:grid-cols-5 gap-2 p-4 cursor-pointer hover:bg-gray-600"
+        className="grid max-md:grid-cols-3 md:grid-cols-5 gap-2 p-4 cursor-pointer hover:bg-gray-600"
         onClick={() => onToggle(bead.id)}
         onKeyDown={handleKeyToggle}
         role="button"
@@ -51,12 +51,12 @@ export default function BeadRow({
         </div>
 
         {/* Transactions */}
-        <div className="text-white font-medium text-sm sm:text-base">
+        <div className="text-white font-medium text-sm sm:text-base max-md:hidden">
           {bead.transactions}
         </div>
 
         {/* Reward */}
-        <div className="text-white font-medium text-sm sm:text-base">
+        <div className="text-white font-medium text-sm sm:text-base max-md:hidden">
           {`${bead.reward.toFixed(2)} BTC`}
         </div>
       </div>
