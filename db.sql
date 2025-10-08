@@ -37,8 +37,29 @@ CREATE TABLE Transactions (
 );
 
 -- 3. Cohorts
--- Cohorts are a bit complicated because of the desire to be append-only.
--- Work in progress
+-- Auxiliary: positive cohort numbers (append a row for each new cohort)
+-- Cohort metadata can be added here
+CREATE TABLE CohortIds (
+    id INTEGER PRIMARY KEY CHECK (id > 0)
+);
+
+-- Mapping: exactly one row per bead; cohort_id NULL means "unassigned"
+CREATE TABLE Cohorts (
+    bead_id INTEGER PRIMARY KEY,    -- the bead’s id from Bead
+    cohort_id INTEGER,              -- NULL until known; else references CohortIds(id)
+    FOREIGN KEY (bead_id) REFERENCES Bead(id),
+    FOREIGN KEY (cohort_id) REFERENCES CohortIds(id)
+);
+
+-- Helpful index: fast to pull all beads in a cohort and to scan for NULLs
+CREATE INDEX cohorts_by_cohortid ON Cohorts(cohort_id);
+
+-- Quick view of beads still awaiting a cohort assignment
+CREATE VIEW Orphans AS
+SELECT b.id
+FROM Bead b
+LEFT JOIN Cohorts c ON c.bead_id = b.id
+WHERE c.cohort_id IS NULL;
 
 -- 4. Relatives (parent/child link)
 CREATE TABLE Relatives (
@@ -78,3 +99,4 @@ CREATE INDEX parent_timestamps_timestamp ON ParentTimestamps(timestamp);
 -- 8. WAL mode for append-only workloads
 PRAGMA journal_mode = WAL;
 PRAGMA synchronous = NORMAL;
+PRAGMA foreign_keys = ON;

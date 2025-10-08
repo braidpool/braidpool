@@ -189,9 +189,44 @@ ORDER BY bead_count DESC
 LIMIT 10;
 ```
 
+## Cohort Management
+
+### 18. **Add or move a bead into the latest cohort**
+    (assumes at least one cohort exists)
+
+```sql
+INSERT INTO Cohorts (bead_id, cohort_id)
+VALUES (:bead_id, (SELECT MAX(id) FROM CohortIds))
+ON CONFLICT(bead_id) DO UPDATE SET cohort_id = excluded.cohort_id;
+```
+
+### 19. **Assign a batch of beads to a specific cohort**
+    (cohort_id = :cohort_id)
+
+```sql
+WITH bead_batch(bead_id) AS (
+    VALUES (201), (202), (203)
+)
+INSERT INTO Cohorts (bead_id, cohort_id)
+SELECT bead_id, :cohort_id
+FROM bead_batch
+ON CONFLICT(bead_id) DO UPDATE SET cohort_id = excluded.cohort_id;
+```
+
+### 20. **List beads belonging to a cohort**
+    (cohort_id = :cohort_id)
+
+```sql
+SELECT b.*
+FROM Bead b
+JOIN Cohorts c ON c.bead_id = b.id
+WHERE c.cohort_id = :cohort_id
+ORDER BY b.id;
+```
+
 ## Complex Multi-Table Queries
 
-### 18. **Full bead details with all parents and transactions**
+### 21. **Full bead details with all parents and transactions**
 
 ```sql
 SELECT b.*,
@@ -205,7 +240,7 @@ WHERE b.id = :bid
 GROUP BY b.id;
 ```
 
-### 19. **Find all ancestors of a specific bead**
+### 22. **Find all ancestors of a specific bead**
     (tip_id = :tip_id)
 
 ```sql
@@ -221,7 +256,7 @@ JOIN ancestors a ON b.id = a.id
 ORDER BY b.start_timestamp;
 ```
 
-### 20. **Detect potential orphan branches**
+### 23. **Detect potential orphan branches**
     (beads that haven't been witnessed recently)
 
 ```sql
