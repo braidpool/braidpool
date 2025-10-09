@@ -97,10 +97,10 @@ pub async fn ipc_template_consumer(
             );
             log::info!("Transactions count is - {}", template_transactions.len());
             let template: BlockTemplate = BlockTemplate {
-                version: template_header.version.to_consensus(),
-                previousblockhash: template_header.prev_blockhash.to_string(),
+                version: template_header.version,
+                previousblockhash: template_header.prev_blockhash,
                 transactions: template_transactions.clone(),
-                curtime: template_header.time.to_u32(),
+                curtime: template_header.time,
                 bits: template_header.bits,
                 ..Default::default()
             };

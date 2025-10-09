@@ -4,18 +4,13 @@ use crate::{EXTRANONCE1_SIZE, EXTRANONCE2_SIZE, EXTRANONCE_SEPARATOR};
 use bitcoin::block::HeaderExt;
 use bitcoin::consensus::serialize;
 use bitcoin::io::Cursor;
-use bitcoin::{
-    absolute::{Decodable, Encodable},
-    io::{self, Write},
-    Transaction,
-};
-use bitcoin::{BlockHeader, BlockTime, TxMerkleNode, Txid, Witness};
+use bitcoin::{absolute::Decodable, Transaction};
+use bitcoin::{BlockHash, BlockHeader, BlockTime, TxMerkleNode, Txid, Witness};
 use core::panic;
 use futures::{lock::Mutex, FutureExt};
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::str::FromStr;
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use tokio::{
     io::{AsyncWriteExt, BufReader},
@@ -49,155 +44,49 @@ node . Which further can be accessed by all the downstream nodes for methods suc
 /// various consensus limits.
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct BlockTemplate {
-    pub version: i32,
+    pub version: bitcoin::block::Version,
     pub rules: Option<Vec<String>>,
     pub vbavailable: Option<Vec<(String, i32)>>,
     pub vbrequired: Option<u32>,
-    pub previousblockhash: String,
+    pub previousblockhash: BlockHash,
     pub transactions: Vec<Transaction>,
     pub coinbaseaux: Option<Vec<(String, String)>>,
     pub coinbasevalue: Option<u64>,
     pub longpollid: Option<String>,
-    pub target: String,
-    pub mintime: Option<u32>,
+    pub target: bitcoin::Target,
+    pub mintime: Option<bitcoin::time::BlockTime>,
     pub mutable: Option<Vec<String>>,
     pub noncerange: Option<String>,
     pub sigoplimit: Option<u32>,
-    pub sizelimit: Option<u32>,
-    pub weightlimit: Option<u32>,
-    pub curtime: u32,
+    pub sizelimit: Option<usize>,
+    pub weightlimit: Option<bitcoin::blockdata::Weight>,
+    pub curtime: bitcoin::time::BlockTime,
     pub bits: bitcoin::CompactTarget,
-    pub height: u32,
-    pub default_witness_commitment: Option<String>,
-}
-impl Encodable for BlockTemplate {
-    fn consensus_encode<W: Write + ?Sized>(&self, writer: &mut W) -> Result<usize, io::Error> {
-        let mut len = 0;
-
-        len += self.version.consensus_encode(writer).unwrap();
-
-        if let Some(rules) = &self.rules {
-            len += (rules.len() as u64).consensus_encode(writer).unwrap();
-            for rule in rules {
-                len += rule.consensus_encode(writer).unwrap();
-            }
-        } else {
-            len += 0u64.consensus_encode(writer).unwrap();
-        }
-
-        if let Some(version_bits_available) = &self.vbavailable {
-            len += (version_bits_available.len() as u64)
-                .consensus_encode(writer)
-                .unwrap();
-            for (key, value) in version_bits_available {
-                len += key.consensus_encode(writer).unwrap();
-                len += value.consensus_encode(writer).unwrap();
-            }
-        } else {
-            len += 0u64.consensus_encode(writer).unwrap();
-        }
-
-        if let Some(version_bits_required) = self.vbrequired {
-            len += version_bits_required.consensus_encode(writer).unwrap();
-        }
-
-        len += self.previousblockhash.consensus_encode(writer).unwrap();
-
-        len += (self.transactions.len() as u64)
-            .consensus_encode(writer)
-            .unwrap();
-        for transaction in &self.transactions {
-            len += transaction.consensus_encode(writer).unwrap();
-        }
-
-        if let Some(coinbase_auxiliary) = &self.coinbaseaux {
-            len += (coinbase_auxiliary.len() as u64)
-                .consensus_encode(writer)
-                .unwrap();
-            for (key, value) in coinbase_auxiliary {
-                len += key.consensus_encode(writer).unwrap();
-                len += value.consensus_encode(writer).unwrap();
-            }
-        } else {
-            len += 0u64.consensus_encode(writer).unwrap();
-        }
-
-        if let Some(coinbase_value) = self.coinbasevalue {
-            len += coinbase_value.consensus_encode(writer).unwrap();
-        }
-
-        if let Some(long_poll_id) = &self.longpollid {
-            len += long_poll_id.consensus_encode(writer).unwrap();
-        }
-
-        len += self.target.consensus_encode(writer).unwrap();
-
-        if let Some(minimum_time) = self.mintime {
-            len += minimum_time.consensus_encode(writer).unwrap();
-        }
-
-        if let Some(mutable_fields) = &self.mutable {
-            len += (mutable_fields.len() as u64)
-                .consensus_encode(writer)
-                .unwrap();
-            for mutable_entry in mutable_fields {
-                len += mutable_entry.consensus_encode(writer).unwrap();
-            }
-        } else {
-            len += 0u64.consensus_encode(writer).unwrap();
-        }
-
-        if let Some(nonce_range) = &self.noncerange {
-            len += nonce_range.consensus_encode(writer).unwrap();
-        }
-
-        if let Some(signature_operation_limit) = self.sigoplimit {
-            len += signature_operation_limit.consensus_encode(writer).unwrap();
-        }
-
-        if let Some(size_limit) = self.sizelimit {
-            len += size_limit.consensus_encode(writer).unwrap();
-        }
-
-        if let Some(weight_limit) = self.weightlimit {
-            len += weight_limit.consensus_encode(writer).unwrap();
-        }
-
-        len += self.curtime.consensus_encode(writer).unwrap();
-        len += self.bits.consensus_encode(writer).unwrap();
-        len += self.height.consensus_encode(writer).unwrap();
-
-        if self.default_witness_commitment.is_none() == false {
-            for witness_commitmment in self.default_witness_commitment.clone() {
-                len += witness_commitmment.consensus_encode(writer)?;
-            }
-        }
-        log::info!("LENGTH DURING SERIALIZATION - {:?}", len);
-        Ok(len)
-    }
+    pub height: bitcoin::absolute::Height,
+    pub default_witness_commitment: Option<Witness>,
 }
 impl Default for BlockTemplate {
     fn default() -> Self {
         Self {
-            version: 0,
+            version: bitcoin::block::Version::TWO,
             rules: None,
             vbavailable: None,
             vbrequired: None,
-            previousblockhash: String::new(),
+            previousblockhash: BlockHash::GENESIS_PREVIOUS_BLOCK_HASH,
             transactions: Vec::new(),
             coinbaseaux: None,
             coinbasevalue: None,
             longpollid: None,
-            target: String::new(),
+            target: bitcoin::Target::MAX,
             mintime: None,
             mutable: None,
             noncerange: None,
             sigoplimit: None,
             sizelimit: None,
             weightlimit: None,
-            curtime: 0,
+            curtime: bitcoin::BlockTime::from_u32(1759998900),
             bits: bitcoin::CompactTarget::from_consensus(0),
-            height: 0,
+            height: bitcoin::absolute::Height::ZERO,
             default_witness_commitment: None,
         }
     }
@@ -298,7 +187,7 @@ pub struct DownstreamClient {
     pub authorized: bool,
     ///Downstream miner IP
     pub downstream_ip: String,
-    /// Did the mine subscribe already?
+    /// Did the mine subscribe already
     pub subscribed: bool,
     ///Diffculty suggested or not
     pub suggest_difficulty_done: bool,
@@ -571,8 +460,10 @@ impl DownstreamClient {
 
         //Applying version mask received during mining.configure
         // Job version
-        let header_version = submitted_job.blocktemplate.version.clone();
-        let mut final_masked_version = submitted_job.blocktemplate.version;
+        let header_version =
+            bitcoin::block::Version::to_consensus(submitted_job.blocktemplate.version.clone());
+        let mut final_masked_version =
+            bitcoin::block::Version::to_consensus(submitted_job.blocktemplate.version);
         if param_array.len() >= 6 {
             //rolling the version bits only if they have been supplied during the configuration phase
             let rolled_version_bits: &str = match param_array.get(5).and_then(|v| v.as_str()) {
@@ -612,7 +503,7 @@ impl DownstreamClient {
             let version_rolling_mask_bytes = version_rolling_mask.to_be_bytes();
             let version_rolling_mask_hex = hex::encode(version_rolling_mask_bytes);
 
-            log::info!("CONVERTED VERSION MASK --- {:?}", version_rolling_mask_hex);
+            log::info!("Converted version mask --- {:?}", version_rolling_mask_hex);
 
             match hex::decode_to_slice(version_rolling_mask_hex, &mut mask_bytes) {
                 Ok(_) => (),
@@ -637,10 +528,7 @@ impl DownstreamClient {
         //Computing the block header
         let header = BlockHeader {
             version: bitcoin::blockdata::block::Version::from_consensus(final_masked_version),
-            prev_blockhash: bitcoin::BlockHash::from_str(
-                &submitted_job.blocktemplate.previousblockhash,
-            )
-            .unwrap(),
+            prev_blockhash: submitted_job.blocktemplate.previousblockhash,
             merkle_root: merkle_root,
             time: BlockTime::from_u32(u32::from_str_radix(ntime, 16).unwrap()),
             bits: submitted_job.blocktemplate.bits,
@@ -1209,7 +1097,7 @@ impl Notifier {
             deserialized_coinbase.len(),
             coinbase_transaction
         );
-        //For splitting of the coinbase we check for the extranonce_seperator we had inserted while resonstructing the coinbase during the
+        //For splitting of the coinbase we check for the extranonce_seperator we had inserted while reconstructing the coinbase during the
         //fetching of the template via IPC .
         let separator_pos = match deserialized_coinbase
             .as_slice()
@@ -1244,8 +1132,9 @@ impl Notifier {
         );
         //Stratum accepts the prev block hash to be in little endian instead of big endian
         //therefore byte by byte reversal is required here .
-        let mut prev_block_hash = notified_template.previousblockhash.as_str();
-        let prev_block_hash_little_endian = match reverse_four_byte_chunks(prev_block_hash) {
+        let prev_block_hash = notified_template.previousblockhash.to_string();
+        let prev_block_hash_little_endian = match reverse_four_byte_chunks(prev_block_hash.as_str())
+        {
             Ok(reversed_hash) => reversed_hash,
             Err(error) => {
                 return Err(error);
@@ -1255,9 +1144,9 @@ impl Notifier {
             "Converting the prev block hash to little endian done -- {:?}",
             prev_block_hash_little_endian
         );
-        let bitcoin_block_version = notified_template.version;
+        let bitcoin_block_version = notified_template.version.to_consensus();
         let bits = notified_template.bits;
-        let time = notified_template.curtime;
+        let time = notified_template.curtime.to_u32();
         //Adding support for segwit coinbase
         Ok(JobNotification {
             job_id: new_job_id.to_string(),
@@ -1702,7 +1591,7 @@ impl Server {
 #[cfg(test)]
 //Unit tests specific to stratum service
 mod test {
-    use std::{collections::HashMap, sync::Arc, time::Duration};
+    use std::{collections::HashMap, str::FromStr, sync::Arc, time::Duration};
 
     use super::*;
     use crate::stratum::{ConnectionMapping, MiningJobMap, NotifyCmd, Server, StratumServerConfig};
@@ -1981,10 +1870,10 @@ mod test {
             merkle_root: TxMerkleNode::from_byte_array(test_merkel_bytes),
         };
         let mut test_template = BlockTemplate {
-            version: test_template_header.version.to_consensus(),
-            previousblockhash: test_template_header.prev_blockhash.to_string(),
+            version: test_template_header.version,
+            previousblockhash: test_template_header.prev_blockhash,
             transactions: vec![test_coinbase_transaction],
-            curtime: test_template_header.time.to_u32(),
+            curtime: test_template_header.time,
             bits: test_template_header.bits,
             ..Default::default()
         };
