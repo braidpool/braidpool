@@ -162,17 +162,20 @@ export default function MinedSharesExplorer() {
               <div className=" rounded-sm overflow-hidden">
                 {/* Table header */}
                 <div
-                  className="grid max-sm:grid-cols-3 md:grid-cols-5  p-4 border-b text-xs sm:text-sm md:text-base
+                  className="grid max-md:grid-cols-3 md:grid-cols-5  p-4 border-b text-xs sm:text-sm md:text-base
  gap-4 border-gray-800/80 font-medium"
                 >
                   {[
-                    'Bead Hash',
-                    'Timestamp',
-                    'Work',
-                    'Transactions',
-                    'Rewards',
-                  ].map((label) => (
-                    <div key={label} className="text-white font-semibold">
+                    { label: 'Bead Hash' },
+                    { label: 'Timestamp' },
+                    { label: 'Work' },
+                    { label: 'Transactions', className: 'max-md:hidden' },
+                    { label: 'Rewards', className: 'max-md:hidden' },
+                  ].map(({ label, className }) => (
+                    <div
+                      key={label}
+                      className={`text-white font-semibold ${className || ''}`}
+                    >
                       {label}
                     </div>
                   ))}
