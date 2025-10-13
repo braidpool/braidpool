@@ -1,15 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
-import {
-  Box,
-  Divider,
-  Drawer,
-  List,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  Typography,
-} from '@mui/material';
-import colors from '../../theme/colors';
+import { useState, useEffect } from 'react';
 
 // Icons
 import {
@@ -41,7 +30,7 @@ import {
 } from '../../utils/braidDataTransformer';
 
 // Constants
-const drawerWidth = 240;
+const DRAWER_WIDTH = 240;
 
 // Define available pages as an enum
 enum Page {
@@ -55,7 +44,6 @@ enum Page {
 }
 
 const Dashboard = () => {
-  const [mobileOpen, setMobileOpen] = useState(false);
   const [_data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [_error, setError] = useState<string | null>(null);
@@ -68,9 +56,7 @@ const Dashboard = () => {
         console.log('🔄 Loading braid data...');
         setLoading(true);
         setError(null);
-        // Load sample data
         const braidData = await loadSampleBraidData();
-        // Transform data for visualization
         const transformedData = transformBraidData(braidData);
         setData(transformedData);
         console.log('✅ Data loaded successfully!');
@@ -84,255 +70,44 @@ const Dashboard = () => {
     fetchData();
   }, []);
 
-  const handleDrawerToggle = () => {
-    setMobileOpen(!mobileOpen);
-  };
+  // Navigation items
+  const navItems = [
+    { id: Page.INSTALLATION, label: 'Installation', icon: ConstructionIcon },
+    { id: Page.DASHBOARD, label: 'Dashboard', icon: DashboardIcon },
+    { id: Page.TRANSACTIONS, label: 'Transactions', icon: SwapHorizIcon },
+    { id: Page.MINER_STATS, label: 'Beads', icon: MemoryIcon },
+    { id: Page.MINING_INVENTORY, label: 'Inventory', icon: InventoryIcon },
+    { id: Page.MEMPOOL, label: 'Mempool', icon: MemoryIcon },
+    { id: Page.DAG_VISUALIZATION, label: 'Visualize', icon: LayersIcon },
+  ];
 
   // Sidebar drawer content
   const sidebar = (
-    <Drawer
-      variant="permanent"
-      sx={{
-        display: { xs: 'none', sm: 'block' },
-        '& .MuiDrawer-paper': {
-          boxSizing: 'border-box',
-          width: drawerWidth,
-          backgroundColor: colors.paper,
-          borderRight: `1px solid ${colors.border}`,
-        },
-      }}
-      open
-    >
-      <Box sx={{ p: 2 }}>
-        <Typography variant="h6" color="primary" sx={{ fontWeight: 700 }}>
-          Braidpool
-        </Typography>
-      </Box>
-      <Divider sx={{ borderColor: colors.border }} />
-      <List>
-        <ListItemButton
-          onClick={() => setCurrentPage(Page.INSTALLATION)}
-          selected={currentPage === Page.INSTALLATION}
-          sx={{
-            pl: 2,
-            py: 1.5,
-            borderLeft:
-              currentPage === Page.INSTALLATION
-                ? `4px solid ${colors.primary}`
-                : 'none',
-            '&.Mui-selected': {
-              backgroundColor: 'rgba(57, 134, 232, 0.08)',
-            },
-          }}
-        >
-          <ListItemIcon
-            sx={{
-              minWidth: 40,
-              color:
-                currentPage === Page.INSTALLATION
-                  ? colors.primary
-                  : colors.textSecondary,
-            }}
-          >
-            <ConstructionIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText
-            primary="Installation"
-            primaryTypographyProps={{ fontSize: '0.875rem' }}
-          />
-        </ListItemButton>
-
-        <ListItemButton
-          onClick={() => setCurrentPage(Page.DASHBOARD)}
-          selected={currentPage === Page.DASHBOARD}
-          sx={{
-            pl: 2,
-            py: 1.5,
-            borderLeft:
-              currentPage === Page.DASHBOARD
-                ? `4px solid ${colors.primary}`
-                : 'none',
-            '&.Mui-selected': {
-              backgroundColor: 'rgba(57, 134, 232, 0.08)',
-            },
-          }}
-        >
-          <ListItemIcon
-            sx={{
-              minWidth: 40,
-              color:
-                currentPage === Page.DASHBOARD
-                  ? colors.primary
-                  : colors.textSecondary,
-            }}
-          >
-            <DashboardIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText
-            primary="Dashboard"
-            primaryTypographyProps={{ fontSize: '0.875rem' }}
-          />
-        </ListItemButton>
-
-        <ListItemButton
-          onClick={() => setCurrentPage(Page.TRANSACTIONS)}
-          selected={currentPage === Page.TRANSACTIONS}
-          sx={{
-            pl: 2,
-            py: 1.5,
-            borderLeft:
-              currentPage === Page.TRANSACTIONS
-                ? `4px solid ${colors.primary}`
-                : 'none',
-            '&.Mui-selected': {
-              backgroundColor: 'rgba(57, 134, 232, 0.08)',
-            },
-          }}
-        >
-          <ListItemIcon
-            sx={{
-              minWidth: 40,
-              color:
-                currentPage === Page.TRANSACTIONS
-                  ? colors.primary
-                  : colors.textSecondary,
-            }}
-          >
-            <SwapHorizIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText
-            primary="Transactions"
-            primaryTypographyProps={{ fontSize: '0.875rem' }}
-          />
-        </ListItemButton>
-
-        <ListItemButton
-          onClick={() => setCurrentPage(Page.MINER_STATS)}
-          selected={currentPage === Page.MINER_STATS}
-          sx={{
-            pl: 2,
-            py: 1.5,
-            borderLeft:
-              currentPage === Page.MINER_STATS
-                ? `4px solid ${colors.primary}`
-                : 'none',
-            '&.Mui-selected': { backgroundColor: 'rgba(57, 134, 232, 0.08)' },
-          }}
-        >
-          <ListItemIcon
-            sx={{
-              minWidth: 40,
-              color:
-                currentPage === Page.MINER_STATS
-                  ? colors.primary
-                  : colors.textSecondary,
-            }}
-          >
-            <MemoryIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText
-            primary="Beads"
-            primaryTypographyProps={{ fontSize: '0.875rem' }}
-          />
-        </ListItemButton>
-
-        <ListItemButton
-          onClick={() => setCurrentPage(Page.MINING_INVENTORY)}
-          selected={currentPage === Page.MINING_INVENTORY}
-          sx={{
-            pl: 2,
-            py: 1.5,
-            borderLeft:
-              currentPage === Page.MINING_INVENTORY
-                ? `4px solid ${colors.primary}`
-                : 'none',
-            '&.Mui-selected': {
-              backgroundColor: 'rgba(57, 134, 232, 0.08)',
-            },
-          }}
-        >
-          <ListItemIcon
-            sx={{
-              minWidth: 40,
-              color:
-                currentPage === Page.MINING_INVENTORY
-                  ? colors.primary
-                  : colors.textSecondary,
-            }}
-          >
-            <InventoryIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText
-            primary="Inventory"
-            primaryTypographyProps={{ fontSize: '0.875rem' }}
-          />
-        </ListItemButton>
-
-        <ListItemButton
-          onClick={() => setCurrentPage(Page.MEMPOOL)}
-          selected={currentPage === Page.MEMPOOL}
-          sx={{
-            pl: 2,
-            py: 1.5,
-            borderLeft:
-              currentPage === Page.MEMPOOL
-                ? `4px solid ${colors.primary}`
-                : 'none',
-            '&.Mui-selected': {
-              backgroundColor: 'rgba(57, 134, 232, 0.08)',
-            },
-          }}
-        >
-          <ListItemIcon
-            sx={{
-              minWidth: 40,
-              color:
-                currentPage === Page.MEMPOOL
-                  ? colors.primary
-                  : colors.textSecondary,
-            }}
-          >
-            <MemoryIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText
-            primary="Mempool"
-            primaryTypographyProps={{ fontSize: '0.875rem' }}
-          />
-        </ListItemButton>
-
-        <ListItemButton
-          onClick={() => setCurrentPage(Page.DAG_VISUALIZATION)}
-          selected={currentPage === Page.DAG_VISUALIZATION}
-          sx={{
-            pl: 2,
-            py: 1.5,
-            borderLeft:
-              currentPage === Page.DAG_VISUALIZATION
-                ? `4px solid ${colors.primary}`
-                : 'none',
-            '&.Mui-selected': {
-              backgroundColor: 'rgba(57, 134, 232, 0.08)',
-            },
-          }}
-        >
-          <ListItemIcon
-            sx={{
-              minWidth: 40,
-              color:
-                currentPage === Page.DAG_VISUALIZATION
-                  ? colors.primary
-                  : colors.textSecondary,
-            }}
-          >
-            <LayersIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText
-            primary="Visualize"
-            primaryTypographyProps={{ fontSize: '0.875rem' }}
-          />
-        </ListItemButton>
-      </List>
-    </Drawer>
+    <div className="fixed left-0 top-0 h-full w-60 bg-[#1e1e1e] border-r border-[#2d2d2d] z-10">
+      <div className="p-4">
+        <h1 className="text-xl font-bold text-white">Braidpool</h1>
+      </div>
+      <hr className="border-[#2d2d2d]" />
+      <nav className="mt-2">
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const isSelected = currentPage === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => setCurrentPage(item.id)}
+              className={`w-full flex items-center px-4 py-3 text-sm transition-colors cursor-pointer ${isSelected
+                ? 'bg-[#2d4a6b] border-l-4 border-[#5b9bd5] text-white'
+                : 'text-gray-300 hover:bg-[#2a2a2a] border-l-4 border-transparent'
+                }`}
+            >
+              <Icon className="w-5 h-5 mr-3 flex-shrink-0" />
+              <span className="text-left">{item.label}</span>
+            </button>
+          );
+        })}
+      </nav>
+    </div>
   );
 
   // Render the main content based on selected page
@@ -344,25 +119,25 @@ const Dashboard = () => {
         return (
           <>
             <TopStatsBar loading={loading} />
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', mt: 2, mx: -1 }}>
-              <Box sx={{ width: { xs: '100%', md: '50%' }, p: 1 }}>
+            <div className="flex flex-wrap mt-4 -mx-2">
+              <div className="w-full md:w-1/2 p-2">
                 <Card title="Pool Hashrate">
                   <PoolHashrateChart loading={loading} />
                 </Card>
-              </Box>
-              <Box sx={{ width: { xs: '100%', md: '50%' }, p: 1 }}>
+              </div>
+              <div className="w-full md:w-1/2 p-2">
                 <Card title="Mempool Activity">
                   <MempoolLatencyStats />
                 </Card>
-              </Box>
-            </Box>
-            <Box sx={{ mt: 2, mx: -1 }}>
-              <Box sx={{ p: 1 }}>
+              </div>
+            </div>
+            <div className="mt-4 -mx-2">
+              <div className="p-2">
                 <Card title="Recent Blocks">
                   <RecentBlocksTable />
                 </Card>
-              </Box>
-            </Box>
+              </div>
+            </div>
           </>
         );
       case Page.TRANSACTIONS:
@@ -371,50 +146,41 @@ const Dashboard = () => {
         return <MineInventoryDashboard />;
       case Page.MEMPOOL:
         return (
-          <Box sx={{ p: 1 }}>
+          <div className="p-2">
             <Card title="Mempool Statistics">
               <MempoolLatencyStats />
             </Card>
-          </Box>
+          </div>
         );
       case Page.DAG_VISUALIZATION:
         return (
-          <Box sx={{ p: 1 }}>
+          <div className="p-2">
             <Card title="Braid Visualization">
-              <Box>
+              <div>
                 <GraphVisualization />
-              </Box>
+              </div>
             </Card>
-          </Box>
+          </div>
         );
       case Page.MINER_STATS:
         return <MinedSharesExplorer />;
       default:
         return (
-          <Box sx={{ p: 1 }}>
-            <Typography>Coming soon</Typography>
-          </Box>
+          <div className="p-2">
+            <p className="text-gray-400">Coming soon</p>
+          </div>
         );
     }
   };
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+    <div className="flex min-h-screen bg-[#0f1419]">
       <Header title="Braidpool" />
       {sidebar}
-      <Box
-        component="main"
-        sx={{
-          flexGrow: 1,
-          p: 3,
-          width: { sm: `calc(100% - ${drawerWidth}px)` },
-          ml: { sm: `${drawerWidth}px` },
-          mt: '50px', // Adjust for header height
-        }}
-      >
+      <main className="flex-1 p-6 ml-60 mt-12">
         {renderPage()}
-      </Box>
-    </Box>
+      </main>
+    </div>
   );
 };
 

@@ -195,8 +195,8 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                     <td className="px-4 py-3">
                       <span
                         className={`inline-block px-2 py-1 rounded text-xs font-medium ${tx.category
-                          ? getCategoryColor(tx.category)
-                          : "bg-gray-500/10 text-gray-400"
+                            ? getCategoryColor(tx.category)
+                            : "bg-gray-500/10 text-gray-400"
                           }`}
                       >
                         {tx.category
@@ -225,8 +225,8 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                       {tx.confirmations ? (
                         <span
                           className={`inline-block px-2 py-1 rounded text-xs font-medium border ${tx.confirmations >= 6
-                            ? "border-green-500/30 bg-green-500/10 text-green-400"
-                            : "border-yellow-500/30 bg-yellow-500/10 text-yellow-400"
+                              ? "border-green-500/30 bg-green-500/10 text-green-400"
+                              : "border-yellow-500/30 bg-yellow-500/10 text-yellow-400"
                             }`}
                         >
                           {tx.confirmations}
