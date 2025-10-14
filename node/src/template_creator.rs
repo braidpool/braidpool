@@ -2,6 +2,7 @@ use crate::config::CoinbaseConfig;
 use crate::error::CoinbaseError;
 use crate::ipc::client::BlockTemplateComponents;
 use crate::EXTRANONCE_SEPARATOR;
+use bitcoin::consensus::encode::{ReadExt, WriteExt};
 use bitcoin::{
     absolute::LockTime,
     blockdata::{
@@ -15,6 +16,7 @@ use bitcoin::{
     Address, Amount, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Txid,
 };
 use std::convert::TryFrom;
+use std::io::Cursor;
 use std::str::FromStr;
 
 pub mod constants {
@@ -169,64 +171,26 @@ pub fn parse_coinbase_transaction(coinbase_bytes: &[u8]) -> Result<Transaction, 
     Transaction::consensus_decode(&mut cursor).map_err(|_| CoinbaseError::ConsensusDecodeError)
 }
 
-/// Decode a Bitcoin varint from bytes
+/// Decode a Bitcoin varint from bytes. Returns (value, bytes_read), where
+/// bytes_read may be < data.len() if additional trailing bytes are present.
 fn decode_varint(data: &[u8]) -> Result<(u64, usize), CoinbaseError> {
-    if data.is_empty() {
-        return Err(CoinbaseError::InvalidBlockTemplateData);
-    }
-    match data[0] {
-        0x00..=0xFC => Ok((data[0] as u64, 1)),
-        0xFD => {
-            if data.len() < 3 {
-                log::error!("Varint FD requires 3 bytes, got {}", data.len());
-                return Err(CoinbaseError::InvalidBlockTemplateData);
-            }
-            let value = u16::from_le_bytes([data[1], data[2]]) as u64;
-            log::debug!("Decoded varint FD: {} (0x{:04x})", value, value);
-            Ok((value, 3))
+    let mut cursor = Cursor::new(data);
+
+    match cursor.read_compact_size() {
+        Ok(value) => {
+            let bytes_read = cursor.position() as usize;
+            Ok((value, bytes_read))
         }
-        0xFE => {
-            if data.len() < 5 {
-                log::error!("Varint FE requires 5 bytes, got {}", data.len());
-                return Err(CoinbaseError::InvalidBlockTemplateData);
-            }
-            let value = u32::from_le_bytes([data[1], data[2], data[3], data[4]]) as u64;
-            log::debug!("Decoded varint FE: {} (0x{:08x})", value, value);
-            Ok((value, 5))
-        }
-        0xFF => {
-            if data.len() < 9 {
-                log::error!("Varint FF requires 9 bytes, got {}", data.len());
-                return Err(CoinbaseError::InvalidBlockTemplateData);
-            }
-            let value = u64::from_le_bytes([
-                data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8],
-            ]);
-            log::debug!("Decoded varint FF: {} (0x{:016x})", value, value);
-            Ok((value, 9))
-        }
+        Err(_) => Err(CoinbaseError::ConsensusDecodeError),
     }
 }
+
 /// Encode a u64 as Bitcoin varint
 fn encode_varint(value: u64) -> Vec<u8> {
-    match value {
-        0x00..=0xFC => vec![value as u8],
-        0xFD..=0xFFFF => {
-            let mut result = vec![0xFD];
-            result.extend_from_slice(&(value as u16).to_le_bytes());
-            result
-        }
-        0x10000..=0xFFFFFFFF => {
-            let mut result = vec![0xFE];
-            result.extend_from_slice(&(value as u32).to_le_bytes());
-            result
-        }
-        _ => {
-            let mut result = vec![0xFF];
-            result.extend_from_slice(&value.to_le_bytes());
-            result
-        }
-    }
+    let mut buf = Vec::new();
+    buf.emit_compact_size(value)
+        .expect("Vec::write failure is impossible");
+    buf
 }
 
 fn find_transaction_end(tx_data: &[u8]) -> Result<usize, CoinbaseError> {
@@ -781,4 +745,153 @@ fn coinbase_input_too_big_is_rejected() {
     let pool_id = "braidpool";
     let res = build_coinbase_input(block_height, &extranonce, pool_id);
     assert!(matches!(res, Err(CoinbaseError::InvalidExtranonceLength)));
+}
+
+#[test]
+fn test_varint_comprehensive() {
+    // Single-byte encoding (0-252)
+    for value in 0u64..=252 {
+        let encoded = encode_varint(value);
+        assert_eq!(encoded.len(), 1, "Value {} should encode to 1 byte", value);
+        assert_eq!(encoded[0], value as u8);
+        let (decoded, bytes_read) = decode_varint(&encoded).unwrap();
+        assert_eq!(decoded, value, "Failed to decode value {}", value);
+        assert_eq!(bytes_read, 1);
+    }
+
+    // Multi-byte: 0xFD (2 bytes), 0xFE (4 bytes), 0xFF (8 bytes)
+    let fd_values = [253u64, 254, 255, 256, 1000, 10000, 65535];
+    for value in fd_values {
+        let encoded = encode_varint(value);
+        assert_eq!(encoded.len(), 3, "Value {} should encode to 3 bytes", value);
+        assert_eq!(encoded[0], 0xFD);
+        let (decoded, bytes_read) = decode_varint(&encoded).unwrap();
+        assert_eq!(decoded, value);
+        assert_eq!(bytes_read, 3);
+    }
+
+    let fe_values = [65536u64, 100000, 1000000, 4294967295];
+    for value in fe_values {
+        let encoded = encode_varint(value);
+        assert_eq!(encoded.len(), 5, "Value {} should encode to 5 bytes", value);
+        assert_eq!(encoded[0], 0xFE);
+        let (decoded, bytes_read) = decode_varint(&encoded).unwrap();
+        assert_eq!(decoded, value);
+        assert_eq!(bytes_read, 5);
+    }
+
+    let ff_values = [4294967296u64, 1000000000000, u64::MAX];
+    for value in ff_values {
+        let encoded = encode_varint(value);
+        assert_eq!(encoded.len(), 9, "Value {} should encode to 9 bytes", value);
+        assert_eq!(encoded[0], 0xFF);
+        let (decoded, bytes_read) = decode_varint(&encoded).unwrap();
+        assert_eq!(decoded, value);
+        assert_eq!(bytes_read, 9);
+    }
+
+    // Roundtrip for varied values
+    let roundtrip_values = [
+        0,
+        1,
+        127,
+        128,
+        252,
+        253,
+        254,
+        255,
+        256,
+        1000,
+        10000,
+        65535,
+        65536,
+        100000,
+        1000000,
+        4294967295,
+        4294967296,
+        u64::MAX,
+    ];
+    for &value in &roundtrip_values {
+        let encoded = encode_varint(value);
+        let (decoded, _) = decode_varint(&encoded).unwrap();
+        assert_eq!(
+            decoded, value,
+            "Roundtrip failed for value {}, encoded as {:?}",
+            value, encoded
+        );
+    }
+
+    // Error handling for malformed/short input
+    assert!(decode_varint(&[]).is_err());
+    assert!(decode_varint(&[0xFD, 0x01]).is_err());
+    assert!(decode_varint(&[0xFE, 0x01, 0x02, 0x03]).is_err());
+    assert!(decode_varint(&[0xFF, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07]).is_err());
+
+    // Protocol compatibility
+    assert_eq!(encode_varint(0), vec![0x00]);
+    assert_eq!(encode_varint(252), vec![0xFC]);
+    assert_eq!(encode_varint(253), vec![0xFD, 0xFD, 0x00]);
+    assert_eq!(encode_varint(65535), vec![0xFD, 0xFF, 0xFF]);
+    assert_eq!(encode_varint(65536), vec![0xFE, 0x00, 0x00, 0x01, 0x00]);
+    assert_eq!(
+        encode_varint(4294967296),
+        vec![0xFF, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00]
+    );
+
+    // Little-endian byte order for multi-byte encodings
+    assert_eq!(encode_varint(0x1234), vec![0xFD, 0x34, 0x12]);
+    assert_eq!(
+        encode_varint(0x12345678),
+        vec![0xFE, 0x78, 0x56, 0x34, 0x12]
+    );
+    assert_eq!(
+        encode_varint(0x123456789ABCDEF0),
+        vec![0xFF, 0xF0, 0xDE, 0xBC, 0x9A, 0x78, 0x56, 0x34, 0x12]
+    );
+
+    // Edge/value boundaries
+    let boundaries = [
+        (252u64, 1),        // Max 1-byte
+        (253u64, 3),        // Min 0xFD
+        (65535u64, 3),      // Max 0xFD
+        (65536u64, 5),      // Min 0xFE
+        (4294967295u64, 5), // Max 0xFE
+        (4294967296u64, 9), // Min 0xFF
+    ];
+    for &(value, expected_len) in &boundaries {
+        let encoded = encode_varint(value);
+        assert_eq!(
+            encoded.len(),
+            expected_len,
+            "Value {} should encode to {} bytes",
+            value,
+            expected_len
+        );
+        let (decoded, bytes_read) = decode_varint(&encoded).unwrap();
+        assert_eq!(decoded, value);
+        assert_eq!(bytes_read, expected_len);
+    }
+
+    // Only consume required bytes, ignore trailing data
+    let mut data = encode_varint(1000);
+    data.extend_from_slice(&[0xFF, 0xFF, 0xFF]);
+    let (decoded, bytes_read) = decode_varint(&data).unwrap();
+    assert_eq!(decoded, 1000);
+    assert_eq!(bytes_read, 3);
+    assert!(bytes_read < data.len());
+
+    // Zero and Max value correctness
+    let encoded_zero = encode_varint(0);
+    assert_eq!(encoded_zero, vec![0x00]);
+    let (decoded_zero, bytes_read_zero) = decode_varint(&encoded_zero).unwrap();
+    assert_eq!(decoded_zero, 0);
+    assert_eq!(bytes_read_zero, 1);
+
+    let max_value = u64::MAX;
+    let encoded_max = encode_varint(max_value);
+    assert_eq!(encoded_max.len(), 9);
+    assert_eq!(encoded_max[0], 0xFF);
+    let (decoded_max, bytes_read_max) = decode_varint(&encoded_max).unwrap();
+    assert_eq!(decoded_max, max_value);
+    assert_eq!(bytes_read_max, 9);
 }
