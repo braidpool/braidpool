@@ -759,7 +759,7 @@ fn test_varint_comprehensive() {
         assert_eq!(bytes_read, 1);
     }
 
-    //  Multi-byte: 0xFD (2 bytes), 0xFE (4 bytes), 0xFF (8 bytes)
+    // Multi-byte: 0xFD (2 bytes), 0xFE (4 bytes), 0xFF (8 bytes)
     let fd_values = [253u64, 254, 255, 256, 1000, 10000, 65535];
     for value in fd_values {
         let encoded = encode_varint(value);
