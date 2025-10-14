@@ -171,7 +171,7 @@ pub fn parse_coinbase_transaction(coinbase_bytes: &[u8]) -> Result<Transaction, 
     Transaction::consensus_decode(&mut cursor).map_err(|_| CoinbaseError::ConsensusDecodeError)
 }
 
-/// Decode a Bitcoin varint from bytes Returns (value, bytes_read), where
+/// Decode a Bitcoin varint from bytes. Returns (value, bytes_read), where
 /// bytes_read may be < data.len() if additional trailing bytes are present.
 fn decode_varint(data: &[u8]) -> Result<(u64, usize), CoinbaseError> {
     let mut cursor = Cursor::new(data);
