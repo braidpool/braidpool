@@ -92,11 +92,27 @@ pub enum StratumErrors {
     PrevHashNotReversed {
         error: String,
     },
+    CandidateBlockNotSent {
+        error: String,
+    },
+    ErrorFetchingCurrentUNIXTimestamp {
+        error: String,
+    },
 }
 pub enum StratumResponseErrors {}
 impl fmt::Display for StratumErrors {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            StratumErrors::ErrorFetchingCurrentUNIXTimestamp { error } => {
+                write!(
+                    f,
+                    "An error {:?} occurred while getting the current unix timestamp .",
+                    error
+                )
+            }
+            StratumErrors::CandidateBlockNotSent { error } => {
+                write!(f, "{:?}", error)
+            }
             StratumErrors::PrevHashNotReversed { error } => {
                 write!(
                     f,

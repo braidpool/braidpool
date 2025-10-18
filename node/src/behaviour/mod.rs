@@ -18,6 +18,7 @@ pub const KADPROTOCOLNAME: StreamProtocol = StreamProtocol::new("/braidpool/kad/
 pub const IDENTIFYPROTOCOLNAME: StreamProtocol = StreamProtocol::new("/braidpool/identify/1.0.0");
 pub const BEAD_SYNC_PROTOCOL: StreamProtocol = StreamProtocol::new("/braidpool/bead-sync/1.0.0");
 pub const BEAD_ANNOUNCE_PROTOCOL: StreamProtocol = StreamProtocol::new("/floodsub/1.0.0");
+pub const BRAIDPOOL_TOPIC: &str = "braidpool_channel";
 
 // Configuration for the request-response protocol
 #[derive(Debug, Clone)]
@@ -34,7 +35,6 @@ impl Default for BeadSyncConfig {
         }
     }
 }
-
 #[derive(NetworkBehaviour)]
 //Custom behaviour for braidpool
 pub struct BraidPoolBehaviour {
