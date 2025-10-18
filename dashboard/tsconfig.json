@@ -1,6 +1,11 @@
 {
   "compilerOptions": {
-    "lib": ["esnext", "ES2020", "DOM", "DOM.Iterable"],
+    "lib": [
+      "esnext",
+      "ES2020",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "allowJs": true,
     "target": "ES6",
     "useDefineForClassFields": true,
@@ -20,10 +25,16 @@
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": [
+        "./src/*"
+      ]
     },
-    "types": ["jest"],
-    "typeRoots": ["./node_modules/@types"],
+    "types": [
+      "jest"
+    ],
+    "typeRoots": [
+      "./node_modules/@types"
+    ],
     "plugins": [
       {
         "name": "next"
@@ -38,6 +49,14 @@
     "src",
     "api/api"
   ],
-  "exclude": ["vite.config.ts", "node_modules", "dist"],
-  "references": [{ "path": "./tsconfig.node.json" }]
+  "exclude": [
+    "vite.config.ts",
+    "node_modules",
+    "dist"
+  ],
+  "references": [
+    {
+      "path": "./tsconfig.node.json"
+    }
+  ]
 }
