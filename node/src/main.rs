@@ -47,18 +47,6 @@ use tokio::sync::{
     RwLock,
 };
 
-mod block_template;
-mod rpc;
-mod zmq;
-
-#[allow(dead_code)]
-mod common_capnp;
-mod echo_capnp;
-#[allow(dead_code)]
-mod init_capnp;
-mod mining_capnp;
-#[allow(dead_code)]
-mod proxy_capnp;
 #[allow(unused)]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -318,20 +306,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     .await;
             });
         });
-    } else {
-        log::info!("Using ZMQ for Bitcoin Core communication");
-        log::info!("ZMQ URL: tcp://{}:{}", args.bitcoin, args.zmqhashblockport);
-        let rpc = rpc::setup(
-            args.bitcoin.clone(),
-            args.rpcport,
-            args.rpcuser,
-            args.rpcpass,
-            args.rpccookie,
-        )?;
-        let (zmq_template_tx, zmq_template_rx) = mpsc::channel(1);
-        let zmq_url = format!("tcp://{}:{}", args.bitcoin, args.zmqhashblockport);
-        tokio::spawn(zmq::zmq_hashblock_listener(zmq_url, rpc, zmq_template_tx));
-        tokio::spawn(block_template::consumer(zmq_template_rx));
     }
     if let Some(addnode) = args.addnode {
         for node in addnode.iter() {

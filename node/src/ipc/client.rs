@@ -1,3 +1,6 @@
+use crate::error::BraidpoolError;
+use crate::init_capnp::init::Client as InitClient;
+use crate::proxy_capnp::thread::Client as ThreadClient;
 use capnp_rpc::{rpc_twoparty_capnp, twoparty, RpcSystem};
 use futures::FutureExt;
 use std::collections::VecDeque;
@@ -10,10 +13,6 @@ use tokio::net::UnixStream;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::{self, JoinHandle};
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
-
-use crate::error::BraidpoolError;
-use crate::init_capnp::init::Client as InitClient;
-use crate::proxy_capnp::thread::Client as ThreadClient;
 
 pub fn bytes_to_hex(bytes: &[u8]) -> String {
     bytes

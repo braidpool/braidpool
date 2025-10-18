@@ -18,26 +18,35 @@ use crate::{
 use std::error::Error;
 pub mod bead;
 pub mod behaviour;
-pub mod block_template;
 pub mod braid;
 pub mod cli;
 pub mod committed_metadata;
-pub mod common_capnp;
 pub mod config;
-pub mod echo_capnp;
 pub mod error;
-pub mod init_capnp;
 pub mod ipc;
-pub mod mining_capnp;
 pub mod peer_manager;
-pub mod proxy_capnp;
-pub mod rpc;
 pub mod rpc_server;
 pub mod stratum;
 pub mod template_creator;
 pub mod uncommitted_metadata;
 pub mod utils;
-pub mod zmq;
+//Including the capnp modules after building while compiling the workspace.package
+pub mod proxy_capnp {
+    include!(concat!(env!("OUT_DIR"), "/proxy_capnp.rs"));
+}
+pub mod mining_capnp {
+    include!(concat!(env!("OUT_DIR"), "/mining_capnp.rs"));
+}
+pub mod echo_capnp {
+    include!(concat!(env!("OUT_DIR"), "/echo_capnp.rs"));
+}
+pub mod common_capnp {
+    include!(concat!(env!("OUT_DIR"), "/common_capnp.rs"));
+}
+pub mod init_capnp {
+    include!(concat!(env!("OUT_DIR"), "/init_capnp.rs"));
+}
+
 /// **Length of the extranonce prefix (in bytes).**
 ///
 /// In Stratum mining, the extranonce is split into two parts:
