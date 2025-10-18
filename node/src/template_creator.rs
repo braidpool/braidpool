@@ -57,7 +57,7 @@ impl FinalTemplate {
     pub fn block_hash(&self) -> Vec<u8> {
         if self.complete_block_hex.len() >= 80 {
             let header = &self.complete_block_hex[0..80];
-            let hash = double_sha256(header);
+            let hash = sha256d::Hash::hash(header).to_byte_array();
             let mut reversed_hash = hash;
             reversed_hash.reverse();
             reversed_hash.to_vec()
@@ -135,11 +135,6 @@ fn encode_bip34_height(height: u32) -> Result<Vec<u8>, CoinbaseError> {
     Ok(bytes)
 }
 
-/// Computes the double-SHA256 hash of a byte slice.
-fn double_sha256(data: &[u8]) -> [u8; 32] {
-    sha256d::Hash::hash(data).to_byte_array()
-}
-
 /// Computes the Merkle root from a coinbase transaction ID and a path of transaction hashes.
 ///
 /// This function iteratively combines the coinbase `txid` with each hash in the provided
@@ -157,7 +152,7 @@ pub fn calculate_merkle_root(coinbase_txid: Txid, path: &[Vec<u8>]) -> [u8; 32] 
     for branch_bytes in path {
         let mut concatenated = current_hash.to_vec();
         concatenated.extend_from_slice(branch_bytes);
-        current_hash = double_sha256(&concatenated);
+        current_hash = sha256d::Hash::hash(&concatenated).to_byte_array();
     }
 
     current_hash
@@ -701,7 +696,7 @@ mod tests {
 
         let mut data = coinbase_txid.to_byte_array().to_vec();
         data.extend_from_slice(&single_path[0]);
-        let expected = double_sha256(&data);
+        let expected = sha256d::Hash::hash(&data).to_byte_array();
 
         assert_eq!(result, expected, "Single step merkle calculation failed");
     }
