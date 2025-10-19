@@ -227,38 +227,37 @@ async fn main() -> Result<(), Box<dyn Error>> {
     swarm.dial(ADDR_REFRENCE.parse::<Multiaddr>().unwrap())?;
     log::info!("Boot Node dialied with listening addr {:?}", ADDR_REFRENCE);
     //IPC(inter process communication) based `getblocktemplate` and `notification` to send to the downstream via the `cmempoold` architecture
-    if args.ipc {
-        log::info!("Socket path: {}", args.ipc_socket);
+    log::info!("Socket path: {}", args.ipc_socket);
 
-        let network = if let Some(network_name) = &args.network {
-            println!("The specified network is: {}", network_name);
-            match network_name.as_str() {
-                "main" | "mainnet" => Network::Bitcoin,
-                "testnet" | "testnet4" => Network::Testnet(bitcoin::TestnetVersion::V4),
-                "signet" => Network::Signet,
-                "regtest" => Network::Regtest,
-                "cpunet" => Network::CPUNet,
-                _ => {
-                    log::error!("Invalid network specified: {}", network_name);
-                    log::info!("Valid options: main, testnet, testnet4, signet, regtest, cpunet");
-                    log::info!("Falling back to regtest");
-                    Network::Regtest
-                }
+    let network = if let Some(network_name) = &args.network {
+        println!("The specified network is: {}", network_name);
+        match network_name.as_str() {
+            "main" | "mainnet" => Network::Bitcoin,
+            "testnet" | "testnet4" => Network::Testnet(bitcoin::TestnetVersion::V4),
+            "signet" => Network::Signet,
+            "regtest" => Network::Regtest,
+            "cpunet" => Network::CPUNet,
+            _ => {
+                log::error!("Invalid network specified: {}", network_name);
+                log::info!("Valid options: main, testnet, testnet4, signet, regtest, cpunet");
+                log::info!("Falling back to regtest");
+                Network::Regtest
             }
-        } else {
-            Network::Bitcoin
-        };
+        }
+    } else {
+        Network::Bitcoin
+    };
 
-        let (ipc_template_tx, ipc_template_rx) = mpsc::channel::<(Vec<u8>, Vec<Vec<u8>>)>(1);
+    let (ipc_template_tx, ipc_template_rx) = mpsc::channel::<(Vec<u8>, Vec<Vec<u8>>)>(1);
 
-        let ipc_socket_path = args.ipc_socket.clone();
+    let ipc_socket_path = args.ipc_socket.clone();
 
-        let _ipc_handler = tokio::task::spawn_blocking(move || {
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .expect("Failed to create tokio runtime");
-            rt.block_on(async {
+    let _ipc_handler = tokio::task::spawn_blocking(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("Failed to create tokio runtime");
+        rt.block_on(async {
                 let local_set = tokio::task::LocalSet::new();
 
                 local_set
@@ -305,8 +304,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     })
                     .await;
             });
-        });
-    }
+    });
     if let Some(addnode) = args.addnode {
         for node in addnode.iter() {
             let node_multiaddr: Multiaddr = node.parse().expect("Failed to parse to multiaddr");
@@ -426,7 +424,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                  log::info!("received addr {addr} through identify");
                              }
                          } else {
-                             log::info!("The peer does not suppor KADEMLIA ");
+                             log::info!("The peer does not support KADEMLIA ");
                          }
                          if info_reference
                              .clone()
@@ -436,7 +434,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                          {
 
                              log::info!(
-                                 "The peer listening at {:?} was does not support FLOODSUB",
+                                 "The peer listening at {:?}  does not support FLOODSUB",
                                  info_reference.observed_addr
                              );
                          }

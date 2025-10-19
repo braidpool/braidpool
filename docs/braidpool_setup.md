@@ -44,15 +44,12 @@ cd braidpool/node
 
 # With minimal options
 cargo run -- \
-  --ipc \
-  --ipc-socket /tmp/bitcoin-ipc.sock \
-  --network mainnet
+  --network cpunet
 
 # With additional options
 cargo run -- \
-  --ipc \
-  --ipc-socket /tmp/bitcoin-ipc.sock \
-  --network regtest \
+  --ipc-socket /tmp/bitcoin-cpunet.sock \
+  --network cpunet \
   --bind 127.0.0.1:6680 \
   --datadir ~/.braidpool/
 ```
@@ -60,7 +57,6 @@ cargo run -- \
 
 You can find all available command-line arguments in [node/src/cli.rs](https://github.com/braidpool/braidpool/blob/main/node/src/cli.rs).
 
--   `--ipc`: Enables IPC communication mode.
 -   `--ipc-socket <PATH>`: Specifies the path to the UNIX domain socket file (should be the same as bitcoin node).
 -   `--network <NETWORK>`: Sets the network. Valid options are `mainnet`, `testnet4`, `signet`, and `cpunet`. The default is `mainnet`.
 
