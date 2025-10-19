@@ -36,12 +36,12 @@ use behaviour::{BraidPoolBehaviour, BraidPoolBehaviourEvent};
 
 use crate::behaviour::KADPROTOCOLNAME;
 //boot nodes peerIds
-const BOOTNODES: [&str; 1] = ["12D3KooWCXH2BiENJ7NkFUBSavd8Ed4ZSYKNdiFnYP5abSo36rGL"];
+const BOOTNODES: [&str; 1] = ["12D3KooWG9z8TziaNuYyEcc9FeUC3FTtrEf2XSnSdDpLvx4Jh2w3"];
 //dns NS
 const SEED_DNS: &str = "/dnsaddr/french.braidpool.net";
 //combined addr for dns resolution and dialing of boot for peer discovery
 const ADDR_REFRENCE: &str =
-    "/dnsaddr/french.braidpool.net/p2p/12D3KooWCXH2BiENJ7NkFUBSavd8Ed4ZSYKNdiFnYP5abSo36rGL";
+    "/dnsaddr/french.braidpool.net/p2p/12D3KooWG9z8TziaNuYyEcc9FeUC3FTtrEf2XSnSdDpLvx4Jh2w3";
 use tokio::sync::{
     mpsc::{self},
     RwLock,
@@ -227,38 +227,37 @@ async fn main() -> Result<(), Box<dyn Error>> {
     swarm.dial(ADDR_REFRENCE.parse::<Multiaddr>().unwrap())?;
     log::info!("Boot Node dialied with listening addr {:?}", ADDR_REFRENCE);
     //IPC(inter process communication) based `getblocktemplate` and `notification` to send to the downstream via the `cmempoold` architecture
-    if args.ipc {
-        log::info!("Socket path: {}", args.ipc_socket);
+    log::info!("Socket path: {}", args.ipc_socket);
 
-        let network = if let Some(network_name) = &args.network {
-            println!("The specified network is: {}", network_name);
-            match network_name.as_str() {
-                "main" | "mainnet" => Network::Bitcoin,
-                "testnet" | "testnet4" => Network::Testnet(bitcoin::TestnetVersion::V4),
-                "signet" => Network::Signet,
-                "regtest" => Network::Regtest,
-                "cpunet" => Network::CPUNet,
-                _ => {
-                    log::error!("Invalid network specified: {}", network_name);
-                    log::info!("Valid options: main, testnet, testnet4, signet, regtest, cpunet");
-                    log::info!("Falling back to regtest");
-                    Network::Regtest
-                }
+    let network = if let Some(network_name) = &args.network {
+        println!("The specified network is: {}", network_name);
+        match network_name.as_str() {
+            "main" | "mainnet" => Network::Bitcoin,
+            "testnet" | "testnet4" => Network::Testnet(bitcoin::TestnetVersion::V4),
+            "signet" => Network::Signet,
+            "regtest" => Network::Regtest,
+            "cpunet" => Network::CPUNet,
+            _ => {
+                log::error!("Invalid network specified: {}", network_name);
+                log::info!("Valid options: main, testnet, testnet4, signet, regtest, cpunet");
+                log::info!("Falling back to regtest");
+                Network::Regtest
             }
-        } else {
-            Network::Bitcoin
-        };
+        }
+    } else {
+        Network::Bitcoin
+    };
 
-        let (ipc_template_tx, ipc_template_rx) = mpsc::channel::<(Vec<u8>, Vec<Vec<u8>>)>(1);
+    let (ipc_template_tx, ipc_template_rx) = mpsc::channel::<(Vec<u8>, Vec<Vec<u8>>)>(1);
 
-        let ipc_socket_path = args.ipc_socket.clone();
+    let ipc_socket_path = args.ipc_socket.clone();
 
-        let _ipc_handler = tokio::task::spawn_blocking(move || {
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .expect("Failed to create tokio runtime");
-            rt.block_on(async {
+    let _ipc_handler = tokio::task::spawn_blocking(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("Failed to create tokio runtime");
+        rt.block_on(async {
                 let local_set = tokio::task::LocalSet::new();
 
                 local_set
@@ -305,8 +304,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     })
                     .await;
             });
-        });
-    }
+    });
     if let Some(addnode) = args.addnode {
         for node in addnode.iter() {
             let node_multiaddr: Multiaddr = node.parse().expect("Failed to parse to multiaddr");
@@ -424,32 +422,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
                          if info.protocols.iter().any(|p| *p == KADPROTOCOLNAME) {
                              for addr in info.listen_addrs {
                                  log::info!("received addr {addr} through identify");
-                                 swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
                              }
                          } else {
-                             log::info!("The peer was not added to the local DHT ");
+                             log::info!("The peer does not support KADEMLIA ");
                          }
                          if info_reference
                              .clone()
                              .protocols
                              .iter()
-                             .any(|p| *p == BEAD_ANNOUNCE_PROTOCOL)
+                             .any(|p| *p != BEAD_ANNOUNCE_PROTOCOL)
                          {
-                             log::info!("PEER ADDED TO FLOODSUB MESH {:?}", peer_id);
-                             for _addr in info_reference.clone().listen_addrs {
-                                 log::info!(
-                                     "Added to partial views with peer_multi_address - {:?}",
-                                     _addr.clone()
-                                 );
-                                 swarm
-                                     .behaviour_mut()
-                                     .bead_announce
-                                     .add_node_to_partial_view(peer_id);
-                                 log::info!("Adding to partial view in floodsub done !")
-                             }
-                         } else {
+
                              log::info!(
-                                 "The peer listening at {:?} was not added to the floodsub mesh",
+                                 "The peer listening at {:?}  does not support FLOODSUB",
                                  info_reference.observed_addr
                              );
                          }
@@ -500,6 +485,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
                      } => {
                          // Add the peer to the peer manager
                          let remote_addr = endpoint.get_remote_address();
+                         swarm.behaviour_mut().kademlia.add_address(&peer_id,remote_addr.clone());
+                         log::info!("Local DHT updated with peer address - {:?}",remote_addr);
+                         swarm.behaviour_mut()
+                         .bead_announce
+                         .add_node_to_partial_view(peer_id);
+
+                         log::info!("Peer added to floodsub mesh {:?}", peer_id);
                          let ip = remote_addr.iter().find_map(|p| match p {
                              libp2p::core::multiaddr::Protocol::Ip4(ip) => {
                                  Some(std::net::IpAddr::V4(ip))

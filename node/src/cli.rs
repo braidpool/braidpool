@@ -43,19 +43,11 @@ pub struct Cli {
     #[arg(long, default_value = "~/.bitcoin/.cookie")]
     pub rpccookie: Option<String>,
 
-    /// Use this port for bitcoin ZMQ
-    #[arg(long, default_value = "28332")]
-    pub zmqhashblockport: u16,
-
     ///Rpc endpoints for the specific methods
     #[command(subcommand)]
     pub command: Option<RpcCommand>,
 
-    /// Use IPC Bitcoin Core communication
-    #[arg(long)]
-    pub ipc: bool,
-
-    /// Path to Bitcoin Core IPC socket (used when --ipc is enabled)
-    #[arg(long)]
+    /// Path to Bitcoin Core IPC socket
+    #[arg(long, default_value = "/tmp/bitcoin-cpunet.sock")]
     pub ipc_socket: String,
 }
