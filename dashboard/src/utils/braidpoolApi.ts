@@ -1,8 +1,12 @@
 import {
   BraidPoolTransaction,
   TransactionCategory,
+<<<<<<< HEAD
 } from "../components/Transactions/type";
 import { BraidPoolApiConfig, ApiTransaction, ApiMempoolInfo } from "./types";
+=======
+} from '../types/transaction';
+>>>>>>> 98366da (changes & formatting)
 
 export type { BraidPoolApiConfig };
 
@@ -32,7 +36,11 @@ class BraidPoolApi {
 
   private async makeRequest<T>(
     endpoint: string,
+<<<<<<< HEAD
     options: RequestInit = {},
+=======
+    options: RequestInit = {}
+>>>>>>> 98366da (changes & formatting)
   ): Promise<T> {
     const url = `${this.config.baseUrl}${endpoint}`;
     const controller = new AbortController();
@@ -43,8 +51,13 @@ class BraidPoolApi {
         ...options,
         signal: controller.signal,
         headers: {
+<<<<<<< HEAD
           "Content-Type": "application/json",
           Accept: "application/json",
+=======
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+>>>>>>> 98366da (changes & formatting)
           ...options.headers,
         },
       });
@@ -56,7 +69,7 @@ class BraidPoolApi {
         try {
           const errorBody = await response.text();
           if (errorBody) errorMessage += ` - ${errorBody}`;
-        } catch { }
+        } catch {}
         throw new BraidPoolApiError(errorMessage, response.status);
       }
 
@@ -64,25 +77,42 @@ class BraidPoolApi {
     } catch (error: any) {
       clearTimeout(timeoutId);
       if (error instanceof BraidPoolApiError) throw error;
+<<<<<<< HEAD
       if (error.name === "AbortError")
         throw new BraidPoolApiError("Request timeout");
       throw new BraidPoolApiError(
         error.message || "Unknown API error",
         undefined,
         error,
+=======
+      if (error.name === 'AbortError')
+        throw new BraidPoolApiError('Request timeout');
+      throw new BraidPoolApiError(
+        error.message || 'Unknown API error',
+        undefined,
+        error
+>>>>>>> 98366da (changes & formatting)
       );
     }
   }
 
   private async retryRequest<T>(
     endpoint: string,
+<<<<<<< HEAD
     options: RequestInit = {},
+=======
+    options: RequestInit = {}
+>>>>>>> 98366da (changes & formatting)
   ): Promise<T> {
     let lastError: Error;
     for (let attempt = 0; attempt <= this.config.retries; attempt++) {
       try {
         console.log(
+<<<<<<< HEAD
           `🔄 BraidPool API Attempt ${attempt + 1}/${this.config.retries + 1}: ${endpoint}`,
+=======
+          `🔄 BraidPool API Attempt ${attempt + 1}/${this.config.retries + 1}: ${endpoint}`
+>>>>>>> 98366da (changes & formatting)
         );
         const result = await this.makeRequest<T>(endpoint, options);
         console.log(`✅ BraidPool API Success: ${endpoint}`);
@@ -91,7 +121,11 @@ class BraidPoolApi {
         lastError = error;
         console.warn(
           `❌ BraidPool API Attempt ${attempt + 1} failed for ${endpoint}:`,
+<<<<<<< HEAD
           error.message,
+=======
+          error.message
+>>>>>>> 98366da (changes & formatting)
         );
         if (attempt < this.config.retries) {
           const delay = Math.pow(2, attempt) * 1000;
@@ -104,10 +138,17 @@ class BraidPoolApi {
   }
 
   async fetchRecentTransactions(
+<<<<<<< HEAD
     limit: number = 10,
   ): Promise<BraidPoolTransaction[]> {
     const transactions =
       await this.retryRequest<ApiTransaction[]>("/transactions");
+=======
+    limit: number = 10
+  ): Promise<BraidPoolTransaction[]> {
+    const transactions =
+      await this.retryRequest<ApiTransaction[]>('/transactions');
+>>>>>>> 98366da (changes & formatting)
     return transactions
       .slice(0, limit)
       .map((tx) => this.transformToBraidPoolTransaction(tx));
@@ -140,8 +181,13 @@ class BraidPoolApi {
     work: number;
     unit: string;
   } {
+<<<<<<< HEAD
     if (work === null || work === undefined) return { work: 0, unit: "TH" };
     if (typeof work === "number") return { work, unit: "TH" };
+=======
+    if (work === null || work === undefined) return { work: 0, unit: 'TH' };
+    if (typeof work === 'number') return { work, unit: 'TH' };
+>>>>>>> 98366da (changes & formatting)
     const match = work.toString().match(/([\d.]+)\s*([TPE]H)?/i);
     if (!match) return { work: 0, unit: "TH" };
     const value = parseFloat(match[1]);
@@ -150,7 +196,11 @@ class BraidPoolApi {
   }
 
   private transformToBraidPoolTransaction(
+<<<<<<< HEAD
     tx: ApiTransaction,
+=======
+    tx: ApiTransaction
+>>>>>>> 98366da (changes & formatting)
   ): BraidPoolTransaction {
     const { work, unit } = this.parseWork(tx.work);
     return {
