@@ -48,7 +48,7 @@ pub struct ApiMempoolInfo {
     pub total_fee: u64,
     pub fee_histogram: Vec<[f64; 2]>,
 }
-struct StateStore {
+pub(crate) struct StateStore {
     committed: HashSet<Txid>, // Stage 2: In cmempool
     proposed: HashSet<Txid>,  // Stage 3: Marked as proposed
     scheduled: HashSet<Txid>, // Stage 4: Marked as scheduled
@@ -260,7 +260,7 @@ pub async fn commit_transaction(Path(txid): Path<String>) -> (StatusCode, Json<s
     };
 
     // Check if already in cmempool
-    if let Ok(_) = committed.get_mempool_entry(&txid) {
+    if committed.get_mempool_entry(&txid).is_ok() {
         STATE.lock().unwrap().committed.insert(txid);
         return (
             StatusCode::OK,

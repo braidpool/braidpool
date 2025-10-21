@@ -138,7 +138,6 @@ mod api_endpoint_tests {
                 | ("Committed", "Proposed")
                 | ("Proposed", "Scheduled")
                 | ("Scheduled", "Confirmed")
-                | (_, "Confirmed")
         )
     }
 }

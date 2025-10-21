@@ -1,7 +1,6 @@
 use bitcoincore_rpc::{Auth, Client, RpcApi};
 use std::error::Error;
 use std::net::SocketAddr;
-use tokio;
 use tower_http::cors::{Any, CorsLayer};
 
 mod api;
