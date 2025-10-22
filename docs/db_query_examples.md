@@ -109,9 +109,9 @@ WHERE r.child = :cid;
     (time from bead creation to witnessing parents)
 
 ```sql
-SELECT AVG(pt.timestamp - child.start_timestamp) AS avg_witnessing_delay
+SELECT AVG(pt.timestamp - parent.start_timestamp) AS avg_witnessing_delay
 FROM ParentTimestamps pt
-JOIN Bead child ON child.id = pt.child
+JOIN Bead parent ON parent.id = pt.parent
 WHERE pt.parent = :pid;
 ```
 
