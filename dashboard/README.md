@@ -4,16 +4,46 @@ A visualization dashboard for the Braidpool decentralized mining pool, and Bitco
 
 ## How to Run
 
-First and foremost, for the braid visualisation to work, either use the deployed API url http://french.braidpool.net:65433, or run it locally via the `simulator_api` located in the `tests` directory in the `main` directory.
+Here’s your setup guide properly formatted and cleaned up for clarity 👇
 
-```bash
-# Install dependencies
+---
+
+### 🧩 Braid Visualization Setup Guide
+
+To run the **Braid Visualization**, you have two options:
+
+* Use the **deployed API**:
+
+  ```
+  http://french.braidpool.net:65433
+  ```
+* Or, run it **locally** via the `simulator_api` located in:
+
+  ```
+   tests/simulator_api.py
+  ```
+
+---
+
+### ⚙️ Setup Instructions
+
+1. Install dependencies
+```
 npm install
+```
+ 2. Set environment variables
+Use the example file as a reference: [`.env.example`](https://github.com/braidpool/braidpool/blob/dev/dashboard/api/.env.example)
 
-# Start development server
-npm run dev
+# 3. Start the backend server
+```
+cd api
+node server.js
 ```
 
+# 4. Start the frontend development server
+```
+npm run dev
+```
 The dashboard will open automatically at [http://localhost:3000](http://localhost:3000).
 
 ## Build for Production
@@ -33,12 +63,16 @@ npm run preview
 - **Miner Management**: Monitor and manage connected miners.
 - **Network Analysis**: View network health and performance.
 
-## Dashboard Sections
+##  Dashboard Features
 
-1. **Main Dashboard**: Overview of key metrics and status.
-2. **Braid Visualization**: Interactive graph showing the DAG structure.
-3. **Mining Inventory**: Status of connected mining hardware.
-4. **Statistics**: Detailed performance metrics and history.
+1. **Main Dashboard** — Overview of key metrics and overall system status.  
+2. **Braid Visualization** — Interactive graph displaying the DAG (Directed Acyclic Graph) structure.  
+3. **Bead Explorer** — Explore individual beads and their relationships within the braid.  
+4. **Mining Inventory** — View the status and performance of connected mining hardware.  
+5. **Bitcoin Statistics** — Detailed insights into Bitcoin price ranges, historical trends, and market analysis.  
+6. **Mempool Statistics** — Provides real-time data on transactions awaiting confirmation.  
+7. **Node Health** — Tracks node uptime, connectivity, and overall performance.
+
 
 ## Troubleshooting
 
