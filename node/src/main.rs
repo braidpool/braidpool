@@ -265,7 +265,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let latest_template_merkle_branch_for_ipc = latest_template_merkle_branch.clone();
 
     // Spawn IPC handler
-    // Spawn IPC handler
     let _ipc_handler = tokio::task::spawn_blocking(move || {
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
