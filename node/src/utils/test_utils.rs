@@ -11,20 +11,124 @@ use crate::uncommitted_metadata::UnCommittedMetadata;
 #[cfg(test)]
 pub use bitcoin::ecdsa::Signature;
 #[cfg(test)]
-use bitcoin::p2p::Address as P2P_Address;
-#[cfg(test)]
 use bitcoin::BlockHeader;
 #[cfg(test)]
 pub use bitcoin::{absolute::Time, p2p::address::AddrV2, PublicKey, Transaction};
 #[cfg(test)]
 pub mod test_utility_functions {
-    use std::collections::HashSet;
+    use std::{
+        collections::{HashMap, HashSet},
+        str::FromStr,
+    };
 
-    use bitcoin::CompactTarget;
+    #[cfg(test)]
+    use bitcoin::Txid;
+    use bitcoin::{
+        pow::CompactTargetExt, BlockHash, BlockTime, BlockVersion, CompactTarget, EcdsaSighashType,
+        TxMerkleNode,
+    };
+    use rand::{rngs::OsRng, thread_rng, RngCore};
+    use secp256k1::{Message, Secp256k1, SecretKey};
+    use serde::{Deserialize, Serialize};
+
+    #[cfg(test)]
+    use crate::braid::Braid;
 
     pub use super::*;
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    pub struct FileBraid {
+        pub description: String,
+        pub parents: HashMap<usize, Vec<usize>>,
+        pub children: HashMap<usize, Vec<usize>>,
+        pub geneses: Vec<usize>,
+        pub tips: Vec<usize>,
+        pub cohorts: Vec<Vec<usize>>,
+        pub bead_work: HashMap<usize, u32>,
+        pub work: HashMap<usize, u32>,
+        pub highest_work_path: Vec<usize>,
+    }
+
+    pub const BRAIDTESTDIRECTORY: &str = "tests/braids";
+    #[cfg(test)]
+    pub fn loading_braid_from_file(file_path: &str) -> (Braid, FileBraid) {
+        use std::collections::HashMap;
+
+        use num::range;
+
+        use crate::braid::{Braid, Cohort};
+
+        let current_file_path = file_path;
+        let file_content = std::fs::read_to_string(current_file_path).unwrap();
+        let file_braid: FileBraid = serde_json::from_str(&file_content).unwrap();
+        let mut beads_to_idx: HashMap<usize, Bead> = HashMap::new();
+        let mut test_braid_vector_bead_mapping: HashMap<BeadHash, usize> = HashMap::new();
+        for bead_idx in file_braid.clone().parents {
+            let random_test_bead = emit_bead();
+            test_braid_vector_bead_mapping.insert(
+                random_test_bead.clone().block_header.block_hash(),
+                bead_idx.0,
+            );
+            beads_to_idx.insert(bead_idx.0, random_test_bead.clone());
+        }
+        let mut test_braid_parents_map: HashMap<usize, HashSet<usize>> = HashMap::new();
+        for (idx, bead) in beads_to_idx.clone() {
+            let mut current_bead = bead;
+            let mut parent_idx_set: HashSet<usize> = HashSet::new();
+            if let Some(current_bead_parents) = file_braid.parents.get(&idx) {
+                for parent_bead_idx in current_bead_parents {
+                    let parent_bead_block_hash =
+                        beads_to_idx[parent_bead_idx].block_header.block_hash();
+                    current_bead
+                        .committed_metadata
+                        .parents
+                        .insert(parent_bead_block_hash);
+
+                    parent_idx_set.insert(*parent_bead_idx);
+                }
+            }
+            test_braid_parents_map.insert(idx, parent_idx_set);
+            beads_to_idx.insert(idx, current_bead);
+        }
+        let mut beads_vector: Vec<Bead> = Vec::new();
+        for bead_index_number in range(0, file_braid.parents.len()) {
+            beads_vector.push(beads_to_idx[&bead_index_number].clone());
+        }
+        let mut current_braid_genesis: HashSet<usize> = HashSet::new();
+        let mut current_braid_tips: HashSet<usize> = HashSet::new();
+        let mut current_bead_cohorots: Vec<Cohort> = Vec::new();
+        for genesis_bead_idx in file_braid.geneses.clone() {
+            current_braid_genesis.insert(genesis_bead_idx);
+        }
+        for tips_bead_idx in file_braid.tips.clone() {
+            current_braid_tips.insert(tips_bead_idx);
+        }
+        for cohort in file_braid.cohorts.clone() {
+            use crate::braid::Cohort;
+
+            let mut current_cohort_indices: HashSet<usize> = HashSet::new();
+            for cohort_bead_idx in cohort {
+                current_cohort_indices.insert(cohort_bead_idx);
+            }
+            current_bead_cohorots.push(Cohort(current_cohort_indices));
+        }
+        //constructing actual braid object from file-braid object
+        (
+            Braid {
+                beads: beads_vector,
+                bead_index_mapping: test_braid_vector_bead_mapping,
+                tips: current_braid_tips,
+                genesis_beads: current_braid_genesis,
+                cohorts: current_bead_cohorots,
+                cohort_tips: vec![HashSet::new()], // Cohorts tips are only used in extend(), so we can skip them here.
+                orphan_beads: Vec::new(),
+            },
+            file_braid.clone(),
+        )
+    }
+
     pub struct TestUnCommittedMetadataBuilder {
-        extra_nonce: i32,
+        extra_nonce_1: u32,
+        extra_nonce_2: u32,
         broadcast_timestamp: Option<Time>,
         signature: Option<Signature>,
     }
@@ -33,14 +137,16 @@ pub mod test_utility_functions {
     impl TestUnCommittedMetadataBuilder {
         pub fn new() -> Self {
             Self {
-                extra_nonce: 0,
+                extra_nonce_1: 0,
+                extra_nonce_2: 0,
                 broadcast_timestamp: None,
                 signature: None,
             }
         }
 
-        pub fn extra_nonce(mut self, nonce: i32) -> Self {
-            self.extra_nonce = nonce;
+        pub fn extra_nonce(mut self, nonce_1: u32, nonce_2: u32) -> Self {
+            self.extra_nonce_1 = nonce_1;
+            self.extra_nonce_2 = nonce_2;
             self
         }
 
@@ -56,7 +162,8 @@ pub mod test_utility_functions {
 
         pub fn build(self) -> UnCommittedMetadata {
             UnCommittedMetadata {
-                extra_nonce: self.extra_nonce,
+                extra_nonce_1: self.extra_nonce_1,
+                extra_nonce_2: self.extra_nonce_2,
                 broadcast_timestamp: self
                     .broadcast_timestamp
                     .expect("broadcast_timestamp is required"),
@@ -66,7 +173,7 @@ pub mod test_utility_functions {
     }
     #[cfg(test)]
     pub struct TestCommittedMetadataBuilder {
-        transactions: Vec<Transaction>,
+        transaction_ids: Vec<Txid>,
         parents: std::collections::HashSet<BeadHash>,
         parent_bead_timestamps: Option<TimeVec>,
         payout_address: Option<String>,
@@ -81,7 +188,7 @@ pub mod test_utility_functions {
     impl TestCommittedMetadataBuilder {
         pub fn new() -> Self {
             Self {
-                transactions: Vec::new(),
+                transaction_ids: Vec::new(),
                 parents: HashSet::new(),
                 parent_bead_timestamps: None,
                 payout_address: None,
@@ -93,8 +200,8 @@ pub mod test_utility_functions {
             }
         }
 
-        pub fn transactions(mut self, txs: Vec<Transaction>) -> Self {
-            self.transactions = txs;
+        pub fn transactions(mut self, txs: Vec<Txid>) -> Self {
+            self.transaction_ids = txs;
             self
         }
 
@@ -136,8 +243,10 @@ pub mod test_utility_functions {
             self
         }
         pub fn build(self) -> CommittedMetadata {
+            use crate::committed_metadata::TxIdVec;
+
             CommittedMetadata {
-                transactions: self.transactions,
+                transaction_ids: TxIdVec(self.transaction_ids),
                 parents: self.parents,
                 parent_bead_timestamps: self
                     .parent_bead_timestamps
@@ -196,5 +305,96 @@ pub mod test_utility_functions {
                     .expect("UnCommittedMetadata is required"),
             }
         }
+    }
+    fn generate_random_public_key_string() -> String {
+        let secp = Secp256k1::new();
+        let mut rng = thread_rng();
+        let secret_key = SecretKey::new(&mut rng);
+        let public_key = PublicKey::new(secret_key.public_key(&secp));
+        public_key.to_string()
+    }
+
+    pub fn emit_bead() -> Bead {
+        // This function creates a random bead for testing purposes.
+
+        let random_public_key = generate_random_public_key_string()
+            .parse::<bitcoin::PublicKey>()
+            .unwrap();
+        // Generate a reasonable timestamp (between 2020-01-01 and now)
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as u32;
+        let current_time = bitcoin::absolute::Time::from_consensus(now).unwrap();
+
+        let _address = String::from("127.0.0.1:8888");
+        let public_key = random_public_key;
+        let socket: String = String::from("127.0.0.1");
+        let time_hash_set = TimeVec(Vec::new());
+        let parent_hash_set: HashSet<BlockHash> = HashSet::new();
+        let weak_target = CompactTarget::from_unprefixed_hex("1d00ffff").unwrap();
+        let min_target = CompactTarget::from_unprefixed_hex("1d00ffff").unwrap();
+        let time_val = current_time;
+
+        let committed_metadata = TestCommittedMetadataBuilder::new()
+            .comm_pub_key(public_key)
+            .miner_ip(socket)
+            .start_timestamp(time_val)
+            .parents(parent_hash_set)
+            .parent_bead_timestamps(time_hash_set)
+            .payout_address(_address)
+            .min_target(min_target)
+            .weak_target(weak_target)
+            .transactions(vec![])
+            .build();
+
+        let extra_nonce_1 = rand::random::<u32>();
+        let extra_nonce_2 = rand::random::<u32>();
+
+        let secp = Secp256k1::new();
+
+        // Generate random secret key
+        let mut rng = OsRng::default();
+        let (secret_key, _) = secp.generate_keypair(&mut rng);
+
+        // Create random 32-byte message
+        let mut msg_bytes = [0u8; 32];
+        rng.fill_bytes(&mut msg_bytes);
+        let msg = Message::from_digest(msg_bytes);
+
+        // Sign the message
+        let signature = secp.sign_ecdsa(&msg, &secret_key);
+
+        // DER encode the signature and get hex
+        let der_sig = signature.serialize_der();
+        let hex = hex::encode(der_sig);
+
+        let sig = Signature {
+            signature: secp256k1::ecdsa::Signature::from_str(&hex).unwrap(),
+            sighash_type: EcdsaSighashType::All,
+        };
+
+        let uncommitted_metadata = TestUnCommittedMetadataBuilder::new()
+            .broadcast_timestamp(time_val)
+            .extra_nonce(extra_nonce_1, extra_nonce_2)
+            .signature(sig)
+            .build();
+        let bytes: [u8; 32] = [0u8; 32];
+
+        let test_block_header = BlockHeader {
+            version: BlockVersion::TWO,
+            prev_blockhash: BlockHash::from_byte_array(bytes),
+            bits: CompactTarget::from_consensus(486604799),
+            nonce: rand::random::<u32>(),
+            time: BlockTime::from_u32(0),
+            merkle_root: TxMerkleNode::from_byte_array(bytes),
+        };
+
+        let test_bead = TestBeadBuilder::new()
+            .block_header(test_block_header)
+            .committed_metadata(committed_metadata)
+            .uncommitted_metadata(uncommitted_metadata)
+            .build();
+        test_bead
     }
 }

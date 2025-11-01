@@ -1,12 +1,13 @@
 use crate::bead::Bead;
+#[cfg(test)]
 use crate::braid;
 use crate::braid::AddBeadStatus;
 use crate::braid::Braid;
 use crate::error::BraidRPCError;
+#[cfg(test)]
 use crate::utils::create_test_bead;
 use crate::utils::BeadHash;
 use clap::Subcommand;
-use futures::future::join_all;
 use jsonrpsee::core::async_trait;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::core::middleware::Batch;
@@ -18,12 +19,13 @@ use jsonrpsee::proc_macros::rpc;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Request;
 use jsonrpsee::ConnectionId;
-use log;
 use serde_json;
 use std::future::Future;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+#[allow(unused_imports)]
+use tracing::{debug, error, info, trace, warn};
 
 //Rpc commands
 #[derive(Subcommand, Debug, Clone)]
@@ -107,16 +109,18 @@ pub async fn handle_request(
         client.request(&method, method_params.clone()).await;
     match rpc_response {
         Ok(response) => {
-            log::info!(
-                "Response received successfully from the RPC server - {:?}",
-                response
+            info!(
+                response = ?response,
+                method = %method,
+                "RPC response received"
             );
             Ok(())
         }
         Err(error) => {
-            log::error!(
-                "An error occurred while receiving response from Server - {:?}",
-                error
+            error!(
+                error = ?error,
+                method = %method,
+                "RPC request failed"
             );
             Err(BraidRPCError::RequestFailed {
                 method: method,
@@ -166,7 +170,7 @@ impl RpcServer for RpcServerImpl {
         let hash = bead_hash
             .parse::<BeadHash>()
             .map_err(|_| ErrorObjectOwned::owned(1, "Invalid bead hash format", None::<()>))?;
-        log::info!("Get bead request recieved from client");
+        info!(hash = %hash, "Get bead request received");
         let braid_data = self.braid_arc.read().await;
         let bead = braid_data
             .beads
@@ -189,7 +193,10 @@ impl RpcServer for RpcServerImpl {
         let bead: Bead = serde_json::from_str(&bead_data).map_err(|e| {
             ErrorObjectOwned::owned(1, format!("Invalid bead data: {}", e), None::<()>)
         })?;
-        log::info!("Add bead request recieved from client");
+        info!(
+            hash = %bead.block_header.block_hash(),
+            "Add bead request received"
+        );
         let mut braid_data = self.braid_arc.write().await;
         let success_status = braid_data.extend(&bead);
 
@@ -212,7 +219,7 @@ impl RpcServer for RpcServerImpl {
             .iter()
             .map(|&index| braid_data.beads[index].block_header.block_hash())
             .collect();
-        log::info!("Get tips request received from client");
+        info!(tip_count = %tips.len(), "Get tips request received");
         let tips_str: Vec<String> = tips.iter().map(|h| h.to_string()).collect();
 
         serde_json::to_string(&tips_str)
@@ -222,14 +229,14 @@ impl RpcServer for RpcServerImpl {
     async fn get_bead_count(&self) -> Result<String, ErrorObjectOwned> {
         let braid_data = self.braid_arc.read().await;
         let count = braid_data.beads.len();
-        log::info!("Get bead count request received  from client");
+        info!(count = %count, "Get bead count request received");
         Ok(count.to_string())
     }
 
     async fn get_cohort_count(&self) -> Result<String, ErrorObjectOwned> {
         let braid_data = self.braid_arc.read().await;
-        log::info!("Get cohort request received from client ");
         let count = braid_data.cohorts.len();
+        info!(count = %count, "Get cohort count request received");
 
         Ok(count.to_string())
     }
@@ -248,14 +255,14 @@ where
         &self,
         request: Request<'a>,
     ) -> impl Future<Output = Self::MethodResponse> + Send + 'a {
-        tracing::info!("Received request: {:?}", request);
+        info!(request = ?request, "RPC request received");
         assert!(request.extensions().get::<ConnectionId>().is_some());
 
         self.0.call(request)
     }
 
     fn batch<'a>(&self, batch: Batch<'a>) -> impl Future<Output = Self::BatchResponse> + Send + 'a {
-        tracing::info!("Received batch: {:?}", batch);
+        info!(batch = ?batch, "RPC batch received");
         self.0.batch(batch)
     }
 
@@ -263,20 +270,23 @@ where
         &self,
         n: Notification<'a>,
     ) -> impl Future<Output = Self::NotificationResponse> + Send + 'a {
-        tracing::info!("Received notif: {:?}", n);
+        info!(notification = ?n, "RPC notification received");
         self.0.notification(n)
     }
 }
 //server building
 //running a server in seperate spawn event
-pub async fn run_rpc_server(braid_shared_pointer: Arc<RwLock<Braid>>) -> Result<SocketAddr, ()> {
+pub async fn run_rpc_server(
+    braid_shared_pointer: Arc<RwLock<Braid>>,
+    bind_address: &str,
+) -> Result<SocketAddr, ()> {
     //Initializing the middleware
     let rpc_middleware =
         jsonrpsee::server::middleware::rpc::RpcServiceBuilder::new().layer_fn(LoggingMiddleware);
     //building the context/server supporting the http transport and ws
     let server = jsonrpsee::server::Server::builder()
         .set_rpc_middleware(rpc_middleware)
-        .build("127.0.0.1:6682")
+        .build(bind_address)
         .await
         .unwrap();
     //listening address for incoming requests/connection
@@ -284,10 +294,22 @@ pub async fn run_rpc_server(braid_shared_pointer: Arc<RwLock<Braid>>) -> Result<
     //context for the served server
     let rpc_impl = RpcServerImpl::new(braid_shared_pointer);
     let handle = server.start(rpc_impl.into_rpc());
-    log::info!(
-        "RPC Server is listening at socket address http://{:?}",
-        addr
-    );
+
+    // Parse host from bind_address
+    let (bind_host, _port) = bind_address.rsplit_once(':').unwrap_or((bind_address, ""));
+    let endpoints = crate::utils::server_endpoints(bind_host, addr.port(), "http");
+    if endpoints.is_empty() {
+        warn!(
+            host = %bind_host,
+            port = %_port,
+            "RPC server listening but no interfaces discovered"
+        );
+    } else {
+        for endpoint in endpoints {
+            info!(endpoint = %endpoint, "RPC server is listening");
+        }
+    }
+
     tokio::spawn(
         //handling the stopping of the server
         handle.stopped(),
@@ -302,9 +324,10 @@ pub async fn test_extend_rpc() {
 
     let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
 
-    let _ = run_rpc_server(Arc::clone(&braid)).await.unwrap();
-
     let server_addr = "127.0.0.1:6682";
+    let _ = run_rpc_server(Arc::clone(&braid), server_addr)
+        .await
+        .unwrap();
     let target_uri = format!("http://{}", server_addr);
     let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
 
@@ -344,7 +367,7 @@ pub async fn test_same_bead_extend() {
         .await
         .unwrap();
     let rpc_impl = RpcServerImpl::new(braid);
-    let handle = server.start(rpc_impl.into_rpc());
+    let _handle = server.start(rpc_impl.into_rpc());
 
     let server_addr = "127.0.0.1:8889";
     let target_uri = format!("http://{}", server_addr);
@@ -358,7 +381,7 @@ pub async fn test_same_bead_extend() {
     params.insert(bead_json_str).unwrap();
 
     //Extending the bead
-    let response_original: Result<String, jsonrpsee::core::ClientError> =
+    let _response_original: Result<String, jsonrpsee::core::ClientError> =
         client.request("addbead", params.clone()).await;
 
     //Extending the same bead again bead
@@ -388,7 +411,7 @@ pub async fn test_cohort_count_rpc() {
         .await
         .unwrap();
     let rpc_impl = RpcServerImpl::new(braid);
-    let handle = server.start(rpc_impl.into_rpc());
+    let _handle = server.start(rpc_impl.into_rpc());
 
     let server_addr = "127.0.0.1:9000";
     let target_uri = format!("http://{}", server_addr);
