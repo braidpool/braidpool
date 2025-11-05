@@ -80,13 +80,25 @@ MINER_DEVICE_URL: 'http://localhost:5001'
 ```
 
 ## Usage
- **Adding Miners**
-   - Enter the IP address of your miner in the input field
+
+### Adding Miners
+
+1. **Prerequisites**
+   - Ensure your miner is powered on and connected to the network
+   - Verify the miner's IP address
+   - Check that the miner is one of the supported devices
+   - Enable API access on your miner (see manufacturer documentation)
+
+2. **Steps to Add**
+   - Enter the miner's IP address in the input field
    - Click "Add Miner" or press Enter
-   - The dashboard will attempt to connect and retrieve data from the miner
-   - Make sure your miner is one of the supported devices listed above
-   - Ensure the miner is on the same network and reachable from the dashboard
-   - The miner should have its API access enabled (specific steps vary by manufacturer)
+   - Wait for connection confirmation
+   - The miner card will appear in the dashboard
 
-
+3. **Troubleshooting Failed Connections**
+   - Verify the IP address is correct
+   - Ensure the miner is on the same network
+   - Check if you can ping the miner's IP
+   - Verify API access is enabled on the miner
+   - Check your firewall settings
 

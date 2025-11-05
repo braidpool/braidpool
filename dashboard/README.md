@@ -76,11 +76,53 @@ To Stop Containers
 ```
 docker-compose down
 ```
+## Technology Stack
+
+### Frontend
+- **Core**
+  - React 18+
+  - TypeScript 4.9+
+  - Vite (Build tooling)
+  - TailwindCSS 3.0+
+
+- **Data Visualization**
+  - D3.js (Braid visualization)
+  - React Charts
+  - Custom graph components
+
+- **State Management**
+  - React Context API
+  - Custom hooks
+  - Real-time data handling
+
+### Backend
+- **API Server**
+  - Node.js
+  - Express.js
+  - WebSocket support
+  - RESTful endpoints
+
+- **Mining Interface**
+  - Python 3.7+
+  - Flask
+  - pyasic library
+  - WebSocket server
+
+- **Development Tools**
+  - Docker & Docker Compose
+  - ESLint & Prettier
+  - Jest & React Testing Library
+  - Python pytest
+
 ## Features
 
 - **Braid Visualization**: Interactive graph of the braid structure.
 - **Performance Metrics**: Real-time mining pool statistics.
-- **Miner Management**: Monitor and manage connected miners.
+- **[Miner Inventory Dashboard](./MinerInventory.md)**: Comprehensive system for monitoring and managing ASIC miners.
+  - Real-time monitoring of multiple miners
+  - Device health tracking
+  - Performance metrics and alerts
+  - Pool configuration monitoring
 - **Network Analysis**: View network health and performance.
 
 ## Troubleshooting
