@@ -92,35 +92,11 @@ Or you can just click on the docs directory in the code and Github will render t
 # Braidpool Dashboard
 
 A visualization dashboard for the Braidpool decentralized mining pool, and Bitcoin related data.
+###  Quick Setup
 
-## How to Run
+For setup instructions and environment configuration, please refer to the  
+➡️ [Dashboard README](./dashboard/README.md)
 
-```bash
-# Navigate to the dashboard directory 
-cd dashboard
-
-# Install dependencies
-npm install
-
-# Start development server
-npm run dev
-```
-
-The dashboard will open automatically at [http://localhost:3000](http://localhost:3000).
-
-## Build for Production
-
-```bash
-# Navigate to the dashboard directory 
-cd dashboard
-
-# Create optimized build
-npm run build
-
-# Preview production build locally
-npm run preview
-```
-For more details on the Dashboard, [checkout its readme file](./dashboard/README.md).
 
 # Progress
 
