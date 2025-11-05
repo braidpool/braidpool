@@ -4,8 +4,6 @@ A visualization dashboard for the Braidpool decentralized mining pool, and Bitco
 
 ## How to Run
 
-
-
 ### 🧩 Braid Visualization Setup Guide
 
 To run the **Braid Visualization**, you have two options:
@@ -37,6 +35,8 @@ Use the example file as a reference: [`.env.example`](https://github.com/braidpo
 cd api
 node server.js
 ```
+The server will run at http://localhost:5000
+
 
 # 4. Start the frontend development server
 ```
@@ -53,7 +53,29 @@ npm run build
 # Preview production build locally
 npm run preview
 ```
+## 🐳 Docker Setup 
 
+You can use **Docker Compose** to spin up all required services- the frontend, backend API, and simulator  with a single command.
+
+Run All Services
+```bash
+Build and start all containers
+
+docker-compose up --build
+```
+
+Once running:
+
+Frontend: http://localhost:3000
+
+API: http://localhost:5000
+
+Simulator API: http://localhost:65433
+
+To Stop Containers
+```
+docker-compose down
+```
 ## Features
 
 - **Braid Visualization**: Interactive graph of the braid structure.
