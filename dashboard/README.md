@@ -83,9 +83,6 @@ docker-compose down
 - **Miner Management**: Monitor and manage connected miners.
 - **Network Analysis**: View network health and performance.
 
-
-
-
 ## Troubleshooting
 
 - **Blank screen**: Check the browser console for errors.
