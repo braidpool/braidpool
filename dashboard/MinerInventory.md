@@ -8,7 +8,6 @@ The dashboard supports a wide range of ASIC miners through the pyasic library, i
 
 Currently supported mining devices can be found in the [pyasic documentation](https://docs.pyasic.org/en/latest/miners/supported_types/).
 
-
 Note: The exact feature support may vary depending on the specific model and firmware version.
 
 ## Features
@@ -27,12 +26,14 @@ Note: The exact feature support may vary depending on the specific model and fir
 ## Setup Requirements
 
 ### Frontend (Dashboard)
+
 - Node.js (v14 or higher)
 - React
 - TypeScript
 - Tailwind CSS
 
 ### Backend (API Server)
+
 - Python 3.7+
 - Flask
 - pyasic library
@@ -43,30 +44,36 @@ Note: The exact feature support may vary depending on the specific model and fir
 ### 1. API Server Setup
 
 1. Navigate to the tests directory and install Python dependencies:
+
 ```bash
 cd tests
 pip install -r requirements.txt
 ```
 
 2. Start the API server:
+
 ```bash
 python miner_device.py
 ```
+
 The server will run on port 5001 by default.
 
 ### 2. Dashboard Setup
 
 1. Navigate to the dashboard directory:
+
 ```bash
 cd dashboard
 ```
 
 2. Install dependencies:
+
 ```bash
 npm install
 ```
 
 3. Start the development server:
+
 ```bash
 npm run dev
 ```
@@ -74,9 +81,11 @@ npm run dev
 ## Configuration
 
 ### API Configuration
+
 The dashboard communicates with miners through the API server. The API endpoint is configured in `URLs.ts`. By default, it points to:
+
 ```typescript
-MINER_DEVICE_URL: 'http://localhost:5001'
+MINER_DEVICE_URL: 'http://localhost:5001';
 ```
 
 ## Usage
@@ -101,4 +110,3 @@ MINER_DEVICE_URL: 'http://localhost:5001'
    - Check if you can ping the miner's IP
    - Verify API access is enabled on the miner
    - Check your firewall settings
-
