@@ -48,26 +48,6 @@ const TransactionsPage: React.FC = () => {
     setAutoRefresh(event.target.checked);
   };
 
-  const getCategoryStyles = (category: TransactionCategory): string => {
-    const styles = {
-      [TransactionCategory.MEMPOOL]:
-        'bg-blue-500/10 border-blue-500/20 text-blue-400',
-      [TransactionCategory.COMMITTED]:
-        'bg-indigo-500/10 border-indigo-500/20 text-indigo-400',
-      [TransactionCategory.PROPOSED]:
-        'bg-green-500/10 border-green-500/20 text-green-400',
-      [TransactionCategory.SCHEDULED]:
-        'bg-yellow-500/10 border-yellow-500/20 text-yellow-400',
-      [TransactionCategory.CONFIRMED]:
-        'bg-emerald-500/10 border-emerald-500/20 text-emerald-400',
-      [TransactionCategory.REPLACED]:
-        'bg-red-500/10 border-red-500/20 text-red-400',
-    };
-    return (
-      styles[category] || 'bg-gray-500/10 border-gray-500/20 text-gray-400'
-    );
-  };
-
   return (
     <div className="min-h-screen bg-gray-950">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

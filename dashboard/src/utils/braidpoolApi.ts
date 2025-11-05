@@ -69,7 +69,7 @@ class BraidPoolApi {
         try {
           const errorBody = await response.text();
           if (errorBody) errorMessage += ` - ${errorBody}`;
-        } catch {}
+        } catch { }
         throw new BraidPoolApiError(errorMessage, response.status);
       }
 

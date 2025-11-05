@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import TransactionsPage from '../TransactionsPage';
-import { BraidPoolTransaction, TransactionCategory } from '@/types/transaction';
+import { BraidPoolTransaction, TransactionCategory } from '../type';
 
 const mockTransactions: BraidPoolTransaction[] = [
   {

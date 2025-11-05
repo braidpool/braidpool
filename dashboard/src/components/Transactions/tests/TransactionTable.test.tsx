@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import TransactionTable from '../TransactionTable';
-import { BraidPoolTransaction, TransactionCategory } from '@/types/transaction';
+import { BraidPoolTransaction, TransactionCategory } from '../type';
 
 // Mock the Card component
 vi.mock('@/components/common/Card', () => ({
