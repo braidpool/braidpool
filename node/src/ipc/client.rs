@@ -5,6 +5,7 @@ use capnp_rpc::{rpc_twoparty_capnp, twoparty, RpcSystem};
 use futures::FutureExt;
 use std::collections::VecDeque;
 use std::error::Error;
+use std::fmt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -26,6 +27,27 @@ pub struct CheckBlockResult {
     pub reason: String,
     pub debug: String,
     pub result: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct SubmitBlockResult {
+    pub success: bool,
+    pub reason: String,
+}
+
+#[derive(Clone)]
+pub struct BlockTemplate {
+    pub template_interface: crate::mining_capnp::block_template::Client,
+    pub components: BlockTemplateComponents,
+    pub processed_block_hex: Option<Vec<u8>>,
+}
+
+impl fmt::Debug for BlockTemplate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("BlockTemplate")
+            .field("components", &self.components)
+            .finish_non_exhaustive()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -65,7 +87,7 @@ enum BitcoinRequest {
     },
     GetBlockTemplateComponents {
         rules: Option<Vec<String>>,
-        response: oneshot::Sender<Result<BlockTemplateComponents, String>>,
+        response: oneshot::Sender<Result<Arc<BlockTemplate>, String>>,
         priority: RequestPriority,
     },
     IsInitialBlockDownload {
@@ -81,6 +103,15 @@ enum BitcoinRequest {
         check_merkle_root: bool,
         check_pow: bool,
         response: oneshot::Sender<Result<CheckBlockResult, String>>,
+        priority: RequestPriority,
+    },
+    SubmitSolution {
+        template: Arc<BlockTemplate>,
+        version: u32,
+        timestamp: u32,
+        nonce: u32,
+        coinbase_transaction: Vec<u8>,
+        response: oneshot::Sender<Result<SubmitBlockResult, String>>,
         priority: RequestPriority,
     },
 }
@@ -157,6 +188,7 @@ impl PriorityRequestQueue {
             BitcoinRequest::IsInitialBlockDownload { priority, .. } => *priority,
             BitcoinRequest::CheckBlock { priority, .. } => *priority,
             BitcoinRequest::GetMiningTipInfo { priority, .. } => *priority,
+            BitcoinRequest::SubmitSolution { priority, .. } => *priority,
         };
 
         let result = match priority {
@@ -242,6 +274,9 @@ impl PriorityRequestQueue {
                 let _ = response.send(Err("Queue full - request dropped".to_string()));
             }
             BitcoinRequest::GetMiningTipInfo { response, .. } => {
+                let _ = response.send(Err("Queue full - request dropped".to_string()));
+            }
+            BitcoinRequest::SubmitSolution { response, .. } => {
                 let _ = response.send(Err("Queue full - request dropped".to_string()));
             }
         }
@@ -407,7 +442,7 @@ impl BitcoinRpcClient {
     pub async fn get_block_template_components(
         &self,
         _rules: Option<Vec<String>>,
-    ) -> Result<BlockTemplateComponents, Box<dyn Error>> {
+    ) -> Result<BlockTemplate, Box<dyn Error>> {
         let mut create_block_req = self.mining_interface.create_new_block_request();
         let mut options = create_block_req.get().init_options();
         options.set_block_reserved_weight(4000);
@@ -487,13 +522,17 @@ impl BitcoinRpcClient {
         let commitment_response = commitment_req.send().promise.await?;
         let commitment_data = commitment_response.get()?.get_result()?.to_vec();
 
-        Ok(BlockTemplateComponents {
-            header: header_data,
-            coinbase_transaction: coinbase_data,
-            fees: fees_vec,
-            coinbase_merkle_path,
-            coinbase_commitment: commitment_data,
-            block_hex: full_block_data,
+        Ok(BlockTemplate {
+            template_interface: block_template_interface,
+            components: BlockTemplateComponents {
+                header: header_data,
+                coinbase_transaction: coinbase_data,
+                fees: fees_vec,
+                coinbase_merkle_path,
+                coinbase_commitment: commitment_data,
+                block_hex: full_block_data,
+            },
+            processed_block_hex: None,
         })
     }
 
@@ -575,6 +614,40 @@ impl BitcoinRpcClient {
         }
     }
 
+    pub async fn submit_solution(
+        &self,
+        template_interface: &crate::mining_capnp::block_template::Client,
+        version: u32,
+        timestamp: u32,
+        nonce: u32,
+        coinbase_transaction: &[u8],
+    ) -> Result<SubmitBlockResult, Box<dyn Error>> {
+        let mut submit_req = template_interface.submit_solution_request();
+        submit_req
+            .get()
+            .get_context()?
+            .set_thread(self.thread_client.clone());
+
+        let mut params = submit_req.get();
+        params.set_version(version);
+        params.set_timestamp(timestamp);
+        params.set_nonce(nonce);
+        params.set_coinbase(coinbase_transaction);
+
+        let response = submit_req.send().promise.await?;
+        let result = response.get()?;
+        let success = result.get_result();
+
+        Ok(SubmitBlockResult {
+            success,
+            reason: if success {
+                "Block submitted successfully".to_string()
+            } else {
+                "Block submission failed".to_string()
+            },
+        })
+    }
+
     pub async fn disconnect(self) -> Result<(), capnp::Error> {
         self.disconnector.await?;
         self.ipc_task
@@ -623,6 +696,7 @@ pub struct QueueSizeStats {
     pub low: usize,
 }
 
+#[derive(Debug)]
 pub struct SharedBitcoinClient {
     request_sender: mpsc::UnboundedSender<QueuedRequest>,
     notification_receiver: Option<mpsc::UnboundedReceiver<BitcoinNotification>>,
@@ -861,8 +935,8 @@ impl SharedBitcoinClient {
             BitcoinRequest::GetBlockTemplateComponents {
                 rules, response, ..
             } => match bitcoin_client.get_block_template_components(rules).await {
-                Ok(components) => {
-                    let _ = response.send(Ok(components));
+                Ok(template) => {
+                    let _ = response.send(Ok(Arc::new(template)));
                 }
                 Err(e) => {
                     let _ = response.send(Err(e.to_string()));
@@ -910,6 +984,39 @@ impl SharedBitcoinClient {
                         let _ = response.send(Ok(check_result));
                     }
                     Err(e) => {
+                        let _ = response.send(Err(e.to_string()));
+                    }
+                }
+            }
+            BitcoinRequest::SubmitSolution {
+                template,
+                version,
+                timestamp,
+                nonce,
+                coinbase_transaction,
+                response,
+                ..
+            } => {
+                match bitcoin_client
+                    .submit_solution(
+                        &template.template_interface,
+                        version,
+                        timestamp,
+                        nonce,
+                        &coinbase_transaction,
+                    )
+                    .await
+                {
+                    Ok(result) => {
+                        if result.success {
+                            log::info!("Block submitted successfully!");
+                        } else {
+                            log::error!("Block submission failed: {}", result.reason);
+                        }
+                        let _ = response.send(Ok(result));
+                    }
+                    Err(e) => {
+                        log::error!("Submit solution IPC error: {}", e);
                         let _ = response.send(Err(e.to_string()));
                     }
                 }
@@ -973,7 +1080,7 @@ impl SharedBitcoinClient {
         &self,
         rules: Option<Vec<String>>,
         priority: Option<RequestPriority>,
-    ) -> Result<BlockTemplateComponents, Box<dyn std::error::Error>> {
+    ) -> Result<Arc<BlockTemplate>, Box<dyn std::error::Error>> {
         let (response_sender, response_receiver) = oneshot::channel();
 
         let request = BitcoinRequest::GetBlockTemplateComponents {
@@ -1042,6 +1149,35 @@ impl SharedBitcoinClient {
             check_pow,
             response: response_sender,
             priority: priority.unwrap_or(RequestPriority::High),
+        };
+
+        self.request_sender.send(QueuedRequest {
+            request,
+            enqueue_time: Instant::now(),
+        })?;
+
+        let result = response_receiver.await??;
+        Ok(result)
+    }
+    pub async fn submit_solution(
+        &self,
+        template: Arc<BlockTemplate>,
+        version: u32,
+        timestamp: u32,
+        nonce: u32,
+        coinbase_transaction: Vec<u8>,
+        priority: Option<RequestPriority>,
+    ) -> Result<SubmitBlockResult, Box<dyn std::error::Error>> {
+        let (response_sender, response_receiver) = oneshot::channel();
+
+        let request = BitcoinRequest::SubmitSolution {
+            template,
+            version,
+            timestamp,
+            nonce,
+            coinbase_transaction,
+            response: response_sender,
+            priority: priority.unwrap_or(RequestPriority::Critical),
         };
 
         self.request_sender.send(QueuedRequest {

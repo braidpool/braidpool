@@ -3,7 +3,12 @@ use bitcoin::{
     consensus::encode::deserialize, ecdsa::Signature, BlockHash, CompactTarget, EcdsaSighashType,
 };
 use num::ToPrimitive;
-use std::{collections::HashSet, str::FromStr, sync::Arc, time::UNIX_EPOCH};
+use std::{
+    collections::{HashMap, HashSet},
+    str::FromStr,
+    sync::Arc,
+    time::UNIX_EPOCH,
+};
 
 use futures::lock::Mutex;
 use tokio::sync::mpsc::{self, Receiver, Sender};
@@ -30,6 +35,8 @@ pub mod stratum;
 pub mod template_creator;
 pub mod uncommitted_metadata;
 pub mod utils;
+use std::sync::atomic::{AtomicU64, Ordering};
+
 //Including the capnp modules after building while compiling the workspace.package
 pub mod proxy_capnp {
     include!(concat!(env!("OUT_DIR"), "/proxy_capnp.rs"));
@@ -45,6 +52,15 @@ pub mod common_capnp {
 }
 pub mod init_capnp {
     include!(concat!(env!("OUT_DIR"), "/init_capnp.rs"));
+}
+
+/// Global template ID counter that persists across the application lifetime
+static GLOBAL_TEMPLATE_COUNTER: AtomicU64 = AtomicU64::new(1);
+
+/// Get the next unique template ID (increments on each call)
+pub fn get_next_template_id() -> String {
+    let id = GLOBAL_TEMPLATE_COUNTER.fetch_add(1, Ordering::SeqCst);
+    id.to_string()
 }
 
 /// **Length of the extranonce prefix (in bytes).**
@@ -91,26 +107,74 @@ pub const EXTRANONCE_SEPARATOR: [u8; EXTRANONCE1_SIZE + EXTRANONCE2_SIZE] =
 /// * `Ok(())` - When the consumer loop completes without errors.
 /// * `Err(IPCtemplateError)` - If an unrecoverable IPC template handling error occurs.
 pub async fn ipc_template_consumer(
-    mut template_rx: mpsc::Receiver<(Vec<u8>, Vec<Vec<u8>>)>,
+    mut template_rx: mpsc::Receiver<Arc<crate::ipc::client::BlockTemplate>>,
     notifier_tx: mpsc::Sender<NotifyCmd>,
     latest_template_arc: &mut Arc<Mutex<BlockTemplate>>,
     latest_template_merkle_branch_arc: &mut Arc<Mutex<Vec<Vec<u8>>>>,
+    template_cache: Arc<
+        tokio::sync::Mutex<HashMap<String, Arc<crate::ipc::client::BlockTemplate>>>,
+    >,
+    latest_template_id: Arc<Mutex<String>>,
 ) -> Result<(), IPCtemplateError> {
-    while let Some(template_bytes) = template_rx.recv().await {
-        if template_bytes.0.len() > 0 {
+    /// Maximum number of block templates to retain in the in-memory cache.
+    ///
+    /// This constant limits how many recent block templates, fetched via IPC from Bitcoin node,
+    /// are kept available for downstream miners. When the cache exceeds this size, the oldest
+    /// templates are evicted to make room for new ones. This helps prevent unbounded memory
+    /// growth and ensures efficient resource usage.
+    const MAX_CACHED_TEMPLATES: usize = 90;
+
+    while let Some(ipc_template) = template_rx.recv().await {
+        let template_bytes = match &ipc_template.processed_block_hex {
+            Some(processed_hex) if !processed_hex.is_empty() => processed_hex,
+            _ => {
+                log::warn!("Skipping template: processed_block_hex is missing or empty");
+                continue;
+            }
+        };
+
+        if template_bytes.len() > 0 {
+            // Generate new template_id for every template
+            let template_id = get_next_template_id();
+            {
+                let mut latest_id = latest_template_id.lock().await;
+                *latest_id = template_id.clone();
+            }
+
+            // Cache the IPC template with this new ID
+            {
+                let mut cache = template_cache.lock().await;
+                cache.insert(template_id.clone(), ipc_template.clone());
+
+                // Cleanup old templates
+                if cache.len() > MAX_CACHED_TEMPLATES {
+                    let mut ids: Vec<u64> =
+                        cache.keys().filter_map(|k| k.parse::<u64>().ok()).collect();
+                    ids.sort();
+
+                    let remove_count = cache.len() - MAX_CACHED_TEMPLATES;
+                    for id in ids.iter().take(remove_count) {
+                        cache.remove(&id.to_string());
+                        log::debug!("Removed old template {} from cache", id);
+                    }
+                }
+            }
+
             let candidate_block: Result<
                 bitcoin::blockdata::block::Block,
                 bitcoin::consensus::DeserializeError,
-            > = deserialize(&template_bytes.0.clone());
-            let merkle_branch_coinbase = template_bytes.1.clone();
+            > = deserialize(&template_bytes);
+
+            let merkle_branch_coinbase = ipc_template.components.coinbase_merkle_path.clone();
             let (template_header, template_transactions) = candidate_block.unwrap().into_parts();
             let coinbase_transaction = template_transactions.get(0);
-            log::info!("Coinbase transaction is - {:?}", coinbase_transaction);
-            log::info!(
+
+            // log::info!("Coinbase transaction is - {:?}", coinbase_transaction);
+            log::debug!(
                 "The block header for the given template is - {:?}",
                 template_header
             );
-            log::info!("Transactions count is - {}", template_transactions.len());
+            log::debug!("Transactions count is - {}", template_transactions.len());
             let template: BlockTemplate = BlockTemplate {
                 version: template_header.version,
                 previousblockhash: template_header.prev_blockhash,
@@ -144,8 +208,8 @@ pub async fn ipc_template_consumer(
                 template.default_witness_commitment.clone();
             let mut latest_template_merkle_branch = latest_template_merkle_branch_arc.lock().await;
             latest_template_merkle_branch.clear();
-            for branch in template_bytes.1.into_iter() {
-                latest_template_merkle_branch.push(branch);
+            for branch in merkle_branch_coinbase.iter() {
+                latest_template_merkle_branch.push(branch.clone());
             }
             log::info!(
                 "Latest template has been updated with the most recently received template from IPC"
@@ -155,6 +219,7 @@ pub async fn ipc_template_consumer(
                 .send(NotifyCmd::SendToAll {
                     template: template,
                     merkle_branch_coinbase,
+                    template_id: template_id.clone(),
                 })
                 .await;
             match notification_sent_or_not {
