@@ -40,7 +40,8 @@ pub enum StratumErrors {
         method: String,
     },
     MiningJobNotFound {
-        job_id: u64,
+        job_id: Option<u64>,
+        template_id: Option<String>,
     },
     MiningJobInsertError {
         mining_job: JobDetails,
@@ -212,11 +213,14 @@ impl fmt::Display for StratumErrors {
                     method
                 )
             }
-            StratumErrors::MiningJobNotFound { job_id } => {
+            StratumErrors::MiningJobNotFound {
+                job_id,
+                template_id,
+            } => {
                 write!(
                     f,
-                    "No mining job found with the provided job id - {:?}",
-                    job_id
+                    "No mining job found with the provided job id - {:?} and template id - {:?}",
+                    job_id, template_id
                 )
             }
             StratumErrors::MiningJobInsertError { mining_job } => {
