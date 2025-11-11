@@ -301,7 +301,7 @@ pub async fn fetch_bead_by_bead_hash(
                 Err(_) => {
                     return Err(DBErrors::TupleAttributeParsingError {
                         error: "Invalid hash length".to_string(),
-                        attribute: "Merkel root".to_string(),
+                        attribute: "Merkle root".to_string(),
                     });
                 }
             };
