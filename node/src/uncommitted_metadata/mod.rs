@@ -24,8 +24,8 @@ impl Default for UnCommittedMetadata {
             sighash_type: EcdsaSighashType::All,
         };
         Self {
-            extra_nonce_1: 124562,
-            extra_nonce_2: 124562,
+            extra_nonce_1: 0,
+            extra_nonce_2: 0,
             broadcast_timestamp: bitcoin::blockdata::locktime::absolute::MedianTimePast::MIN,
             signature: default_sig,
         }

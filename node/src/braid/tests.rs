@@ -13,97 +13,12 @@ use crate::braid::consensus_functions::reverse;
 use crate::braid::consensus_functions::tips;
 use crate::braid::consensus_functions::updating_ancestors;
 use crate::braid::Cohort;
+use crate::utils::test_utils::test_utility_functions::loading_braid_from_file;
 use crate::utils::test_utils::test_utility_functions::*;
-use bitcoin::block::BlockHash as BeadHash;
-use num::range;
 use num::BigUint;
-use serde::{Deserialize, Serialize};
-use serde_json;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::path::Path;
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct FileBraid {
-    pub description: String,
-    pub parents: HashMap<usize, Vec<usize>>,
-    pub children: HashMap<usize, Vec<usize>>,
-    pub geneses: Vec<usize>,
-    pub tips: Vec<usize>,
-    pub cohorts: Vec<Vec<usize>>,
-    pub bead_work: HashMap<usize, u32>,
-    pub work: HashMap<usize, u32>,
-    pub highest_work_path: Vec<usize>,
-}
-
-pub const BRAIDTESTDIRECTORY: &str = "tests/braids";
-
-fn loading_braid_from_file(file_path: &str) -> (Braid, FileBraid) {
-    let current_file_path = file_path;
-    let file_content = std::fs::read_to_string(current_file_path).unwrap();
-    let file_braid: FileBraid = serde_json::from_str(&file_content).unwrap();
-    let mut beads_to_idx: HashMap<usize, Bead> = HashMap::new();
-    let mut test_braid_vector_bead_mapping: HashMap<BeadHash, usize> = HashMap::new();
-    for bead_idx in file_braid.clone().parents {
-        let random_test_bead = emit_bead();
-        test_braid_vector_bead_mapping.insert(
-            random_test_bead.clone().block_header.block_hash(),
-            bead_idx.0,
-        );
-        beads_to_idx.insert(bead_idx.0, random_test_bead.clone());
-    }
-    let mut test_braid_parents_map: HashMap<usize, HashSet<usize>> = HashMap::new();
-    for (idx, bead) in beads_to_idx.clone() {
-        let mut current_bead = bead;
-        let mut parent_idx_set: HashSet<usize> = HashSet::new();
-        if let Some(current_bead_parents) = file_braid.parents.get(&idx) {
-            for parent_bead_idx in current_bead_parents {
-                let parent_bead_block_hash =
-                    beads_to_idx[parent_bead_idx].block_header.block_hash();
-                current_bead
-                    .committed_metadata
-                    .parents
-                    .insert(parent_bead_block_hash);
-
-                parent_idx_set.insert(*parent_bead_idx);
-            }
-        }
-        test_braid_parents_map.insert(idx, parent_idx_set);
-        beads_to_idx.insert(idx, current_bead);
-    }
-    let mut beads_vector: Vec<Bead> = Vec::new();
-    for bead_index_number in range(0, file_braid.parents.len()) {
-        beads_vector.push(beads_to_idx[&bead_index_number].clone());
-    }
-    let mut current_braid_genesis: HashSet<usize> = HashSet::new();
-    let mut current_braid_tips: HashSet<usize> = HashSet::new();
-    let mut current_bead_cohorots: Vec<Cohort> = Vec::new();
-    for genesis_bead_idx in file_braid.geneses.clone() {
-        current_braid_genesis.insert(genesis_bead_idx);
-    }
-    for tips_bead_idx in file_braid.tips.clone() {
-        current_braid_tips.insert(tips_bead_idx);
-    }
-    for cohort in file_braid.cohorts.clone() {
-        let mut current_cohort_indices: HashSet<usize> = HashSet::new();
-        for cohort_bead_idx in cohort {
-            current_cohort_indices.insert(cohort_bead_idx);
-        }
-        current_bead_cohorots.push(Cohort(current_cohort_indices));
-    }
-    //constructing actual braid object from file-braid object
-    (
-        Braid {
-            beads: beads_vector,
-            bead_index_mapping: test_braid_vector_bead_mapping,
-            tips: current_braid_tips,
-            genesis_beads: current_braid_genesis,
-            cohorts: current_bead_cohorots,
-            cohort_tips: vec![HashSet::new()], // Cohorts tips are only used in extend(), so we can skip them here.
-            orphan_beads: Vec::new(),
-        },
-        file_braid.clone(),
-    )
-}
 #[test]
 pub fn test_extend_functionality() {
     // Create a braid with one bead.

@@ -44,7 +44,6 @@ pub async fn init_db() -> Result<SqlitePool, DBErrors> {
         }
     };
     let sql_lite_connections = db_config
-        .with_regexp()
         .foreign_keys(true)
         .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal);
     //Initializing connection to existing DB
