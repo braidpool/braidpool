@@ -1,7 +1,6 @@
 #!/bin/bash
 
 set -e # Exit immediately if a command exits with a non-zero status.
-
 # --- Configuration ---
 SESSION_NAME="braidpool"
 REQUIRED_PYTHON_VERSION="3.12"
