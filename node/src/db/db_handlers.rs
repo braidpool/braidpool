@@ -348,7 +348,7 @@ pub async fn fetch_bead_by_bead_hash(
         .await
     {
         Ok(_rows) => {
-            if _rows.is_none() == false {
+            if _rows.is_some() {
                 println!("Bead with given bead hash fetched successfully");
             } else {
                 println!("No such bead exists");
