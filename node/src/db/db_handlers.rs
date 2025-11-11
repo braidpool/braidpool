@@ -21,30 +21,30 @@ use tokio::sync::{
     RwLock,
 };
 const DB_CHANNEL_CAPACITY: usize = 1024;
-const INSERT_QUERY: &'static str = "   
+const INSERT_QUERY: &'static str = "
 INSERT INTO bead (
     id, hash, nVersion, hashPrevBlock, hashMerkleRoot, nTime,
     nBits, nNonce, payout_address, start_timestamp, comm_pub_key,
-    min_target, weak_target, miner_ip, extranonce1,extranonce2,
+    min_target, weak_target, miner_ip, extranonce1, extranonce2,
     broadcast_timestamp, signature
 )
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?);
 
 INSERT INTO Transactions (bead_id, txid)
-SELECT 
+SELECT
     json_extract(value, '$.bead_id') AS bead_id,
-    json_extract(value, '$.txid') AS txid
+    unhex(json_extract(value, '$.txid')) AS txid
 FROM json_each(?);
 
-INSERT INTO Relatives (child, parent) 
+INSERT INTO Relatives (child, parent)
 SELECT json_extract(value,'$.child') AS child,
     json_extract(value,'$.parent') AS PARENT
 FROM json_each(?);
 
 INSERT INTO ParentTimestamps (parent, child, timestamp)
-SELECT  json_extract(value,'$.parent') AS parent,
-        json_extract(value,'$.child') AS child,
-        json_extract(value,'$.timestamp') AS timestamp
+SELECT json_extract(value,'$.parent') AS parent,
+    json_extract(value,'$.child') AS child,
+    json_extract(value,'$.timestamp') AS timestamp
 FROM json_each(?);
 ";
 #[derive(Debug)]
@@ -213,7 +213,8 @@ impl DBHandler {
                             ));
                         }
                         for bead_tx in bead_to_insert.committed_metadata.transaction_ids.0.iter() {
-                            transaction_tuples.push(((*bead_id as u64), bead_tx.to_string()));
+                            transaction_tuples
+                                .push(((*bead_id as u64), hex::encode(bead_tx.to_byte_array())));
                         }
                         //Constructing json bindings
                         let transactions_values = transaction_tuples
@@ -375,14 +376,13 @@ pub async fn fetch_beads_in_batch(
 
             let current_bead_id = row.get::<i32, _>("id");
 
-            let tx_rows =
-                sqlx::query("SELECT unhex(txid) as txid FROM Transactions WHERE bead_id = ?")
-                    .bind(current_bead_id)
-                    .fetch_all(&conn)
-                    .await
-                    .map_err(|e| DBErrors::TupleNotFetched {
-                        error: e.to_string(),
-                    })?;
+            let tx_rows = sqlx::query("SELECT txid as txid FROM Transactions WHERE bead_id = ?")
+                .bind(current_bead_id)
+                .fetch_all(&conn)
+                .await
+                .map_err(|e| DBErrors::TupleNotFetched {
+                    error: e.to_string(),
+                })?;
 
             for tx in tx_rows {
                 let tx_bytes: Vec<u8> = tx.get("txid");
@@ -531,21 +531,19 @@ pub async fn fetch_bead_by_bead_hash(
             });
         }
     };
-    //Fetching transactions from DB using unhex to get raw hex from blob
-    let rows = match sqlx::query(
-        "SELECT  unhex(txid) as txid,bead_id FROM Transactions WHERE bead_id = ?",
-    )
-    .bind(bead_id)
-    .fetch_all(&db_connection_arc.lock().await.clone())
-    .await
-    {
-        Ok(rows) => rows,
-        Err(error) => {
-            return Err(DBErrors::TupleNotFetched {
-                error: error.to_string(),
-            });
-        }
-    };
+    let rows =
+        match sqlx::query("SELECT  txid as txid, bead_id FROM Transactions WHERE bead_id = ?")
+            .bind(bead_id)
+            .fetch_all(&db_connection_arc.lock().await.clone())
+            .await
+        {
+            Ok(rows) => rows,
+            Err(error) => {
+                return Err(DBErrors::TupleNotFetched {
+                    error: error.to_string(),
+                });
+            }
+        };
     //Fetching parent timestamps from DB
     let parent_timestamp_rows =
         match sqlx::query("SELECT  parent,child,timestamp FROM ParentTimestamps WHERE child = ?")
@@ -711,7 +709,7 @@ pub mod test {
                 ));
             }
             for bead_tx in bead.committed_metadata.transaction_ids.0.iter() {
-                transaction_tuples.push(((*bead_id as u64), bead_tx.to_string()));
+                transaction_tuples.push(((*bead_id as u64), hex::encode(bead_tx.to_byte_array())));
             }
             //Adding dummy tx
             transaction_tuples.push((
