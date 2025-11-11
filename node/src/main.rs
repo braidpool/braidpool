@@ -14,11 +14,14 @@ use libp2p::{
     swarm::SwarmEvent,
     PeerId,
 };
+use node::db::db_handlers::fetch_beads_in_batch;
 use node::SwarmHandler;
 use node::{
     bead::{self, Bead, BeadRequest},
     behaviour::{self, BEAD_ANNOUNCE_PROTOCOL, BRAIDPOOL_TOPIC},
-    braid, cli, ipc, ipc_template_consumer,
+    braid, cli,
+    db::db_handlers::DBHandler,
+    ipc_template_consumer,
     peer_manager::PeerManager,
     rpc_server::{parse_arguments, run_rpc_server},
     setup_logging, setup_tracing,
@@ -47,34 +50,65 @@ use tokio::sync::{
     RwLock,
 };
 
-#[allow(unused)]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    //Initializing loggers and tracers
+    setup_logging();
+    setup_tracing()?;
+    let genesis_beads = Vec::from([]);
+    // Initializing the braid object with read write lock
+    //for supporting concurrent readers and single writer
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+    //Initializing DB and db command handler
+    let (mut _db_handler, db_tx) = DBHandler::new(Arc::clone(&braid)).await.unwrap();
+    let db_connection_pool = _db_handler.db_connection_pool.clone();
+    //Reconstructing local braid upon startup
+    let db_connection_pool_ref = _db_handler.db_connection_pool.clone();
+    let braid_ref = braid.clone();
+    let initial_bead_fetch_handle = tokio::spawn(async move {
+        let mut guard = braid_ref.write().await;
+        let fetched_beads = fetch_beads_in_batch(db_connection_pool_ref, 4)
+            .await
+            .unwrap();
+        for bead in fetched_beads {
+            let curr_bead_status = guard.extend(&bead);
+            log::info!(
+                "Bead inserted with hash - {:?} extended successfully with status - {:?}",
+                bead.block_header.block_hash(),
+                curr_bead_status
+            );
+        }
+    });
+    let _yield_result = initial_bead_fetch_handle.await.unwrap();
     let latest_template_id = Arc::new(Mutex::new(String::from("genesis")));
     let latest_template_id_for_notifier = latest_template_id.clone();
     let latest_template_id_for_consumer = latest_template_id.clone();
+    //Starting the `query_handler` task
+    tokio::spawn(async move {
+        let _res = _db_handler.insert_query_handler().await;
+    });
     //latest available template to be cached for the newest connection until new job is received
-    let mut latest_template = Arc::new(Mutex::new(BlockTemplate::default()));
+    let latest_template = Arc::new(Mutex::new(BlockTemplate::default()));
     //latest available template merkle branch
-    let mut latest_template_merkle_branch = Arc::new(Mutex::new(Vec::new()));
+    let latest_template_merkle_branch = Arc::new(Mutex::new(Vec::new()));
     let mut latest_template_ref = latest_template.clone();
     let mut latest_template_merkle_branch_ref = latest_template_merkle_branch.clone();
     //One will go into the IPC and the other will go to the `notifier`
     let (notification_tx, notification_rx) = mpsc::channel::<NotifyCmd>(1024);
     //Communication bridge between stratum and network swarm and swarm commands also, for communicating share population and propogating them further
-    let (swarm_handler, mut swarm_command_receiver) = SwarmHandler::new();
+    let (swarm_handler, mut swarm_command_receiver) = SwarmHandler::new(Arc::clone(&braid), db_tx);
     let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
     //cloning the channel to be sent across different interfaces
     let notification_tx_clone = notification_tx.clone();
     //Connection mapping for all the downstream connection connected to the stratum server
     let connection_mapping = Arc::new(Mutex::new(ConnectionMapping::new()));
     //Mining job map keeping all the jobs provided to the downstream
-    let mut mining_job_map = Arc::new(Mutex::new(HashMap::new()));
+    let mining_job_map = Arc::new(Mutex::new(HashMap::new()));
     //Intializing `notifier` for mining.notify
     let mut notifier: Notifier = Notifier::new(notification_rx, Arc::clone(&mining_job_map));
     //Stratum configuration initialization
     let stratum_config: StratumServerConfig = StratumServerConfig::default();
-    let (block_submission_tx, mut block_submission_rx) =
+    let (block_submission_tx, block_submission_rx) =
         tokio::sync::mpsc::unbounded_channel::<node::stratum::BlockSubmissionRequest>();
 
     //Initializing stratum server
@@ -85,7 +119,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     );
     //Running the notification service
     tokio::spawn(async move {
-        notifier
+        let _res = notifier
             .run_notifier(
                 connection_mapping.clone(),
                 &mut latest_template_ref,
@@ -96,7 +130,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     });
     //Running the stratum service
     tokio::spawn(async move {
-        stratum_server
+        let _res = stratum_server
             .run_stratum_service(
                 mining_job_map,
                 notification_tx_clone,
@@ -110,8 +144,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let main_task_token = CancellationToken::new();
     let ipc_task_token = main_task_token.clone();
     let args = cli::Cli::parse();
-    setup_logging();
-    setup_tracing()?;
     let datadir = shellexpand::full(args.datadir.to_str().unwrap()).unwrap();
     match fs::metadata(&*datadir) {
         Ok(m) => {
@@ -168,12 +200,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             keypair
         }
     };
-
-    let genesis_beads = Vec::from([]);
-    // Initializing the braid object with read write lock
-    //for supporting concurrent readers and single writer
-    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
-
     //spawning the rpc server
     if let Some(rpc_command) = args.command {
         let server_address = tokio::spawn(run_rpc_server(Arc::clone(&braid)));
@@ -188,7 +214,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // load beads from db (if present) and insert in braid here
     // Initializing the peer manager
     let mut peer_manager = PeerManager::new(8);
-
     //For local testing uncomment this keypair peer since it running to process will
     //result in same peerID leading to OutgoingConnectionError
 
@@ -444,7 +469,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                          log::info!("Sent identify info to {:?}", peer_id);
                      }
                      SwarmEvent::Behaviour(BraidPoolBehaviourEvent::Identify(
-                         identify::Event::Received { info, peer_id, .. },
+                         identify::Event::Received { info,  .. },
                      )) => {
                          let info_reference = info.clone();
                          log::info!(
@@ -482,10 +507,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                              log::info!("Failed to get closest peers: {err}");
                          }
                         QueryResult::Bootstrap(Ok(BootstrapOk {
-                            peer,
-                            num_remaining,
+                            peer, ..
                         }))=>{
-                            log::info!("Peer recieved while bootstrapping - {:?}",peer);
+                            log::info!("Peer received while bootstrapping - {:?}",peer);
                         }
                          _ => log::info!("Other query result: {:?}", result),
                      },
@@ -696,9 +720,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                              .publish(current_broadcast_topic.clone(), bead_bytes);
                         log::info!("Published to flood sub topic successfully !");
                      }
-                     _=>{
-
-                     }
                  }
              }
             }
@@ -709,6 +730,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let shutdown_signal = tokio::signal::ctrl_c().await;
     match shutdown_signal {
         Ok(_) => {
+            log::info!("Closing connection to DB pool");
+            let pool = db_connection_pool.lock().await;
+            //Closing all the existing connections to pool and committing from .db-wal to .db
+            pool.close().await;
+            log::info!("All the existing connections to pool closed");
             log::info!("Shutting down the Network Swarm");
             swarm_handle.abort();
             tokio::time::sleep(Duration::from_millis(1)).await;

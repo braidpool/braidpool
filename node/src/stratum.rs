@@ -650,8 +650,11 @@ impl DownstreamClient {
                 });
             }
         }
-        let extranonce_2_raw_value = i32::from_str_radix(extranonce2, 16).unwrap();
-        let swarm_command_sent = match swarm_handler
+        //Passing both the extranonces for committment in uncommitted metadata
+        let extranonce_2_raw_value = u32::from_str_radix(extranonce2, 16).unwrap();
+        let extranonce_1_hex_str = hex::encode(self.extranonce1.clone());
+        let extranonce_1_raw_value = u32::from_str_radix(&extranonce_1_hex_str, 16).unwrap();
+        let _swarm_command_sent = match swarm_handler
             .lock()
             .await
             .propagate_valid_bead(
@@ -660,6 +663,7 @@ impl DownstreamClient {
                 &self.downstream_ip,
                 submitted_job.job_sent_time,
                 worker_name,
+                extranonce_1_raw_value,
             )
             .await
         {
@@ -1717,7 +1721,7 @@ impl Server {
                         //Parsing the lines read from buffer to find out whether they are valid JSON request type to be server as per
                         //stratum or not .
                         match serde_json::from_str::<StandardRequest>(&line) {
-                                Ok(request) => {
+                                Ok(_request) => {
                          let server_request_res:Result<StratumResponses, StratumErrors> = downstream_client.lock().await.handle_client_to_server_request(serde_json::from_str(&line).unwrap(),mining_job_map.clone(),downstream_message_sender.clone(),notification_sender.clone(),peer_addr.to_string(),swarm_handler.clone()).await;
                          match server_request_res{
                             Ok(_)=>{
@@ -1759,7 +1763,11 @@ mod test {
     use std::{collections::HashMap, str::FromStr, sync::Arc, time::Duration};
 
     use super::*;
-    use crate::stratum::{ConnectionMapping, MiningJobMap, NotifyCmd, Server, StratumServerConfig};
+    use crate::{
+        braid,
+        db::db_handlers::DBHandler,
+        stratum::{ConnectionMapping, MiningJobMap, NotifyCmd, Server, StratumServerConfig},
+    };
     use bitcoin::{
         absolute::LockTime, pow::CompactTargetExt, script::ScriptBufExt, Amount, BlockHash,
         BlockVersion, OutPoint, ScriptBuf, Sequence, TxIn, TxOut,
@@ -1768,15 +1776,20 @@ mod test {
     use tokio::{
         io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
         net::TcpStream,
-        sync::mpsc,
+        sync::{mpsc, RwLock},
     };
 
     #[tokio::test]
     pub async fn server_start_test() {
+        let genesis_beads = Vec::from([]);
+        let test_braid: Arc<RwLock<braid::Braid>> =
+            Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
         let connection_mapping = Arc::new(Mutex::new(ConnectionMapping::new()));
         let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
-        let (swarm_handler, mut swarm_command_receiver) = SwarmHandler::new();
+        let (_test_db_handler, test_db_tx) = DBHandler::new(Arc::clone(&test_braid)).await.unwrap();
+        let (swarm_handler, mut swarm_command_receiver) =
+            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx);
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let config = StratumServerConfig {
             hostname: "127.0.0.1".to_string(),
@@ -1827,8 +1840,13 @@ mod test {
     #[tokio::test]
     pub async fn server_subscribe_response() {
         let connection_mapping = Arc::new(Mutex::new(ConnectionMapping::new()));
+        let genesis_beads = Vec::from([]);
+        let test_braid: Arc<RwLock<braid::Braid>> =
+            Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
         let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
-        let (swarm_handler, mut swarm_command_receiver) = SwarmHandler::new();
+        let (_test_db_handler, test_db_tx) = DBHandler::new(Arc::clone(&test_braid)).await.unwrap();
+        let (swarm_handler, mut swarm_command_receiver) =
+            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx);
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
 
@@ -1865,9 +1883,14 @@ mod test {
     #[tokio::test]
     async fn test_mining_authorize_response() {
         let connection_mapping = Arc::new(Mutex::new(ConnectionMapping::new()));
+        let genesis_beads = Vec::from([]);
+        let test_braid: Arc<RwLock<braid::Braid>> =
+            Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
         let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
-        let (swarm_handler, mut swarm_command_receiver) = SwarmHandler::new();
+        let (_test_db_handler, test_db_tx) = DBHandler::new(Arc::clone(&test_braid)).await.unwrap();
+        let (swarm_handler, mut swarm_command_receiver) =
+            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx);
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let config = StratumServerConfig {
             hostname: "127.0.0.1".to_string(),
@@ -1904,9 +1927,14 @@ mod test {
     #[tokio::test]
     async fn test_mining_set_difficulty_response() {
         let connection_mapping = Arc::new(Mutex::new(ConnectionMapping::new()));
+        let genesis_beads = Vec::from([]);
+        let test_braid: Arc<RwLock<braid::Braid>> =
+            Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+        let (_test_db_handler, test_db_tx) = DBHandler::new(Arc::clone(&test_braid)).await.unwrap();
         let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
-        let (swarm_handler, mut swarm_command_receiver) = SwarmHandler::new();
+        let (swarm_handler, mut swarm_command_receiver) =
+            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx);
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let config = StratumServerConfig {
             hostname: "127.0.0.1".to_string(),
@@ -1935,10 +1963,15 @@ mod test {
     #[tokio::test]
     async fn test_invalid_json() {
         let connection_mapping = Arc::new(Mutex::new(ConnectionMapping::new()));
+        let genesis_beads = Vec::from([]);
+        let test_braid: Arc<RwLock<braid::Braid>> =
+            Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+        let (_test_db_handler, test_db_tx) = DBHandler::new(Arc::clone(&test_braid)).await.unwrap();
         let mining_job_map: Arc<Mutex<HashMap<String, Arc<Mutex<MiningJobMap>>>>> =
             Arc::new(Mutex::new(HashMap::new()));
         let (notify_tx, _notify_rx) = mpsc::channel::<NotifyCmd>(32);
-        let (swarm_handler, mut swarm_command_receiver) = SwarmHandler::new();
+        let (swarm_handler, mut swarm_command_receiver) =
+            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx);
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let config = StratumServerConfig {
             hostname: "127.0.0.1".to_string(),
@@ -1993,7 +2026,12 @@ mod test {
         Test block taken - 00000020e6ebb395a1e2ba60f17650d790309e21af08062229ad955376ac574300000000e8de27818e402a0d5e6028f363be4b47d809ad348e6bc88ac2f9c2bedf0409e9337edf68ffff001d7aeb8b0601020000000001010000000000000000000000000000000000000000000000000000000000000000ffffffff1602611e089495ac0803000000094272616964706f6f6cffffffff0300f2052a01000000160014e470d0179325db88b55771f6c0a5139dd81d73180000000000000000266a24aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf900000000000000002a6a286272616964706f6f6c5f626561645f6d657461646174615f686173685f33326201020304050607080120000000000000000000000000000000000000000000000000000000000000000000000000
 
          */
-        let (swarm_handler, mut swarm_command_receiver) = SwarmHandler::new();
+        let genesis_beads = Vec::from([]);
+        let test_braid: Arc<RwLock<braid::Braid>> =
+            Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+        let (_test_db_handler, test_db_tx) = DBHandler::new(Arc::clone(&test_braid)).await.unwrap();
+        let (swarm_handler, mut swarm_command_receiver) =
+            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx);
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let test_merkel_bytes: [u8; 32] = [0u8; 32];
         let mut test_witness = Witness::new();
