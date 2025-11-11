@@ -47,7 +47,7 @@ pub async fn init_db() -> Result<SqlitePool, DBErrors> {
         .with_regexp()
         .foreign_keys(true)
         .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal);
-    //Initalizing connection to existing DB
+    //Initializing connection to existing DB
     let conn = if db_exists {
         log::info!("Database already exists at {:?}", db_path);
         let pool = match SqlitePool::connect_with(sql_lite_connections).await {
