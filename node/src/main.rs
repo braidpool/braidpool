@@ -61,7 +61,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //Initializing DB and db command handler
     let (mut _db_handler, db_tx) = DBHandler::new(Arc::clone(&braid)).await.unwrap();
     let db_connection_pool = _db_handler.db_connection_pool.clone();
-    //Initializing DB
     let latest_template_id = Arc::new(Mutex::new(String::from("genesis")));
     let latest_template_id_for_notifier = latest_template_id.clone();
     let latest_template_id_for_consumer = latest_template_id.clone();
