@@ -173,7 +173,6 @@ pub async fn ipc_template_consumer(
             let (template_header, template_transactions) = candidate_block.unwrap().into_parts();
             let _coinbase_transaction = template_transactions.get(0);
 
-            // log::info!("Coinbase transaction is - {:?}", coinbase_transaction);
             log::debug!(
                 "The block header for the given template is - {:?}",
                 template_header

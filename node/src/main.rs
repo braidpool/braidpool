@@ -14,6 +14,7 @@ use libp2p::{
     swarm::SwarmEvent,
     PeerId,
 };
+use node::db::db_handlers::fetch_beads_in_batch;
 use node::SwarmHandler;
 use node::{
     bead::{self, Bead, BeadRequest},
@@ -61,6 +62,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //Initializing DB and db command handler
     let (mut _db_handler, db_tx) = DBHandler::new(Arc::clone(&braid)).await.unwrap();
     let db_connection_pool = _db_handler.db_connection_pool.clone();
+    //Reconstructing local braid upon startup
+    let db_connection_pool_ref = _db_handler.db_connection_pool.clone();
+    let braid_ref = braid.clone();
+    let initial_bead_fetch_handle = tokio::spawn(async move {
+        let mut guard = braid_ref.write().await;
+        let fetched_beads = fetch_beads_in_batch(db_connection_pool_ref, 4)
+            .await
+            .unwrap();
+        for bead in fetched_beads {
+            let curr_bead_status = guard.extend(&bead);
+            log::info!(
+                "Bead inserted with hash - {:?} extended successfully with status - {:?}",
+                bead.block_header.block_hash(),
+                curr_bead_status
+            );
+        }
+    });
+    let _yield_result = initial_bead_fetch_handle.await.unwrap();
     let latest_template_id = Arc::new(Mutex::new(String::from("genesis")));
     let latest_template_id_for_notifier = latest_template_id.clone();
     let latest_template_id_for_consumer = latest_template_id.clone();
