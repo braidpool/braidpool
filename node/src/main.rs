@@ -491,7 +491,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         QueryResult::Bootstrap(Ok(BootstrapOk {
                             peer, ..
                         }))=>{
-                            log::info!("Peer recieved while bootstrapping - {:?}",peer);
+                            log::info!("Peer received while bootstrapping - {:?}",peer);
                         }
                          _ => log::info!("Other query result: {:?}", result),
                      },
