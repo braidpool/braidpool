@@ -59,7 +59,7 @@ impl DBHandler {
     pub async fn new(
         local_braid_arc: Arc<RwLock<Braid>>,
     ) -> Result<(Self, Sender<BraidpoolDBTypes>), DBErrors> {
-        log::info!("Initializing Schema for persistant DB");
+        log::info!("Initializing Schema for persistent DB");
         let connection = match init_db().await {
             Ok(conn) => conn,
             Err(error) => {
