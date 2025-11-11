@@ -1,12 +1,24 @@
+import React from 'react';
 import { FaGithub, FaTwitter, FaDiscord, FaCode } from 'react-icons/fa';
+import { EXTERNAL_LINKS } from '../../URLs';
 
-export default function Footer() {
+const Footer: React.FC = () => {
+  const projectLinks: { label: string; link: string }[] = [
+    { label: 'About', link: EXTERNAL_LINKS.ABOUT },
+    { label: 'Documentation', link: EXTERNAL_LINKS.DOCUMENTATION },
+    { label: 'Contribute', link: EXTERNAL_LINKS.CONTRIBUTE },
+  ];
+
+  const legalLinks: { label: string; link: string }[] = [
+    { label: 'APGL-3.0 License', link: EXTERNAL_LINKS.LICENSE },
+  ];
+
   return (
-    <footer className=" text-gray-300 px-8 sm:px-10 md:px-20 py-8">
+    <footer className="text-gray-300 px-8 sm:px-10 md:px-20 py-8">
       <div
         className="max-w-6xl mx-auto grid 
-  sm:grid-cols-1 md:grid-cols-3 lg:grid-cols-5 
-  gap-10 "
+        sm:grid-cols-1 md:grid-cols-3 lg:grid-cols-5 
+        gap-10"
       >
         {/* Logo & Description */}
         <div className="space-y-3">
@@ -27,19 +39,21 @@ export default function Footer() {
           </p>
         </div>
 
-        {/* Project */}
+        {/* Project Links */}
         <div>
           <h2 className="text-base font-semibold text-white mb-2 mt-2">
             Project
           </h2>
           <ul className="space-y-1 text-sm">
-            {['About', 'Documentation', 'Contribute', 'FAQs'].map((item) => (
-              <li key={item}>
+            {projectLinks.map(({ label, link }) => (
+              <li key={label}>
                 <a
-                  href={`/${item.toLowerCase()}`}
+                  href={link}
+                  target="_blank"
+                  rel="noreferrer"
                   className="hover:text-white hover:translate-x-1 transition-all duration-200 inline-block"
                 >
-                  {item}
+                  {label}
                 </a>
               </li>
             ))}
@@ -55,7 +69,7 @@ export default function Footer() {
             <li className="flex items-center gap-2 group">
               <FaGithub className="group-hover:rotate-[360deg] transition-transform duration-500" />
               <a
-                href="https://github.com/braidpool/braidpool"
+                href={EXTERNAL_LINKS.GITHUB}
                 target="_blank"
                 rel="noreferrer"
                 className="hover:text-white"
@@ -63,10 +77,11 @@ export default function Footer() {
                 GitHub
               </a>
             </li>
+
             <li className="flex items-center gap-2 group">
               <FaTwitter className="group-hover:rotate-[360deg] transition-transform duration-500" />
               <a
-                href="https://twitter.com/braidpool"
+                href={EXTERNAL_LINKS.TWITTER}
                 target="_blank"
                 rel="noreferrer"
                 className="hover:text-white"
@@ -74,9 +89,15 @@ export default function Footer() {
                 Twitter
               </a>
             </li>
+
             <li className="flex items-center gap-2 group">
               <FaDiscord className="group-hover:rotate-[360deg] transition-transform duration-500" />
-              <a href="/forum" className="hover:text-white">
+              <a
+                href={EXTERNAL_LINKS.DISCORD}
+                target="_blank"
+                rel="noreferrer"
+                className="hover:text-white"
+              >
                 Discord
               </a>
             </li>
@@ -89,14 +110,12 @@ export default function Footer() {
             Legal
           </h2>
           <ul className="space-y-1 text-sm">
-            {[
-              ['MIT License', '/license'],
-              ['Terms of Use', '/terms'],
-              ['Privacy Policy', '/privacy'],
-            ].map(([label, link]) => (
+            {legalLinks.map(({ label, link }) => (
               <li key={label}>
                 <a
                   href={link}
+                  target="_blank"
+                  rel="noreferrer"
                   className="hover:text-white hover:translate-x-1 transition-all duration-200 inline-block"
                 >
                   {label}
@@ -104,30 +123,29 @@ export default function Footer() {
               </li>
             ))}
           </ul>
-          <ul>
-            <li>
-              <a
-                href="#"
-                className="text-gray-400 hover:text-white transition-colors duration-200 flex items-center"
-              >
-                <FaCode className="h-4 w-4 mr-2" />
-                <span>Developer Forum</span>
-              </a>
-            </li>
-          </ul>
         </div>
+
+        {/* Newsletter */}
         <div className="flex-col sm:flex-row">
           <h3 className="text-white font-bold mb-4 text-lg">Stay Updated</h3>
           <p className="text-gray-400 mb-4 text-sm">
             Subscribe to our newsletter for the latest updates and insights.
           </p>
-          <div className="flex">
+          <div className="flex flex-col sm:flex-row w-full max-w-xs sm:max-w-none">
             <input
               type="email"
               placeholder="Your email"
-              className="bg-gray-900/80 border border-gray-700/80 rounded-l-lg p-2 text-sm flex-grow focus:outline-none focus:border-gray-500"
+              className="bg-gray-900/80 border border-gray-700/80
+              rounded-t-lg
+              p-2 text-sm flex-grow
+              focus:outline-none focus:border-gray-500 text-center"
             />
-            <button className="bg-gray-900 hover:bg-gray-600 text-white px-2 rounded-r-lg transition-colors duration-200">
+            <button
+              className="bg-gray-900 hover:bg-gray-600 text-white
+           px-3 py-2
+           rounded-b-lg
+           text-sm transition-colors duration-200 whitespace-nowrap"
+            >
               Subscribe
             </button>
           </div>
@@ -141,4 +159,6 @@ export default function Footer() {
       </div>
     </footer>
   );
-}
+};
+
+export default Footer;
