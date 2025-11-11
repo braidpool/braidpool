@@ -81,7 +81,10 @@ pub async fn init_db() -> Result<SqlitePool, DBErrors> {
         };
 
         // Force WAL checkpoint to flush schema changes to disk
-        match sqlx::query("PRAGMA wal_checkpoint(FULL)").execute(&pool).await {
+        match sqlx::query("PRAGMA wal_checkpoint(FULL)")
+            .execute(&pool)
+            .await
+        {
             Ok(_) => {
                 log::info!("WAL checkpoint completed successfully");
             }
