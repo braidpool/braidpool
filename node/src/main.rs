@@ -167,8 +167,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let perms = fs::metadata(&keystore_path)?.permissions();
             if perms.mode() & 0o777 != 0o400 {
                 warn!(
-                    "Keystore permissions are not secure: {:o}, setting to 0o400",
-                    perms.mode() & 0o777
+                    permissions = perms.mode() & 0o777,
+                    "Keystore permissions are not secure, setting to 0o400"
                 );
                 let mut new_perms = perms.clone();
                 new_perms.set_mode(0o400);
@@ -517,7 +517,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         QueryResult::Bootstrap(Ok(BootstrapOk {
                             peer, ..
                         }))=>{
-                            info!(peer = ?peer, "Peer received during bootstrap");
+                            info!(peer = ?peer, "New peer");
                         }
                          _ => info!(result = ?result, "Other DHT query result"),
                      },
@@ -575,9 +575,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                          });
                          peer_manager.add_peer(peer_id, !endpoint.is_dialer(), ip);
                          info!(
-                             "Connection established to peer: {} via {}",
-                             peer_id,
-                             remote_addr
+                             peer_id = ?peer_id,
+                             remote_addr = ?remote_addr,
+                             "Connection established to peer"
                          );
                      }
                      SwarmEvent::ConnectionClosed {
