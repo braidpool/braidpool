@@ -66,19 +66,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //Reconstructing local braid upon startup
     let db_connection_pool_ref = _db_handler.db_connection_pool.clone();
     let braid_ref = braid.clone();
+    // FIXME instead we should look 144 blocks back from the bitcoin tip (1 day) and load beads
+    // starting from that block as genesis
     let initial_bead_fetch_handle = tokio::spawn(async move {
         let mut guard = braid_ref.write().await;
-        let fetched_beads = fetch_beads_in_batch(db_connection_pool_ref, 4)
+        let fetched_beads = fetch_beads_in_batch(db_connection_pool_ref, 1000)
             .await
             .unwrap();
-        for bead in fetched_beads {
+        for bead in &fetched_beads {
             let curr_bead_status = guard.extend(&bead);
-            info!(
+            debug!(
                 hash = ?bead.block_header.block_hash(),
                 status = ?curr_bead_status,
                 "Bead inserted"
             );
         }
+        info!(beads = fetched_beads.len(), "Beads loaded from DB");
     });
     let _yield_result = initial_bead_fetch_handle.await.unwrap();
     let latest_template_id = Arc::new(Mutex::new(TemplateId::default()));
