@@ -68,13 +68,15 @@ pub mod init_capnp {
     include!(concat!(env!("OUT_DIR"), "/init_capnp.rs"));
 }
 
+/// Unique identifier assigned to each block template.
+pub type TemplateId = u64;
+
 /// Global template ID counter that persists across the application lifetime
 static GLOBAL_TEMPLATE_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 /// Get the next unique template ID (increments on each call)
-pub fn get_next_template_id() -> String {
-    let id = GLOBAL_TEMPLATE_COUNTER.fetch_add(1, Ordering::SeqCst);
-    id.to_string()
+pub fn get_next_template_id() -> TemplateId {
+    GLOBAL_TEMPLATE_COUNTER.fetch_add(1, Ordering::SeqCst)
 }
 
 /// **Length of the extranonce prefix (in bytes).**
@@ -126,9 +128,9 @@ pub async fn ipc_template_consumer(
     latest_template_arc: &mut Arc<Mutex<BlockTemplate>>,
     latest_template_merkle_branch_arc: &mut Arc<Mutex<Vec<Vec<u8>>>>,
     template_cache: Arc<
-        tokio::sync::Mutex<HashMap<String, Arc<crate::ipc::client::BlockTemplate>>>,
+        tokio::sync::Mutex<HashMap<TemplateId, Arc<crate::ipc::client::BlockTemplate>>>,
     >,
-    latest_template_id: Arc<Mutex<String>>,
+    latest_template_id: Arc<Mutex<TemplateId>>,
 ) -> Result<(), IPCtemplateError> {
     while let Some(ipc_template) = template_rx.recv().await {
         let template_bytes = match &ipc_template.processed_block_hex {
@@ -147,23 +149,22 @@ pub async fn ipc_template_consumer(
             let template_id = get_next_template_id();
             {
                 let mut latest_id = latest_template_id.lock().await;
-                *latest_id = template_id.clone();
+                *latest_id = template_id;
             }
 
             // Cache the IPC template with this new ID
             {
                 let mut cache = template_cache.lock().await;
-                cache.insert(template_id.clone(), ipc_template.clone());
+                cache.insert(template_id, ipc_template.clone());
 
                 // Cleanup old templates
                 if cache.len() > MAX_CACHED_TEMPLATES {
-                    let mut ids: Vec<u64> =
-                        cache.keys().filter_map(|k| k.parse::<u64>().ok()).collect();
-                    ids.sort();
+                    let mut ids: Vec<TemplateId> = cache.keys().copied().collect();
+                    ids.sort_unstable();
 
                     let remove_count = cache.len() - MAX_CACHED_TEMPLATES;
                     for id in ids.iter().take(remove_count) {
-                        cache.remove(&id.to_string());
+                        cache.remove(id);
                         debug!(template_id = %id, "Removed old template from cache");
                     }
                 }
@@ -178,11 +179,7 @@ pub async fn ipc_template_consumer(
             let (template_header, template_transactions) = candidate_block.unwrap().into_parts();
             let _coinbase_transaction = template_transactions.get(0);
 
-            debug!(
-                template_id = ?template_id,
-                template_header = ?template_header,
-                "New block template"
-            );
+            debug!(template_id = %template_id, template_header = ?template_header, "New block template");
             let template: BlockTemplate = BlockTemplate {
                 version: template_header.version,
                 previousblockhash: template_header.prev_blockhash,
@@ -229,7 +226,7 @@ pub async fn ipc_template_consumer(
                 .send(NotifyCmd::SendToAll {
                     template: template,
                     merkle_branch_coinbase,
-                    template_id: template_id.clone(),
+                    template_id,
                 })
                 .await;
             match notification_sent_or_not {

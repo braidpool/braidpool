@@ -1,6 +1,6 @@
 use crate::error::StratumErrors;
 use crate::template_creator::calculate_merkle_root;
-use crate::{SwarmHandler, EXTRANONCE1_SIZE, EXTRANONCE2_SIZE, EXTRANONCE_SEPARATOR};
+use crate::{SwarmHandler, TemplateId, EXTRANONCE1_SIZE, EXTRANONCE2_SIZE, EXTRANONCE_SEPARATOR};
 use bitcoin::block::HeaderExt;
 use bitcoin::consensus::serialize;
 use bitcoin::io::Cursor;
@@ -29,7 +29,7 @@ use tracing::{debug, error, info, trace, warn};
 #[derive(Debug, Clone)]
 pub struct BlockSubmissionRequest {
     /// The template ID that this submission is for
-    pub template_id: String,
+    pub template_id: TemplateId,
     /// Fully constructed block header (includes version, prevhash, merkle root, time, bits, nonce)
     pub header: BlockHeader,
     /// Complete coinbase transaction
@@ -477,8 +477,7 @@ impl DownstreamClient {
             .ok_or_else(|| StratumErrors::MiningJobNotFound {
                 job_id: Some(numeric_job_id),
                 template_id: None,
-            })?
-            .clone();
+            })?;
         //Building the coinbase and then eventually the block and testing for the validation against the
         //mainnet/regtest/cpunet/testnet difficulty or the weakshare local difficulty .
         let extranonce_1_hex = hex::encode(self.extranonce1.clone());
@@ -681,7 +680,7 @@ impl DownstreamClient {
                 // If valid block found, send to submission channel
                 if let Some(ref submission_tx) = self.block_submission_tx {
                     let submission = BlockSubmissionRequest {
-                        template_id: template_id.clone(),
+                        template_id,
                         header: header.clone(),
                         coinbase_transaction: coinbase_tx_for_submission.clone(),
                     };
@@ -1092,7 +1091,7 @@ pub enum NotifyCmd {
     SendToAll {
         template: BlockTemplate,
         merkle_branch_coinbase: Vec<Vec<u8>>,
-        template_id: String,
+        template_id: TemplateId,
     },
     SendLatestTemplateToNewDownstream {
         new_downstream_addr: String,
@@ -1147,9 +1146,9 @@ pub struct JobDetails {
 /// multiple threads serving requests according to the new process of serving requests .
 pub struct MiningJobMap {
     // template_id to job details
-    mining_jobs: HashMap<String, JobDetails>,
+    mining_jobs: HashMap<TemplateId, JobDetails>,
     // numeric job_id to template_id
-    job_id_to_template: HashMap<u64, String>,
+    job_id_to_template: HashMap<u64, TemplateId>,
     // Generate sequential numeric job IDs for miners
     next_job_id: u64,
 }
@@ -1162,13 +1161,13 @@ impl MiningJobMap {
         }
     }
     ///Inserting a suitable mining job which has been passed to the downstream being constructed from a suitable block template .
-    pub async fn insert_mining_job(&mut self, template_id: String, job_details: JobDetails) -> u64 {
+    pub async fn insert_mining_job(&mut self, template_id: TemplateId, job_details: JobDetails) -> u64 {
         let numeric_job_id = self.next_job_id;
 
         debug!(job_id = %numeric_job_id, template_id = %template_id, "Inserting mining job into MiningJobMap");
 
         // Store job by template_id
-        self.mining_jobs.insert(template_id.clone(), job_details);
+        self.mining_jobs.insert(template_id, job_details);
 
         // Map numeric job_id to template_id for reverse lookup
         self.job_id_to_template.insert(numeric_job_id, template_id);
@@ -1179,13 +1178,13 @@ impl MiningJobMap {
     /// Get job by template_id which is used internally by server
     pub async fn get_by_template_id(
         &self,
-        template_id: &str,
+        template_id: TemplateId,
     ) -> Result<&JobDetails, StratumErrors> {
         self.mining_jobs
-            .get(template_id)
+            .get(&template_id)
             .ok_or_else(|| StratumErrors::MiningJobNotFound {
                 job_id: None,
-                template_id: Some(template_id.to_string()),
+                template_id: Some(template_id),
             })
     }
 
@@ -1198,12 +1197,12 @@ impl MiningJobMap {
             }
         })?;
 
-        self.get_by_template_id(template_id).await
+        self.get_by_template_id(*template_id).await
     }
 
     /// Get template_id from numeric job_id for mining.submit validation
-    pub fn template_id_from_job_id(&self, job_id: u64) -> Option<&String> {
-        self.job_id_to_template.get(&job_id)
+    pub fn template_id_from_job_id(&self, job_id: u64) -> Option<TemplateId> {
+        self.job_id_to_template.get(&job_id).copied()
     }
 }
 ///`Notifier` that will serve the purpose of notifying the downstream nodes with the lates available jobs
@@ -1275,7 +1274,7 @@ impl Notifier {
     pub async fn construct_job_notification(
         clean_job: bool,
         mut notified_template: BlockTemplate,
-        template_id: &str,
+        template_id: TemplateId,
         merkle_coinbase_branch: Vec<Vec<u8>>,
     ) -> Result<JobNotification, StratumErrors> {
         debug!(
@@ -1304,7 +1303,7 @@ impl Notifier {
         };
         let deserialized_coinbase = serialize::<Transaction>(&coinbase_transaction);
         debug!(
-            template_id = ?template_id,
+            template_id = %template_id,
             coinbase = ?coinbase_transaction,
             "Deserialized coinbase"
         );
@@ -1336,7 +1335,7 @@ impl Notifier {
             }
         }
         debug!(
-            template_id = ?template_id,
+            template_id = %template_id,
             merkle_branches = ?merkle_branches,
             "Merkle branches are"
         );
@@ -1392,7 +1391,7 @@ impl Notifier {
         downstream_connection_map: Arc<Mutex<ConnectionMapping>>,
         latest_template_arc: &mut Arc<Mutex<BlockTemplate>>,
         latest_template_merkle_branch_arc: &mut Arc<Mutex<Vec<Vec<u8>>>>,
-        latest_template_id: Arc<Mutex<String>>,
+        latest_template_id: Arc<Mutex<TemplateId>>,
     ) -> Result<(), StratumErrors> {
         debug!("Stratum notifier task started");
         while let Some(notification_command) = self.notification_receiver.recv().await {
@@ -1439,7 +1438,7 @@ impl Notifier {
                         let job_notification = match Self::construct_job_notification(
                             clean_job,
                             template.clone(),
-                            &template_id,
+                            template_id,
                             merkle_branch_coinbase.clone(),
                         )
                         .await
@@ -1480,9 +1479,8 @@ impl Notifier {
                             job_sent_time: unix_timestamp,
                         };
 
-                        let numeric_job_id = curr_peer_mining_job_map
-                            .insert_mining_job(template_id.clone(), job_details)
-                            .await;
+                        let numeric_job_id =
+                            curr_peer_mining_job_map.insert_mining_job(template_id, job_details).await;
 
                         let job_notification_response = JobNotificationResponse {
                             method: "mining.notify".to_string(),
@@ -1524,10 +1522,7 @@ impl Notifier {
                 NotifyCmd::SendLatestTemplateToNewDownstream {
                     new_downstream_addr,
                 } => {
-                    let current_template_id = {
-                        let id = latest_template_id.lock().await;
-                        id.clone()
-                    };
+                    let current_template_id = *latest_template_id.lock().await;
                     let connection_entry = {
                         let current_downstream_mapping = downstream_connection_map.lock().await;
                         current_downstream_mapping
@@ -1546,10 +1541,9 @@ impl Notifier {
                     };
                     let connection_id_hex = format!("{:x}", connection_entry.connection_id);
 
-                    if current_template_id == "genesis" {
+                    if current_template_id == 0 {
                         warn!(
                             connection_id = %connection_id_hex,
-                            miner = %new_downstream_addr,
                             "No templates generated yet for new miner"
                         );
                         continue; // Skip but keep notifier running
@@ -1561,8 +1555,7 @@ impl Notifier {
                     info!(
                         connection_id = %connection_id_hex,
                         template_id = %current_template_id,
-                        miner = %new_downstream_addr,
-                        "Sending template to new miner"
+                        "Sending existing latest template to new miner"
                     );
                     let global_peer_mining_job_map_arc = self.job_map_arc.lock().await;
                     let current_peer_mining_job_map_arc = global_peer_mining_job_map_arc
@@ -1576,7 +1569,7 @@ impl Notifier {
                     let job_notification = Self::construct_job_notification(
                         clean_job,
                         latest_template.clone(),
-                        &current_template_id,
+                        current_template_id,
                         latest_template_merkle_branch,
                     )
                     .await;
@@ -1609,7 +1602,7 @@ impl Notifier {
                                     job_sent_time: unix_timestamp,
                                 };
                                 let numeric_job_id = curr_peer_mining_job_map
-                                    .insert_mining_job(current_template_id.clone(), job_details)
+                                    .insert_mining_job(current_template_id, job_details)
                                     .await;
                                 let job_notification_response = JobNotificationResponse {
                                     method: "mining.notify".to_string(),
@@ -2314,7 +2307,7 @@ mod test {
             ..Default::default()
         };
         let mut constructed_test_notification =
-            Notifier::construct_job_notification(false, test_template.clone(), "1", vec![])
+            Notifier::construct_job_notification(false, test_template.clone(), 1, vec![])
                 .await
                 .unwrap();
         println!(
@@ -2340,7 +2333,7 @@ mod test {
         let numeric_job_id = mock_mining_job_map
             .lock()
             .await
-            .insert_mining_job("1".to_string(), job_details.clone())
+            .insert_mining_job(1, job_details.clone())
             .await;
         let test_submit_request_params = json!([
             "bitaxe",

@@ -2,14 +2,14 @@
 use crate::config::CoinbaseConfig;
 use crate::error::CoinbaseError;
 use crate::error::{classify_error, ErrorKind};
-use crate::MAX_CACHED_TEMPLATES;
+use crate::template_creator::{create_block_template, FinalTemplate};
+use crate::{MAX_CACHED_TEMPLATES, TemplateId};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
 pub mod client;
-use crate::template_creator::{create_block_template, FinalTemplate};
 use bitcoin::Network;
 pub use client::{
     BitcoinNotification, BlockTemplateComponents, CheckBlockResult, RequestPriority,
@@ -30,7 +30,7 @@ pub async fn ipc_block_listener(
     ipc_socket_path: String,
     block_template_tx: Sender<Arc<client::BlockTemplate>>,
     network: Network,
-    template_cache: Arc<tokio::sync::Mutex<HashMap<String, Arc<client::BlockTemplate>>>>,
+    template_cache: Arc<tokio::sync::Mutex<HashMap<TemplateId, Arc<client::BlockTemplate>>>>,
     mut block_submission_rx: tokio::sync::mpsc::UnboundedReceiver<
         crate::stratum::BlockSubmissionRequest,
     >,
@@ -266,7 +266,7 @@ pub async fn ipc_block_listener(
                                     ipc_template,
                                     header,
                                     bitcoin::consensus::encode::serialize(&coinbase_transaction),
-                                    template_id.clone(),
+                                    template_id,
                                     Some(RequestPriority::Critical),
                                 )
                                 .await

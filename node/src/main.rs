@@ -26,7 +26,7 @@ use node::{
     rpc_server::{parse_arguments, run_rpc_server},
     setup_tracing,
     stratum::{BlockTemplate, ConnectionMapping, Notifier, NotifyCmd, Server, StratumServerConfig},
-    SwarmCommand,
+    SwarmCommand, TemplateId,
 };
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
@@ -81,7 +81,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     });
     let _yield_result = initial_bead_fetch_handle.await.unwrap();
-    let latest_template_id = Arc::new(Mutex::new(String::from("genesis")));
+    let latest_template_id = Arc::new(Mutex::new(TemplateId::default()));
     let latest_template_id_for_notifier = latest_template_id.clone();
     let latest_template_id_for_consumer = latest_template_id.clone();
     //Starting the `query_handler` task
@@ -306,7 +306,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
             local_set
                 .run_until(async {
                     let template_cache: Arc<
-                        tokio::sync::Mutex<HashMap<String, Arc<node::ipc::client::BlockTemplate>>>,
+                        tokio::sync::Mutex<
+                            HashMap<TemplateId, Arc<node::ipc::client::BlockTemplate>>,
+                        >,
                     > = Arc::new(tokio::sync::Mutex::new(HashMap::new()));
                     let template_cache_for_consumer = template_cache.clone();
                     let template_cache_for_listener = template_cache.clone();
@@ -538,7 +540,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                  info!(
                                      peer = %peer,
                                      latency_ms = %latency.as_millis(),
-                                     "Ping successful"
+                                     "Ping"
                                  );
                              }
                              Err(err) => {

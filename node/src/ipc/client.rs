@@ -1,6 +1,7 @@
 use crate::error::BraidpoolError;
 use crate::init_capnp::init::Client as InitClient;
 use crate::proxy_capnp::thread::Client as ThreadClient;
+use crate::TemplateId;
 use bitcoin::BlockHeader;
 use capnp_rpc::{rpc_twoparty_capnp, twoparty, RpcSystem};
 use futures::FutureExt;
@@ -106,7 +107,7 @@ enum BitcoinRequest {
         template: Arc<BlockTemplate>,
         header: BlockHeader,
         coinbase_transaction: Vec<u8>,
-        template_id: String,
+        template_id: TemplateId,
         response: oneshot::Sender<Result<SubmitBlockResult, String>>,
         priority: RequestPriority,
     },
@@ -1208,7 +1209,7 @@ impl SharedBitcoinClient {
         template: Arc<BlockTemplate>,
         header: BlockHeader,
         coinbase_transaction: Vec<u8>,
-        template_id: String,
+        template_id: TemplateId,
         priority: Option<RequestPriority>,
     ) -> Result<SubmitBlockResult, Box<dyn std::error::Error>> {
         let (response_sender, response_receiver) = oneshot::channel();
