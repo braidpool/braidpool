@@ -700,8 +700,8 @@ impl DownstreamClient {
     ) -> Result<StratumResponses, StratumErrors> {
         if let Some(difficulty) = suggest_difficulty_params.get(0) {
             info!(
-                "Handling suggested difficulty - {}",
-                suggest_difficulty_params
+                params = ?suggest_difficulty_params,
+                "Handling suggested difficulty"
             );
             self.suggest_difficulty_done = true;
             Ok(StratumResponses::SuggestDifficultyResponse {
@@ -1179,8 +1179,9 @@ impl Notifier {
         merkle_coinbase_branch: Vec<Vec<u8>>,
     ) -> Result<JobNotification, StratumErrors> {
         info!(
-            "Constructing JobNotification for job_id: {} with clean_job: {}",
-            template_id, clean_job
+            template_id = %template_id,
+            clean_job = %clean_job,
+            "Constructing JobNotification"
         );
 
         let coinbase_transaction = match notified_template.transactions.get_mut(0) {
@@ -1304,8 +1305,8 @@ impl Notifier {
                     template_id,
                 } => {
                     info!(
-                        "Received new template {} to broadcast to all clients",
-                        template_id
+                        template_id = %template_id,
+                        "Received new template to broadcast to all clients"
                     );
                     //We will receive the template from the IPC channel and construct a valid job
                     //from the provided template and pass onto the message_reciver in the handle connection for
@@ -1405,15 +1406,16 @@ impl Notifier {
 
                     if current_template_id == "genesis" {
                         warn!(
-                            "No templates generated yet for new miner {}",
-                            new_downstream_addr
+                            miner = %new_downstream_addr,
+                            "No templates generated yet for new miner"
                         );
                         continue; // Skip but keep notifier running
                     }
 
                     info!(
-                        "Sending template {} to new miner {}",
-                        current_template_id, new_downstream_addr
+                        template_id = %current_template_id,
+                        miner = %new_downstream_addr,
+                        "Sending template to new miner"
                     );
 
                     let latest_template = latest_template_arc.lock().await.to_owned();
@@ -1502,8 +1504,8 @@ impl Notifier {
                         Ok(job) => job,
                         Err(error) => {
                             error!(
-                                "Error occurred while fetching the job notification - {}",
-                                error
+                                error = %error,
+                                "Error occurred while fetching the job notification"
                             );
                             return Err(error);
                         }
@@ -1584,10 +1586,6 @@ impl Server {
             "{}:{}",
             self.stratum_config.hostname, self.stratum_config.port
         );
-        info!(
-            "Stratum mining server is listening at stratum+tcp://{:?}",
-            bind_address
-        );
         let listener = match TcpListener::bind(&bind_address).await {
             Ok(listener) => listener,
             Err(e) => {
@@ -1595,6 +1593,13 @@ impl Server {
                 return Err(Box::new(e));
             }
         };
+
+        let actual_addr = listener.local_addr().unwrap();
+        crate::utils::log_server_listening(
+            &self.stratum_config.hostname,
+            actual_addr.port(),
+            "stratum+tcp"
+        );
         loop {
             tokio::select! {
                 event = listener.accept()=>{

@@ -23,7 +23,7 @@ pub type Bytes = Vec<Byte>;
 pub(crate) type Relatives = HashSet<BeadHash>;
 
 // Error Definitions
-use std::{collections::HashSet, str::FromStr};
+use std::{collections::HashSet, net::IpAddr, str::FromStr};
 
 pub(crate) fn hashset_to_vec_deterministic(hashset: &HashSet<BeadHash>) -> Vec<BeadHash> {
     let mut vec: Vec<BeadHash> = hashset.iter().cloned().collect();
@@ -39,6 +39,61 @@ pub(crate) fn retrieve_bead(_beadhash: BeadHash) -> Option<Bead> {
     // This function is a placeholder for the actual retrieval logic.
     // In a real implementation, this would fetch the bead from a database or other storage.
     None
+}
+
+/// Get list of actual local IPv4 addresses for servers binding to 0.0.0.0
+///
+/// Returns all IPv4 addresses found on network interfaces.
+/// Returns empty vector if no interfaces found or on error.
+pub fn get_local_ipv4_addresses() -> Vec<IpAddr> {
+    if_addrs::get_if_addrs()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|iface| {
+            if let if_addrs::IfAddr::V4(ref addr) = iface.addr {
+                Some(IpAddr::V4(addr.ip))
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+/// Log server listening endpoints with actual IP addresses
+///
+/// When binding to 0.0.0.0, this enumerates all non-loopback IPv4 interfaces
+/// and logs each available endpoint. Otherwise, logs the configured address.
+///
+/// # Arguments
+/// * `bind_host` - The configured hostname (e.g., "0.0.0.0", "127.0.0.1", or specific IP)
+/// * `port` - The port number the server is listening on
+/// * `protocol` - Protocol prefix for the URL (e.g., "stratum+tcp", "http")
+pub fn log_server_listening(bind_host: &str, port: u16, protocol: &str) {
+    use tracing::info;
+
+    if bind_host == "0.0.0.0" {
+        let local_ips = get_local_ipv4_addresses();
+        if local_ips.is_empty() {
+            info!(
+                port = %port,
+                "Server is listening on all interfaces"
+            );
+        } else {
+            for ip in local_ips {
+                let endpoint = format!("{}://{}:{}", protocol, ip, port);
+                info!(
+                    endpoint = %endpoint,
+                    "Server is listening"
+                );
+            }
+        }
+    } else {
+        let endpoint = format!("{}://{}:{}", protocol, bind_host, port);
+        info!(
+            endpoint = %endpoint,
+            "Server is listening"
+        );
+    }
 }
 
 // Helper function to create test beads

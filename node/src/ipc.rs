@@ -437,10 +437,10 @@ async fn get_template_with_retry(
                             if hex.len() >= MIN_TEMPLATE_SIZE {
                                 if attempt > 1 {
                                     info!(
-                                        "{}: Got valid template {} bytes (attempt {})",
-                                        context,
-                                        hex.len(),
-                                        attempt
+                                        context = %context,
+                                        size_bytes = %hex.len(),
+                                        attempt = %attempt,
+                                        "Got valid template on retry"
                                     );
                                 }
                                 return Ok(processed_template);
@@ -505,8 +505,10 @@ async fn get_template_with_retry(
                 }
 
                 warn!(
-                    "{}: Attempt {} failed: {}, retrying...",
-                    context, attempt, e
+                    context = %context,
+                    attempt = %attempt,
+                    error = %e,
+                    "Template fetch failed - retrying"
                 );
             }
         }

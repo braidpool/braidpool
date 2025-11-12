@@ -276,14 +276,17 @@ where
 }
 //server building
 //running a server in seperate spawn event
-pub async fn run_rpc_server(braid_shared_pointer: Arc<RwLock<Braid>>) -> Result<SocketAddr, ()> {
+pub async fn run_rpc_server(
+    braid_shared_pointer: Arc<RwLock<Braid>>,
+    bind_address: &str,
+) -> Result<SocketAddr, ()> {
     //Initializing the middleware
     let rpc_middleware =
         jsonrpsee::server::middleware::rpc::RpcServiceBuilder::new().layer_fn(LoggingMiddleware);
     //building the context/server supporting the http transport and ws
     let server = jsonrpsee::server::Server::builder()
         .set_rpc_middleware(rpc_middleware)
-        .build("127.0.0.1:6682")
+        .build(bind_address)
         .await
         .unwrap();
     //listening address for incoming requests/connection
@@ -291,7 +294,11 @@ pub async fn run_rpc_server(braid_shared_pointer: Arc<RwLock<Braid>>) -> Result<
     //context for the served server
     let rpc_impl = RpcServerImpl::new(braid_shared_pointer);
     let handle = server.start(rpc_impl.into_rpc());
-    info!(address = %addr, "RPC server listening");
+
+    // Parse host from bind_address
+    let (bind_host, _port) = bind_address.rsplit_once(':').unwrap_or((bind_address, ""));
+    crate::utils::log_server_listening(bind_host, addr.port(), "http");
+
     tokio::spawn(
         //handling the stopping of the server
         handle.stopped(),
@@ -306,9 +313,8 @@ pub async fn test_extend_rpc() {
 
     let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
 
-    let _ = run_rpc_server(Arc::clone(&braid)).await.unwrap();
-
     let server_addr = "127.0.0.1:6682";
+    let _ = run_rpc_server(Arc::clone(&braid), server_addr).await.unwrap();
     let target_uri = format!("http://{}", server_addr);
     let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
 
