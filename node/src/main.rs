@@ -103,7 +103,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //One will go into the IPC and the other will go to the `notifier`
     let (notification_tx, notification_rx) = mpsc::channel::<NotifyCmd>(1024);
     //Communication bridge between stratum and network swarm and swarm commands also, for communicating share population and propogating them further
-    let (swarm_handler, mut swarm_command_receiver) = SwarmHandler::new(Arc::clone(&braid), db_tx);
+    let (swarm_handler, mut swarm_command_receiver) =
+        SwarmHandler::new(Arc::clone(&braid), db_tx.clone());
     let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
     //cloning the channel to be sent across different interfaces
     let notification_tx_clone = notification_tx.clone();
@@ -467,7 +468,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                      // update the peer manager about the invalid bead
                                      peer_manager.penalize_for_invalid_bead(&message.source);
                                  } else if let braid::AddBeadStatus::BeadAdded = status {
-                                     // update score of the peer
+                                     // update score of the peer and adding to local db store
+                                     let _query_send_result = match db_tx.send(node::db::BraidpoolDBTypes::InsertTupleTypes { query: node::db::InsertTupleTypes::InsertBeadSequentially { bead_to_insert: bead } }).await{
+                                        Ok(_)=>{
+                                            log::info!("Insert command sent successfully to db handler after receiving bead from peer");
+                                        },
+                                        Err(error)=>{
+                                            log::error!("An error occurred while sending insert bead command received from peer - {:?} due to - {:?} ",message.source,error.0);
+                                        }
+                                     };
                                      peer_manager.update_score(&message.source, 1.0);
                                  }
                              }
@@ -564,6 +573,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                      SwarmEvent::ConnectionEstablished {
                          peer_id, endpoint, ..
                      } => {
+                        //Triggering IBD and atomic boolean for starting mining or not depending on state of IBD .
+
                          // Add the peer to the peer manager
                          let remote_addr = endpoint.get_remote_address();
                          swarm.behaviour_mut().kademlia.add_address(&peer_id,remote_addr.clone());

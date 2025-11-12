@@ -1,5 +1,5 @@
 use crate::bead::Bead;
-use crate::utils::{retrieve_bead, BeadHash};
+use crate::utils::BeadHash;
 use num::BigUint;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -91,13 +91,10 @@ impl Braid {
 
             if !parent_exists {
                 // Try to retrieve the parent
-                if let Some(retrieved_bead) = retrieve_bead(*parent_hash) {
-                    self.extend(&retrieved_bead);
-                } else {
-                    // Parent not found and can't be retrieved
-                    self.orphan_beads.push(bead.clone());
-                    return AddBeadStatus::ParentsNotYetReceived;
-                }
+                //This is not required if a bead exists in DB it would already been extended to local braid as well
+                // Parent not found and can't be retrieved
+                self.orphan_beads.push(bead.clone());
+                return AddBeadStatus::ParentsNotYetReceived;
             }
         }
         // Already seen this bead
@@ -221,6 +218,7 @@ impl Braid {
                     AddBeadStatus::InvalidBead => {
                         continue;
                     }
+                    //Unecessary condition
                     AddBeadStatus::ParentsNotYetReceived => {
                         self.orphan_beads.push(orphan_bead);
                     }

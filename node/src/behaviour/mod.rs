@@ -10,7 +10,6 @@ use libp2p::{
     swarm::NetworkBehaviour,
     PeerId, StreamProtocol,
 };
-use std::collections::HashSet;
 use std::{error::Error, time::Duration};
 
 // Protocol names

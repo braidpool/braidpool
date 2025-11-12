@@ -15,10 +15,12 @@ use crate::braid::consensus_functions::updating_ancestors;
 use crate::braid::Cohort;
 use crate::utils::test_utils::test_utility_functions::loading_braid_from_file;
 use crate::utils::test_utils::test_utility_functions::*;
+use bitcoin::BlockHash;
 use num::BigUint;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::path::Path;
+use std::str::FromStr;
 #[test]
 pub fn test_extend_functionality() {
     // Create a braid with one bead.
@@ -1544,7 +1546,7 @@ fn test_get_beads_after() {
     let result = test_braid.get_beads_after(vec![last_hash]);
     assert!(result.is_some());
 
-    println!("✅ Linear chain tests passed");
+    println!("Linear chain tests passed");
 }
 
 #[test]
@@ -1635,7 +1637,7 @@ fn test_get_beads_after_diamond_structure() {
         .collect();
     assert!(returned_hashes.contains(&beads[3].block_header.block_hash()));
 
-    println!("✅ Diamond structure tests passed");
+    println!("Diamond structure tests passed");
 }
 
 #[test]
@@ -1746,13 +1748,13 @@ fn test_get_beads_after_complex_braid() {
         .collect();
     assert!(returned_hashes.contains(&beads[7].block_header.block_hash()));
 
-    println!("✅ Complex braid tests passed");
+    println!("Complex braid tests passed");
 }
 
 #[test]
 fn test_get_beads_after_edge_cases() {
     // Test Case 4: Edge cases
-
+    pub type BeadHash = BlockHash;
     // Create a simple braid for edge case testing
     let mut beads = Vec::new();
     for _i in 0..3 {

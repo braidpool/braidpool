@@ -1,6 +1,6 @@
 use crate::committed_metadata::CommittedMetadata;
 use crate::uncommitted_metadata::UnCommittedMetadata;
-use crate::utils::{hashset_to_vec_deterministic, BeadHash};
+use crate::utils::BeadHash;
 use async_trait::async_trait;
 use bitcoin::consensus::encode::Decodable;
 use bitcoin::consensus::encode::Encodable;
@@ -11,7 +11,6 @@ use libp2p::futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use libp2p::request_response::Codec;
 use libp2p::StreamProtocol;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 
 const GET_BEADS: u8 = 0;
 const GET_TIPS: u8 = 1;
