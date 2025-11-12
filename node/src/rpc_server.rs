@@ -297,7 +297,18 @@ pub async fn run_rpc_server(
 
     // Parse host from bind_address
     let (bind_host, _port) = bind_address.rsplit_once(':').unwrap_or((bind_address, ""));
-    crate::utils::log_server_listening(bind_host, addr.port(), "http");
+    let endpoints = crate::utils::server_endpoints(bind_host, addr.port(), "http");
+    if endpoints.is_empty() {
+        warn!(
+            host = %bind_host,
+            port = %_port,
+            "RPC server listening but no interfaces discovered"
+        );
+    } else {
+        for endpoint in endpoints {
+            info!(endpoint = %endpoint, "RPC server is listening");
+        }
+    }
 
     tokio::spawn(
         //handling the stopping of the server
@@ -314,7 +325,9 @@ pub async fn test_extend_rpc() {
     let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
 
     let server_addr = "127.0.0.1:6682";
-    let _ = run_rpc_server(Arc::clone(&braid), server_addr).await.unwrap();
+    let _ = run_rpc_server(Arc::clone(&braid), server_addr)
+        .await
+        .unwrap();
     let target_uri = format!("http://{}", server_addr);
     let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
 

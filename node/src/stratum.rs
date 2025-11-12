@@ -1310,6 +1310,7 @@ impl Notifier {
         };
         let deserialized_coinbase = serialize::<Transaction>(&coinbase_transaction);
         debug!(
+            template_id = ?template_id,
             coinbase = ?coinbase_transaction,
             "Deserialized coinbase"
         );
@@ -1341,8 +1342,8 @@ impl Notifier {
             }
         }
         debug!(
-            merkle_branches = ?merkle_branches,
             template_id = ?template_id,
+            merkle_branches = ?merkle_branches,
             "Merkle branches are"
         );
         //Stratum accepts the prev block hash to be in little endian instead of big endian
@@ -1412,16 +1413,31 @@ impl Notifier {
                         template_id = %template_id,
                         "Received new block template"
                     );
+                    let connection_snapshot = downstream_connection_map
+                        .lock()
+                        .await
+                        .downstream_channel_mapping
+                        .clone();
                     //We will receive the template from the IPC channel and construct a valid job
                     //from the provided template and pass onto the message_reciver in the handle connection for
                     // downstream communication to take place.
                     for (peer_adr, mining_job_arc) in self.job_map_arc.lock().await.iter() {
+                        let connection_info = match connection_snapshot.get(peer_adr) {
+                            Some(info) => info,
+                            None => {
+                                warn!(
+                                    template_id = %template_id,
+                                    peer = %peer_adr,
+                                    "Peer not found in connection mapping during job notification - skipping notification"
+                                );
+                                continue;
+                            }
+                        };
+                        let connection_id_hex = format!("{:x}", connection_info.connection_id);
                         let mut template_for_job = template.clone();
                         template_for_job.transactions.remove(0);
 
                         let mut curr_peer_mining_job_map = mining_job_arc.lock().await;
-                        //The new job id to be provided while constructing the new job .
-                        // let next_job_id = curr_peer_mining_job_map.get_next_job_id();
                         // Clean Jobs. If true, miners should abort their current work and immediately use the new job,
                         // even if it degrades hashrate in the short term. If false, they can still use the current job,
                         // but should move to the new one as soon as possible without impacting hashrate.
@@ -1436,7 +1452,14 @@ impl Notifier {
                         {
                             Ok(job) => job,
                             Err(e) => {
-                                error!(peer = %peer_adr, error = %e, template_id = %template_id, reason = "job_construction_failed", "Failed to construct job for peer");
+                                error!(
+                                    connection_id = %connection_id_hex,
+                                    template_id = %template_id,
+                                    peer = %peer_adr,
+                                    error = %e,
+                                    reason = "job_construction_failed",
+                                    "Failed to construct job for peer"
+                                );
                                 continue; // Skip this peer but continue with others
                             }
                         };
@@ -1482,19 +1505,24 @@ impl Notifier {
                             ]),
                         };
 
-                        let downstream_channel_mapping = downstream_connection_map
-                            .lock()
+                        if let Err(e) = connection_info
+                            .sender
+                            .send(serde_json::to_string(&job_notification_response).unwrap())
                             .await
-                            .downstream_channel_mapping
-                            .clone();
-
-                        if let Some(downstream_channel) = downstream_channel_mapping.get(peer_adr) {
-                            if let Err(e) = downstream_channel
-                                .send(serde_json::to_string(&job_notification_response).unwrap())
-                                .await
-                            {
-                                error!(peer = %peer_adr, error = %e, "Failed to send job to peer");
-                            }
+                        {
+                            error!(
+                                connection_id = %connection_id_hex,
+                                peer = %peer_adr,
+                                error = %e,
+                                "Failed to send job to peer"
+                            );
+                        } else {
+                            trace!(
+                                connection_id = %connection_id_hex,
+                                peer = %peer_adr,
+                                job_id = %numeric_job_id,
+                                "Dispatched job to peer"
+                            );
                         }
                     }
                 }
@@ -1506,43 +1534,47 @@ impl Notifier {
                         let id = latest_template_id.lock().await;
                         id.clone()
                     };
+                    let connection_entry = {
+                        let current_downstream_mapping = downstream_connection_map.lock().await;
+                        current_downstream_mapping
+                            .downstream_channel_mapping
+                            .get(&new_downstream_addr)
+                            .cloned()
+                    };
+                    let connection_entry = match connection_entry {
+                        Some(entry) => entry,
+                        None => {
+                            error!(peer = %new_downstream_addr, "Mining peer not found in connection mapping");
+                            return Err(StratumErrors::PeerNotFoundInConnectionMapping {
+                                peer_addr: new_downstream_addr,
+                            });
+                        }
+                    };
+                    let connection_id_hex = format!("{:x}", connection_entry.connection_id);
 
                     if current_template_id == "genesis" {
                         warn!(
+                            connection_id = %connection_id_hex,
                             miner = %new_downstream_addr,
                             "No templates generated yet for new miner"
                         );
                         continue; // Skip but keep notifier running
                     }
 
+                    let latest_template = latest_template_arc.lock().await.to_owned();
+                    let latest_template_merkle_branch =
+                        latest_template_merkle_branch_arc.lock().await.to_owned();
                     info!(
+                        connection_id = %connection_id_hex,
                         template_id = %current_template_id,
                         miner = %new_downstream_addr,
                         "Sending template to new miner"
                     );
-
-                    let latest_template = latest_template_arc.lock().await.to_owned();
-                    let latest_template_merkle_branch =
-                        latest_template_merkle_branch_arc.lock().await.to_owned();
-                    let current_downstream_mapping = downstream_connection_map.lock().await;
-                    let current_downstream_message_sender_res = current_downstream_mapping
-                        .downstream_channel_mapping
-                        .get(&new_downstream_addr);
                     let global_peer_mining_job_map_arc = self.job_map_arc.lock().await;
                     let current_peer_mining_job_map_arc = global_peer_mining_job_map_arc
                         .get(&new_downstream_addr)
                         .unwrap();
                     let mut curr_peer_mining_job_map = current_peer_mining_job_map_arc.lock().await;
-                    let current_downstream_message_sender =
-                        match current_downstream_message_sender_res {
-                            Some(downstream_sender) => downstream_sender,
-                            None => {
-                                error!(peer = %new_downstream_addr, "Mining peer not found in connection mapping");
-                                return Err(StratumErrors::PeerNotFoundInConnectionMapping {
-                                    peer_addr: new_downstream_addr,
-                                });
-                            }
-                        };
 
                     // Clean Jobs. If true, miners should abort their current work and immediately use the new job, even if it degrades hashrate in the short term.
                     // If false, they can still use the current job, but should move to the new one as soon as possible without impacting hashrate.
@@ -1613,10 +1645,7 @@ impl Notifier {
                             return Err(error);
                         }
                     };
-                    match current_downstream_message_sender
-                        .send(job_notification)
-                        .await
-                    {
+                    match connection_entry.sender.send(job_notification).await {
                         Ok(_) => {}
                         Err(error) => {
                             return Err(StratumErrors::NotifyMessageNotSent {
@@ -1634,8 +1663,14 @@ impl Notifier {
 }
 ///Connection information associated with each downstream peer associated along with the mapped `Sender_channel` for sending downstream responses and communication.
 #[derive(Debug, Clone)]
+pub struct ConnectionInfo {
+    pub connection_id: u32,
+    pub sender: mpsc::Sender<String>,
+}
+
+#[derive(Debug, Clone)]
 pub struct ConnectionMapping {
-    downstream_channel_mapping: HashMap<String, mpsc::Sender<String>>,
+    downstream_channel_mapping: HashMap<String, ConnectionInfo>,
 }
 impl ConnectionMapping {
     pub fn new() -> Self {
@@ -1643,14 +1678,20 @@ impl ConnectionMapping {
             downstream_channel_mapping: HashMap::new(),
         }
     }
-    ///Inserting new connction along with its `peer_socket_address` and `Sender_channel` associated with the client.
+    ///Inserting new connction along with its `peer_socket_address`, `connection_id`, and `Sender_channel`.
     pub fn new_connection(
         &mut self,
         peer_addr: String,
+        connection_id: u32,
         peer_msg_sender: mpsc::Sender<String>,
-    ) -> () {
-        self.downstream_channel_mapping
-            .insert(peer_addr, peer_msg_sender);
+    ) {
+        self.downstream_channel_mapping.insert(
+            peer_addr,
+            ConnectionInfo {
+                connection_id,
+                sender: peer_msg_sender,
+            },
+        );
     }
 }
 //Containing all the functionality for a stratum service
@@ -1697,23 +1738,34 @@ impl Server {
             }
         };
 
-        let actual_addr = listener.local_addr().unwrap();
-        crate::utils::log_server_listening(
+        let endpoints = crate::utils::server_endpoints(
             &self.stratum_config.hostname,
-            actual_addr.port(),
+            self.stratum_config.port,
             "stratum+tcp",
         );
+        if endpoints.is_empty() {
+            warn!(
+                host = %self.stratum_config.hostname,
+                port = %self.stratum_config.port,
+                "Server listening but no interfaces were discovered"
+            );
+        } else {
+            for endpoint in endpoints {
+                info!(endpoint = %endpoint, "Stratum server is listening");
+            }
+        }
         loop {
             tokio::select! {
                 event = listener.accept()=>{
                     //shared ownership across all tasks and spawning a seperate downstream for each new connection
                     let self_ = Arc::new(Mutex::new(DownstreamClient::default()));
-                    let connection_id_hex = {
+                    let (connection_id, connection_id_hex) = {
                         let mut client = self_.lock().await;
                         if let Some(ref submission_tx) = self.block_submission_tx {
                             client.block_submission_tx = Some(submission_tx.clone());
                         }
-                        format!("{:x}", client.connection_id)
+                        let id = client.connection_id;
+                        (id, format!("{:x}", id))
                     };
                     //downstream miner mapping for associated jobs for a specific channel for downstream
                     let self_mining_map = Arc::new(Mutex::new(MiningJobMap::new()));
@@ -1729,7 +1781,10 @@ impl Server {
                             //downstream channel for server2client communication to take place
                             let (downstream_tx,mut downstream_rx) = mpsc::channel(1024);
                             //adding the new connection to the connection map
-                            self.downstream_connection_mapping.lock().await.new_connection(peer_addr.to_string(), downstream_tx.clone());
+                            self.downstream_connection_mapping
+                                .lock()
+                                .await
+                                .new_connection(peer_addr.to_string(), connection_id, downstream_tx.clone());
                             info!(
                                 connection_id = %connection_id_hex,
                                 peer = %peer_addr,

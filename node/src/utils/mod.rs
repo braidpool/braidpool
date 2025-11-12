@@ -10,6 +10,8 @@ use bitcoin::{
     CompactTarget, EcdsaSighashType, TxMerkleNode,
 };
 // Standard Imports
+#[allow(unused_imports)]
+use tracing::{debug, error, info, trace, warn};
 
 pub mod test_utils;
 
@@ -62,37 +64,25 @@ pub fn get_local_ipv4_addresses() -> Vec<IpAddr> {
 /// Log server listening endpoints with actual IP addresses
 ///
 /// When binding to 0.0.0.0, this enumerates all non-loopback IPv4 interfaces
-/// and logs each available endpoint. Otherwise, logs the configured address.
+/// and return each available endpoint. Otherwise, logs the configured address.
 ///
 /// # Arguments
 /// * `bind_host` - The configured hostname (e.g., "0.0.0.0", "127.0.0.1", or specific IP)
 /// * `port` - The port number the server is listening on
 /// * `protocol` - Protocol prefix for the URL (e.g., "stratum+tcp", "http")
-pub fn log_server_listening(bind_host: &str, port: u16, protocol: &str) {
-    use tracing::info;
-
+pub fn server_endpoints(bind_host: &str, port: u16, protocol: &str) -> Vec<String> {
     if bind_host == "0.0.0.0" {
         let local_ips = get_local_ipv4_addresses();
         if local_ips.is_empty() {
-            info!(
-                port = %port,
-                "Server is listening on all interfaces"
-            );
+            Vec::new()
         } else {
-            for ip in local_ips {
-                let endpoint = format!("{}://{}:{}", protocol, ip, port);
-                info!(
-                    endpoint = %endpoint,
-                    "Server is listening"
-                );
-            }
+            local_ips
+                .into_iter()
+                .map(|ip| format!("{}://{}:{}", protocol, ip, port))
+                .collect()
         }
     } else {
-        let endpoint = format!("{}://{}:{}", protocol, bind_host, port);
-        info!(
-            endpoint = %endpoint,
-            "Server is listening"
-        );
+        vec![format!("{}://{}:{}", protocol, bind_host, port)]
     }
 }
 
@@ -147,5 +137,32 @@ pub fn create_test_bead(nonce: u32, prev_hash: Option<BlockHash>) -> Bead {
         block_header: test_block_header,
         committed_metadata: test_committed_metadata,
         uncommitted_metadata: test_uncommitted_metadata,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn server_endpoints_returns_single_endpoint_for_specific_host() {
+        let result = server_endpoints("127.0.0.1", 8080, "http");
+        assert_eq!(result, vec!["http://127.0.0.1:8080"]);
+    }
+
+    #[test]
+    fn server_endpoints_expands_all_interfaces_when_ips_provided() {
+        let local_ips = get_local_ipv4_addresses();
+        if local_ips.is_empty() {
+            // Some CI sandboxes may report no interfaces; in that case ensure the function returns empty too.
+            let result = server_endpoints("0.0.0.0", 3333, "stratum+tcp");
+            assert!(result.is_empty());
+        } else {
+            let expected: Vec<String> = local_ips
+                .into_iter()
+                .map(|ip| format!("stratum+tcp://{}:3333", ip))
+                .collect();
+            let result = server_endpoints("0.0.0.0", 3333, "stratum+tcp");
+            assert_eq!(result, expected);
+        }
     }
 }
