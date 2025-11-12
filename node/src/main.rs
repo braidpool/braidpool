@@ -234,7 +234,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_behaviour(|local_key| BraidPoolBehaviour::new(local_key).unwrap())?
         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX)))
         .build();
-    info!(peer_id = %swarm.local_peer_id(), "Local peer ID");
     let socket_addr: std::net::SocketAddr = match args.bind.parse() {
         Ok(addr) => addr,
         Err(_) => format!("{}:6680", args.bind)

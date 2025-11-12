@@ -1694,7 +1694,7 @@ impl Server {
         connection_mapping_arc: Arc<Mutex<ConnectionMapping>>,
         block_submission_tx: Option<mpsc::UnboundedSender<BlockSubmissionRequest>>,
     ) -> Self {
-        info!(config = ?server_config, "Initializing stratum server");
+        debug!(config = ?server_config, "Initializing stratum server");
 
         Self {
             stratum_config: server_config,

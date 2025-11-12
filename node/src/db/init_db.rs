@@ -20,10 +20,13 @@ pub async fn init_db() -> Result<SqlitePool, DBErrors> {
     let db_dir = Path::new(&home_dir).join(".braidpool");
     //Final db directory path
     let db_path = db_dir.join("braidpool.db");
-    //Creating db directory
+    //Creating db directory if it doesn't exist
+    let dir_exists = db_dir.exists();
     match fs::create_dir_all(&db_dir) {
         Ok(_) => {
-            info!("DB directory created successfully");
+            if !dir_exists {
+                info!("DB directory created successfully");
+            }
         }
         Err(error) => {
             return Err(DBErrors::DBDirectoryNotCreated {
@@ -52,7 +55,6 @@ pub async fn init_db() -> Result<SqlitePool, DBErrors> {
     let conn = if db_exists {
         info!(
             db_path = %db_path.display(),
-            exists = true,
             "Using existing database"
         );
         let pool = match SqlitePool::connect_with(sql_lite_connections).await {
