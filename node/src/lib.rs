@@ -134,7 +134,10 @@ pub async fn ipc_template_consumer(
         let template_bytes = match &ipc_template.processed_block_hex {
             Some(processed_hex) if !processed_hex.is_empty() => processed_hex,
             _ => {
-                warn!(field = "processed_block_hex", "Skipping invalid template - hex payload missing");
+                warn!(
+                    field = "processed_block_hex",
+                    "Skipping invalid template - hex payload missing"
+                );
                 continue;
             }
         };
@@ -176,12 +179,9 @@ pub async fn ipc_template_consumer(
             let _coinbase_transaction = template_transactions.get(0);
 
             debug!(
+                template_id = ?template_id,
                 template_header = ?template_header,
-                "The block header for the given template is"
-            );
-            debug!(
-                tx_count = template_transactions.len(),
-                "Transactions count is"
+                "New block template"
             );
             let template: BlockTemplate = BlockTemplate {
                 version: template_header.version,
@@ -222,7 +222,7 @@ pub async fn ipc_template_consumer(
             info!(
                 template_id = %template_id,
                 tx_count = %template_transactions.len(),
-                "Updated latest template from IPC"
+                "New block template"
             );
 
             let notification_sent_or_not = notifier_tx
@@ -234,7 +234,7 @@ pub async fn ipc_template_consumer(
                 .await;
             match notification_sent_or_not {
                 Ok(_) => {
-                    info!(template_id = %template_id, "Template sent to notifier");
+                    debug!(template_id = %template_id, "Template sent to notifier");
                 }
                 Err(error) => {
                     error!(error = ?error, "Failed to send template notification");

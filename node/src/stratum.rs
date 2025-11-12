@@ -30,12 +30,8 @@ use tracing::{debug, error, info, trace, warn};
 pub struct BlockSubmissionRequest {
     /// The template ID that this submission is for
     pub template_id: String,
-    /// Block version
-    pub version: i32,
-    /// Block timestamp
-    pub timestamp: u32,
-    /// Block nonce
-    pub nonce: u32,
+    /// Fully constructed block header (includes version, prevhash, merkle root, time, bits, nonce)
+    pub header: BlockHeader,
     /// Complete coinbase transaction
     pub coinbase_transaction: bitcoin::Transaction,
 }
@@ -686,9 +682,7 @@ impl DownstreamClient {
                 if let Some(ref submission_tx) = self.block_submission_tx {
                     let submission = BlockSubmissionRequest {
                         template_id: template_id.clone(),
-                        version: final_masked_version,
-                        timestamp: header.time.to_u32(),
-                        nonce: header.nonce,
+                        header: header.clone(),
                         coinbase_transaction: coinbase_tx_for_submission.clone(),
                     };
 

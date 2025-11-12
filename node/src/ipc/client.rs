@@ -1,6 +1,7 @@
 use crate::error::BraidpoolError;
 use crate::init_capnp::init::Client as InitClient;
 use crate::proxy_capnp::thread::Client as ThreadClient;
+use bitcoin::BlockHeader;
 use capnp_rpc::{rpc_twoparty_capnp, twoparty, RpcSystem};
 use futures::FutureExt;
 use std::collections::VecDeque;
@@ -17,12 +18,6 @@ use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
-pub fn bytes_to_hex(bytes: &[u8]) -> String {
-    bytes
-        .iter()
-        .map(|b| format!("{:02x}", b))
-        .collect::<String>()
-}
 
 #[derive(Debug, Clone)]
 pub struct CheckBlockResult {
@@ -109,10 +104,9 @@ enum BitcoinRequest {
     },
     SubmitSolution {
         template: Arc<BlockTemplate>,
-        version: u32,
-        timestamp: u32,
-        nonce: u32,
+        header: BlockHeader,
         coinbase_transaction: Vec<u8>,
+        template_id: String,
         response: oneshot::Sender<Result<SubmitBlockResult, String>>,
         priority: RequestPriority,
     },
@@ -597,7 +591,7 @@ impl BitcoinRpcClient {
                             error!(
                                 error = %e,
                                 height = %height,
-                                hash = %bytes_to_hex(&hash),
+                                hash = %hex::encode(&hash),
                                 "Failed to send tip change notification"
                             );
                             if notification_sender.is_closed() {
@@ -1010,13 +1004,16 @@ impl SharedBitcoinClient {
             }
             BitcoinRequest::SubmitSolution {
                 template,
-                version,
-                timestamp,
-                nonce,
+                header,
                 coinbase_transaction,
+                template_id,
                 response,
                 ..
             } => {
+                let block_hash = header.block_hash();
+                let version = header.version.to_consensus() as u32;
+                let timestamp = header.time.to_u32();
+                let nonce = header.nonce;
                 match bitcoin_client
                     .submit_solution(
                         &template.template_interface,
@@ -1030,6 +1027,8 @@ impl SharedBitcoinClient {
                     Ok(result) => {
                         if result.success {
                             info!(
+                                template_id = %template_id,
+                                block_hash = %block_hash,
                                 version = %version,
                                 timestamp = %timestamp,
                                 nonce = %nonce,
@@ -1037,9 +1036,12 @@ impl SharedBitcoinClient {
                             );
                         } else {
                             error!(
-                                reason = %result.reason,
+                                template_id = %template_id,
+                                block_hash = %block_hash,
                                 version = %version,
                                 timestamp = %timestamp,
+                                nonce = %nonce,
+                                reason = %result.reason,
                                 "Block submission rejected by Bitcoin Core"
                             );
                         }
@@ -1047,6 +1049,11 @@ impl SharedBitcoinClient {
                     }
                     Err(e) => {
                         error!(
+                            template_id = %template_id,
+                            block_hash = %block_hash,
+                            version = %version,
+                            timestamp = %timestamp,
+                            nonce = %nonce,
                             error = %e,
                             operation = "submit_solution",
                             "Block submission IPC error"
@@ -1199,20 +1206,18 @@ impl SharedBitcoinClient {
     pub async fn submit_solution(
         &self,
         template: Arc<BlockTemplate>,
-        version: u32,
-        timestamp: u32,
-        nonce: u32,
+        header: BlockHeader,
         coinbase_transaction: Vec<u8>,
+        template_id: String,
         priority: Option<RequestPriority>,
     ) -> Result<SubmitBlockResult, Box<dyn std::error::Error>> {
         let (response_sender, response_receiver) = oneshot::channel();
 
         let request = BitcoinRequest::SubmitSolution {
             template,
-            version,
-            timestamp,
-            nonce,
+            header,
             coinbase_transaction,
+            template_id,
             response: response_sender,
             priority: priority.unwrap_or(RequestPriority::Critical),
         };

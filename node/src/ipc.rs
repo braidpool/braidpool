@@ -12,7 +12,7 @@ pub mod client;
 use crate::template_creator::{create_block_template, FinalTemplate};
 use bitcoin::Network;
 pub use client::{
-    bytes_to_hex, BitcoinNotification, BlockTemplateComponents, CheckBlockResult, RequestPriority,
+    BitcoinNotification, BlockTemplateComponents, CheckBlockResult, RequestPriority,
     SharedBitcoinClient,
 };
 
@@ -124,11 +124,6 @@ pub async fn ipc_block_listener(
                     network,
                 ).await {
                     Ok(template) => {
-                        info!(
-                            size_bytes = template.components.block_hex.len(),
-                            height = tip_height,
-                            "Got initial block template"
-                        );
                         if let Err(e) = block_template_tx.send(Arc::new(template)).await {
                             error!(error = %e, "Failed to send initial template");
                             continue;
@@ -175,8 +170,8 @@ pub async fn ipc_block_listener(
                                 hash_reversed.reverse();
                                 info!(
                                     height = height,
-                                    hash = %bytes_to_hex(&hash_reversed),
-                                    "New block received"
+                                    hash = %hex::encode(&hash_reversed),
+                                    "New block"
                                 );
                                 match shared_client.is_initial_block_download(Some(RequestPriority::High)).await {
                                     Ok(in_ibd) => {
@@ -191,10 +186,6 @@ pub async fn ipc_block_listener(
                                                 network,
                                             ).await {
                                                 Ok(template) => {
-                                                    info!(
-                                                        size_bytes = template.processed_block_hex.as_ref().map(|v| v.len()).unwrap_or(0),
-                                                        "Got block template data"
-                                                    );
                                                     if let Err(e) = block_template_tx.send(Arc::new(template)).await {
                                                         error!(error = %e, height = height, "Failed to send template");
                                                         break true;
@@ -261,16 +252,21 @@ pub async fn ipc_block_listener(
 
                     submission = block_submission_rx.recv() => {
                     if let Some(submission) = submission {
-                        let template_opt = template_cache.lock().await.get(&submission.template_id).cloned();
+                        let crate::stratum::BlockSubmissionRequest {
+                            template_id,
+                            header,
+                            coinbase_transaction,
+                        } = submission;
+                        let block_hash = header.block_hash();
+                        let template_opt = template_cache.lock().await.get(&template_id).cloned();
 
                         if let Some(ipc_template) = template_opt {
                             match shared_client
                                 .submit_solution(
                                     ipc_template,
-                                    submission.version as u32,
-                                    submission.timestamp,
-                                    submission.nonce,
-                                    bitcoin::consensus::encode::serialize(&submission.coinbase_transaction),
+                                    header,
+                                    bitcoin::consensus::encode::serialize(&coinbase_transaction),
+                                    template_id.clone(),
                                     Some(RequestPriority::Critical),
                                 )
                                 .await
@@ -278,12 +274,14 @@ pub async fn ipc_block_listener(
                                 Ok(result) => {
                                     if result.success {
                                         info!(
-                                            template_id = %submission.template_id,
+                                            template_id = %template_id,
+                                            block_hash = %block_hash,
                                             "Block ACCEPTED by Bitcoin Core"
                                         );
                                     } else {
                                         error!(
-                                            template_id = %submission.template_id,
+                                            template_id = %template_id,
+                                            block_hash = %block_hash,
                                             reason = %result.reason,
                                             "Block REJECTED by Bitcoin Core"
                                         );
@@ -291,7 +289,8 @@ pub async fn ipc_block_listener(
                                 }
                                 Err(e) => {
                                     error!(
-                                        template_id = %submission.template_id,
+                                        template_id = %template_id,
+                                        block_hash = %block_hash,
                                         error = %e,
                                         "Failed to submit block"
                                     );
@@ -303,7 +302,8 @@ pub async fn ipc_block_listener(
                             // - Template expired (cache is full and old template was evicted)
                             // - Cache overflow (exceeded MAX_CACHED_TEMPLATES limit)
                             error!(
-                                template_id = %submission.template_id,
+                                template_id = %template_id,
+                                block_hash = %block_hash,
                                 cache_size = template_cache.lock().await.len(),
                                 max_cache_size = MAX_CACHED_TEMPLATES,
                                 "Block submission dropped - template not found in cache"
