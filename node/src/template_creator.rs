@@ -376,7 +376,10 @@ pub fn build_braidpool_coinbase_from_template(
             &components.coinbase_commitment,
         )?)
     } else {
-        warn!(context = "block_template", "SegWit commitment missing (may be expected for non-SegWit blocks)");
+        warn!(
+            context = "block_template",
+            "SegWit commitment missing (may be expected for non-SegWit blocks)"
+        );
         None
     };
 

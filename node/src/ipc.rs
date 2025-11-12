@@ -3,7 +3,7 @@ use crate::config::CoinbaseConfig;
 use crate::error::CoinbaseError;
 use crate::error::{classify_error, ErrorKind};
 use crate::template_creator::{create_block_template, FinalTemplate};
-use crate::{MAX_CACHED_TEMPLATES, TemplateId};
+use crate::{TemplateId, MAX_CACHED_TEMPLATES};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc::Sender;

@@ -1161,7 +1161,11 @@ impl MiningJobMap {
         }
     }
     ///Inserting a suitable mining job which has been passed to the downstream being constructed from a suitable block template .
-    pub async fn insert_mining_job(&mut self, template_id: TemplateId, job_details: JobDetails) -> u64 {
+    pub async fn insert_mining_job(
+        &mut self,
+        template_id: TemplateId,
+        job_details: JobDetails,
+    ) -> u64 {
         let numeric_job_id = self.next_job_id;
 
         debug!(job_id = %numeric_job_id, template_id = %template_id, "Inserting mining job into MiningJobMap");
@@ -1479,8 +1483,9 @@ impl Notifier {
                             job_sent_time: unix_timestamp,
                         };
 
-                        let numeric_job_id =
-                            curr_peer_mining_job_map.insert_mining_job(template_id, job_details).await;
+                        let numeric_job_id = curr_peer_mining_job_map
+                            .insert_mining_job(template_id, job_details)
+                            .await;
 
                         let job_notification_response = JobNotificationResponse {
                             method: "mining.notify".to_string(),
