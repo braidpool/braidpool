@@ -607,12 +607,12 @@ impl DownstreamClient {
         };
         let compact_target = submitted_job.blocktemplate.bits;
         let target = bitcoin::Target::from_compact(compact_target);
-        info!(
+        debug!(
             connection_id = %connection_id_hex,
             target = %target.to_hex(),
             "Mining target"
         );
-        info!(
+        debug!(
             connection_id = %connection_id_hex,
             block_hash = %header.block_hash(),
             "Block hash computed"
@@ -687,7 +687,7 @@ impl DownstreamClient {
 
                     match submission_tx.send(submission) {
                         Ok(_) => {
-                            info!(
+                            debug!(
                                 connection_id = %connection_id_hex,
                                 template_id = %template_id,
                                 "Block sent to submission handler"

@@ -26,7 +26,7 @@ pub const MAX_CACHED_TEMPLATES: usize = 90;
 
 use crate::{
     bead::Bead,
-    braid::Braid,
+    braid::{Braid,AddBeadStatus},
     committed_metadata::{CommittedMetadata, TimeVec, TxIdVec},
     db::BraidpoolDBTypes,
     error::{IPCtemplateError, StratumErrors},
@@ -284,7 +284,7 @@ impl SwarmHandler {
             .map(|tx| tx.compute_txid())
             .collect();
         let transaction_ids: Vec<Txid> = Vec::from(ids);
-        info!("Broadcasting bead via floodsub");
+        debug!("Broadcasting bead via floodsub");
         //TODO:Currently temprorary placeholder will be replaced in upcoming PRs
         let public_key = "020202020202020202020202020202020202020202020202020202020202020202"
             .parse::<bitcoin::PublicKey>()
@@ -301,10 +301,8 @@ impl SwarmHandler {
                 .0
                 .push(current_tip_bead.committed_metadata.start_timestamp);
         }
-        info!(
-            "Current tip indices before new insertion - {:?}",
-            tips_index
-        );
+        debug!(tip_indices = ?tips_index, tip_hashes = ?parent_hash_set, 
+            "Tips before extending the Braid");
         //TODO:This will be replaced via the allotted `WeakShareDifficulty` after Difficulty adjustment
         let weak_target = CompactTarget::from_unprefixed_hex("1d00ffff").unwrap();
         //Mindiff
@@ -358,11 +356,20 @@ impl SwarmHandler {
             uncommitted_metadata: candidate_block_bead_uncommitted_metadata,
         };
         let status = braid_data.extend(&weak_share);
-        info!(
-            status = ?status,
-            hash = %weak_share.block_header.block_hash(),
-            "Braid extended successfully"
-        );
+        match status {
+            AddBeadStatus::BeadAdded => {
+                let new_tips: Vec<_> = braid_data.tips.iter().map(|&idx| idx).collect();
+                info!(
+                    hash = %weak_share.block_header.block_hash(),
+                    new_tips = ?new_tips,
+                    "Braid extended successfully"
+                );
+            }
+            _ => {
+                warn!(status = ?status, hash = %weak_share.block_header.block_hash(),
+                    "Failed to extend Braid")
+            }
+        }
         let _db_insertion_command = match self
             .db_command_sender
             .send(BraidpoolDBTypes::InsertTupleTypes {
@@ -394,7 +401,7 @@ impl SwarmHandler {
             Ok(_) => {
                 info!(
                     hash = %weak_share.block_header.block_hash(),
-                    "Candidate block sent to swarm"
+                    "Bead sent to swarm"
                 );
             }
             Err(e) => {

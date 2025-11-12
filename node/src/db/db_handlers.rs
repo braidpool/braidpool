@@ -304,7 +304,7 @@ pub async fn fetch_beads_in_batch(
         })?
         .get("row_cnt");
 
-    info!(
+    debug!(
         total_rows = total_rows,
         "Number of beads present locally in persistent DB"
     );
