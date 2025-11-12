@@ -212,8 +212,7 @@ pub struct DownstreamClient {
     ///Configuration done so that all the phases are tracked and thus template can be supplied to downstream
     pub channel_configured: bool,
     /// The unique identifier assigned to this downstream connection/channel.
-    #[allow(unused)]
-    pub(super) connection_id: u32,
+    connection_id: u32,
     /// The extranonce1 value assigned to this downstream miner.
     extranonce1: Vec<u8>,
     /// `extranonce1` to be sent to the Downstream in the SV1 `mining.subscribe` message response.
@@ -232,6 +231,10 @@ pub struct DownstreamClient {
     pub block_submission_tx: Option<mpsc::UnboundedSender<BlockSubmissionRequest>>,
 }
 impl DownstreamClient {
+    /// A helper function to keep connection_id immutable after assignment
+    pub fn connection_id(&self) -> u32 {
+        self.connection_id
+    }
     /// Handles an incoming Stratum `Client2Server` request from a downstream miner.
     ///
     /// Routes the request to the appropriate handler based on its `method`:
@@ -259,6 +262,7 @@ impl DownstreamClient {
         let req_params = client_request.params;
         let method = client_request.method.clone();
         let client_request_id = client_request.id;
+        let connection_id_hex = format!("{:x}", self.connection_id());
         let response_or_error = match method.as_ref() {
             "mining.configure" => self.handle_configure(&req_params, client_request_id).await,
             "mining.subscribe" => {
@@ -291,16 +295,24 @@ impl DownstreamClient {
                     } => serde_json::to_string(&suggest_difficulty_resp).unwrap(),
                 };
                 debug!(
+                    connection_id = %connection_id_hex,
                     method = %client_request.method,
                     response = %response_json_string,
                     "Sending response to downstream"
                 );
                 match response_message_sender.send(response_json_string).await {
                     Ok(_) => {
-                        debug!("Response sent to writer task");
+                        debug!(
+                            connection_id = %connection_id_hex,
+                            "Response sent to writer task"
+                        );
                     }
                     Err(error) => {
-                        error!(error = %error, "Failed to send response to writer task");
+                        error!(
+                            connection_id = %connection_id_hex,
+                            error = %error,
+                            "Failed to send response to writer task"
+                        );
                     }
                 };
                 //Sending the initial latest avaialble template to the recently subscribed and authorized
@@ -319,10 +331,15 @@ impl DownstreamClient {
                         .await;
                     match notification_sent_res {
                         Ok(_) => {
-                            debug!(peer_addr = %peer_addr, "Requested latest template for new peer");
+                            debug!(
+                                connection_id = %connection_id_hex,
+                                peer_addr = %peer_addr,
+                                "Requested latest template for new peer"
+                            );
                         }
                         Err(error) => {
                             error!(
+                                connection_id = %connection_id_hex,
                                 error = %error,
                                 peer_addr = %peer_addr,
                                 "Failed to request latest template for new downstream"
@@ -334,6 +351,7 @@ impl DownstreamClient {
             }
             Err(error) => {
                 error!(
+                    connection_id = %connection_id_hex,
                     error = %error,
                     method = "handle_client_to_server_request",
                     "Failed to process client request"
@@ -373,6 +391,7 @@ impl DownstreamClient {
         client_request_id: u64,
         swarm_handler: Arc<Mutex<SwarmHandler>>,
     ) -> Result<StratumResponses, StratumErrors> {
+        let connection_id_hex = format!("{:x}", self.connection_id());
         let param_array = match submit_work_params.as_array() {
             Some(param_array) => param_array,
             None => {
@@ -397,7 +416,11 @@ impl DownstreamClient {
             Ok(name) => name,
             Err(error) => return Err(error),
         };
-        info!(worker = %worker_name, "Mining worker connected");
+        info!(
+            connection_id = %connection_id_hex,
+            worker = %worker_name,
+            "Mining worker connected"
+        );
 
         // Parse hex job_id (sent by miner)
         let job_id_str = match param_array.get(1).and_then(|v| v.as_str()) {
@@ -475,6 +498,7 @@ impl DownstreamClient {
 
         // Log the coinbase transaction in hex
         debug!(
+            connection_id = %connection_id_hex,
             coinbase_hex = %hex::encode(&coinbase_bytes),
             "Reconstructed coinbase transaction"
         );
@@ -518,7 +542,12 @@ impl DownstreamClient {
             match hex::decode_to_slice(rolled_version_bits, &mut rolled_version) {
                 Ok(_) => (),
                 Err(e) => {
-                    error!(error = ?e, param = "rolled_version_bits", "Failed to decode version rolling bits");
+                    error!(
+                        connection_id = %connection_id_hex,
+                        error = ?e,
+                        param = "rolled_version_bits",
+                        "Failed to decode version rolling bits"
+                    );
                     return Err(StratumErrors::VersionRollingHexParseError {
                         error: e.to_string(),
                     });
@@ -541,12 +570,21 @@ impl DownstreamClient {
             let version_rolling_mask_bytes = version_rolling_mask.to_be_bytes();
             let version_rolling_mask_hex = hex::encode(version_rolling_mask_bytes);
 
-            info!(version_mask = ?version_rolling_mask_hex, "Converted version mask");
+            info!(
+                connection_id = %connection_id_hex,
+                version_mask = ?version_rolling_mask_hex,
+                "Converted version mask"
+            );
 
             match hex::decode_to_slice(version_rolling_mask_hex, &mut mask_bytes) {
                 Ok(_) => (),
                 Err(e) => {
-                    error!(error = ?e, param = "version_rolling_mask_hex", "Failed to decode version mask hex");
+                    error!(
+                        connection_id = %connection_id_hex,
+                        error = ?e,
+                        param = "version_rolling_mask_hex",
+                        "Failed to decode version mask hex"
+                    );
                     return Err(StratumErrors::VersionRollingHexParseError {
                         error: e.to_string(),
                     });
@@ -574,8 +612,16 @@ impl DownstreamClient {
         };
         let compact_target = submitted_job.blocktemplate.bits;
         let target = bitcoin::Target::from_compact(compact_target);
-        info!(target = %target.to_hex(), "Mining target");
-        info!(block_hash = %header.block_hash(), "Block hash computed");
+        info!(
+            connection_id = %connection_id_hex,
+            target = %target.to_hex(),
+            "Mining target"
+        );
+        info!(
+            connection_id = %connection_id_hex,
+            block_hash = %header.block_hash(),
+            "Block hash computed"
+        );
 
         // Print each header field in big-endian hex just before PoW validation
         let coinbase_txid_be_hex = hex::encode(coinbase_tx.compute_txid().to_byte_array());
@@ -590,6 +636,7 @@ impl DownstreamClient {
         let nonce_be_hex = hex::encode(header.nonce.to_be_bytes());
 
         debug!(
+            connection_id = %connection_id_hex,
             coinbase_txid = %coinbase_txid_be_hex,
             version = %version_be_hex,
             prev_blockhash = %prevhash_be_hex,
@@ -603,7 +650,11 @@ impl DownstreamClient {
         let witness = match &submitted_job.coinbase_witness_commitment {
             Some(w) => w.to_vec(),
             None => {
-                error!(job_id = %numeric_job_id, "Job missing witness commitment");
+                error!(
+                    connection_id = %connection_id_hex,
+                    job_id = %numeric_job_id,
+                    "Job missing witness commitment"
+                );
                 return Err(StratumErrors::InvalidCoinbase);
             }
         };
@@ -624,7 +675,12 @@ impl DownstreamClient {
         //Checking with PoW of the target whether the block sent by downstream is below that or not
         match header.validate_pow(target) {
             Ok(_) => {
-                debug!(target = %target.to_hex(), hash = %header.block_hash(), "Header meets target");
+                debug!(
+                    connection_id = %connection_id_hex,
+                    target = %target.to_hex(),
+                    hash = %header.block_hash(),
+                    "Header meets target"
+                );
 
                 // If valid block found, send to submission channel
                 if let Some(ref submission_tx) = self.block_submission_tx {
@@ -638,18 +694,37 @@ impl DownstreamClient {
 
                     match submission_tx.send(submission) {
                         Ok(_) => {
-                            info!(template_id = %template_id, "Block sent to submission handler");
+                            info!(
+                                connection_id = %connection_id_hex,
+                                template_id = %template_id,
+                                "Block sent to submission handler"
+                            );
                         }
                         Err(e) => {
-                            error!(error = %e, template_id = %template_id, "Failed to send block submission");
+                            error!(
+                                connection_id = %connection_id_hex,
+                                error = %e,
+                                template_id = %template_id,
+                                "Failed to send block submission"
+                            );
                         }
                     }
                 } else {
-                    warn!(context = "block_submission", template_id = %template_id, "Channel unavailable - cannot forward valid block");
+                    warn!(
+                        connection_id = %connection_id_hex,
+                        context = "block_submission",
+                        template_id = %template_id,
+                        "Channel unavailable - cannot forward valid block"
+                    );
                 }
             }
             Err(e) => {
-                debug!(error = %e, target = %target.to_hex(), "Header does not meet target");
+                debug!(
+                    connection_id = %connection_id_hex,
+                    error = %e,
+                    target = %target.to_hex(),
+                    "Header does not meet target"
+                );
                 return Ok(StratumResponses::StandardResponse {
                     std_response: StandardResponse::new_ok(Some(client_request_id), json!(false)),
                 });
@@ -673,7 +748,13 @@ impl DownstreamClient {
             .await
         {
             Ok(_) => {
-                info!(job_id = %numeric_job_id, template_id = %template_id, peer = %self.downstream_ip, "Candidate block submitted");
+                info!(
+                    connection_id = %connection_id_hex,
+                    job_id = %numeric_job_id,
+                    template_id = %template_id,
+                    peer = %self.downstream_ip,
+                    "Candidate block submitted"
+                );
                 Ok(StratumResponses::StandardResponse {
                     std_response: StandardResponse::new_ok(Some(client_request_id), json!(true)),
                 })
@@ -700,6 +781,7 @@ impl DownstreamClient {
     ) -> Result<StratumResponses, StratumErrors> {
         if let Some(difficulty) = suggest_difficulty_params.get(0) {
             info!(
+                connection_id = %format!("{:x}", self.connection_id()),
                 params = ?suggest_difficulty_params,
                 "Handling suggested difficulty"
             );
@@ -730,9 +812,11 @@ impl DownstreamClient {
         authorize_request_params: &Value,
         client_request_id: u64,
     ) -> Result<StratumResponses, StratumErrors> {
-        info!(
-            "Authorization is taking place -- {:?}",
-            authorize_request_params
+        let connection_id_hex = format!("{:x}", self.connection_id());
+        debug!(
+            connection_id = %connection_id_hex,
+            params = ?authorize_request_params,
+            "Authorization request"
         );
         let param_array = match authorize_request_params.as_array() {
             Some(param_array) => param_array,
@@ -766,7 +850,11 @@ impl DownstreamClient {
         }
 
         self.authorized = true;
-        info!(username = %username, "Miner authorized");
+        info!(
+            connection_id = %connection_id_hex,
+            username = %username,
+            "Miner authorized"
+        );
         Ok(StratumResponses::StandardResponse {
             std_response: (StandardResponse {
                 id: Some(client_request_id),
@@ -786,9 +874,11 @@ impl DownstreamClient {
         config_req_params: &Value,
         client_request_id: u64,
     ) -> Result<StratumResponses, StratumErrors> {
+        let connection_id_hex = format!("{:x}", self.connection_id());
         info!(
-            "{:?} configuration handling is taking place",
-            config_req_params
+            connection_id = %connection_id_hex,
+            params = ?config_req_params,
+            "Configuration handling is taking place"
         );
         let params = match config_req_params.as_array() {
             Some(param_array) => param_array,
@@ -822,7 +912,11 @@ impl DownstreamClient {
                     return Err(StratumErrors::ConfigureFeatureStringConversion { error: "Json value could not be converted to string in while handling mining.configure ".to_string() })
                 }
             };
-        info!(features = ?feature_names, "Mining features requested");
+        info!(
+            connection_id = %connection_id_hex,
+            features = ?feature_names,
+            "Mining features requested"
+        );
         let config_map = match params[1].as_object() {
             Some(con_map) => con_map,
             None => {
@@ -832,7 +926,11 @@ impl DownstreamClient {
                 });
             }
         };
-        info!(config = ?config_map, "Configuration map processed");
+        info!(
+            connection_id = %connection_id_hex,
+            config = ?config_map,
+            "Configuration map processed"
+        );
         //Possible `req_params` under the request sent to server via client
         #[allow(unused)]
         let minimum_difficulty = config_map.get("minimum-difficulty.value").or(None);
@@ -924,7 +1022,11 @@ impl DownstreamClient {
         subscribe_req_params: &Value,
         client_request_id: u64,
     ) -> Result<StratumResponses, StratumErrors> {
-        info!(params = ?subscribe_req_params, "Miner subscribing");
+        info!(
+            connection_id = %format!("{:x}", self.connection_id()),
+            params = ?subscribe_req_params,
+            "Miner subscribing"
+        );
         //TODO: dummy testing subscription IDs must be unique though can be changed accordingly these are just dummy values
         let subscriptions: Vec<(String, String)> = vec![
             (String::from("mining.set_difficulty"), String::from("34")),
@@ -949,9 +1051,13 @@ impl Default for DownstreamClient {
         //4 bytes
         let mut extranonce1_bytes = [0; 4];
         rand::thread_rng().fill_bytes(&mut extranonce1_bytes);
-        info!(
-            "Extranonce1 generated for a new downstream connection is following {:?}",
-            hex::encode(&extranonce1_bytes)
+        let connection_id = rand::thread_rng().next_u32(); // FIXME use a counter here, not an RNG
+                                                           // (will collide with 65k mining devices)
+        let extranonce1_hex = hex::encode(&extranonce1_bytes); // FIXME should be connection_id
+        debug!(
+            connection_id = %format!("{:x}", connection_id),
+            extranonce1 = %extranonce1_hex,
+            "Generated extranonce1 for new downstream connection"
         );
         DownstreamClient {
             authorized: false,
@@ -960,7 +1066,7 @@ impl Default for DownstreamClient {
             suggest_difficulty_done: false,
             channel_configured: false,
             //generating a random u32 client connection id
-            connection_id: rand::thread_rng().next_u32(),
+            connection_id,
             extranonce1: Vec::from(extranonce1_bytes),
             version_rolling_mask: None,
             version_rolling_min_bit: None,
@@ -1065,7 +1171,7 @@ impl MiningJobMap {
     pub async fn insert_mining_job(&mut self, template_id: String, job_details: JobDetails) -> u64 {
         let numeric_job_id = self.next_job_id;
 
-        info!(job_id = %numeric_job_id, template_id = %template_id, "Inserting mining job");
+        debug!(job_id = %numeric_job_id, template_id = %template_id, "Inserting mining job into MiningJobMap");
 
         // Store job by template_id
         self.mining_jobs.insert(template_id.clone(), job_details);
@@ -1178,7 +1284,7 @@ impl Notifier {
         template_id: &str,
         merkle_coinbase_branch: Vec<Vec<u8>>,
     ) -> Result<JobNotification, StratumErrors> {
-        info!(
+        debug!(
             template_id = %template_id,
             clean_job = %clean_job,
             "Constructing JobNotification"
@@ -1204,9 +1310,8 @@ impl Notifier {
         };
         let deserialized_coinbase = serialize::<Transaction>(&coinbase_transaction);
         debug!(
-            "Deserialized coinbase length is - {:?} \n and the coinbase tx is - {:?}",
-            deserialized_coinbase.len(),
-            coinbase_transaction
+            coinbase = ?coinbase_transaction,
+            "Deserialized coinbase"
         );
         //For splitting of the coinbase we check for the extranonce_seperator we had inserted while reconstructing the coinbase during the
         //fetching of the template via IPC .
@@ -1229,17 +1334,16 @@ impl Notifier {
         for tx in notified_template.transactions {
             txids_hashes.push(tx.compute_txid());
         }
-        if merkle_coinbase_branch.len() == 0 {
-            info!(template_id = %template_id, "Using previous template - empty merkle branch");
-        } else {
+        if merkle_coinbase_branch.len() != 0 {
             for sibling_node in merkle_coinbase_branch.iter() {
                 let sibling_hex = hex::encode(sibling_node);
                 merkle_branches.push(sibling_hex);
             }
         }
-        info!(
+        debug!(
             merkle_branches = ?merkle_branches,
-            "Merkle branches for the given template's coinbase are"
+            template_id = ?template_id,
+            "Merkle branches are"
         );
         //Stratum accepts the prev block hash to be in little endian instead of big endian
         //therefore byte by byte reversal is required here .
@@ -1304,9 +1408,9 @@ impl Notifier {
                     merkle_branch_coinbase,
                     template_id,
                 } => {
-                    info!(
+                    debug!(
                         template_id = %template_id,
-                        "Received new template to broadcast to all clients"
+                        "Received new block template"
                     );
                     //We will receive the template from the IPC channel and construct a valid job
                     //from the provided template and pass onto the message_reciver in the handle connection for
@@ -1398,7 +1502,6 @@ impl Notifier {
                 NotifyCmd::SendLatestTemplateToNewDownstream {
                     new_downstream_addr,
                 } => {
-                    info!(peer = %new_downstream_addr, "New miner connected");
                     let current_template_id = {
                         let id = latest_template_id.lock().await;
                         id.clone()
@@ -1434,7 +1537,7 @@ impl Notifier {
                         match current_downstream_message_sender_res {
                             Some(downstream_sender) => downstream_sender,
                             None => {
-                                error!(peer = %new_downstream_addr, "Peer not found in connection mapping");
+                                error!(peer = %new_downstream_addr, "Mining peer not found in connection mapping");
                                 return Err(StratumErrors::PeerNotFoundInConnectionMapping {
                                     peer_addr: new_downstream_addr,
                                 });
@@ -1598,16 +1701,20 @@ impl Server {
         crate::utils::log_server_listening(
             &self.stratum_config.hostname,
             actual_addr.port(),
-            "stratum+tcp"
+            "stratum+tcp",
         );
         loop {
             tokio::select! {
                 event = listener.accept()=>{
                     //shared ownership across all tasks and spawning a seperate downstream for each new connection
                     let self_ = Arc::new(Mutex::new(DownstreamClient::default()));
-                     if let Some(ref submission_tx) = self.block_submission_tx {
-                        self_.lock().await.block_submission_tx = Some(submission_tx.clone());
-                    }
+                    let connection_id_hex = {
+                        let mut client = self_.lock().await;
+                        if let Some(ref submission_tx) = self.block_submission_tx {
+                            client.block_submission_tx = Some(submission_tx.clone());
+                        }
+                        format!("{:x}", client.connection_id)
+                    };
                     //downstream miner mapping for associated jobs for a specific channel for downstream
                     let self_mining_map = Arc::new(Mutex::new(MiningJobMap::new()));
                     match event{
@@ -1623,7 +1730,11 @@ impl Server {
                             let (downstream_tx,mut downstream_rx) = mpsc::channel(1024);
                             //adding the new connection to the connection map
                             self.downstream_connection_mapping.lock().await.new_connection(peer_addr.to_string(), downstream_tx.clone());
-                            info!(peer = %peer_addr, "Miner connected");
+                            info!(
+                                connection_id = %connection_id_hex,
+                                peer = %peer_addr,
+                                "Miner connected"
+                            );
                             self_.lock().await.downstream_ip = peer_addr.to_string();
 
                             let connection_mapping_clone = Arc::clone(&self.downstream_connection_mapping);
@@ -1633,7 +1744,11 @@ impl Server {
                             // catering each new connection as seperate process
                             tokio::spawn(async move{
                                 let _=  Self::handle_connection(self_.clone(),peer_addr,reader,writer,&mut downstream_rx,self_mining_map.clone(),downstream_tx,notification_sender,swarm_handler_arc_ref).await;
-                                debug!(peer = %peer_addr_string, "Cleaning up disconnected miner");
+                                debug!(
+                                    connection_id = %connection_id_hex,
+                                    peer = %peer_addr_string,
+                                    "Cleaning up disconnected miner"
+                                );
 
                                 // cleanup after connection closes, remove from connection mapping
                                 connection_mapping_clone
@@ -1648,12 +1763,20 @@ impl Server {
                                         .await
                                         .remove(&peer_addr_string);
 
-                                debug!(peer = %peer_addr_string, "Miner cleanup complete");
+                                debug!(
+                                    connection_id = %connection_id_hex,
+                                    peer = %peer_addr_string,
+                                    "Miner cleanup complete"
+                                );
 
                             });
                         }
                         Err(error)=>{
-                            info!(error = ?error, "Connection failed");
+                            info!(
+                                connection_id = %connection_id_hex,
+                                error = ?error,
+                                "Connection failed"
+                            );
                         }
                     }
                 }
@@ -1694,21 +1817,43 @@ impl Server {
         let reader = BufReader::new(stream_reader);
         //reading incoming stream frame by frame
         let mut framed = FramedRead::new(reader, LinesCodec::new_with_max_length(MAX_LINE_LENGTH));
-        info!(peer = %peer_addr, "Handling new connection");
+        let connection_id_hex = {
+            let client = downstream_client.lock().await;
+            format!("{:x}", client.connection_id)
+        };
+        debug!(
+            connection_id = %connection_id_hex,
+            peer = %peer_addr,
+            "Handling new connection"
+        );
 
         loop {
             tokio::select! {
                 Some(message) = downstream_receiver.recv()=>{
-                    trace!(message = ?message, peer = %peer_addr, "Sending message to miner");
+                    trace!(
+                        connection_id = %connection_id_hex,
+                        message = ?message,
+                        peer = %peer_addr,
+                        "Sending message to miner"
+                    );
                     //Sending the notifications of new job to the downstream
                     let write_or_not = stream_writer.write_all(format!("{}\n",message).as_bytes()).await;
                     match write_or_not{
                         Ok(_)=>{
-                            trace!(peer = %peer_addr, "Response written to stream");
+                            trace!(
+                                connection_id = %connection_id_hex,
+                                peer = %peer_addr,
+                                "Response written to stream"
+                            );
 
                         },
                         Err(error)=>{
-                            error!(error = %error, peer = %peer_addr, "Failed to write to stream");
+                            error!(
+                                connection_id = %connection_id_hex,
+                                error = %error,
+                                peer = %peer_addr,
+                                "Failed to write to stream"
+                            );
                         }
                     }
                 }
@@ -1718,7 +1863,12 @@ impl Server {
                             if line.is_empty() {
                                 continue;
                             }
-                            trace!(line = %line, peer = %peer_addr, "Read line from miner");
+                            trace!(
+                                connection_id = %connection_id_hex,
+                                line = %line,
+                                peer = %peer_addr,
+                                "Read line from miner"
+                            );
                         //Parsing the lines read from buffer to find out whether they are valid JSON request type to be server as per
                         //stratum or not .
                         match serde_json::from_str::<StandardRequest>(&line) {
@@ -1735,6 +1885,7 @@ impl Server {
                                 }
                                 Err(e) => {
                                     error!(
+                                        connection_id = %connection_id_hex,
                                         peer = %peer_addr,
                                         error = %e,
                                         line = %line,
@@ -1747,11 +1898,21 @@ impl Server {
 
                         }
                         Some(Err(e)) => {
-                            error!(error = %e, peer = %peer_addr, fatal = true, "Fatal error reading from stream");
+                            error!(
+                                connection_id = %connection_id_hex,
+                                error = %e,
+                                peer = %peer_addr,
+                                fatal = true,
+                                "Fatal error reading from stream"
+                            );
                             return Err(Box::new(StratumErrors::UnableToReadStream { error: e }));
                         }
                         None => {
-                            info!(peer = %peer_addr, "Connection closed by client");
+                            info!(
+                                connection_id = %connection_id_hex,
+                                peer = %peer_addr,
+                                "Connection closed by client"
+                            );
                             break;
 
                         }
