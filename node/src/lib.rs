@@ -26,7 +26,7 @@ pub const MAX_CACHED_TEMPLATES: usize = 90;
 
 use crate::{
     bead::Bead,
-    braid::{Braid,AddBeadStatus},
+    braid::{AddBeadStatus, Braid},
     committed_metadata::{CommittedMetadata, TimeVec, TxIdVec},
     db::BraidpoolDBTypes,
     error::{IPCtemplateError, StratumErrors},
@@ -301,7 +301,7 @@ impl SwarmHandler {
                 .0
                 .push(current_tip_bead.committed_metadata.start_timestamp);
         }
-        debug!(tip_indices = ?tips_index, tip_hashes = ?parent_hash_set, 
+        debug!(tip_indices = ?tips_index, tip_hashes = ?parent_hash_set,
             "Tips before extending the Braid");
         //TODO:This will be replaced via the allotted `WeakShareDifficulty` after Difficulty adjustment
         let weak_target = CompactTarget::from_unprefixed_hex("1d00ffff").unwrap();
