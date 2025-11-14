@@ -255,33 +255,54 @@ impl Braid {
             }
         }
     }
-
     /// utility function for GetBeadsAfter request
     pub fn get_beads_after(&self, old_tips: Vec<BeadHash>) -> Option<Vec<Bead>> {
         let old_tips: HashSet<BeadHash> = old_tips.into_iter().collect();
+        tracing::warn!(
+            old_tips=?old_tips,"Tips received from the peer for which beads are requested for during IBD"
+        );
+        //In case no tips are present i.e. the new braid-node has been initialized
+        if old_tips.len() == 0 {
+            return Some(self.beads.clone());
+        }
         let mut response_beads = Vec::new();
         let mut found_start = false;
         let mut smallest_index = usize::MAX;
-        for hash in old_tips {
-            if let Some(&index) = self.bead_index_mapping.get(&hash) {
+        //finding the starting index
+        for hash in &old_tips {
+            if let Some(&index) = self.bead_index_mapping.get(hash) {
                 if index < smallest_index {
                     smallest_index = index;
                 }
                 found_start = true;
             }
         }
+        tracing::debug!(
+            smallest_index=?smallest_index,"Smallest possible index from all the tips - ",
+
+        );
         // just iterating over the vector of cohorts for now, this needs to be changed to use a more efficient retrieval of cohort index given bead hash
         let mut smallest_cohort_index = usize::MAX;
         for (idx, cohort) in self.cohorts.iter().enumerate() {
             if cohort.0.contains(&smallest_index) {
+                //Finding the cohort for which the smallest index is a part of
                 smallest_cohort_index = idx;
                 break;
             }
         }
+        tracing::debug!(
+            smallest_index=?smallest_index,"Smallest possible cohort index for which the given smallest index is a part of - ",
+        );
         while (smallest_cohort_index < self.cohorts.len()) {
             let cohort = &self.cohorts[smallest_cohort_index];
             for bead_index in &cohort.0 {
-                response_beads.push(self.beads[*bead_index].clone());
+                let curr_bead = self.beads[*bead_index].clone();
+                //Not including the beads that are already present in old_tips
+                if !old_tips.contains(&curr_bead.block_header.block_hash()) {
+                    response_beads.push(curr_bead);
+                } else {
+                    println!("This bead is already present in old tips thus skipping");
+                }
             }
             smallest_cohort_index += 1;
         }

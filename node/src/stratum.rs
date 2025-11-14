@@ -11,6 +11,7 @@ use num::ToPrimitive;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::sync::atomic::AtomicBool;
 use std::time::UNIX_EPOCH;
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use tokio::{
@@ -1716,6 +1717,7 @@ impl Server {
         mining_job_map: Arc<Mutex<HashMap<String, Arc<Mutex<MiningJobMap>>>>>,
         notification_sender: mpsc::Sender<NotifyCmd>,
         swarm_handler: Arc<Mutex<SwarmHandler>>,
+        ibd_or_not: Arc<AtomicBool>,
     ) -> Result<(), Box<std::io::Error>> {
         debug!("Starting stratum server");
         let bind_address = format!(
@@ -1748,82 +1750,89 @@ impl Server {
         }
         loop {
             tokio::select! {
-                event = listener.accept()=>{
-                    //shared ownership across all tasks and spawning a seperate downstream for each new connection
-                    let self_ = Arc::new(Mutex::new(DownstreamClient::default()));
-                    let (connection_id, connection_id_hex) = {
-                        let mut client = self_.lock().await;
-                        if let Some(ref submission_tx) = self.block_submission_tx {
-                            client.block_submission_tx = Some(submission_tx.clone());
+                    event = listener.accept()=>{
+                        //Currently we do not accept connections from downstream during IBD wrt to sync nodes
+                        if ibd_or_not.clone().load(std::sync::atomic::Ordering::SeqCst) == true{
+                        warn!("Braid node not synced and is under IBD thus skipping the connection from downstream.");
+                            continue;
                         }
-                        let id = client.connection_id;
-                        (id, format!("{:x}", id))
-                    };
-                    //downstream miner mapping for associated jobs for a specific channel for downstream
-                    let self_mining_map = Arc::new(Mutex::new(MiningJobMap::new()));
-                    match event{
-                        Ok((stream,peer_addr))=>{
-                            let (reader, writer) = stream.into_split();
-                            //Notification sender to the `Notifier` task
-                            let notification_sender = notification_sender.clone();
-                            //Communication bridge between swarm and stratum service
-                            let swarm_handler_arc_ref = Arc::clone(&swarm_handler);
-                            //Adding the downstream mining map to global mapper
-                            mining_job_map.lock().await.insert(peer_addr.to_string(), self_mining_map.clone());
-                            //downstream channel for server2client communication to take place
-                            let (downstream_tx,mut downstream_rx) = mpsc::channel(1024);
-                            //adding the new connection to the connection map
-                            self.downstream_connection_mapping
-                                .lock()
-                                .await
-                                .new_connection(peer_addr.to_string(), connection_id, downstream_tx.clone());
-                            info!(
-                                connection_id = %connection_id_hex,
-                                peer = %peer_addr,
-                                "Miner connected"
-                            );
-                            self_.lock().await.downstream_ip = peer_addr.to_string();
-
-                            let connection_mapping_clone = Arc::clone(&self.downstream_connection_mapping);
-                            let mining_job_map_clone = Arc::clone(&mining_job_map);
-                            let peer_addr_string = peer_addr.to_string();
-
-                            // catering each new connection as seperate process
-                            tokio::spawn(async move{
-                                let _=  Self::handle_connection(self_.clone(),peer_addr,reader,writer,&mut downstream_rx,self_mining_map.clone(),downstream_tx,notification_sender,swarm_handler_arc_ref).await;
-                                debug!(
+                        else{
+                 //shared ownership across all tasks and spawning a seperate downstream for each new connection
+                 let self_ = Arc::new(Mutex::new(DownstreamClient::default()));
+                        let (connection_id, connection_id_hex) = {
+                            let mut client = self_.lock().await;
+                    if let Some(ref submission_tx) = self.block_submission_tx {
+                         client.block_submission_tx = Some(submission_tx.clone());
+                     }
+                            let id = client.connection_id;
+                            (id, format!("{:x}", id))
+                        };
+                 //downstream miner mapping for associated jobs for a specific channel for downstream
+                 let self_mining_map = Arc::new(Mutex::new(MiningJobMap::new()));
+                 match event{
+                     Ok((stream,peer_addr))=>{
+                         let (reader, writer) = stream.into_split();
+                         //Notification sender to the `Notifier` task
+                         let notification_sender = notification_sender.clone();
+                         //Communication bridge between swarm and stratum service
+                         let swarm_handler_arc_ref = Arc::clone(&swarm_handler);
+                         //Adding the downstream mining map to global mapper
+                         mining_job_map.lock().await.insert(peer_addr.to_string(), self_mining_map.clone());
+                         //downstream channel for server2client communication to take place
+                         let (downstream_tx,mut downstream_rx) = mpsc::channel(1024);
+                         //adding the new connection to the connection map
+                         self.downstream_connection_mapping
+                                    .lock()
+                                    .await
+                                    .new_connection(peer_addr.to_string(), connection_id, downstream_tx.clone());
+                         info!(
                                     connection_id = %connection_id_hex,
-                                    peer = %peer_addr_string,
-                                    "Cleaning up disconnected miner"
+                                    peer = %peer_addr,
+                                    "Miner connected"
                                 );
+                         self_.lock().await.downstream_ip = peer_addr.to_string();
 
-                                // cleanup after connection closes, remove from connection mapping
-                                connection_mapping_clone
-                                        .lock()
-                                        .await
-                                        .downstream_channel_mapping
-                                        .remove(&peer_addr_string);
+                         let connection_mapping_clone = Arc::clone(&self.downstream_connection_mapping);
+                         let mining_job_map_clone = Arc::clone(&mining_job_map);
+                         let peer_addr_string = peer_addr.to_string();
 
-                                // Remove from job mapping
-                                    mining_job_map_clone
-                                        .lock()
-                                        .await
-                                        .remove(&peer_addr_string);
+                         // catering each new connection as seperate process
+                         tokio::spawn(async move{
+                             let _=  Self::handle_connection(self_.clone(),peer_addr,reader,writer,&mut downstream_rx,self_mining_map.clone(),downstream_tx,notification_sender,swarm_handler_arc_ref).await;
+                             debug!(
+                                        connection_id = %connection_id_hex,
+                                        peer = %peer_addr_string,
+                                        "Cleaning up disconnected miner"
+                                    );
 
-                                debug!(
+                             // cleanup after connection closes, remove from connection mapping
+                             connection_mapping_clone
+                                     .lock()
+                                     .await
+                                     .downstream_channel_mapping
+                                     .remove(&peer_addr_string);
+
+                             // Remove from job mapping
+                                 mining_job_map_clone
+                                     .lock()
+                                     .await
+                                     .remove(&peer_addr_string);
+
+                                    debug!(
+                                        connection_id = %connection_id_hex,
+                                        peer = %peer_addr_string,
+                                        "Miner cleanup complete"
+                                    );
+
+                                });
+                            }
+                            Err(error)=>{
+                                info!(
                                     connection_id = %connection_id_hex,
-                                    peer = %peer_addr_string,
-                                    "Miner cleanup complete"
+                                    error = ?error,
+                                    "Connection failed"
                                 );
-
-                            });
-                        }
-                        Err(error)=>{
-                            info!(
-                                connection_id = %connection_id_hex,
-                                error = ?error,
-                                "Connection failed"
-                            );
+                            }
                         }
                     }
                 }
@@ -1996,6 +2005,8 @@ mod test {
 
     #[tokio::test]
     pub async fn server_start_test() {
+        let ibd_or_not: AtomicBool = AtomicBool::new(false);
+        let test_ibd_spinlock = Arc::new(ibd_or_not);
         let genesis_beads = Vec::from([]);
         let test_braid: Arc<RwLock<braid::Braid>> =
             Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
@@ -2016,7 +2027,12 @@ mod test {
 
         let server_task = tokio::spawn(async move {
             let _ = server
-                .run_stratum_service(mining_job_map, notify_tx, swarm_handler_arc)
+                .run_stratum_service(
+                    mining_job_map,
+                    notify_tx,
+                    swarm_handler_arc,
+                    test_ibd_spinlock.clone(),
+                )
                 .await;
         });
 
@@ -2054,6 +2070,8 @@ mod test {
 
     #[tokio::test]
     pub async fn server_subscribe_response() {
+        let ibd_or_not: AtomicBool = AtomicBool::new(false);
+        let test_ibd_spinlock = Arc::new(ibd_or_not);
         let connection_mapping = Arc::new(Mutex::new(ConnectionMapping::new()));
         let genesis_beads = Vec::from([]);
         let test_braid: Arc<RwLock<braid::Braid>> =
@@ -2075,7 +2093,12 @@ mod test {
 
         let server_task = tokio::spawn(async move {
             let _ = server
-                .run_stratum_service(mining_job_map, notify_tx, swarm_handler_arc)
+                .run_stratum_service(
+                    mining_job_map,
+                    notify_tx,
+                    swarm_handler_arc,
+                    test_ibd_spinlock,
+                )
                 .await;
         });
 
@@ -2097,6 +2120,8 @@ mod test {
     }
     #[tokio::test]
     async fn test_mining_authorize_response() {
+        let ibd_or_not: AtomicBool = AtomicBool::new(false);
+        let ibd_spinlock = Arc::new(ibd_or_not);
         let connection_mapping = Arc::new(Mutex::new(ConnectionMapping::new()));
         let genesis_beads = Vec::from([]);
         let test_braid: Arc<RwLock<braid::Braid>> =
@@ -2117,7 +2142,12 @@ mod test {
         let mut server = Server::new(config, connection_mapping, None);
         tokio::spawn(async move {
             let _ = server
-                .run_stratum_service(mining_job_map, notify_tx, swarm_handler_arc)
+                .run_stratum_service(
+                    mining_job_map,
+                    notify_tx,
+                    swarm_handler_arc,
+                    ibd_spinlock.clone(),
+                )
                 .await;
         });
 
@@ -2141,6 +2171,8 @@ mod test {
     }
     #[tokio::test]
     async fn test_mining_set_difficulty_response() {
+        let ibd_or_not: AtomicBool = AtomicBool::new(false);
+        let ibd_spinlock = Arc::new(ibd_or_not);
         let connection_mapping = Arc::new(Mutex::new(ConnectionMapping::new()));
         let genesis_beads = Vec::from([]);
         let test_braid: Arc<RwLock<braid::Braid>> =
@@ -2160,7 +2192,12 @@ mod test {
         let mut server = Server::new(config, connection_mapping, None);
         tokio::spawn(async move {
             let _ = server
-                .run_stratum_service(mining_job_map, notify_tx, swarm_handler_arc)
+                .run_stratum_service(
+                    mining_job_map,
+                    notify_tx,
+                    swarm_handler_arc,
+                    ibd_spinlock.clone(),
+                )
                 .await;
         });
         tokio::time::sleep(Duration::from_millis(300)).await;
@@ -2177,6 +2214,8 @@ mod test {
     }
     #[tokio::test]
     async fn test_invalid_json() {
+        let ibd_or_not: AtomicBool = AtomicBool::new(false);
+        let ibd_spinlock = Arc::new(ibd_or_not);
         let connection_mapping = Arc::new(Mutex::new(ConnectionMapping::new()));
         let genesis_beads = Vec::from([]);
         let test_braid: Arc<RwLock<braid::Braid>> =
@@ -2199,7 +2238,12 @@ mod test {
         let notify_tx_clone = notify_tx.clone();
         tokio::spawn(async move {
             server
-                .run_stratum_service(mining_job_map_clone, notify_tx_clone, swarm_handler_arc)
+                .run_stratum_service(
+                    mining_job_map_clone,
+                    notify_tx_clone,
+                    swarm_handler_arc,
+                    ibd_spinlock,
+                )
                 .await
                 .unwrap();
         });

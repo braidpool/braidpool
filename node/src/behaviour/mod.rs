@@ -89,9 +89,9 @@ impl BraidPoolBehaviour {
     }
 
     // Request beads from a peer
-    pub fn request_beads(&mut self, peer: PeerId, hashes: Vec<BeadHash>) -> OutboundRequestId {
+    pub fn request_beads(&mut self, peer: PeerId, hashes: &Vec<BeadHash>) -> OutboundRequestId {
         self.bead_sync
-            .send_request(&peer, BeadRequest::GetBeads(hashes))
+            .send_request(&peer, BeadRequest::GetBeads(hashes.clone()))
     }
 
     // Request tips from a peer
@@ -110,7 +110,16 @@ impl BraidPoolBehaviour {
             .send_response(channel, BeadResponse::Beads(beads))
             .expect("Failed to send response");
     }
-
+    //Respond with `GetBeadsAfter` beadhashes request
+    pub fn respond_with_beadhashes(
+        &mut self,
+        channel: ResponseChannel<BeadResponse>,
+        bead_hashes: Vec<BeadHash>,
+    ) {
+        self.bead_sync
+            .send_response(channel, BeadResponse::GetBeadsAfter(bead_hashes))
+            .expect("Failed to send response");
+    }
     // Respond to a tips request
     pub fn respond_with_tips(
         &mut self,

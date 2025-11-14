@@ -1544,7 +1544,7 @@ fn test_get_beads_after() {
     // Test 3: Get beads after the last bead (should return empty or just that bead)
     let last_hash = beads[3].block_header.block_hash();
     let result = test_braid.get_beads_after(vec![last_hash]);
-    assert!(result.is_some());
+    assert!(result.is_none());
 
     println!("Linear chain tests passed");
 }
@@ -1815,7 +1815,7 @@ fn test_get_beads_after_edge_cases() {
     // Test 4: Get beads after the tip (last bead)
     let tip_hash = beads[2].block_header.block_hash();
     let result = test_braid.get_beads_after(vec![tip_hash]);
-    assert!(result.is_some());
+    assert!(result.is_none());
     // Should return at least the tip bead itself or beads from its cohort
 }
 

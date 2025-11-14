@@ -89,7 +89,7 @@ pub enum BeadResponse {
     // Get all beads for IBD
     GetAllBeads(Vec<Bead>),
     // Get beads after a specific set of hashes
-    GetBeadsAfter(Vec<Bead>),
+    GetBeadsAfter(Vec<BeadHash>),
     // Error response
     Error(BeadSyncError),
 }
@@ -247,8 +247,8 @@ impl Encodable for BeadResponse {
                 let mut written = 0;
                 written += GET_BEADS_AFTER.consensus_encode(writer)?;
                 written += (beads.len() as u32).consensus_encode(writer)?;
-                for bead in beads {
-                    written += bead.consensus_encode(writer)?;
+                for bead_hash in beads {
+                    written += bead_hash.consensus_encode(writer)?;
                 }
                 Ok(written)
             }
@@ -302,12 +302,12 @@ impl Decodable for BeadResponse {
             }
             GET_BEADS_AFTER => {
                 let count = u32::consensus_decode(d)?;
-                let mut beads = Vec::new();
+                let mut bead_hashes = Vec::new();
                 for _ in 0..count {
-                    let bead = Bead::consensus_decode(d)?;
-                    beads.push(bead);
+                    let bead_hash = BeadHash::consensus_decode(d)?;
+                    bead_hashes.push(bead_hash);
                 }
-                Ok(BeadResponse::GetBeadsAfter(beads))
+                Ok(BeadResponse::GetBeadsAfter(bead_hashes))
             }
             _ => Err(Error::from(io::Error::new(
                 io::ErrorKind::InvalidData,
