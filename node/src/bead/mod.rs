@@ -27,11 +27,11 @@ pub struct Bead {
 }
 impl Default for Bead {
     fn default() -> Self {
-        let empty_merkel_bytes: [u8; 32] = [0; 32];
+        let empty_merkle_bytes: [u8; 32] = [0; 32];
         Self {
             block_header: BlockHeader {
                 bits: CompactTarget::from_consensus(486604799),
-                merkle_root: TxMerkleNode::from_byte_array(empty_merkel_bytes),
+                merkle_root: TxMerkleNode::from_byte_array(empty_merkle_bytes),
                 nonce: 0,
                 prev_blockhash: BlockHash::GENESIS_PREVIOUS_BLOCK_HASH,
                 time: BlockTime::from_u32(23021),

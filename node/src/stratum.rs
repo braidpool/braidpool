@@ -1,12 +1,11 @@
 use crate::error::StratumErrors;
 use crate::template_creator::calculate_merkle_root;
-use crate::{SwarmHandler, EXTRANONCE1_SIZE, EXTRANONCE2_SIZE, EXTRANONCE_SEPARATOR};
+use crate::{SwarmHandler, TemplateId, EXTRANONCE1_SIZE, EXTRANONCE2_SIZE, EXTRANONCE_SEPARATOR};
 use bitcoin::block::HeaderExt;
 use bitcoin::consensus::serialize;
 use bitcoin::io::Cursor;
 use bitcoin::{absolute::Decodable, Transaction};
 use bitcoin::{BlockHash, BlockHeader, BlockTime, TxMerkleNode, Txid, Witness};
-use core::panic;
 use futures::{lock::Mutex, FutureExt};
 use num::ToPrimitive;
 use rand::RngCore;
@@ -24,17 +23,15 @@ use tokio::{
 };
 use tokio_stream::StreamExt;
 use tokio_util::codec::{FramedRead, LinesCodec};
+#[allow(unused_imports)]
+use tracing::{debug, error, info, trace, warn};
 
 #[derive(Debug, Clone)]
 pub struct BlockSubmissionRequest {
     /// The template ID that this submission is for
-    pub template_id: String,
-    /// Block version
-    pub version: i32,
-    /// Block timestamp
-    pub timestamp: u32,
-    /// Block nonce
-    pub nonce: u32,
+    pub template_id: TemplateId,
+    /// Fully constructed block header (includes version, prevhash, merkle root, time, bits, nonce)
+    pub header: BlockHeader,
     /// Complete coinbase transaction
     pub coinbase_transaction: bitcoin::Transaction,
 }
@@ -211,8 +208,7 @@ pub struct DownstreamClient {
     ///Configuration done so that all the phases are tracked and thus template can be supplied to downstream
     pub channel_configured: bool,
     /// The unique identifier assigned to this downstream connection/channel.
-    #[allow(unused)]
-    pub(super) connection_id: u32,
+    connection_id: u32,
     /// The extranonce1 value assigned to this downstream miner.
     extranonce1: Vec<u8>,
     /// `extranonce1` to be sent to the Downstream in the SV1 `mining.subscribe` message response.
@@ -231,6 +227,10 @@ pub struct DownstreamClient {
     pub block_submission_tx: Option<mpsc::UnboundedSender<BlockSubmissionRequest>>,
 }
 impl DownstreamClient {
+    /// A helper function to keep connection_id immutable after assignment
+    pub fn connection_id(&self) -> u32 {
+        self.connection_id
+    }
     /// Handles an incoming Stratum `Client2Server` request from a downstream miner.
     ///
     /// Routes the request to the appropriate handler based on its `method`:
@@ -258,6 +258,7 @@ impl DownstreamClient {
         let req_params = client_request.params;
         let method = client_request.method.clone();
         let client_request_id = client_request.id;
+        let connection_id_hex = format!("{:x}", self.connection_id());
         let response_or_error = match method.as_ref() {
             "mining.configure" => self.handle_configure(&req_params, client_request_id).await,
             "mining.subscribe" => {
@@ -289,19 +290,24 @@ impl DownstreamClient {
                         suggest_difficulty_resp,
                     } => serde_json::to_string(&suggest_difficulty_resp).unwrap(),
                 };
-                log::info!("Response received is - {:?}", response_json_string);
-                log::info!(
-                    "Sending response of the request {:?} to the downstream",
-                    client_request.method
+                debug!(
+                    connection_id = %connection_id_hex,
+                    method = %client_request.method,
+                    response = %response_json_string,
+                    "Sending response to downstream"
                 );
                 match response_message_sender.send(response_json_string).await {
                     Ok(_) => {
-                        log::info!("Message sent successfully to the writer task");
+                        debug!(
+                            connection_id = %connection_id_hex,
+                            "Response sent to writer task"
+                        );
                     }
                     Err(error) => {
-                        log::error!(
-                            "An error occurred while sending response to the writer task - {}",
-                            error
+                        error!(
+                            connection_id = %connection_id_hex,
+                            error = %error,
+                            "Failed to send response to writer task"
                         );
                     }
                 };
@@ -321,17 +327,31 @@ impl DownstreamClient {
                         .await;
                     match notification_sent_res {
                         Ok(_) => {
-                            log::info!("Notification requesting latest available template sent successfully to the notifier by a new peer {:?}",peer_addr);
+                            debug!(
+                                connection_id = %connection_id_hex,
+                                peer_addr = %peer_addr,
+                                "Requested latest template for new peer"
+                            );
                         }
                         Err(error) => {
-                            log::error!("An error occurred while requesting latest template by a newly authorized downstream node - {}",error);
+                            error!(
+                                connection_id = %connection_id_hex,
+                                error = %error,
+                                peer_addr = %peer_addr,
+                                "Failed to request latest template for new downstream"
+                            );
                         }
                     }
                 }
                 Ok(stratum_response)
             }
             Err(error) => {
-                log::error!("{}", error);
+                error!(
+                    connection_id = %connection_id_hex,
+                    error = %error,
+                    method = "handle_client_to_server_request",
+                    "Failed to process client request"
+                );
                 Err(error)
             }
         }
@@ -367,6 +387,7 @@ impl DownstreamClient {
         client_request_id: u64,
         swarm_handler: Arc<Mutex<SwarmHandler>>,
     ) -> Result<StratumResponses, StratumErrors> {
+        let connection_id_hex = format!("{:x}", self.connection_id());
         let param_array = match submit_work_params.as_array() {
             Some(param_array) => param_array,
             None => {
@@ -391,7 +412,11 @@ impl DownstreamClient {
             Ok(name) => name,
             Err(error) => return Err(error),
         };
-        log::info!("Worker name connected to the downstream {}", worker_name);
+        info!(
+            connection_id = %connection_id_hex,
+            worker = %worker_name,
+            "Mining worker connected"
+        );
 
         // Parse hex job_id (sent by miner)
         let job_id_str = match param_array.get(1).and_then(|v| v.as_str()) {
@@ -452,8 +477,7 @@ impl DownstreamClient {
             .ok_or_else(|| StratumErrors::MiningJobNotFound {
                 job_id: Some(numeric_job_id),
                 template_id: None,
-            })?
-            .clone();
+            })?;
         //Building the coinbase and then eventually the block and testing for the validation against the
         //mainnet/regtest/cpunet/testnet difficulty or the weakshare local difficulty .
         let extranonce_1_hex = hex::encode(self.extranonce1.clone());
@@ -468,24 +492,28 @@ impl DownstreamClient {
         let coinbase_bytes = hex::decode(coinbase_tx_hex).unwrap();
 
         // Log the coinbase transaction in hex
-        log::info!("Coinbase transaction hex: {}", hex::encode(&coinbase_bytes));
+        debug!(
+            connection_id = %connection_id_hex,
+            coinbase_hex = %hex::encode(&coinbase_bytes),
+            "Reconstructed coinbase transaction"
+        );
 
         let mut coinbase_cursor = Cursor::new(coinbase_bytes);
         let mut coinbase_tx: Transaction =
             bitcoin::Transaction::consensus_decode(&mut coinbase_cursor).unwrap();
 
         //computing merkle new merkle path due to updated coinbase transaction
-        let mut merkel_branches_bytes: Vec<Vec<u8>> = Vec::new();
-        for merkel_branch in submitted_job.coinbase_merkel_path.clone() {
-            let mut merkel_branch_bytes: [u8; 32] = [0u8; 32];
-            //Computing hex of merkel branch in big-endian as expected by the miner
-            hex::decode_to_slice(merkel_branch, &mut merkel_branch_bytes).unwrap();
-            merkel_branches_bytes.push(Vec::from(merkel_branch_bytes));
+        let mut merkle_branches_bytes: Vec<Vec<u8>> = Vec::new();
+        for merkle_branch in submitted_job.coinbase_merkle_path.clone() {
+            let mut merkle_branch_bytes: [u8; 32] = [0u8; 32];
+            //Computing hex of merkle branch in big-endian as expected by the miner
+            hex::decode_to_slice(merkle_branch, &mut merkle_branch_bytes).unwrap();
+            merkle_branches_bytes.push(Vec::from(merkle_branch_bytes));
         }
-        let merkel_root_bytes =
-            calculate_merkle_root(coinbase_tx.compute_txid(), merkel_branches_bytes.as_slice());
+        let merkle_root_bytes =
+            calculate_merkle_root(coinbase_tx.compute_txid(), merkle_branches_bytes.as_slice());
         //Computing the newly constructed merkle root via the merkle path
-        let merkle_root = TxMerkleNode::from_byte_array(merkel_root_bytes);
+        let merkle_root = TxMerkleNode::from_byte_array(merkle_root_bytes);
 
         //Applying version mask received during mining.configure
         // Job version
@@ -509,7 +537,12 @@ impl DownstreamClient {
             match hex::decode_to_slice(rolled_version_bits, &mut rolled_version) {
                 Ok(_) => (),
                 Err(e) => {
-                    log::error!("Failed to decode rolled_version_bits: {:?}", e);
+                    error!(
+                        connection_id = %connection_id_hex,
+                        error = ?e,
+                        param = "rolled_version_bits",
+                        "Failed to decode version rolling bits"
+                    );
                     return Err(StratumErrors::VersionRollingHexParseError {
                         error: e.to_string(),
                     });
@@ -532,12 +565,21 @@ impl DownstreamClient {
             let version_rolling_mask_bytes = version_rolling_mask.to_be_bytes();
             let version_rolling_mask_hex = hex::encode(version_rolling_mask_bytes);
 
-            log::info!("Converted version mask --- {:?}", version_rolling_mask_hex);
+            info!(
+                connection_id = %connection_id_hex,
+                version_mask = ?version_rolling_mask_hex,
+                "Converted version mask"
+            );
 
             match hex::decode_to_slice(version_rolling_mask_hex, &mut mask_bytes) {
                 Ok(_) => (),
                 Err(e) => {
-                    log::error!("Failed to decode version_rolling_mask_hex: {:?}", e);
+                    error!(
+                        connection_id = %connection_id_hex,
+                        error = ?e,
+                        param = "version_rolling_mask_hex",
+                        "Failed to decode version mask hex"
+                    );
                     return Err(StratumErrors::VersionRollingHexParseError {
                         error: e.to_string(),
                     });
@@ -565,10 +607,15 @@ impl DownstreamClient {
         };
         let compact_target = submitted_job.blocktemplate.bits;
         let target = bitcoin::Target::from_compact(compact_target);
-        log::info!("target    : {}", target.to_hex());
-        log::info!(
-            "block_hash: {}",
-            hex::encode(header.block_hash().to_byte_array())
+        debug!(
+            connection_id = %connection_id_hex,
+            target = %target.to_hex(),
+            "Mining target"
+        );
+        debug!(
+            connection_id = %connection_id_hex,
+            block_hash = %header.block_hash(),
+            "Block hash computed"
         );
 
         // Print each header field in big-endian hex just before PoW validation
@@ -583,18 +630,26 @@ impl DownstreamClient {
         let bits_be_hex = hex::encode(header.bits.to_consensus().to_be_bytes());
         let nonce_be_hex = hex::encode(header.nonce.to_be_bytes());
 
-        log::debug!("coinbase_txid: {}", coinbase_txid_be_hex);
-        log::debug!("header.version: {}", version_be_hex);
-        log::debug!("header.prev_blockhash: {}", prevhash_be_hex);
-        log::debug!("header.merkle_root: {}", merkle_root_be_hex);
-        log::debug!("header.time: {}", time_be_hex);
-        log::debug!("header.bits: {}", bits_be_hex);
-        log::debug!("header.nonce: {}", nonce_be_hex);
+        debug!(
+            connection_id = %connection_id_hex,
+            coinbase_txid = %coinbase_txid_be_hex,
+            version = %version_be_hex,
+            prev_blockhash = %prevhash_be_hex,
+            merkle_root = %merkle_root_be_hex,
+            time = %time_be_hex,
+            bits = %bits_be_hex,
+            nonce = %nonce_be_hex,
+            "Block header fields for submission"
+        );
         //Pushing back the witness comittment
         let witness = match &submitted_job.coinbase_witness_commitment {
             Some(w) => w.to_vec(),
             None => {
-                log::error!("Job {} has no witness commitment", numeric_job_id);
+                error!(
+                    connection_id = %connection_id_hex,
+                    job_id = %numeric_job_id,
+                    "Job missing witness commitment"
+                );
                 return Err(StratumErrors::InvalidCoinbase);
             }
         };
@@ -611,40 +666,58 @@ impl DownstreamClient {
 
         // Construct and log the complete block using rust-bitcoin's Block struct
         let complete_block = bitcoin::Block::new_unchecked(header, block_transactions);
-        log::info!(
-            "block_hash: {}",
-            hex::encode(complete_block.block_hash().to_byte_array())
-        );
 
         //Checking with PoW of the target whether the block sent by downstream is below that or not
         match header.validate_pow(target) {
             Ok(_) => {
-                log::info!("Header meets the target");
+                debug!(
+                    connection_id = %connection_id_hex,
+                    target = %target.to_hex(),
+                    hash = %header.block_hash(),
+                    "Header meets target"
+                );
 
                 // If valid block found, send to submission channel
                 if let Some(ref submission_tx) = self.block_submission_tx {
                     let submission = BlockSubmissionRequest {
-                        template_id: template_id.clone(),
-                        version: final_masked_version,
-                        timestamp: header.time.to_u32(),
-                        nonce: header.nonce,
+                        template_id,
+                        header: header.clone(),
                         coinbase_transaction: coinbase_tx_for_submission.clone(),
                     };
 
                     match submission_tx.send(submission) {
                         Ok(_) => {
-                            log::info!("Sent block to submission handler!");
+                            debug!(
+                                connection_id = %connection_id_hex,
+                                template_id = %template_id,
+                                "Block sent to submission handler"
+                            );
                         }
                         Err(e) => {
-                            log::error!("Failed to send block submission: {}", e);
+                            error!(
+                                connection_id = %connection_id_hex,
+                                error = %e,
+                                template_id = %template_id,
+                                "Failed to send block submission"
+                            );
                         }
                     }
                 } else {
-                    log::warn!("No block submission channel available");
+                    warn!(
+                        connection_id = %connection_id_hex,
+                        context = "block_submission",
+                        template_id = %template_id,
+                        "Channel unavailable - cannot forward valid block"
+                    );
                 }
             }
             Err(e) => {
-                log::info!("Header does not meet the target: {}", e);
+                debug!(
+                    connection_id = %connection_id_hex,
+                    error = %e,
+                    target = %target.to_hex(),
+                    "Header does not meet target"
+                );
                 return Ok(StratumResponses::StandardResponse {
                     std_response: StandardResponse::new_ok(Some(client_request_id), json!(false)),
                 });
@@ -668,7 +741,13 @@ impl DownstreamClient {
             .await
         {
             Ok(_) => {
-                log::info!("Candidate block sent successfully");
+                info!(
+                    connection_id = %connection_id_hex,
+                    job_id = %numeric_job_id,
+                    template_id = %template_id,
+                    peer = %self.downstream_ip,
+                    "Candidate block submitted"
+                );
                 Ok(StratumResponses::StandardResponse {
                     std_response: StandardResponse::new_ok(Some(client_request_id), json!(true)),
                 })
@@ -694,9 +773,10 @@ impl DownstreamClient {
         suggest_difficulty_params: &Value,
     ) -> Result<StratumResponses, StratumErrors> {
         if let Some(difficulty) = suggest_difficulty_params.get(0) {
-            log::info!(
-                "Handling suggested difficulty - {}",
-                suggest_difficulty_params
+            info!(
+                connection_id = %format!("{:x}", self.connection_id()),
+                params = ?suggest_difficulty_params,
+                "Handling suggested difficulty"
             );
             self.suggest_difficulty_done = true;
             Ok(StratumResponses::SuggestDifficultyResponse {
@@ -725,9 +805,11 @@ impl DownstreamClient {
         authorize_request_params: &Value,
         client_request_id: u64,
     ) -> Result<StratumResponses, StratumErrors> {
-        log::info!(
-            "Authorization is taking place -- {:?}",
-            authorize_request_params
+        let connection_id_hex = format!("{:x}", self.connection_id());
+        debug!(
+            connection_id = %connection_id_hex,
+            params = ?authorize_request_params,
+            "Authorization request"
         );
         let param_array = match authorize_request_params.as_array() {
             Some(param_array) => param_array,
@@ -752,22 +834,20 @@ impl DownstreamClient {
                 return Err(error);
             }
         };
-        let password_res: Result<&str, StratumErrors> = match param_array.get(1) {
-            Some(pass) => Ok(pass.as_str().unwrap()),
-            None => Err(StratumErrors::ParamNotFound {
+        // Validate password parameter exists (but don't log it)
+        if param_array.get(1).is_none() {
+            return Err(StratumErrors::ParamNotFound {
                 param: "password".to_string(),
                 method: "mining.authorize".to_string(),
-            }),
-        };
+            });
+        }
 
-        let password = match password_res {
-            Ok(password_value) => password_value,
-            Err(error) => {
-                return Err(error);
-            }
-        };
         self.authorized = true;
-        log::info!("username {}, password {}", username, password);
+        info!(
+            connection_id = %connection_id_hex,
+            username = %username,
+            "Miner authorized"
+        );
         Ok(StratumResponses::StandardResponse {
             std_response: (StandardResponse {
                 id: Some(client_request_id),
@@ -787,9 +867,11 @@ impl DownstreamClient {
         config_req_params: &Value,
         client_request_id: u64,
     ) -> Result<StratumResponses, StratumErrors> {
-        log::info!(
-            "{:?} configuration handling is taking place",
-            config_req_params
+        let connection_id_hex = format!("{:x}", self.connection_id());
+        info!(
+            connection_id = %connection_id_hex,
+            params = ?config_req_params,
+            "Configuration handling is taking place"
         );
         let params = match config_req_params.as_array() {
             Some(param_array) => param_array,
@@ -823,7 +905,11 @@ impl DownstreamClient {
                     return Err(StratumErrors::ConfigureFeatureStringConversion { error: "Json value could not be converted to string in while handling mining.configure ".to_string() })
                 }
             };
-        log::info!("{:?}", feature_names);
+        info!(
+            connection_id = %connection_id_hex,
+            features = ?feature_names,
+            "Mining features requested"
+        );
         let config_map = match params[1].as_object() {
             Some(con_map) => con_map,
             None => {
@@ -833,7 +919,11 @@ impl DownstreamClient {
                 });
             }
         };
-        log::info!("{:?}", config_map);
+        info!(
+            connection_id = %connection_id_hex,
+            config = ?config_map,
+            "Configuration map processed"
+        );
         //Possible `req_params` under the request sent to server via client
         #[allow(unused)]
         let minimum_difficulty = config_map.get("minimum-difficulty.value").or(None);
@@ -925,7 +1015,11 @@ impl DownstreamClient {
         subscribe_req_params: &Value,
         client_request_id: u64,
     ) -> Result<StratumResponses, StratumErrors> {
-        log::info!("Subscribing is taking place -- {:?}", subscribe_req_params);
+        info!(
+            connection_id = %format!("{:x}", self.connection_id()),
+            params = ?subscribe_req_params,
+            "Miner subscribing"
+        );
         //TODO: dummy testing subscription IDs must be unique though can be changed accordingly these are just dummy values
         let subscriptions: Vec<(String, String)> = vec![
             (String::from("mining.set_difficulty"), String::from("34")),
@@ -950,9 +1044,13 @@ impl Default for DownstreamClient {
         //4 bytes
         let mut extranonce1_bytes = [0; 4];
         rand::thread_rng().fill_bytes(&mut extranonce1_bytes);
-        log::info!(
-            "Extranonce1 generated for a new downstream connection is following {:?}",
-            hex::encode(&extranonce1_bytes)
+        let connection_id = rand::thread_rng().next_u32(); // FIXME use a counter here, not an RNG
+                                                           // (will collide with 65k mining devices)
+        let extranonce1_hex = hex::encode(&extranonce1_bytes); // FIXME should be connection_id
+        debug!(
+            connection_id = %format!("{:x}", connection_id),
+            extranonce1 = %extranonce1_hex,
+            "Generated extranonce1 for new downstream connection"
         );
         DownstreamClient {
             authorized: false,
@@ -961,7 +1059,7 @@ impl Default for DownstreamClient {
             suggest_difficulty_done: false,
             channel_configured: false,
             //generating a random u32 client connection id
-            connection_id: rand::thread_rng().next_u32(),
+            connection_id,
             extranonce1: Vec::from(extranonce1_bytes),
             version_rolling_mask: None,
             version_rolling_min_bit: None,
@@ -993,7 +1091,7 @@ pub enum NotifyCmd {
     SendToAll {
         template: BlockTemplate,
         merkle_branch_coinbase: Vec<Vec<u8>>,
-        template_id: String,
+        template_id: TemplateId,
     },
     SendLatestTemplateToNewDownstream {
         new_downstream_addr: String,
@@ -1035,7 +1133,7 @@ pub struct JobDetails {
     pub blocktemplate: BlockTemplate,
     pub coinbase1: String,
     pub coinbase2: String,
-    pub coinbase_merkel_path: Vec<String>,
+    pub coinbase_merkle_path: Vec<String>,
     pub coinbase_witness_commitment: Option<Witness>,
     //Unix timestamp at which current job was sent to downstream miner
     pub job_sent_time: u32,
@@ -1048,9 +1146,9 @@ pub struct JobDetails {
 /// multiple threads serving requests according to the new process of serving requests .
 pub struct MiningJobMap {
     // template_id to job details
-    mining_jobs: HashMap<String, JobDetails>,
+    mining_jobs: HashMap<TemplateId, JobDetails>,
     // numeric job_id to template_id
-    job_id_to_template: HashMap<u64, String>,
+    job_id_to_template: HashMap<u64, TemplateId>,
     // Generate sequential numeric job IDs for miners
     next_job_id: u64,
 }
@@ -1063,13 +1161,17 @@ impl MiningJobMap {
         }
     }
     ///Inserting a suitable mining job which has been passed to the downstream being constructed from a suitable block template .
-    pub async fn insert_mining_job(&mut self, template_id: String, job_details: JobDetails) -> u64 {
+    pub async fn insert_mining_job(
+        &mut self,
+        template_id: TemplateId,
+        job_details: JobDetails,
+    ) -> u64 {
         let numeric_job_id = self.next_job_id;
 
-        log::info!("Inserting new mining job with job_id: {}", numeric_job_id);
+        debug!(job_id = %numeric_job_id, template_id = %template_id, "Inserting mining job into MiningJobMap");
 
         // Store job by template_id
-        self.mining_jobs.insert(template_id.clone(), job_details);
+        self.mining_jobs.insert(template_id, job_details);
 
         // Map numeric job_id to template_id for reverse lookup
         self.job_id_to_template.insert(numeric_job_id, template_id);
@@ -1080,13 +1182,13 @@ impl MiningJobMap {
     /// Get job by template_id which is used internally by server
     pub async fn get_by_template_id(
         &self,
-        template_id: &str,
+        template_id: TemplateId,
     ) -> Result<&JobDetails, StratumErrors> {
         self.mining_jobs
-            .get(template_id)
+            .get(&template_id)
             .ok_or_else(|| StratumErrors::MiningJobNotFound {
                 job_id: None,
-                template_id: Some(template_id.to_string()),
+                template_id: Some(template_id),
             })
     }
 
@@ -1099,12 +1201,12 @@ impl MiningJobMap {
             }
         })?;
 
-        self.get_by_template_id(template_id).await
+        self.get_by_template_id(*template_id).await
     }
 
     /// Get template_id from numeric job_id for mining.submit validation
-    pub fn template_id_from_job_id(&self, job_id: u64) -> Option<&String> {
-        self.job_id_to_template.get(&job_id)
+    pub fn template_id_from_job_id(&self, job_id: u64) -> Option<TemplateId> {
+        self.job_id_to_template.get(&job_id).copied()
     }
 }
 ///`Notifier` that will serve the purpose of notifying the downstream nodes with the lates available jobs
@@ -1176,19 +1278,19 @@ impl Notifier {
     pub async fn construct_job_notification(
         clean_job: bool,
         mut notified_template: BlockTemplate,
-        template_id: &str,
+        template_id: TemplateId,
         merkle_coinbase_branch: Vec<Vec<u8>>,
     ) -> Result<JobNotification, StratumErrors> {
-        log::info!(
-            "Constructing JobNotification for job_id: {} with clean_job: {}",
-            template_id,
-            clean_job
+        debug!(
+            template_id = %template_id,
+            clean_job = %clean_job,
+            "Constructing JobNotification"
         );
 
         let coinbase_transaction = match notified_template.transactions.get_mut(0) {
             Some(tx) => tx,
             None => {
-                log::error!("Template has no coinbase transaction at index 0");
+                error!(template_id = %template_id, "Template missing coinbase transaction");
                 return Err(StratumErrors::JobNotificationNotConstructed {
                     job_template: notified_template,
                 });
@@ -1204,10 +1306,10 @@ impl Notifier {
             input.witness.clear();
         };
         let deserialized_coinbase = serialize::<Transaction>(&coinbase_transaction);
-        log::debug!(
-            "Deserialized coinbase length is - {:?} \n and the coinbase tx is - {:?}",
-            deserialized_coinbase.len(),
-            coinbase_transaction
+        debug!(
+            template_id = %template_id,
+            coinbase = ?coinbase_transaction,
+            "Deserialized coinbase"
         );
         //For splitting of the coinbase we check for the extranonce_seperator we had inserted while reconstructing the coinbase during the
         //fetching of the template via IPC .
@@ -1223,24 +1325,23 @@ impl Notifier {
         let coinbase_2 = hex::encode(
             &deserialized_coinbase[separator_pos + (EXTRANONCE1_SIZE + EXTRANONCE2_SIZE)..],
         );
-        log::debug!("Coinbase splitted with coinbase_prefix and coinbase suffix respectively as -- {:?} {:?}",coinbase_1,coinbase_2);
-        //Constructing merkel root via merkel path .
+        debug!(prefix_len = %coinbase_1.len(), suffix_len = %coinbase_2.len(), "Split coinbase transaction");
+        //Constructing merkle root via merkle path .
         let mut merkle_branches: Vec<String> = Vec::new();
         let mut txids_hashes: Vec<Txid> = vec![];
         for tx in notified_template.transactions {
             txids_hashes.push(tx.compute_txid());
         }
-        if merkle_coinbase_branch.len() == 0 {
-            log::info!("Empty branch hence previous template was being used and hence saving has to be done !");
-        } else {
+        if merkle_coinbase_branch.len() != 0 {
             for sibling_node in merkle_coinbase_branch.iter() {
                 let sibling_hex = hex::encode(sibling_node);
                 merkle_branches.push(sibling_hex);
             }
         }
-        log::info!(
-            "merkle branches for the given template's coinbase are respectively - {:?}",
-            merkle_branches
+        debug!(
+            template_id = %template_id,
+            merkle_branches = ?merkle_branches,
+            "Merkle branches are"
         );
         //Stratum accepts the prev block hash to be in little endian instead of big endian
         //therefore byte by byte reversal is required here .
@@ -1252,10 +1353,6 @@ impl Notifier {
                 return Err(error);
             }
         };
-        log::info!(
-            "Converting the prev block hash to little endian done -- {:?}",
-            prev_block_hash_little_endian
-        );
         let bitcoin_block_version = notified_template.version.to_consensus();
         let bits = notified_template.bits;
         let time = notified_template.curtime.to_u32();
@@ -1298,9 +1395,9 @@ impl Notifier {
         downstream_connection_map: Arc<Mutex<ConnectionMapping>>,
         latest_template_arc: &mut Arc<Mutex<BlockTemplate>>,
         latest_template_merkle_branch_arc: &mut Arc<Mutex<Vec<Vec<u8>>>>,
-        latest_template_id: Arc<Mutex<String>>,
+        latest_template_id: Arc<Mutex<TemplateId>>,
     ) -> Result<(), StratumErrors> {
-        log::info!("Notifier task has  started");
+        debug!("Stratum notifier task started");
         while let Some(notification_command) = self.notification_receiver.recv().await {
             match notification_command {
                 //Whenever a new template is received it is broadcasted across all the downstream nodes connected .
@@ -1309,20 +1406,35 @@ impl Notifier {
                     merkle_branch_coinbase,
                     template_id,
                 } => {
-                    log::info!(
-                        "Received new template {} to broadcast to all clients",
-                        template_id
+                    debug!(
+                        template_id = %template_id,
+                        "Received new block template"
                     );
+                    let connection_snapshot = downstream_connection_map
+                        .lock()
+                        .await
+                        .downstream_channel_mapping
+                        .clone();
                     //We will receive the template from the IPC channel and construct a valid job
                     //from the provided template and pass onto the message_reciver in the handle connection for
                     // downstream communication to take place.
                     for (peer_adr, mining_job_arc) in self.job_map_arc.lock().await.iter() {
+                        let connection_info = match connection_snapshot.get(peer_adr) {
+                            Some(info) => info,
+                            None => {
+                                warn!(
+                                    template_id = %template_id,
+                                    peer = %peer_adr,
+                                    "Peer not found in connection mapping during job notification - skipping notification"
+                                );
+                                continue;
+                            }
+                        };
+                        let connection_id_hex = format!("{:x}", connection_info.connection_id);
                         let mut template_for_job = template.clone();
                         template_for_job.transactions.remove(0);
 
                         let mut curr_peer_mining_job_map = mining_job_arc.lock().await;
-                        //The new job id to be provided while constructing the new job .
-                        // let next_job_id = curr_peer_mining_job_map.get_next_job_id();
                         // Clean Jobs. If true, miners should abort their current work and immediately use the new job,
                         // even if it degrades hashrate in the short term. If false, they can still use the current job,
                         // but should move to the new one as soon as possible without impacting hashrate.
@@ -1330,14 +1442,21 @@ impl Notifier {
                         let job_notification = match Self::construct_job_notification(
                             clean_job,
                             template.clone(),
-                            &template_id,
+                            template_id,
                             merkle_branch_coinbase.clone(),
                         )
                         .await
                         {
                             Ok(job) => job,
                             Err(e) => {
-                                log::error!("Failed to construct job for peer {}: {}", peer_adr, e);
+                                error!(
+                                    connection_id = %connection_id_hex,
+                                    template_id = %template_id,
+                                    peer = %peer_adr,
+                                    error = %e,
+                                    reason = "job_construction_failed",
+                                    "Failed to construct job for peer"
+                                );
                                 continue; // Skip this peer but continue with others
                             }
                         };
@@ -1358,14 +1477,14 @@ impl Notifier {
                             blocktemplate: template_for_job,
                             coinbase1: job_notification.coinbase1.clone(),
                             coinbase2: job_notification.coinbase2.clone(),
-                            coinbase_merkel_path: job_notification.merkle_branches.clone(),
+                            coinbase_merkle_path: job_notification.merkle_branches.clone(),
                             coinbase_witness_commitment: job_notification
                                 .coinbase_witness_commitment,
                             job_sent_time: unix_timestamp,
                         };
 
                         let numeric_job_id = curr_peer_mining_job_map
-                            .insert_mining_job(template_id.clone(), job_details)
+                            .insert_mining_job(template_id, job_details)
                             .await;
 
                         let job_notification_response = JobNotificationResponse {
@@ -1383,19 +1502,24 @@ impl Notifier {
                             ]),
                         };
 
-                        let downstream_channel_mapping = downstream_connection_map
-                            .lock()
+                        if let Err(e) = connection_info
+                            .sender
+                            .send(serde_json::to_string(&job_notification_response).unwrap())
                             .await
-                            .downstream_channel_mapping
-                            .clone();
-
-                        if let Some(downstream_channel) = downstream_channel_mapping.get(peer_adr) {
-                            if let Err(e) = downstream_channel
-                                .send(serde_json::to_string(&job_notification_response).unwrap())
-                                .await
-                            {
-                                log::error!("Failed to send to peer {}: {}", peer_adr, e);
-                            }
+                        {
+                            error!(
+                                connection_id = %connection_id_hex,
+                                peer = %peer_adr,
+                                error = %e,
+                                "Failed to send job to peer"
+                            );
+                        } else {
+                            trace!(
+                                connection_id = %connection_id_hex,
+                                peer = %peer_adr,
+                                job_id = %numeric_job_id,
+                                "Dispatched job to peer"
+                            );
                         }
                     }
                 }
@@ -1403,48 +1527,46 @@ impl Notifier {
                 NotifyCmd::SendLatestTemplateToNewDownstream {
                     new_downstream_addr,
                 } => {
-                    log::info!("New miner connected: {}", new_downstream_addr);
-                    let current_template_id = {
-                        let id = latest_template_id.lock().await;
-                        id.clone()
+                    let current_template_id = *latest_template_id.lock().await;
+                    let connection_entry = {
+                        let current_downstream_mapping = downstream_connection_map.lock().await;
+                        current_downstream_mapping
+                            .downstream_channel_mapping
+                            .get(&new_downstream_addr)
+                            .cloned()
                     };
+                    let connection_entry = match connection_entry {
+                        Some(entry) => entry,
+                        None => {
+                            error!(peer = %new_downstream_addr, "Mining peer not found in connection mapping");
+                            return Err(StratumErrors::PeerNotFoundInConnectionMapping {
+                                peer_addr: new_downstream_addr,
+                            });
+                        }
+                    };
+                    let connection_id_hex = format!("{:x}", connection_entry.connection_id);
 
-                    if current_template_id == "genesis" {
-                        log::warn!(
-                            "No templates generated yet for new miner {}",
-                            new_downstream_addr
+                    if current_template_id == 0 {
+                        warn!(
+                            connection_id = %connection_id_hex,
+                            "No templates generated yet for new miner"
                         );
                         continue; // Skip but keep notifier running
                     }
 
-                    log::info!(
-                        "Sending template {} to new miner {}",
-                        current_template_id,
-                        new_downstream_addr
-                    );
-
                     let latest_template = latest_template_arc.lock().await.to_owned();
                     let latest_template_merkle_branch =
                         latest_template_merkle_branch_arc.lock().await.to_owned();
-                    let current_downstream_mapping = downstream_connection_map.lock().await;
-                    let current_downstream_message_sender_res = current_downstream_mapping
-                        .downstream_channel_mapping
-                        .get(&new_downstream_addr);
+                    info!(
+                        connection_id = %connection_id_hex,
+                        template_id = %current_template_id,
+                        "Sending existing latest template to new miner"
+                    );
                     let global_peer_mining_job_map_arc = self.job_map_arc.lock().await;
                     let current_peer_mining_job_map_arc = global_peer_mining_job_map_arc
                         .get(&new_downstream_addr)
                         .unwrap();
                     let mut curr_peer_mining_job_map = current_peer_mining_job_map_arc.lock().await;
-                    let current_downstream_message_sender =
-                        match current_downstream_message_sender_res {
-                            Some(downstream_sender) => downstream_sender,
-                            None => {
-                                log::error!("Newly peer not found in the Connection mapping");
-                                return Err(StratumErrors::PeerNotFoundInConnectionMapping {
-                                    peer_addr: new_downstream_addr,
-                                });
-                            }
-                        };
 
                     // Clean Jobs. If true, miners should abort their current work and immediately use the new job, even if it degrades hashrate in the short term.
                     // If false, they can still use the current job, but should move to the new one as soon as possible without impacting hashrate.
@@ -1452,7 +1574,7 @@ impl Notifier {
                     let job_notification = Self::construct_job_notification(
                         clean_job,
                         latest_template.clone(),
-                        &current_template_id,
+                        current_template_id,
                         latest_template_merkle_branch,
                     )
                     .await;
@@ -1480,12 +1602,12 @@ impl Notifier {
                                     blocktemplate: latest_template_ref,
                                     coinbase1: job.coinbase1.clone(),
                                     coinbase2: job.coinbase2.clone(),
-                                    coinbase_merkel_path: job.merkle_branches.clone(),
+                                    coinbase_merkle_path: job.merkle_branches.clone(),
                                     coinbase_witness_commitment: job.coinbase_witness_commitment,
                                     job_sent_time: unix_timestamp,
                                 };
                                 let numeric_job_id = curr_peer_mining_job_map
-                                    .insert_mining_job(current_template_id.clone(), job_details)
+                                    .insert_mining_job(current_template_id, job_details)
                                     .await;
                                 let job_notification_response = JobNotificationResponse {
                                     method: "mining.notify".to_string(),
@@ -1508,17 +1630,14 @@ impl Notifier {
                     let job_notification = match serialized_notification {
                         Ok(job) => job,
                         Err(error) => {
-                            log::error!(
-                                "Error occurred while fetching the job notification - {}",
-                                error
+                            error!(
+                                error = %error,
+                                "Error occurred while fetching the job notification"
                             );
                             return Err(error);
                         }
                     };
-                    match current_downstream_message_sender
-                        .send(job_notification)
-                        .await
-                    {
+                    match connection_entry.sender.send(job_notification).await {
                         Ok(_) => {}
                         Err(error) => {
                             return Err(StratumErrors::NotifyMessageNotSent {
@@ -1536,8 +1655,14 @@ impl Notifier {
 }
 ///Connection information associated with each downstream peer associated along with the mapped `Sender_channel` for sending downstream responses and communication.
 #[derive(Debug, Clone)]
+pub struct ConnectionInfo {
+    pub connection_id: u32,
+    pub sender: mpsc::Sender<String>,
+}
+
+#[derive(Debug, Clone)]
 pub struct ConnectionMapping {
-    downstream_channel_mapping: HashMap<String, mpsc::Sender<String>>,
+    downstream_channel_mapping: HashMap<String, ConnectionInfo>,
 }
 impl ConnectionMapping {
     pub fn new() -> Self {
@@ -1545,14 +1670,20 @@ impl ConnectionMapping {
             downstream_channel_mapping: HashMap::new(),
         }
     }
-    ///Inserting new connction along with its `peer_socket_address` and `Sender_channel` associated with the client.
+    ///Inserting new connction along with its `peer_socket_address`, `connection_id`, and `Sender_channel`.
     pub fn new_connection(
         &mut self,
         peer_addr: String,
+        connection_id: u32,
         peer_msg_sender: mpsc::Sender<String>,
-    ) -> () {
-        self.downstream_channel_mapping
-            .insert(peer_addr, peer_msg_sender);
+    ) {
+        self.downstream_channel_mapping.insert(
+            peer_addr,
+            ConnectionInfo {
+                connection_id,
+                sender: peer_msg_sender,
+            },
+        );
     }
 }
 //Containing all the functionality for a stratum service
@@ -1563,7 +1694,7 @@ impl Server {
         connection_mapping_arc: Arc<Mutex<ConnectionMapping>>,
         block_submission_tx: Option<mpsc::UnboundedSender<BlockSubmissionRequest>>,
     ) -> Self {
-        log::info!("Initializing server with config: {:?}", server_config);
+        debug!(config = ?server_config, "Initializing stratum server");
 
         Self {
             stratum_config: server_config,
@@ -1586,27 +1717,48 @@ impl Server {
         notification_sender: mpsc::Sender<NotifyCmd>,
         swarm_handler: Arc<Mutex<SwarmHandler>>,
     ) -> Result<(), Box<std::io::Error>> {
-        log::info!("Server is being started");
+        debug!("Starting stratum server");
         let bind_address = format!(
             "{}:{}",
             self.stratum_config.hostname, self.stratum_config.port
         );
-        log::info!("Server is listening at {:?}", bind_address);
         let listener = match TcpListener::bind(&bind_address).await {
             Ok(listener) => listener,
             Err(e) => {
-                log::error!("Failed to bind to {}: {}", bind_address, e);
+                error!(address = %bind_address, error = %e, "Failed to bind stratum server");
                 return Err(Box::new(e));
             }
         };
+
+        let endpoints = crate::utils::server_endpoints(
+            &self.stratum_config.hostname,
+            self.stratum_config.port,
+            "stratum+tcp",
+        );
+        if endpoints.is_empty() {
+            warn!(
+                host = %self.stratum_config.hostname,
+                port = %self.stratum_config.port,
+                "Server listening but no interfaces were discovered"
+            );
+        } else {
+            for endpoint in endpoints {
+                info!(endpoint = %endpoint, "Stratum server is listening");
+            }
+        }
         loop {
             tokio::select! {
                 event = listener.accept()=>{
                     //shared ownership across all tasks and spawning a seperate downstream for each new connection
                     let self_ = Arc::new(Mutex::new(DownstreamClient::default()));
-                     if let Some(ref submission_tx) = self.block_submission_tx {
-                        self_.lock().await.block_submission_tx = Some(submission_tx.clone());
-                    }
+                    let (connection_id, connection_id_hex) = {
+                        let mut client = self_.lock().await;
+                        if let Some(ref submission_tx) = self.block_submission_tx {
+                            client.block_submission_tx = Some(submission_tx.clone());
+                        }
+                        let id = client.connection_id;
+                        (id, format!("{:x}", id))
+                    };
                     //downstream miner mapping for associated jobs for a specific channel for downstream
                     let self_mining_map = Arc::new(Mutex::new(MiningJobMap::new()));
                     match event{
@@ -1621,8 +1773,15 @@ impl Server {
                             //downstream channel for server2client communication to take place
                             let (downstream_tx,mut downstream_rx) = mpsc::channel(1024);
                             //adding the new connection to the connection map
-                            self.downstream_connection_mapping.lock().await.new_connection(peer_addr.to_string(), downstream_tx.clone());
-                            log::info!("Connection established from a downstream node with peer address - {:?}",peer_addr);
+                            self.downstream_connection_mapping
+                                .lock()
+                                .await
+                                .new_connection(peer_addr.to_string(), connection_id, downstream_tx.clone());
+                            info!(
+                                connection_id = %connection_id_hex,
+                                peer = %peer_addr,
+                                "Miner connected"
+                            );
                             self_.lock().await.downstream_ip = peer_addr.to_string();
 
                             let connection_mapping_clone = Arc::clone(&self.downstream_connection_mapping);
@@ -1632,7 +1791,11 @@ impl Server {
                             // catering each new connection as seperate process
                             tokio::spawn(async move{
                                 let _=  Self::handle_connection(self_.clone(),peer_addr,reader,writer,&mut downstream_rx,self_mining_map.clone(),downstream_tx,notification_sender,swarm_handler_arc_ref).await;
-                                log::debug!("Cleaning up disconnected miner: {}", peer_addr_string);
+                                debug!(
+                                    connection_id = %connection_id_hex,
+                                    peer = %peer_addr_string,
+                                    "Cleaning up disconnected miner"
+                                );
 
                                 // cleanup after connection closes, remove from connection mapping
                                 connection_mapping_clone
@@ -1647,12 +1810,20 @@ impl Server {
                                         .await
                                         .remove(&peer_addr_string);
 
-                                log::debug!("Cleanup complete for {}", peer_addr_string);
+                                debug!(
+                                    connection_id = %connection_id_hex,
+                                    peer = %peer_addr_string,
+                                    "Miner cleanup complete"
+                                );
 
                             });
                         }
                         Err(error)=>{
-                            log::info!("Connection failed: {:?}", error);
+                            info!(
+                                connection_id = %connection_id_hex,
+                                error = ?error,
+                                "Connection failed"
+                            );
                         }
                     }
                 }
@@ -1693,21 +1864,43 @@ impl Server {
         let reader = BufReader::new(stream_reader);
         //reading incoming stream frame by frame
         let mut framed = FramedRead::new(reader, LinesCodec::new_with_max_length(MAX_LINE_LENGTH));
-        log::info!("Handling new connection from {}", peer_addr);
+        let connection_id_hex = {
+            let client = downstream_client.lock().await;
+            format!("{:x}", client.connection_id)
+        };
+        debug!(
+            connection_id = %connection_id_hex,
+            peer = %peer_addr,
+            "Handling new connection"
+        );
 
         loop {
             tokio::select! {
                 Some(message) = downstream_receiver.recv()=>{
-                    log::info!("Message recieved from the Server to be sent to the downstream node is - {:?}",message);
+                    trace!(
+                        connection_id = %connection_id_hex,
+                        message = ?message,
+                        peer = %peer_addr,
+                        "Sending message to miner"
+                    );
                     //Sending the notifications of new job to the downstream
                     let write_or_not = stream_writer.write_all(format!("{}\n",message).as_bytes()).await;
                     match write_or_not{
                         Ok(_)=>{
-                            log::info!("Response has been written to the TcpStream successfully");
+                            trace!(
+                                connection_id = %connection_id_hex,
+                                peer = %peer_addr,
+                                "Response written to stream"
+                            );
 
                         },
                         Err(error)=>{
-                            log::error!("An error occurred while writing to the stream - {}",error);
+                            error!(
+                                connection_id = %connection_id_hex,
+                                error = %error,
+                                peer = %peer_addr,
+                                "Failed to write to stream"
+                            );
                         }
                     }
                 }
@@ -1717,7 +1910,12 @@ impl Server {
                             if line.is_empty() {
                                 continue;
                             }
-                            log::info!("Read line {:?} from {}...", line, peer_addr);
+                            trace!(
+                                connection_id = %connection_id_hex,
+                                line = %line,
+                                peer = %peer_addr,
+                                "Read line from miner"
+                            );
                         //Parsing the lines read from buffer to find out whether they are valid JSON request type to be server as per
                         //stratum or not .
                         match serde_json::from_str::<StandardRequest>(&line) {
@@ -1733,18 +1931,35 @@ impl Server {
                          }
                                 }
                                 Err(e) => {
-                                    log::error!("Failed to parse JSON from {}: {}. Line: '{}'", peer_addr, e, line);
+                                    error!(
+                                        connection_id = %connection_id_hex,
+                                        peer = %peer_addr,
+                                        error = %e,
+                                        line = %line,
+                                        error_type = "json_parse",
+                                        "Failed to parse JSON request"
+                                    );
                                 }
                             }
 
 
                         }
                         Some(Err(e)) => {
-                            log::error!("Error reading line from {}: {}", peer_addr, e);
+                            error!(
+                                connection_id = %connection_id_hex,
+                                error = %e,
+                                peer = %peer_addr,
+                                fatal = true,
+                                "Fatal error reading from stream"
+                            );
                             return Err(Box::new(StratumErrors::UnableToReadStream { error: e }));
                         }
                         None => {
-                            log::info!("Connection closed by client: {}", peer_addr);
+                            info!(
+                                connection_id = %connection_id_hex,
+                                peer = %peer_addr,
+                                "Connection closed by client"
+                            );
                             break;
 
                         }
@@ -1878,7 +2093,7 @@ mod test {
         reader.read_line(&mut response_line).await.unwrap();
 
         let parsed: serde_json::Value = serde_json::from_str(response_line.trim()).unwrap();
-        println!("{:?}", parsed);
+        println!("Parsed response: {:?}", parsed);
     }
     #[tokio::test]
     async fn test_mining_authorize_response() {
@@ -2033,10 +2248,10 @@ mod test {
         let (swarm_handler, mut swarm_command_receiver) =
             SwarmHandler::new(Arc::clone(&test_braid), test_db_tx);
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
-        let test_merkel_bytes: [u8; 32] = [0u8; 32];
+        let test_merkle_bytes: [u8; 32] = [0u8; 32];
         let mut test_witness = Witness::new();
         test_witness.push(vec![0u8; 32]);
-        //Little more doubt in construction of initial coinbase only and in merkel which can be due to coinbase only
+        //Little more doubt in construction of initial coinbase only and in merkle which can be due to coinbase only
         //There is a case in prevblockhash too but it can be discussed afterwards
         //Cleaning up connection channels from connection mapping as well as from global map arc of stratum server
         let test_coinbase_transaction: Transaction = Transaction {
@@ -2086,7 +2301,7 @@ mod test {
                 "000000004357ac765395ad29220608af219e3090d75076f160bae2a195b3ebe6",
             )
             .unwrap(),
-            merkle_root: TxMerkleNode::from_byte_array(test_merkel_bytes),
+            merkle_root: TxMerkleNode::from_byte_array(test_merkle_bytes),
         };
         let mut test_template = BlockTemplate {
             version: test_template_header.version,
@@ -2097,10 +2312,13 @@ mod test {
             ..Default::default()
         };
         let mut constructed_test_notification =
-            Notifier::construct_job_notification(false, test_template.clone(), "1", vec![])
+            Notifier::construct_job_notification(false, test_template.clone(), 1, vec![])
                 .await
                 .unwrap();
-        println!("{:?}", constructed_test_notification);
+        println!(
+            "Constructed test notification: {:?}",
+            constructed_test_notification
+        );
         let constructed_test_notification_ref = constructed_test_notification.clone();
         let current_system_time = std::time::SystemTime::now();
         let duration_since_epoch = current_system_time.duration_since(UNIX_EPOCH).unwrap();
@@ -2113,14 +2331,14 @@ mod test {
             blocktemplate: test_template,
             coinbase1: constructed_test_notification_ref.clone().coinbase1.clone(),
             coinbase2: constructed_test_notification_ref.clone().coinbase2.clone(),
-            coinbase_merkel_path: vec![],
+            coinbase_merkle_path: vec![],
             coinbase_witness_commitment: Some(test_witness),
             job_sent_time: unix_timestamp,
         };
         let numeric_job_id = mock_mining_job_map
             .lock()
             .await
-            .insert_mining_job("1".to_string(), job_details.clone())
+            .insert_mining_job(1, job_details.clone())
             .await;
         let test_submit_request_params = json!([
             "bitaxe",
@@ -2173,7 +2391,7 @@ mod test {
         );
     }
     #[test]
-    fn test_merkel_root_construction() {
+    fn test_merkle_root_construction() {
         let coinbase_string_non_segwit = "02000000010000000000000000000000000000000000000000000000000000000000000000ffffffff170305190408ac53db1b00000000094272616964706f6f6cffffffff03c81d039500000000160014af0ce4a33e61762bde14de428440a9def7acc9310000000000000000266a24aa21a9edac3e72f41e3e7cda29fa3e372e7209108db9c2b2bff9e7b51fdffb10b89a9e4300000000000000002a6a286272616964706f6f6c5f626561645f6d657461646174615f686173685f333262010203040506070800000000";
         let coinbase_bytes = hex::decode(coinbase_string_non_segwit).unwrap();
         let mut cursor = Cursor::new(coinbase_bytes);
@@ -2181,24 +2399,24 @@ mod test {
         let coinbase_wtxid = coinbase_tx.compute_wtxid();
         let coinbase_txid = coinbase_tx.compute_txid();
         assert_eq!(coinbase_txid.to_string(), coinbase_wtxid.to_string());
-        let test_merkel_branches = [
+        let test_merkle_branches = [
             "0ce0d53011438c88cdff30f6312ca67d87bf14fb39e449a5cf90cd369d750e21",
             "562d5094b1362ac66b126a910908eea2a17b06891483ee90447914dcad65c96b",
             "d485ae53320318f499c91e3b8899c004d10ba358aa143ace70aab9f4448aac0e",
             "37aabcd6778b0a07f06c7d9f5f12ca156b679bdf69f1c6327a06d30c0002b49d",
             "408040846f74ad0a82e58a17431b8fde5f62e5e913f34ffe21e29b907eda7e0f",
         ];
-        let mut merkel_branches_serialized: Vec<Vec<u8>> = Vec::new();
-        for merkle_branch_str in test_merkel_branches {
-            let mut merkel_branch_bytes: [u8; 32] = [0u8; 32];
-            hex::decode_to_slice(merkle_branch_str, &mut merkel_branch_bytes).unwrap();
-            merkel_branches_serialized.push(Vec::from(merkel_branch_bytes));
+        let mut merkle_branches_serialized: Vec<Vec<u8>> = Vec::new();
+        for merkle_branch_str in test_merkle_branches {
+            let mut merkle_branch_bytes: [u8; 32] = [0u8; 32];
+            hex::decode_to_slice(merkle_branch_str, &mut merkle_branch_bytes).unwrap();
+            merkle_branches_serialized.push(Vec::from(merkle_branch_bytes));
         }
-        println!("Merkel branches bytes - {:?}", merkel_branches_serialized);
-        let merkel_root_bytes =
-            calculate_merkle_root(coinbase_txid, &merkel_branches_serialized.as_slice());
-        let mr = TxMerkleNode::from_byte_array(merkel_root_bytes);
-        println!("Merkel root - {:?}", mr.to_string());
+        println!("Merkle branches bytes - {:?}", merkle_branches_serialized);
+        let merkle_root_bytes =
+            calculate_merkle_root(coinbase_txid, &merkle_branches_serialized.as_slice());
+        let mr = TxMerkleNode::from_byte_array(merkle_root_bytes);
+        println!("Merkle root - {:?}", mr.to_string());
         assert_eq!(
             mr.to_string(),
             "690699e45d09d84d81cb58a4f8ba734e7fc90856d8b24524797f9a54ff57b1a1".to_string()

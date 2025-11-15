@@ -20,6 +20,8 @@ use tokio::sync::{
     mpsc::{Receiver, Sender},
     RwLock,
 };
+#[allow(unused_imports)]
+use tracing::{debug, error, info, trace, warn};
 const DB_CHANNEL_CAPACITY: usize = 1024;
 const INSERT_QUERY: &'static str = "
 INSERT INTO bead (
@@ -59,11 +61,11 @@ impl DBHandler {
     pub async fn new(
         local_braid_arc: Arc<RwLock<Braid>>,
     ) -> Result<(Self, Sender<BraidpoolDBTypes>), DBErrors> {
-        log::info!("Initializing Schema for persistent DB");
+        debug!("Initializing schema for persistent database");
         let connection = match init_db().await {
             Ok(conn) => conn,
             Err(error) => {
-                log::error!("An error occurred while initializing and establishing connection with local DB {:?}.", error);
+                error!(error = ?error, "Failed to initialize database connection");
                 return Err(DBErrors::ConnectionToDBNotEstablished {
                     error: error.to_string(),
                 });
@@ -89,14 +91,14 @@ impl DBHandler {
         _ancestor_mapping: &HashMap<usize, HashSet<usize>>,
         bead_id: &usize,
     ) -> Result<(), DBErrors> {
-        log::info!("Sequential insertion query received from the query handler");
+        trace!("Sequential insertion query received");
         let hex_converted_extranonce_1 =
             hex::encode(bead.uncommitted_metadata.extra_nonce_1.to_be_bytes());
         let hex_converted_extranonce_2 =
             hex::encode(bead.uncommitted_metadata.extra_nonce_2.to_be_bytes());
         let block_header_bytes = bead.block_header.block_hash().to_byte_array().to_vec();
         let prev_block_hash_bytes = bead.block_header.prev_blockhash.to_byte_array().to_vec();
-        let merkel_root_bytes = bead.block_header.merkle_root.to_byte_array().to_vec();
+        let merkle_root_bytes = bead.block_header.merkle_root.to_byte_array().to_vec();
         let payout_addr_bytes = bead.committed_metadata.payout_address.as_bytes().to_vec();
         let public_key_bytes = bead.committed_metadata.comm_pub_key.to_vec();
         let signature_bytes = bead.uncommitted_metadata.signature.to_vec();
@@ -107,7 +109,7 @@ impl DBHandler {
             .bind(block_header_bytes)
             .bind(bead.block_header.version.to_consensus())
             .bind(prev_block_hash_bytes)
-            .bind(merkel_root_bytes)
+            .bind(merkle_root_bytes)
             .bind(bead.block_header.time.to_u32())
             .bind(bead.block_header.bits.to_consensus())
             .bind(bead.block_header.nonce)
@@ -127,14 +129,14 @@ impl DBHandler {
             .execute(&mut *conn)
             .await
         {
-            log::error!("Transaction failed to commit rolling back due to - {:?}", e);
+            error!(error = ?e, "Transaction failed, rolling back");
             match conn.rollback().await {
                 Ok(_) => {
-                    log::info!("Transaction rollbacked successfully");
+                    info!("Transaction rollbacked successfully");
                     return Ok(());
                 }
                 Err(error) => {
-                    log::error!("An error occurred while rolling back the transaction");
+                    error!(error = ?error, "Failed to rollback transaction");
                     return Err(DBErrors::TransactionNotRolledBack {
                         error: error.to_string(),
                         query: "Insertion of Bead".to_string(),
@@ -144,10 +146,10 @@ impl DBHandler {
         }
         match conn.commit().await {
             Ok(_) => {
-                log::info!("All related insertions committed successfully");
+                debug!("Transaction committed successfully");
             }
             Err(error) => {
-                log::error!("An error occurred while committing transaction");
+                error!(error = ?error, "Failed to commit transaction");
                 return Err(DBErrors::InsertionTransactionNotCommitted {
                     error: error.to_string(),
                     query_name: "Combined insert transaction".to_string(),
@@ -158,7 +160,7 @@ impl DBHandler {
     }
     //Individual insertion operations
     pub async fn insert_query_handler(&mut self) {
-        log::info!("Query handler task started");
+        debug!("Query handler task started");
         while let Some(query_request) = self.receiver.recv().await {
             match query_request {
                 BraidpoolDBTypes::InsertTupleTypes { query } => match query {
@@ -251,6 +253,7 @@ impl DBHandler {
                         let parent_timestamp_json =
                             serde_json::to_string(&parent_timestamps_values).unwrap();
 
+                        let bead_hash = bead_to_insert.block_header.block_hash();
                         match self
                             .insert_bead(
                                 bead_to_insert,
@@ -263,10 +266,19 @@ impl DBHandler {
                             .await
                         {
                             Ok(_) => {
-                                log::info!("Insertion query handled");
+                                info!(
+                                    bead_id = bead_id,
+                                    bead_hash = %bead_hash,
+                                    "Bead inserted successfully"
+                                );
                             }
                             Err(error) => {
-                                log::error!("Error occurred while dealing with DB - {:?}", error);
+                                error!(
+                                    error = ?error,
+                                    bead_id = bead_id,
+                                    bead_hash = %bead_hash,
+                                    "Failed to insert bead"
+                                );
                                 continue;
                             }
                         };
@@ -292,9 +304,9 @@ pub async fn fetch_beads_in_batch(
         })?
         .get("row_cnt");
 
-    log::info!(
-        "Number of beads present locally in persistent DB - {:?}",
-        total_rows
+    debug!(
+        total_rows = total_rows,
+        "Number of beads present locally in persistent DB"
     );
     if total_rows == 0 {
         return Ok(vec![]);
@@ -467,7 +479,7 @@ pub async fn fetch_bead_by_bead_hash(
                     });
                 }
             };
-            let merkel_hash = match row.get::<Vec<u8>, _>("hashMerkleRoot").try_into() {
+            let merkle_hash = match row.get::<Vec<u8>, _>("hashMerkleRoot").try_into() {
                 Ok(arr) => TxMerkleNode::from_byte_array(arr),
                 Err(_) => {
                     return Err(DBErrors::TupleAttributeParsingError {
@@ -503,7 +515,7 @@ pub async fn fetch_bead_by_bead_hash(
             fetched_bead.committed_metadata.payout_address = payout_address;
             fetched_bead.block_header.prev_blockhash = prev_block_hash;
             fetched_bead.block_header.nonce = nonce;
-            fetched_bead.block_header.merkle_root = merkel_hash;
+            fetched_bead.block_header.merkle_root = merkle_hash;
             fetched_bead.committed_metadata.comm_pub_key = pub_key;
             fetched_bead.committed_metadata.miner_ip = miner_ip;
             fetched_bead.committed_metadata.min_target = min_target;
@@ -519,10 +531,10 @@ pub async fn fetch_bead_by_bead_hash(
         .await
     {
         Ok(_rows) => {
-            if _rows.is_some() {
-                println!("Bead with given bead hash fetched successfully");
+            if _rows.is_none() == false {
+                trace!(bead_hash = %bead_hash, "Bead fetched successfully");
             } else {
-                println!("No such bead exists");
+                trace!(bead_hash = %bead_hash, "No such bead exists");
             }
         }
         Err(error) => {
@@ -607,7 +619,6 @@ pub async fn fetch_bead_by_bead_hash(
                 });
             }
         };
-        println!("{:?}", raw_tx_id);
         fetched_bead
             .committed_metadata
             .transaction_ids
@@ -645,7 +656,7 @@ pub mod test {
 
         match setup_result {
             Ok(_) => {
-                println!("Test Schema setup success");
+                info!("Test Schema setup success");
             }
             Err(error) => {
                 panic!("{:?}", error);
@@ -755,7 +766,7 @@ pub mod test {
                 hex::encode(bead.uncommitted_metadata.extra_nonce_2.to_be_bytes());
             let block_header_bytes = bead.block_header.block_hash().to_byte_array().to_vec();
             let prev_block_hash_bytes = bead.block_header.prev_blockhash.to_byte_array().to_vec();
-            let merkel_root_bytes = bead.block_header.merkle_root.to_byte_array().to_vec();
+            let merkle_root_bytes = bead.block_header.merkle_root.to_byte_array().to_vec();
             let payout_addr_bytes = bead.committed_metadata.payout_address.as_bytes().to_vec();
             let public_key_bytes = bead.committed_metadata.comm_pub_key.to_vec();
             let signature_bytes = bead.uncommitted_metadata.signature.to_vec();
@@ -765,7 +776,7 @@ pub mod test {
                 .bind(block_header_bytes)
                 .bind(bead.block_header.version.to_consensus())
                 .bind(prev_block_hash_bytes)
-                .bind(merkel_root_bytes)
+                .bind(merkle_root_bytes)
                 .bind(bead.block_header.time.to_u32())
                 .bind(bead.block_header.bits.to_consensus())
                 .bind(bead.block_header.nonce)

@@ -16,7 +16,6 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 futures = { workspace = true }
 bytes = { workspace = true }
-flexbuffers = { workspace = true }
 serde_json = { workspace = true }
 clap = { workspace = true }
 bitcoin = { workspace = true }
@@ -24,8 +23,6 @@ bitcoin_hashes = { workspace = true }
 bitcoincore-rpc = { workspace = true }
 bitcoincore-rpc-json = { workspace = true }
 bitcoincore-zmq = { workspace = true }
-env_logger = { workspace = true }
-log = { workspace = true }
 shellexpand = { workspace = true }
 num = { workspace = true }
 rand = { workspace = true }
@@ -35,7 +32,9 @@ toml = { workspace = true }
 jsonrpsee = { workspace = true }
 async-trait = { workspace = true }
 sqlx = { workspace = true}
-anyhow = "1.0.100"
+strum = { workspace = true }
+if-addrs = { workspace = true }
+anyhow = { workspace = true }
 
 
 [build-dependencies]
