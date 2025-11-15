@@ -40,3 +40,7 @@ sqlx = {version="0.8.6",features=[ "sqlite",
   "chrono",
   "uuid","regexp","runtime-tokio","runtime-async-std","derive"]}
 strum = { version = "0.26", features = ["derive"] }
+if-addrs = "0.13"
+anyhow = "1.0.100"
+
+
