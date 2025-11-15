@@ -18,7 +18,6 @@ futures = { workspace = true }
 bytes = { workspace = true }
 flexbuffers = { workspace = true }
 serde_json = { workspace = true }
-sqlite = { workspace = true }
 clap = { workspace = true }
 bitcoin = { workspace = true }
 bitcoin_hashes = { workspace = true }
@@ -35,6 +34,8 @@ libp2p = { workspace = true }
 toml = { workspace = true }
 jsonrpsee = { workspace = true }
 async-trait = { workspace = true }
+sqlx = { workspace = true}
+anyhow = "1.0.100"
 
 
 [build-dependencies]

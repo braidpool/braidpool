@@ -6,7 +6,7 @@ use bitcoin::consensus::encode::Decodable;
 use bitcoin::consensus::encode::Encodable;
 use bitcoin::consensus::Error;
 use bitcoin::io::{self, BufRead, Write};
-use bitcoin::BlockHeader;
+use bitcoin::{BlockHash, BlockHeader, BlockTime, BlockVersion, CompactTarget, TxMerkleNode};
 use libp2p::futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use libp2p::request_response::Codec;
 use libp2p::StreamProtocol;
@@ -25,7 +25,23 @@ pub struct Bead {
     pub committed_metadata: CommittedMetadata,
     pub uncommitted_metadata: UnCommittedMetadata,
 }
-
+impl Default for Bead {
+    fn default() -> Self {
+        let empty_merkel_bytes: [u8; 32] = [0; 32];
+        Self {
+            block_header: BlockHeader {
+                bits: CompactTarget::from_consensus(486604799),
+                merkle_root: TxMerkleNode::from_byte_array(empty_merkel_bytes),
+                nonce: 0,
+                prev_blockhash: BlockHash::GENESIS_PREVIOUS_BLOCK_HASH,
+                time: BlockTime::from_u32(23021),
+                version: BlockVersion::TWO,
+            },
+            committed_metadata: CommittedMetadata::default(),
+            uncommitted_metadata: UnCommittedMetadata::default(),
+        }
+    }
+}
 impl Encodable for Bead {
     fn consensus_encode<W: Write + ?Sized>(&self, w: &mut W) -> Result<usize, io::Error> {
         let mut len = 0;

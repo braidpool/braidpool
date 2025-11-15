@@ -1,7 +1,7 @@
 // Bitcoin Imports
 use crate::{
     bead::Bead,
-    committed_metadata::{CommittedMetadata, TimeVec},
+    committed_metadata::{CommittedMetadata, TimeVec, TxIdVec},
     uncommitted_metadata::UnCommittedMetadata,
 };
 use ::bitcoin::BlockHash;
@@ -51,21 +51,23 @@ pub fn create_test_bead(nonce: u32, prev_hash: Option<BlockHash>) -> Bead {
     if let Some(hash) = prev_hash {
         parent_hash_set.insert(hash);
     }
-    let weak_target = CompactTarget::from_consensus(32);
-    let min_target = CompactTarget::from_consensus(1);
+    let weak_target = CompactTarget::from_consensus(486604799);
+    let min_target = CompactTarget::from_consensus(486604799);
     let time_val = Time::from_consensus(1653195600).unwrap();
     let test_committed_metadata: CommittedMetadata = CommittedMetadata {
         comm_pub_key: public_key,
         min_target: min_target,
         miner_ip: "".to_string(),
-        transactions: vec![],
+        transaction_ids: TxIdVec(vec![]),
         parents: parent_hash_set,
         parent_bead_timestamps: time_hash_set,
         payout_address: String::from(""),
         start_timestamp: time_val,
         weak_target: weak_target,
     };
-    let extra_nonce = 42;
+    let extra_nonce_1 = 42;
+    let extra_nonce_2 = rand::random::<u32>();
+
     let hex = "3046022100839c1fbc5304de944f697c9f4b1d01d1faeba32d751c0f7acb21ac8a0f436a72022100e89bd46bb3a5a62adc679f659b7ce876d83ee297c7a5587b2011c4fcc72eab45";
     let sig = Signature {
         signature: secp256k1::ecdsa::Signature::from_str(hex).unwrap(),
@@ -73,14 +75,15 @@ pub fn create_test_bead(nonce: u32, prev_hash: Option<BlockHash>) -> Bead {
     };
     let test_uncommitted_metadata = UnCommittedMetadata {
         broadcast_timestamp: time_val,
-        extra_nonce: extra_nonce,
+        extra_nonce_1: extra_nonce_1,
+        extra_nonce_2: extra_nonce_2,
         signature: sig,
     };
     let test_bytes: [u8; 32] = [0u8; 32];
     let test_block_header = BlockHeader {
         version: BlockVersion::TWO,
         prev_blockhash: prev_hash.unwrap_or(BlockHash::from_byte_array(test_bytes)),
-        bits: CompactTarget::from_consensus(32),
+        bits: CompactTarget::from_consensus(486604799),
         nonce: nonce,
         time: BlockTime::from_u32(8328429),
         merkle_root: TxMerkleNode::from_byte_array(test_bytes),

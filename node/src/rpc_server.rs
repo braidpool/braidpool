@@ -1,12 +1,13 @@
 use crate::bead::Bead;
+#[cfg(test)]
 use crate::braid;
 use crate::braid::AddBeadStatus;
 use crate::braid::Braid;
 use crate::error::BraidRPCError;
+#[cfg(test)]
 use crate::utils::create_test_bead;
 use crate::utils::BeadHash;
 use clap::Subcommand;
-use futures::future::join_all;
 use jsonrpsee::core::async_trait;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::core::middleware::Batch;
@@ -344,7 +345,7 @@ pub async fn test_same_bead_extend() {
         .await
         .unwrap();
     let rpc_impl = RpcServerImpl::new(braid);
-    let handle = server.start(rpc_impl.into_rpc());
+    let _handle = server.start(rpc_impl.into_rpc());
 
     let server_addr = "127.0.0.1:8889";
     let target_uri = format!("http://{}", server_addr);
@@ -358,7 +359,7 @@ pub async fn test_same_bead_extend() {
     params.insert(bead_json_str).unwrap();
 
     //Extending the bead
-    let response_original: Result<String, jsonrpsee::core::ClientError> =
+    let _response_original: Result<String, jsonrpsee::core::ClientError> =
         client.request("addbead", params.clone()).await;
 
     //Extending the same bead again bead
@@ -388,7 +389,7 @@ pub async fn test_cohort_count_rpc() {
         .await
         .unwrap();
     let rpc_impl = RpcServerImpl::new(braid);
-    let handle = server.start(rpc_impl.into_rpc());
+    let _handle = server.start(rpc_impl.into_rpc());
 
     let server_addr = "127.0.0.1:9000";
     let target_uri = format!("http://{}", server_addr);

@@ -267,3 +267,44 @@ WHERE b.broadcast_timestamp < :cutoff_time
   AND pt.parent IS NULL
   AND EXISTS (SELECT 1 FROM Relatives r WHERE r.parent = b.id);
 ```
+
+### 24. **Insert a bead and all dependent rows atomically**
+
+Uses JSON arrays to handle variable numbers of transactions, relatives, and timestamps. Requires SQLite 3.38+.
+
+```sql
+BEGIN TRANSACTION;
+
+    INSERT INTO bead (
+        id, hash, nVersion, hashPrevBlock, hashMerkleRoot, nTime,
+        nBits, nNonce, payout_address, start_timestamp, comm_pub_key,
+        min_target, weak_target, miner_ip, extra_nonce,
+        broadcast_timestamp, signature
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+    INSERT INTO Transactions (bead_id, txid)
+    SELECT 
+        json_extract(value, '$.bead_id') AS bead_id,
+        json_extract(value, '$.txid') AS txid
+    FROM json_each(?);
+
+    INSERT INTO Relatives (child, parent) 
+    SELECT json_extract(value,'$.child') AS child,
+        json_extract(value,'$.parent') AS PARENT
+    FROM json_each(?);
+
+    INSERT INTO ParentTimestamps (parent, child, timestamp)
+    SELECT json_extract(value,'$.parent') AS parent,
+            json_extract(value,'$.child') AS child,
+            json_extract(value,'$.timestamp') AS timestamp
+    FROM json_each(?);
+    COMMIT;
+```
+
+**Parameters:**
+- `:transactions_json` = `'["txid1","txid2","txid3"]'` (or empty array `'[]'`)
+- `:relatives_json` = `'[1,2]'`
+- `:parent_timestamps_json` = `'[{"parent":1,"timestamp":1234567890},{"parent":2,"timestamp":1234567891}]'`
+
+This approach uses `json_each()` to iterate over JSON arrays, allowing variable numbers of dependent rows without string generation. All operations are atomic within a single transaction.

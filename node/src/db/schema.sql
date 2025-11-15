@@ -1,29 +1,26 @@
 -- 1. Bead
 CREATE TABLE Bead (
-    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-    hash                TEXT NOT NULL CHECK (hash REGEXP '^[0-9A-Fa-f]{64}$'),
+    id                  INTEGER PRIMARY KEY ,
+    hash                BLOB NOT NULL,
     -- Block header fields
-    nVersion            TEXT NOT NULL CHECK (nVersion REGEXP '^[0-9A-Fa-f]{8}$'),
-    hashPrevBlock       TEXT NOT NULL CHECK (hashPrevBlock REGEXP '^[0-9A-Fa-f]{64}$'),
-    hashMerkleRoot      TEXT NOT NULL CHECK (hashMerkleRoot REGEXP '^[0-9A-Fa-f]{64}$'),
-    nTime               TEXT NOT NULL CHECK (nTime REGEXP '^[0-9A-Fa-f]{8}$'),
-    nBits               TEXT NOT NULL CHECK (nBits REGEXP '^[0-9A-Fa-f]{8}$'),
-    nNonce              TEXT NOT NULL CHECK (nNonce REGEXP '^[0-9A-Fa-f]{8}$'),
+    nVersion            INTEGER CHECK (nVersion >= 0 AND nVersion < 0x100000000),
+    hashPrevBlock       BLOB NOT NULL,
+    hashMerkleRoot      BLOB NOT NULL,
+    nTime               INTEGER CHECK (nTime >= 0 AND nTime < 0x100000000),
+    nBits               INTEGER CHECK (nBits >= 0 AND nBits < 0x100000000),
+    nNonce              INTEGER CHECK (nNonce >= 0 AND nNonce < 0x100000000),
     -- Committed Metadata
-    payout_address      TEXT NOT NULL CHECK (length(payout_address) <= 128),
+    payout_address      BLOB NOT NULL,
     start_timestamp     INTEGER NOT NULL,           -- 64-bit unix epoch in MICROseconds
-    comm_pub_key        TEXT NOT NULL CHECK (length(comm_pub_key) <= 512),
-    min_target          TEXT NOT NULL CHECK (
-        min_target REGEXP '^[0-9A-Fa-f]{8}$'
-    ),
-    weak_target         TEXT NOT NULL CHECK (       -- hex compact target
-        weak_target REGEXP '^[0-9A-Fa-f]{8}$'
-    ),
-    miner_ip            TEXT NOT NULL CHECK (length(miner_ip) <= 45),
+    comm_pub_key        BLOB NOT NULL,
+    min_target          INTEGER CHECK (min_target >= 0 AND min_target < 0x100000000),
+    weak_target         INTEGER CHECK (weak_target >= 0 AND weak_target < 0x100000000),
+    miner_ip            TEXT NOT NULL,
     -- UnCommitted Metadata
-    extra_nonce         TEXT NOT NULL CHECK (extra_nonce REGEXP '^[0-9A-Fa-f]{16}$'),
+    extranonce1         TEXT NOT NULL,
+    extranonce2         TEXT NOT NULL,
     broadcast_timestamp INTEGER NOT NULL,       -- 64-bit unix epoch in MICROseconds
-    signature           TEXT NOT NULL,
+    signature           BLOB NOT NULL,
     -- Constraints
     UNIQUE (nVersion, hashPrevBlock, hashMerkleRoot, nTime, nBits, nNonce),
     UNIQUE (hash)
@@ -32,7 +29,7 @@ CREATE TABLE Bead (
 -- 2. Transactions
 CREATE TABLE Transactions (
       bead_id           INTEGER NOT NULL REFERENCES Bead(id),
-      txid              TEXT NOT NULL CHECK (txid REGEXP '^[0-9A-Fa-f]{64}$'),
+      txid              BLOB,
       UNIQUE (bead_id, txid)
 );
 
@@ -89,7 +86,6 @@ CREATE TABLE AncestorTimestamps (
 -- 7. Fast look-up indices
 CREATE INDEX bead_txids ON Transactions(bead_id);
 CREATE INDEX parents ON Relatives(parent);
-CREATE INDEX children ON Relatives(child);
 CREATE INDEX bead_hash ON Bead(hash);
 CREATE INDEX timestamps_parents ON ParentTimestamps(parent);
 CREATE INDEX timestamps_children ON ParentTimestamps(child);
