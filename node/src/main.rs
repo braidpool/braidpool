@@ -24,9 +24,9 @@ use node::{
     ipc_template_consumer,
     peer_manager::PeerManager,
     rpc_server::{parse_arguments, run_rpc_server},
-    setup_logging, setup_tracing,
+    setup_tracing,
     stratum::{BlockTemplate, ConnectionMapping, Notifier, NotifyCmd, Server, StratumServerConfig},
-    SwarmCommand,
+    SwarmCommand, TemplateId,
 };
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
@@ -34,6 +34,8 @@ use std::sync::Arc;
 use std::{collections::HashMap, error::Error};
 use std::{fs, time::Duration};
 use tokio_util::sync::CancellationToken;
+#[allow(unused_imports)]
+use tracing::{debug, error, info, trace, warn};
 
 use behaviour::{BraidPoolBehaviour, BraidPoolBehaviourEvent};
 
@@ -52,8 +54,7 @@ use tokio::sync::{
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    //Initializing loggers and tracers
-    setup_logging();
+    // Initialize tracing with colors and module prefixes
     setup_tracing()?;
     let genesis_beads = Vec::from([]);
     // Initializing the braid object with read write lock
@@ -65,22 +66,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //Reconstructing local braid upon startup
     let db_connection_pool_ref = _db_handler.db_connection_pool.clone();
     let braid_ref = braid.clone();
+    // FIXME instead we should look 144 blocks back from the bitcoin tip (1 day) and load beads
+    // starting from that block as genesis
     let initial_bead_fetch_handle = tokio::spawn(async move {
         let mut guard = braid_ref.write().await;
-        let fetched_beads = fetch_beads_in_batch(db_connection_pool_ref, 4)
+        let fetched_beads = fetch_beads_in_batch(db_connection_pool_ref, 1000)
             .await
             .unwrap();
-        for bead in fetched_beads {
+        for bead in &fetched_beads {
             let curr_bead_status = guard.extend(&bead);
-            log::info!(
-                "Bead inserted with hash - {:?} extended successfully with status - {:?}",
-                bead.block_header.block_hash(),
-                curr_bead_status
+            debug!(
+                hash = ?bead.block_header.block_hash(),
+                status = ?curr_bead_status,
+                "Bead inserted"
             );
         }
+        info!(beads = fetched_beads.len(), "Beads loaded from DB");
     });
     let _yield_result = initial_bead_fetch_handle.await.unwrap();
-    let latest_template_id = Arc::new(Mutex::new(String::from("genesis")));
+    let latest_template_id = Arc::new(Mutex::new(TemplateId::default()));
     let latest_template_id_for_notifier = latest_template_id.clone();
     let latest_template_id_for_consumer = latest_template_id.clone();
     //Starting the `query_handler` task
@@ -148,12 +152,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     match fs::metadata(&*datadir) {
         Ok(m) => {
             if !m.is_dir() {
-                log::error!("Data directory {} exists but is not a directory", datadir);
+                error!(datadir = %datadir, "Data directory exists but is not a directory");
             }
-            log::info!("Using existing data directory: {}", datadir);
+            info!(datadir = %datadir, "Using existing data directory");
         }
         Err(_) => {
-            log::info!("Creating data directory: {}", datadir);
+            info!(datadir = %datadir, "Creating data directory");
             fs::create_dir_all(&*datadir)?;
         }
     }
@@ -165,9 +169,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         if keystore_path.exists() {
             let perms = fs::metadata(&keystore_path)?.permissions();
             if perms.mode() & 0o777 != 0o400 {
-                log::warn!(
-                    "Keystore permissions are not secure: {:o}, setting to 0o400",
-                    perms.mode() & 0o777
+                warn!(
+                    permissions = perms.mode() & 0o777,
+                    "Keystore permissions are not secure, setting to 0o400"
                 );
                 let mut new_perms = perms.clone();
                 new_perms.set_mode(0o400);
@@ -179,14 +183,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //and use the below one
     let keypair = match fs::read(&keystore_path) {
         Ok(keypair) => {
-            log::info!("Loading existing keypair from keystore...");
+            info!(path = %keystore_path.display(), "Loading keypair from keystore");
             libp2p::identity::Keypair::from_protobuf_encoding(&keypair).map_err(|e| {
-                log::error!("Failed to read keypair from keystore: {}", e);
+                error!(error = %e, path = %keystore_path.display(), "Failed to read keypair from keystore");
                 e
             })?
         }
         Err(_) => {
-            log::info!("No existing keypair found, generating new keypair...");
+            info!(path = %keystore_path.display(), "Generating new keypair");
             let keypair: Keypair = libp2p::identity::Keypair::generate_ed25519();
             let keypair_bytes = keypair.to_protobuf_encoding()?;
             fs::write(&keystore_path, keypair_bytes)?;
@@ -195,21 +199,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 let mut perms = fs::metadata(&keystore_path)?.permissions();
                 perms.set_mode(0o400);
                 fs::set_permissions(&keystore_path, perms)?;
-                log::info!("Set keystore file permissions to 0o400");
+                info!(path = %keystore_path.display(), perms = "0o400", "Set keystore permissions");
             }
             keypair
         }
     };
     //spawning the rpc server
+    let rpc_addr = "127.0.0.1:6682"; // TODO: Load from config file
     if let Some(rpc_command) = args.command {
-        let server_address = tokio::spawn(run_rpc_server(Arc::clone(&braid)));
+        let server_address = tokio::spawn(run_rpc_server(Arc::clone(&braid), rpc_addr));
         let socket_address = server_address.await.unwrap().unwrap();
         let _parsing_handle =
             tokio::spawn(parse_arguments(rpc_command, socket_address.clone())).await;
     } else {
         //running the rpc server and updating the reference counter
         //for shared ownership
-        let _server_handler = tokio::spawn(run_rpc_server(Arc::clone(&braid))).await;
+        let _server_handler = tokio::spawn(run_rpc_server(Arc::clone(&braid), rpc_addr)).await;
     }
     // load beads from db (if present) and insert in braid here
     // Initializing the peer manager
@@ -229,7 +234,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_behaviour(|local_key| BraidPoolBehaviour::new(local_key).unwrap())?
         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX)))
         .build();
-    log::info!("Local Peerid: {}", swarm.local_peer_id());
     let socket_addr: std::net::SocketAddr = match args.bind.parse() {
         Ok(addr) => addr,
         Err(_) => format!("{}:6680", args.bind)
@@ -259,14 +263,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
             SEED_DNS.parse::<Multiaddr>().unwrap(),
         );
     }
-    log::info!("Boot nodes have been added to the node's local DHT");
+    info!(boot_node_count = %BOOTNODES.len(), "Boot nodes added to DHT");
     swarm.dial(ADDR_REFRENCE.parse::<Multiaddr>().unwrap())?;
-    log::info!("Boot Node dialied with listening addr {:?}", ADDR_REFRENCE);
+    info!(address = %ADDR_REFRENCE, "Dialed boot node");
     //IPC(inter process communication) based `getblocktemplate` and `notification` to send to the downstream via the `cmempoold` architecture
-    log::info!("Socket path: {}", args.ipc_socket);
+    info!(socket = %args.ipc_socket, "IPC socket path");
 
     let network = if let Some(network_name) = &args.network {
-        println!("The specified network is: {}", network_name);
+        info!(network = %network_name, "Network selected");
         match network_name.as_str() {
             "main" | "mainnet" => Network::Bitcoin,
             "testnet" | "testnet4" => Network::Testnet(bitcoin::TestnetVersion::V4),
@@ -274,9 +278,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
             "regtest" => Network::Regtest,
             "cpunet" => Network::CPUNet,
             _ => {
-                log::error!("Invalid network specified: {}", network_name);
-                log::info!("Valid options: main, testnet, testnet4, signet, regtest, cpunet");
-                log::info!("Falling back to regtest");
+                error!(
+                    network = %network_name,
+                    valid_networks = "main, testnet, testnet4, signet, regtest, cpunet",
+                    "Invalid network specified"
+                );
+                info!(fallback = "regtest", "Using fallback network");
                 Network::Regtest
             }
         }
@@ -301,7 +308,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
             local_set
                 .run_until(async {
                     let template_cache: Arc<
-                        tokio::sync::Mutex<HashMap<String, Arc<node::ipc::client::BlockTemplate>>>,
+                        tokio::sync::Mutex<
+                            HashMap<TemplateId, Arc<node::ipc::client::BlockTemplate>>,
+                        >,
                     > = Arc::new(tokio::sync::Mutex::new(HashMap::new()));
                     let template_cache_for_consumer = template_cache.clone();
                     let template_cache_for_listener = template_cache.clone();
@@ -324,10 +333,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             .await
                             {
                                 Ok(_) => {
-                                    log::info!("IPC block listener exited normally");
+                                    info!("IPC block listener exited");
                                 }
                                 Err(e) => {
-                                    log::error!("IPC block listener error: {}", e);
+                                    error!(error = %e, "IPC block listener error");
                                 }
                             }
                         }
@@ -345,16 +354,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             )
                             .await
                             {
-                                log::error!("IPC template consumer error: {:?}", e);
+                                error!(error = ?e, "IPC template consumer error");
                             }
                         }
                     });
 
                     tokio::select! {
-                        _ = listener_task => log::info!("Listener and Submission task completed"),
-                        _ = consumer_task => log::info!("Template consumer completed"),
+                        _ = listener_task => info!(task = "listener", "IPC listener task completed"),
+                        _ = consumer_task => info!(task = "consumer", "Template consumer task completed"),
                         _ = ipc_task_token.cancelled() => {
-                            log::info!("Token cancelled, shutting down IPC task");
+                            info!("IPC task shutting down - cancellation token triggered");
                         }
                     }
                 })
@@ -367,14 +376,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let node_multiaddr: Multiaddr = node.parse().expect("Failed to parse to multiaddr");
             let dial_result = swarm.dial(node_multiaddr.clone());
             if let Some(err) = dial_result.err() {
-                log::error!(
-                    "Failed to dial node: {} with error: {}",
-                    node_multiaddr,
-                    err
-                );
+                error!(address = %node_multiaddr, error = %err, "Failed to dial peer node");
                 continue;
             }
-            log::info!("Dialed : {}", node_multiaddr);
+            info!(address = %node_multiaddr, "Dialed peer node");
         }
     };
     let swarm_handle = tokio::spawn(async move {
@@ -392,43 +397,47 @@ async fn main() -> Result<(), Box<dyn Error>> {
                              old_peer,
                          },
                      )) => {
-                         log::info!(
-                             "Routing updated for peer: {peer}, new: {is_new_peer}, addresses: {:?}, bucket: {:?}, old_peer: {:?}",
-                             addresses, bucket_range, old_peer
+                         info!(
+                             peer = %peer,
+                             is_new = %is_new_peer,
+                             addresses = ?addresses,
+                             bucket = ?bucket_range,
+                             old_peer = ?old_peer,
+                             "DHT routing updated"
                          );
                      }
                      SwarmEvent::Behaviour(BraidPoolBehaviourEvent::BeadAnnounce(
                          floodsub::FloodsubEvent::Subscribed { peer_id, topic },
                      )) => {
-                         log::info!(
-                             "A new peer {:?} subscribed to the topic {:?}",
-                             peer_id,
-                             topic
+                         info!(
+                             peer = ?peer_id,
+                             topic = ?topic,
+                             "Peer subscribed to topic"
                          );
                      }
                      SwarmEvent::Behaviour(BraidPoolBehaviourEvent::BeadAnnounce(
                          floodsub::FloodsubEvent::Unsubscribed { peer_id, topic },
                      )) => {
-                         log::info!(
-                             "A peer {:?} unsubscribed from the topic {:?}",
-                             peer_id,
-                             topic
+                         info!(
+                             peer = ?peer_id,
+                             topic = ?topic,
+                             "Peer unsubscribed from topic"
                          );
                      }
                      SwarmEvent::Behaviour(BraidPoolBehaviourEvent::BeadAnnounce(
                          floodsub::FloodsubEvent::Message(message),
                      )) => {
-                         log::info!(
-                             "{:?} Message has been recieved  from the peer {:?} and having data {:?}",
-                             message.topics,
-                             message.source,
-                             message.data
+                         info!(
+                             topics = ?message.topics,
+                             source = ?message.source,
+                             size_bytes = %message.data.len(),
+                             "Floodsub message received"
                          );
                          let result_bead: Result<Bead, bitcoin::consensus::DeserializeError> =
                              deserialize(&message.data);
                          match result_bead {
                              Ok(bead) => {
-                                 log::info!("Received bead: {:?}", bead);
+                                 info!(bead = ?bead, hash = %bead.block_header.block_hash(), "Received bead");
                                  // Handle the received bead here
                                  let status = {
                                      let mut braid_lock = braid.write().await;
@@ -445,7 +454,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                              ),
                                          );
                                      } else {
-                                         log::warn!("No peers available to request parents");
+                                         warn!(parent_count = %bead.committed_metadata.parents.len(), "Insufficient peers for bead sync");
                                      }
                                  } else if let braid::AddBeadStatus::InvalidBead = status {
                                      // update the peer manager about the invalid bead
@@ -456,32 +465,33 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                  }
                              }
                              Err(e) => {
-                                 log::error!("Failed to deserialize bead: {}", e);
+                                 error!(error = %e, "Failed to deserialize bead");
                              }
                          }
                      }
                      SwarmEvent::NewListenAddr { address, .. } => {
-                         log::info!("Listening on {:?}", address)
+                         info!(address = ?address, "P2P listening on address")
                      }
                      SwarmEvent::Behaviour(BraidPoolBehaviourEvent::Identify(
                          identify::Event::Sent { peer_id, .. },
                      )) => {
-                         log::info!("Sent identify info to {:?}", peer_id);
+                         debug!(peer = ?peer_id, "Sent identify info");
                      }
                      SwarmEvent::Behaviour(BraidPoolBehaviourEvent::Identify(
-                         identify::Event::Received { info,  .. },
+                         identify::Event::Received { peer_id, info,  .. },
                      )) => {
                          let info_reference = info.clone();
-                         log::info!(
-                             "Listen addresses recieved are in length - {:?}",
-                             info_reference.listen_addrs.len()
+                         info!(
+                             peer = ?peer_id,
+                             address_count = %info_reference.listen_addrs.len(),
+                             "Received listen addresses"
                          );
                          if info.protocols.iter().any(|p| *p == KADPROTOCOLNAME) {
                              for addr in info.listen_addrs {
-                                 log::info!("received addr {addr} through identify");
+                                 info!(address = %addr, "Received address via identify");
                              }
                          } else {
-                             log::info!("The peer does not support KADEMLIA ");
+                             info!(peer = ?peer_id, "Peer does not support Kademlia");
                          }
                          if info_reference
                              .clone()
@@ -490,28 +500,28 @@ async fn main() -> Result<(), Box<dyn Error>> {
                              .any(|p| *p != BEAD_ANNOUNCE_PROTOCOL)
                          {
 
-                             log::info!(
-                                 "The peer listening at {:?}  does not support FLOODSUB",
-                                 info_reference.observed_addr
+                             info!(
+                                 peer_address = ?info_reference.observed_addr,
+                                 "Peer does not support floodsub"
                              );
                          }
-                         log::info!("Received {:?}", info_reference);
+                         debug!(info = ?info_reference, "Received peer info");
                      }
                      SwarmEvent::Behaviour(BraidPoolBehaviourEvent::Kademlia(
                          kad::Event::OutboundQueryProgressed { result, .. },
                      )) => match result {
                          QueryResult::GetClosestPeers(Ok(ok)) => {
-                             log::info!("Got closest peers: {:?}", ok.peers);
+                             info!(peers = ?ok.peers, peer_count = %ok.peers.len(), "Got closest peers");
                          }
                          QueryResult::GetClosestPeers(Err(err)) => {
-                             log::info!("Failed to get closest peers: {err}");
+                             error!(error = %err, "Failed to get closest peers");
                          }
                         QueryResult::Bootstrap(Ok(BootstrapOk {
                             peer, ..
                         }))=>{
-                            log::info!("Peer received while bootstrapping - {:?}",peer);
+                            info!(peer = ?peer, "New peer");
                         }
-                         _ => log::info!("Other query result: {:?}", result),
+                         _ => info!(result = ?result, "Other DHT query result"),
                      },
                      SwarmEvent::Behaviour(BraidPoolBehaviourEvent::Identify(
                          identify::Event::Error {
@@ -520,21 +530,29 @@ async fn main() -> Result<(), Box<dyn Error>> {
                              connection_id: _,
                          },
                      )) => {
-                         log::error!("Error in identify event for peer {}: {:?}", peer_id, error);
+                         error!(peer = %peer_id, error = ?error, "Identify event error");
                      }
                      SwarmEvent::Behaviour(BraidPoolBehaviourEvent::Ping(ping::Event {
                          peer,
                          result,
                          ..
                      })) => {
-                         log::info!(
-                             "Ping result for peer {}: {:?}",
-                             peer,
-                             match result {
-                                 Ok(latency) => format!("Latency: {} ms", latency.as_millis()),
-                                 Err(err) => format!("Error: {}", err),
+                         match result {
+                             Ok(latency) => {
+                                 info!(
+                                     peer = %peer,
+                                     latency_ms = %latency.as_millis(),
+                                     "Ping"
+                                 );
                              }
-                         );
+                             Err(err) => {
+                                 warn!(
+                                     peer = %peer,
+                                     error = %err,
+                                     "Ping failed"
+                                 );
+                             }
+                         }
                      }
                      SwarmEvent::ConnectionEstablished {
                          peer_id, endpoint, ..
@@ -542,12 +560,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
                          // Add the peer to the peer manager
                          let remote_addr = endpoint.get_remote_address();
                          swarm.behaviour_mut().kademlia.add_address(&peer_id,remote_addr.clone());
-                         log::info!("Local DHT updated with peer address - {:?}",remote_addr);
+                         info!(address = ?remote_addr, "DHT updated with peer address");
                          swarm.behaviour_mut()
                          .bead_announce
                          .add_node_to_partial_view(peer_id);
 
-                         log::info!("Peer added to floodsub mesh {:?}", peer_id);
+                         info!(peer = %peer_id, "Peer added to floodsub mesh");
                          let ip = remote_addr.iter().find_map(|p| match p {
                              libp2p::core::multiaddr::Protocol::Ip4(ip) => {
                                  Some(std::net::IpAddr::V4(ip))
@@ -558,10 +576,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                              _ => None,
                          });
                          peer_manager.add_peer(peer_id, !endpoint.is_dialer(), ip);
-                         log::info!(
-                             "Connection established to peer: {} via {}",
-                             peer_id,
-                             remote_addr
+                         info!(
+                             peer_id = ?peer_id,
+                             remote_addr = ?remote_addr,
+                             "Connection established to peer"
                          );
                      }
                      SwarmEvent::ConnectionClosed {
@@ -571,7 +589,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                          num_established,
                          cause,
                      } => {
-                         log::info!("Connection closed to peer: {} with connection id: {} via {}. Number of established connections: {}. Cause: {:?}", peer_id,connection_id,endpoint.get_remote_address(), num_established,cause);
+                         info!(peer = %peer_id, connection_id = %connection_id, address = %endpoint.get_remote_address(), established = %num_established, cause = ?cause, "Connection closed");
                          // Remove the peer from the peer manager
                          peer_manager.remove_peer(&peer_id);
                          swarm
@@ -586,11 +604,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
                              connection_id,
                          },
                      )) => {
-                         log::info!(
-                             "Received bead sync message from peer: {}: {:?}. Connection-id: {:?}",
-                             peer,
-                             message,
-                             connection_id
+                         info!(
+                             peer = %peer,
+                             message = ?message,
+                             connection = ?connection_id,
+                             "Bead sync message received"
                          );
                          match message {
                              request_response::Message::Request {
@@ -675,28 +693,32 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                      }
                                      // no use of this arm as of now
                                      bead::BeadResponse::Tips(tips) => {
-                                         log::info!("Received tips: {:?}", tips);
+                                         info!(tips = ?tips, tip_count = %tips.len(), "Received braid tips");
                                      }
                                      bead::BeadResponse::Genesis(genesis) => {
-                                         log::info!("Received genesis beads: {:?}", genesis);
+                                         info!(genesis = ?genesis, genesis_count = %genesis.len(), "Received genesis beads");
                                          let status = {
                                              let braid_lock = braid.read().await;
                                              braid_lock.check_genesis_beads(&genesis)
                                          };
                                          match status {
                                              braid::GenesisCheckStatus::GenesisBeadsValid => {
-                                                 log::info!("Genesis beads are valid");
+                                                 info!(count = %genesis.len(), "Genesis beads validated");
                                              }
                                              braid::GenesisCheckStatus::MissingGenesisBead => {
-                                                 log::warn!("Missing genesis bead");
+                                                 warn!(peer = %peer, "Missing genesis bead");
                                              }
                                              braid::GenesisCheckStatus::GenesisBeadsCountMismatch => {
-                                                 log::warn!("Genesis beads count mismatch");
+                                                 warn!(
+                                                     received = %genesis.len(),
+                                                     peer = %peer,
+                                                     "Genesis bead count mismatch"
+                                                 );
                                              }
                                          }
                                      }
                                      bead::BeadResponse::Error(error) => {
-                                         log::error!("Error in bead sync response: {:?}", error);
+                                         error!(error = ?error, "Bead sync response error");
                                          peer_manager.update_score(&peer, -1.0);
                                      }
                                  };
@@ -704,7 +726,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                          }
                      }
                      other_event=>{
-                             log::info!("{:?}",other_event);
+                             debug!(event = ?other_event, "Other swarm event");
                      }
                  }
 
@@ -718,7 +740,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                              .behaviour_mut()
                              .bead_announce
                              .publish(current_broadcast_topic.clone(), bead_bytes);
-                        log::info!("Published to flood sub topic successfully !");
+                        info!(topic = ?current_broadcast_topic, "Published bead to floodsub topic");
                      }
                  }
              }
@@ -726,16 +748,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     });
 
-    //gracefull shutdown via `Cancellation token`
+    //graceful shutdown via `Cancellation token`
     let shutdown_signal = tokio::signal::ctrl_c().await;
     match shutdown_signal {
         Ok(_) => {
-            log::info!("Closing connection to DB pool");
+            info!(component = "database", "Closing connection pool");
             let pool = db_connection_pool.lock().await;
             //Closing all the existing connections to pool and committing from .db-wal to .db
             pool.close().await;
-            log::info!("All the existing connections to pool closed");
-            log::info!("Shutting down the Network Swarm");
+            info!(component = "database", "Connections closed");
+            info!(component = "swarm", "Shutting down network swarm");
             swarm_handle.abort();
             tokio::time::sleep(Duration::from_millis(1)).await;
             #[allow(unused)]
@@ -744,21 +766,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .await
             {
                 Ok(_) => {
-                    log::info!("Sub-tasks have been INTERRUPTED kindly wait for them to shutdown");
+                    info!(
+                        component = "shutdown",
+                        "Sub-tasks interrupted - waiting for graceful shutdown"
+                    );
                     main_task_token.cancel();
                 }
                 Err(error) => {
-                    log::error!(
-                        "An error running while sending INTERUPPT to the sub tasks - {:?}",
-                        error
-                    );
+                    error!(error = ?error, "Failed to send interrupt signal to sub-tasks");
                 }
             };
         }
         Err(error) => {
-            log::error!(
-                "An error occurred while shutting down the braid node {:?}",
-                error
+            error!(
+                error = ?error,
+                component = "shutdown",
+                "Shutdown signal error"
             );
         }
     }
