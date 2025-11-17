@@ -1752,7 +1752,7 @@ impl Server {
             tokio::select! {
                     event = listener.accept()=>{
                         //Currently we do not accept connections from downstream during IBD wrt to sync nodes
-                        if ibd_or_not.clone().load(std::sync::atomic::Ordering::SeqCst) == true{
+                        if ibd_or_not.load(std::sync::atomic::Ordering::SeqCst) == true{
                         warn!("Braid node not synced and is under IBD thus skipping the connection from downstream.");
                             continue;
                         }

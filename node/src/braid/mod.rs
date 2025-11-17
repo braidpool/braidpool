@@ -218,7 +218,6 @@ impl Braid {
                     AddBeadStatus::InvalidBead => {
                         continue;
                     }
-                    //Unecessary condition
                     AddBeadStatus::ParentsNotYetReceived => {
                         self.orphan_beads.push(orphan_bead);
                     }
@@ -277,6 +276,11 @@ impl Braid {
                 found_start = true;
             }
         }
+        //If somehow no bead matched that can be due to possible latency/fork so send all the beads instead as fallback
+        if smallest_index == usize::MAX {
+            return Some(self.beads.clone());
+        }
+
         tracing::debug!(
             smallest_index=?smallest_index,"Smallest possible index from all the tips - ",
 

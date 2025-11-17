@@ -737,8 +737,29 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                 | bead::BeadResponse::GetAllBeads(beads) => {
                                     let (beads_tx, beads_rx) = tokio::sync::oneshot::channel::<Vec<BeadHash>>();
                                     //Fetching the pruned bead-hashes received during `GetBeadAfter` request
-                                    ibd_command_tx.send(IBDCommands::FetchGetBeadCache { peer_id: peer.to_string(), beadhash_sender: beads_tx }).await.unwrap();
-                                    let pruned_beads = beads_rx.await.expect("Error in response branch of GETALLBEADS");
+                                    match ibd_command_tx.send(IBDCommands::FetchGetBeadCache { peer_id: peer.to_string(), beadhash_sender: beads_tx }).await{
+                                        Ok(_)=>{
+                                            info!("IBD command sent to handler successfully !");
+                                        },
+                                        Err(error)=>{
+                                            //Re-initiating IBD
+                                            error!("An error occurred while sending ibd command to ibd_handler - {:?}, re-trying IBD",error.0);
+                                            let sync_retry_request:BeadRequest = BeadRequest::GetTips;
+                                            swarm.behaviour_mut().bead_sync.send_request(&peer, sync_retry_request);
+                                            continue;
+                                        }
+                                    };
+                                    let pruned_beads = match beads_rx.await{
+                                        Ok(received_beads)=>{
+                                            received_beads
+                                        },
+                                        Err(error)=>{
+                                            error!(error=?error.to_string(),"An ERROR occurred while receiving cached beads from ibd_handler due to , re-trying IBD");
+                                            let sync_retry_request:BeadRequest = BeadRequest::GetTips;
+                                            swarm.behaviour_mut().bead_sync.send_request(&peer, sync_retry_request);
+                                            continue;
+                                        }
+                                    };
                                     let mut braid_lock = braid.write().await;
                                     for bead in beads.into_iter() {
                                         let status = braid_lock.extend(&bead);
@@ -766,8 +787,29 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     }
                                     //Preparing next batch request to be sent to the sync node
                                     let (batch_tx, batch_rx) = tokio::sync::oneshot::channel::<usize>();
-                                    ibd_command_tx.send(IBDCommands::UpdateAndFetchBatchOffset { peer_id: peer.to_string(), offset_sender: batch_tx, batch_size:IBD_BATCH_SIZE  }).await.unwrap();
-                                    let next_batch_offset = batch_rx.await.expect("Next branch offset");
+                                    match ibd_command_tx.send(IBDCommands::UpdateAndFetchBatchOffset { peer_id: peer.to_string(), offset_sender: batch_tx, batch_size:IBD_BATCH_SIZE  }).await{
+                                            Ok(_)=>{
+                                                info!("Offset Updated");
+                                            },
+                                            Err(error)=>{
+                                                error!(error=?error,"An error occurred while sending the offset update command, re-trying IBD");
+                                                let sync_retry_request:BeadRequest = BeadRequest::GetTips;
+                                                swarm.behaviour_mut().bead_sync.send_request(&peer, sync_retry_request);
+                                                continue;
+                                            }
+                                    };
+                                    let next_batch_offset = match batch_rx.await{
+                                        Ok(next_offset)=>{
+                                            info!(next_offset=?next_offset,"Newer offset for batch request received successfully val ");
+                                            next_offset
+                                        },
+                                        Err(error)=>{
+                                            error!(error=?error,"An error occurred while receving the offset, re-trying IBD");
+                                            let sync_retry_request:BeadRequest = BeadRequest::GetTips;
+                                            swarm.behaviour_mut().bead_sync.send_request(&peer, sync_retry_request);
+                                            continue;
+                                        }
+                                    };
                                     if next_batch_offset < pruned_beads.len() && ((next_batch_offset+IBD_BATCH_SIZE)< pruned_beads.len()){
                                         swarm.behaviour_mut().request_beads(peer, &pruned_beads[next_batch_offset..(next_batch_offset+IBD_BATCH_SIZE)].to_vec());
                                     }
@@ -788,8 +830,28 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                  bead::BeadResponse::GetBeadsAfter(bead_hashes)=>{
                                     //Getting all the beadhashes after the common oldest in both the peers
                                     let (tips_tx, tips_rx) = tokio::sync::oneshot::channel::<Vec<BeadHash>>();
-                                    ibd_command_tx.send(IBDCommands::FetchCachedTips { peer_id: peer.to_string(), tips_sender: tips_tx }).await.unwrap();
-                                    let received_tips = tips_rx.await.expect("Error in GetBeadsAfter IBD");
+                                    match ibd_command_tx.send(IBDCommands::FetchCachedTips { peer_id: peer.to_string(), tips_sender: tips_tx }).await{
+                                        Ok(_)=>{
+                                            info!("Cached Tips received successfully.");
+                                        },
+                                        Err(error)=>{
+                                            error!(error=?error,"Error occurred while receiving tips, re-trying IBD");
+                                            let sync_retry_request:BeadRequest = BeadRequest::GetTips;
+                                            swarm.behaviour_mut().bead_sync.send_request(&peer, sync_retry_request);
+                                            continue;
+                                        }
+                                    };
+                                    let received_tips = match tips_rx.await{
+                                        Ok(received_tips)=>{
+                                            received_tips
+                                        },
+                                        Err(error)=>{
+                                            error!(error=?error,"An error occurred while receving the Tips, re-trying IBD");
+                                            let sync_retry_request:BeadRequest = BeadRequest::GetTips;
+                                            swarm.behaviour_mut().bead_sync.send_request(&peer, sync_retry_request);
+                                            continue;
+                                        }
+                                    };
                                     //Pruning the hashes wrt cached `Tips`
                                     let mut found_tips = HashSet::new();
                                     let mut pruned = Vec::new();
@@ -806,7 +868,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     }
                                     let pruned_ref = pruned.clone();
                                     // Storing them in cache
-                                    ibd_command_tx.send(IBDCommands::UpdateIBDGetBeadCache { get_bead_response: pruned, peer_id: peer.to_string() }).await.unwrap();
+                                    match ibd_command_tx.send(IBDCommands::UpdateIBDGetBeadCache { get_bead_response: pruned, peer_id: peer.to_string() }).await{
+                                        Ok(_)=>{
+                                            info!("Received beads to be fetched in GetBeads saved successfully");
+                                        },
+                                        Err(error)=>{
+                                            error!(error=?error,"An error occurred while Caching pruned beadhashes to be fetched in GetBeads");
+                                            let sync_retry_request:BeadRequest = BeadRequest::GetTips;
+                                            swarm.behaviour_mut().bead_sync.send_request(&peer, sync_retry_request);
+                                            continue;
+                                        }
+                                    };
                                     // Initiating `GetBead` request cycle
                                     if pruned_ref.len() <= IBD_BATCH_SIZE{
                                         swarm.behaviour_mut().request_beads(peer, &pruned_ref);
@@ -822,7 +894,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     //IBD and continue with mining
                                     //Initializing the batch offset for the corresponding sync peer
                                     let (ibd_bridge_tx, _ibd_bridge_rx) = tokio::sync::oneshot::channel::<usize>();
-                                    ibd_command_tx.send(IBDCommands::UpdateAndFetchBatchOffset { peer_id: peer.to_string(), offset_sender: ibd_bridge_tx, batch_size: IBD_BATCH_SIZE }).await.unwrap();
+                                    match ibd_command_tx.send(IBDCommands::UpdateAndFetchBatchOffset { peer_id: peer.to_string(), offset_sender: ibd_bridge_tx, batch_size: IBD_BATCH_SIZE }).await{
+                                        Ok(_)=>{
+                                            info!("Offset Initialized successfully");
+                                        },
+                                        Err(_error)=>{
+                                            error!("An error occurred while sending offset initalization command to ibd_handler");
+                                            continue;
+                                        }
+                                    };
                                     let _val = _ibd_bridge_rx.await.unwrap();
                                     let braid_data = braid.read().await;
 
@@ -850,6 +930,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                             err = ?error,
                                             "Error while sending update cache command"
                                         );
+                                        continue;
                                     }
                                   };
                                     //After storing tips we will issue `GetBeads` command that will find the oldest

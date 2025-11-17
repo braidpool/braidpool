@@ -6,6 +6,7 @@ pub const IBD_BATCH_SIZE: usize = 100;
 
 //Storing tips mapping received from peers during `GetTips`
 //that will be flushed out after IBD is done hence no complete dependency
+#[derive(Debug)]
 pub enum IBDCommands {
     //Updating tips received from various sync peers that will act as the stopping window for IBD
     UpdateIBDTipsCache {
@@ -28,7 +29,7 @@ pub enum IBDCommands {
         peer_id: String,
         tips_sender: tokio::sync::oneshot::Sender<Vec<BeadHash>>,
     },
-    //
+    //Fetching cached beadshashes received during GetBeads
     FetchGetBeadCache {
         peer_id: String,
         beadhash_sender: tokio::sync::oneshot::Sender<Vec<BeadHash>>,
@@ -71,7 +72,7 @@ impl IBDManager {
                             }
                             Err(error) => {
                                 tracing::error!(
-                                error=?error, "Error while updating and sending it to request channel due to - "
+                                error=?error, "Error while updating and sending it to request channel"
                                 );
                             }
                         };
@@ -83,7 +84,7 @@ impl IBDManager {
                             }
                             Err(error) => {
                                 tracing::error!(
-                                    error,"Error while intiating batch offset and sending it to request channel due to - "
+                                    error,"Error while initiating batch offset and sending it to request channel"
                                 );
                             }
                         }
