@@ -1,12 +1,12 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import TransactionsPage from '../TransactionsPage';
-import { BraidPoolTransaction, TransactionCategory } from '../type';
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import TransactionsPage from "../TransactionsPage";
+import { BraidPoolTransaction, TransactionCategory } from "../type";
 
 const mockTransactions: BraidPoolTransaction[] = [
   {
-    txid: 'mock-tx-1',
-    hash: 'mock-tx-1',
+    txid: "mock-tx-1",
+    hash: "mock-tx-1",
     category: TransactionCategory.MEMPOOL,
     size: 250,
     weight: 1000,
@@ -16,7 +16,7 @@ const mockTransactions: BraidPoolTransaction[] = [
     outputs: 3,
     confirmations: 0,
     work: 100,
-    workUnit: 'TH',
+    workUnit: "TH",
     vin: [],
     vout: [],
     status: { confirmed: false },
@@ -28,7 +28,7 @@ const mockTransactions: BraidPoolTransaction[] = [
 // Mock braidpoolApi
 const mockFetchRecentTransactions = vi.fn();
 
-vi.mock('@/utils/braidpoolApi', () => ({
+vi.mock("@/utils/braidpoolApi", () => ({
   braidpoolApi: {
     fetchRecentTransactions: (...args: any[]) =>
       mockFetchRecentTransactions(...args),
@@ -36,7 +36,7 @@ vi.mock('@/utils/braidpoolApi', () => ({
 }));
 
 // Mock TransactionTable component
-vi.mock('../TransactionTable', () => ({
+vi.mock("../TransactionTable", () => ({
   default: ({
     transactions,
     loading,
@@ -47,140 +47,140 @@ vi.mock('../TransactionTable', () => ({
   }: any) => (
     <div data-testid="transaction-table">
       <div data-testid="transactions-count">{transactions.length}</div>
-      <div data-testid="loading-state">{loading ? 'loading' : 'loaded'}</div>
-      <div data-testid="error-state">{error || 'no-error'}</div>
+      <div data-testid="loading-state">{loading ? "loading" : "loaded"}</div>
+      <div data-testid="error-state">{error || "no-error"}</div>
       <div data-testid="auto-refresh">
-        {autoRefresh ? 'enabled' : 'disabled'}
+        {autoRefresh ? "enabled" : "disabled"}
       </div>
     </div>
   ),
 }));
 
 // Mock TopStatsBar component
-vi.mock('@/components/common/TopStatsBar', () => ({
+vi.mock("@/components/common/TopStatsBar", () => ({
   default: () => <div data-testid="top-stats-bar">Stats Bar</div>,
 }));
 
-describe('TransactionsPage - Tailwind Tests', () => {
+describe("TransactionsPage - Tailwind Tests", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetchRecentTransactions.mockResolvedValue(mockTransactions);
   });
 
-  describe('Basic Rendering', () => {
-    it('renders without crashing', () => {
+  describe("Basic Rendering", () => {
+    it("renders without crashing", () => {
       render(<TransactionsPage />);
-      expect(screen.getByText('Transaction Management')).toBeInTheDocument();
+      expect(screen.getByText("Transaction Management")).toBeInTheDocument();
     });
 
-    it('displays page title', () => {
+    it("displays page title", () => {
       render(<TransactionsPage />);
-      expect(screen.getByText('Transaction Management')).toBeInTheDocument();
+      expect(screen.getByText("Transaction Management")).toBeInTheDocument();
     });
 
-    it('displays page description', () => {
+    it("displays page description", () => {
       render(<TransactionsPage />);
       expect(
-        screen.getByText(/Monitor and analyze Bitcoin transactions/)
+        screen.getByText(/Monitor and analyze Bitcoin transactions/),
       ).toBeInTheDocument();
     });
 
-    it('renders TopStatsBar component', () => {
+    it("renders TopStatsBar component", () => {
       render(<TransactionsPage />);
-      expect(screen.getByTestId('top-stats-bar')).toBeInTheDocument();
+      expect(screen.getByTestId("top-stats-bar")).toBeInTheDocument();
     });
 
-    it('renders TransactionTable component', async () => {
+    it("renders TransactionTable component", async () => {
       render(<TransactionsPage />);
       await waitFor(() => {
-        expect(screen.getByTestId('transaction-table')).toBeInTheDocument();
+        expect(screen.getByTestId("transaction-table")).toBeInTheDocument();
       });
     });
   });
 
-  describe('Transaction Categories Section', () => {
-    it('displays transaction categories section', () => {
+  describe("Transaction Categories Section", () => {
+    it("displays transaction categories section", () => {
       render(<TransactionsPage />);
-      expect(screen.getByText('Transaction Categories')).toBeInTheDocument();
+      expect(screen.getByText("Transaction Categories")).toBeInTheDocument();
     });
 
-    it('displays all category labels', () => {
+    it("displays all category labels", () => {
       render(<TransactionsPage />);
 
-      expect(screen.getByText('Mempool')).toBeInTheDocument();
-      expect(screen.getByText('Committed')).toBeInTheDocument();
-      expect(screen.getByText('Proposed')).toBeInTheDocument();
-      expect(screen.getByText('Scheduled')).toBeInTheDocument();
-      expect(screen.getByText('Confirmed')).toBeInTheDocument();
-      expect(screen.getByText('Replaced')).toBeInTheDocument();
+      expect(screen.getByText("Mempool")).toBeInTheDocument();
+      expect(screen.getByText("Committed")).toBeInTheDocument();
+      expect(screen.getByText("Proposed")).toBeInTheDocument();
+      expect(screen.getByText("Scheduled")).toBeInTheDocument();
+      expect(screen.getByText("Confirmed")).toBeInTheDocument();
+      expect(screen.getByText("Replaced")).toBeInTheDocument();
     });
 
-    it('displays category descriptions', () => {
+    it("displays category descriptions", () => {
       render(<TransactionsPage />);
 
       expect(
-        screen.getByText(/Transactions in bitcoind mempool only/)
+        screen.getByText(/Transactions in bitcoind mempool only/),
       ).toBeInTheDocument();
       expect(
-        screen.getByText(/Transactions committed to cmempool node/)
+        screen.getByText(/Transactions committed to cmempool node/),
       ).toBeInTheDocument();
       expect(
-        screen.getByText(/Transactions proposed for next block/)
+        screen.getByText(/Transactions proposed for next block/),
       ).toBeInTheDocument();
     });
   });
 
-  describe('Live Transaction Feed Section', () => {
-    it('displays Live Transaction Feed title', () => {
+  describe("Live Transaction Feed Section", () => {
+    it("displays Live Transaction Feed title", () => {
       render(<TransactionsPage />);
-      expect(screen.getByText('Live Transaction Feed')).toBeInTheDocument();
+      expect(screen.getByText("Live Transaction Feed")).toBeInTheDocument();
     });
 
-    it('displays feed description', () => {
+    it("displays feed description", () => {
       render(<TransactionsPage />);
       expect(
-        screen.getByText('Real-time Bitcoin transactions from your node')
+        screen.getByText("Real-time updates from your Bitcoin node"),
       ).toBeInTheDocument();
     });
 
-    it('displays Auto Refresh toggle', () => {
+    it("displays Auto Refresh toggle", () => {
       render(<TransactionsPage />);
-      expect(screen.getByText('Auto Refresh')).toBeInTheDocument();
+      expect(screen.getByText("Auto Refresh")).toBeInTheDocument();
     });
   });
 
-  describe('Auto Refresh Toggle', () => {
-    it('auto refresh checkbox is checked by default', async () => {
+  describe("Auto Refresh Toggle", () => {
+    it("auto refresh checkbox is checked by default", async () => {
       render(<TransactionsPage />);
 
-      const checkbox = screen.getByRole('checkbox');
+      const checkbox = screen.getByRole("checkbox");
       expect(checkbox).toBeChecked();
 
       await waitFor(() => {
-        expect(screen.getByTestId('auto-refresh')).toBeInTheDocument();
+        expect(screen.getByTestId("auto-refresh")).toBeInTheDocument();
       });
     });
 
-    it('toggles auto refresh when clicked', async () => {
+    it("toggles auto refresh when clicked", async () => {
       render(<TransactionsPage />);
 
-      const checkbox = screen.getByRole('checkbox');
+      const checkbox = screen.getByRole("checkbox");
       expect(checkbox).toBeChecked();
 
       // Click to disable
       fireEvent.click(checkbox);
 
       await waitFor(() => {
-        expect(screen.getByTestId('auto-refresh')).toBeInTheDocument();
+        expect(screen.getByTestId("auto-refresh")).toBeInTheDocument();
       });
 
       expect(checkbox).not.toBeChecked();
     });
 
-    it('enables auto refresh when toggled back on', async () => {
+    it("enables auto refresh when toggled back on", async () => {
       render(<TransactionsPage />);
 
-      const checkbox = screen.getByRole('checkbox');
+      const checkbox = screen.getByRole("checkbox");
 
       // Disable
       fireEvent.click(checkbox);
@@ -196,8 +196,8 @@ describe('TransactionsPage - Tailwind Tests', () => {
     });
   });
 
-  describe('Data Fetching', () => {
-    it('fetches transactions on mount', async () => {
+  describe("Data Fetching", () => {
+    it("fetches transactions on mount", async () => {
       render(<TransactionsPage />);
 
       await waitFor(() => {
@@ -205,55 +205,55 @@ describe('TransactionsPage - Tailwind Tests', () => {
       });
     });
 
-    it('displays fetched transactions', async () => {
+    it("displays fetched transactions", async () => {
       render(<TransactionsPage />);
 
       await waitFor(() => {
-        expect(screen.getByTestId('transactions-count')).toHaveTextContent('1');
+        expect(screen.getByTestId("transactions-count")).toHaveTextContent("1");
       });
     });
 
-    it('shows loading state initially', () => {
+    it("shows loading state initially", () => {
       render(<TransactionsPage />);
-      expect(screen.getByTestId('loading-state')).toHaveTextContent('loading');
+      expect(screen.getByTestId("loading-state")).toHaveTextContent("loading");
     });
 
-    it('shows loaded state after fetch completes', async () => {
+    it("shows loaded state after fetch completes", async () => {
       render(<TransactionsPage />);
 
       await waitFor(() => {
-        expect(screen.getByTestId('loading-state')).toHaveTextContent('loaded');
+        expect(screen.getByTestId("loading-state")).toHaveTextContent("loaded");
       });
     });
   });
 
-  describe('Error Handling', () => {
-    it('displays error message when fetch fails', async () => {
+  describe("Error Handling", () => {
+    it("displays error message when fetch fails", async () => {
       mockFetchRecentTransactions.mockRejectedValueOnce(
-        new Error('Network error')
+        new Error("Network error"),
       );
 
       render(<TransactionsPage />);
 
       await waitFor(() => {
-        expect(screen.getByTestId('error-state')).toHaveTextContent(
-          'Failed to load transactions. Please try again.'
+        expect(screen.getByTestId("error-state")).toHaveTextContent(
+          "Failed to load transactions. Please try again.",
         );
       });
     });
 
-    it('logs error to console when fetch fails', async () => {
+    it("logs error to console when fetch fails", async () => {
       const consoleSpy = vi
-        .spyOn(console, 'error')
+        .spyOn(console, "error")
         .mockImplementation(() => {});
-      mockFetchRecentTransactions.mockRejectedValueOnce(new Error('API Error'));
+      mockFetchRecentTransactions.mockRejectedValueOnce(new Error("API Error"));
 
       render(<TransactionsPage />);
 
       await waitFor(() => {
         expect(consoleSpy).toHaveBeenCalledWith(
-          'Failed to fetch transactions:',
-          expect.any(Error)
+          "Failed to fetch transactions:",
+          expect.any(Error),
         );
       });
 
@@ -261,40 +261,40 @@ describe('TransactionsPage - Tailwind Tests', () => {
     });
   });
 
-  describe('Props Passed to TransactionTable', () => {
-    it('passes correct props to TransactionTable', async () => {
+  describe("Props Passed to TransactionTable", () => {
+    it("passes correct props to TransactionTable", async () => {
       render(<TransactionsPage />);
 
       await waitFor(() => {
-        expect(screen.getByTestId('transaction-table')).toBeInTheDocument();
+        expect(screen.getByTestId("transaction-table")).toBeInTheDocument();
       });
 
-      expect(screen.getByTestId('auto-refresh')).toHaveTextContent('enabled');
+      expect(screen.getByTestId("auto-refresh")).toHaveTextContent("enabled");
     });
 
-    it('passes transactions data to TransactionTable', async () => {
+    it("passes transactions data to TransactionTable", async () => {
       render(<TransactionsPage />);
 
       await waitFor(() => {
-        expect(screen.getByTestId('transactions-count')).toBeInTheDocument();
+        expect(screen.getByTestId("transactions-count")).toBeInTheDocument();
       });
 
-      expect(screen.getByTestId('transactions-count')).toHaveTextContent('1');
+      expect(screen.getByTestId("transactions-count")).toHaveTextContent("1");
     });
   });
 
-  describe('Tailwind Styling', () => {
-    it('renders toggle switch', () => {
+  describe("Tailwind Styling", () => {
+    it("renders toggle switch", () => {
       render(<TransactionsPage />);
-      const checkbox = screen.getByRole('checkbox');
+      const checkbox = screen.getByRole("checkbox");
       expect(checkbox).toBeInTheDocument();
     });
 
-    it('displays all required UI elements', () => {
+    it("displays all required UI elements", () => {
       render(<TransactionsPage />);
-      expect(screen.getByText('Transaction Management')).toBeInTheDocument();
-      expect(screen.getByText('Transaction Categories')).toBeInTheDocument();
-      expect(screen.getByText('Live Transaction Feed')).toBeInTheDocument();
+      expect(screen.getByText("Transaction Management")).toBeInTheDocument();
+      expect(screen.getByText("Transaction Categories")).toBeInTheDocument();
+      expect(screen.getByText("Live Transaction Feed")).toBeInTheDocument();
     });
   });
 });
