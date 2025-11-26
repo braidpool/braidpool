@@ -12,7 +12,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Orchestration check
     let standard = Client::new(
         "http://127.0.0.1:18332",
-        Auth::UserPass("jevinrpc".to_string(), "securepass123".to_string()),
+        Auth::UserPass(
+            "<your_rpc_username>".to_string(),
+            "securepass123".to_string(),
+        ),
     )?;
     let committed = Client::new(
         "http://127.0.0.1:19443",
@@ -34,7 +37,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     );
 
     // Start API server
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    let addr = SocketAddr::from(([127, 0, 0, 1], 3001));
     println!("API running at http://{}", addr);
 
     axum::serve(tokio::net::TcpListener::bind(addr).await?, app).await?;
