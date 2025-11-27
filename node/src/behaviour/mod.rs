@@ -43,7 +43,6 @@ pub struct BraidPoolBehaviour {
     pub bead_sync: request_response::Behaviour<BeadCodec>,
     pub bead_announce: floodsub::Floodsub,
 }
-
 impl BraidPoolBehaviour {
     pub fn new(local_key: &Keypair) -> Result<BraidPoolBehaviour, Box<dyn Error>> {
         //initializing the store for kademlia based DHT
@@ -63,7 +62,7 @@ impl BraidPoolBehaviour {
         let identify_behaviour = identify::Behaviour::new(identify_config);
         let ping_config = ping::Config::default()
             .with_timeout(Duration::from_secs(3600))
-            .with_interval(Duration::from_secs(60));
+            .with_interval(Duration::from_secs(5));
         let ping_behaviour = ping::Behaviour::new(ping_config.clone());
 
         // Initialize bead download behaviour

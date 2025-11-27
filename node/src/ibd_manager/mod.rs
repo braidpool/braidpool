@@ -1,38 +1,59 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, u64};
+
+use libp2p::PeerId;
+use tokio::task::JoinHandle;
 
 use crate::utils::BeadHash;
-//Beads fetching will be done with batch size
-pub const IBD_BATCH_SIZE: usize = 100;
+pub const IBD_BATCH_SIZE: usize = 50;
+pub const MAX_IBD_RETRIES: u64 = 10;
+pub const IBD_TRIGGER_AFTER: u64 = 20;
+pub const MAX_IBD_INCOMING_THRESHOLD: u64 = 20;
 
-//Storing tips mapping received from peers during `GetTips`
-//that will be flushed out after IBD is done hence no complete dependency
 #[derive(Debug)]
 pub enum IBDCommands {
-    //Updating tips received from various sync peers that will act as the stopping window for IBD
-    UpdateIBDTipsCache {
+    UpdateIBDTipsMapping {
         received_tips: Vec<BeadHash>,
         peer_id: String,
     },
-    //Caching the received beadhashes received during `GetBead` request which will be used to fetch and extend beads in batches via `GetBead`
-    UpdateIBDGetBeadCache {
+    UpdateIncoming {
         get_bead_response: Vec<BeadHash>,
         peer_id: String,
     },
-    //Update the batch offset and fetch newer batch offset window will become [offset*batchsize,(offset*batchsize)+batchsize]
     UpdateAndFetchBatchOffset {
         peer_id: String,
         offset_sender: tokio::sync::oneshot::Sender<usize>,
         batch_size: usize,
     },
-    //Fetching the cached Tips
     FetchCachedTips {
         peer_id: String,
         tips_sender: tokio::sync::oneshot::Sender<Vec<BeadHash>>,
     },
-    //Fetching cached beadshashes received during GetBeads
-    FetchGetBeadCache {
+    FetchGetBeadMapping {
         peer_id: String,
         beadhash_sender: tokio::sync::oneshot::Sender<Vec<BeadHash>>,
+    },
+    UpdateTimestampMapping {
+        peer_id: String,
+        end_timestamp: u64,
+    },
+    FetchTimestamp {
+        peer_id: String,
+        timestamp_sender: tokio::sync::oneshot::Sender<u64>,
+    },
+    FetchAllTimestamps {
+        sender: tokio::sync::oneshot::Sender<HashMap<String, u64>>,
+    },
+    UpdateIncomingBeadMapping {
+        peer_id: PeerId,
+        handle: Option<JoinHandle<()>>,
+        retry_or_not: bool,
+    },
+    GetIncomingBeadRetryCount {
+        peer_id: PeerId,
+        retry_sender: tokio::sync::oneshot::Sender<u64>,
+    },
+    AbortWaitHandle {
+        peer_id: PeerId,
     },
 }
 pub struct IBDManager {
@@ -40,6 +61,9 @@ pub struct IBDManager {
     batch_mapping: HashMap<String, usize>,
     get_bead_mapping: HashMap<String, Vec<BeadHash>>,
     command_receiver: tokio::sync::mpsc::Receiver<IBDCommands>,
+    timestamp_mapping: HashMap<String, u64>,
+    //(PeerId ---->(retries done wrt to given sync peer,thread_handler))
+    incoming_bead_mapping: HashMap<PeerId, (u64, Option<JoinHandle<()>>)>,
 }
 impl IBDManager {
     pub fn new() -> (Self, tokio::sync::mpsc::Sender<IBDCommands>) {
@@ -50,6 +74,8 @@ impl IBDManager {
                 batch_mapping: HashMap::new(),
                 get_bead_mapping: HashMap::new(),
                 command_receiver: ibd_rx,
+                timestamp_mapping: HashMap::new(),
+                incoming_bead_mapping: HashMap::new(),
             },
             ibd_tx,
         )
@@ -84,19 +110,19 @@ impl IBDManager {
                             }
                             Err(error) => {
                                 tracing::error!(
-                                    error,"Error while initiating batch offset and sending it to request channel"
+                                    error=?error,"Error while initiating batch offset and sending it to request channel"
                                 );
                             }
                         }
                     }
                 }
-                IBDCommands::UpdateIBDGetBeadCache {
+                IBDCommands::UpdateIncoming {
                     get_bead_response,
                     peer_id,
                 } => {
                     self.get_bead_mapping.insert(peer_id, get_bead_response);
                 }
-                IBDCommands::UpdateIBDTipsCache {
+                IBDCommands::UpdateIBDTipsMapping {
                     received_tips,
                     peer_id,
                 } => {
@@ -111,13 +137,13 @@ impl IBDManager {
                             Ok(_) => {
                                 tracing::info!("Cached tips sent successfully to swarm event loop");
                             }
-                            Err(_error) => {
-                                tracing::error!("Tips not sent");
+                            Err(error) => {
+                                tracing::error!(error=?error,"Tips not sent");
                             }
                         };
                     };
                 }
-                IBDCommands::FetchGetBeadCache {
+                IBDCommands::FetchGetBeadMapping {
                     peer_id,
                     beadhash_sender,
                 } => {
@@ -128,10 +154,112 @@ impl IBDManager {
                                     "Cached get bead hashes sent successfully to swarm event loop"
                                 );
                             }
-                            Err(_error) => {
-                                tracing::error!("Beadhashes not sent");
+                            Err(error) => {
+                                tracing::error!(error=?error,"Beadhashes not sent");
                             }
                         };
+                    };
+                }
+                IBDCommands::UpdateTimestampMapping {
+                    peer_id,
+                    end_timestamp,
+                } => {
+                    if self.timestamp_mapping.contains_key(&peer_id) {
+                        if let Some(prev_timestamp) = self.timestamp_mapping.get(&peer_id) {
+                            if *prev_timestamp == end_timestamp {
+                                tracing::info!("Timestamp already exists");
+                            } else {
+                                //It is a retry request for IBD can be caused due to failure in any of the case
+                                //hence timestamp must be updated
+                                self.timestamp_mapping.insert(peer_id, end_timestamp);
+                            }
+                        };
+                    } else {
+                        tracing::info!("Timestamp received after receiving last batch of beads requested by peer from sync node");
+                        self.timestamp_mapping.insert(peer_id, end_timestamp);
+                    }
+                }
+                IBDCommands::FetchTimestamp {
+                    peer_id,
+                    timestamp_sender,
+                } => {
+                    if let Some(current_ts) = self.timestamp_mapping.get(&peer_id) {
+                        match timestamp_sender.send(*current_ts) {
+                            Ok(_) => {
+                                tracing::info!("Fetched existing timestamp for peer");
+                            }
+                            Err(error) => {
+                                tracing::error!(
+                                    error=?error,
+                                    "Error while sending existing timestamp to request channel"
+                                );
+                            }
+                        }
+                    } else {
+                        tracing::error!("No timestamp found corresponding to the peer id");
+                    }
+                }
+                IBDCommands::FetchAllTimestamps { sender } => {
+                    let timestamps_clone = self.timestamp_mapping.clone();
+                    match sender.send(timestamps_clone) {
+                        Ok(_) => {
+                            tracing::info!("Sent entire timestamp mapping to requester");
+                        }
+                        Err(error) => {
+                            tracing::error!(
+                                error=?error,
+                                "Error while sending timestamp mapping to requester"
+                            );
+                        }
+                    }
+                }
+                IBDCommands::UpdateIncomingBeadMapping {
+                    peer_id,
+                    handle,
+                    retry_or_not,
+                } => {
+                    if self.incoming_bead_mapping.contains_key(&peer_id) {
+                        if retry_or_not {
+                            if let Some(mapped_tuple) = self.incoming_bead_mapping.get_mut(&peer_id)
+                            {
+                                //Aborting the previous handle
+                                if let Some(ibd_incoming_handle) = &mapped_tuple.1 {
+                                    ibd_incoming_handle.abort();
+                                }
+                                //Updating retry count and setting newer handle to None
+                                *mapped_tuple = (mapped_tuple.0 + 1, None);
+                            }
+                        } else {
+                            //If it is not a retry then we can use the previously stored value
+                            if let Some(mapped_tuple) = self.incoming_bead_mapping.get_mut(&peer_id)
+                            {
+                                *mapped_tuple = (mapped_tuple.0, handle);
+                            }
+                        }
+                    } else {
+                        self.incoming_bead_mapping.insert(peer_id, (0, None));
+                    }
+                }
+                IBDCommands::GetIncomingBeadRetryCount {
+                    peer_id,
+                    retry_sender,
+                } => {
+                    let retries = self
+                        .incoming_bead_mapping
+                        .get(&peer_id)
+                        .map(|entry| entry.0)
+                        .unwrap_or(u64::MAX);
+
+                    let _ = retry_sender.send(retries);
+
+                    tracing::debug!("Fetched retry count for peer {} -> {}", peer_id, retries);
+                }
+                IBDCommands::AbortWaitHandle { peer_id } => {
+                    if let Some(incoming_mapping) = self.incoming_bead_mapping.get_mut(&peer_id) {
+                        if let Some(ibd_wait_handle) = &incoming_mapping.1 {
+                            ibd_wait_handle.abort();
+                        }
+                        incoming_mapping.1 = None;
                     };
                 }
             }

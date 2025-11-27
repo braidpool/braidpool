@@ -265,7 +265,6 @@ impl Braid {
             return Some(self.beads.clone());
         }
         let mut response_beads = Vec::new();
-        let mut found_start = false;
         let mut smallest_index = usize::MAX;
         //finding the starting index
         for hash in &old_tips {
@@ -273,7 +272,6 @@ impl Braid {
                 if index < smallest_index {
                     smallest_index = index;
                 }
-                found_start = true;
             }
         }
         //If somehow no bead matched that can be due to possible latency/fork so send all the beads instead as fallback
@@ -294,10 +292,13 @@ impl Braid {
                 break;
             }
         }
+        if smallest_cohort_index == usize::MAX {
+            return Some(self.beads.clone());
+        }
         tracing::debug!(
-            smallest_index=?smallest_index,"Smallest possible cohort index for which the given smallest index is a part of - ",
+            smallest_index=?smallest_index,"Smallest possible cohort index for which the given smallest index is a part of",
         );
-        while (smallest_cohort_index < self.cohorts.len()) {
+        while smallest_cohort_index < self.cohorts.len() {
             let cohort = &self.cohorts[smallest_cohort_index];
             for bead_index in &cohort.0 {
                 let curr_bead = self.beads[*bead_index].clone();
@@ -305,7 +306,7 @@ impl Braid {
                 if !old_tips.contains(&curr_bead.block_header.block_hash()) {
                     response_beads.push(curr_bead);
                 } else {
-                    println!("This bead is already present in old tips thus skipping");
+                    tracing::debug!("This bead is already present in old tips thus skipping");
                 }
             }
             smallest_cohort_index += 1;

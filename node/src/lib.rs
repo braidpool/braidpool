@@ -247,6 +247,8 @@ pub async fn ipc_template_consumer(
 }
 pub enum SwarmCommand {
     PropagateValidBead { bead_bytes: Vec<u8> },
+    //Intiate IBD after waiting for connection_mapping to be populated via peer discovery
+    InitiateIBD,
 }
 pub struct SwarmHandler {
     pub command_sender: Sender<SwarmCommand>,

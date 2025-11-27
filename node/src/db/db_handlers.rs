@@ -1,6 +1,8 @@
+#[cfg(test)]
+use crate::braid::consensus_functions;
 use crate::{
     bead::Bead,
-    braid::{consensus_functions, Braid},
+    braid::Braid,
     db::{init_db::init_db, BraidpoolDBTypes, InsertTupleTypes},
     error::DBErrors,
 };
@@ -88,7 +90,6 @@ impl DBHandler {
         txs_json: String,
         relative_json: String,
         parent_timestamp_json: String,
-        _ancestor_mapping: &HashMap<usize, HashSet<usize>>,
         bead_id: &usize,
     ) -> Result<(), DBErrors> {
         trace!("Sequential insertion query received");
@@ -102,7 +103,15 @@ impl DBHandler {
         let payout_addr_bytes = bead.committed_metadata.payout_address.as_bytes().to_vec();
         let public_key_bytes = bead.committed_metadata.comm_pub_key.to_vec();
         let signature_bytes = bead.uncommitted_metadata.signature.to_vec();
-        let mut conn = self.db_connection_pool.lock().await.begin().await.unwrap();
+        let mut conn = match self.db_connection_pool.lock().await.begin().await {
+            Ok(conn) => conn,
+            Err(err) => {
+                error!("Failed to begin DB transaction: {}", err);
+                return Err(DBErrors::ConnectionToSQlitePoolFailed {
+                    error: err.to_string(),
+                });
+            }
+        };
         //All fields are in be format
         if let Err(e) = sqlx::query(&INSERT_QUERY)
             .bind(*bead_id as i64)
@@ -181,14 +190,6 @@ impl DBHandler {
                                 }
                             }
                         }
-                        //Constructing ancestor set, children set will be empty as it will become the next tip
-                        let mut ancestor_mapping: HashMap<usize, HashSet<usize>> = HashMap::new();
-                        consensus_functions::updating_ancestors(
-                            &braid_data,
-                            bead_to_insert.block_header.block_hash(),
-                            &mut ancestor_mapping,
-                            &braid_parent_set,
-                        );
                         //Considering the index of the beads in braid will be same as the (insertion ids-1)
                         let bead_id = braid_data
                             .bead_index_mapping
@@ -260,7 +261,6 @@ impl DBHandler {
                                 txs_json,
                                 relative_json,
                                 parent_timestamp_json,
-                                &ancestor_mapping,
                                 bead_id,
                             )
                             .await
