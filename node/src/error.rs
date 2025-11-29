@@ -2,6 +2,7 @@
 use std::{fmt, path::PathBuf};
 
 use crate::stratum::{BlockTemplate, JobDetails};
+use crate::TemplateId;
 use bitcoin::address::ParseError as AddressParseError;
 use tokio::sync::oneshot;
 
@@ -156,7 +157,7 @@ pub enum StratumErrors {
     },
     MiningJobNotFound {
         job_id: Option<u64>,
-        template_id: Option<String>,
+        template_id: Option<TemplateId>,
     },
     MiningJobInsertError {
         mining_job: JobDetails,

@@ -21,7 +21,7 @@ fn main() {
                     Ok(entry) => {
                         let path = entry.path();
                         if path.extension().and_then(|ext| ext.to_str()) == Some("capnp") {
-                            println!("cargo:warning=Compiling schema file: {:?}", path);
+                            println!("cargo:warn=Compiling schema file: {:?}", path);
                             //The output path for rust bindings is default `OUT_DIR` -
                             if let Err(e) = capnpc::CompilerCommand::new()
                                 .src_prefix("schema")
