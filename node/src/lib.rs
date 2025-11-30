@@ -37,6 +37,7 @@ use crate::{
 use std::error::Error;
 #[macro_use]
 pub mod macros;
+pub mod audit;
 pub mod bead;
 pub mod behaviour;
 pub mod braid;
@@ -52,7 +53,9 @@ pub mod rpc_server;
 pub mod stratum;
 pub mod template_creator;
 pub mod uncommitted_metadata;
+pub mod upstream_pool;
 pub mod utils;
+use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 //Including the capnp modules after building while compiling the workspace.package
@@ -72,15 +75,41 @@ pub mod init_capnp {
     include!(concat!(env!("OUT_DIR"), "/init_capnp.rs"));
 }
 
-/// Unique identifier assigned to each block template.
-pub type TemplateId = u64;
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum TemplateId {
+    /// Internal Braidpool template (sequential counter)
+    Braidpool(u64),
+    /// Upstream pool template (arbitrary string from upstream)
+    Upstream(String),
+}
+
+impl TemplateId {
+    pub fn from_upstream_string(job_id: &str) -> Self {
+        TemplateId::Upstream(job_id.to_string())
+    }
+}
+
+impl Default for TemplateId {
+    fn default() -> Self {
+        TemplateId::Braidpool(0)
+    }
+}
+
+impl fmt::Display for TemplateId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TemplateId::Braidpool(id) => write!(f, "Braidpool({})", id),
+            TemplateId::Upstream(id) => write!(f, "Upstream({})", id),
+        }
+    }
+}
 
 /// Global template ID counter that persists across the application lifetime
 static GLOBAL_TEMPLATE_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 /// Get the next unique template ID (increments on each call)
 pub fn get_next_template_id() -> TemplateId {
-    GLOBAL_TEMPLATE_COUNTER.fetch_add(1, Ordering::SeqCst)
+    TemplateId::Braidpool(GLOBAL_TEMPLATE_COUNTER.fetch_add(1, Ordering::SeqCst))
 }
 
 /// **Length of the extranonce prefix (in bytes).**
@@ -153,17 +182,17 @@ pub async fn ipc_template_consumer(
             let template_id = get_next_template_id();
             {
                 let mut latest_id = latest_template_id.lock().await;
-                *latest_id = template_id;
+                *latest_id = template_id.clone();
             }
 
             // Cache the IPC template with this new ID
             {
                 let mut cache = template_cache.lock().await;
-                cache.insert(template_id, ipc_template.clone());
+                cache.insert(template_id.clone(), ipc_template.clone());
 
                 // Cleanup old templates
                 if cache.len() > MAX_CACHED_TEMPLATES {
-                    let mut ids: Vec<TemplateId> = cache.keys().copied().collect();
+                    let mut ids: Vec<TemplateId> = cache.keys().cloned().collect();
                     ids.sort_unstable();
 
                     let remove_count = cache.len() - MAX_CACHED_TEMPLATES;
@@ -230,7 +259,7 @@ pub async fn ipc_template_consumer(
                 .send(NotifyCmd::SendToAll {
                     template: template,
                     merkle_branch_coinbase,
-                    template_id,
+                    template_id: template_id.clone(),
                 })
                 .await;
             match notification_sent_or_not {

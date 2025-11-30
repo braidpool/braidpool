@@ -73,6 +73,26 @@ pub struct Cli {
     /// Path to Bitcoin Core IPC socket (Unix domain socket on Linux/macOS)
     #[arg(long, default_value = DEFAULT_IPC_SOCKET)]
     pub ipc_socket: String,
+
+    /// Enable audit mode (proxy to upstream pool)
+    #[arg(long, default_value = "false")]
+    pub audit: bool,
+
+    /// Upstream pool hostname (required if audit is enabled)
+    #[arg(long)]
+    pub upstream_host: Option<String>,
+
+    /// Upstream pool port the default is 3334 (for Ocean)
+    #[arg(long, default_value = "3334")]
+    pub upstream_port: u16,
+
+    /// Upstream pool username (Bitcoin address for payout)
+    #[arg(long)]
+    pub upstream_username: Option<String>,
+
+    /// Upstream pool password (default: "x")
+    #[arg(long, default_value = "x")]
+    pub upstream_password: String,
 }
 
 #[cfg(test)]

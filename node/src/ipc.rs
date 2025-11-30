@@ -265,7 +265,7 @@ pub async fn ipc_block_listener(
                                     ipc_template,
                                     header,
                                     bitcoin::consensus::encode::serialize(&coinbase_transaction),
-                                    template_id,
+                                    template_id.clone(),
                                     Some(RequestPriority::Critical),
                                 )
                                 .await
