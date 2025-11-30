@@ -34,6 +34,8 @@ use crate::{
     uncommitted_metadata::UnCommittedMetadata,
 };
 use std::error::Error;
+#[macro_use]
+pub mod macros;
 pub mod bead;
 pub mod behaviour;
 pub mod braid;
@@ -247,7 +249,7 @@ pub async fn ipc_template_consumer(
 }
 pub enum SwarmCommand {
     PropagateValidBead { bead_bytes: Vec<u8> },
-    //Intiate IBD after waiting for connection_mapping to be populated via peer discovery
+    //Initiate IBD after waiting for connection_mapping to be populated via peer discovery
     InitiateIBD,
 }
 pub struct SwarmHandler {

@@ -224,7 +224,15 @@ impl IBDManager {
                             {
                                 //Aborting the previous handle
                                 if let Some(ibd_incoming_handle) = &mapped_tuple.1 {
-                                    ibd_incoming_handle.abort();
+                                    if ibd_incoming_handle.is_finished() {
+                                        tracing::info!("Previous IBD incoming handle for peer {} already finished", peer_id);
+                                    } else {
+                                        ibd_incoming_handle.abort();
+                                        tracing::info!(
+                                            "Aborted previous IBD incoming handle for peer {}",
+                                            peer_id
+                                        );
+                                    }
                                 }
                                 //Updating retry count and setting newer handle to None
                                 *mapped_tuple = (mapped_tuple.0 + 1, None);

@@ -19,7 +19,7 @@ use node::ibd_manager::{IBD_TRIGGER_AFTER, MAX_IBD_INCOMING_THRESHOLD, MAX_IBD_R
 use node::utils::BeadHash;
 use node::SwarmHandler;
 use node::{
-    bead::{self, Bead, BeadRequest, BeadSyncError},
+    bead::{Bead, BeadHashes, BeadRequest, BeadResponse, BeadSyncError},
     behaviour::{self, BEAD_ANNOUNCE_PROTOCOL, BRAIDPOOL_TOPIC},
     braid, cli,
     db::db_handlers::DBHandler,
@@ -34,7 +34,7 @@ use node::{
 use std::collections::HashSet;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{collections::HashMap, error::Error};
@@ -46,8 +46,8 @@ use tracing::{debug, error, info, trace, warn};
 use behaviour::{BraidPoolBehaviour, BraidPoolBehaviourEvent};
 
 use crate::behaviour::KADPROTOCOLNAME;
-const LATENCY_ALPHA: u64 = 10;
-//boot nodes peerIds
+const LATENCY_ALPHA: u64 = 10; // seconds
+                               //boot nodes peerIds
 const BOOTNODES: [&str; 1] = ["12D3KooWG9z8TziaNuYyEcc9FeUC3FTtrEf2XSnSdDpLvx4Jh2w3"];
 //dns NS
 const SEED_DNS: &str = "/dnsaddr/french.braidpool.net";
@@ -65,15 +65,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let _ibd_handler = tokio::spawn(async move {
         ibd_manager.handle_ibd_command().await;
     });
-    //False if not under ibd otherwise true
+    //False if not under ibd otherwise true at start will be in IBD by default
     let ibd_or_not: AtomicBool = AtomicBool::new(true);
     let ibd_spinlock = Arc::new(ibd_or_not);
     // Initialize tracing with colors and module prefixes
     setup_tracing()?;
-    let genesis_beads = Vec::from([]);
     // Initializing the braid object with read write lock
     //for supporting concurrent readers and single writer
-    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(Vec::from([]))));
     //Initializing DB and db command handler
     let (mut _db_handler, db_tx) = DBHandler::new(Arc::clone(&braid)).await.unwrap();
     let db_connection_pool = _db_handler.db_connection_pool.clone();
@@ -477,7 +476,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                      let mut braid_lock = braid.write().await;
                                      braid_lock.extend(&bead)
                                  };
-                                 if ibd_spinlock.load(std::sync::atomic::Ordering::SeqCst){
+                                 if ibd_spinlock.load(Ordering::SeqCst){
                                     let broadcast_ts = bead.uncommitted_metadata.broadcast_timestamp.clone().to_u32();
                                     let (ts_tx, ts_rx) = tokio::sync::oneshot::channel();
                                     if let Err(e) = ibd_command_tx
@@ -488,8 +487,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     let timestamp_map = match ts_rx.await {
                                         Ok(map) => map,
                                         Err(_) => {
-                                            tracing::warn!("Failed to receive timestamp map");
-                                            return;
+                                            tracing::error!("Failed to receive timestamp map");
+                                            continue;
                                         }
                                     };
                                       //If the received  bead exceeds the timestamp of ibd completion wrt to a sync node
@@ -500,11 +499,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                             swarm.behaviour_mut().bead_sync.send_request(
                                                 &peer,
                                                 BeadRequest::GetBeads(
-                                                    bead.committed_metadata
-                                                        .parents
-                                                        .clone()
-                                                        .into_iter()
-                                                        .collect(),
+                                                    BeadHashes(
+                                                        bead.committed_metadata
+                                                            .parents
+                                                            .clone()
+                                                            .into_iter()
+                                                            .collect(),
+                                                    )
                                                 ),
                                             );
                                         } else {
@@ -558,14 +559,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                                 continue;
                                             },
                                             braid::AddBeadStatus::BeadAdded | braid::AddBeadStatus::DagAlreadyContainsBead =>{
-                                                ibd_spinlock.store(false,std::sync::atomic::Ordering::SeqCst);
+                                                ibd_spinlock.store(false,Ordering::SeqCst);
                                                 continue;
                                             },
                                            }
 
                                         }
                                         else{
-                                            ibd_spinlock.store(false,std::sync::atomic::Ordering::SeqCst);
+                                            ibd_spinlock.store(false,Ordering::SeqCst);
                                             continue;
                                         }
                                     }
@@ -578,11 +579,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                             swarm.behaviour_mut().bead_sync.send_request(
                                                 &peer,
                                                 BeadRequest::GetBeads(
-                                                    bead.committed_metadata
-                                                        .parents
-                                                        .clone()
-                                                        .into_iter()
-                                                        .collect(),
+                                                    BeadHashes(
+                                                        bead.committed_metadata
+                                                            .parents
+                                                            .clone()
+                                                            .into_iter()
+                                                            .collect(),
+                                                    )
                                                 ),
                                             );
                                         } else {
@@ -766,78 +769,116 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         } => {
                             // Handle the bead sync request here
                             match request {
-                                bead::BeadRequest::GetBeads(hashes) => {
-                                    let mut beads = Vec::new();
-                                    {
-                                        let braid_lock = braid.read().await;
-                                        for hash in hashes.iter() {
-                                            if let Some(index) =
-                                                braid_lock.bead_index_mapping.get(hash)
-                                            {
-                                                if let Some(bead) = braid_lock.beads.get(*index) {
-                                                    beads.push(bead.clone());
+                                BeadRequest::GetBeads(hashes) => {
+                                    // Check if we're still in IBD
+                                    if ibd_spinlock.load(Ordering::SeqCst) {
+                                        swarm.behaviour_mut().respond_with_error(
+                                            channel,
+                                            BeadSyncError::PeerSyncing,
+                                        );
+                                    } else {
+                                        let mut beads = Vec::new();
+                                        {
+                                            let braid_lock = braid.read().await;
+                                            for hash in hashes.iter() {
+                                                if let Some(index) =
+                                                    braid_lock.bead_index_mapping.get(hash)
+                                                {
+                                                    if let Some(bead) = braid_lock.beads.get(*index) {
+                                                        beads.push(bead.clone());
+                                                    }
                                                 }
                                             }
                                         }
+                                        //Sending all the beads requested in the hashes supplied during `GetData` request
+                                        swarm.behaviour_mut().respond_with_beads(channel, beads);
                                     }
-                                    //Sending all the beads requested in the hashes supplied during `GetData` request
-                                    swarm.behaviour_mut().respond_with_beads(channel, beads);
                                 }
-                                bead::BeadRequest::GetTips => {
-                                    let tips;
-                                    {
-                                        let braid_lock = braid.read().await;
-                                        tips = braid_lock
-                                            .tips
-                                            .iter()
-                                            .filter_map(|index| braid_lock.beads.get(*index))
-                                            .cloned()
-                                            .map(|bead| bead.block_header.block_hash())
-                                            .collect();
-                                    }
-                                    swarm.behaviour_mut().respond_with_tips(channel, tips);
-                                }
-                                bead::BeadRequest::GetGenesis => {
-                                    let genesis;
-                                    {
-                                        let braid_lock = braid.read().await;
-                                        genesis = braid_lock
-                                            .genesis_beads
-                                            .iter()
-                                            .filter_map(|index| braid_lock.beads.get(*index))
-                                            .cloned()
-                                            .map(|bead| bead.block_header.block_hash())
-                                            .collect();
-                                    }
-                                    swarm.behaviour_mut().respond_with_genesis(channel, genesis);
-                                }
-                                bead::BeadRequest::GetAllBeads => {
-                                    let all_beads;
-                                    {
-                                        let braid_lock = braid.read().await;
-                                        all_beads = braid_lock.beads.iter().cloned().collect();
-                                    }
-                                    swarm.behaviour_mut().respond_with_beads(channel, all_beads);
-                                }
-                                bead::BeadRequest::GetBeadsAfter(hashes) => {
-                                    let beads = braid.read().await.get_beads_after(hashes);
-                                    if let Some(response_beads) = beads {
-                                        let mut computed_beads_hashes:Vec<BeadHash> = Vec::new();
-                                        for bead in response_beads.into_iter(){
-                                            computed_beads_hashes.push(bead.block_header.block_hash());
-                                        }
-                                        //Sending the corresponding bead hashes requested by the new peer for IBD that will
-                                        //be after the new peer's `Tips`.
-                                        swarm
-                                            .behaviour_mut()
-                                            .respond_with_beadhashes(channel, computed_beads_hashes);
-                                    } else {
+                                BeadRequest::GetTips => {
+                                    // Check if we're still in IBD
+                                    if ibd_spinlock.load(Ordering::SeqCst) {
                                         swarm.behaviour_mut().respond_with_error(
                                             channel,
-                                            BeadSyncError::Other(String::from(
-                                                "provided hashes not found",
-                                            )),
+                                            BeadSyncError::PeerSyncing,
                                         );
+                                    } else {
+                                        let tips;
+                                        {
+                                            let braid_lock = braid.read().await;
+                                            tips = braid_lock
+                                                .tips
+                                                .iter()
+                                                .filter_map(|index| braid_lock.beads.get(*index))
+                                                .cloned()
+                                                .map(|bead| bead.block_header.block_hash())
+                                                .collect();
+                                        }
+                                        swarm.behaviour_mut().respond_with_tips(channel, tips);
+                                    }
+                                }
+                                BeadRequest::GetGenesis => {
+                                    // Check if we're still in IBD
+                                    if ibd_spinlock.load(Ordering::SeqCst) {
+                                        swarm.behaviour_mut().respond_with_error(
+                                            channel,
+                                            BeadSyncError::PeerSyncing,
+                                        );
+                                    } else {
+                                        let genesis;
+                                        {
+                                            let braid_lock = braid.read().await;
+                                            genesis = braid_lock
+                                                .genesis_beads
+                                                .iter()
+                                                .filter_map(|index| braid_lock.beads.get(*index))
+                                                .cloned()
+                                                .map(|bead| bead.block_header.block_hash())
+                                                .collect();
+                                        }
+                                        swarm.behaviour_mut().respond_with_genesis(channel, genesis);
+                                    }
+                                }
+                                BeadRequest::GetAllBeads => {
+                                    // Check if we're still in IBD
+                                    if ibd_spinlock.load(Ordering::SeqCst) {
+                                        swarm.behaviour_mut().respond_with_error(
+                                            channel,
+                                            BeadSyncError::PeerSyncing,
+                                        );
+                                    } else {
+                                        let all_beads;
+                                        {
+                                            let braid_lock = braid.read().await;
+                                            all_beads = braid_lock.beads.iter().cloned().collect();
+                                        }
+                                        swarm.behaviour_mut().respond_with_beads(channel, all_beads);
+                                    }
+                                }
+                                BeadRequest::GetBeadsAfter(hashes) => {
+                                    // Check if we're still in IBD
+                                    if ibd_spinlock.load(Ordering::SeqCst) {
+                                        swarm.behaviour_mut().respond_with_error(
+                                            channel,
+                                            BeadSyncError::PeerSyncing,
+                                        );
+                                    } else {
+                                        let beads = braid.read().await.get_beads_after(hashes.into());
+                                        if let Some(response_beads) = beads {
+                                            let mut computed_beads_hashes:Vec<BeadHash> = Vec::new();
+                                            for bead in response_beads.into_iter(){
+                                                computed_beads_hashes.push(bead.block_header.block_hash());
+                                            }
+                                            //Sending the corresponding bead hashes requested by the new peer for IBD that will
+                                            //be after the new peer's `Tips`.
+                                            swarm
+                                                .behaviour_mut()
+                                                .respond_with_beadhashes(channel, computed_beads_hashes);
+                                        } else {
+                                            swarm.behaviour_mut().respond_with_error(
+                                                channel,
+                                                BeadSyncError::BeadHashNotFound,
+                                            );
+                                        }
                                     }
                                 }
                             }
@@ -847,8 +888,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             response,
                         } => {
                             match response {
-                                bead::BeadResponse::Beads(beads)
-                                | bead::BeadResponse::GetAllBeads(beads) => {
+                                BeadResponse::Beads(beads)
+                                | BeadResponse::GetAllBeads(beads) => {
                                     let (beads_tx, beads_rx) = tokio::sync::oneshot::channel::<Vec<BeadHash>>();
                                     //Fetching the pruned bead-hashes received during `GetBeadAfter` request
                                     match ibd_command_tx.send(IBDCommands::FetchGetBeadMapping { peer_id: peer.to_string(), beadhash_sender: beads_tx }).await{
@@ -874,7 +915,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                             received_beads
                                         },
                                         Err(error)=>{
-                                            error!(error=?error.to_string(),"An ERROR occurred while receiving cached beads from ibd_handler due to , re-trying IBD");
+                                            error!(error=?error.to_string(),"An error occurred while receiving cached beads from ibd_handler due to , re-trying IBD");
                                             match swarm_command_sender.send(SwarmCommand::InitiateIBD).await{
                                                 Ok(_)=>{
                                                     info!("Reinitiating IBD command sent to swarm handler");
@@ -896,7 +937,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                         } else if let braid::AddBeadStatus::BeadAdded = status {
                                             // update score of the peer
                                             peer_manager.update_score(&peer, 1.0);
-                                            //persisting the recived beads from peer onto DB(disk)
+                                            //persisting the received beads from peer onto DB(disk)
                                             match db_tx.send(node::db::BraidpoolDBTypes::InsertTupleTypes { query: node::db::InsertTupleTypes::InsertBeadSequentially { bead_to_insert: bead } }).await{
                                                 Ok(_)=>{
                                                     info!(beadhash=?curr_beadhash,"Bead received in IBD persisted over disk with beadhash and status BeadAdded");
@@ -976,10 +1017,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                                     //Sleeping for a fixed duration to be set according to statistical estimates
                                                     tokio::time::sleep(Duration::from_secs(MAX_IBD_INCOMING_THRESHOLD)).await;
                                                     //We will check if no bead is `incoming` after the duration of 600 seconds then we will reset/set ibd_flag accordingly
-                                                    if ibd_spinlock_ref.load(std::sync::atomic::Ordering::SeqCst) == true{
+                                                    if ibd_spinlock_ref.load(Ordering::SeqCst){
                                                         //If no incoming is received during the period then we can say
                                                         //that ibd wrt the given sync node is successfully completed
-                                                        ibd_spinlock_ref.store(false,std::sync::atomic::Ordering::SeqCst);
+                                                        ibd_spinlock_ref.store(false,Ordering::SeqCst);
                                                         warn!("Maximum threshold wrt IBD incoming exceeded thus ibd_flag being set to false");
                                                     }
 
@@ -1000,7 +1041,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                         };
                                     }
                                 }
-                                 bead::BeadResponse::GetBeadsAfter(bead_hashes)=>{
+                                 BeadResponse::GetBeadsAfter(bead_hashes)=>{
                                     //Getting all the beadhashes after the common oldest in both the peers
                                     let (tips_tx, tips_rx) = tokio::sync::oneshot::channel::<Vec<BeadHash>>();
                                     match ibd_command_tx.send(IBDCommands::FetchCachedTips { peer_id: peer.to_string(), tips_sender: tips_tx }).await{
@@ -1079,7 +1120,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     }
 
                                 }
-                                bead::BeadResponse::Tips(tips) => {
+                                BeadResponse::Tips(tips) => {
                                     info!(tips = ?tips, tip_count = %tips.len(), "Received braid tips");
                                     //If received tips are already present in the local braid arc then we can stop
                                     //IBD and continue with mining
@@ -1105,14 +1146,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
                                     let flag = tips.iter().all(|tip_hash| bead_hash_set.contains(tip_hash));
 
-                                    if flag == true{
+                                    if flag{
                                         //No need to proceed further and continue to next event
                                         info!("Peer already synced to tip");
                                         //IBD flag can be set  as the current bead is already synced//
-                                        ibd_spinlock.store(false, std::sync::atomic::Ordering::SeqCst);
+                                        ibd_spinlock.store(false, Ordering::SeqCst);
                                         continue;
                                     }
-                                  let _update_tip_cache_ack = match  ibd_command_tx.send(IBDCommands::UpdateIBDTipsMapping { received_tips: tips, peer_id: peer.to_string() }).await{
+                                  let _update_tip_cache_ack = match  ibd_command_tx.send(IBDCommands::UpdateIBDTipsMapping { received_tips: tips.0, peer_id: peer.to_string() }).await{
                                     Ok(_)=>{
                                         info!("Tip cache update successfully");
                                     },
@@ -1133,15 +1174,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                        current_tip_hashes.push(current_bead.block_header.block_hash());
                                     });
                                     //Sending the current bead hashes for the receiving of beads to start in batches
-                                    let get_bead_start_request:BeadRequest = BeadRequest::GetBeadsAfter(current_tip_hashes);
+                                    let get_bead_start_request:BeadRequest = BeadRequest::GetBeadsAfter(BeadHashes(current_tip_hashes));
                                     swarm.behaviour_mut().bead_sync.send_request(&peer,get_bead_start_request);
 
                                 }
-                                bead::BeadResponse::Genesis(genesis) => {
+                                BeadResponse::Genesis(genesis) => {
                                     info!(genesis=?genesis,"Received genesis beads: ");
                                     let status = {
                                         let braid_lock = braid.read().await;
-                                        braid_lock.check_genesis_beads(&genesis)
+                                        braid_lock.check_genesis_beads(&genesis.0)
                                     };
                                     match status {
                                         braid::GenesisCheckStatus::GenesisBeadsValid => {
@@ -1151,24 +1192,29 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                             warn!(peer = %peer, "Missing genesis bead");
                                             swarm
                                                 .behaviour_mut()
-                                                .request_beads(peer, &genesis);
+                                                .request_beads(peer, &genesis.0);
                                         }
                                         braid::GenesisCheckStatus::GenesisBeadsCountMismatch => {
                                             warn!(
-                                                received = %genesis.len(),
+                                                received = %genesis.0.len(),
                                                 peer = %peer,
                                                 "Genesis bead count mismatch"
                                             );
                                         }
                                     }
                                 }
-                                bead::BeadResponse::Error(error) => match error {
+                                BeadResponse::Error(error) => match error {
                                     BeadSyncError::GenesisMismatch => {
                                         warn!("Genesis mismatch error received");
                                         swarm.behaviour_mut().request_genesis(peer.clone());
                                     }
-                                    BeadSyncError::Other(ref err_msg) => {
-                                        error!(err_msg=?err_msg,"Error in bead sync response:");
+                                    BeadSyncError::BeadHashNotFound => {
+                                        warn!("Peer requested bead hashes not found in local store");
+                                    }
+                                    BeadSyncError::PeerSyncing => {
+                                        warn!("Peer is still in IBD, retry with different peer");
+                                        // FIXME Could retry with different peer or wait
+                                        // For now, log and continue
                                     }
                                 },
                             };
@@ -1196,47 +1242,61 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         info!("Initiating IBD after peer discovery and selecting peer with lowest latency score");
                         //Evicting lowest latency peer id
                         let peer_ids = peer_manager.get_top_k_peers_for_propagation(1);
-                        let lowest_latency_peer = peer_ids.get(0).unwrap();
-                        let (retry_count_tx,retry_count_rx) = tokio::sync::oneshot::channel();
-                        match ibd_command_tx.send(IBDCommands::GetIncomingBeadRetryCount{peer_id:*lowest_latency_peer,retry_sender:retry_count_tx}).await{
-                            Ok(_)=>{
-                                info!(peer=?lowest_latency_peer,"Retry count corresponding to peer received successfully");
-                            },
-                            Err(error)=>{
-                                error!(error=?error,"An error occurred while sending retry count to IBDHandler");
-                            }
-                        }
-                        let retry_cnt = retry_count_rx.await.unwrap();
-                        if retry_cnt >= MAX_IBD_RETRIES && retry_cnt != u64::MAX{
-                            warn!("Corresponding peer {:?} retries for IBD exceeded selecting next lowest latent peer",lowest_latency_peer);
+                        if peer_ids.len() == 0 {
+                            warn!("No peer available for syncing to take place");
+                            //TODO: A fallback should be there to save all the connections and revert to a reachable connection which is established in future
                             continue;
                         }
-                        else if retry_cnt == u64::MAX{
-                            //First time syncing is being done wrt the provided peer
-                            match ibd_command_tx.send(IBDCommands::UpdateIncomingBeadMapping{peer_id:*lowest_latency_peer,retry_or_not:false,handle:None}).await{
-                                Ok(_)=>{
-                                    info!("Incoming bead command sent successfully");
-                                    let sync_start_request:BeadRequest = BeadRequest::GetTips;
-                                    swarm.behaviour_mut().bead_sync.send_request(&lowest_latency_peer, sync_start_request);
-                                },
-                                Err(error)=>{
-                                    error!(error=?error,"An error occurred while sending Update Incoming due to ");
-                                }
-                            };
-                        }
                         else{
-                            //Case of retry is there
-                            match ibd_command_tx.send(IBDCommands::UpdateIncomingBeadMapping{peer_id:*lowest_latency_peer,retry_or_not:true,handle:None}).await{
+                            let lowest_latency_peer = peer_ids.get(0).unwrap();
+                            let (retry_count_tx,retry_count_rx) = tokio::sync::oneshot::channel();
+                            match ibd_command_tx.send(IBDCommands::GetIncomingBeadRetryCount{peer_id:*lowest_latency_peer,retry_sender:retry_count_tx}).await{
                                 Ok(_)=>{
-                                    info!("Incoming bead command sent successfully");
+                                    info!(peer=?lowest_latency_peer,"Retry count corresponding to peer received successfully");
                                 },
                                 Err(error)=>{
-                                    error!(error=?error,"An error occurred while sending Update Incoming due to ");
+                                    error!(error=?error,"An error occurred while sending retry count to IBDHandler");
+                                }
+                            }
+                            let retry_cnt = match retry_count_rx.await {
+                                Ok(cnt) => cnt,
+                                Err(e) => {
+                                    error!(error=?e, "Failed to receive retry count from IBDHandler, channel closed or sender dropped");
+                                    continue;
                                 }
                             };
-                            //Initiating IBD and sending the request to fetch tips and store them in a centralized mapping owned by main_thread .
-                            let sync_start_request:BeadRequest = BeadRequest::GetTips;
-                            swarm.behaviour_mut().bead_sync.send_request(&lowest_latency_peer, sync_start_request);
+                            if retry_cnt >= MAX_IBD_RETRIES && retry_cnt != u64::MAX{
+                                warn!("Corresponding peer {:?} retries for IBD exceeded selecting next lowest latent peer",lowest_latency_peer);
+                                continue;
+                            }
+                            else if retry_cnt == u64::MAX{
+                                //First time syncing is being done wrt the provided peer
+                                match ibd_command_tx.send(IBDCommands::UpdateIncomingBeadMapping{peer_id:*lowest_latency_peer,retry_or_not:false,handle:None}).await{
+                                    Ok(_)=>{
+                                        info!("Incoming bead command sent successfully");
+                                        let sync_start_request:BeadRequest = BeadRequest::GetTips;
+                                        swarm.behaviour_mut().bead_sync.send_request(&lowest_latency_peer, sync_start_request);
+                                    },
+                                    Err(error)=>{
+                                        error!(error=?error,"An error occurred while sending Update Incoming due to ");
+                                    }
+                                };
+                            }
+                            else{
+                                //Case of retry is there
+                                match ibd_command_tx.send(IBDCommands::UpdateIncomingBeadMapping{peer_id:*lowest_latency_peer,retry_or_not:true,handle:None}).await{
+                                    Ok(_)=>{
+                                        info!("Incoming bead command sent successfully");
+                                    },
+                                    Err(error)=>{
+                                        error!(error=?error,"An error occurred while sending Update Incoming due to ");
+                                    }
+                                };
+                                //Initiating IBD and sending the request to fetch tips and store them in a centralized mapping owned by main_thread .
+                                let sync_start_request:BeadRequest = BeadRequest::GetTips;
+                                swarm.behaviour_mut().bead_sync.send_request(&lowest_latency_peer, sync_start_request);
+                            }
+
                         }
                      }
                  }
