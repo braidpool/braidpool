@@ -1,9 +1,11 @@
 use super::Bead;
 use super::BeadCodec;
 use super::BeadHash;
+use super::BeadHashes;
 use super::BeadRequest;
 use super::BeadResponse;
 use super::BeadSyncError;
+use super::Beads;
 use super::CommittedMetadata;
 use super::UnCommittedMetadata;
 use crate::committed_metadata::TimeVec;
@@ -164,11 +166,7 @@ fn test_serialized_bead() {
 
 #[test]
 fn test_bead_request_serialization() {
-    let request = BeadRequest::GetBeads(
-        vec![BeadHash::from_byte_array([0u8; 32])]
-            .into_iter()
-            .collect(),
-    );
+    let request = BeadRequest::GetBeads(vec![BeadHash::from_byte_array([0u8; 32])].into());
     let mut buffer = Vec::new();
     request.consensus_encode(&mut buffer).unwrap();
 
@@ -224,7 +222,7 @@ fn test_bead_response_serialization() {
         .committed_metadata(test_committed_metadata)
         .uncommitted_metadata(test_uncommitted_metadata)
         .build();
-    let response = BeadResponse::Beads(vec![test_bead]);
+    let response = BeadResponse::Beads(Beads(vec![test_bead]));
     let mut buffer = Vec::new();
     response.consensus_encode(&mut buffer).unwrap();
     let decoded = BeadResponse::consensus_decode(&mut buffer.as_slice()).unwrap();
@@ -251,20 +249,16 @@ fn test_codec_request_roundtrip() {
 #[test]
 fn test_codec_response_roundtrip() {
     let mut codec = BeadCodec::default();
-    let response = BeadResponse::Tips(
-        vec![
-            BeadHash::from_byte_array([
-                3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 1, 24, 12, 14, 35, 35, 34, 3, 42, 32, 32,
-                32, 32, 4, 32, 24, 5, 12, 1,
-            ]),
-            BeadHash::from_byte_array([
-                1, 2, 3, 4, 5, 6, 7, 8, 9, 1, 2, 3, 4, 5, 6, 7, 8, 9, 1, 2, 3, 4, 5, 6, 7, 8, 9, 1,
-                2, 3, 4, 5,
-            ]),
-        ]
-        .into_iter()
-        .collect(),
-    );
+    let response = BeadResponse::Tips(BeadHashes(vec![
+        BeadHash::from_byte_array([
+            3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 1, 24, 12, 14, 35, 35, 34, 3, 42, 32, 32, 32,
+            32, 4, 32, 24, 5, 12, 1,
+        ]),
+        BeadHash::from_byte_array([
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 1, 2, 3, 4, 5, 6, 7, 8, 9, 1, 2, 3, 4, 5, 6, 7, 8, 9, 1, 2,
+            3, 4, 5,
+        ]),
+    ]));
 
     // Serialize
     let mut buffer = Vec::new();
@@ -280,11 +274,8 @@ fn test_codec_response_roundtrip() {
 #[test]
 fn test_get_beads_after_serialization() {
     let mut codec = BeadCodec::default();
-    let request = BeadRequest::GetBeadsAfter(
-        vec![BeadHash::from_byte_array([0u8; 32])]
-            .into_iter()
-            .collect(),
-    );
+    let request =
+        BeadRequest::GetBeadsAfter(BeadHashes(vec![BeadHash::from_byte_array([0u8; 32])]));
 
     // Serialize
     let mut buffer = Vec::new();
@@ -305,10 +296,12 @@ fn test_bead_request_codec() {
 
     for request in vec![
         BeadRequest::GetTips,
-        BeadRequest::GetBeads(Vec::from([BeadHash::from_byte_array([0u8; 32])])),
+        BeadRequest::GetBeads(BeadHashes(Vec::from([BeadHash::from_byte_array(
+            [0u8; 32],
+        )]))),
         BeadRequest::GetGenesis,
         BeadRequest::GetAllBeads,
-        BeadRequest::GetBeadsAfter(vec![BeadHash::from_byte_array([0u8; 32])]),
+        BeadRequest::GetBeadsAfter(BeadHashes(vec![BeadHash::from_byte_array([0u8; 32])])),
     ] {
         // Serialize
         let mut buffer = Vec::new();
@@ -334,13 +327,13 @@ fn test_bead_response_codec() {
 
     // Test all BeadResponse variants
     let responses = vec![
-        BeadResponse::Beads(vec![test_bead.clone()]),
-        BeadResponse::Tips(vec![test_hash, test_hash2]),
-        BeadResponse::Genesis(vec![test_hash]),
-        BeadResponse::GetAllBeads(vec![test_bead.clone(), test_bead.clone()]),
-        BeadResponse::GetBeadsAfter(vec![test_bead.block_header.block_hash()]),
+        BeadResponse::Beads(Beads(vec![test_bead.clone()])),
+        BeadResponse::Tips(BeadHashes(vec![test_hash, test_hash2])),
+        BeadResponse::Genesis(BeadHashes(vec![test_hash])),
+        BeadResponse::GetAllBeads(Beads(vec![test_bead.clone(), test_bead.clone()])),
+        BeadResponse::GetBeadsAfter(BeadHashes(vec![test_bead.block_header.block_hash()])),
         BeadResponse::Error(BeadSyncError::GenesisMismatch),
-        BeadResponse::Error(BeadSyncError::Other("Test error message".to_string())),
+        BeadResponse::Error(BeadSyncError::BeadHashNotFound),
     ];
 
     for response in responses {
@@ -363,10 +356,8 @@ fn test_bead_sync_error_codec() {
     // Test BeadSyncError encoding/decoding directly (not through codec)
     let errors = vec![
         BeadSyncError::GenesisMismatch,
-        BeadSyncError::Other("Network timeout".to_string()),
-        BeadSyncError::Other("Invalid bead format".to_string()),
-        BeadSyncError::Other("".to_string()), // Empty string edge case
-        BeadSyncError::Other("Very long error message that tests the string encoding and decoding with special characters: !@#$%^&*()_+-=[]{}|;':,.<>?".to_string()),
+        BeadSyncError::BeadHashNotFound,
+        BeadSyncError::PeerSyncing,
     ];
 
     for error in errors {

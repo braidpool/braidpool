@@ -1,4 +1,4 @@
-use crate::bead::{Bead, BeadCodec, BeadRequest, BeadResponse, BeadSyncError};
+use crate::bead::{Bead, BeadCodec, BeadHashes, BeadRequest, BeadResponse, BeadSyncError};
 use crate::utils::BeadHash;
 use libp2p::floodsub;
 use libp2p::{
@@ -90,7 +90,7 @@ impl BraidPoolBehaviour {
     // Request beads from a peer
     pub fn request_beads(&mut self, peer: PeerId, hashes: &Vec<BeadHash>) -> OutboundRequestId {
         self.bead_sync
-            .send_request(&peer, BeadRequest::GetBeads(hashes.clone()))
+            .send_request(&peer, BeadRequest::GetBeads(BeadHashes(hashes.clone())))
     }
 
     // Request tips from a peer
@@ -106,7 +106,7 @@ impl BraidPoolBehaviour {
     // Respond to a bead request
     pub fn respond_with_beads(&mut self, channel: ResponseChannel<BeadResponse>, beads: Vec<Bead>) {
         self.bead_sync
-            .send_response(channel, BeadResponse::Beads(beads))
+            .send_response(channel, BeadResponse::Beads(crate::bead::Beads(beads)))
             .expect("Failed to send response");
     }
     //Respond with `GetBeadsAfter` beadhashes request
@@ -116,7 +116,10 @@ impl BraidPoolBehaviour {
         bead_hashes: Vec<BeadHash>,
     ) {
         self.bead_sync
-            .send_response(channel, BeadResponse::GetBeadsAfter(bead_hashes))
+            .send_response(
+                channel,
+                BeadResponse::GetBeadsAfter(BeadHashes(bead_hashes)),
+            )
             .expect("Failed to send response");
     }
     // Respond to a tips request
@@ -126,7 +129,7 @@ impl BraidPoolBehaviour {
         tips: Vec<BeadHash>,
     ) {
         self.bead_sync
-            .send_response(channel, BeadResponse::Tips(tips))
+            .send_response(channel, BeadResponse::Tips(BeadHashes(tips)))
             .expect("Failed to send response");
     }
 
@@ -137,7 +140,7 @@ impl BraidPoolBehaviour {
         genesis: Vec<BeadHash>,
     ) {
         self.bead_sync
-            .send_response(channel, BeadResponse::Genesis(genesis))
+            .send_response(channel, BeadResponse::Genesis(BeadHashes(genesis)))
             .expect("Failed to send response");
     }
 

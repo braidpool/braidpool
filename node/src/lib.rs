@@ -34,6 +34,8 @@ use crate::{
     uncommitted_metadata::UnCommittedMetadata,
 };
 use std::error::Error;
+#[macro_use]
+pub mod macros;
 pub mod bead;
 pub mod behaviour;
 pub mod braid;
