@@ -14,9 +14,11 @@ use libp2p::{
     swarm::SwarmEvent,
     PeerId,
 };
+use node::audit;
 use node::db::db_handlers::{fetch_beads_in_batch, prepare_bead_tuple_data};
 use node::ibd_manager::{IBD_TRIGGER_AFTER, MAX_IBD_INCOMING_THRESHOLD, MAX_IBD_RETRIES};
 use node::utils::BeadHash;
+use node::upstream_pool;
 use node::SwarmHandler;
 use node::{
     bead::{Bead, BeadHashes, BeadRequest, BeadResponse, BeadSyncError},
@@ -60,6 +62,7 @@ use tokio::sync::{
 };
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    let args = cli::Cli::parse();
     // Initialize tracing with colors and module prefixes
     setup_tracing()?;
     let (mut ibd_manager, ibd_command_tx) = IBDManager::new();
@@ -143,7 +146,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //Intializing `notifier` for mining.notify
     let mut notifier: Notifier = Notifier::new(notification_rx, Arc::clone(&mining_job_map));
     //Stratum configuration initialization
-    let stratum_config: StratumServerConfig = StratumServerConfig::default();
+    let stratum_config = StratumServerConfig {
+        audit_mode: args.audit,
+        ..Default::default()
+    };
     let (block_submission_tx, block_submission_rx) =
         tokio::sync::mpsc::unbounded_channel::<node::stratum::BlockSubmissionRequest>();
     //IBD notifier task after peer_discovery
@@ -169,6 +175,201 @@ async fn main() -> Result<(), Box<dyn Error>> {
         connection_mapping.clone(),
         Some(block_submission_tx),
     );
+
+    let (upstream_ready_tx, upstream_ready_rx) = tokio::sync::oneshot::channel::<()>();
+    let (upstream_share_tx_option, upstream_configure_tx_option, audit_dag_option) = if args.audit {
+        // Validate CLI arguments for audit mode
+        if args.upstream_host.is_none() {
+            error!("--upstream-host is required when --audit is enabled");
+            std::process::exit(1);
+        }
+        if args.upstream_username.is_none() {
+            error!("--upstream-username is required when --audit is enabled");
+            std::process::exit(1);
+        }
+
+        info!("Audit mode is enabled acting as a proxy to the upstream pool");
+        info!(
+            "Upstream: {}:{}",
+            args.upstream_host.as_ref().unwrap(),
+            args.upstream_port
+        );
+
+        // Initialize audit records
+        let audit_dag = Arc::new(Mutex::new(audit::AuditDAG::new()));
+        let audit_dag_for_stratum = audit_dag.clone();
+
+        // Setting upstream pool configuration from CLI args
+        let upstream_config = upstream_pool::UpstreamPoolConfig {
+            hostname: args.upstream_host.clone().unwrap(),
+            port: args.upstream_port,
+            username: args.upstream_username.clone().unwrap(),
+            password: args.upstream_password.clone(),
+        };
+
+        // For forwarding shares to upstream pool
+        let (upstream_share_tx, upstream_share_rx) = mpsc::channel(1024);
+        // For receiving jobs from the upstream pool
+        let (upstream_job_tx, mut upstream_job_rx) = mpsc::channel(1024);
+        // For receiving responses from upstream (share accepted etc.)
+        let (upstream_response_tx, mut upstream_response_rx) =
+            mpsc::channel::<(String, serde_json::Value, u64)>(1024);
+        // For receiving extranounce values
+        let (upstream_extranonce_tx, mut upstream_extranonce_rx) =
+            mpsc::channel::<(String, usize)>(1);
+        // For receiving difficulty updates
+        let (upstream_difficulty_tx, mut upstream_difficulty_rx) = mpsc::channel::<f64>(1);
+        // For forwarding configure request to upstream pool
+        let (configure_tx, configure_rx) = mpsc::channel(10);
+        // Stores the most recent upstream job notification received from the upstream pool. Used for relaying the latest job to
+        // miners or for auditing purposes.
+        // TODO: implement caching the latest template for the upcoming miners
+        let last_upstream_job: Arc<Mutex<Option<node::stratum::JobNotification>>> =
+            Arc::new(Mutex::new(None));
+        let last_upstream_job_for_relay = last_upstream_job.clone();
+        let connection_mapping_for_responses = connection_mapping.clone();
+        tokio::spawn(async move {
+            while let Some((worker_name, response, original_request_id)) =
+                upstream_response_rx.recv().await
+            {
+                info!("Upstream response for {}: {:?}", worker_name, response);
+
+                // Get the correct peer address for this worker
+                let conn_map = connection_mapping_for_responses.lock().await;
+
+                if let Some(channel) = conn_map.get_channel_for_worker(&worker_name) {
+                    let miner_response = serde_json::json!({
+                        "id": original_request_id,
+                        "result": response.get("result").unwrap_or(&serde_json::json!(null)),
+                        "error": response.get("error").unwrap_or(&serde_json::json!(null))
+                    });
+
+                    if let Err(e) = channel
+                        .send(serde_json::to_string(&miner_response).unwrap())
+                        .await
+                    {
+                        error!(
+                            "Failed to forward response to worker {}: {}",
+                            worker_name, e
+                        );
+                    } else {
+                        info!(
+                            "Forwarded upstream response to worker {} (id={})",
+                            worker_name, original_request_id
+                        );
+                    }
+                } else {
+                    warn!("Worker '{}' not found in connection mapping", worker_name);
+                }
+            }
+        });
+
+        let notification_tx_for_upstream_difficulty = notification_tx.clone();
+        let connection_mapping_for_upstream = connection_mapping.clone();
+
+        // Spawn upstream pool client with reconnection logic
+        tokio::spawn(async move {
+            info!("Starting upstream pool client...");
+            let upstream_client = upstream_pool::UpstreamPoolClient::new(
+                upstream_config.clone(),
+                upstream_share_rx,
+                upstream_job_tx.clone(),
+                notification_tx_for_upstream_difficulty,
+                upstream_response_tx.clone(),
+                Some(upstream_extranonce_tx),
+                Some(upstream_difficulty_tx),
+                configure_rx,
+            );
+            {
+                let mut conn_map = connection_mapping_for_upstream.lock().await;
+                conn_map.set_upstream_connected(true);
+            }
+            match upstream_client.run().await {
+                Ok(_) => {
+                    warn!("Upstream pool client exited gracefully");
+                }
+                Err(e) => {
+                    error!("Upstream pool client error: {:?}", e);
+                }
+            }
+            {
+                let mut conn_map = connection_mapping_for_upstream.lock().await;
+                conn_map.set_upstream_connected(false);
+            }
+            error!("Upstream connection lost - restarting...");
+        });
+
+        let connection_mapping_for_extranonce = connection_mapping.clone();
+        tokio::spawn(async move {
+            if let Some((extranonce1, extranonce2_size)) = upstream_extranonce_rx.recv().await {
+                info!(
+                    "Received upstream extranonce: {}, size: {}",
+                    extranonce1, extranonce2_size
+                );
+
+                let mut conn_map = connection_mapping_for_extranonce.lock().await;
+                conn_map.set_upstream_extranonce(extranonce1, extranonce2_size);
+
+                let _ = upstream_ready_tx.send(());
+                info!("Stratum server updated with upstream extranonce");
+            }
+        });
+
+        let connection_mapping_for_difficulty = connection_mapping.clone();
+        tokio::spawn(async move {
+            while let Some(difficulty) = upstream_difficulty_rx.recv().await {
+                info!("Received upstream difficulty: {}", difficulty);
+                let mut conn_map = connection_mapping_for_difficulty.lock().await;
+                conn_map.set_upstream_difficulty(difficulty);
+                info!("Stratum server updated with upstream difficulty");
+            }
+            warn!("Upstream difficulty channel closed");
+        });
+
+        // Handle jobs from upstream pool (relay to notifier)
+        let notification_tx_for_upstream = notification_tx.clone();
+        tokio::spawn(async move {
+            while let Some(job) = upstream_job_rx.recv().await {
+                info!("Received job from upstream pool: {}", job.job_id);
+
+                // Store last upstream job
+                *last_upstream_job_for_relay.lock().await = Some(job.clone());
+
+                // Forward to notifier
+                if let Err(e) = notification_tx_for_upstream
+                    .send(NotifyCmd::SendUpstreamJob {
+                        job_notification: job,
+                    })
+                    .await
+                {
+                    error!("Failed to forward upstream job: {}", e);
+                } else {
+                    info!("Forwarded upstream job to notifier");
+                }
+            }
+        });
+
+        (
+            Some(upstream_share_tx),
+            Some(configure_tx),
+            Some(audit_dag_for_stratum),
+        )
+    } else {
+        info!("Audit mode disabled, running in normal pool mode");
+        (None, None, None)
+    };
+
+    if args.audit {
+        info!("Waiting for upstream pool...");
+        match tokio::time::timeout(std::time::Duration::from_secs(30), upstream_ready_rx).await {
+            Ok(Ok(())) => info!("Upstream is ready"),
+            _ => {
+                error!("Upstream pool connection failed");
+                std::process::exit(1);
+            }
+        }
+    }
+
     //Running the notification service
     tokio::spawn(async move {
         let _res = notifier
@@ -189,6 +390,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 notification_tx_clone,
                 swarm_handler_arc.clone(),
                 spin_lock_ref,
+                audit_dag_option,
+                upstream_share_tx_option,
+                upstream_configure_tx_option,
             )
             .await;
     });
@@ -407,18 +611,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let latest_template_merkle_branch_for_ipc = latest_template_merkle_branch.clone();
 
     // Spawn IPC handler
-    let _ipc_handler = tokio::task::spawn_blocking(move || {
-        let rt = match tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-        {
-            Ok(rt) => rt,
-            Err(e) => {
-                error!(error = %e, "Failed to create tokio runtime for IPC handler");
-                return;
-            }
-        };
-        rt.block_on(async {
+    let _ipc_handler = if !args.audit {
+        Some(tokio::task::spawn_blocking(move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("Failed to create tokio runtime");
+            rt.block_on(async {
             let local_set = tokio::task::LocalSet::new();
 
             local_set
@@ -485,7 +684,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 })
                 .await;
         });
-    });
+        }))
+    } else {
+        info!("Skipping IPC connection, audit mode enabled using upstream pool jobs");
+        None
+    };
 
     if let Some(addnode) = args.addnode {
         for node in addnode.iter() {
