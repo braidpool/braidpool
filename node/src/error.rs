@@ -236,6 +236,12 @@ pub enum StratumErrors {
     BeadPersistenceFailed {
         error: String,
     },
+    UpstreamConnectionFailed {
+        error: String,
+    },
+    UpstreamShareForwardFailed {
+        error: String,
+    },
 }
 pub enum StratumResponseErrors {}
 impl fmt::Display for StratumErrors {
@@ -369,6 +375,12 @@ impl fmt::Display for StratumErrors {
                     "Self-mined bead added to braid but not persisted to DB - {}",
                     error
                 )
+            }
+            StratumErrors::UpstreamConnectionFailed { error } => {
+                write!(f, "Failed to connect to upstream pool: {}", error)
+            }
+            StratumErrors::UpstreamShareForwardFailed { error } => {
+                write!(f, "Failed to forward share to upstream: {}", error)
             }
         }
     }
