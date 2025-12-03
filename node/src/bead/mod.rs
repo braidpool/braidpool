@@ -115,11 +115,9 @@ braidpool_protocol! {
     /// **Variants:**
     /// - `GenesisMismatch`: Genesis beads don't match between peers
     /// - `BeadHashNotFound`: Requested bead hash not found in local store
-    /// - `PeerSyncing`: Peer is still syncing (in IBD) and cannot serve requests
     pub enum BeadSyncError {
         GenesisMismatch     = 0,
         BeadHashNotFound    = 1,
-        PeerSyncing         = 2,
     }
 }
 

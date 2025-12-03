@@ -37,18 +37,6 @@ pub struct BlockSubmissionRequest {
     pub coinbase_transaction: bitcoin::Transaction,
 }
 
-/*
-1)Creating a `notifier` struct that will contain a notification sender along with another attribute of `notification` which will contain all the fields related to mining.notify endpoint from server2client method in stratumcontaining functions such as building
-notification for a given block template received
-2)Running a notifier in a separate task listening for new `templates` and after recieving those a new notification is constructed i.e. a valid job format and sent
-to the downstream node .
-3)A bifurcation of commands such as send to all clients and send to a particular downstream node that will be enabled via a command sender and command reciever, command sender will be passed
-for each new connection and event mapped into the handle_connection function will serve for writing to the tcp_stream .
-4)All the jobs currently will have to be mapped with all its data sent to a downstream and also the modified values received from the downstream node pertaining for the reconstruction of a valid
-weak_share or `Bead` in case of braidpool is concerned hence a mapping required for storing all the jobs along with their job_id as well as the template used for generating that job by a valid downstream
-node . Which further can be accessed by all the downstream nodes for methods such as mining.getjob(job_id) .
-*/
-
 /// Represents the `getblocktemplate` RPC response from Bitcoin Core.
 ///
 /// Based on [BIP-0022](https://github.com/bitcoin/bips/blob/master/bip-0022.mediawiki) and
@@ -2013,7 +2001,7 @@ mod test {
         let connection_mapping = Arc::new(Mutex::new(ConnectionMapping::new()));
         let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
-        let (_test_db_handler, test_db_tx) = DBHandler::new(Arc::clone(&test_braid)).await.unwrap();
+        let (_test_db_handler, test_db_tx) = DBHandler::new().await.unwrap();
         let (swarm_handler, mut swarm_command_receiver) =
             SwarmHandler::new(Arc::clone(&test_braid), test_db_tx);
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
@@ -2077,7 +2065,7 @@ mod test {
         let test_braid: Arc<RwLock<braid::Braid>> =
             Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
         let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
-        let (_test_db_handler, test_db_tx) = DBHandler::new(Arc::clone(&test_braid)).await.unwrap();
+        let (_test_db_handler, test_db_tx) = DBHandler::new().await.unwrap();
         let (swarm_handler, mut swarm_command_receiver) =
             SwarmHandler::new(Arc::clone(&test_braid), test_db_tx);
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
@@ -2128,7 +2116,7 @@ mod test {
             Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
         let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
-        let (_test_db_handler, test_db_tx) = DBHandler::new(Arc::clone(&test_braid)).await.unwrap();
+        let (_test_db_handler, test_db_tx) = DBHandler::new().await.unwrap();
         let (swarm_handler, mut swarm_command_receiver) =
             SwarmHandler::new(Arc::clone(&test_braid), test_db_tx);
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
@@ -2177,7 +2165,7 @@ mod test {
         let genesis_beads = Vec::from([]);
         let test_braid: Arc<RwLock<braid::Braid>> =
             Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
-        let (_test_db_handler, test_db_tx) = DBHandler::new(Arc::clone(&test_braid)).await.unwrap();
+        let (_test_db_handler, test_db_tx) = DBHandler::new().await.unwrap();
         let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
         let (swarm_handler, mut swarm_command_receiver) =
@@ -2220,7 +2208,7 @@ mod test {
         let genesis_beads = Vec::from([]);
         let test_braid: Arc<RwLock<braid::Braid>> =
             Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
-        let (_test_db_handler, test_db_tx) = DBHandler::new(Arc::clone(&test_braid)).await.unwrap();
+        let (_test_db_handler, test_db_tx) = DBHandler::new().await.unwrap();
         let mining_job_map: Arc<Mutex<HashMap<String, Arc<Mutex<MiningJobMap>>>>> =
             Arc::new(Mutex::new(HashMap::new()));
         let (notify_tx, _notify_rx) = mpsc::channel::<NotifyCmd>(32);
@@ -2288,7 +2276,7 @@ mod test {
         let genesis_beads = Vec::from([]);
         let test_braid: Arc<RwLock<braid::Braid>> =
             Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
-        let (_test_db_handler, test_db_tx) = DBHandler::new(Arc::clone(&test_braid)).await.unwrap();
+        let (_test_db_handler, test_db_tx) = DBHandler::new().await.unwrap();
         let (swarm_handler, mut swarm_command_receiver) =
             SwarmHandler::new(Arc::clone(&test_braid), test_db_tx);
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));

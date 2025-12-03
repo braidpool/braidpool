@@ -357,7 +357,6 @@ fn test_bead_sync_error_codec() {
     let errors = vec![
         BeadSyncError::GenesisMismatch,
         BeadSyncError::BeadHashNotFound,
-        BeadSyncError::PeerSyncing,
     ];
 
     for error in errors {

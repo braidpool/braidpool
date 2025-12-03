@@ -4,9 +4,10 @@ use libp2p::PeerId;
 use tokio::task::JoinHandle;
 
 use crate::utils::BeadHash;
-pub const IBD_BATCH_SIZE: usize = 50;
+pub const IBD_BATCH_SIZE: usize = 500;
 pub const MAX_IBD_RETRIES: u64 = 10;
 pub const IBD_TRIGGER_AFTER: u64 = 20;
+/// We wait for incoming beads with the range [current_timestamp,current_timestamp + MAX_IBD_INCOMING_THRESHOLD]
 pub const MAX_IBD_INCOMING_THRESHOLD: u64 = 20;
 
 #[derive(Debug)]
@@ -24,7 +25,7 @@ pub enum IBDCommands {
         offset_sender: tokio::sync::oneshot::Sender<usize>,
         batch_size: usize,
     },
-    FetchCachedTips {
+    FetchTips {
         peer_id: String,
         tips_sender: tokio::sync::oneshot::Sender<Vec<BeadHash>>,
     },
@@ -56,13 +57,50 @@ pub enum IBDCommands {
         peer_id: PeerId,
     },
 }
+/// The `IBDManager` is responsible for coordinating all state and bookkeeping
+/// required during the Initial Block Download (IBD) phase.
+///
+/// It receives asynchronous `IBDCommands` through an internal channel and
+/// maintains multiple internal mappings used to:
+///
+/// - Track per-peer batch offsets for batched bead requests  
+/// - Store tips in memory received from sync peers  
+/// - Store bead in memory responses mapped by peer  
+/// - Track per-peer timestamps for sequencing IBD batches  
+/// - Maintain retry counts and async handles for incoming bead-processing tasks  
+///
+/// The manager runs a dedicated event loop (see `run_ibd_handler`) which
+/// consumes commands and mutates internal state accordingly.
+///
+/// This component is intentionally single-threaded (through the event loop),
+/// ensuring safe mutation of maps without additional synchronization.
 pub struct IBDManager {
+    /// Tracks the most recent tips received from each peer during IBD.
+    /// (peer_id --> Vec<BeadHash>)
     tips_mapping: HashMap<String, Vec<BeadHash>>,
+
+    /// Tracks the current batch offset for each peer when requesting batched beads.
+    /// (peer_id --> current offset)
     batch_mapping: HashMap<String, usize>,
+
+    /// Stores bead hashes obtained by GetBead requests from each peer.
+    /// (peer_id --> Vec<BeadHash>)
     get_bead_mapping: HashMap<String, Vec<BeadHash>>,
+
+    /// The internal channel receiver for all IBD-related commands.
     command_receiver: tokio::sync::mpsc::Receiver<IBDCommands>,
+
+    /// Stores the timestamp associated with the last successfully processed batch
+    /// for each peer.
+    /// (peer_id --> timestamp)
     timestamp_mapping: HashMap<String, u64>,
-    //(PeerId ---->(retries done wrt to given sync peer,thread_handler))
+
+    /// Tracks retry counts and associated join handles for incoming bead
+    /// processing tasks.
+    ///
+    /// (peer_id --> (retry_count, Option<JoinHandle>))
+    ///
+    /// A retry count increments when an incoming bead handler must be restarted.
     incoming_bead_mapping: HashMap<PeerId, (u64, Option<JoinHandle<()>>)>,
 }
 impl IBDManager {
@@ -80,7 +118,7 @@ impl IBDManager {
             ibd_tx,
         )
     }
-    pub async fn handle_ibd_command(&mut self) {
+    pub async fn run_ibd_handler(&mut self) {
         while let Some(ibd_command) = self.command_receiver.recv().await {
             match ibd_command {
                 IBDCommands::UpdateAndFetchBatchOffset {
@@ -128,7 +166,7 @@ impl IBDManager {
                 } => {
                     self.tips_mapping.insert(peer_id, received_tips);
                 }
-                IBDCommands::FetchCachedTips {
+                IBDCommands::FetchTips {
                     peer_id,
                     tips_sender,
                 } => {

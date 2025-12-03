@@ -2,9 +2,9 @@
 use crate::braid::consensus_functions;
 use crate::{
     bead::Bead,
-    braid::Braid,
     db::{init_db::init_db, BraidpoolDBTypes, InsertTupleTypes},
     error::DBErrors,
+    utils::BeadHash,
 };
 use bitcoin::{
     absolute::MedianTimePast, ecdsa::Signature, BlockHash, BlockTime, BlockVersion, CompactTarget,
@@ -14,14 +14,9 @@ use futures::lock::Mutex;
 use num::ToPrimitive;
 use serde_json::json;
 use sqlx::{Pool, Row, Sqlite};
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
-use tokio::sync::{
-    mpsc::{Receiver, Sender},
-    RwLock,
-};
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
+use tokio::sync::mpsc::{Receiver, Sender};
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
 const DB_CHANNEL_CAPACITY: usize = 1024;
@@ -57,12 +52,9 @@ pub struct DBHandler {
     receiver: Receiver<BraidpoolDBTypes>,
     //Shared across tasks for accessing DB after contention using `Mutex`
     pub db_connection_pool: Arc<Mutex<Pool<Sqlite>>>,
-    local_braid_arc: Arc<RwLock<Braid>>,
 }
 impl DBHandler {
-    pub async fn new(
-        local_braid_arc: Arc<RwLock<Braid>>,
-    ) -> Result<(Self, Sender<BraidpoolDBTypes>), DBErrors> {
+    pub async fn new() -> Result<(Self, Sender<BraidpoolDBTypes>), DBErrors> {
         debug!("Initializing schema for persistent database");
         let connection = match init_db().await {
             Ok(conn) => conn,
@@ -78,7 +70,6 @@ impl DBHandler {
             Self {
                 receiver: db_handler_rx,
                 db_connection_pool: Arc::new(Mutex::new(connection)),
-                local_braid_arc: local_braid_arc,
             },
             db_handler_tx,
         ))
@@ -141,8 +132,11 @@ impl DBHandler {
             error!(error = ?e, "Transaction failed, rolling back");
             match conn.rollback().await {
                 Ok(_) => {
-                    info!("Transaction rollbacked successfully");
-                    return Ok(());
+                    info!("Transaction rollbacked successfully and not committed");
+                    return Err(DBErrors::InsertionTransactionNotCommitted {
+                        error: e.to_string(),
+                        query_name: "Combined insert transaction".to_string(),
+                    });
                 }
                 Err(error) => {
                     error!(error = ?error, "Failed to rollback transaction");
@@ -155,7 +149,7 @@ impl DBHandler {
         }
         match conn.commit().await {
             Ok(_) => {
-                debug!("Transaction committed successfully");
+                debug!("Transaction committed and not rolledback successfully");
             }
             Err(error) => {
                 error!(error = ?error, "Failed to commit transaction");
@@ -173,87 +167,13 @@ impl DBHandler {
         while let Some(query_request) = self.receiver.recv().await {
             match query_request {
                 BraidpoolDBTypes::InsertTupleTypes { query } => match query {
-                    InsertTupleTypes::InsertBeadSequentially { bead_to_insert } => {
-                        let braid_data = self.local_braid_arc.read().await;
-                        let mut braid_parent_set: HashMap<usize, HashSet<usize>> = HashMap::new();
-                        //Constructing the parent set
-                        for bead in braid_data.beads.iter().enumerate() {
-                            let parent_beads = &bead.1.committed_metadata.parents;
-                            braid_parent_set.insert(bead.0, HashSet::new());
-                            for parent_bead_hash in parent_beads.iter() {
-                                let current_parent_bead_index = braid_data
-                                    .bead_index_mapping
-                                    .get(&*parent_bead_hash)
-                                    .unwrap();
-                                if let Some(value) = braid_parent_set.get_mut(&bead.0) {
-                                    value.insert(*current_parent_bead_index);
-                                }
-                            }
-                        }
-                        //Considering the index of the beads in braid will be same as the (insertion ids-1)
-                        let bead_id = braid_data
-                            .bead_index_mapping
-                            .get(&bead_to_insert.block_header.block_hash())
-                            .unwrap();
-                        let current_bead_parent_set = braid_parent_set.get(&(bead_id)).unwrap();
-
-                        let mut relative_tuples: Vec<(u64, u64)> = Vec::new();
-                        let mut parent_timestamp_tuples: Vec<(u64, u64, u64)> = Vec::new();
-                        let mut transaction_tuples: Vec<(u64, String)> = Vec::new();
-                        //Constructing relatives and parent_timestamps
-                        for parent_bead in current_bead_parent_set {
-                            relative_tuples.push(((*parent_bead as u64), (*bead_id as u64)));
-                            let current_parent_timestamp = braid_data
-                                .beads
-                                .get(*parent_bead)
-                                .unwrap()
-                                .committed_metadata
-                                .start_timestamp;
-                            parent_timestamp_tuples.push((
-                                (*parent_bead as u64),
-                                (*bead_id as u64),
-                                current_parent_timestamp.to_u32().to_u64().unwrap(),
-                            ));
-                        }
-                        for bead_tx in bead_to_insert.committed_metadata.transaction_ids.0.iter() {
-                            transaction_tuples
-                                .push(((*bead_id as u64), hex::encode(bead_tx.to_byte_array())));
-                        }
-                        //Constructing json bindings
-                        let transactions_values = transaction_tuples
-                            .iter()
-                            .map(|t| {
-                                json!({
-                                    "txid":t.1,
-                                    "bead_id":t.0
-                                })
-                            })
-                            .collect::<Vec<_>>();
-                        let parent_timestamps_values = parent_timestamp_tuples
-                            .iter()
-                            .map(|p| {
-                                json!({
-                                    "child":p.1,
-                                    "parent":p.0,
-                                    "timestamp":p.2
-                                })
-                            })
-                            .collect::<Vec<_>>();
-
-                        let relatives_values = relative_tuples
-                            .iter()
-                            .map(|r| {
-                                json!({
-                                    "parent":r.0,
-                                    "child":r.1
-                                })
-                            })
-                            .collect::<Vec<_>>();
-                        let txs_json = serde_json::to_string(&transactions_values).unwrap();
-                        let relative_json = serde_json::to_string(&relatives_values).unwrap();
-                        let parent_timestamp_json =
-                            serde_json::to_string(&parent_timestamps_values).unwrap();
-
+                    InsertTupleTypes::InsertBeadSequentially {
+                        bead_to_insert,
+                        txs_json,
+                        relative_json,
+                        parent_timestamp_json,
+                        bead_id,
+                    } => {
                         let bead_hash = bead_to_insert.block_header.block_hash();
                         match self
                             .insert_bead(
@@ -261,12 +181,12 @@ impl DBHandler {
                                 txs_json,
                                 relative_json,
                                 parent_timestamp_json,
-                                bead_id,
+                                &bead_id,
                             )
                             .await
                         {
                             Ok(_) => {
-                                info!(
+                                debug!(
                                     bead_id = bead_id,
                                     bead_hash = %bead_hash,
                                     "Bead inserted successfully"
@@ -287,6 +207,69 @@ impl DBHandler {
             }
         }
     }
+}
+pub fn prepare_bead_tuple_data(
+    beads: &Vec<Bead>,
+    bead_index_mapping: &HashMap<BeadHash, usize>,
+    bead: &Bead,
+) -> anyhow::Result<(String, String, String)> {
+    let mut parent_set: HashMap<usize, HashSet<usize>> = HashMap::new();
+
+    for (idx, b) in beads.iter().enumerate() {
+        let mut set = HashSet::new();
+        for p in &b.committed_metadata.parents {
+            let parent_idx = *bead_index_mapping.get(p).unwrap();
+            set.insert(parent_idx);
+        }
+        parent_set.insert(idx, set);
+    }
+
+    let bead_id = *bead_index_mapping
+        .get(&bead.block_header.block_hash())
+        .unwrap();
+    let current_parents = parent_set.get(&bead_id).cloned().unwrap_or_default();
+
+    let mut relatives = Vec::new();
+    let mut parent_ts = Vec::new();
+    let mut txs = Vec::new();
+
+    for parent in current_parents {
+        let ts = beads[parent]
+            .committed_metadata
+            .start_timestamp
+            .to_u32()
+            .to_u64()
+            .expect("An error occurred while casting u32 to u64");
+
+        relatives.push((parent as u64, bead_id as u64));
+        parent_ts.push((parent as u64, bead_id as u64, ts));
+    }
+
+    for tx in &bead.committed_metadata.transaction_ids.0 {
+        txs.push((bead_id as u64, hex::encode(tx.to_byte_array())));
+    }
+
+    let txs_json = serde_json::to_string(
+        &txs.iter()
+            .map(|t| json!({ "txid": t.1, "bead_id": t.0 }))
+            .collect::<Vec<_>>(),
+    )?;
+
+    let relatives_json = serde_json::to_string(
+        &relatives
+            .iter()
+            .map(|r| json!({ "parent": r.0, "child": r.1 }))
+            .collect::<Vec<_>>(),
+    )?;
+
+    let parent_ts_json = serde_json::to_string(
+        &parent_ts
+            .iter()
+            .map(|p| json!({ "child": p.1, "parent": p.0, "timestamp": p.2 }))
+            .collect::<Vec<_>>(),
+    )?;
+
+    Ok((txs_json, relatives_json, parent_ts_json))
 }
 //Fetching beads in batch
 pub async fn fetch_beads_in_batch(
