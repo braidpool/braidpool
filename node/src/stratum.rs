@@ -287,7 +287,41 @@ impl DownstreamClient {
                 )
                 .await
             }
-            "mining.suggest_difficulty" => self.suggest_difficulty(&req_params).await,
+            "mining.suggest_difficulty" => {
+                // In audit mode, ignore Braidpool's suggested difficulty and use the upstream pool's difficulty instead
+                if self.is_proxy_mode {
+                    let upstream_diff = {
+                        let mapping = connection_mapping.lock().await;
+                        mapping.upstream_difficulty
+                    };
+                    if let Some(diff) = upstream_diff {
+                        info!(
+                            connection_id = %connection_id_hex,
+                            suggested = ?req_params,
+                            upstream_diff = %diff,
+                            "Audit mode, suggest_difficulty is taking place using upstream difficulty"
+                        );
+                        // Return the upstream difficulty
+                        Ok(StratumResponses::SuggestDifficultyResponse {
+                            suggest_difficulty_resp: SuggestDifficultyResponse {
+                                method: "mining.set_difficulty".to_string(),
+                                params: vec![diff as u64],
+                            },
+                        })
+                    } else {
+                        error!(
+                            connection_id = %connection_id_hex,
+                            "Audit mode: no upstream difficulty available, rejecting suggest_difficulty"
+                        );
+                        Err(StratumErrors::UpstreamNotReady {
+                            error: "Upstream pool difficulty not available yet".to_string(),
+                        })
+                    }
+                } else {
+                    // For normal Braidpool interactions
+                    self.suggest_difficulty(&req_params).await
+                }
+            }
             method => Err(StratumErrors::InvalidMethod {
                 method: method.to_string(),
             }),
