@@ -242,6 +242,9 @@ pub enum StratumErrors {
     UpstreamShareForwardFailed {
         error: String,
     },
+    UpstreamNotReady {
+        error: String,
+    },
 }
 pub enum StratumResponseErrors {}
 impl fmt::Display for StratumErrors {
@@ -381,6 +384,9 @@ impl fmt::Display for StratumErrors {
             }
             StratumErrors::UpstreamShareForwardFailed { error } => {
                 write!(f, "Failed to forward share to upstream: {}", error)
+            }
+            StratumErrors::UpstreamNotReady { error } => {
+                write!(f, "Upstream pool is not ready: {}", error)
             }
         }
     }
