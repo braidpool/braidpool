@@ -280,7 +280,7 @@ impl Braid {
         }
 
         tracing::debug!(
-            smallest_index=?smallest_index,"Smallest possible index from all the tips - ",
+            smallest_index=?smallest_index,"Smallest possible index from all the tips",
 
         );
         // just iterating over the vector of cohorts for now, this needs to be changed to use a more efficient retrieval of cohort index given bead hash
