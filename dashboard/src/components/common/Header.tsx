@@ -8,6 +8,7 @@ import {
   Menu,
   X,
   HeartPulse,
+  Receipt,
 } from 'lucide-react';
 import { Page } from '../Dashboard/Types';
 import { HeaderNavProps } from './Types';
@@ -18,6 +19,11 @@ const NAV_ITEMS = [
     page: Page.DASHBOARD,
     icon: <LayoutDashboard size={18} />,
   },
+  {
+    label: 'Transactions', 
+    page: Page.TRANSACTIONS, 
+    icon: <Receipt size={18} />,
+  }, 
   { label: 'Bead', page: Page.MINER_STATS, icon: <MemoryStick size={18} /> },
   {
     label: 'Inventory',

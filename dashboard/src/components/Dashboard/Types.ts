@@ -1,5 +1,6 @@
 export enum Page {
   DASHBOARD = 'dashboard',
+  TRANSACTIONS = 'transactions',
   MINING_INVENTORY = 'mining-inventory',
   MEMPOOL = 'mempool',
   DAG_VISUALIZATION = 'dag-visualization',
