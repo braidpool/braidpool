@@ -474,10 +474,9 @@ pub async fn fetch_bead_by_bead_hash(
             let ntime = BlockTime::from_u32(row.get::<u32, _>("nTime"));
             let nbits = CompactTarget::from_consensus(row.get::<u32, _>("nBits"));
             let nonce = row.get::<u32, _>("nNonce");
-            let payout_address = str::from_utf8(&row.get::<Vec<u8>, _>("payout_address"))
+            let payout_address = std::str::from_utf8(&row.get::<Vec<u8>, _>("payout_address"))
                 .unwrap()
                 .to_string();
-
             let start_timestamp =
                 MedianTimePast::from_u32(row.get::<u32, _>("start_timestamp")).unwrap();
             let pub_key = PublicKey::from_slice(&row.get::<Vec<u8>, _>("comm_pub_key")).unwrap();
