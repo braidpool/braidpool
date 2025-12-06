@@ -2058,7 +2058,7 @@ mod test {
     use super::*;
     use crate::{
         braid,
-        db::db_handlers::DBHandler,
+        db::db_handlers::{DBHandler, DB_CHANNEL_CAPACITY},
         stratum::{ConnectionMapping, MiningJobMap, NotifyCmd, Server, StratumServerConfig},
     };
     use bitcoin::{
@@ -2077,8 +2077,9 @@ mod test {
         let ibd_or_not: AtomicBool = AtomicBool::new(false);
         let test_ibd_spinlock = Arc::new(ibd_or_not);
         let genesis_beads = Vec::from([]);
+        let (db_handler_tx, db_handler_rx) = tokio::sync::mpsc::channel(DB_CHANNEL_CAPACITY);
         let test_braid: Arc<RwLock<braid::Braid>> =
-            Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+            Arc::new(RwLock::new(braid::Braid::new(genesis_beads, db_handler_tx)));
         let connection_mapping = Arc::new(RwLock::new(ConnectionMapping::new()));
         let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
@@ -2143,8 +2144,9 @@ mod test {
         let test_ibd_spinlock = Arc::new(ibd_or_not);
         let connection_mapping = Arc::new(RwLock::new(ConnectionMapping::new()));
         let genesis_beads = Vec::from([]);
+        let (db_handler_tx, db_handler_rx) = tokio::sync::mpsc::channel(DB_CHANNEL_CAPACITY);
         let test_braid: Arc<RwLock<braid::Braid>> =
-            Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+            Arc::new(RwLock::new(braid::Braid::new(genesis_beads, db_handler_tx)));
         let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let (_test_db_handler, test_db_tx) = DBHandler::new().await.unwrap();
         let (swarm_handler, mut swarm_command_receiver) =
@@ -2193,8 +2195,9 @@ mod test {
         let ibd_spinlock = Arc::new(ibd_or_not);
         let connection_mapping = Arc::new(RwLock::new(ConnectionMapping::new()));
         let genesis_beads = Vec::from([]);
+        let (db_handler_tx, db_handler_rx) = tokio::sync::mpsc::channel(DB_CHANNEL_CAPACITY);
         let test_braid: Arc<RwLock<braid::Braid>> =
-            Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+            Arc::new(RwLock::new(braid::Braid::new(genesis_beads, db_handler_tx)));
         let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
         let (_test_db_handler, test_db_tx) = DBHandler::new().await.unwrap();
@@ -2244,8 +2247,9 @@ mod test {
         let ibd_spinlock = Arc::new(ibd_or_not);
         let connection_mapping = Arc::new(RwLock::new(ConnectionMapping::new()));
         let genesis_beads = Vec::from([]);
+        let (db_handler_tx, db_handler_rx) = tokio::sync::mpsc::channel(DB_CHANNEL_CAPACITY);
         let test_braid: Arc<RwLock<braid::Braid>> =
-            Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+            Arc::new(RwLock::new(braid::Braid::new(genesis_beads, db_handler_tx)));
         let (_test_db_handler, test_db_tx) = DBHandler::new().await.unwrap();
         let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
@@ -2287,8 +2291,9 @@ mod test {
         let ibd_spinlock = Arc::new(ibd_or_not);
         let connection_mapping = Arc::new(RwLock::new(ConnectionMapping::new()));
         let genesis_beads = Vec::from([]);
+        let (db_handler_tx, db_handler_rx) = tokio::sync::mpsc::channel(DB_CHANNEL_CAPACITY);
         let test_braid: Arc<RwLock<braid::Braid>> =
-            Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+            Arc::new(RwLock::new(braid::Braid::new(genesis_beads, db_handler_tx)));
         let (_test_db_handler, test_db_tx) = DBHandler::new().await.unwrap();
         let mining_job_map: Arc<Mutex<HashMap<String, Arc<Mutex<MiningJobMap>>>>> =
             Arc::new(Mutex::new(HashMap::new()));
@@ -2355,8 +2360,9 @@ mod test {
 
          */
         let genesis_beads = Vec::from([]);
+        let (db_handler_tx, db_handler_rx) = tokio::sync::mpsc::channel(DB_CHANNEL_CAPACITY);
         let test_braid: Arc<RwLock<braid::Braid>> =
-            Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+            Arc::new(RwLock::new(braid::Braid::new(genesis_beads, db_handler_tx)));
         let (_test_db_handler, test_db_tx) = DBHandler::new().await.unwrap();
         let (swarm_handler, mut swarm_command_receiver) =
             SwarmHandler::new(Arc::clone(&test_braid), test_db_tx);

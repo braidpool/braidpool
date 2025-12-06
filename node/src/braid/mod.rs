@@ -1,10 +1,13 @@
 use crate::bead::Bead;
+use crate::db::db_handlers::prepare_bead_tuple_data;
+use crate::db::{BraidpoolDBTypes, InsertTupleTypes};
 use crate::utils::BeadHash;
 use num::BigUint;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::collections::{HashMap, HashSet};
+use tokio::sync::mpsc::Sender;
 #[derive(Clone, Debug, Serialize, PartialEq, Deserialize)]
 pub struct Cohort(pub HashSet<usize>);
 #[derive(Debug, Clone)]
@@ -22,7 +25,7 @@ pub enum GenesisCheckStatus {
     GenesisBeadsCountMismatch,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 
 pub struct Braid {
     pub beads: Vec<Bead>,
@@ -32,11 +35,12 @@ pub struct Braid {
     pub orphan_beads: Vec<Bead>,
     pub genesis_beads: HashSet<usize>,
     pub bead_index_mapping: HashMap<BeadHash, usize>,
+    pub db_tx: Sender<BraidpoolDBTypes>,
 }
 
 impl Braid {
     ///Initializing the Braid object for keeping track of current state of Braid
-    pub fn new(genesis_beads: Vec<Bead>) -> Self {
+    pub fn new(genesis_beads: Vec<Bead>, db_tx: Sender<BraidpoolDBTypes>) -> Self {
         let mut beads = Vec::new();
         let mut bead_indices = HashSet::new();
         let mut bead_index_mapping = HashMap::new();
@@ -58,6 +62,7 @@ impl Braid {
             orphan_beads: Vec::new(),
             genesis_beads: bead_indices,
             bead_index_mapping,
+            db_tx,
         }
     }
     pub fn reset(&mut self) {
@@ -77,7 +82,8 @@ impl Braid {
     pub fn extend(&mut self, bead: &Bead) -> AddBeadStatus {
         // If the braid is empty and bead has no parents, treat as genesis bead
         if self.beads.is_empty() && bead.committed_metadata.parents.is_empty() {
-            *self = Braid::new(vec![bead.clone()]);
+            let db_tx_ref = self.db_tx.clone();
+            *self = Braid::new(vec![bead.clone()], db_tx_ref);
             return AddBeadStatus::BeadAdded;
         }
         // No parents: bad block i.e. the extend will add beads after the genesis
@@ -203,10 +209,50 @@ impl Braid {
             if all_parents_available {
                 // Remove the orphan bead first, then process it
                 let orphan_bead = self.orphan_beads.remove(i);
-
+                tracing::info!(
+                    "Orphan bead now has all parents, thus extending to local braid: {:?}",
+                    orphan_bead.block_header.block_hash()
+                );
                 // Now extend with the orphan bead
                 match self.extend(&orphan_bead) {
                     AddBeadStatus::BeadAdded => {
+                        let (txs_json, relative_json, parent_timestamp_json) =
+                            match prepare_bead_tuple_data(
+                                &self.beads,
+                                &self.bead_index_mapping,
+                                &orphan_bead,
+                            ) {
+                                Ok(received_tuples) => received_tuples,
+                                Err(error) => {
+                                    tracing::error!("An error occurred while preparing bead tuple data for bead with beadhash - {:?} due to {:?}",orphan_bead.block_header.block_hash(),error);
+                                    continue;
+                                }
+                            };
+                        let bead_id = self
+                            .bead_index_mapping
+                            .get(&orphan_bead.block_header.block_hash())
+                            .unwrap();
+                        let db_tx_clone = self.db_tx.clone();
+                        let insert_cmd = BraidpoolDBTypes::InsertTupleTypes {
+                            query: InsertTupleTypes::InsertBeadSequentially {
+                                bead_to_insert: orphan_bead,
+                                txs_json,
+                                relative_json,
+                                parent_timestamp_json,
+                                bead_id: *bead_id,
+                            },
+                        };
+                        //Persist the newly added orphan bead to DB asynchronously
+                        tokio::spawn(async move {
+                            match db_tx_clone.send(insert_cmd).await {
+                                Ok(_) => {
+                                    tracing::info!("Insert orphan bead command sent to db handler successfully");
+                                }
+                                Err(error) => {
+                                    tracing::error!("An error occurred while sending insert orphan bead command received from peer to db handler due to {:?}",error);
+                                }
+                            };
+                        });
                         // Recursively process remaining orphans as this addition
                         // might enable more orphans to be processed
                         self.process_orphan_beads();

@@ -19,7 +19,7 @@ use std::sync::Arc;
 use tokio::sync::mpsc::{Receiver, Sender};
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
-const DB_CHANNEL_CAPACITY: usize = 1024;
+pub const DB_CHANNEL_CAPACITY: usize = 1024;
 const INSERT_QUERY: &'static str = "
 INSERT INTO bead (
     id, hash, nVersion, hashPrevBlock, hashMerkleRoot, nTime,
