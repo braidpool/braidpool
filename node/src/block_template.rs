@@ -12,6 +12,8 @@ const BLOCK_TEMPLATE_RULES: [GetBlockTemplateRules; 4] = [
 
 const BACKOFF_BASE: u64 = 2;
 const MAX_RPC_FAILURES: u32 = 20;
+// Maximum backoff in seconds (about 18 hours) - prevents overflow
+const MAX_BACKOFF_SECS: u64 = 65536;
 
 pub async fn fetcher(
     rpc: &bitcoincore_rpc::Client,
@@ -23,10 +25,16 @@ pub async fn fetcher(
     loop {
         match rpc.get_block_template(GetBlockTemplateModes::Template, &BLOCK_TEMPLATE_RULES, &[]) {
             Ok(get_block_template_result) => {
-                block_template_tx
+                if let Err(e) = block_template_tx
                     .send(get_block_template_result.clone())
                     .await
-                    .expect("send block template over mpsc channel");
+                {
+                    log::error!(
+                        "Failed to send block template over mpsc channel: {}. \
+                        Receiver may have been dropped.",
+                        e
+                    );
+                }
                 break;
             }
             Err(e) => {
@@ -38,8 +46,10 @@ pub async fn fetcher(
                     );
                     std::process::exit(1);
                 }
-                rpc_failure_backoff = u64::checked_pow(BACKOFF_BASE, rpc_failure_counter.clone())
-                    .expect("MAX_RPC_FAILURES doesn't allow overflow; qed");
+                // Use saturating_pow to prevent overflow, then cap at MAX_BACKOFF_SECS
+                rpc_failure_backoff = BACKOFF_BASE
+                    .saturating_pow(rpc_failure_counter)
+                    .min(MAX_BACKOFF_SECS);
 
                 // sleep until it's time to try again
                 log::error!("Error on `getblocktemplate` RPC: {}", e);

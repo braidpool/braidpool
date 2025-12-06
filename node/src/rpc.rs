@@ -2,30 +2,36 @@ use bitcoincore_rpc::RpcApi;
 use shellexpand;
 use std::path::PathBuf;
 
+use crate::error::RpcError;
+
 pub fn setup(
     bitcoin: String,
     rpc_port: u16,
     rpc_user: Option<String>,
     rpc_pass: Option<String>,
     rpc_cookie: Option<String>,
-) -> Result<bitcoincore_rpc::Client, bitcoincore_rpc::Error> {
+) -> Result<bitcoincore_rpc::Client, RpcError> {
     let rpc_url = format!("{}:{}", bitcoin, rpc_port);
-    let (rpc, is_cookie_auth) = if rpc_user.is_some() {
+    let (rpc, is_cookie_auth) = if let Some(ref user) = rpc_user {
+        let pass = rpc_pass.ok_or_else(|| RpcError::MissingAuth("rpcpass".to_string()))?;
         log::info!(
             "Using username/password RPC authentication with username: {:?}",
-            rpc_user.as_ref().unwrap()
+            user
         );
         (
             bitcoincore_rpc::Client::new(
                 &rpc_url,
-                bitcoincore_rpc::Auth::UserPass(rpc_user.unwrap(), rpc_pass.unwrap()),
+                bitcoincore_rpc::Auth::UserPass(user.clone(), pass),
             )?,
             false,
         )
     } else {
+        let cookie = rpc_cookie.ok_or_else(|| {
+            RpcError::MissingAuth("rpcuser/rpcpass or rpccookie".to_string())
+        })?;
         log::info!(
             "Using Cookie authentication with cookie: {:?} {:?}",
-            rpc_cookie.as_ref().unwrap(),
+            cookie,
             rpc_url
         );
         log::info!("Connecting to RPC endpoint: {:?}", rpc_url);
@@ -33,7 +39,7 @@ pub fn setup(
             bitcoincore_rpc::Client::new(
                 &rpc_url,
                 bitcoincore_rpc::Auth::CookieFile(PathBuf::from(
-                    shellexpand::tilde(&rpc_cookie.unwrap()).to_string(),
+                    shellexpand::tilde(&cookie).to_string(),
                 )),
             )?,
             true,
@@ -46,18 +52,21 @@ pub fn setup(
     let best_block_hash = rpc.get_best_block_hash()?;
     log::info!("Best block hash: {:?}", best_block_hash);
     // get_blockchain_info returns a json blob
-    let info = rpc.get_blockchain_info().unwrap();
-    log::info!("Blockchain info: {:?}", info);
-    if let Err(e) = rpc.get_blockchain_info() {
-        log::error!("get_blockchain_info returned an error: {:?}", e);
-        if is_cookie_auth {
-            log::error!(
-                "Unable to authenticate to bitcoind using a cookie file. \
-                Ensure that bitcoind is running on the same node or use \
-                rpcuser/rpcpass instead."
-            );
+    match rpc.get_blockchain_info() {
+        Ok(info) => {
+            log::info!("Blockchain info: {:?}", info);
         }
-        std::process::exit(1);
+        Err(e) => {
+            log::error!("get_blockchain_info returned an error: {:?}", e);
+            if is_cookie_auth {
+                log::error!(
+                    "Unable to authenticate to bitcoind using a cookie file. \
+                    Ensure that bitcoind is running on the same node or use \
+                    rpcuser/rpcpass instead."
+                );
+            }
+            return Err(RpcError::RpcCall(e));
+        }
     }
 
     Ok(rpc)

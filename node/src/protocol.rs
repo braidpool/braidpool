@@ -15,6 +15,8 @@ pub use handshake::HandshakeMessage;
 pub use heartbeat::HeartbeatMessage;
 pub use ping::PingMessage;
 
+use crate::error::ProtocolError;
+
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub enum Message {
     Ping(PingMessage),
@@ -23,10 +25,11 @@ pub enum Message {
 }
 
 impl Message {
-    pub fn as_bytes(&self) -> Option<Bytes> {
+    pub fn as_bytes(&self) -> Result<Bytes, ProtocolError> {
         let mut s = flexbuffers::FlexbufferSerializer::new();
-        self.serialize(&mut s).unwrap();
-        Some(Bytes::from(s.take_buffer()))
+        self.serialize(&mut s)
+            .map_err(|e| ProtocolError::Serialization(e.to_string()))?;
+        Ok(Bytes::from(s.take_buffer()))
     }
 
     pub fn from_bytes(b: &[u8]) -> Result<Self, Box<dyn Error>> {

@@ -6,6 +6,7 @@ use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 
 // const CHANNEL_CAPACITY: usize = 32;
 
+use crate::error::ProtocolError;
 use crate::protocol::{self, HandshakeMessage, Message, ProtocolMessage};
 
 pub struct Connection {
@@ -32,8 +33,8 @@ impl Connection {
     pub async fn start_from_connect(&mut self, addr: &SocketAddr) -> Result<(), Box<dyn Error>> {
         use futures::SinkExt;
         log::info!("Starting from connect");
-        let message = HandshakeMessage::start(addr).unwrap();
-        self.writer.send(message.as_bytes().unwrap()).await?;
+        let message = HandshakeMessage::start(addr).ok_or(ProtocolError::MessageCreation)?;
+        self.writer.send(message.as_bytes()?).await?;
         self.start_read_loop().await?;
         Ok(())
     }
@@ -69,16 +70,20 @@ impl Connection {
     async fn message_received(&mut self, message: &Bytes) -> Result<(), &'static str> {
         use futures::SinkExt;
 
-        let message: Message = protocol::Message::from_bytes(message).unwrap();
+        let message: Message = protocol::Message::from_bytes(message)
+            .map_err(|_| "Error deserializing: Closing peer connection")?;
         match message.response_for_received() {
             Ok(result) => {
                 if let Some(response) = result {
-                    if let Some(to_send) = response.as_bytes() {
-                        if (self.writer.send(to_send).await).is_err() {
-                            return Err("Send failed: Closing peer connection");
+                    match response.as_bytes() {
+                        Ok(to_send) => {
+                            if (self.writer.send(to_send).await).is_err() {
+                                return Err("Send failed: Closing peer connection");
+                            }
                         }
-                    } else {
-                        return Err("Error serializing: Closing peer connection");
+                        Err(_) => {
+                            return Err("Error serializing: Closing peer connection");
+                        }
                     }
                 }
             }

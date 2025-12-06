@@ -10,6 +10,7 @@ use num::BigUint;
 use serde::{Deserialize, Serialize};
 
 use crate::braid::*;
+use crate::error::BraidError;
 
 /// The work per bead if work is not passed
 fn fixed_bead_work() -> Work {
@@ -237,12 +238,16 @@ impl<'de> Deserialize<'de> for Dag {
 }
 
 /// Make a DAG object which caches the children, geneses, tips, cohorts, and highest work path
+///
+/// # Errors
+///
+/// Returns `BraidError` if work calculation or highest work path computation fails.
 #[allow(dead_code)]
 pub fn make_dag(
     hashed_parents: &Relatives,
     bead_work: Option<&HashMap<BeadHash, Work>>,
     description: Option<&str>,
-) -> Dag {
+) -> Result<Dag, BraidError> {
     let parents = number_beads(hashed_parents);
     let children = reverse(&parents);
     let geneses = geneses(&parents);
@@ -257,10 +262,10 @@ pub fn make_dag(
             .collect(),
     };
 
-    let work = descendant_work(&parents, Some(&children), &bead_work, Some(&cohorts));
-    let highest_work_path = highest_work_path(&parents, Some(&children), &bead_work);
+    let work = descendant_work(&parents, Some(&children), &bead_work, Some(&cohorts))?;
+    let highest_work_path = highest_work_path(&parents, Some(&children), &bead_work)?;
 
-    Dag {
+    Ok(Dag {
         description: description.map(String::from),
         parents,
         children,
@@ -270,7 +275,7 @@ pub fn make_dag(
         bead_work,
         work,
         highest_work_path,
-    }
+    })
 }
 
 /// Load a JSON file containing a braid
@@ -291,7 +296,7 @@ pub fn save_braid<P: AsRef<Path>>(
     filename: P,
     description: Option<&str>,
 ) -> Result<Dag, Box<dyn Error>> {
-    let dag = make_dag(parents, None, description);
+    let dag = make_dag(parents, None, description)?;
 
     let mut result = serde_json::Map::new();
     result.insert(

@@ -447,7 +447,7 @@ fn test_highest_work_path() {
         .map(|b| (b.clone(), Work::from(1u32)))
         .collect();
     assert_eq!(
-        braid::highest_work_path(&parents1, Some(&children1), &bead_work),
+        braid::highest_work_path(&parents1, Some(&children1), &bead_work).unwrap(),
         expected
     );
 }
@@ -462,7 +462,7 @@ fn test_highest_work_path_files() {
             let path_str = path.to_string_lossy();
             let dag = load_braid(&path).unwrap();
             assert_eq!(
-                braid::highest_work_path(&dag.parents, Some(&dag.children), &dag.bead_work),
+                braid::highest_work_path(&dag.parents, Some(&dag.children), &dag.bead_work).unwrap(),
                 dag.highest_work_path,
                 "Failed on file: {}",
                 path_str
@@ -507,7 +507,7 @@ fn test_check_work_files() {
             let dag = load_braid(&path).unwrap();
             assert_eq!(
                 dag.work,
-                braid::descendant_work(&dag.parents, Some(&dag.children), &dag.bead_work, None),
+                braid::descendant_work(&dag.parents, Some(&dag.children), &dag.bead_work, None).unwrap(),
                 "Failed on file: {}",
                 path_str
             );

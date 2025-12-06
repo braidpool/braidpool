@@ -10,9 +10,12 @@ mod block_template;
 mod braid;
 mod cli;
 mod connection;
+mod error;
 mod protocol;
 mod rpc;
 mod zmq;
+
+use error::NodeError;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -21,7 +24,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     setup_logging();
     setup_tracing()?;
 
-    let datadir = shellexpand::full(args.datadir.to_str().unwrap()).unwrap();
+    let datadir_str = args
+        .datadir
+        .to_str()
+        .ok_or_else(|| NodeError::InvalidPath(format!("{:?}", args.datadir)))?;
+    let datadir = shellexpand::full(datadir_str)
+        .map_err(|e| NodeError::ShellExpansion(e.to_string()))?;
     match fs::metadata(&*datadir) {
         Ok(m) => {
             if !m.is_dir() {
@@ -51,7 +59,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if let Some(addnode) = args.addnode {
         for node in addnode.iter() {
             //log::info!("Connecting to node: {:?}", node);
-            let stream = TcpStream::connect(node).await.expect("Error connecting");
+            let stream = match TcpStream::connect(node).await {
+                Ok(s) => s,
+                Err(e) => {
+                    log::error!("Failed to connect to node {}: {}", node, e);
+                    continue;
+                }
+            };
             let (r, w) = stream.into_split();
             let framed_reader = FramedRead::new(r, LengthDelimitedCodec::new());
             let framed_writer = FramedWrite::new(w, LengthDelimitedCodec::new());
@@ -110,7 +124,8 @@ fn setup_tracing() -> Result<(), Box<dyn Error>> {
         .finish();
 
     // Set the subscriber as the global default for tracing
-    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
+    tracing::subscriber::set_global_default(subscriber)
+        .map_err(|e| NodeError::TracingSetup(e.to_string()))?;
 
     Ok(())
 }

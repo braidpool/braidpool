@@ -9,6 +9,8 @@ pub mod io_json;
 
 use num::BigUint;
 
+use crate::error::BraidError;
+
 /// A type alias for a bead (A 256-bit uint representing a block hash)
 pub type BeadHash = BigUint;
 
@@ -86,8 +88,7 @@ pub fn all_ancestors<'a>(
 ) -> &'a HashMap<BeadHash, HashSet<BeadHash>> {
     let mut work_stack = vec![(b.clone(), false)]; // (bead, is_processed)
 
-    while !work_stack.is_empty() {
-        let (current, is_processed) = work_stack.pop().unwrap();
+    while let Some((current, is_processed)) = work_stack.pop() {
 
         if is_processed {
             // We've finished processing all parents, compute ancestors
@@ -332,12 +333,16 @@ pub fn sub_braid(beads: &HashSet<BeadHash>, parents: &Relatives) -> Relatives {
 }
 
 /// Find the work in descendants
+///
+/// # Errors
+///
+/// Returns `BraidError::BeadWorkNotFound` if a bead in the DAG doesn't have associated work.
 pub fn descendant_work(
     parents: &Relatives,
     children: Option<&Relatives>,
     bead_work: &BeadWork,
     in_cohorts: Option<&Vec<HashSet<BeadHash>>>,
-) -> HashMap<BeadHash, Work> {
+) -> Result<HashMap<BeadHash, Work>, BraidError> {
     let children_map = match children {
         Some(c) => c.clone(),
         None => reverse(parents),
@@ -360,12 +365,18 @@ pub fn descendant_work(
             all_ancestors(b, &sub_children, &mut sub_descendants);
 
             // Start with the bead's own work
-            let mut b_work = bead_work.get(b).cloned().unwrap();
+            let mut b_work = bead_work
+                .get(b)
+                .cloned()
+                .ok_or_else(|| BraidError::BeadWorkNotFound(b.to_string()))?;
 
             // Add work from descendants within this cohort
             if let Some(descendants) = sub_descendants.get(b) {
                 for a in descendants {
-                    b_work += bead_work.get(a).cloned().unwrap();
+                    b_work += bead_work
+                        .get(a)
+                        .cloned()
+                        .ok_or_else(|| BraidError::BeadWorkNotFound(a.to_string()))?;
                 }
             }
 
@@ -376,13 +387,17 @@ pub fn descendant_work(
         }
 
         // Update previous_work with sum of all work in this cohort
-        previous_work += c
-            .iter()
-            .map(|b| bead_work.get(b).cloned().unwrap())
-            .sum::<Work>();
+        let mut cohort_work = Work::from(0u64);
+        for b in &c {
+            cohort_work += bead_work
+                .get(b)
+                .cloned()
+                .ok_or_else(|| BraidError::BeadWorkNotFound(b.to_string()))?;
+        }
+        previous_work += cohort_work;
     }
 
-    retval
+    Ok(retval)
 }
 
 /// A custom comparison function for sorting beads
@@ -424,45 +439,54 @@ pub fn bead_cmp(
 }
 
 /// Return a sorting function for beads based on work
+///
+/// # Errors
+///
+/// Returns `BraidError` if work calculation fails.
 #[allow(dead_code)]
-pub fn work_sort_key<'a>(
-    parents: &'a Relatives,
-    children: Option<&'a Relatives>,
-    bead_work: &'a BeadWork,
-) -> impl Fn(&BeadHash, &BeadHash) -> std::cmp::Ordering + 'a {
+pub fn work_sort_key(
+    parents: &Relatives,
+    children: Option<&Relatives>,
+    bead_work: &BeadWork,
+) -> Result<Box<dyn Fn(&BeadHash, &BeadHash) -> std::cmp::Ordering>, BraidError> {
     let children = match children {
         Some(c) => c.clone(),
         None => reverse(parents),
     };
 
-    let dwork = descendant_work(parents, Some(&children), &bead_work, None);
-    let awork = descendant_work(&children, Some(parents), &bead_work, None);
+    let dwork = descendant_work(parents, Some(&children), bead_work, None)?;
+    let awork = descendant_work(&children, Some(parents), bead_work, None)?;
 
-    move |a, b| bead_cmp(a, b, &dwork, &awork)
+    Ok(Box::new(move |a, b| bead_cmp(a, b, &dwork, &awork)))
 }
 
 /// Find the highest (descendant) work path, by following the highest weights through the DAG
+///
+/// # Errors
+///
+/// Returns `BraidError::EmptyBeadCollection` if the DAG has no genesis beads or a bead has no children
+/// when expected, or `BraidError::BeadWorkNotFound` if work calculation fails.
 #[allow(dead_code)]
 pub fn highest_work_path(
     parents: &Relatives,
     children: Option<&Relatives>,
     bead_work: &BeadWork,
-) -> Vec<BeadHash> {
+) -> Result<Vec<BeadHash>, BraidError> {
     let children = match children {
         Some(c) => c.clone(),
         None => reverse(parents),
     };
 
     // Calculate descendant and ancestor work for proper tie-breaking
-    let dwork = descendant_work(parents, Some(&children), &bead_work, None);
-    let awork = descendant_work(&children, Some(parents), &bead_work, None);
+    let dwork = descendant_work(parents, Some(&children), bead_work, None)?;
+    let awork = descendant_work(&children, Some(parents), bead_work, None)?;
 
     // Find the genesis bead with maximum work using full comparison logic
     let genesis_beads = geneses(parents);
     let max_genesis = genesis_beads
         .iter()
         .max_by(|a, b| bead_cmp(a, b, &dwork, &awork))
-        .unwrap()
+        .ok_or(BraidError::EmptyBeadCollection)?
         .clone();
 
     let mut hwpath = vec![max_genesis];
@@ -481,13 +505,13 @@ pub fn highest_work_path(
         let max_child = children_set
             .iter()
             .max_by(|a, b| bead_cmp(a, b, &dwork, &awork))
-            .unwrap()
+            .ok_or(BraidError::EmptyBeadCollection)?
             .clone();
 
         hwpath.push(max_child);
     }
 
-    hwpath
+    Ok(hwpath)
 }
 
 /// Number the beads in a braid sequentially in topological order starting at genesis
