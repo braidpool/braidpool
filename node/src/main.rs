@@ -1,5 +1,7 @@
-use bitcoin::consensus::encode::deserialize;
-use bitcoin::Network;
+use bitcoin::{
+    consensus::encode::deserialize, ecdsa::Signature, pow::CompactTargetExt, BlockHash,
+    CompactTarget, EcdsaSighashType, Network, Txid,
+};
 use clap::Parser;
 use futures::lock::Mutex;
 use futures::StreamExt;
@@ -14,14 +16,17 @@ use libp2p::{
     swarm::SwarmEvent,
     PeerId,
 };
-use node::db::db_handlers::{fetch_beads_in_batch, prepare_bead_tuple_data};
+use node::committed_metadata::{CommittedMetadata, TimeVec, TxIdVec};
+use node::db::db_handlers::fetch_beads_in_batch;
 use node::ibd_manager::{IBD_TRIGGER_AFTER, MAX_IBD_INCOMING_THRESHOLD, MAX_IBD_RETRIES};
 use node::utils::BeadHash;
 use node::SwarmHandler;
 use node::{
     bead::{Bead, BeadHashes, BeadRequest, BeadResponse, BeadSyncError},
     behaviour::{self, BEAD_ANNOUNCE_PROTOCOL, BRAIDPOOL_TOPIC},
-    braid, cli,
+    braid,
+    braid::AddBeadStatus,
+    cli,
     db::db_handlers::DBHandler,
     ibd_manager::{IBDCommands, IBDManager, IBD_BATCH_SIZE},
     ipc_template_consumer,
@@ -29,11 +34,14 @@ use node::{
     rpc_server::{run_rpc_server, BitcoinRpcConfig, RpcProxyCommand},
     setup_tracing,
     stratum::{BlockTemplate, ConnectionMapping, Notifier, NotifyCmd, Server, StratumServerConfig},
+    uncommitted_metadata::UnCommittedMetadata,
     SwarmCommand, TemplateId,
 };
+use num::ToPrimitive;
 use std::collections::HashSet;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
+use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -126,8 +134,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //One will go into the IPC and the other will go to the `notifier`
     let (notification_tx, notification_rx) = mpsc::channel::<NotifyCmd>(1024);
     //Communication bridge between stratum and network swarm and swarm commands also, for communicating share population and propogating them further
-    let (swarm_handler, mut swarm_command_receiver) =
-        SwarmHandler::new(Arc::clone(&braid), db_tx.clone());
+    let (swarm_handler, mut swarm_command_receiver) = SwarmHandler::new(db_tx.clone());
     //Swarm command sender
     let swarm_command_sender = swarm_handler.command_sender.clone();
     let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
@@ -575,6 +582,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                 info!(bead = ?bead, hash = %bead.block_header.block_hash(), "Received bead");
                                 // Handle the received bead here
                                 let mut braid_data = braid.write().await;
+                                let curr_beads = braid_data.beads.clone();
+                                let bead_index_mapping = braid_data.bead_index_mapping.clone();
                                 let status = {
                                      braid_data.extend(&bead)
                                  };
@@ -649,7 +658,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                             }
                                         };
                                         // update score of the peer and adding to local db store
-                                        let _query_send_result = match db_tx.send(node::db::BraidpoolDBTypes::InsertTupleTypes { query: node::db::InsertTupleTypes::InsertBeadSequentially { bead_to_insert: bead,txs_json:txs_json,relative_json:relative_json,parent_timestamp_json:parent_timestamp_json,bead_id:*bead_id } }).await{
+                                        let _query_send_result = match db_tx.send(node::db::BraidpoolDBTypes::InsertTupleTypes { query: node::db::InsertTupleTypes::InsertBeadSequentially { bead_to_insert: bead,curr_beads:curr_beads,bead_index_mapping:bead_index_mapping} }).await{
                                            Ok(_)=>{
                                                debug!("Insert command sent successfully to db handler after receiving bead from peer");
                                            },
@@ -764,7 +773,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                             }
                                         };
                                         // update score of the peer and adding to local db store
-                                        let _query_send_result = match db_tx.send(node::db::BraidpoolDBTypes::InsertTupleTypes { query: node::db::InsertTupleTypes::InsertBeadSequentially { bead_to_insert: bead,txs_json:txs_json,relative_json:relative_json,parent_timestamp_json:parent_timestamp_json,bead_id:*bead_id } }).await{
+                                        let _query_send_result = match db_tx.send(node::db::BraidpoolDBTypes::InsertTupleTypes { query: node::db::InsertTupleTypes::InsertBeadSequentially { bead_to_insert: bead,curr_beads:curr_beads,bead_index_mapping:bead_index_mapping} }).await{
                                             Ok(_)=>{
                                                debug!("Insert command sent successfully to db handler after receiving bead from peer");
                                            },
@@ -1071,6 +1080,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     };
                                     for bead in beads.into_iter() {
                                         let mut braid_data = braid.write().await;
+                                        let curr_beads = braid_data.beads.clone();
+                                        let bead_index_mapping = braid_data.bead_index_mapping.clone();
                                         let status = braid_data.extend(&bead);
                                         let curr_beadhash = bead.block_header.block_hash().to_string();
                                         if let braid::AddBeadStatus::InvalidBead = status {
@@ -1106,7 +1117,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                                 peer_manager.update_score(&peer, 1.0);
                                             }
                                             //persisting the received beads from peer onto DB(disk)
-                                            match db_tx.send(node::db::BraidpoolDBTypes::InsertTupleTypes { query: node::db::InsertTupleTypes::InsertBeadSequentially { bead_to_insert: bead,txs_json:txs_json,parent_timestamp_json:parent_timestamp_json,relative_json:relative_json,bead_id:*bead_id } }).await{
+                                            match db_tx.send(node::db::BraidpoolDBTypes::InsertTupleTypes { query: node::db::InsertTupleTypes::InsertBeadSequentially { bead_to_insert: bead,curr_beads:curr_beads,bead_index_mapping:bead_index_mapping} }).await{
                                                 Ok(_)=>{
                                                     debug!(beadhash=?curr_beadhash,"Bead received in IBD persisted over disk with beadhash and status BeadAdded");
                                                 },
@@ -1406,15 +1417,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
              }
              Some(swarm_command) = swarm_command_receiver.recv()=>{
                  match swarm_command{
-                     SwarmCommand::PropagateValidBead {
-                         bead_bytes,
-                     } => {
-                         swarm
-                             .behaviour_mut()
-                             .bead_announce
-                             .publish(current_broadcast_topic.clone(), bead_bytes);
-                        info!(topic = ?current_broadcast_topic, "Published bead to floodsub topic");
-                     },
                      SwarmCommand::InitiateIBD=>{
                         info!("Initiating IBD after peer discovery and selecting peer with lowest latency score");
                         //Evicting lowest latency peer id
@@ -1520,13 +1522,133 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                 });
                             }
                         }
+                     },
+                     SwarmCommand::PropagateMinedBead{
+                        candidate_block,
+                        extranonce_2_raw_value,
+                        downstream_client_ip,
+                        job_sent_timestamp,
+                        downstream_payout_addr,
+                        //TODO: Will be used as seperate entity after altering `uncommitted_metadata`
+                        extranonce_1_raw_value,
+                     }=>{
+                        let (candidate_block_header, candidate_block_transactions) = candidate_block.into_parts();
+                        let ids: Vec<Txid> = candidate_block_transactions
+                            .iter()
+                            .map(|tx| tx.compute_txid())
+                            .collect();
+                        let transaction_ids: Vec<Txid> = Vec::from(ids);
+                        debug!("Broadcasting bead via floodsub");
+                        //TODO:Currently temprorary placeholder will be replaced in upcoming PRs
+                        let public_key = "020202020202020202020202020202020202020202020202020202020202020202"
+                            .parse::<bitcoin::PublicKey>()
+                            .unwrap();
+                        let mut time_hash_set = TimeVec(Vec::new());
+                        let mut parent_hash_set: HashSet<BlockHash> = HashSet::new();
+                        let mut braid_data = braid.write().await;
+                        let tips_index = &braid_data.tips;
+                        //Committing parents data in bead
+                        for tip_bead in tips_index {
+                            let current_tip_bead = braid_data.beads.get(*tip_bead).unwrap();
+                            parent_hash_set.insert(current_tip_bead.block_header.block_hash());
+                            time_hash_set
+                                .0
+                                .push(current_tip_bead.committed_metadata.start_timestamp);
+                        }
+                        debug!(tip_indices = ?tips_index, tip_hashes = ?parent_hash_set,
+                            "Tips before extending the Braid");
+                            //TODO:This will be replaced via the allotted `WeakShareDifficulty` after Difficulty adjustment
+                            let weak_target = CompactTarget::from_unprefixed_hex("1d00ffff").unwrap();
+                            //Mindiff
+                            let min_target = CompactTarget::from_unprefixed_hex("1d00ffff").unwrap();
+                        //Job sent time before downstream starts mining
+                        let job_notification_time_val =
+                        bitcoin::blockdata::locktime::absolute::Time::from_consensus(job_sent_timestamp)
+                        .unwrap();
+                    let candidate_block_bead_committed_metadata = CommittedMetadata {
+                        comm_pub_key: public_key,
+                        transaction_ids: TxIdVec(transaction_ids),
+                        parents: parent_hash_set,
+                        parent_bead_timestamps: time_hash_set,
+                        payout_address: downstream_payout_addr.to_string(),
+                        start_timestamp: job_notification_time_val,
+                        min_target: min_target,
+                        weak_target: weak_target,
+                        miner_ip: downstream_client_ip.to_string(),
+                    };
+                    //TODO:This will be either be generated via the `Pubkey` from config parameter from `~/.braidpool`
+                    let hex = "3046022100839c1fbc5304de944f697c9f4b1d01d1faeba32d751c0f7acb21ac8a0f436a72022100e89bd46bb3a5a62adc679f659b7ce876d83ee297c7a5587b2011c4fcc72eab45";
+                    let sig = Signature {
+                        signature: secp256k1::ecdsa::Signature::from_str(hex).unwrap(),
+                        sighash_type: EcdsaSighashType::All,
+                    };
+                    //Current UNIX timestamp during broadcast of bead
+                    let current_system_time = std::time::SystemTime::now();
+                    let duration_since_epoch = match current_system_time.duration_since(UNIX_EPOCH) {
+                        Ok(duration) => duration,
+                        Err(error) => {
+                            error!(error = ?error, "System time before UNIX EPOCH");
+                            continue;
+                        }
+                    };
+
+                    let unix_timestamp = duration_since_epoch.as_secs().to_u32().unwrap();
+
+                    let candidate_block_bead_uncommitted_metadata = UnCommittedMetadata {
+                        broadcast_timestamp: bitcoin::blockdata::locktime::absolute::MedianTimePast::from_u32(
+                            unix_timestamp,
+                        )
+                        .unwrap(),
+                        extra_nonce_1: extranonce_1_raw_value,
+                        extra_nonce_2: extranonce_2_raw_value,
+                        signature: sig,
+                    };
+                    let weak_share = Bead {
+                        committed_metadata: candidate_block_bead_committed_metadata,
+                        block_header: candidate_block_header,
+                        uncommitted_metadata: candidate_block_bead_uncommitted_metadata,
+                    };
+                    let status = braid_data.extend(&weak_share);
+                    let curr_bead_hash = weak_share.block_header.block_hash();
+                    let curr_beads = braid_data.beads.clone();
+                    let bead_index_mapping = braid_data.bead_index_mapping.clone();
+                    match status {
+                            AddBeadStatus::BeadAdded => {
+                                let new_tips: Vec<_> = braid_data.tips.iter().map(|&idx| idx).collect();
+                                info!(
+                                    hash = %curr_bead_hash,
+                                    new_tips = ?new_tips,
+                                    "Braid extended successfully"
+                                );
+
+                                let _db_insertion_command = match db_tx.send(node::db::BraidpoolDBTypes::InsertTupleTypes { query: node::db::InsertTupleTypes::InsertBeadSequentially { bead_to_insert: weak_share.clone(),curr_beads:curr_beads,bead_index_mapping:bead_index_mapping} })
+                                        .await
+                                    {
+                                        Ok(_) => {
+                                            debug!(
+                                                hash = %curr_bead_hash,
+                                                "InsertBeadSequentially sent to DB thread"
+                                            );
+                                        }
+                                        Err(error) => {
+                                            error!(error = ?error, "Database insertion command failed");
+                                        }
+                                    };
+                                    let serialized_weak_share_bytes = bitcoin::consensus::serialize(&weak_share);
+                                swarm
+                                .behaviour_mut()
+                                .bead_announce
+                                .publish(current_broadcast_topic.clone(), serialized_weak_share_bytes);
+                                info!(topic = ?current_broadcast_topic, "Published bead to floodsub topic");
+                            }
+                            _ => {
+                                warn!(status = ?status, hash = %weak_share.block_header.block_hash(),
+                                    "Failed to extend Braid")
+                            }
+                        }
                      }
                  }
              }
-
-
-
-
             }
         }
     });
