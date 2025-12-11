@@ -75,7 +75,7 @@ impl DBHandler {
         ))
     }
     //Insertion handlers private
-    pub async fn insert_bead(
+    async fn insert_bead(
         &self,
         bead: Bead,
         txs_json: String,
@@ -161,6 +161,70 @@ impl DBHandler {
         };
         Ok(())
     }
+    fn prepare_bead_tuple_data(
+        &mut self,
+        beads: &Vec<Bead>,
+        bead_index_mapping: &HashMap<BeadHash, usize>,
+        bead: &Bead,
+    ) -> anyhow::Result<(String, String, String)> {
+        let mut parent_set: HashMap<usize, HashSet<usize>> = HashMap::new();
+
+        for (idx, b) in beads.iter().enumerate() {
+            let mut set = HashSet::new();
+            for p in &b.committed_metadata.parents {
+                let parent_idx = *bead_index_mapping.get(p).unwrap();
+                set.insert(parent_idx);
+            }
+            parent_set.insert(idx, set);
+        }
+
+        let bead_id = *bead_index_mapping
+            .get(&bead.block_header.block_hash())
+            .unwrap();
+        let current_parents = parent_set.get(&bead_id).cloned().unwrap_or_default();
+
+        let mut relatives = Vec::new();
+        let mut parent_ts = Vec::new();
+        let mut txs = Vec::new();
+
+        for parent in current_parents {
+            let ts = beads[parent]
+                .committed_metadata
+                .start_timestamp
+                .to_u32()
+                .to_u64()
+                .expect("An error occurred while casting u32 to u64");
+
+            relatives.push((parent as u64, bead_id as u64));
+            parent_ts.push((parent as u64, bead_id as u64, ts));
+        }
+
+        for tx in &bead.committed_metadata.transaction_ids.0 {
+            txs.push((bead_id as u64, hex::encode(tx.to_byte_array())));
+        }
+
+        let txs_json = serde_json::to_string(
+            &txs.iter()
+                .map(|t| json!({ "txid": t.1, "bead_id": t.0 }))
+                .collect::<Vec<_>>(),
+        )?;
+
+        let relatives_json = serde_json::to_string(
+            &relatives
+                .iter()
+                .map(|r| json!({ "parent": r.0, "child": r.1 }))
+                .collect::<Vec<_>>(),
+        )?;
+
+        let parent_ts_json = serde_json::to_string(
+            &parent_ts
+                .iter()
+                .map(|p| json!({ "child": p.1, "parent": p.0, "timestamp": p.2 }))
+                .collect::<Vec<_>>(),
+        )?;
+
+        Ok((txs_json, relatives_json, parent_ts_json))
+    }
     //Individual insertion operations
     pub async fn insert_query_handler(&mut self) {
         debug!("Query handler task started");
@@ -169,12 +233,30 @@ impl DBHandler {
                 BraidpoolDBTypes::InsertTupleTypes { query } => match query {
                     InsertTupleTypes::InsertBeadSequentially {
                         bead_to_insert,
-                        txs_json,
-                        relative_json,
-                        parent_timestamp_json,
-                        bead_id,
+                        bead_index_mapping,
+                        curr_beads,
                     } => {
+                        let bead_id = bead_index_mapping
+                            .get(&bead_to_insert.block_header.block_hash())
+                            .unwrap();
                         let bead_hash = bead_to_insert.block_header.block_hash();
+                        let (txs_json, relative_json, parent_timestamp_json) = match self
+                            .prepare_bead_tuple_data(
+                                &curr_beads,
+                                &bead_index_mapping,
+                                &bead_to_insert,
+                            ) {
+                            Ok((txs, relatives, parent_ts)) => (txs, relatives, parent_ts),
+                            Err(error) => {
+                                error!(
+                                    error = ?error,
+                                    bead_id = bead_id,
+                                    bead_hash = %bead_hash,
+                                    "Failed to prepare bead tuple data"
+                                );
+                                continue;
+                            }
+                        };
                         match self
                             .insert_bead(
                                 bead_to_insert,
@@ -207,69 +289,6 @@ impl DBHandler {
             }
         }
     }
-}
-pub fn prepare_bead_tuple_data(
-    beads: &Vec<Bead>,
-    bead_index_mapping: &HashMap<BeadHash, usize>,
-    bead: &Bead,
-) -> anyhow::Result<(String, String, String)> {
-    let mut parent_set: HashMap<usize, HashSet<usize>> = HashMap::new();
-
-    for (idx, b) in beads.iter().enumerate() {
-        let mut set = HashSet::new();
-        for p in &b.committed_metadata.parents {
-            let parent_idx = *bead_index_mapping.get(p).unwrap();
-            set.insert(parent_idx);
-        }
-        parent_set.insert(idx, set);
-    }
-
-    let bead_id = *bead_index_mapping
-        .get(&bead.block_header.block_hash())
-        .unwrap();
-    let current_parents = parent_set.get(&bead_id).cloned().unwrap_or_default();
-
-    let mut relatives = Vec::new();
-    let mut parent_ts = Vec::new();
-    let mut txs = Vec::new();
-
-    for parent in current_parents {
-        let ts = beads[parent]
-            .committed_metadata
-            .start_timestamp
-            .to_u32()
-            .to_u64()
-            .expect("An error occurred while casting u32 to u64");
-
-        relatives.push((parent as u64, bead_id as u64));
-        parent_ts.push((parent as u64, bead_id as u64, ts));
-    }
-
-    for tx in &bead.committed_metadata.transaction_ids.0 {
-        txs.push((bead_id as u64, hex::encode(tx.to_byte_array())));
-    }
-
-    let txs_json = serde_json::to_string(
-        &txs.iter()
-            .map(|t| json!({ "txid": t.1, "bead_id": t.0 }))
-            .collect::<Vec<_>>(),
-    )?;
-
-    let relatives_json = serde_json::to_string(
-        &relatives
-            .iter()
-            .map(|r| json!({ "parent": r.0, "child": r.1 }))
-            .collect::<Vec<_>>(),
-    )?;
-
-    let parent_ts_json = serde_json::to_string(
-        &parent_ts
-            .iter()
-            .map(|p| json!({ "child": p.1, "parent": p.0, "timestamp": p.2 }))
-            .collect::<Vec<_>>(),
-    )?;
-
-    Ok((txs_json, relatives_json, parent_ts_json))
 }
 //Fetching beads in batch
 pub async fn fetch_beads_in_batch(

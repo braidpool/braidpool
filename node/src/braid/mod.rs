@@ -1,5 +1,4 @@
 use crate::bead::Bead;
-use crate::db::db_handlers::prepare_bead_tuple_data;
 use crate::db::{BraidpoolDBTypes, InsertTupleTypes};
 use crate::utils::BeadHash;
 use num::BigUint;
@@ -216,43 +215,6 @@ impl Braid {
                 // Now extend with the orphan bead
                 match self.extend(&orphan_bead) {
                     AddBeadStatus::BeadAdded => {
-                        let (txs_json, relative_json, parent_timestamp_json) =
-                            match prepare_bead_tuple_data(
-                                &self.beads,
-                                &self.bead_index_mapping,
-                                &orphan_bead,
-                            ) {
-                                Ok(received_tuples) => received_tuples,
-                                Err(error) => {
-                                    tracing::error!("An error occurred while preparing bead tuple data for bead with beadhash - {:?} due to {:?}",orphan_bead.block_header.block_hash(),error);
-                                    continue;
-                                }
-                            };
-                        let bead_id = self
-                            .bead_index_mapping
-                            .get(&orphan_bead.block_header.block_hash())
-                            .unwrap();
-                        let db_tx_clone = self.db_tx.clone();
-                        let insert_cmd = BraidpoolDBTypes::InsertTupleTypes {
-                            query: InsertTupleTypes::InsertBeadSequentially {
-                                bead_to_insert: orphan_bead,
-                                txs_json,
-                                relative_json,
-                                parent_timestamp_json,
-                                bead_id: *bead_id,
-                            },
-                        };
-                        //Persist the newly added orphan bead to DB asynchronously
-                        tokio::spawn(async move {
-                            match db_tx_clone.send(insert_cmd).await {
-                                Ok(_) => {
-                                    tracing::info!("Insert orphan bead command sent to db handler successfully");
-                                }
-                                Err(error) => {
-                                    tracing::error!("An error occurred while sending insert orphan bead command received from peer to db handler due to {:?}",error);
-                                }
-                            };
-                        });
                         // Recursively process remaining orphans as this addition
                         // might enable more orphans to be processed
                         self.process_orphan_beads();
