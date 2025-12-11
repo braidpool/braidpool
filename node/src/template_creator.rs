@@ -81,6 +81,7 @@ impl FinalTemplate {
             0
         }
     }
+
     /// Returns the block hash as hex string
     pub fn block_hash_hex(&self) -> String {
         hex::encode(self.block_hash())
@@ -98,6 +99,21 @@ impl FinalTemplate {
     /// Returns the size of the complete block in bytes
     pub fn block_size(&self) -> usize {
         self.complete_block_hex.len()
+    }
+
+    /// Returns the number of transactions in the block
+    ///
+    /// The number of transactions is the first `varint` field after the block header.
+    pub fn block_transaction_count(&self) -> u64 {
+        if self.complete_block_hex.len() >= 80 {
+            let body = &self.complete_block_hex[80..];
+            match decode_varint(body) {
+                Ok((count, _)) => count,
+                Err(_) => 0,
+            }
+        } else {
+            0
+        }
     }
 }
 
