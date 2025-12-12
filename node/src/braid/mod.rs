@@ -1,12 +1,10 @@
 use crate::bead::Bead;
-use crate::db::{BraidpoolDBTypes, InsertTupleTypes};
 use crate::utils::BeadHash;
 use num::BigUint;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::collections::{HashMap, HashSet};
-use tokio::sync::mpsc::Sender;
 #[derive(Clone, Debug, Serialize, PartialEq, Deserialize)]
 pub struct Cohort(pub HashSet<usize>);
 #[derive(Debug, Clone)]
@@ -34,12 +32,11 @@ pub struct Braid {
     pub orphan_beads: Vec<Bead>,
     pub genesis_beads: HashSet<usize>,
     pub bead_index_mapping: HashMap<BeadHash, usize>,
-    pub db_tx: Sender<BraidpoolDBTypes>,
 }
 
 impl Braid {
     ///Initializing the Braid object for keeping track of current state of Braid
-    pub fn new(genesis_beads: Vec<Bead>, db_tx: Sender<BraidpoolDBTypes>) -> Self {
+    pub fn new(genesis_beads: Vec<Bead>) -> Self {
         let mut beads = Vec::new();
         let mut bead_indices = HashSet::new();
         let mut bead_index_mapping = HashMap::new();
@@ -61,7 +58,6 @@ impl Braid {
             orphan_beads: Vec::new(),
             genesis_beads: bead_indices,
             bead_index_mapping,
-            db_tx,
         }
     }
     pub fn reset(&mut self) {
@@ -81,8 +77,7 @@ impl Braid {
     pub fn extend(&mut self, bead: &Bead) -> AddBeadStatus {
         // If the braid is empty and bead has no parents, treat as genesis bead
         if self.beads.is_empty() && bead.committed_metadata.parents.is_empty() {
-            let db_tx_ref = self.db_tx.clone();
-            *self = Braid::new(vec![bead.clone()], db_tx_ref);
+            *self = Braid::new(vec![bead.clone()]);
             return AddBeadStatus::BeadAdded;
         }
         // No parents: bad block i.e. the extend will add beads after the genesis
@@ -195,7 +190,10 @@ impl Braid {
         let mut i = self.orphan_beads.len();
         while i > 0 {
             i -= 1;
-
+            tracing::info!(
+                "PROCESSING ORPHAN BEAD - {:?}",
+                self.orphan_beads[i].block_header.block_hash()
+            );
             // Check if all parents are now available for this orphan
             let mut all_parents_available = true;
             for parent_hash in &self.orphan_beads[i].committed_metadata.parents {
@@ -215,6 +213,10 @@ impl Braid {
                 // Now extend with the orphan bead
                 match self.extend(&orphan_bead) {
                     AddBeadStatus::BeadAdded => {
+                        tracing::warn!(
+                            "Orphan bead successfully added to braid: {:?}",
+                            orphan_bead.block_header.block_hash()
+                        );
                         // Recursively process remaining orphans as this addition
                         // might enable more orphans to be processed
                         self.process_orphan_beads();

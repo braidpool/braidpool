@@ -85,6 +85,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             format!("Database initialization failed: {:?}", e),
         )
     })?;
+    let (mut _db_handler, db_tx) = DBHandler::new().await.unwrap();
+    // Initializing the braid object with read write lock
+    //for supporting concurrent readers and single writer
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(Vec::from([]))));
     let db_connection_pool = _db_handler.db_connection_pool.clone();
     //Reconstructing local braid upon startup
     let db_connection_pool_ref = _db_handler.db_connection_pool.clone();
@@ -579,14 +583,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
                          let result_bead: Result<Bead, bitcoin::consensus::DeserializeError> = deserialize(&message.data);
                          match result_bead {
                              Ok(bead) => {
-                                info!(bead = ?bead, hash = %bead.block_header.block_hash(), "Received bead");
+                                // info!(bead = ?bead, hash = %bead.block_header.block_hash(), "Received bead");
                                 // Handle the received bead here
                                 let mut braid_data = braid.write().await;
+                                //If the current bead's extension has further led to removal of orphan beads then
+                                //we can get the orphan beads that we can persist in DB also
+                                let previous_braid_height = braid_data.beads.len();
+                                let status = {
+                                    braid_data.extend(&bead)
+                                };
                                 let curr_beads = braid_data.beads.clone();
                                 let bead_index_mapping = braid_data.bead_index_mapping.clone();
-                                let status = {
-                                     braid_data.extend(&bead)
-                                 };
+                                let braid_height_after_extend = braid_data.beads.len();
+                                let mut orphan_beads_removed:Vec<Bead> = Vec::new();
+                                if (braid_height_after_extend-previous_braid_height) > 1 {
+                                    //Orphans have also been removed upon successful extension of braid
+                                    let orphans_removed = braid_data.beads[previous_braid_height+1..].to_vec();
+                                    orphan_beads_removed.extend_from_slice(&orphans_removed);
+                                }
                                  //If the node is under IBD then no need for timestamp check and it will be empty in any case
                                  if ibd_spinlock.load(Ordering::SeqCst){
                                     let broadcast_ts = bead.uncommitted_metadata.broadcast_timestamp.clone().to_u32();
@@ -658,9 +672,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                             }
                                         };
                                         // update score of the peer and adding to local db store
-                                        let _query_send_result = match db_tx.send(node::db::BraidpoolDBTypes::InsertTupleTypes { query: node::db::InsertTupleTypes::InsertBeadSequentially { bead_to_insert: bead,curr_beads:curr_beads,bead_index_mapping:bead_index_mapping} }).await{
+                                        let _query_send_result = match db_tx.send(node::db::BraidpoolDBTypes::InsertTupleTypes { query: node::db::InsertTupleTypes::InsertBeadSequentially { bead_to_insert: bead,curr_beads:curr_beads,bead_index_mapping:bead_index_mapping,removed_orphans:orphan_beads_removed} }).await{
                                            Ok(_)=>{
                                                debug!("Insert command sent successfully to db handler after receiving bead from peer");
+
                                            },
                                            Err(error)=>{
                                                error!(
@@ -773,7 +788,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                             }
                                         };
                                         // update score of the peer and adding to local db store
-                                        let _query_send_result = match db_tx.send(node::db::BraidpoolDBTypes::InsertTupleTypes { query: node::db::InsertTupleTypes::InsertBeadSequentially { bead_to_insert: bead,curr_beads:curr_beads,bead_index_mapping:bead_index_mapping} }).await{
+                                        let _query_send_result = match db_tx.send(node::db::BraidpoolDBTypes::InsertTupleTypes { query: node::db::InsertTupleTypes::InsertBeadSequentially { bead_to_insert: bead,curr_beads:curr_beads,bead_index_mapping:bead_index_mapping,removed_orphans:orphan_beads_removed} }).await{
                                             Ok(_)=>{
                                                debug!("Insert command sent successfully to db handler after receiving bead from peer");
                                            },
@@ -1080,9 +1095,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     };
                                     for bead in beads.into_iter() {
                                         let mut braid_data = braid.write().await;
+                                        let previous_braid_height = braid_data.beads.len();
+                                        let status = braid_data.extend(&bead);
                                         let curr_beads = braid_data.beads.clone();
                                         let bead_index_mapping = braid_data.bead_index_mapping.clone();
-                                        let status = braid_data.extend(&bead);
+                                        let braid_height_after_extend = braid_data.beads.len();
+                                        warn!("HEIGHT BEFORE EXTEND - {:?} AND HEIGHT AFTER EXTEND - {:?} ",previous_braid_height,braid_height_after_extend);
+                                        let mut orphan_beads_removed:Vec<Bead> = Vec::new();
+                                        if (braid_height_after_extend-previous_braid_height) > 1 {
+                                            //Orphans have also been removed upon successful extension of braid
+                                            let orphans_removed = braid_data.beads[previous_braid_height+1..].to_vec();
+                                            warn!("ORPHANS REMOVED DURING EXTEND - {:?}",orphans_removed.iter().map(|b| b.block_header.block_hash()).collect::<Vec<BeadHash>>());
+                                            orphan_beads_removed.extend_from_slice(&orphans_removed);
+                                            warn!("ORPHAN SET LEN - {:?}",orphan_beads_removed.len());
+                                        }
                                         let curr_beadhash = bead.block_header.block_hash().to_string();
                                         if let braid::AddBeadStatus::InvalidBead = status {
                                             // update the peer manager about the invalid bead
@@ -1117,7 +1143,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                                 peer_manager.update_score(&peer, 1.0);
                                             }
                                             //persisting the received beads from peer onto DB(disk)
-                                            match db_tx.send(node::db::BraidpoolDBTypes::InsertTupleTypes { query: node::db::InsertTupleTypes::InsertBeadSequentially { bead_to_insert: bead,curr_beads:curr_beads,bead_index_mapping:bead_index_mapping} }).await{
+                                            match db_tx.send(node::db::BraidpoolDBTypes::InsertTupleTypes { query: node::db::InsertTupleTypes::InsertBeadSequentially { bead_to_insert: bead,curr_beads:curr_beads,bead_index_mapping:bead_index_mapping,removed_orphans:orphan_beads_removed} }).await{
                                                 Ok(_)=>{
                                                     debug!(beadhash=?curr_beadhash,"Bead received in IBD persisted over disk with beadhash and status BeadAdded");
                                                 },
@@ -1620,8 +1646,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     new_tips = ?new_tips,
                                     "Braid extended successfully"
                                 );
-
-                                let _db_insertion_command = match db_tx.send(node::db::BraidpoolDBTypes::InsertTupleTypes { query: node::db::InsertTupleTypes::InsertBeadSequentially { bead_to_insert: weak_share.clone(),curr_beads:curr_beads,bead_index_mapping:bead_index_mapping} })
+                                //In case of self-mined bead we won't have any orphan beads removed
+                                let _db_insertion_command = match db_tx.send(node::db::BraidpoolDBTypes::InsertTupleTypes { query: node::db::InsertTupleTypes::InsertBeadSequentially { bead_to_insert: weak_share.clone(),curr_beads:curr_beads,bead_index_mapping:bead_index_mapping,removed_orphans:Vec::new()} })
                                         .await
                                     {
                                         Ok(_) => {

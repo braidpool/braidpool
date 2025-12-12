@@ -55,10 +55,7 @@ pub mod test_utility_functions {
 
         use num::range;
 
-        use crate::{
-            braid::{Braid, Cohort},
-            db::db_handlers::DB_CHANNEL_CAPACITY,
-        };
+        use crate::braid::{Braid, Cohort};
 
         let current_file_path = file_path;
         let file_content = std::fs::read_to_string(current_file_path).unwrap();
@@ -115,7 +112,6 @@ pub mod test_utility_functions {
             current_bead_cohorots.push(Cohort(current_cohort_indices));
         }
         //constructing actual braid object from file-braid object
-        let (db_handler_tx, _db_handler_rx) = tokio::sync::mpsc::channel(DB_CHANNEL_CAPACITY);
         (
             Braid {
                 beads: beads_vector,
@@ -125,7 +121,6 @@ pub mod test_utility_functions {
                 cohorts: current_bead_cohorots,
                 cohort_tips: vec![HashSet::new()], // Cohorts tips are only used in extend(), so we can skip them here.
                 orphan_beads: Vec::new(),
-                db_tx: db_handler_tx,
             },
             file_braid.clone(),
         )
