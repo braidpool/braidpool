@@ -12,6 +12,7 @@ pub enum InsertTupleTypes {
         bead_to_insert: Bead,
         curr_beads: Vec<Bead>,
         bead_index_mapping: HashMap<bitcoin::BlockHash, usize>,
+        removed_orphans: Vec<Bead>,
     },
 }
 #[derive(Debug, Clone)]

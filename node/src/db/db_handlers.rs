@@ -235,6 +235,7 @@ impl DBHandler {
                         bead_to_insert,
                         bead_index_mapping,
                         curr_beads,
+                        removed_orphans,
                     } => {
                         let bead_id = bead_index_mapping
                             .get(&bead_to_insert.block_header.block_hash())
@@ -273,6 +274,59 @@ impl DBHandler {
                                     bead_hash = %bead_hash,
                                     "Bead inserted successfully"
                                 );
+                                //Inserting the beads removed from orphan set upon the extension of current bead
+                                for orphan in removed_orphans.into_iter() {
+                                    let orphan_bead_id = bead_index_mapping
+                                        .get(&orphan.block_header.block_hash())
+                                        .unwrap();
+                                    let (txs_json, relative_json, parent_timestamp_json) =
+                                        match self.prepare_bead_tuple_data(
+                                            &curr_beads,
+                                            &bead_index_mapping,
+                                            &orphan,
+                                        ) {
+                                            Ok((txs, relatives, parent_ts)) => {
+                                                (txs, relatives, parent_ts)
+                                            }
+                                            Err(error) => {
+                                                error!(
+                                                    error = ?error,
+                                                    bead_id = orphan_bead_id,
+                                                    bead_hash = %bead_hash,
+                                                    "Failed to prepare orphan bead tuple data"
+                                                );
+                                                break;
+                                            }
+                                        };
+
+                                    match self
+                                        .insert_bead(
+                                            orphan,
+                                            txs_json,
+                                            relative_json,
+                                            parent_timestamp_json,
+                                            &orphan_bead_id,
+                                        )
+                                        .await
+                                    {
+                                        Ok(_) => {
+                                            warn!(
+                                                orphan_bead_id = orphan_bead_id,
+                                                bead_hash = %bead_hash,
+                                                "Orphan bead inserted successfully"
+                                            );
+                                        }
+                                        Err(error) => {
+                                            error!(
+                                                error = ?error,
+                                                orphan_bead_id = orphan_bead_id,
+                                                bead_hash = %bead_hash,
+                                                "Failed to re-insert orphan bead"
+                                            );
+                                            break;
+                                        }
+                                    };
+                                }
                             }
                             Err(error) => {
                                 error!(

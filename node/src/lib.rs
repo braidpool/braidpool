@@ -249,7 +249,7 @@ pub enum SwarmCommand {
 }
 pub struct SwarmHandler {
     pub command_sender: Sender<SwarmCommand>,
-    db_command_sender: tokio::sync::mpsc::Sender<BraidpoolDBTypes>,
+    _db_command_sender: tokio::sync::mpsc::Sender<BraidpoolDBTypes>,
 }
 impl SwarmHandler {
     pub fn new(
@@ -260,7 +260,7 @@ impl SwarmHandler {
         (
             Self {
                 command_sender: swarm_stratum_bridge_tx,
-                db_command_sender,
+                _db_command_sender: db_command_sender,
             },
             swarm_stratum_bridge_rx,
         )
