@@ -11,10 +11,9 @@ use bitcoin::{
     PublicKey, TxMerkleNode, Txid,
 };
 use futures::lock::Mutex;
-use num::ToPrimitive;
 use serde_json::json;
 use sqlx::{Pool, Row, Sqlite};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc::{Receiver, Sender};
 #[allow(unused_imports)]
@@ -163,41 +162,23 @@ impl DBHandler {
     }
     fn prepare_bead_tuple_data(
         &mut self,
-        beads: &Vec<Bead>,
-        bead_index_mapping: &HashMap<BeadHash, usize>,
+        bead_index_mapping: &HashMap<BeadHash, (usize, u32)>,
         bead: &Bead,
     ) -> anyhow::Result<(String, String, String)> {
-        let mut parent_set: HashMap<usize, HashSet<usize>> = HashMap::new();
-
-        for (idx, b) in beads.iter().enumerate() {
-            let mut set = HashSet::new();
-            for p in &b.committed_metadata.parents {
-                let parent_idx = *bead_index_mapping.get(p).unwrap();
-                set.insert(parent_idx);
-            }
-            parent_set.insert(idx, set);
-        }
-
-        let bead_id = *bead_index_mapping
+        let bead_id = bead_index_mapping
             .get(&bead.block_header.block_hash())
-            .unwrap();
-        let current_parents = parent_set.get(&bead_id).cloned().unwrap_or_default();
-
+            .unwrap()
+            .0;
+        let mut current_parents = Vec::new();
         let mut relatives = Vec::new();
         let mut parent_ts = Vec::new();
-        let mut txs = Vec::new();
-
-        for parent in current_parents {
-            let ts = beads[parent]
-                .committed_metadata
-                .start_timestamp
-                .to_u32()
-                .to_u64()
-                .expect("An error occurred while casting u32 to u64");
-
-            relatives.push((parent as u64, bead_id as u64));
-            parent_ts.push((parent as u64, bead_id as u64, ts));
+        for parent in &bead.committed_metadata.parents {
+            let (parent_index, parent_timestamp) = bead_index_mapping.get(parent).unwrap();
+            current_parents.push(parent_index);
+            relatives.push((*parent_index as u64, bead_id as u64));
+            parent_ts.push((*parent_index as u64, bead_id as u64, *parent_timestamp));
         }
+        let mut txs = Vec::new();
 
         for tx in &bead.committed_metadata.transaction_ids.0 {
             txs.push((bead_id as u64, hex::encode(tx.to_byte_array())));
@@ -234,19 +215,13 @@ impl DBHandler {
                     InsertTupleTypes::InsertBeadSequentially {
                         bead_to_insert,
                         bead_index_mapping,
-                        curr_beads,
                         removed_orphans,
+                        bead_id,
                     } => {
-                        let bead_id = bead_index_mapping
-                            .get(&bead_to_insert.block_header.block_hash())
-                            .unwrap();
                         let bead_hash = bead_to_insert.block_header.block_hash();
                         let (txs_json, relative_json, parent_timestamp_json) = match self
-                            .prepare_bead_tuple_data(
-                                &curr_beads,
-                                &bead_index_mapping,
-                                &bead_to_insert,
-                            ) {
+                            .prepare_bead_tuple_data(&bead_index_mapping, &bead_to_insert)
+                        {
                             Ok((txs, relatives, parent_ts)) => (txs, relatives, parent_ts),
                             Err(error) => {
                                 error!(
@@ -278,13 +253,12 @@ impl DBHandler {
                                 for orphan in removed_orphans.into_iter() {
                                     let orphan_bead_id = bead_index_mapping
                                         .get(&orphan.block_header.block_hash())
-                                        .unwrap();
+                                        .unwrap()
+                                        .0;
                                     let (txs_json, relative_json, parent_timestamp_json) =
-                                        match self.prepare_bead_tuple_data(
-                                            &curr_beads,
-                                            &bead_index_mapping,
-                                            &orphan,
-                                        ) {
+                                        match self
+                                            .prepare_bead_tuple_data(&bead_index_mapping, &orphan)
+                                        {
                                             Ok((txs, relatives, parent_ts)) => {
                                                 (txs, relatives, parent_ts)
                                             }
@@ -351,7 +325,6 @@ pub async fn fetch_beads_in_batch(
 ) -> Result<Vec<Bead>, DBErrors> {
     let mut fetched_beads = Vec::new();
     let conn = db_pool.lock().await.clone();
-
     let total_rows: u32 = sqlx::query("SELECT COUNT(*) as row_cnt FROM BEAD")
         .fetch_one(&conn)
         .await
@@ -689,6 +662,7 @@ pub mod test {
     use super::*;
     use serde_json::json;
     use sqlx::{sqlite::SqliteConnectOptions, SqlitePool};
+    use std::collections::HashSet;
     use std::{fs, path::Path, str::FromStr};
     const TEST_DB_URL: &str = "sqlite::memory:";
     use crate::{
@@ -739,9 +713,10 @@ pub mod test {
                     let current_parent_bead_index = current_file_braid
                         .bead_index_mapping
                         .get(&*parent_bead_hash)
-                        .unwrap();
+                        .unwrap()
+                        .0;
                     if let Some(value) = braid_parent_set.get_mut(&bead.0) {
-                        value.insert(*current_parent_bead_index);
+                        value.insert(current_parent_bead_index);
                     }
                 }
             }
@@ -755,13 +730,14 @@ pub mod test {
             let bead_id = current_file_braid
                 .bead_index_mapping
                 .get(&bead.block_header.block_hash())
-                .unwrap();
+                .unwrap()
+                .0;
             let current_bead_parent_set = braid_parent_set.get(&(bead_id)).unwrap();
             let mut relative_tuples: Vec<(u64, u64)> = Vec::new();
-            let mut parent_timestamp_tuples: Vec<(u64, u64, u64)> = Vec::new();
+            let mut parent_timestamp_tuples: Vec<(u64, u64, u32)> = Vec::new();
             let mut transaction_tuples: Vec<(u64, String)> = Vec::new();
             for parent_bead in current_bead_parent_set {
-                relative_tuples.push(((*parent_bead as u64), (*bead_id as u64)));
+                relative_tuples.push(((*parent_bead as u64), (bead_id as u64)));
                 let current_parent_timestamp = current_file_braid
                     .beads
                     .get(*parent_bead)
@@ -770,16 +746,16 @@ pub mod test {
                     .start_timestamp;
                 parent_timestamp_tuples.push((
                     (*parent_bead as u64),
-                    (*bead_id as u64),
-                    current_parent_timestamp.to_u32().to_u64().unwrap(),
+                    (bead_id as u64),
+                    current_parent_timestamp.to_u32(),
                 ));
             }
             for bead_tx in bead.committed_metadata.transaction_ids.0.iter() {
-                transaction_tuples.push(((*bead_id as u64), hex::encode(bead_tx.to_byte_array())));
+                transaction_tuples.push(((bead_id as u64), hex::encode(bead_tx.to_byte_array())));
             }
             //Adding dummy tx
             transaction_tuples.push((
-                *bead_id as u64,
+                bead_id as u64,
                 "b1a6cecc2e40e89e9e943c3c010c1f6ca6dd1530361ead7289254d929ee4eb2a".to_string(),
             ));
             let transactions_values = transaction_tuples
@@ -827,7 +803,7 @@ pub mod test {
             let signature_bytes = bead.uncommitted_metadata.signature.to_vec();
             let mut test_insertion_tx = test_pool.begin().await.unwrap();
             if let Err(e) = sqlx::query(&INSERT_QUERY)
-                .bind(*bead_id as i64)
+                .bind(bead_id as i64)
                 .bind(block_header_bytes)
                 .bind(bead.block_header.version.to_consensus())
                 .bind(prev_block_hash_bytes)

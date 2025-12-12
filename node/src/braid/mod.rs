@@ -31,7 +31,7 @@ pub struct Braid {
     pub cohort_tips: Vec<HashSet<usize>>,
     pub orphan_beads: Vec<Bead>,
     pub genesis_beads: HashSet<usize>,
-    pub bead_index_mapping: HashMap<BeadHash, usize>,
+    pub bead_index_mapping: HashMap<BeadHash, (usize, u32)>,
 }
 
 impl Braid {
@@ -44,7 +44,10 @@ impl Braid {
         for (index, bead) in genesis_beads.into_iter().enumerate() {
             beads.push(bead.clone());
             bead_indices.insert(index);
-            bead_index_mapping.insert(bead.block_header.block_hash(), index);
+            bead_index_mapping.insert(
+                bead.block_header.block_hash(),
+                (index, bead.committed_metadata.start_timestamp.to_u32()),
+            );
         }
         let mut genesis_cohort: Vec<Cohort> = Vec::new();
         if bead_indices.len() != 0 {
@@ -110,7 +113,13 @@ impl Braid {
         // Insert bead into beads vector
         self.beads.push(bead.clone());
         let new_bead_index = self.beads.len() - 1;
-        self.bead_index_mapping.insert(bead_hash, new_bead_index);
+        self.bead_index_mapping.insert(
+            bead_hash,
+            (
+                new_bead_index,
+                bead.committed_metadata.start_timestamp.to_u32(),
+            ),
+        );
 
         // Find earliest parent of bead in cohorts and nuke all cohorts after that
         let mut found_parent_indices = HashSet::new();
@@ -123,7 +132,7 @@ impl Braid {
             // Find which parent indices are in this cohort
             for parent_hash in &bead.committed_metadata.parents {
                 if let Some(&parent_index) = self.bead_index_mapping.get(parent_hash) {
-                    if cohort.0.contains(&parent_index) {
+                    if cohort.0.contains(&parent_index.0) {
                         found_parent_indices.insert(parent_index);
                     }
                 }
@@ -133,7 +142,7 @@ impl Braid {
             // further back
             if !found_parent_indices.is_empty()
                 && found_parent_indices.len() == bead.committed_metadata.parents.len()
-                && (self.cohort_tips[i] == found_parent_indices)
+                && (self.cohort_tips[i] == found_parent_indices.iter().map(|idx| idx.0).collect())
             {
                 remove_after = Some(i + 1);
                 dangling.insert(new_bead_index);
@@ -163,7 +172,7 @@ impl Braid {
         for parent_hash in &bead.committed_metadata.parents {
             // Find the index of the parent bead
             if let Some(&parent_index) = self.bead_index_mapping.get(parent_hash) {
-                self.tips.remove(&parent_index);
+                self.tips.remove(&parent_index.0);
             }
         }
 
@@ -190,8 +199,8 @@ impl Braid {
         let mut i = self.orphan_beads.len();
         while i > 0 {
             i -= 1;
-            tracing::info!(
-                "PROCESSING ORPHAN BEAD - {:?}",
+            tracing::debug!(
+                "Processing orphan beads with blockhash - {:?}",
                 self.orphan_beads[i].block_header.block_hash()
             );
             // Check if all parents are now available for this orphan
@@ -206,14 +215,14 @@ impl Braid {
             if all_parents_available {
                 // Remove the orphan bead first, then process it
                 let orphan_bead = self.orphan_beads.remove(i);
-                tracing::info!(
+                tracing::debug!(
                     "Orphan bead now has all parents, thus extending to local braid: {:?}",
                     orphan_bead.block_header.block_hash()
                 );
                 // Now extend with the orphan bead
                 match self.extend(&orphan_bead) {
                     AddBeadStatus::BeadAdded => {
-                        tracing::warn!(
+                        tracing::debug!(
                             "Orphan bead successfully added to braid: {:?}",
                             orphan_bead.block_header.block_hash()
                         );
@@ -243,7 +252,7 @@ impl Braid {
         for bead_hash in genesis_beads {
             let index = self.bead_index_mapping.get(bead_hash);
             let bead_exists = match index {
-                Some(idx) => self.genesis_beads.contains(idx),
+                Some(idx) => self.genesis_beads.contains(&idx.0),
                 None => false,
             };
             if !bead_exists {
@@ -259,7 +268,10 @@ impl Braid {
             if !self.bead_index_mapping.contains_key(&bead_hash) {
                 self.beads.push(bead.clone());
                 let new_index = self.beads.len() - 1;
-                self.bead_index_mapping.insert(bead_hash, new_index);
+                self.bead_index_mapping.insert(
+                    bead_hash,
+                    (new_index, bead.committed_metadata.start_timestamp.to_u32()),
+                );
                 self.genesis_beads.insert(new_index);
             }
         }
@@ -279,8 +291,8 @@ impl Braid {
         //finding the starting index
         for hash in &old_tips {
             if let Some(&index) = self.bead_index_mapping.get(hash) {
-                if index < smallest_index {
-                    smallest_index = index;
+                if index.0 < smallest_index {
+                    smallest_index = index.0;
                 }
             }
         }
@@ -388,7 +400,8 @@ pub mod consensus_functions {
         //utilizing the passed arguments as of parents instead of the internal braid one
         let current_beads = &braid_obj.beads;
         for bead in current_beads {
-            let current_bead_index = braid_obj.bead_index_mapping[&bead.block_header.block_hash()];
+            let current_bead_index =
+                braid_obj.bead_index_mapping[&bead.block_header.block_hash()].0;
             let parents = match parents.get(&current_bead_index) {
                 Some(b) => b,
                 _ => {
@@ -433,7 +446,7 @@ pub mod consensus_functions {
 
         let current_beads = &braid_obj.beads;
         for bead in current_beads {
-            let current_bead_idx = braid_obj.bead_index_mapping[&bead.block_header.block_hash()];
+            let current_bead_idx = braid_obj.bead_index_mapping[&bead.block_header.block_hash()].0;
             let parents = &parents[&current_bead_idx];
 
             for parent_bead_idx in parents.iter() {
@@ -510,7 +523,7 @@ pub mod consensus_functions {
         parents: &HashMap<usize, HashSet<usize>>,
     ) -> &'a mut HashMap<usize, HashSet<usize>> {
         let mut dequeue: VecDeque<(usize, bool)> = VecDeque::new();
-        let current_bead_index = braid_obj.bead_index_mapping[&current_block_hash];
+        let current_bead_index = braid_obj.bead_index_mapping[&current_block_hash].0;
         dequeue.push_back((current_bead_index, false));
         while let Some((current, is_processed)) = dequeue.pop_back() {
             if is_processed {
@@ -585,7 +598,7 @@ pub mod consensus_functions {
         ancestors: &'a mut HashMap<usize, HashSet<usize>>,
         parents: &HashMap<usize, HashSet<usize>>,
     ) -> &'a mut HashMap<usize, HashSet<usize>> {
-        let current_block_idx = braid_obj.bead_index_mapping[&current_block_hash];
+        let current_block_idx = braid_obj.bead_index_mapping[&current_block_hash].0;
         //if bead entry already exists in the current ancestor mapping
         if let Some(current_bead_ancestors) = ancestors.get_mut(&current_block_idx) {
             current_bead_ancestors.clear();

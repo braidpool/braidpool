@@ -61,12 +61,15 @@ pub mod test_utility_functions {
         let file_content = std::fs::read_to_string(current_file_path).unwrap();
         let file_braid: FileBraid = serde_json::from_str(&file_content).unwrap();
         let mut beads_to_idx: HashMap<usize, Bead> = HashMap::new();
-        let mut test_braid_vector_bead_mapping: HashMap<BeadHash, usize> = HashMap::new();
+        let mut test_braid_vector_bead_mapping: HashMap<BeadHash, (usize, u32)> = HashMap::new();
         for bead_idx in file_braid.clone().parents {
             let random_test_bead = emit_bead();
             test_braid_vector_bead_mapping.insert(
                 random_test_bead.clone().block_header.block_hash(),
-                bead_idx.0,
+                (
+                    bead_idx.0,
+                    random_test_bead.committed_metadata.start_timestamp.to_u32(),
+                ),
             );
             beads_to_idx.insert(bead_idx.0, random_test_bead.clone());
         }
