@@ -31,7 +31,6 @@ pub mod committed_metadata;
 pub mod config;
 pub mod db;
 pub mod error;
-pub mod ibd_manager;
 pub mod ipc;
 pub mod peer_manager;
 pub mod rpc_server;
