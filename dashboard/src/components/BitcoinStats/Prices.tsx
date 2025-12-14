@@ -191,25 +191,27 @@ const BitcoinPriceTracker: React.FC = () => {
           </div>
         ) : showSkeletons ? (
           <div className="flex gap-6" data-testid="animate-pulse">
-            {/* Current Price */}
-            <div className="flex flex-col gap-1 items-center">
-              <span className="text-sm text-gray-500">
-                Current Price ({currency})
-              </span>
-              <div className="animate-pulse bg-gray-200 rounded h-7 w-24"></div>
-            </div>
-
-            {/* 24h Low */}
-            <div className="flex flex-col gap-1 items-center">
-              <span className="text-sm text-gray-500">24h Low</span>
-              <div className="animate-pulse bg-gray-200 rounded h-6 w-20"></div>
-            </div>
-
-            {/* 24h High */}
-            <div className="flex flex-col gap-1 items-center">
-              <span className="text-sm text-gray-500">24h High</span>
-              <div className="animate-pulse bg-gray-200 rounded h-6 w-20"></div>
-            </div>
+            {[
+              {
+                label: `Current Price (${currency})`,
+                skeletonClass: 'h-7 w-24',
+              },
+              {
+                label: '24h Low',
+                skeletonClass: 'h-6 w-20',
+              },
+              {
+                label: '24h High',
+                skeletonClass: 'h-6 w-20',
+              },
+            ].map(({ label, skeletonClass }) => (
+              <div key={label} className="flex flex-col gap-1 items-center">
+                <span className="text-sm text-gray-500">{label}</span>
+                <div
+                  className={`animate-pulse bg-gray-200 rounded ${skeletonClass}`}
+                />
+              </div>
+            ))}
           </div>
         ) : priceData ? (
           <>
