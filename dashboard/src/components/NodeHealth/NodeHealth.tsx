@@ -8,6 +8,7 @@ import { TABS, useIsSmallScreen } from './Utils';
 import { shortenHash } from '../BeadsTab/lib/Utils';
 import { WEBSOCKET_URLS } from '../../URLs';
 import { MAX_RECONNECT_ATTEMPTS } from './Constants';
+import { Loader } from 'lucide-react';
 
 import {
   BlockchainInfo,
@@ -179,8 +180,11 @@ const NodeHealth: React.FC = () => {
     !netTotals
   ) {
     return (
-      <div className="min-h-auto bg-[#1e1e1e] text-white flex items-center justify-center">
-        Loading...
+      <div className="flex items-center justify-center h-full w-full">
+        <div className="flex flex-col items-center">
+          <Loader className="h-8 w-8 text-[#0077B6] animate-spin" />
+          <p className="mt-4 text-[#0077B6]">Loading...</p>
+        </div>
       </div>
     );
   }

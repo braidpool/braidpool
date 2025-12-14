@@ -191,12 +191,25 @@ const BitcoinPriceTracker: React.FC = () => {
           </div>
         ) : showSkeletons ? (
           <div className="flex gap-6" data-testid="animate-pulse">
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className="flex flex-col gap-1">
-                <div className="animate-pulse bg-gray-200 rounded h-7 w-20"></div>
-                <div className="animate-pulse bg-gray-200 rounded h-5 w-16"></div>
-              </div>
-            ))}
+            {/* Current Price */}
+            <div className="flex flex-col gap-1 items-center">
+              <span className="text-sm text-gray-500">
+                Current Price ({currency})
+              </span>
+              <div className="animate-pulse bg-gray-200 rounded h-7 w-24"></div>
+            </div>
+
+            {/* 24h Low */}
+            <div className="flex flex-col gap-1 items-center">
+              <span className="text-sm text-gray-500">24h Low</span>
+              <div className="animate-pulse bg-gray-200 rounded h-6 w-20"></div>
+            </div>
+
+            {/* 24h High */}
+            <div className="flex flex-col gap-1 items-center">
+              <span className="text-sm text-gray-500">24h High</span>
+              <div className="animate-pulse bg-gray-200 rounded h-6 w-20"></div>
+            </div>
           </div>
         ) : priceData ? (
           <>
@@ -264,10 +277,16 @@ const BitcoinPriceTracker: React.FC = () => {
       {/* Global Stats */}
       {showSkeletons ? (
         <div className="flex flex-wrap shadow-sm justify-center items-center gap-4 md:gap-20 p-4">
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className="flex flex-col gap-1">
-              <div className="animate-pulse bg-gray-200 rounded h-6 w-20"></div>
-              <div className="animate-pulse bg-gray-200 rounded h-4 w-16"></div>
+          {[
+            'Market Cap',
+            'Active Cryptocurrencies',
+            'Active Markets',
+            'BTC Dominance',
+            'Last Updated',
+          ].map((label) => (
+            <div key={label} className="flex flex-col gap-1 items-center">
+              <span className="text-sm text-gray-500">{label}</span>
+              <div className="animate-pulse bg-gray-200 rounded h-6 w-24"></div>
             </div>
           ))}
         </div>
