@@ -230,10 +230,7 @@ impl PriorityRequestQueue {
             }
             RequestPriority::Low => {
                 if self.low_queue.len() >= self.max_queue_sizes.low {
-                    // Drop oldest low priority request
-                    if let Some(dropped) = self.low_queue.pop_front() {
-                        self.send_queue_full_error(dropped);
-                    }
+                    let _ = self.low_queue.pop_front();
                 }
                 self.low_queue.push_back(request);
                 self.metrics
@@ -248,35 +245,6 @@ impl PriorityRequestQueue {
         }
 
         result
-    }
-
-    fn send_queue_full_error(&self, dropped_request: BitcoinRequest) {
-        match dropped_request {
-            BitcoinRequest::RemoveTransaction { response, .. } => {
-                let _ = response.send(Err("Queue full - request dropped".to_string()));
-            }
-            BitcoinRequest::RemoveMultipleTransactions { response, .. } => {
-                let _ = response.send(Err("Queue full - request dropped".to_string()));
-            }
-            BitcoinRequest::GetBlockTemplate { response, .. } => {
-                let _ = response.send(Err("Queue full - request dropped".to_string()));
-            }
-            BitcoinRequest::GetBlockTemplateComponents { response, .. } => {
-                let _ = response.send(Err("Queue full - request dropped".to_string()));
-            }
-            BitcoinRequest::IsInitialBlockDownload { response, .. } => {
-                let _ = response.send(Err("Queue full - request dropped".to_string()));
-            }
-            BitcoinRequest::CheckBlock { response, .. } => {
-                let _ = response.send(Err("Queue full - request dropped".to_string()));
-            }
-            BitcoinRequest::GetMiningTipInfo { response, .. } => {
-                let _ = response.send(Err("Queue full - request dropped".to_string()));
-            }
-            BitcoinRequest::SubmitSolution { response, .. } => {
-                let _ = response.send(Err("Queue full - request dropped".to_string()));
-            }
-        }
     }
 
     fn dequeue(&mut self) -> Option<BitcoinRequest> {
