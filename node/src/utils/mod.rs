@@ -37,12 +37,6 @@ pub(crate) fn vec_to_hashset(vec: Vec<BeadHash>) -> HashSet<BeadHash> {
     vec.iter().cloned().collect()
 }
 
-pub(crate) fn retrieve_bead(_beadhash: BeadHash) -> Option<Bead> {
-    // This function is a placeholder for the actual retrieval logic.
-    // In a real implementation, this would fetch the bead from a database or other storage.
-    None
-}
-
 /// Get list of actual local IPv4 addresses for servers binding to 0.0.0.0
 ///
 /// Returns all IPv4 addresses found on network interfaces.

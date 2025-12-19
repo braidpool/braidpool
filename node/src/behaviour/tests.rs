@@ -178,15 +178,13 @@ async fn test_bead_request_handling() {
                                     );
                                     assert_eq!(hashes.len(), 1);
                                     assert_eq!(hashes.iter().next().unwrap(), &bead_hash);
-                                    // Respond with an error for now
+                                    // Bead not found in local store - return appropriate error
                                     swarm
                                         .behaviour_mut()
                                         .bead_sync
                                         .send_response(
                                             channel,
-                                            BeadResponse::Error(
-                                                "Bead retrieval not implemented yet".to_string(),
-                                            ),
+                                            BeadResponse::Error(BeadSyncError::BeadHashNotFound),
                                         )
                                         .unwrap();
                                 }
@@ -211,9 +209,9 @@ async fn test_bead_request_handling() {
             match swarm.next().await {
                 Some(SwarmEvent::ConnectionEstablished { peer_id, .. }) => {
                     println!("Swarm2: Connection established with {}", peer_id);
-                    let mut hashes = HashSet::new();
-                    hashes.insert(bead_hash);
-                    swarm.behaviour_mut().request_beads(local_peer_id, hashes);
+                    let mut hashes = Vec::new();
+                    hashes.push(bead_hash);
+                    swarm.behaviour_mut().request_beads(local_peer_id, &hashes);
                 }
                 Some(SwarmEvent::IncomingConnection { .. }) => {
                     println!("Swarm2: Incoming connection");
@@ -235,15 +233,14 @@ async fn test_bead_request_handling() {
                                 } => {
                                     if let BeadRequest::GetBeads(hashes) = request {
                                         println!("Swarm2: Received bead request from {} with hashes: {:?}", peer, hashes);
-                                        // Respond with an error for now
+                                        // Bead not found in local store - return appropriate error
                                         swarm
                                             .behaviour_mut()
                                             .bead_sync
                                             .send_response(
                                                 channel,
                                                 BeadResponse::Error(
-                                                    "Bead retrieval not implemented yet"
-                                                        .to_string(),
+                                                    BeadSyncError::BeadHashNotFound,
                                                 ),
                                             )
                                             .unwrap();
@@ -255,8 +252,8 @@ async fn test_bead_request_handling() {
                                     response,
                                 } => {
                                     if let BeadResponse::Error(error) = response {
-                                        println!("Swarm2: Received error response: {}", error);
-                                        assert_eq!(error, "Bead retrieval not implemented yet");
+                                        println!("Swarm2: Received error response: {:?}", error);
+                                        assert_eq!(error, BeadSyncError::BeadHashNotFound);
                                         break;
                                     }
                                 }
