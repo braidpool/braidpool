@@ -41,3 +41,19 @@ export const getMempoolRecentUrl = (): string =>
 
 export const getMempoolTransactionUrl = (txid: string): string =>
   `${API_URLS.MEMPOOL_API_BASE}/tx/${txid}`;
+
+export const EXTERNAL_LINKS = {
+  // Project Info
+  ABOUT: 'https://github.com/braidpool/braidpool/',
+  DOCUMENTATION: 'https://github.com/braidpool/braidpool/tree/main/docs',
+  CONTRIBUTE:
+    'https://github.com/braidpool/braidpool/blob/main/CONTRIBUTING.md',
+
+  // Community
+  GITHUB: 'https://github.com/braidpool/braidpool',
+  TWITTER: 'https://twitter.com/braidpool',
+  DISCORD: 'https://discord.com/invite/pZYUDwkpPv',
+
+  // Legal
+  LICENSE: 'https://github.com/braidpool/braidpool/?tab=AGPL-3.0-1-ov-file',
+} as const;
