@@ -307,24 +307,30 @@ const BitcoinPriceTracker: React.FC = () => {
       {/* Charts Section */}
       <div className="w-full flex flex-wrap justify-center items-center gap-4 md:gap-20 p-4 mt-4 md:p-6 rounded-lg mb-6">
         {/* Price Range Bar Chart */}
-        <div className="flex flex-col w-full h-80">
+        <div className="flex flex-col w-full h-80 -mx-6 sm:mx-0 px-6 sm:px-0">
           <p className="font-semibold text-base">Bitcoin Price Range (24h)</p>
           <span className="text-sm text-gray-500 mb-2">
             Displays the 24-hour low, current, and 24-hour high prices in{' '}
             {currency}
           </span>
-          <ResponsiveContainer width="99%" height="100%">
+          <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={[
                 { label: '24h Low', value: priceData?.low24h ?? 0 },
                 { label: 'Current', value: priceData?.current ?? 0 },
                 { label: '24h High', value: priceData?.high24h ?? 0 },
               ]}
-              margin={{ left: 40, right: 20, top: 20, bottom: 20 }}
+              margin={{
+                left: -5,
+                right: -5,
+                top: 20,
+                bottom: 20,
+              }}
             >
-              <XAxis dataKey="label" />
+              <XAxis dataKey="label" tick={{ fontSize: 12 }} />
               <YAxis
-                width={80}
+                width={50}
+                tick={{ fontSize: 10 }}
                 domain={[
                   (dataMin: number) =>
                     Math.floor(
@@ -349,13 +355,14 @@ const BitcoinPriceTracker: React.FC = () => {
                 contentStyle={{
                   backgroundColor: 'black',
                   border: '1px solid #ccc',
+                  fontSize: '12px',
                 }}
                 formatter={(value) => [
                   `${getCurrencySymbol(currency)}${formatPrice(Number(value))}`,
                   'Price',
                 ]}
               />
-              <Legend />
+              <Legend wrapperStyle={{ fontSize: '12px' }} />
               <Bar dataKey="value" fill="#8884d8" />
             </BarChart>
           </ResponsiveContainer>
@@ -409,28 +416,32 @@ const BitcoinPriceTracker: React.FC = () => {
       <div className="w-full flex flex-wrap justify-center items-center gap-4 md:gap-20 p-4 md:p-6 rounded-lg mb-6">
         <div className="grid sm:grid-cols-1 md:grid-cols-2 gap-4 md:gap-20 p-4">
           {/* Fear-Greed Meter */}
-          <div className="flex flex-col w-full h-72">
+          <div className="flex flex-col w-full">
             <p className="font-semibold text-base">Fear & Greed Index</p>
             <span className="text-sm text-gray-500 mb-2">
               Market sentiment indicator
             </span>
-            <div className="w-full flex flex-wrap justify-center items-center">
-              <ResponsiveContainer width="50%" height="100%">
+            <div className="w-full flex justify-center items-center">
+              <div className="w-full sm:w-3/4 md:w-1/2 lg:w-2/5 xl:w-1/3 max-w-sm">
                 <img
                   src="https://alternative.me/crypto/fear-and-greed-index.png"
                   alt="Latest Crypto Fear & Greed Index"
                   className="w-full h-auto"
                 />
-              </ResponsiveContainer>
+              </div>
             </div>
           </div>
 
           {/* Placeholder */}
-          <div className="flex flex-col w-full h-72">
+          <div className="flex flex-col w-full">
             <p className="font-semibold text-base">Market Trends</p>
             <span className="text-sm text-gray-500 mb-2">Coming soon...</span>
-            <div className="w-full h-full flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg">
-              <p className="text-gray-500">Additional visualization</p>
+            <div className="w-full flex justify-center items-center">
+              <div className="w-full sm:w-3/4 md:w-1/2 lg:w-2/5 xl:w-1/3 max-w-sm h-64 sm:h-72 md:h-80">
+                <div className="w-full h-full flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg">
+                  <p className="text-gray-500">Additional visualization</p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
