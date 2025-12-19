@@ -1,40 +1,59 @@
 use crate::committed_metadata::CommittedMetadata;
 use crate::uncommitted_metadata::UnCommittedMetadata;
-use crate::utils::{hashset_to_vec_deterministic, BeadHash};
+use crate::utils::BeadHash;
 use async_trait::async_trait;
 use bitcoin::consensus::encode::Decodable;
 use bitcoin::consensus::encode::Encodable;
-use bitcoin::consensus::Error;
-use bitcoin::io::{self, BufRead, Write};
 use bitcoin::{BlockHash, BlockHeader, BlockTime, BlockVersion, CompactTarget, TxMerkleNode};
 use libp2p::futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use libp2p::request_response::Codec;
 use libp2p::StreamProtocol;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::io::{Error as IoError, ErrorKind, Result as IoResult};
 
-const GET_BEADS: u8 = 0;
-const GET_TIPS: u8 = 1;
-const GET_GENESIS: u8 = 2;
-const GET_ALL_BEADS: u8 = 3;
-const BEAD_RESPONSE_ERROR: u8 = 4;
+/// Collection of beads.
+///
+/// Newtype wrapper around `Vec<Bead>` that provides Bitcoin consensus encoding/decoding
+/// and convenient iteration methods. Used to work around Rust's orphan rule.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct Beads(pub Vec<Bead>);
+impl_vec_wrapper!(Beads, Bead);
 
+/// Collection of bead hashes.
+///
+/// Newtype wrapper around `Vec<BeadHash>` that provides Bitcoin consensus encoding/decoding
+/// and convenient iteration methods. Used for requesting and responding with bead identifiers.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct BeadHashes(pub Vec<BeadHash>);
+impl_vec_wrapper!(BeadHashes, BeadHash);
+
+/// A bead in the Braidpool DAG structure.
+///
+/// A bead represents a weak share in the Braidpool mining protocol. It combines a Bitcoin
+/// block header with metadata about the mining process and network topology.
+///
+/// **Fields:**
+/// - `block_header`: Standard Bitcoin block header with proof-of-work
+/// - `committed_metadata`: Metadata committed to the block (parents, timestamps, transactions)
+/// - `uncommitted_metadata`: Metadata not part of the hash (signature, broadcast time)
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Bead {
     pub block_header: BlockHeader,
     pub committed_metadata: CommittedMetadata,
     pub uncommitted_metadata: UnCommittedMetadata,
 }
+impl_consensus_encoding!(Bead, block_header, committed_metadata, uncommitted_metadata);
+
 impl Default for Bead {
     fn default() -> Self {
         let empty_merkle_bytes: [u8; 32] = [0; 32];
         Self {
             block_header: BlockHeader {
-                bits: CompactTarget::from_consensus(486604799),
+                bits: CompactTarget::from_consensus(1),
                 merkle_root: TxMerkleNode::from_byte_array(empty_merkle_bytes),
                 nonce: 0,
                 prev_blockhash: BlockHash::GENESIS_PREVIOUS_BLOCK_HASH,
-                time: BlockTime::from_u32(23021),
+                time: BlockTime::from_u32(0),
                 version: BlockVersion::TWO,
             },
             committed_metadata: CommittedMetadata::default(),
@@ -42,206 +61,70 @@ impl Default for Bead {
         }
     }
 }
-impl Encodable for Bead {
-    fn consensus_encode<W: Write + ?Sized>(&self, w: &mut W) -> Result<usize, io::Error> {
-        let mut len = 0;
-        len += self.block_header.consensus_encode(w)?;
-        len += self.committed_metadata.consensus_encode(w)?;
-        len += self.uncommitted_metadata.consensus_encode(w)?;
-        Ok(len)
+
+braidpool_protocol! {
+    /// Request types for bead synchronization protocol.
+    ///
+    /// Used in the request-response protocol to request beads from remote peers.
+    /// Each variant maps to a specific opcode for network encoding.
+    ///
+    /// **Variants:**
+    /// - `GetBeads(BeadHashes)`: Request specific beads by their hashes
+    /// - `GetTips`: Request the current DAG tips
+    /// - `GetGenesis`: Request the genesis bead(s)
+    /// - `GetAllBeads`: Request all beads (for IBD)
+    /// - `GetBeadsAfter(BeadHashes)`: Request all beads after specified hashes (for sync)
+    pub enum BeadRequest {
+        GetBeads(BeadHashes)        = 0,
+        GetTips                     = 1,
+        GetGenesis                  = 2,
+        GetAllBeads                 = 3,
+        GetBeadsAfter(BeadHashes)   = 4,
     }
 }
 
-impl Decodable for Bead {
-    fn consensus_decode<R: BufRead + ?Sized>(r: &mut R) -> Result<Self, Error> {
-        let block_header = BlockHeader::consensus_decode(r)?;
-        let committed_metadata = CommittedMetadata::consensus_decode(r)?;
-        let uncommitted_metadata = UnCommittedMetadata::consensus_decode(r)?;
-        Ok(Bead {
-            block_header,
-            committed_metadata,
-            uncommitted_metadata,
-        })
+braidpool_protocol! {
+    /// Response types for bead synchronization protocol.
+    ///
+    /// Responses to `BeadRequest` messages. Contains either the requested data
+    /// or an error explaining why the request couldn't be fulfilled.
+    ///
+    /// **Variants:**
+    /// - `Beads(Beads)`: Response containing requested beads
+    /// - `Tips(BeadHashes)`: Response containing current DAG tip hashes
+    /// - `Genesis(BeadHashes)`: Response containing genesis bead hash(es)
+    /// - `GetAllBeads(Beads)`: Response containing all beads (for IBD)
+    /// - `GetBeadsAfter(BeadHashes)`: Response containing beads after specified hashes
+    /// - `Error(BeadSyncError)`: Error response indicating why request failed
+    pub enum BeadResponse {
+        Beads(Beads)                = 0,
+        Tips(BeadHashes)            = 1,
+        Genesis(BeadHashes)         = 2,
+        GetAllBeads(Beads)          = 3,
+        GetBeadsAfter(BeadHashes)   = 4,
+        Error(BeadSyncError)        = 5,
     }
 }
 
-// Request types for bead download
-#[derive(Debug, Clone, PartialEq)]
-pub enum BeadRequest {
-    // Request beads from a specific set of hashes
-    GetBeads(HashSet<BeadHash>),
-    // Request the latest tips from a peer
-    GetTips,
-    GetGenesis,
-    GetAllBeads,
-}
-
-// Response types for bead download
-#[derive(Debug, Clone, PartialEq)]
-pub enum BeadResponse {
-    // Response containing requested beads
-    Beads(Vec<Bead>),
-    // Response containing tips
-    Tips(Vec<BeadHash>),
-    // Response containing genesis
-    Genesis(Vec<BeadHash>),
-    // Get all beads for IBD
-    GetAllBeads(Vec<Bead>),
-    // Error response
-    Error(String),
-}
-
-impl Encodable for BeadRequest {
-    fn consensus_encode<W: Write + ?Sized>(&self, writer: &mut W) -> Result<usize, io::Error> {
-        match self {
-            BeadRequest::GetBeads(hashes) => {
-                let mut written = 0;
-                written += GET_BEADS.consensus_encode(writer)?; // 0 for GetBeads
-                let hashes_vec = hashset_to_vec_deterministic(hashes);
-                written += (hashes_vec.len() as u32).consensus_encode(writer)?;
-                for hash in hashes_vec {
-                    written += hash.consensus_encode(writer)?;
-                }
-                Ok(written)
-            }
-            BeadRequest::GetTips => {
-                GET_TIPS.consensus_encode(writer) // 1 for GetTips
-            }
-            BeadRequest::GetGenesis => {
-                GET_GENESIS.consensus_encode(writer) // 2 for GetGenesis
-            }
-            BeadRequest::GetAllBeads => {
-                GET_ALL_BEADS.consensus_encode(writer) // 3 for GetAllBeads
-            }
-        }
+braidpool_protocol! {
+    /// Errors that can occur during bead synchronization.
+    ///
+    /// These errors are returned in `BeadResponse::Error` to indicate
+    /// why a bead request could not be fulfilled.
+    ///
+    /// **Variants:**
+    /// - `GenesisMismatch`: Genesis beads don't match between peers
+    /// - `BeadHashNotFound`: Requested bead hash not found in local store
+    pub enum BeadSyncError {
+        GenesisMismatch     = 0,
+        BeadHashNotFound    = 1,
     }
 }
 
-impl Decodable for BeadRequest {
-    fn consensus_decode<D: BufRead + ?Sized>(d: &mut D) -> Result<Self, Error> {
-        let request_type = u8::consensus_decode(d)?;
-        match request_type {
-            GET_BEADS => {
-                let count = u32::consensus_decode(d)?;
-                let mut hashes = HashSet::new();
-                for _ in 0..count {
-                    let hash = BeadHash::consensus_decode(d)?;
-                    hashes.insert(hash);
-                }
-                Ok(BeadRequest::GetBeads(hashes))
-            }
-            GET_TIPS => Ok(BeadRequest::GetTips),
-            GET_GENESIS => Ok(BeadRequest::GetGenesis),
-            GET_ALL_BEADS => Ok(BeadRequest::GetAllBeads),
-            _ => Err(Error::from(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Invalid BeadRequest type",
-            ))),
-        }
-    }
-}
-
-impl Encodable for BeadResponse {
-    fn consensus_encode<W: Write + ?Sized>(&self, writer: &mut W) -> Result<usize, io::Error> {
-        match self {
-            BeadResponse::Beads(beads) => {
-                let mut written = 0;
-                written += GET_BEADS.consensus_encode(writer)?; // 0 for Beads
-                written += (beads.len() as u32).consensus_encode(writer)?;
-                for bead in beads {
-                    written += bead.consensus_encode(writer)?;
-                }
-                Ok(written)
-            }
-            BeadResponse::Tips(tips) => {
-                let mut written = 0;
-                written += GET_TIPS.consensus_encode(writer)?; // 1 for Tips
-                written += (tips.len() as u32).consensus_encode(writer)?;
-                for tip in tips {
-                    written += tip.consensus_encode(writer)?;
-                }
-                Ok(written)
-            }
-            BeadResponse::Genesis(genesis) => {
-                let mut written = 0;
-                written += GET_GENESIS.consensus_encode(writer)?; // 2 for Genesis
-                written += (genesis.len() as u32).consensus_encode(writer)?;
-                for hash in genesis {
-                    written += hash.consensus_encode(writer)?;
-                }
-                Ok(written)
-            }
-            BeadResponse::GetAllBeads(beads) => {
-                let mut written = 0;
-                written += GET_ALL_BEADS.consensus_encode(writer)?; // 3 for GetAllBeads
-                written += (beads.len() as u32).consensus_encode(writer)?;
-                for bead in beads {
-                    written += bead.consensus_encode(writer)?;
-                }
-                Ok(written)
-            }
-            BeadResponse::Error(error) => {
-                let mut written = 0;
-                written += BEAD_RESPONSE_ERROR.consensus_encode(writer)?; // 4 for Error
-                written += error.consensus_encode(writer)?;
-                Ok(written)
-            }
-        }
-    }
-}
-
-impl Decodable for BeadResponse {
-    fn consensus_decode<D: BufRead + ?Sized>(d: &mut D) -> Result<Self, Error> {
-        let response_type = u8::consensus_decode(d)?;
-        match response_type {
-            GET_BEADS => {
-                let count = u32::consensus_decode(d)?;
-                let mut beads = Vec::new();
-                for _ in 0..count {
-                    let bead = Bead::consensus_decode(d)?;
-                    beads.push(bead);
-                }
-                Ok(BeadResponse::Beads(beads))
-            }
-            GET_TIPS => {
-                let count = u32::consensus_decode(d)?;
-                let mut tips = Vec::new();
-                for _ in 0..count {
-                    let tip = BeadHash::consensus_decode(d)?;
-                    tips.push(tip);
-                }
-                Ok(BeadResponse::Tips(tips))
-            }
-            GET_GENESIS => {
-                let count = u32::consensus_decode(d)?;
-                let mut genesis = Vec::new();
-                for _ in 0..count {
-                    let hash = BeadHash::consensus_decode(d)?;
-                    genesis.push(hash);
-                }
-                Ok(BeadResponse::Genesis(genesis))
-            }
-            GET_ALL_BEADS => {
-                let count = u32::consensus_decode(d)?;
-                let mut beads = Vec::new();
-                for _ in 0..count {
-                    let bead = Bead::consensus_decode(d)?;
-                    beads.push(bead);
-                }
-                Ok(BeadResponse::GetAllBeads(beads))
-            }
-            BEAD_RESPONSE_ERROR => {
-                let error = String::consensus_decode(d)?;
-                Ok(BeadResponse::Error(error))
-            }
-            _ => Err(Error::from(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Invalid BeadResponse type",
-            ))),
-        }
-    }
-}
-
+/// Codec for encoding/decoding bead sync messages over libp2p.
+///
+/// Implements the `libp2p::request_response::Codec` trait to handle serialization
+/// of `BeadRequest` and `BeadResponse` messages using Bitcoin consensus encoding.
 #[derive(Clone, Default)]
 pub struct BeadCodec;
 
@@ -251,32 +134,24 @@ impl Codec for BeadCodec {
     type Request = BeadRequest;
     type Response = BeadResponse;
 
-    async fn read_request<T>(
-        &mut self,
-        _: &Self::Protocol,
-        io: &mut T,
-    ) -> std::io::Result<Self::Request>
+    async fn read_request<T>(&mut self, _: &Self::Protocol, io: &mut T) -> IoResult<Self::Request>
     where
         T: AsyncRead + Unpin + Send,
     {
         let mut buf = Vec::new();
         io.read_to_end(&mut buf).await?;
         BeadRequest::consensus_decode(&mut buf.as_slice())
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+            .map_err(|e| IoError::new(ErrorKind::InvalidData, e))
     }
 
-    async fn read_response<T>(
-        &mut self,
-        _: &Self::Protocol,
-        io: &mut T,
-    ) -> std::io::Result<Self::Response>
+    async fn read_response<T>(&mut self, _: &Self::Protocol, io: &mut T) -> IoResult<Self::Response>
     where
         T: AsyncRead + Unpin + Send,
     {
         let mut buf = Vec::new();
         io.read_to_end(&mut buf).await?;
         BeadResponse::consensus_decode(&mut buf.as_slice())
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+            .map_err(|e| IoError::new(ErrorKind::InvalidData, e))
     }
 
     async fn write_request<T>(
@@ -284,17 +159,17 @@ impl Codec for BeadCodec {
         _: &Self::Protocol,
         io: &mut T,
         request: Self::Request,
-    ) -> std::io::Result<()>
+    ) -> IoResult<()>
     where
         T: AsyncWrite + Unpin + Send,
     {
         let mut buf = Vec::new();
         request
             .consensus_encode(&mut buf)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+            .map_err(|e| IoError::new(ErrorKind::InvalidData, e))?;
         io.write_all(&buf)
             .await
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+            .map_err(|e| IoError::new(ErrorKind::Other, e))
     }
 
     async fn write_response<T>(
@@ -302,17 +177,17 @@ impl Codec for BeadCodec {
         _: &Self::Protocol,
         io: &mut T,
         response: Self::Response,
-    ) -> std::io::Result<()>
+    ) -> IoResult<()>
     where
         T: AsyncWrite + Unpin + Send,
     {
         let mut buf = Vec::new();
         response
             .consensus_encode(&mut buf)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+            .map_err(|e| IoError::new(ErrorKind::InvalidData, e))?;
         io.write_all(&buf)
             .await
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+            .map_err(|e| IoError::new(ErrorKind::Other, e))
     }
 }
 

@@ -1,5 +1,5 @@
 use crate::bead::Bead;
-use crate::utils::{retrieve_bead, BeadHash};
+use crate::utils::BeadHash;
 use num::BigUint;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -60,6 +60,15 @@ impl Braid {
             bead_index_mapping,
         }
     }
+    pub fn reset(&mut self) {
+        self.beads.clear();
+        self.tips.clear();
+        self.cohorts.clear();
+        self.cohort_tips.clear();
+        self.orphan_beads.clear();
+        self.genesis_beads.clear();
+        self.bead_index_mapping.clear();
+    }
 }
 #[allow(unused)]
 impl Braid {
@@ -82,13 +91,10 @@ impl Braid {
 
             if !parent_exists {
                 // Try to retrieve the parent
-                if let Some(retrieved_bead) = retrieve_bead(*parent_hash) {
-                    self.extend(&retrieved_bead);
-                } else {
-                    // Parent not found and can't be retrieved
-                    self.orphan_beads.push(bead.clone());
-                    return AddBeadStatus::ParentsNotYetReceived;
-                }
+                //This is not required if a bead exists in DB it would already been extended to local braid as well
+                // Parent not found and can't be retrieved
+                self.orphan_beads.push(bead.clone());
+                return AddBeadStatus::ParentsNotYetReceived;
             }
         }
         // Already seen this bead
@@ -248,7 +254,71 @@ impl Braid {
             }
         }
     }
+    /// utility function for GetBeadsAfter request
+    pub fn get_beads_after(&self, old_tips: Vec<BeadHash>) -> Option<Vec<Bead>> {
+        let old_tips: HashSet<BeadHash> = old_tips.into_iter().collect();
+        tracing::warn!(
+            old_tips=?old_tips,"Tips received from the peer for which beads are requested for during IBD"
+        );
+        //In case no tips are present i.e. the new braid-node has been initialized
+        if old_tips.len() == 0 {
+            return Some(self.beads.clone());
+        }
+        let mut response_beads = Vec::new();
+        let mut smallest_index = usize::MAX;
+        //finding the starting index
+        for hash in &old_tips {
+            if let Some(&index) = self.bead_index_mapping.get(hash) {
+                if index < smallest_index {
+                    smallest_index = index;
+                }
+            }
+        }
+        //If somehow no bead matched that can be due to possible latency/fork so send all the beads instead as fallback
+        if smallest_index == usize::MAX {
+            return Some(self.beads.clone());
+        }
+
+        tracing::debug!(
+            smallest_index=?smallest_index,"Smallest possible index from all the tips",
+
+        );
+        // just iterating over the vector of cohorts for now, this needs to be changed to use a more efficient retrieval of cohort index given bead hash
+        let mut smallest_cohort_index = usize::MAX;
+        for (idx, cohort) in self.cohorts.iter().enumerate() {
+            if cohort.0.contains(&smallest_index) {
+                //Finding the cohort for which the smallest index is a part of
+                smallest_cohort_index = idx;
+                break;
+            }
+        }
+        if smallest_cohort_index == usize::MAX {
+            return Some(self.beads.clone());
+        }
+        tracing::debug!(
+            smallest_index=?smallest_index,"Smallest possible cohort index for which the given smallest index is a part of",
+        );
+        while smallest_cohort_index < self.cohorts.len() {
+            let cohort = &self.cohorts[smallest_cohort_index];
+            for bead_index in &cohort.0 {
+                let curr_bead = self.beads[*bead_index].clone();
+                //Not including the beads that are already present in old_tips
+                if !old_tips.contains(&curr_bead.block_header.block_hash()) {
+                    response_beads.push(curr_bead);
+                } else {
+                    tracing::debug!("This bead is already present in old tips thus skipping");
+                }
+            }
+            smallest_cohort_index += 1;
+        }
+        if (response_beads.is_empty()) {
+            None
+        } else {
+            Some(response_beads)
+        }
+    }
 }
+
 #[allow(unused)]
 pub mod consensus_functions {
     use num::{One, Zero};
