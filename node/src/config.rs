@@ -37,7 +37,7 @@ pub struct BraidpoolConfig {
 #[derive(Serialize, Deserialize, Clone)]
 //Rpc server configuration
 pub struct BraidRpcConfig {
-    rpc_server_addr: String,
+    pub rpc_server_addr: String,
 }
 impl Default for BraidRpcConfig {
     fn default() -> Self {
