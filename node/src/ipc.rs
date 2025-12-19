@@ -114,13 +114,11 @@ pub async fn ipc_block_listener(
 
             // Only try to get initial template if node is synced
             if is_synced {
-                match get_template_with_retry(
+                match get_template(
                     &mut shared_client,
-                    3,
                     RequestPriority::High,
                     "initial template",
                     tip_height,
-                    0,
                     network,
                 ).await {
                     Ok(template) => {
@@ -176,13 +174,11 @@ pub async fn ipc_block_listener(
                                 match shared_client.is_initial_block_download(Some(RequestPriority::High)).await {
                                     Ok(in_ibd) => {
                                         if !in_ibd { // Node is synced (not in IBD)
-                                            match get_template_with_retry(
+                                            match get_template(
                                                 &mut shared_client,
-                                                2,
                                                 RequestPriority::High,
                                                 &format!("block {}", height),
                                                 height,
-                                                0,
                                                 network,
                                             ).await {
                                                 Ok(template) => {
@@ -385,144 +381,55 @@ pub async fn ipc_block_listener(
     }).await
 }
 
-/// Retries block template requests with smart error handling and fallback strategies
+/// Retrieves block template
 ///
-/// This function implements a sophisticated retry mechanism that:
-/// - Attempts template fetching up to `max_attempts` times
-/// - Uses 500ms delays between attempts
-/// - Accepts templates smaller than 512 bytes as fallback
-/// - Returns immediately on connection errors for caller to handle reconnection
+/// This function:
+/// - Accepts templates smaller than 256 bytes
+/// - Propagates errors to caller
 ///
 /// # Arguments
 /// * `client` - The shared Bitcoin client for IPC communication
-/// * `max_attempts` - Maximum retry attempts (typically 2-3 for fast response)
 /// * `priority` - Request priority affecting queue position
 /// * `context` - Context for logging
-async fn get_template_with_retry(
+/// * `block_height` - The height of the block for which the template is requested
+/// * `network` - The Bitcoin network (e.g., Mainnet, Testnet, Regtest) for which the
+///   template is generated
+async fn get_template(
     client: &mut SharedBitcoinClient,
-    max_attempts: u32,
     priority: RequestPriority,
     context: &str,
     block_height: u32,
-    initial_nonce: u32,
     network: Network,
 ) -> Result<client::BlockTemplate, Box<dyn std::error::Error>> {
-    const MIN_TEMPLATE_SIZE: usize = 512;
+    const MIN_TEMPLATE_SIZE: usize = 256;
+    const NONCE: u32 = 0;
     let config = CoinbaseConfig::for_network(network);
-    let mut last_template: Option<client::BlockTemplate> = None;
 
-    for attempt in 1..=max_attempts {
-        match client
-            .get_block_template_components(None, Some(priority))
-            .await
-        {
-            Ok(components) => {
-                match create_braidpool_template(
-                    &components.components,
-                    &config,
-                    block_height,
-                    initial_nonce,
-                ) {
-                    Ok(final_template) => {
-                        let complete_block_bytes = final_template.complete_block_hex;
-                        if complete_block_bytes.is_empty() {
-                            return Err("Received empty template (0 bytes)".into());
-                        }
+    let components = client
+        .get_block_template_components(None, Some(priority))
+        .await?;
 
-                        let mut processed_template = (*components).clone();
-                        processed_template.processed_block_hex = Some(complete_block_bytes);
-                        last_template = Some(processed_template.clone());
+    let final_template =
+        create_braidpool_template(&components.components, &config, block_height, NONCE)?;
 
-                        if let Some(ref hex) = processed_template.processed_block_hex {
-                            if hex.len() >= MIN_TEMPLATE_SIZE {
-                                if attempt > 1 {
-                                    info!(
-                                        context = %context,
-                                        size_bytes = %hex.len(),
-                                        attempt = %attempt,
-                                        "Got valid template on retry"
-                                    );
-                                }
-                                return Ok(processed_template);
-                            } else if attempt == max_attempts {
-                                warn!(
-                                    context = %context,
-                                    size_bytes = %hex.len(),
-                                    max_attempts = %max_attempts,
-                                    "Template too small after max attempts - using anyway"
-                                );
-                                return Ok(processed_template);
-                            } else {
-                                warn!(
-                                    context = %context,
-                                    size_bytes = %hex.len(),
-                                    attempt = %attempt,
-                                    max_attempts = %max_attempts,
-                                    "Template too small - retrying"
-                                );
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        // Don't retry connection errors - let caller handle reconnection
-                        let boxed_err: Box<dyn std::error::Error> = Box::new(e.clone());
-                        if matches!(classify_error(&boxed_err), ErrorKind::ConnectionBroken) {
-                            return Err(Box::new(e));
-                        }
-
-                        if attempt == max_attempts {
-                            if let Some(template) = last_template {
-                                warn!(
-                                    context = %context,
-                                    "Final attempt failed - using last template"
-                                );
-                                return Ok(template);
-                            }
-                            return Err(Box::new(e));
-                        }
-
-                        warn!(
-                            context = %context,
-                            attempt = %attempt,
-                            error = %e,
-                            "Template fetch attempt failed - retrying"
-                        );
-                    }
-                }
-            }
-            Err(e) => {
-                // Don't retry connection errors - let caller handle reconnection
-                if matches!(classify_error(&e), ErrorKind::ConnectionBroken) {
-                    return Err(e);
-                }
-
-                if attempt == max_attempts {
-                    if let Some(template) = last_template {
-                        warn!(context = %context, "Final attempt failed - using last template");
-                        return Ok(template);
-                    }
-                    return Err(e);
-                }
-
-                warn!(
-                    context = %context,
-                    attempt = %attempt,
-                    error = %e,
-                    "Template fetch failed - retrying"
-                );
-            }
-        }
-
-        // Short delay between retries
-        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    let complete_block_bytes = final_template.complete_block_hex;
+    if complete_block_bytes.is_empty() {
+        return Err("Received empty template (0 bytes)".into());
     }
 
-    // This should never be reached due to the logic above, but just in case
-    if let Some(template) = last_template {
-        Ok(template)
-    } else {
-        Err("All attempts failed and no template available".into())
+    if complete_block_bytes.len() < MIN_TEMPLATE_SIZE {
+        warn!(
+            context = %context,
+            size_bytes = %complete_block_bytes.len(),
+            min_template_size = %MIN_TEMPLATE_SIZE,
+            "Template smaller than minimum template size - using anyway"
+        );
     }
+
+    let mut processed_template = (*components).clone();
+    processed_template.processed_block_hex = Some(complete_block_bytes);
+
+    Ok(processed_template)
 }
 
 fn create_braidpool_template(
