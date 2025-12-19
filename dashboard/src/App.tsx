@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Dashboard from './components/Dashboard/Dashboard';
 import MinedSharesExplorer from './components/BeadsTab/MinedSharesExplorer';
-import Footer from './components/Footer';
+import Footer from './components/Footer/Footer';
 
 function App() {
   return (
