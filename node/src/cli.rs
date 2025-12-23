@@ -1,14 +1,17 @@
 use clap::Parser;
 use std::path::PathBuf;
 
-#[derive(Parser, Debug)]
+use crate::rpc_server::RpcCommand;
+
+#[derive(Parser, Debug, Clone)]
+#[command(name = "braid", about = "Braidpool Node CLI")]
 pub struct Cli {
     /// Braid data directory
     #[arg(long, default_value = "~/.braidpool/")]
     pub datadir: PathBuf,
 
     /// Bind to a given address and always listen on it
-    #[arg(long, default_value = "0.0.0.0:25188")]
+    #[arg(long, default_value = "0.0.0.0:6680")]
     pub bind: String,
 
     /// Add a node to connect to and attempt to keep the connection open. This option can be
@@ -40,7 +43,11 @@ pub struct Cli {
     #[arg(long, default_value = "~/.bitcoin/.cookie")]
     pub rpccookie: Option<String>,
 
-    /// Use this port for bitcoin ZMQ
-    #[arg(long, default_value = "28332")]
-    pub zmqhashblockport: u16,
+    ///Rpc endpoints for the specific methods
+    #[command(subcommand)]
+    pub command: Option<RpcCommand>,
+
+    /// Path to Bitcoin Core IPC socket
+    #[arg(long, default_value = "/tmp/bitcoin-cpunet.sock")]
+    pub ipc_socket: String,
 }
