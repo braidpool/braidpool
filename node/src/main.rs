@@ -89,16 +89,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // starting from that block as genesis
     let initial_bead_fetch_handle = tokio::spawn(async move {
         let mut guard = braid_ref.write().await;
-        let fetched_beads = fetch_beads_in_batch(db_connection_pool_ref, 1000).await?;
+        let fetched_beads = fetch_beads_in_batch(db_connection_pool_ref, 50).await?;
+        info!(beads = fetched_beads.len(), "Beads loaded from DB");
         for bead in &fetched_beads {
             let curr_bead_status = guard.extend(&bead);
-            debug!(
+            info!(
                 hash = ?bead.block_header.block_hash(),
                 status = ?curr_bead_status,
                 "Bead inserted"
             );
         }
-        info!(beads = fetched_beads.len(), "Beads loaded from DB");
         Ok::<(), node::error::DBErrors>(())
     });
     match initial_bead_fetch_handle.await {
@@ -357,7 +357,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     })?;
     swarm.dial(boot_addr)?;
     info!(address = %ADDR_REFRENCE, "Dialed boot node");
-    //IPC(inter process communication) based `getblocktemplate` and `notification` to send to the downstream via the `cmempoold` architecture
+    // IPC(inter process communication) based `getblocktemplate` and `notification` to send to the downstream via the `cmempoold` architecture
     info!(socket = %args.ipc_socket, "IPC socket path");
 
     let network = if let Some(network_name) = &args.network {
