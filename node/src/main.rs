@@ -141,6 +141,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let notification_tx_clone = notification_tx.clone();
     //Connection mapping for all the downstream connection connected to the stratum server
     let connection_mapping = Arc::new(Mutex::new(ConnectionMapping::new()));
+    let connection_mapping_for_shutdown = connection_mapping.clone();
     //Mining job map keeping all the jobs provided to the downstream
     let mining_job_map = Arc::new(Mutex::new(HashMap::new()));
     //Intializing `notifier` for mining.notify
@@ -176,6 +177,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Some(block_submission_tx),
     );
 
+    let (main_shutdown_tx, _main_shutdown_rx) =
+        mpsc::channel::<tokio::signal::unix::SignalKind>(32);
+    let main_task_token = CancellationToken::new();
+    let ipc_task_token = main_task_token.clone();
+    let mut upstream_cache_for_notifier = None;
     let (upstream_ready_tx, upstream_ready_rx) = tokio::sync::oneshot::channel::<()>();
     let (upstream_share_tx_option, upstream_configure_tx_option, audit_dag_option) = if args.audit {
         // Validate CLI arguments for audit mode
@@ -207,146 +213,338 @@ async fn main() -> Result<(), Box<dyn Error>> {
             password: args.upstream_password.clone(),
         };
 
-        // For forwarding shares to upstream pool
-        let (upstream_share_tx, upstream_share_rx) = mpsc::channel(1024);
-        // For receiving jobs from the upstream pool
-        let (upstream_job_tx, mut upstream_job_rx) = mpsc::channel(1024);
-        // For receiving responses from upstream (share accepted etc.)
-        let (upstream_response_tx, mut upstream_response_rx) =
+        // Initialize upstream cache
+        let upstream_cache = upstream_pool::UpstreamCache::new();
+        let upstream_cache_clone = upstream_cache.clone();
+        upstream_cache_for_notifier = Some(upstream_cache.clone());
+        let mining_job_map_for_upstream_cleanup = mining_job_map.clone();
+
+        // For forwarding shares to upstream pool (stratum server -> upstream client), using Arc<Mutex<Receiver>> so the receiver survives reconnections,
+        // Buffer 50,000 shares to survive upstream lag spikes without blocking miners
+        let (upstream_share_tx, upstream_share_rx) =
+            mpsc::channel::<upstream_pool::UpstreamShare>(50000);
+        let upstream_share_rx = Arc::new(tokio::sync::Mutex::new(upstream_share_rx));
+
+        // For receiving jobs from upstream pool (upstream client -> notifier)
+        let (upstream_job_tx, upstream_job_rx) =
+            mpsc::channel::<node::stratum::JobNotification>(1024);
+        let upstream_job_rx = Arc::new(tokio::sync::Mutex::new(upstream_job_rx));
+
+        // For receiving responses from upstream (upstream client -> stratum server)
+        let (upstream_response_tx, upstream_response_rx) =
             mpsc::channel::<(String, serde_json::Value, u64)>(1024);
-        // For receiving extranounce values
-        let (upstream_extranonce_tx, mut upstream_extranonce_rx) =
-            mpsc::channel::<(String, usize)>(1);
-        // For receiving difficulty updates
-        let (upstream_difficulty_tx, mut upstream_difficulty_rx) = mpsc::channel::<f64>(1);
-        // For forwarding configure request to upstream pool
-        let (configure_tx, configure_rx) = mpsc::channel(10);
-        // Stores the most recent upstream job notification received from the upstream pool. Used for relaying the latest job to
-        // miners or for auditing purposes.
-        // TODO: implement caching the latest template for the upcoming miners
-        let last_upstream_job: Arc<Mutex<Option<node::stratum::JobNotification>>> =
-            Arc::new(Mutex::new(None));
-        let last_upstream_job_for_relay = last_upstream_job.clone();
+        let upstream_response_rx = Arc::new(tokio::sync::Mutex::new(upstream_response_rx));
+
+        // For forwarding configure requests to upstream pool
+        let (configure_tx, configure_rx) =
+            mpsc::channel::<(serde_json::Value, u64, mpsc::Sender<serde_json::Value>)>(50000);
+        let configure_rx = Arc::new(tokio::sync::Mutex::new(configure_rx));
+
+        // cancellation tokens
+        let upstream_response_task_token = main_task_token.clone();
+        let upstream_job_task_token = main_task_token.clone();
+
         let connection_mapping_for_responses = connection_mapping.clone();
+        let upstream_response_rx_clone = upstream_response_rx.clone();
         tokio::spawn(async move {
-            while let Some((worker_name, response, original_request_id)) =
-                upstream_response_rx.recv().await
-            {
-                info!("Upstream response for {}: {:?}", worker_name, response);
+            info!("Starting upstream response handler");
+            loop {
+                tokio::select! {
+                            received = async {
+                                let mut rx = upstream_response_rx_clone.lock().await;
+                                rx.recv().await
+                        } => {
+                        match received {
+                            Some((worker_name, response, original_request_id)) => {
+                                debug!("Upstream response for {}: {:?}", worker_name, response);
+                                let conn_map = connection_mapping_for_responses.lock().await;
+                                if let Some(channel) = conn_map.get_channel_for_worker(&worker_name) {
+                                    let miner_response = serde_json::json!({
+                                        "id": original_request_id,
+                                        "result": response.get("result").unwrap_or(&serde_json::json!(null)),
+                                        "error": response.get("error").unwrap_or(&serde_json::json!(null))
+                                    });
 
-                // Get the correct peer address for this worker
-                let conn_map = connection_mapping_for_responses.lock().await;
-
-                if let Some(channel) = conn_map.get_channel_for_worker(&worker_name) {
-                    let miner_response = serde_json::json!({
-                        "id": original_request_id,
-                        "result": response.get("result").unwrap_or(&serde_json::json!(null)),
-                        "error": response.get("error").unwrap_or(&serde_json::json!(null))
-                    });
-
-                    if let Err(e) = channel
-                        .send(serde_json::to_string(&miner_response).unwrap())
-                        .await
-                    {
-                        error!(
-                            "Failed to forward response to worker {}: {}",
-                            worker_name, e
-                        );
-                    } else {
-                        info!(
-                            "Forwarded upstream response to worker {} (id={})",
-                            worker_name, original_request_id
-                        );
+                                    if let Err(e) = channel
+                                        .send(serde_json::to_string(&miner_response).unwrap())
+                                        .await
+                                    {
+                                        error!(
+                                            "Failed to forward response to worker {}: {}",
+                                            worker_name, e
+                                        );
+                                    } else {
+                                        trace!(
+                                            "Forwarded upstream response to worker {} (id={})",
+                                            worker_name, original_request_id
+                                        );
+                                    }
+                                } else {
+                                    warn!("Worker '{}' not found in connection mapping", worker_name);
+                                }
+                            }
+                            None => {
+                                // Channel closed, this means all senders were dropped
+                                // In our design, this shouldn't happen because we clone senders
+                                // But if it does, log and wait before checking again
+                                if upstream_response_task_token.is_cancelled() {
+                                    break;
+                                }
+                                warn!("Upstream response channel returned None - waiting for reconnection");
+                                tokio::time::sleep(Duration::from_secs(1)).await;
+                            }
+                        }
                     }
-                } else {
-                    warn!("Worker '{}' not found in connection mapping", worker_name);
+                    _ = upstream_response_task_token.cancelled() => {
+                        info!("Upstream response handler shutting down");
+                        break;
+                    }
+                }
+            }
+        });
+
+        // Forwards jobs from upstream to the notifier
+        let notification_tx_for_upstream_jobs = notification_tx.clone();
+        let upstream_job_rx_clone = upstream_job_rx.clone();
+        tokio::spawn(async move {
+            info!("Starting persistent upstream job handler");
+            loop {
+                tokio::select! {
+                        received = async {
+                        let mut rx = upstream_job_rx_clone.lock().await;
+                        rx.recv().await
+                    } => {
+                    match received {
+                        Some(job) => {
+                            info!("Received job from upstream pool: {}", job.job_id);
+
+                            if let Err(e) = notification_tx_for_upstream_jobs
+                                .send(NotifyCmd::SendUpstreamJob {
+                                    job_notification: job,
+                                })
+                                .await
+                            {
+                                error!("Failed to forward upstream job: {}", e);
+                            } else {
+                                debug!("Forwarded upstream job to notifier");
+                            }
+                        }
+                        None => {
+                            warn!("Upstream job channel returned None, waiting for reconnection...");
+                            tokio::time::sleep(Duration::from_secs(1)).await;
+                        }
+                    }
+                }
+                _ = upstream_job_task_token.cancelled() => {
+                            info!("Upstream job handler shutting down");
+                            break;
+                    }
                 }
             }
         });
 
         let notification_tx_for_upstream_difficulty = notification_tx.clone();
         let connection_mapping_for_upstream = connection_mapping.clone();
-
-        // Spawn upstream pool client with reconnection logic
+        let upstream_task_token = main_task_token.clone();
+        let mut upstream_ready_tx_option = Some(upstream_ready_tx);
         tokio::spawn(async move {
-            info!("Starting upstream pool client...");
-            let upstream_client = upstream_pool::UpstreamPoolClient::new(
-                upstream_config.clone(),
-                upstream_share_rx,
-                upstream_job_tx.clone(),
-                notification_tx_for_upstream_difficulty,
-                upstream_response_tx.clone(),
-                Some(upstream_extranonce_tx),
-                Some(upstream_difficulty_tx),
-                configure_rx,
-            );
-            {
-                let mut conn_map = connection_mapping_for_upstream.lock().await;
-                conn_map.set_upstream_connected(true);
-            }
-            match upstream_client.run().await {
-                Ok(_) => {
-                    warn!("Upstream pool client exited gracefully");
-                }
-                Err(e) => {
-                    error!("Upstream pool client error: {:?}", e);
-                }
-            }
-            {
-                let mut conn_map = connection_mapping_for_upstream.lock().await;
-                conn_map.set_upstream_connected(false);
-            }
-            error!("Upstream connection lost - restarting...");
-        });
+            // Reconnection state
+            let mut retry_count: u32 = 0;
+            let base_delay = Duration::from_secs(5);
+            let max_delay = Duration::from_secs(60);
+            let mut last_successful_connection = std::time::Instant::now();
 
-        let connection_mapping_for_extranonce = connection_mapping.clone();
-        tokio::spawn(async move {
-            if let Some((extranonce1, extranonce2_size)) = upstream_extranonce_rx.recv().await {
+            loop {
+                if upstream_task_token.is_cancelled() {
+                    info!("Upstream pool task received shutdown signal");
+                    break;
+                }
                 info!(
-                    "Received upstream extranonce: {}, size: {}",
-                    extranonce1, extranonce2_size
+                    "Starting upstream pool connection attempt #{} to {}:{}",
+                    retry_count + 1,
+                    upstream_config.hostname,
+                    upstream_config.port
                 );
 
-                let mut conn_map = connection_mapping_for_extranonce.lock().await;
-                conn_map.set_upstream_extranonce(extranonce1, extranonce2_size);
+                // These are recreated for each connection attempt
+                let (upstream_extranonce_tx, mut upstream_extranonce_rx) =
+                    mpsc::channel::<(String, usize)>(1);
+                let (upstream_difficulty_tx, mut upstream_difficulty_rx) = mpsc::channel::<f64>(1);
+                let first_connection_ready_tx = upstream_ready_tx_option.take();
+                let connection_mapping_for_extranonce = connection_mapping_for_upstream.clone();
+                let extranonce_task = tokio::spawn(async move {
+                    let mut ready_tx = first_connection_ready_tx;
 
-                let _ = upstream_ready_tx.send(());
-                info!("Stratum server updated with upstream extranonce");
-            }
-        });
+                    while let Some((extranonce1, extranonce2_size)) =
+                        upstream_extranonce_rx.recv().await
+                    {
+                        info!(
+                            "Received upstream extranonce: {}, size: {}",
+                            extranonce1, extranonce2_size
+                        );
+                        let mut conn_map = connection_mapping_for_extranonce.lock().await;
+                        let old_extranonce = conn_map.upstream_extranonce1.as_ref();
+                        let changed =
+                            old_extranonce.is_some() && old_extranonce != Some(&extranonce1);
 
-        let connection_mapping_for_difficulty = connection_mapping.clone();
-        tokio::spawn(async move {
-            while let Some(difficulty) = upstream_difficulty_rx.recv().await {
-                info!("Received upstream difficulty: {}", difficulty);
-                let mut conn_map = connection_mapping_for_difficulty.lock().await;
-                conn_map.set_upstream_difficulty(difficulty);
-                info!("Stratum server updated with upstream difficulty");
-            }
-            warn!("Upstream difficulty channel closed");
-        });
+                        if changed {
+                            warn!(
+                                old = ?old_extranonce,
+                                new = %extranonce1,
+                                "Extranonce changed - disconnecting all miners"
+                            );
 
-        // Handle jobs from upstream pool (relay to notifier)
-        let notification_tx_for_upstream = notification_tx.clone();
-        tokio::spawn(async move {
-            while let Some(job) = upstream_job_rx.recv().await {
-                info!("Received job from upstream pool: {}", job.job_id);
+                            // Disconnect miners
+                            let peers: Vec<String> =
+                                conn_map.get_channels().keys().cloned().collect();
 
-                // Store last upstream job
-                *last_upstream_job_for_relay.lock().await = Some(job.clone());
+                            warn!(
+                                count = peers.len(),
+                                "Disconnecting all miners due to extranonce change"
+                            );
+                            for peer_addr in peers {
+                                conn_map.disconnect_peer(&peer_addr, "Upstream extranonce changed");
+                            }
+                        }
 
-                // Forward to notifier
-                if let Err(e) = notification_tx_for_upstream
-                    .send(NotifyCmd::SendUpstreamJob {
-                        job_notification: job,
-                    })
-                    .await
+                        // Update the state, this guarantees that the next miner to grab the lock sees the new extranonce
+                        conn_map.set_upstream_extranonce(extranonce1, extranonce2_size);
+                        drop(conn_map);
+
+                        // Signal ready only on first connection
+                        if let Some(tx) = ready_tx.take() {
+                            if let Err(_) = tx.send(()) {
+                                warn!("Failed to signal upstream ready (receiver dropped)");
+                            } else {
+                                info!("Signaled upstream ready to main thread");
+                            }
+                        }
+                        debug!("Stratum server updated with upstream extranonce");
+                    }
+                    debug!("Extranonce handler exiting for this connection");
+                });
+
+                // Spawn difficulty handler for this connection
+                let connection_mapping_for_difficulty = connection_mapping_for_upstream.clone();
+                let difficulty_task = tokio::spawn(async move {
+                    while let Some(difficulty) = upstream_difficulty_rx.recv().await {
+                        info!("Received upstream difficulty: {}", difficulty);
+                        let mut conn_map = connection_mapping_for_difficulty.lock().await;
+                        conn_map.set_upstream_difficulty(difficulty);
+                        drop(conn_map);
+                        debug!("Stratum server updated with upstream difficulty");
+                    }
+                    debug!("Difficulty handler exiting for this connection");
+                });
+
+                let upstream_client = upstream_pool::UpstreamPoolClient::new(
+                    upstream_config.clone(),
+                    upstream_share_rx.clone(),
+                    upstream_job_tx.clone(),
+                    notification_tx_for_upstream_difficulty.clone(),
+                    upstream_response_tx.clone(),
+                    Some(upstream_extranonce_tx),
+                    Some(upstream_difficulty_tx),
+                    configure_rx.clone(),
+                    upstream_cache_clone.clone(),
+                );
+
+                // Mark upstream as connected
                 {
-                    error!("Failed to forward upstream job: {}", e);
-                } else {
-                    info!("Forwarded upstream job to notifier");
+                    let mut conn_map = connection_mapping_for_upstream.lock().await;
+                    conn_map.set_upstream_connected(true);
+                }
+
+                // Run the client with cancellation support
+                let result = tokio::select! {
+                    result = upstream_client.run() => result,
+                    _ = upstream_task_token.cancelled() => {
+                        info!("Upstream client received shutdown signal during connection");
+                        // Return Ok to break the reconnection loop gracefully
+                        Ok(())
+                    }
+                };
+
+                // Mark upstream as disconnected
+                {
+                    let mut conn_map = connection_mapping_for_upstream.lock().await;
+                    conn_map.set_upstream_connected(false);
+                }
+
+                // Cleanup per-connection tasks
+                extranonce_task.abort();
+                difficulty_task.abort();
+
+                // Invalidate cached job on disconnect
+                {
+                    let mut cache = upstream_cache_clone.write().await;
+                    cache.invalidate_job();
+                    info!("Invalidated cached job due to upstream disconnect");
+                }
+
+                match result {
+                    Ok(_) => {
+                        warn!("Upstream pool client exited gracefully");
+
+                        // If cancelled, break immediately
+                        if upstream_task_token.is_cancelled() {
+                            break;
+                        }
+                        break;
+                    }
+                    Err(e) => {
+                        error!("Upstream pool client error: {:?}", e);
+
+                        // Check if shutdown was triggered before retrying
+                        if upstream_task_token.is_cancelled() {
+                            info!("Shutdown requested, stopping upstream reconnection");
+                            break;
+                        }
+                        info!("Invalidating all upstream jobs to prevent stale shares...");
+                        let global_map = mining_job_map_for_upstream_cleanup.lock().await;
+                        for miner_job_map in global_map.values() {
+                            let mut map = miner_job_map.lock().await;
+                            map.clear_upstream_jobs();
+                        }
+                        info!(
+                            "Upstream job cache cleared for {} miners.",
+                            global_map.len()
+                        );
+
+                        // Calculate backoff delay with jitter
+                        let delay = std::cmp::min(
+                            base_delay * 2u32.saturating_pow(retry_count.min(6)),
+                            max_delay,
+                        );
+                        let jitter = Duration::from_millis(rand::random::<u64>() % 1000);
+                        let total_delay = delay + jitter;
+                        error!(
+                            "Upstream connection lost - reconnecting in {:?} (attempt #{})",
+                            total_delay,
+                            retry_count + 1
+                        );
+                        tokio::select! {
+                            _ = tokio::time::sleep(total_delay) => {
+                                // Normal sleep completed
+                            }
+                            _ = upstream_task_token.cancelled() => {
+                                info!("Shutdown requested during reconnection backoff");
+                                break;
+                            }
+                        }
+                        retry_count += 1;
+
+                        // Reset retry count if we've been connected successfully for a while
+                        if last_successful_connection.elapsed() > Duration::from_secs(300) {
+                            info!("Resetting retry count due to previous stable connection");
+                            retry_count = 0;
+                        }
+                        last_successful_connection = std::time::Instant::now();
+                    }
                 }
             }
+
+            info!("Upstream pool client task shutting down");
         });
 
         (
@@ -360,14 +558,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
     };
 
     if args.audit {
-        info!("Waiting for upstream pool...");
-        match tokio::time::timeout(std::time::Duration::from_secs(30), upstream_ready_rx).await {
-            Ok(Ok(())) => info!("Upstream is ready"),
-            _ => {
-                error!("Upstream pool connection failed");
+        info!("Waiting for upstream pool (timeout: 30s)...");
+        match tokio::time::timeout(Duration::from_secs(60), upstream_ready_rx).await {
+            // Changed from 30s
+            Ok(Ok(())) => {
+                info!("Upstream pool connected successfully");
+            }
+            Ok(Err(_)) => {
+                error!("Upstream ready channel closed unexpectedly");
+                std::process::exit(1);
+            }
+            Err(_) => {
+                error!("Upstream pool failed to connect within 60 seconds");
+                error!("Check --upstream-host, --upstream-username, and network connectivity");
+                error!("Process will exit and should be restarted by user");
                 std::process::exit(1);
             }
         }
+        info!("Upstream reconnection monitoring active, will auto-reconnect on disconnects");
     }
 
     //Running the notification service
@@ -378,6 +586,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 &mut latest_template_ref,
                 &mut latest_template_merkle_branch_ref,
                 latest_template_id_for_notifier,
+                upstream_cache_for_notifier,
             )
             .await;
     });
@@ -1684,11 +1893,33 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let shutdown_signal = tokio::signal::ctrl_c().await;
     match shutdown_signal {
         Ok(_) => {
+            info!(component = "shutdown", "Graceful shutdown initiated");
+            info!(
+                component = "stratum",
+                "Disconnecting all miners gracefully..."
+            );
+            {
+                let mut conn_map = connection_mapping_for_shutdown.lock().await;
+                let miner_count = conn_map.get_channels().len();
+                info!(miners = miner_count, "Sending shutdown notice to miners");
+                conn_map
+                    .disconnect_all_with_message("Pool server restarting")
+                    .await;
+            }
+
+            // Cancel all audit mode tasks first
+            info!(component = "audit", "Cancelling upstream pool tasks");
+            main_task_token.cancel();
+
             info!(component = "database", "Closing connection pool");
             let pool = db_connection_pool.lock().await;
             //Closing all the existing connections to pool and committing from .db-wal to .db
             pool.close().await;
             info!(component = "database", "Connections closed");
+
+            // Give tasks time to drain
+            tokio::time::sleep(Duration::from_millis(100)).await;
+
             info!(component = "swarm", "Shutting down network swarm");
             swarm_handle.abort();
             tokio::time::sleep(Duration::from_millis(1)).await;

@@ -3135,6 +3135,7 @@ dependencies = [
  "serde",
  "serde_json",
  "shellexpand",
+ "socket2 0.5.10",
  "sqlx",
  "strum",
  "tokio",

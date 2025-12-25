@@ -4,6 +4,7 @@ use crate::{SwarmHandler, TemplateId, EXTRANONCE1_SIZE, EXTRANONCE2_SIZE, EXTRAN
 use bitcoin::block::HeaderExt;
 use bitcoin::consensus::serialize;
 use bitcoin::io::Cursor;
+use bitcoin::pow::CompactTargetExt;
 use bitcoin::{absolute::Decodable, Transaction};
 use bitcoin::{BlockHash, BlockHeader, BlockTime, TxMerkleNode, Txid, Witness};
 use futures::{lock::Mutex, FutureExt};
@@ -26,6 +27,8 @@ use tokio_stream::StreamExt;
 use tokio_util::codec::{FramedRead, LinesCodec};
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
+
+pub const DISCONNECT_SIGNAL: &str = "!!!_INTERNAL_DISCONNECT_SIGNAL_!!!";
 
 #[derive(Debug, Clone)]
 pub struct BlockSubmissionRequest {
@@ -1555,6 +1558,26 @@ impl MiningJobMap {
             string_job_id_map: HashMap::new(),
         }
     }
+    pub fn clear_upstream_jobs(&mut self) {
+        if self.string_job_id_map.is_empty() {
+            return;
+        }
+        info!(
+            count = %self.string_job_id_map.len(),
+            "Clearing stale upstream jobs from map due to disconnect"
+        );
+        let stale_template_ids: Vec<TemplateId> = self
+            .string_job_id_map
+            .values()
+            .map(|(tid, _)| tid.clone())
+            .collect();
+
+        self.string_job_id_map.clear();
+        for tid in stale_template_ids {
+            self.mining_jobs.remove(&tid);
+        }
+    }
+
     ///Inserting a suitable mining job which has been passed to the downstream being constructed from a suitable block template .
     pub async fn insert_mining_job(
         &mut self,
@@ -1808,6 +1831,133 @@ impl Notifier {
             parsed_bits: None,
         })
     }
+    async fn send_upstream_job_notification_to_miner(
+        peer_addr: &str,
+        connection_entry: &ConnectionInfo,
+        job_notification: &crate::stratum::JobNotification,
+        mining_job_map: &Arc<Mutex<MiningJobMap>>,
+    ) -> Result<(), StratumErrors> {
+        let mut curr_peer_mining_job_map = mining_job_map.lock().await;
+        let compact_bits = match job_notification.parsed_bits {
+            Some(bits) => bits,
+            None => {
+                error!(
+                    peer = %peer_addr,
+                    job_id = %job_notification.job_id,
+                    "Upstream job missing parsed_bits, attempting hex parse"
+                );
+
+                // Try fallback parse, but this indicates upstream handler issue
+                bitcoin::CompactTarget::from_hex(&job_notification.nbits).map_err(|e| {
+                    StratumErrors::InvalidMethodParams {
+                        method: format!("Invalid nbits in upstream job: {}", e),
+                    }
+                })?
+            }
+        };
+
+        // Reconstruct template from job notification
+        let mut template = crate::stratum::BlockTemplate::default();
+        template.bits = compact_bits;
+
+        // Parse version
+        let version_u32 = u32::from_str_radix(&job_notification.version, 16).map_err(|e| {
+            StratumErrors::InvalidMethodParams {
+                method: format!("Invalid version hex: {}", e),
+            }
+        })?;
+        template.version = bitcoin::block::Version::from_consensus(version_u32 as i32);
+
+        // Parse and reverse prevhash
+        if let Ok(prevhash_bytes) = hex::decode(&job_notification.prevhash) {
+            if prevhash_bytes.len() != 32 {
+                return Err(StratumErrors::InvalidMethodParams {
+                    method: format!("Invalid prevhash length: {}", prevhash_bytes.len()),
+                });
+            }
+            let mut reversed = [0u8; 32];
+            for i in 0..32 {
+                reversed[i] = prevhash_bytes[31 - i];
+            }
+            template.previousblockhash = bitcoin::BlockHash::from_byte_array(reversed);
+        } else {
+            return Err(StratumErrors::InvalidMethodParams {
+                method: "Failed to decode prevhash".to_string(),
+            });
+        }
+
+        let unix_timestamp = u32::from_str_radix(&job_notification.ntime, 16).unwrap_or_else(|e| {
+            warn!(
+                peer = %peer_addr,
+                ntime = %job_notification.ntime,
+                error = %e,
+                "Failed to parse ntime from upstream job, using current time as fallback"
+            );
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() as u32)
+                .unwrap_or(0)
+        });
+
+        template.curtime = bitcoin::BlockTime::from_u32(unix_timestamp);
+        let template_id = TemplateId::from_upstream_string(&job_notification.job_id);
+        let job_details = crate::stratum::JobDetails {
+            blocktemplate: template,
+            coinbase1: job_notification.coinbase1.clone(),
+            coinbase2: job_notification.coinbase2.clone(),
+            coinbase_merkle_path: job_notification.merkle_branches.clone(),
+            coinbase_witness_commitment: job_notification.coinbase_witness_commitment.clone(),
+            job_sent_time: unix_timestamp,
+            is_upstream_job: true,
+        };
+
+        let upstream_job_id = curr_peer_mining_job_map
+            .insert_upstream_job(
+                job_notification.job_id.clone(),
+                template_id.clone(),
+                job_details,
+            )
+            .await;
+
+        let job_notification_response = serde_json::json!({
+            "method": "mining.notify",
+            "params": [
+                upstream_job_id,
+                job_notification.prevhash,
+                job_notification.coinbase1,
+                job_notification.coinbase2,
+                job_notification.merkle_branches,
+                job_notification.version,
+                job_notification.nbits,
+                job_notification.ntime,
+                job_notification.clean_jobs
+            ]
+        });
+
+        let json_str = serde_json::to_string(&job_notification_response).map_err(|e| {
+            StratumErrors::InvalidMethodParams {
+                method: format!("Failed to serialize job notification: {}", e),
+            }
+        })?;
+
+        connection_entry
+            .sender
+            .send(json_str.clone())
+            .await
+            .map_err(|e| StratumErrors::NotifyMessageNotSent {
+                error: format!("Failed to send upstream job to {}: {}", peer_addr, e),
+                msg: json_str,
+                msg_type: "UpstreamJob".to_string(),
+            })?;
+
+        info!(
+            "Sent upstream job {} to {} (bits: {})",
+            upstream_job_id, peer_addr, job_notification.nbits
+        );
+
+        Ok(())
+    }
+
     /// Runs the Stratum notifier task that handles broadcasting mining jobs to downstream miners.
     ///
     /// This asynchronous function continuously listens for notification commands and performs
@@ -1831,6 +1981,7 @@ impl Notifier {
         latest_template_arc: &mut Arc<Mutex<BlockTemplate>>,
         latest_template_merkle_branch_arc: &mut Arc<Mutex<Vec<Vec<u8>>>>,
         latest_template_id: Arc<Mutex<TemplateId>>,
+        upstream_cache: Option<Arc<tokio::sync::RwLock<crate::upstream_pool::UpstreamCache>>>,
     ) -> Result<(), StratumErrors> {
         debug!("Stratum notifier task started");
         while let Some(notification_command) = self.notification_receiver.recv().await {
@@ -1973,6 +2124,62 @@ impl Notifier {
                 NotifyCmd::SendLatestTemplateToNewDownstream {
                     new_downstream_addr,
                 } => {
+                    if let Some(cache_lock) = &upstream_cache {
+                        let cache = cache_lock.read().await;
+                        if let Some(job_notification) = cache.get_latest_job() {
+                            info!(
+                                "Sending cached upstream job {} to new miner {}",
+                                job_notification.job_id, new_downstream_addr
+                            );
+
+                            let connection_entry = {
+                                let current_downstream_mapping =
+                                    downstream_connection_map.lock().await;
+                                current_downstream_mapping
+                                    .downstream_channel_mapping
+                                    .get(&new_downstream_addr)
+                                    .cloned()
+                            };
+
+                            let mining_job_map = {
+                                let global_map = self.job_map_arc.lock().await;
+                                global_map.get(&new_downstream_addr).cloned()
+                            };
+
+                            if let (Some(connection_entry), Some(map)) =
+                                (connection_entry, mining_job_map)
+                            {
+                                match Self::send_upstream_job_notification_to_miner(
+                                    &new_downstream_addr,
+                                    &connection_entry,
+                                    &job_notification,
+                                    &map,
+                                )
+                                .await
+                                {
+                                    Ok(_) => {
+                                        debug!(
+                                            peer = %new_downstream_addr,
+                                            "Successfully sent cached upstream job"
+                                        );
+                                    }
+                                    Err(e) => {
+                                        error!(
+                                            peer = %new_downstream_addr,
+                                            error = %e,
+                                            "Failed to send cached upstream job"
+                                        );
+                                    }
+                                }
+                            } else {
+                                warn!(
+                                    peer = %new_downstream_addr,
+                                    "Connection or job map not found for new downstream"
+                                );
+                            }
+                            continue;
+                        }
+                    }
                     let current_template_id = latest_template_id.lock().await.clone();
                     let connection_entry = {
                         let current_downstream_mapping = downstream_connection_map.lock().await;
@@ -2325,6 +2532,64 @@ impl ConnectionMapping {
         debug!("Removed peer {} and associated workers", peer_addr);
     }
 
+    pub async fn disconnect_all_with_message(&mut self, reason: &str) {
+        let peers: Vec<(String, ConnectionInfo)> =
+            self.downstream_channel_mapping.drain().collect();
+
+        for (peer_addr, connection_info) in peers {
+            // Send stratum error before closing
+            let error_msg = serde_json::json!({
+                "id": null,
+                "result": null,
+                "error": [20, reason, null]
+            });
+            let _ = connection_info
+                .sender
+                .try_send(serde_json::to_string(&error_msg).unwrap());
+
+            // Then send disconnect signal
+            let _ = connection_info
+                .sender
+                .try_send(DISCONNECT_SIGNAL.to_string());
+            info!(
+                peer = %peer_addr,
+                connection_id = %connection_info.connection_id,
+                reason = %reason,
+                "Sent shutdown notice to miner"
+            );
+        }
+
+        // Clear worker mappings
+        self.worker_to_peer.clear();
+    }
+
+    pub fn disconnect_peer(&mut self, peer_addr: &str, reason: &str) {
+        if let Some(connection_info) = self.downstream_channel_mapping.remove(peer_addr) {
+            info!(
+                peer = %peer_addr,
+                connection_id = %connection_info.connection_id,
+                reason = %reason,
+                "Disconnecting miner..."
+            );
+
+            // Send the explicit signal
+            let _ = connection_info
+                .sender
+                .try_send(DISCONNECT_SIGNAL.to_string());
+
+            // Drop the connection info, closes the channel
+            drop(connection_info);
+
+            info!(peer = %peer_addr, "Miner disconnected (Signal Sent & Channel Dropped)");
+        } else {
+            warn!(peer = %peer_addr, "Peer not found in connection mapping");
+        }
+
+        // cleanup workers
+        self.worker_to_peer
+            .retain(|_worker_name, mapped_peer| mapped_peer != peer_addr);
+    }
+
     pub fn set_upstream_extranonce(&mut self, extranonce1: String, extranonce2_size: usize) {
         self.upstream_extranonce1 = Some(extranonce1);
         self.upstream_extranonce2_size = Some(extranonce2_size);
@@ -2627,22 +2892,28 @@ impl Server {
 
         loop {
             tokio::select! {
-                Some(message) = downstream_receiver.recv() => {
-                    debug!("Message to send to {}: {}", peer_addr, message);
-
-                    if let Err(e) = stream_writer.write_all(format!("{}\n", message).as_bytes()).await {
-                        error!("Failed to write to {}: {}", peer_addr, e);
-                        break;
+                msg_option = downstream_receiver.recv() => {
+                    match msg_option {
+                        Some(message) => {
+                            if message == DISCONNECT_SIGNAL {
+                                info!(peer = %peer_addr, "Received explicit disconnect signal");
+                                break;
+                            }
+                            debug!("Sending to {}: {}", peer_addr, message);
+                            if let Err(e) = tokio::time::timeout(
+                                std::time::Duration::from_secs(5),
+                                stream_writer.write_all(format!("{}\n", message).as_bytes())
+                            ).await {
+                                error!("Write error to {}: {}", peer_addr, e);
+                                break;
+                            }
+                        }
+                        None => {
+                            info!(peer = %peer_addr, "Channel closed by main, disconnecting miner");
+                            break;
+                        }
                     }
-
-                    if let Err(e) = stream_writer.flush().await {
-                        error!("Failed to flush to {}: {}", peer_addr, e);
-                        break;
-                    }
-
-                    info!("Response has been written to the TcpStream successfully");
                 }
-
                 // Process incoming requests from miner
                 line = framed.next().fuse() => {
                     match line {
