@@ -312,7 +312,7 @@ const MinerInventoryDashboard = () => {
             {offlineMiners} Offline
           </button>
           <div className="px-4 py-2 rounded-md border border-gray-600 text-gray-400 ">
-            Total Miner : {totalMiners} Total
+            Total Miners: {totalMiners}
           </div>
           <div className="px-4 py-2 rounded-md border border-gray-600 text-gray-400 ">
             Total Hashrate : {totalHashrate.toFixed(3)} TH/s Total
