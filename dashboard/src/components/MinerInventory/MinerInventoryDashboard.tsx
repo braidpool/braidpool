@@ -267,12 +267,10 @@ const MinerInventoryDashboard = () => {
           >
             {loading ? 'Adding...' : 'Add Miner'}
           </button>
-
-         
         </div>
 
         {/* Summary Stats */}
-        
+
         <div className="flex flex-wrap justify-center gap-3 mt-6 text-sm">
           <button
             onClick={() =>
@@ -327,62 +325,67 @@ const MinerInventoryDashboard = () => {
           </div>
         </div>
       </div>
-     <div className="flex w-full justify-end ">
-  <div className="flex items-end gap-3  p-3 ">
-    {/* Search Input */}
-    <div>
-    <input
-      type="text"
-      value={searchInput}
-      onChange={(e) => setSearchInput(e.target.value)}
-      placeholder="Search by IP or name"
-      aria-label="Search miners"
-      className="px-3 py-2 text-sm border border-gray-600 bg-gray-800 rounded text-white placeholder-gray-400 w-64 focus:outline-none focus:ring-1 focus:ring-gray-500"
-      onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-    />
+      <div className="flex w-full justify-end ">
+        <div className="flex items-end gap-3  p-3 ">
+          {/* Search Input */}
+          <div>
+            <input
+              type="text"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Search by IP or name"
+              aria-label="Search miners"
+              className="px-3 py-2 text-sm border border-gray-600 bg-gray-800 rounded text-white placeholder-gray-400 w-64 focus:outline-none focus:ring-1 focus:ring-gray-500"
+              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+            />
 
-    
-
-    {/* Clear Button */}
-    <button
-      onClick={clearSearch}
-      className="px-3 py-2 text-sm text-gray-300 rounded border border-gray-600 bg-gray-900 hover:bg-gray-800 transition"
-    >
-      Clear
-    </button>
-</div>
-    {/* Sort Dropdown */}
-    <div>
-    <select
-      value={sortBy}
-      onChange={(e) =>
-        setSortBy(
-          e.target.value as 'all' | 'efficiency' | 'hashrate' | 'power' | 'temperature'
-        )
-      }
-      aria-label="Sort miners"
-      className="px-3 py-2 text-sm border border-gray-600 bg-gray-800 rounded text-white focus:outline-none focus:ring-1 focus:ring-gray-500"
-    >
-      <option value="all">Sort</option>
-      <option value="efficiency">Efficiency (W/TH)</option>
-      <option value="hashrate">Hashrate (TH/s)</option>
-      <option value="power">Power (W)</option>
-      <option value="temperature">Temperature (°C)</option>
-    </select>
-    </div>
-    </div>
-    <div className="flex items-center gap-3">
-      <div className="text-sm text-gray-400">
-        {lastUpdate ? `Last update: ${lastUpdate.toLocaleString()}` : 'Never updated'}
+            {/* Clear Button */}
+            <button
+              onClick={clearSearch}
+              className="px-3 py-2 text-sm text-gray-300 rounded border border-gray-600 bg-gray-900 hover:bg-gray-800 transition"
+            >
+              Clear
+            </button>
+          </div>
+          {/* Sort Dropdown */}
+          <div>
+            <select
+              value={sortBy}
+              onChange={(e) =>
+                setSortBy(
+                  e.target.value as
+                    | 'all'
+                    | 'efficiency'
+                    | 'hashrate'
+                    | 'power'
+                    | 'temperature'
+                )
+              }
+              aria-label="Sort miners"
+              className="px-3 py-2 text-sm border border-gray-600 bg-gray-800 rounded text-white focus:outline-none focus:ring-1 focus:ring-gray-500"
+            >
+              <option value="all">Sort</option>
+              <option value="efficiency">Efficiency (W/TH)</option>
+              <option value="hashrate">Hashrate (TH/s)</option>
+              <option value="power">Power (W)</option>
+              <option value="temperature">Temperature (°C)</option>
+            </select>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="text-sm text-gray-400">
+            {lastUpdate
+              ? `Last update: ${lastUpdate.toLocaleString()}`
+              : 'Never updated'}
+          </div>
+          <button
+            onClick={refreshAllMiners}
+            className="px-3 py-1 text-sm rounded border border-gray-600 text-white bg-gray-800 hover:bg-gray-700"
+          >
+            Refresh
+          </button>
+        </div>
       </div>
-      <button
-        onClick={refreshAllMiners}
-        className="px-3 py-1 text-sm rounded border border-gray-600 text-white bg-gray-800 hover:bg-gray-700"
-      >
-        Refresh
-      </button>
-    </div>
-  </div>
 
       {miners.length === 0 ? (
         <div className="text-center py-12 text-gray-400">
@@ -394,7 +397,6 @@ const MinerInventoryDashboard = () => {
       ) : sortedDisplayedMiners.length === 0 ? (
         <div className="text-center py-12 text-gray-400">
           <p className="text-lg">No miners match your search</p>
-      
         </div>
       ) : (
         <div className="flex overflow-x-auto space-x-4 pb-4">
