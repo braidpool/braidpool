@@ -21,6 +21,7 @@ import {
 } from './Types';
 import { currencyLabels, currencyColors } from './Constants';
 import { WEBSOCKET_URLS } from '@/URLs';
+import { Loader } from 'lucide-react';
 
 const MempoolLatencyStats = () => {
   const wsRef = useRef<WebSocket | null>(null);
@@ -91,8 +92,11 @@ const MempoolLatencyStats = () => {
 
   if (!mempoolData) {
     return (
-      <div className="text-center text-gray-400 py-10">
-        Loading Mempool Stats...
+      <div className="flex items-center justify-center h-full w-full">
+        <div className="flex flex-col items-center">
+          <Loader className="h-8 w-8 text-[#0077B6] animate-spin" />
+          <p className="mt-4 text-[#0077B6]">Loading Mempool Stats...</p>
+        </div>
       </div>
     );
   }
