@@ -124,7 +124,7 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
 
   if (isLoading || !isConnected) {
     return (
-      <div className="p-8 text-center text-red-900">
+      <div className="p-8 text-center text-gray-400">
         Loading hashrate data...
       </div>
     );
