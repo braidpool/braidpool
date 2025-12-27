@@ -26,7 +26,6 @@ export default function DashboardHeader({
           ))}
         </select>
       </div>
-
       {/* --- Desktop View: Tabs (Original) --- */}
       <div className="!hidden md:!block border-b border-gray-700">
         <nav className="mb-px flex flex-wrap gap-x-6" aria-label="Tabs">
