@@ -252,7 +252,6 @@ export default function MinedSharesExplorer({
               )}
             </div>
           )}
-
           <div style={{ display: activeTab === 'trends' ? 'block' : 'none' }}>
             <TrendsTab timeRange={timeRange} />
           </div>
