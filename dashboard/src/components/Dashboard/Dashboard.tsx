@@ -69,19 +69,24 @@ const Dashboard = () => {
             <Card 
               title="Beads Explorer"
               headerExtra={
-                <select
-                  id="tabs"
-                  name="tabs"
-                  className="block md:!hidden rounded-md border border-gray-700 bg-gray-800 py-1 px-3 text-sm text-white focus:border-blue-500 focus:outline-none focus:ring-blue-500 min-w-[150px]"
-                  value={activeTab}
-                  onChange={(e) => setActiveTab(e.target.value)}
-                >
-                  {TABS.map((tab) => (
-                    <option key={tab.id} value={tab.id}>
-                      {tab.label}
-                    </option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <label htmlFor="tabs" className="sr-only">
+                    Select a tab
+                  </label>
+                  <select
+                    id="tabs"
+                    name="tabs"
+                    className="block md:!hidden rounded-md border border-gray-700 bg-gray-800 py-1 px-3 text-sm text-white focus:border-blue-500 focus:outline-none focus:ring-blue-500 min-w-[150px]"
+                    value={activeTab}
+                    onChange={(e) => setActiveTab(e.target.value)}
+                  >
+                    {TABS.map((tab) => (
+                      <option key={tab.id} value={tab.id}>
+                        {tab.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               }
             >
               <div>
