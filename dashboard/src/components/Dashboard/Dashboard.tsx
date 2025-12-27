@@ -73,6 +73,7 @@ const Dashboard = () => {
                   <label htmlFor="tabs" className="sr-only">
                     Select a tab
                   </label>
+                  {/* Using ! to force responsive behavior against external overrides */}
                   <select
                     id="tabs"
                     name="tabs"
