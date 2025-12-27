@@ -43,6 +43,7 @@ export function TrendsTab({ timeRange }: { timeRange: string }) {
         </div>
 
         {/* Desktop View: Tabs (Hidden on small screens, Flex on medium+) */}
+        {/* Using ! to force responsive behavior against external overrides */}
         <nav
           className="!hidden md:!flex -mb-px flex-wrap justify-center gap-x-10"
           aria-label="Tabs"
