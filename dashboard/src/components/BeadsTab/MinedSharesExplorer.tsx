@@ -9,12 +9,17 @@ import { WEBSOCKET_URLS } from '../../URLs';
 import { ITEMS_PER_PAGE, DEFAULT_TIME_RANGE } from './Constants';
 import { PoolDominance } from './PoolDominance/PoolDominance';
 
-export default function MinedSharesExplorer() {
+export default function MinedSharesExplorer({ 
+  activeTab = 'beads', 
+  setActiveTab = () => {} 
+}: { 
+  activeTab?: string; 
+  setActiveTab?: (tab: string) => void;
+}) {
   const [expandedBeads, setExpandedBeads] = useState<Record<BeadId, boolean>>({
     bead1: true,
     bead2: false,
   });
-  const [activeTab, setActiveTab] = useState('beads');
   const [liveBeads, setLiveBeads] = useState<Bead[]>([]);
   const [activeBead, setActiveBead] = useState<BeadId | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
@@ -154,7 +159,9 @@ export default function MinedSharesExplorer() {
   return (
     <div className="min-h-screen  text-white relative">
       <div className="container mx-auto px-2 sm:px-4 py-8">
-        <DashboardHeader activeTab={activeTab} setActiveTab={setActiveTab} />
+        <div className="!hidden md:!block">
+          <DashboardHeader activeTab={activeTab} setActiveTab={setActiveTab} />
+        </div>
 
         <div className="relative">
           {activeTab === 'beads' && (
