@@ -75,14 +75,14 @@ export function TrendsTab({ timeRange }: { timeRange: string }) {
       </div>
 
       {/* Content Sections */}
-      <div style={{ display: activeSubTab === 'hashrate' ? 'block' : 'none' }}>
+      <div className={activeSubTab === 'hashrate' ? 'block' : 'hidden'}>
         <HashrateTab timeRange={timeRange} />
       </div>
-      <div style={{ display: activeSubTab === 'latency' ? 'block' : 'none' }}>
+      <div className={activeSubTab === 'latency' ? 'block' : 'hidden'}>
         <LatencyTab timeRange={timeRange} />
       </div>
       <div
-        style={{ display: activeSubTab === 'transactions' ? 'block' : 'none' }}
+        className={activeSubTab === 'transactions' ? 'block' : 'hidden'}
       >
         <TransactionsTab
           chartHovered={chartHovered}
@@ -91,7 +91,7 @@ export function TrendsTab({ timeRange }: { timeRange: string }) {
         />
       </div>
       <div
-        style={{ display: activeSubTab === 'difficulty' ? 'block' : 'none' }}
+        className={activeSubTab === 'difficulty' ? 'block' : 'hidden'}
       >
         <Difficulty />
       </div>
