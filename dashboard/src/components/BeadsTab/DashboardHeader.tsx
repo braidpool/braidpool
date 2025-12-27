@@ -8,6 +8,7 @@ export default function DashboardHeader({
   return (
     <header>
       {/* --- Mobile View: Dropdown --- */}
+      {/* Using ! to force responsive behavior against external overrides */}
       <div className="block md:!hidden py-4">
         <label htmlFor="tabs" className="sr-only">
           Select a tab
