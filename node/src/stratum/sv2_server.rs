@@ -28,14 +28,14 @@
 //! - SRI Project: https://github.com/stratum-mining/stratum
 
 use mining_sv2::{
-    CloseChannel, NewExtendedMiningJob, NewMiningJob, OpenExtendedMiningChannel,
+    CloseChannel, OpenExtendedMiningChannel,
     OpenExtendedMiningChannelSuccess, OpenStandardMiningChannel, OpenStandardMiningChannelSuccess,
-    SetCustomMiningJob, SetNewPrevHash, SetTarget, SubmitSharesExtended, SubmitSharesStandard,
-    SubmitSharesSuccess, UpdateChannel,
+    SetNewPrevHash, SubmitSharesExtended, SubmitSharesStandard,
+    SubmitSharesSuccess,
 };
 
 use common_messages_sv2::{
-    ChannelEndpointChanged, SetupConnection, SetupConnectionError, SetupConnectionSuccess,
+    SetupConnection, SetupConnectionError, SetupConnectionSuccess,
 };
 
 use tracing::{debug, info, warn};
@@ -68,6 +68,19 @@ pub struct Sv2Channel {
     pub is_active: bool,
 }
 
+/// Mining job for Future Jobs support
+#[derive(Debug, Clone)]
+pub struct MiningJob {
+    /// Job ID
+    pub job_id: u32,
+    /// Previous hash (block header)
+    pub prev_hash: [u8; 32],
+    /// Is this a future job?
+    pub is_future: bool,
+    /// Channel ID this job belongs to
+    pub channel_id: u32,
+}
+
 /// SV2 Server state
 #[derive(Debug)]
 pub struct Sv2Server {
@@ -79,6 +92,12 @@ pub struct Sv2Server {
     version: u16,
     /// Server flags
     flags: u32,
+    /// Next job ID to assign
+    next_job_id: u32,
+    /// Active jobs mapped by ID (for Future Jobs support)
+    jobs: std::collections::HashMap<u32, MiningJob>,
+    /// Current active job ID
+    current_job_id: Option<u32>,
 }
 
 // ============================================================================
@@ -93,6 +112,9 @@ impl Sv2Server {
             channels: std::collections::HashMap::new(),
             version: 2, // SV2 protocol version
             flags: 0,
+            next_job_id: 1,
+            jobs: std::collections::HashMap::new(),
+            current_job_id: None,
         }
     }
 
@@ -300,6 +322,122 @@ impl Sv2Server {
     pub fn active_channel_count(&self) -> usize {
         self.channels.values().filter(|c| c.is_active).count()
     }
+
+    // ------------------------------------------------------------------------
+    // Future Jobs Implementation
+    // ------------------------------------------------------------------------
+
+    /// Send a new mining job to a channel
+    ///
+    /// This is used for Future Jobs - miners can receive multiple jobs
+    /// and quickly switch between them when SetNewPrevHash is sent.
+    ///
+    /// # Implementation Note
+    ///
+    /// Currently stores the job internally but returns a simple status.
+    /// The actual NewMiningJob message construction requires complex SV2 types
+    /// and would be integrated with Braidpool's block template system.
+    pub fn send_new_mining_job(
+        &mut self,
+        channel_id: u32,
+        job_id: u32,
+        is_future: bool,
+    ) -> Result<(), String> {
+        // Verify channel exists and is active
+        let channel = self
+            .channels
+            .get(&channel_id)
+            .ok_or("Channel not found")?;
+
+        if !channel.is_active {
+            return Err("Channel is not active".to_string());
+        }
+
+        // Create mining job
+        let job = MiningJob {
+            job_id,
+            prev_hash: [0u8; 32], // Will be set by SetNewPrevHash
+            is_future,
+            channel_id,
+        };
+
+        // Store job
+        self.jobs.insert(job_id, job);
+
+        // If this is current job (not future), update current_job_id
+        if !is_future {
+            self.current_job_id = Some(job_id);
+        }
+
+        info!(
+            channel_id,
+            job_id,
+            is_future,
+            "Sent new mining job"
+        );
+
+        // TODO: Build and send actual NewMiningJob message
+        // This requires integration with Braidpool's block template system
+        // to populate merkle_root, min_ntime, and other fields properly
+
+        Ok(())
+    }
+
+    /// Set new previous hash - activates a future job
+    ///
+    /// This allows rapid switching between work units. When a new block
+    /// is found on the network, the server sends SetNewPrevHash to
+    /// immediately switch all miners to the new block template.
+    pub fn set_new_prev_hash<'a>(
+        &mut self,
+        channel_id: u32,
+        job_id: u32,
+        prev_hash: [u8; 32],
+    ) -> Result<SetNewPrevHash<'a>, String> {
+        // Verify channel exists
+        self.channels
+            .get(&channel_id)
+            .ok_or("Channel not found")?;
+
+        // Update job with new prev_hash
+        if let Some(job) = self.jobs.get_mut(&job_id) {
+            job.prev_hash = prev_hash;
+            job.is_future = false; // No longer a future job
+            self.current_job_id = Some(job_id);
+
+            info!(
+                channel_id,
+                job_id,
+                prev_hash = ?prev_hash,
+                "Set new previous hash - activated future job"
+            );
+
+            Ok(SetNewPrevHash {
+                channel_id,
+                job_id,
+                prev_hash: prev_hash.to_vec().try_into().unwrap(),
+                min_ntime: 0, // Current time
+                nbits: 0x1d00ffff, // Default difficulty
+            })
+        } else {
+            Err("Job not found".to_string())
+        }
+    }
+
+    /// Get current active job ID
+    pub fn current_job(&self) -> Option<u32> {
+        self.current_job_id
+    }
+
+    /// Get job count (for testing/monitoring)
+    pub fn job_count(&self) -> usize {
+        self.jobs.len()
+    }
+
+    /// Get future jobs count
+    pub fn future_jobs_count(&self) -> usize {
+        self.jobs.values().filter(|j| j.is_future).count()
+    }
 }
 
 impl Default for Sv2Server {
@@ -420,5 +558,163 @@ mod tests {
         server.handle_close_channel(close).unwrap();
 
         assert_eq!(server.active_channel_count(), 0);
+    }
+
+    // ------------------------------------------------------------------------
+    // Future Jobs Tests
+    // ------------------------------------------------------------------------
+
+    #[test]
+    fn test_send_new_mining_job() {
+        let mut server = Sv2Server::new();
+
+        // First, create a channel
+        let request = OpenStandardMiningChannel {
+            request_id: 1u32.into(),
+            user_identity: "worker1".to_string().try_into().unwrap(),
+            nominal_hash_rate: 1_000_000_000.0,
+            max_target: [0xFF; 32].into(),
+        };
+        let channel_success = server.handle_open_standard_channel(request).unwrap();
+        let channel_id = channel_success.channel_id;
+
+        // Send a current job (not future)
+        let result = server.send_new_mining_job(channel_id, 1, false);
+        assert!(result.is_ok());
+
+        // Verify job was stored
+        assert_eq!(server.job_count(), 1);
+        assert_eq!(server.current_job(), Some(1));
+        assert_eq!(server.future_jobs_count(), 0);
+    }
+
+    #[test]
+    fn test_send_future_job() {
+        let mut server = Sv2Server::new();
+
+        // Create a channel
+        let request = OpenStandardMiningChannel {
+            request_id: 1u32.into(),
+            user_identity: "worker1".to_string().try_into().unwrap(),
+            nominal_hash_rate: 1_000_000_000.0,
+            max_target: [0xFF; 32].into(),
+        };
+        let channel_success = server.handle_open_standard_channel(request).unwrap();
+        let channel_id = channel_success.channel_id;
+
+        // Send a future job
+        let result = server.send_new_mining_job(channel_id, 2, true);
+        assert!(result.is_ok());
+
+        // Verify job was stored
+        assert_eq!(server.job_count(), 1);
+        assert_eq!(server.current_job(), None); // No current job, only future
+        assert_eq!(server.future_jobs_count(), 1);
+    }
+
+    #[test]
+    fn test_set_new_prev_hash() {
+        let mut server = Sv2Server::new();
+
+        // Create a channel
+        let request = OpenStandardMiningChannel {
+            request_id: 1u32.into(),
+            user_identity: "worker1".to_string().try_into().unwrap(),
+            nominal_hash_rate: 1_000_000_000.0,
+            max_target: [0xFF; 32].into(),
+        };
+        let channel_success = server.handle_open_standard_channel(request).unwrap();
+        let channel_id = channel_success.channel_id;
+
+        // Send a future job
+        server.send_new_mining_job(channel_id, 1, true).unwrap();
+        assert_eq!(server.future_jobs_count(), 1);
+        assert_eq!(server.current_job(), None);
+
+        // Activate the future job with SetNewPrevHash
+        let prev_hash = [0xAB; 32];
+        let result = server.set_new_prev_hash(channel_id, 1, prev_hash);
+        assert!(result.is_ok());
+
+        let set_prev_hash = result.unwrap();
+        assert_eq!(set_prev_hash.channel_id, channel_id);
+        assert_eq!(set_prev_hash.job_id, 1);
+
+        // Verify job is now current (not future)
+        assert_eq!(server.future_jobs_count(), 0);
+        assert_eq!(server.current_job(), Some(1));
+    }
+
+    #[test]
+    fn test_multiple_future_jobs() {
+        let mut server = Sv2Server::new();
+
+        // Create a channel
+        let request = OpenStandardMiningChannel {
+            request_id: 1u32.into(),
+            user_identity: "worker1".to_string().try_into().unwrap(),
+            nominal_hash_rate: 1_000_000_000.0,
+            max_target: [0xFF; 32].into(),
+        };
+        let channel_success = server.handle_open_standard_channel(request).unwrap();
+        let channel_id = channel_success.channel_id;
+
+        // Send current job
+        server.send_new_mining_job(channel_id, 1, false).unwrap();
+
+        // Send multiple future jobs
+        server.send_new_mining_job(channel_id, 2, true).unwrap();
+        server.send_new_mining_job(channel_id, 3, true).unwrap();
+        server.send_new_mining_job(channel_id, 4, true).unwrap();
+
+        assert_eq!(server.job_count(), 4);
+        assert_eq!(server.future_jobs_count(), 3);
+        assert_eq!(server.current_job(), Some(1));
+
+        // Quickly switch to job 2
+        let prev_hash = [0xCD; 32];
+        server.set_new_prev_hash(channel_id, 2, prev_hash).unwrap();
+
+        assert_eq!(server.future_jobs_count(), 2); // Jobs 3 and 4 still future
+        assert_eq!(server.current_job(), Some(2)); // Job 2 is now current
+    }
+
+    #[test]
+    fn test_future_job_rapid_switching() {
+        let mut server = Sv2Server::new();
+
+        // Create a channel
+        let request = OpenStandardMiningChannel {
+            request_id: 1u32.into(),
+            user_identity: "worker1".to_string().try_into().unwrap(),
+            nominal_hash_rate: 1_000_000_000.0,
+            max_target: [0xFF; 32].into(),
+        };
+        let channel_success = server.handle_open_standard_channel(request).unwrap();
+        let channel_id = channel_success.channel_id;
+
+        // Pre-send 5 future jobs
+        for job_id in 1..=5 {
+            server.send_new_mining_job(channel_id, job_id, true).unwrap();
+        }
+
+        assert_eq!(server.job_count(), 5);
+        assert_eq!(server.future_jobs_count(), 5);
+
+        // Rapidly switch between jobs (simulating new blocks found on network)
+        let prev_hashes = [
+            [0x01; 32],
+            [0x02; 32],
+            [0x03; 32],
+        ];
+
+        for (idx, prev_hash) in prev_hashes.iter().enumerate() {
+            let job_id = (idx + 1) as u32;
+            server.set_new_prev_hash(channel_id, job_id, *prev_hash).unwrap();
+            assert_eq!(server.current_job(), Some(job_id));
+        }
+
+        // 3 jobs activated, 2 still future
+        assert_eq!(server.future_jobs_count(), 2);
     }
 }
