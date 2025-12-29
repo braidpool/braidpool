@@ -674,8 +674,14 @@ mod tests {
         let result = client.set_extranonce1(None);
 
         // Verify it kept the original value
-        assert_eq!(result.0.inner_as_ref(), original_extranonce.0.inner_as_ref());
-        assert_eq!(client.extranonce1().0.inner_as_ref(), original_extranonce.0.inner_as_ref());
+        assert_eq!(
+            result.0.inner_as_ref(),
+            original_extranonce.0.inner_as_ref()
+        );
+        assert_eq!(
+            client.extranonce1().0.inner_as_ref(),
+            original_extranonce.0.inner_as_ref()
+        );
     }
 
     #[test]
