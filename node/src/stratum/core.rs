@@ -199,16 +199,16 @@ pub struct DownstreamClient {
     /// The unique identifier assigned to this downstream connection/channel.
     connection_id: u32,
     /// The extranonce1 value assigned to this downstream miner.
-    extranonce1: Vec<u8>,
+    pub(super) extranonce1: Vec<u8>,
     /// `extranonce1` to be sent to the Downstream in the SV1 `mining.subscribe` message response.
     //extranonce1: Vec<u8>,
     //extranonce2_size: usize,
     /// Version rolling mask bits `HexU32Be` used in case of considering SV2 for cross checking purposes
-    version_rolling_mask: Option<String>,
+    pub(super) version_rolling_mask: Option<String>,
     /// Minimum version rolling mask bits size
-    version_rolling_min_bit: Option<u32>,
+    pub(super) version_rolling_min_bit: Option<u32>,
     /// The expected size of the extranonce2 field provided by the miner.
-    extranonce2_len: usize,
+    pub(super) extranonce2_len: usize,
     /// Optional per-connection monitoring target (stricter than share/weak target).
     /// Used to sample miner health at a higher rate than the share target.
     pub monitor_target: Option<bitcoin::Target>,
@@ -249,13 +249,13 @@ impl DownstreamClient {
         let client_request_id = client_request.id;
         let connection_id_hex = format!("{:x}", self.connection_id());
         let response_or_error = match method.as_ref() {
-            "mining.configure" => self.handle_configure(&req_params, client_request_id).await,
+            "mining.configure" => self.handle_configure_legacy(&req_params, client_request_id).await,
             "mining.subscribe" => {
-                Self::handle_subscribe(self, &req_params, client_request_id).await
+                Self::handle_subscribe_legacy(self, &req_params, client_request_id).await
             }
-            "mining.authorize" => self.handle_authorize(&req_params, client_request_id).await,
+            "mining.authorize" => self.handle_authorize_legacy(&req_params, client_request_id).await,
             "mining.submit" => {
-                Self::handle_submit(
+                Self::handle_submit_legacy(
                     self,
                     &req_params,
                     mining_job_map,
@@ -369,7 +369,7 @@ impl DownstreamClient {
     ///
     /// # Return
     ///  `StratumError` or `Stratum Response`
-    pub async fn handle_submit(
+    pub async fn handle_submit_legacy(
         &mut self,
         submit_work_params: &Value,
         mining_job_map: Arc<Mutex<MiningJobMap>>,
@@ -789,7 +789,12 @@ impl DownstreamClient {
     /// # Returns
     /// * `Ok(StratumResponses::StandardResponse)` with `true` if authorization succeeds.
     /// * `Err(StratumErrors::InvalidMethodParams)` if either parameter is missing or invalid.
-    pub async fn handle_authorize(
+    ///
+    /// Legacy handle_authorize method - kept for backward compatibility
+    ///
+    /// This method will be gradually phased out as we migrate to sv1_api.
+    /// New code should use the IsServer trait implementation instead.
+    pub async fn handle_authorize_legacy(
         &mut self,
         authorize_request_params: &Value,
         client_request_id: u64,
@@ -851,7 +856,11 @@ impl DownstreamClient {
     // "version-rolling"
     // "minimum-difficulty"
     // "subscribe-extranonce"
-    pub async fn handle_configure(
+    /// Legacy handle_configure method - kept for backward compatibility
+    ///
+    /// This method will be gradually phased out as we migrate to sv1_api.
+    /// New code should use the IsServer trait implementation instead.
+    pub async fn handle_configure_legacy(
         &mut self,
         config_req_params: &Value,
         client_request_id: u64,
@@ -999,7 +1008,12 @@ impl DownstreamClient {
     ///   16
     /// ]
     /// ```
-    pub async fn handle_subscribe(
+    ///
+    /// Legacy handle_subscribe method - kept for backward compatibility
+    ///
+    /// This method will be gradually phased out as we migrate to sv1_api.
+    /// New code should use the IsServer trait implementation instead.
+    pub async fn handle_subscribe_legacy(
         &mut self,
         subscribe_req_params: &Value,
         client_request_id: u64,
@@ -1915,27 +1929,75 @@ impl Server {
                             );
                         //Parsing the lines read from buffer to find out whether they are valid JSON request type to be server as per
                         //stratum or not .
-                        match serde_json::from_str::<StandardRequest>(&line) {
-                                Ok(_request) => {
-                         let server_request_res:Result<StratumResponses, StratumErrors> = downstream_client.lock().await.handle_client_to_server_request(serde_json::from_str(&line).unwrap(),mining_job_map.clone(),downstream_message_sender.clone(),notification_sender.clone(),peer_addr.to_string(),swarm_handler.clone()).await;
-                         match server_request_res{
-                            Ok(_)=>{
 
-                            },
-                            Err(error)=>{
-                                return Err(Box::new(error))
-                            }
-                         }
+                        // Try parsing with sv1_api first (new approach)
+                        match serde_json::from_str::<sv1_api::json_rpc::Message>(&line) {
+                                Ok(_sv1_message) => {
+                                    trace!(
+                                        connection_id = %connection_id_hex,
+                                        peer = %peer_addr,
+                                        "Successfully parsed message with sv1_api"
+                                    );
+
+                                    // Route through IsServer trait if it's a request
+                                    // For now, fall back to legacy routing
+                                    // TODO: Implement full sv1_api routing
+                                    match serde_json::from_str::<StandardRequest>(&line) {
+                                        Ok(_request) => {
+                                            let server_request_res:Result<StratumResponses, StratumErrors> = downstream_client.lock().await.handle_client_to_server_request(serde_json::from_str(&line).unwrap(),mining_job_map.clone(),downstream_message_sender.clone(),notification_sender.clone(),peer_addr.to_string(),swarm_handler.clone()).await;
+                                            match server_request_res{
+                                                Ok(_)=>{
+
+                                                },
+                                                Err(error)=>{
+                                                    return Err(Box::new(error))
+                                                }
+                                            }
+                                        }
+                                        Err(e) => {
+                                            error!(
+                                                connection_id = %connection_id_hex,
+                                                peer = %peer_addr,
+                                                error = %e,
+                                                line = %line,
+                                                error_type = "legacy_parse",
+                                                "Failed to parse with legacy parser after sv1_api success"
+                                            );
+                                        }
+                                    }
                                 }
                                 Err(e) => {
-                                    error!(
+                                    // Fall back to legacy parsing
+                                    trace!(
                                         connection_id = %connection_id_hex,
                                         peer = %peer_addr,
                                         error = %e,
-                                        line = %line,
-                                        error_type = "json_parse",
-                                        "Failed to parse JSON request"
+                                        "sv1_api parsing failed, trying legacy parser"
                                     );
+
+                                    match serde_json::from_str::<StandardRequest>(&line) {
+                                        Ok(_request) => {
+                                            let server_request_res:Result<StratumResponses, StratumErrors> = downstream_client.lock().await.handle_client_to_server_request(serde_json::from_str(&line).unwrap(),mining_job_map.clone(),downstream_message_sender.clone(),notification_sender.clone(),peer_addr.to_string(),swarm_handler.clone()).await;
+                                            match server_request_res{
+                                                Ok(_)=>{
+
+                                                },
+                                                Err(error)=>{
+                                                    return Err(Box::new(error))
+                                                }
+                                            }
+                                        }
+                                        Err(e) => {
+                                            error!(
+                                                connection_id = %connection_id_hex,
+                                                peer = %peer_addr,
+                                                error = %e,
+                                                line = %line,
+                                                error_type = "json_parse",
+                                                "Failed to parse JSON request with both sv1_api and legacy parser"
+                                            );
+                                        }
+                                    }
                                 }
                             }
 
@@ -2390,10 +2452,10 @@ mod test {
         let test_extranonce_1 = hex::decode("9495ac08").unwrap();
         mock_downstream_handler.extranonce1 = test_extranonce_1;
         let configure_response = mock_downstream_handler
-            .handle_configure(&configure_test_request, 1)
+            .handle_configure_legacy(&configure_test_request, 1)
             .await;
         let submit_response: StratumResponses = mock_downstream_handler
-            .handle_submit(
+            .handle_submit_legacy(
                 &test_submit_request_params,
                 mock_mining_job_map.clone(),
                 2,
@@ -2453,5 +2515,60 @@ mod test {
             mr.to_string(),
             "690699e45d09d84d81cb58a4f8ba734e7fc90856d8b24524797f9a54ff57b1a1".to_string()
         );
+    }
+
+    /// Test that sv1_api can parse standard Stratum V1 messages
+    #[test]
+    fn test_sv1_api_message_parsing() {
+        // Test mining.subscribe
+        let subscribe_msg = r#"{"id":1,"method":"mining.subscribe","params":["miner/1.0.0"]}"#;
+        let parsed = serde_json::from_str::<sv1_api::json_rpc::Message>(subscribe_msg);
+        assert!(parsed.is_ok(), "Should parse subscribe message");
+
+        // Test mining.authorize
+        let authorize_msg = r#"{"id":2,"method":"mining.authorize","params":["worker1","password"]}"#;
+        let parsed = serde_json::from_str::<sv1_api::json_rpc::Message>(authorize_msg);
+        assert!(parsed.is_ok(), "Should parse authorize message");
+
+        // Test mining.configure
+        let configure_msg = r#"{"id":3,"method":"mining.configure","params":[[],{}]}"#;
+        let parsed = serde_json::from_str::<sv1_api::json_rpc::Message>(configure_msg);
+        assert!(parsed.is_ok(), "Should parse configure message");
+
+        // Test mining.submit
+        let submit_msg = r#"{"id":4,"method":"mining.submit","params":["worker1","1","00000000","6436eddf","41d5deb0"]}"#;
+        let parsed = serde_json::from_str::<sv1_api::json_rpc::Message>(submit_msg);
+        assert!(parsed.is_ok(), "Should parse submit message");
+
+        // Test invalid JSON
+        let invalid_msg = r#"{"id":5,"method":"invalid_method"invalid}"#;
+        let parsed = serde_json::from_str::<sv1_api::json_rpc::Message>(invalid_msg);
+        assert!(parsed.is_err(), "Should fail to parse invalid JSON");
+    }
+
+    /// Test that both sv1_api and legacy parsers handle the same messages
+    #[test]
+    fn test_dual_parser_compatibility() {
+        let test_messages = vec![
+            r#"{"id":1,"method":"mining.subscribe","params":[]}"#,
+            r#"{"id":2,"method":"mining.authorize","params":["worker","pass"]}"#,
+            r#"{"id":3,"method":"mining.configure","params":[]}"#,
+        ];
+
+        for msg in test_messages {
+            // Try sv1_api parser
+            let sv1_result = serde_json::from_str::<sv1_api::json_rpc::Message>(msg);
+
+            // Try legacy parser
+            let legacy_result = serde_json::from_str::<StandardRequest>(msg);
+
+            // Both should succeed or both should fail
+            assert_eq!(
+                sv1_result.is_ok(),
+                legacy_result.is_ok(),
+                "Parsers should agree on message: {}",
+                msg
+            );
+        }
     }
 }
