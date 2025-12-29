@@ -199,15 +199,38 @@ pub struct DownstreamClient {
     /// The unique identifier assigned to this downstream connection/channel.
     connection_id: u32,
     /// The extranonce1 value assigned to this downstream miner.
+    ///
+    /// **Visibility**: `pub(super)` allows access from sibling modules (sv1_server_impl, sv2_server)
+    /// within the parent `stratum` module, while preventing access from outside the stratum subsystem.
+    ///
+    /// **Access Pattern**: External code should use IsServer trait methods:
+    /// - `extranonce1()` - getter
+    /// - `set_extranonce1()` - setter
     pub(super) extranonce1: Vec<u8>,
     /// `extranonce1` to be sent to the Downstream in the SV1 `mining.subscribe` message response.
     //extranonce1: Vec<u8>,
     //extranonce2_size: usize,
     /// Version rolling mask bits `HexU32Be` used in case of considering SV2 for cross checking purposes
+    ///
+    /// **Visibility**: `pub(super)` for trait implementation access within stratum module.
+    ///
+    /// **Access Pattern**: Use IsServer trait methods:
+    /// - `version_rolling_mask()` - getter
+    /// - `set_version_rolling_mask()` - setter
     pub(super) version_rolling_mask: Option<String>,
     /// Minimum version rolling mask bits size
+    ///
+    /// **Visibility**: `pub(super)` for trait implementation access within stratum module.
+    ///
+    /// **Access Pattern**: Use IsServer trait method `set_version_rolling_min_bit()` - setter
     pub(super) version_rolling_min_bit: Option<u32>,
     /// The expected size of the extranonce2 field provided by the miner.
+    ///
+    /// **Visibility**: `pub(super)` for trait implementation access within stratum module.
+    ///
+    /// **Access Pattern**: Use IsServer trait methods:
+    /// - `extranonce2_size()` - getter
+    /// - `set_extranonce2_size()` - setter
     pub(super) extranonce2_len: usize,
     /// Optional per-connection monitoring target (stricter than share/weak target).
     /// Used to sample miner health at a higher rate than the share target.
@@ -1938,38 +1961,44 @@ impl Server {
 
                         // Try parsing with sv1_api first (new approach)
                         match serde_json::from_str::<sv1_api::json_rpc::Message>(&line) {
-                                Ok(_sv1_message) => {
+                                Ok(sv1_message) => {
                                     trace!(
                                         connection_id = %connection_id_hex,
                                         peer = %peer_addr,
                                         "Successfully parsed message with sv1_api"
                                     );
 
-                                    // Route through IsServer trait if it's a request
-                                    // For now, fall back to legacy routing
-                                    // TODO: Implement full sv1_api routing
-                                    match serde_json::from_str::<StandardRequest>(&line) {
-                                        Ok(_request) => {
-                                            let server_request_res:Result<StratumResponses, StratumErrors> = downstream_client.lock().await.handle_client_to_server_request(serde_json::from_str(&line).unwrap(),mining_job_map.clone(),downstream_message_sender.clone(),notification_sender.clone(),peer_addr.to_string(),swarm_handler.clone()).await;
-                                            match server_request_res{
-                                                Ok(_)=>{
+                                    // Use the already-parsed sv1_message instead of re-parsing
+                                    // Convert sv1_message to StandardRequest if needed
+                                    if let Some(braidpool_request) = super::sv1_compat::sv1_message_to_braidpool_request(&sv1_message) {
+                                        let server_request_res: Result<StratumResponses, StratumErrors> = downstream_client
+                                            .lock()
+                                            .await
+                                            .handle_client_to_server_request(
+                                                braidpool_request,
+                                                mining_job_map.clone(),
+                                                downstream_message_sender.clone(),
+                                                notification_sender.clone(),
+                                                peer_addr.to_string(),
+                                                swarm_handler.clone(),
+                                            )
+                                            .await;
 
-                                                },
-                                                Err(error)=>{
-                                                    return Err(Box::new(error))
-                                                }
+                                        match server_request_res {
+                                            Ok(_) => {
+                                                // Request handled successfully
+                                            }
+                                            Err(error) => {
+                                                return Err(Box::new(error));
                                             }
                                         }
-                                        Err(e) => {
-                                            error!(
-                                                connection_id = %connection_id_hex,
-                                                peer = %peer_addr,
-                                                error = %e,
-                                                line = %line,
-                                                error_type = "legacy_parse",
-                                                "Failed to parse with legacy parser after sv1_api success"
-                                            );
-                                        }
+                                    } else {
+                                        // Not a request, might be a response or notification
+                                        trace!(
+                                            connection_id = %connection_id_hex,
+                                            peer = %peer_addr,
+                                            "sv1_message is not a request, ignoring"
+                                        );
                                     }
                                 }
                                 Err(e) => {

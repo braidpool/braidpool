@@ -74,8 +74,8 @@ impl<'a> IsServer<'a> for DownstreamClient {
             // This allows all 16 version bits to be used
             let final_mask = HexU32Be(mask.0 & 0x1FFFE000);
 
-            // Store mask in DownstreamClient for future use
-            self.version_rolling_mask = Some(format!("{:08x}", final_mask.0));
+            // Store mask using setter method
+            self.set_version_rolling_mask(Some(HexU32Be(final_mask.0)));
 
             // Store min bit count if provided (check and store first)
             // Note: sv1_api returns Some(HexU32Be(0)) when min_bit_count is None,
@@ -83,7 +83,7 @@ impl<'a> IsServer<'a> for DownstreamClient {
             if let Some(min_bit) = requested_min_bit_count {
                 // Only store if it's a meaningful value (non-zero)
                 if min_bit.0 != 0 {
-                    self.version_rolling_min_bit = Some(min_bit.0);
+                    self.set_version_rolling_min_bit(Some(HexU32Be(min_bit.0)));
                 }
 
                 // Build response parameters with the provided/default min bit count
@@ -129,12 +129,15 @@ impl<'a> IsServer<'a> for DownstreamClient {
     /// A vector of (subscription_id, subscription_type) tuples.
     /// Typically: `[("mining.notify", "unique_id"), ("mining.set_difficulty", "unique_id")]`
     fn handle_subscribe(&self, _request: &client_to_server::Subscribe) -> Vec<(String, String)> {
-        // Return standard subscription IDs
-        // Note: These are dummy values matching the legacy implementation
-        // TODO: Generate truly unique subscription IDs based on connection_id
+        // Generate unique subscription IDs based on connection_id
+        // Each connection will have different IDs, avoiding conflicts
+        let conn_id = self.connection_id();
+        let difficulty_sub_id = format!("{:08x}_diff", conn_id);
+        let notify_sub_id = format!("{:08x}_notify", conn_id);
+
         vec![
-            (String::from("mining.set_difficulty"), String::from("34")),
-            (String::from("mining.notify"), String::from("12")),
+            (String::from("mining.set_difficulty"), difficulty_sub_id),
+            (String::from("mining.notify"), notify_sub_id),
         ]
     }
 
@@ -233,12 +236,18 @@ impl<'a> IsServer<'a> for DownstreamClient {
     ///
     /// Indicates the miner supports dynamic extranonce updates.
     ///
-    /// # TODO
+    /// # Note
     ///
-    /// - Map to existing `handle_extranonce_subscribe`
-    /// - Mark connection as supporting dynamic extranonce
+    /// Extranonce subscribe is an optional protocol extension.
+    /// Allows miners to be notified of changes in extranonce1.
+    /// For now, we accept the subscription but don't send notifications.
     fn handle_extranonce_subscribe(&self) {
-        todo!("Implement handle_extranonce_subscribe")
+        debug!(
+            connection_id = %format!("{:x}", self.connection_id()),
+            "Extranonce subscribe requested - feature not fully implemented"
+        );
+        // Accept the subscription
+        // TODO: Send mining.set_extranonce notifications when extranonce changes
     }
 
     // ------------------------------------------------------------------------
@@ -302,8 +311,22 @@ impl<'a> IsServer<'a> for DownstreamClient {
 
         // Return the current extranonce1 (either newly set or existing)
         // Convert Vec<u8> to Sv1Extranonce
-        Sv1Extranonce::try_from(self.extranonce1.clone())
-            .expect("extranonce1 should always be valid")
+        match Sv1Extranonce::try_from(self.extranonce1.clone()) {
+            Ok(extranonce) => extranonce,
+            Err(e) => {
+                tracing::error!(
+                    connection_id = %format!("{:x}", self.connection_id()),
+                    error = ?e,
+                    extranonce1 = ?self.extranonce1,
+                    "Invalid extranonce1 - using empty fallback"
+                );
+                // Return empty extranonce as safe fallback
+                Sv1Extranonce::try_from(vec![]).unwrap_or_else(|_| {
+                    // If even empty vec fails, use a valid 4-byte extranonce
+                    Sv1Extranonce::try_from(vec![0u8; 4]).expect("4-byte vec should be valid")
+                })
+            }
+        }
     }
 
     /// Get the current extranonce1 for this connection
@@ -313,8 +336,20 @@ impl<'a> IsServer<'a> for DownstreamClient {
     /// The current extranonce1 as sv1_api::Extranonce
     fn extranonce1(&self) -> Sv1Extranonce<'a> {
         // Convert Vec<u8> to Sv1Extranonce
-        Sv1Extranonce::try_from(self.extranonce1.clone())
-            .expect("extranonce1 should always be valid")
+        match Sv1Extranonce::try_from(self.extranonce1.clone()) {
+            Ok(extranonce) => extranonce,
+            Err(e) => {
+                tracing::error!(
+                    connection_id = %format!("{:x}", self.connection_id()),
+                    error = ?e,
+                    extranonce1 = ?self.extranonce1,
+                    "Invalid extranonce1 - using fallback"
+                );
+                // Return 4-byte extranonce as safe fallback
+                Sv1Extranonce::try_from(vec![0u8; 4])
+                    .unwrap_or_else(|_| panic!("4-byte extranonce should always be valid"))
+            }
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -357,13 +392,10 @@ impl<'a> IsServer<'a> for DownstreamClient {
     /// # Returns
     ///
     /// The version rolling mask if configured, None otherwise
-    ///
-    /// # TODO
-    ///
-    /// - Convert from DownstreamClient.version_rolling_mask (Option<String>)
-    /// - Parse as HexU32Be
     fn version_rolling_mask(&self) -> Option<HexU32Be> {
-        todo!("Implement version_rolling_mask - convert from DownstreamClient")
+        self.version_rolling_mask
+            .as_ref()
+            .and_then(|mask_str| mask_str.parse::<u32>().ok().map(HexU32Be))
     }
 
     /// Set the version rolling mask
@@ -371,26 +403,27 @@ impl<'a> IsServer<'a> for DownstreamClient {
     /// # Arguments
     ///
     /// * `mask` - The version rolling mask to set
-    ///
-    /// # TODO
-    ///
-    /// - Convert HexU32Be to String
-    /// - Store in DownstreamClient.version_rolling_mask
-    fn set_version_rolling_mask(&mut self, _mask: Option<HexU32Be>) {
-        todo!("Implement set_version_rolling_mask - store in DownstreamClient")
+    fn set_version_rolling_mask(&mut self, mask: Option<HexU32Be>) {
+        self.version_rolling_mask = mask.map(|m| format!("{:08x}", m.0));
+        debug!(
+            connection_id = %format!("{:x}", self.connection_id()),
+            mask = ?self.version_rolling_mask,
+            "Version rolling mask updated"
+        );
     }
 
     /// Set the minimum version rolling bit count
     ///
     /// # Arguments
     ///
-    /// * `mask` - The minimum bit count
-    ///
-    /// # TODO
-    ///
-    /// - Store in DownstreamClient.version_rolling_min_bit
-    fn set_version_rolling_min_bit(&mut self, _mask: Option<HexU32Be>) {
-        todo!("Implement set_version_rolling_min_bit - store in DownstreamClient")
+    /// * `min_bit` - The minimum bit count
+    fn set_version_rolling_min_bit(&mut self, min_bit: Option<HexU32Be>) {
+        self.version_rolling_min_bit = min_bit.map(|m| m.0);
+        debug!(
+            connection_id = %format!("{:x}", self.connection_id()),
+            min_bit = ?self.version_rolling_min_bit,
+            "Version rolling min bit updated"
+        );
     }
 
     // ------------------------------------------------------------------------
@@ -405,13 +438,20 @@ impl<'a> IsServer<'a> for DownstreamClient {
     ///
     /// A JSON-RPC notification message containing the mining job
     ///
-    /// # TODO
+    /// # Note
     ///
-    /// - Get latest job from MiningJobMap
-    /// - Convert JobNotification to sv1_api::server_to_client::Notify
-    /// - Construct json_rpc::Message
+    /// The notify method is called by the Notifier system, not directly here.
+    /// This method is part of the IsServer trait interface for when the server
+    /// needs to construct a notification message to send to the miner.
+    ///
+    /// In Braidpool's architecture, notifications are handled asynchronously
+    /// through the NotifyCmd channel system, not through this trait method.
     fn notify(&mut self) -> Result<json_rpc::Message, Sv1Error<'_>> {
-        todo!("Implement notify - convert JobNotification to sv1_api::Notify")
+        // Return error - no job available through this interface
+        // Notifications are handled through Braidpool's NotifyCmd system
+        Err(Sv1Error::IncorrectClientStatus(
+            "Notifications handled through NotifyCmd channel".into(),
+        ))
     }
 
     // ------------------------------------------------------------------------
@@ -569,8 +609,28 @@ mod tests {
 
         // Verify subscriptions
         assert_eq!(subscriptions.len(), 2);
-        assert!(subscriptions.contains(&("mining.set_difficulty".to_string(), "34".to_string())));
-        assert!(subscriptions.contains(&("mining.notify".to_string(), "12".to_string())));
+
+        // Verify subscription types are correct (IDs are now unique per connection)
+        let has_difficulty = subscriptions
+            .iter()
+            .any(|(method, _id)| method == "mining.set_difficulty");
+        let has_notify = subscriptions
+            .iter()
+            .any(|(method, _id)| method == "mining.notify");
+
+        assert!(
+            has_difficulty,
+            "Should have mining.set_difficulty subscription"
+        );
+        assert!(has_notify, "Should have mining.notify subscription");
+
+        // Verify IDs are unique and based on connection_id
+        let conn_id = client.connection_id();
+        let expected_diff_id = format!("{:08x}_diff", conn_id);
+        let expected_notify_id = format!("{:08x}_notify", conn_id);
+
+        assert!(subscriptions.contains(&("mining.set_difficulty".to_string(), expected_diff_id)));
+        assert!(subscriptions.contains(&("mining.notify".to_string(), expected_notify_id)));
     }
 
     #[test]
@@ -608,14 +668,14 @@ mod tests {
     fn test_extranonce1_set_none() {
         // Create a DownstreamClient with default values
         let mut client = DownstreamClient::default();
-        let original_extranonce = client.extranonce1.clone();
+        let original_extranonce = client.extranonce1();
 
         // Set None (should keep existing value)
         let result = client.set_extranonce1(None);
 
         // Verify it kept the original value
-        assert_eq!(result.0.inner_as_ref(), original_extranonce.as_slice());
-        assert_eq!(client.extranonce1, original_extranonce);
+        assert_eq!(result.0.inner_as_ref(), original_extranonce.0.inner_as_ref());
+        assert_eq!(client.extranonce1().0.inner_as_ref(), original_extranonce.0.inner_as_ref());
     }
 
     #[test]
@@ -623,11 +683,11 @@ mod tests {
         // Create a DownstreamClient with default values
         let client = DownstreamClient::default();
 
-        // Get extranonce2 size
+        // Get extranonce2 size - should return 4 (default value)
         let size = client.extranonce2_size();
 
-        // Verify it matches the internal value
-        assert_eq!(size, client.extranonce2_len);
+        // Verify it returns a valid size
+        assert_eq!(size, 4); // Default extranonce2 size
     }
 
     #[test]
@@ -641,21 +701,21 @@ mod tests {
 
         // Verify it was set correctly
         assert_eq!(result, new_size);
-        assert_eq!(client.extranonce2_len, new_size);
+        assert_eq!(client.extranonce2_size(), new_size);
     }
 
     #[test]
     fn test_extranonce2_size_set_none() {
         // Create a DownstreamClient with default values
         let mut client = DownstreamClient::default();
-        let original_size = client.extranonce2_len;
+        let original_size = client.extranonce2_size();
 
         // Set None (should keep existing value)
         let result = client.set_extranonce2_size(None);
 
         // Verify it kept the original value
         assert_eq!(result, original_size);
-        assert_eq!(client.extranonce2_len, original_size);
+        assert_eq!(client.extranonce2_size(), original_size);
     }
 
     // ========================================================================

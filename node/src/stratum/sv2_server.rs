@@ -402,12 +402,20 @@ impl Sv2Server {
                 "Set new previous hash - activated future job"
             );
 
+            // Get current timestamp for min_ntime
+            let min_ntime = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() as u32)
+                .unwrap_or(0);
+
             Ok(SetNewPrevHash {
                 channel_id,
                 job_id,
                 prev_hash: prev_hash.to_vec().try_into().unwrap(),
-                min_ntime: 0,      // Current time
-                nbits: 0x1d00ffff, // Default difficulty
+                min_ntime,
+                // TODO: Get nbits from actual block template
+                // 0x1d00ffff is Bitcoin's genesis difficulty (very easy)
+                nbits: 0x1d00ffff,
             })
         } else {
             Err("Job not found".to_string())

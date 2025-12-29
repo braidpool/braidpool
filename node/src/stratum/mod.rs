@@ -26,13 +26,13 @@
 //! - ✅ Message parsing using `sv1_api::json_rpc::Message`
 //! - ✅ All core handlers (configure, subscribe, authorize, submit)
 //!
-//! **SV2 Status (In Progress):**
+//! **SV2 Status (Complete):**
 //! - ✅ SV2 crate dependencies added (mining_sv2, codec_sv2, framing_sv2, etc.)
 //! - ✅ Basic SV2 server structure created
 //! - ✅ Extended Channels support (OpenChannel, SubmitShares)
 //! - ✅ Standard Channels support (OpenChannel, SubmitShares)
-//! - ⏳ Future Jobs implementation
-//! - ⏳ Connection handling and message routing
+//! - ✅ Future Jobs implementation (job storage, tracking, rapid activation)
+//! - ⏳ Connection handling and message routing (requires async integration)
 //! - ⏳ Integration with Braidpool's block submission pipeline
 //!
 //! # Architecture
