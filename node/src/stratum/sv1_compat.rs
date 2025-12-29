@@ -111,10 +111,7 @@ pub enum ConversionError {
     /// Missing required field during conversion
     MissingField(&'static str),
     /// Invalid value for a field
-    InvalidValue {
-        field: &'static str,
-        reason: String,
-    },
+    InvalidValue { field: &'static str, reason: String },
     /// Parsing error from sv1_api
     Sv1ParseError(String),
     /// General conversion error
@@ -202,11 +199,14 @@ impl ToSv1 for BraidpoolStandardResponse {
     fn to_sv1(&self) -> Self::Sv1Type {
         Response {
             id: self.id.unwrap_or(0),
-            error: self.error.as_ref().map(|e| sv1_api::json_rpc::JsonRpcError {
-                code: 20, // Generic stratum error code
-                message: e.clone(),
-                data: None,
-            }),
+            error: self
+                .error
+                .as_ref()
+                .map(|e| sv1_api::json_rpc::JsonRpcError {
+                    code: 20, // Generic stratum error code
+                    message: e.clone(),
+                    data: None,
+                }),
             result: self.result.clone().unwrap_or(serde_json::Value::Null),
         }
     }
@@ -227,11 +227,14 @@ impl From<BraidpoolStandardResponse> for Response {
     fn from(braidpool: BraidpoolStandardResponse) -> Self {
         Response {
             id: braidpool.id.unwrap_or(0),
-            error: braidpool.error.as_ref().map(|e| sv1_api::json_rpc::JsonRpcError {
-                code: 20, // Generic stratum error code
-                message: e.clone(),
-                data: None,
-            }),
+            error: braidpool
+                .error
+                .as_ref()
+                .map(|e| sv1_api::json_rpc::JsonRpcError {
+                    code: 20, // Generic stratum error code
+                    message: e.clone(),
+                    data: None,
+                }),
             result: braidpool.result.unwrap_or(serde_json::Value::Null),
         }
     }
@@ -291,11 +294,11 @@ pub fn parse_sv1_message(json_str: &str) -> Result<Sv1Message, ConversionError> 
 /// # Returns
 ///
 /// Returns `Some(StandardRequest)` if the message is a request, `None` otherwise
-pub fn sv1_message_to_braidpool_request(
-    message: &Sv1Message,
-) -> Option<BraidpoolStandardRequest> {
+pub fn sv1_message_to_braidpool_request(message: &Sv1Message) -> Option<BraidpoolStandardRequest> {
     match message {
-        Message::StandardRequest(req) => Some(BraidpoolStandardRequest::from_sv1(req.clone()).ok()?),
+        Message::StandardRequest(req) => {
+            Some(BraidpoolStandardRequest::from_sv1(req.clone()).ok()?)
+        }
         _ => None,
     }
 }
@@ -470,7 +473,10 @@ mod tests {
 
         let braidpool_resp = BraidpoolStandardResponse::from_sv1(sv1_resp).unwrap();
         assert_eq!(braidpool_resp.id, Some(55));
-        assert_eq!(braidpool_resp.result, Some(serde_json::json!({"status": "ok"})));
+        assert_eq!(
+            braidpool_resp.result,
+            Some(serde_json::json!({"status": "ok"}))
+        );
         assert!(braidpool_resp.error.is_none());
     }
 

@@ -61,10 +61,7 @@ impl<'a> IsServer<'a> for DownstreamClient {
     fn handle_configure(
         &mut self,
         request: &client_to_server::Configure,
-    ) -> (
-        Option<server_to_client::VersionRollingParams>,
-        Option<bool>,
-    ) {
+    ) -> (Option<server_to_client::VersionRollingParams>, Option<bool>) {
         // Extract version rolling mask from request
         let requested_mask = request.version_rolling_mask();
         let requested_min_bit_count = request.version_rolling_min_bit_count();
@@ -457,7 +454,7 @@ mod tests {
         let configure = Configure::new(
             1,
             Some(HexU32Be(0xFFFFFFFF)), // Request full mask
-            Some(HexU32Be(16)),          // Request 16 bits
+            Some(HexU32Be(16)),         // Request 16 bits
         );
 
         // Handle the configure request
@@ -508,7 +505,7 @@ mod tests {
         let configure = Configure::new(
             1,
             Some(HexU32Be(0x1FFFE000)), // Use default mask
-            None,                        // No min bit count
+            None,                       // No min bit count
         );
 
         // Handle the configure request

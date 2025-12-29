@@ -79,8 +79,8 @@ pub mod sv2_server;
 pub use core::{
     reverse_four_byte_chunks, BlockSubmissionRequest, BlockTemplate, ConnectionInfo,
     ConnectionMapping, DownstreamClient, JobDetails, JobNotification, JobNotificationResponse,
-    MiningJobMap, NotifyCmd, Notifier, Server, StandardRequest, StandardResponse,
-    StratumResponses, StratumServerConfig, SuggestDifficultyResponse,
+    MiningJobMap, Notifier, NotifyCmd, Server, StandardRequest, StandardResponse, StratumResponses,
+    StratumServerConfig, SuggestDifficultyResponse,
 };
 
 // Re-export SV1 compatibility utilities

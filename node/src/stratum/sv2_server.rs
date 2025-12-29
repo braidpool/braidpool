@@ -28,15 +28,12 @@
 //! - SRI Project: https://github.com/stratum-mining/stratum
 
 use mining_sv2::{
-    CloseChannel, OpenExtendedMiningChannel,
-    OpenExtendedMiningChannelSuccess, OpenStandardMiningChannel, OpenStandardMiningChannelSuccess,
-    SetNewPrevHash, SubmitSharesExtended, SubmitSharesStandard,
-    SubmitSharesSuccess,
+    CloseChannel, OpenExtendedMiningChannel, OpenExtendedMiningChannelSuccess,
+    OpenStandardMiningChannel, OpenStandardMiningChannelSuccess, SetNewPrevHash,
+    SubmitSharesExtended, SubmitSharesStandard, SubmitSharesSuccess,
 };
 
-use common_messages_sv2::{
-    SetupConnection, SetupConnectionError, SetupConnectionSuccess,
-};
+use common_messages_sv2::{SetupConnection, SetupConnectionError, SetupConnectionSuccess};
 
 use tracing::{debug, info, warn};
 
@@ -140,7 +137,10 @@ impl Sv2Server {
             );
             return Err(SetupConnectionError {
                 flags: 0,
-                error_code: "unsupported-protocol-version".to_string().try_into().unwrap(),
+                error_code: "unsupported-protocol-version"
+                    .to_string()
+                    .try_into()
+                    .unwrap(),
             });
         }
 
@@ -211,7 +211,7 @@ impl Sv2Server {
         let channel = Sv2Channel {
             channel_id,
             channel_type: ChannelType::Extended,
-            target: [0xFF; 32], // Default target
+            target: [0xFF; 32],              // Default target
             extranonce_prefix: vec![0u8; 8], // Extended channels use longer prefix
             is_active: true,
         };
@@ -344,10 +344,7 @@ impl Sv2Server {
         is_future: bool,
     ) -> Result<(), String> {
         // Verify channel exists and is active
-        let channel = self
-            .channels
-            .get(&channel_id)
-            .ok_or("Channel not found")?;
+        let channel = self.channels.get(&channel_id).ok_or("Channel not found")?;
 
         if !channel.is_active {
             return Err("Channel is not active".to_string());
@@ -369,12 +366,7 @@ impl Sv2Server {
             self.current_job_id = Some(job_id);
         }
 
-        info!(
-            channel_id,
-            job_id,
-            is_future,
-            "Sent new mining job"
-        );
+        info!(channel_id, job_id, is_future, "Sent new mining job");
 
         // TODO: Build and send actual NewMiningJob message
         // This requires integration with Braidpool's block template system
@@ -395,9 +387,7 @@ impl Sv2Server {
         prev_hash: [u8; 32],
     ) -> Result<SetNewPrevHash<'a>, String> {
         // Verify channel exists
-        self.channels
-            .get(&channel_id)
-            .ok_or("Channel not found")?;
+        self.channels.get(&channel_id).ok_or("Channel not found")?;
 
         // Update job with new prev_hash
         if let Some(job) = self.jobs.get_mut(&job_id) {
@@ -416,7 +406,7 @@ impl Sv2Server {
                 channel_id,
                 job_id,
                 prev_hash: prev_hash.to_vec().try_into().unwrap(),
-                min_ntime: 0, // Current time
+                min_ntime: 0,      // Current time
                 nbits: 0x1d00ffff, // Default difficulty
             })
         } else {
@@ -695,22 +685,22 @@ mod tests {
 
         // Pre-send 5 future jobs
         for job_id in 1..=5 {
-            server.send_new_mining_job(channel_id, job_id, true).unwrap();
+            server
+                .send_new_mining_job(channel_id, job_id, true)
+                .unwrap();
         }
 
         assert_eq!(server.job_count(), 5);
         assert_eq!(server.future_jobs_count(), 5);
 
         // Rapidly switch between jobs (simulating new blocks found on network)
-        let prev_hashes = [
-            [0x01; 32],
-            [0x02; 32],
-            [0x03; 32],
-        ];
+        let prev_hashes = [[0x01; 32], [0x02; 32], [0x03; 32]];
 
         for (idx, prev_hash) in prev_hashes.iter().enumerate() {
             let job_id = (idx + 1) as u32;
-            server.set_new_prev_hash(channel_id, job_id, *prev_hash).unwrap();
+            server
+                .set_new_prev_hash(channel_id, job_id, *prev_hash)
+                .unwrap();
             assert_eq!(server.current_job(), Some(job_id));
         }
 

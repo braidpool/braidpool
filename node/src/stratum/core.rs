@@ -249,11 +249,17 @@ impl DownstreamClient {
         let client_request_id = client_request.id;
         let connection_id_hex = format!("{:x}", self.connection_id());
         let response_or_error = match method.as_ref() {
-            "mining.configure" => self.handle_configure_legacy(&req_params, client_request_id).await,
+            "mining.configure" => {
+                self.handle_configure_legacy(&req_params, client_request_id)
+                    .await
+            }
             "mining.subscribe" => {
                 Self::handle_subscribe_legacy(self, &req_params, client_request_id).await
             }
-            "mining.authorize" => self.handle_authorize_legacy(&req_params, client_request_id).await,
+            "mining.authorize" => {
+                self.handle_authorize_legacy(&req_params, client_request_id)
+                    .await
+            }
             "mining.submit" => {
                 Self::handle_submit_legacy(
                     self,
@@ -2526,7 +2532,8 @@ mod test {
         assert!(parsed.is_ok(), "Should parse subscribe message");
 
         // Test mining.authorize
-        let authorize_msg = r#"{"id":2,"method":"mining.authorize","params":["worker1","password"]}"#;
+        let authorize_msg =
+            r#"{"id":2,"method":"mining.authorize","params":["worker1","password"]}"#;
         let parsed = serde_json::from_str::<sv1_api::json_rpc::Message>(authorize_msg);
         assert!(parsed.is_ok(), "Should parse authorize message");
 
