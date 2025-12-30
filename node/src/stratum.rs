@@ -1,5 +1,6 @@
 use crate::error::StratumErrors;
 use crate::template_creator::calculate_merkle_root;
+use crate::utils::validate;
 use crate::{SwarmHandler, TemplateId, EXTRANONCE1_SIZE, EXTRANONCE2_SIZE, EXTRANONCE_SEPARATOR};
 use bitcoin::block::HeaderExt;
 use bitcoin::consensus::serialize;
@@ -110,8 +111,8 @@ pub struct StratumServerConfig {
     pub minimum_difficulty: u64,
     /// Optional maximum allowed mining difficulty.
     pub maximum_difficulty: Option<u64>,
-    /// Optional payout address for solo mining mode.
-    pub solo_address: Option<String>,
+    ///Configured network for mining
+    pub bitcoin_network: bitcoin::Network,
 }
 
 impl Default for StratumServerConfig {
@@ -123,7 +124,7 @@ impl Default for StratumServerConfig {
             start_difficulty: 1,
             minimum_difficulty: 1,
             maximum_difficulty: None,
-            solo_address: None,
+            bitcoin_network: bitcoin::Network::Bitcoin,
         }
     }
 }
@@ -214,6 +215,7 @@ pub struct DownstreamClient {
     pub monitor_target: Option<bitcoin::Target>,
     /// channel for sending valid block submissions from miners to the block submission handler.
     pub block_submission_tx: Option<mpsc::UnboundedSender<BlockSubmissionRequest>>,
+    network_type: bitcoin::Network,
 }
 impl DownstreamClient {
     /// A helper function to keep connection_id immutable after assignment
@@ -414,6 +416,19 @@ impl DownstreamClient {
         let worker_name = match worker_name_res {
             Ok(name) => name,
             Err(error) => return Err(error),
+        };
+        //Parsing payout address from worker name
+        let payout_address = match validate(worker_name, self.network_type) {
+            Ok((address, _worker)) => address.to_string(),
+            Err(e) => {
+                error!(
+                    connection_id = %connection_id_hex,
+                    worker = %worker_name,
+                    error = %e,
+                    "Worker payout address validation failed"
+                );
+                return Err(e);
+            }
         };
         info!(
             connection_id = %connection_id_hex,
@@ -761,7 +776,7 @@ impl DownstreamClient {
                 extranonce_2_raw_value,
                 &self.downstream_ip,
                 submitted_job.job_sent_time,
-                worker_name,
+                &payout_address,
                 extranonce_1_raw_value,
             )
             .await
@@ -1108,6 +1123,7 @@ impl Default for DownstreamClient {
             extranonce2_len: EXTRANONCE2_SIZE,
             monitor_target: None,
             block_submission_tx: None,
+            network_type: bitcoin::Network::Bitcoin,
         }
     }
 }
@@ -1787,6 +1803,7 @@ impl Server {
         notification_sender: mpsc::Sender<NotifyCmd>,
         swarm_handler: Arc<Mutex<SwarmHandler>>,
         ibd_or_not: Arc<AtomicBool>,
+        network_type: bitcoin::Network,
     ) -> Result<(), Box<std::io::Error>> {
         debug!("Starting stratum server");
         let bind_address = format!(
@@ -1827,7 +1844,10 @@ impl Server {
                         }
                         else{
                  //shared ownership across all tasks and spawning a seperate downstream for each new connection
-                 let self_ = Arc::new(Mutex::new(DownstreamClient::default()));
+                 let self_ = Arc::new(Mutex::new(DownstreamClient{
+                    network_type:network_type,
+                    ..Default::default()
+                 }));
                         let (connection_id, connection_id_hex) = {
                             let mut client = self_.lock().await;
                     if let Some(ref submission_tx) = self.block_submission_tx {
@@ -2101,6 +2121,7 @@ mod test {
                     notify_tx,
                     swarm_handler_arc,
                     test_ibd_spinlock.clone(),
+                    bitcoin::Network::Bitcoin,
                 )
                 .await;
         });
@@ -2167,6 +2188,7 @@ mod test {
                     notify_tx,
                     swarm_handler_arc,
                     test_ibd_spinlock,
+                    bitcoin::Network::Bitcoin,
                 )
                 .await;
         });
@@ -2216,6 +2238,7 @@ mod test {
                     notify_tx,
                     swarm_handler_arc,
                     ibd_spinlock.clone(),
+                    bitcoin::Network::Bitcoin,
                 )
                 .await;
         });
@@ -2266,6 +2289,7 @@ mod test {
                     notify_tx,
                     swarm_handler_arc,
                     ibd_spinlock.clone(),
+                    bitcoin::Network::Bitcoin,
                 )
                 .await;
         });
@@ -2312,6 +2336,7 @@ mod test {
                     notify_tx_clone,
                     swarm_handler_arc,
                     ibd_spinlock,
+                    bitcoin::Network::Bitcoin,
                 )
                 .await
                 .unwrap();
@@ -2428,15 +2453,14 @@ mod test {
             Notifier::construct_job_notification(false, test_template.clone(), 1, vec![])
                 .await
                 .unwrap();
-        println!(
-            "Constructed test notification: {:?}",
-            constructed_test_notification
-        );
         let constructed_test_notification_ref = constructed_test_notification.clone();
         let current_system_time = std::time::SystemTime::now();
         let duration_since_epoch = current_system_time.duration_since(UNIX_EPOCH).unwrap();
         let unix_timestamp = duration_since_epoch.as_secs().to_u32().unwrap();
-        let mut mock_downstream_handler = DownstreamClient::default();
+        let mut mock_downstream_handler = DownstreamClient {
+            network_type: bitcoin::Network::Testnet(bitcoin::TestnetVersion::V4),
+            ..Default::default()
+        };
         let mock_mining_job_map: Arc<Mutex<MiningJobMap>> =
             Arc::new(Mutex::new(MiningJobMap::new()));
         test_template.transactions.remove(0);
@@ -2454,7 +2478,7 @@ mod test {
             .insert_mining_job(1, job_details.clone())
             .await;
         let test_submit_request_params = json!([
-            "bitaxe",
+            "tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx.bitaxe",
             numeric_job_id.to_string(),
             "03000000",
             "68df7e33",

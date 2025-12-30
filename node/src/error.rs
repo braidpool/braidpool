@@ -147,8 +147,16 @@ impl fmt::Display for DBErrors {
         }
     }
 }
+#[derive(Debug, PartialEq)]
+pub enum UsernameValidationError {
+    NetworkIncompatibleAddress { network: String },
+    InvalidAddress { address: String },
+}
 #[derive(Debug)]
 pub enum StratumErrors {
+    UserNameParseError {
+        error: UsernameValidationError,
+    },
     InvalidMethod {
         method: String,
     },
@@ -220,6 +228,15 @@ pub enum StratumResponseErrors {}
 impl fmt::Display for StratumErrors {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            StratumErrors::UserNameParseError { error } => match error {
+                UsernameValidationError::NetworkIncompatibleAddress { network } => {
+                    write!(f,"The provided payout address is not compatible with the configured network - {}",network)
+                }
+                UsernameValidationError::InvalidAddress { address } => {
+                    write!(f,"The provided payout address could not be parsed into a valid bitcoin payout address - {}",address)
+                }
+            },
+
             StratumErrors::ErrorFetchingCurrentUNIXTimestamp { error } => {
                 write!(
                     f,

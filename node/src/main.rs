@@ -62,6 +62,42 @@ use tokio::sync::{
 async fn main() -> Result<(), Box<dyn Error>> {
     // Initialize tracing with colors and module prefixes
     setup_tracing()?;
+    let args = cli::Cli::parse();
+    let datadir = shellexpand::full(args.datadir.to_str().unwrap()).unwrap();
+    match fs::metadata(&*datadir) {
+        Ok(m) => {
+            if !m.is_dir() {
+                error!(datadir = %datadir, "Data directory exists but is not a directory");
+            }
+            info!(datadir = %datadir, "Using existing data directory");
+        }
+        Err(_) => {
+            info!(datadir = %datadir, "Creating data directory");
+            fs::create_dir_all(&*datadir)?;
+        }
+    }
+
+    let network = if let Some(network_name) = &args.network {
+        info!(network = %network_name, "Network selected");
+        match network_name.as_str() {
+            "main" | "mainnet" => Network::Bitcoin,
+            "testnet" | "testnet4" => Network::Testnet(bitcoin::TestnetVersion::V4),
+            "signet" => Network::Signet,
+            "regtest" => Network::Regtest,
+            "cpunet" => Network::CPUNet,
+            _ => {
+                error!(
+                    network = %network_name,
+                    valid_networks = "main, testnet, testnet4, signet, regtest, cpunet",
+                    "Invalid network specified"
+                );
+                info!(fallback = "regtest", "Using fallback network");
+                Network::Regtest
+            }
+        }
+    } else {
+        Network::Bitcoin
+    };
     let (mut ibd_manager, ibd_command_tx) = IBDManager::new();
     //IBD cache handler
     let _ibd_handler = tokio::spawn(async move {
@@ -191,6 +227,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 notification_tx_clone,
                 swarm_handler_arc.clone(),
                 spin_lock_ref,
+                network,
             )
             .await;
     });
@@ -356,28 +393,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     info!(address = %ADDR_REFRENCE, "Dialed boot node");
     //IPC(inter process communication) based `getblocktemplate` and `notification` to send to the downstream via the `cmempoold` architecture
     info!(socket = %args.ipc_socket, "IPC socket path");
-
-    let network = if let Some(network_name) = &args.network {
-        info!(network = %network_name, "Network selected");
-        match network_name.as_str() {
-            "main" | "mainnet" => Network::Bitcoin,
-            "testnet" | "testnet4" => Network::Testnet(bitcoin::TestnetVersion::V4),
-            "signet" => Network::Signet,
-            "regtest" => Network::Regtest,
-            "cpunet" => Network::CPUNet,
-            _ => {
-                error!(
-                    network = %network_name,
-                    valid_networks = "main, testnet, testnet4, signet, regtest, cpunet",
-                    "Invalid network specified"
-                );
-                info!(fallback = "regtest", "Using fallback network");
-                Network::Regtest
-            }
-        }
-    } else {
-        Network::Bitcoin
-    };
 
     let ipc_socket_path_for_blocking = args.ipc_socket.clone();
     let notification_tx_for_ipc = notification_tx.clone();

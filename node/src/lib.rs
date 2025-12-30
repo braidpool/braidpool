@@ -47,6 +47,7 @@ pub mod db;
 pub mod error;
 pub mod ibd_manager;
 pub mod ipc;
+pub mod payout;
 pub mod peer_manager;
 pub mod rpc_server;
 pub mod stratum;
