@@ -9,7 +9,6 @@ import NodeHealth from '../NodeHealth/NodeHealth';
 import BitcoinStats from '../BitcoinStats/BitcoinStats';
 import { Page } from './Types';
 import BlockViewer from './BlockViewer';
-import TransactionsPage from '../Transactions/TransactionsPage';
 
 const Dashboard = () => {
   const [currentPage, setCurrentPage] = useState<Page>(Page.DASHBOARD);
@@ -26,8 +25,6 @@ const Dashboard = () => {
             <BlockViewer />
           </Card>
         );
-      case Page.TRANSACTIONS:  
-        return <TransactionsPage />;  
       case Page.MINING_INVENTORY:
         return (
           <div className="p-2">

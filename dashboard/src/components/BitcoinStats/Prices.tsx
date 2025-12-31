@@ -25,11 +25,15 @@ import { useRef } from 'react';
 import { WEBSOCKET_URLS } from '../../URLs';
 import { MAX_HISTORY_ITEMS } from './Constants';
 
+import { braidpoolApi } from '../../utils/braidpoolApi';
+import { BraidPoolTransaction } from './Types';
+import BraidPoolTransactionTable from '../Transactions/BraidPoolTransactionTable';
+
 const BitcoinPriceTracker: React.FC = () => {
   const [currency, setCurrency] = useState<'USD' | 'EUR' | 'GBP' | 'JPY'>(
     'USD'
   );
-  const [transactions, setTransactions] = useState<any[]>([]);
+  const [transactions, setTransactions] = useState<BraidPoolTransaction[]>([]);
   const [rbftransactions, setrbfTransactions] = useState<any[]>([]);
   const [priceData, setPriceData] = useState<PriceData | null>(null);
   const [globalStats, setGlobalStats] = useState<GlobalStats | null>(null);
@@ -42,6 +46,11 @@ const BitcoinPriceTracker: React.FC = () => {
   const [priceHistory, setPriceHistory] = useState<
     { price: number; time: string }[]
   >([]);
+
+  const [braidpoolTransactions, setBraidpoolTransactions] = useState<BraidPoolTransaction[]>([]);
+  const [braidpoolLoading, setBraidpoolLoading] = useState(true);
+  const [braidpoolError, setBraidpoolError] = useState<string | null>(null);
+
   // MAX_HISTORY_ITEMS is imported from BeadsTab/Constants
   const showSkeletons = loading || !isConnected || (!priceData && !globalStats);
   const currencyRef = useRef(currency);
@@ -51,22 +60,44 @@ const BitcoinPriceTracker: React.FC = () => {
   }, [currency]);
 
   useEffect(() => {
-    const fetchTransactions = async () => {
-      const data = await getLatestTransactions();
-      setTransactions(data as any[]);
-    };
+  const fetchTransactions = async () => {
+    try {
+      const data = await braidpoolApi.fetchRecentTransactions(50);
+      setTransactions(data);
+    } catch (error) {
+      console.error('Error fetching BraidPool transactions:', error);
+    }
+  };
+  
+  fetchTransactions();
+  
+  const intervalId = setInterval(() => {
     fetchTransactions();
-    const fetchRbfTransactions = async () => {
-      const data = await latestRBFTransactions();
-      setrbfTransactions(data as any[]);
-    };
-    fetchRbfTransactions();
-    const intervalId = setInterval(() => {
-      fetchTransactions();
-      fetchRbfTransactions();
-    }, 5000);
-    return () => clearInterval(intervalId);
-  }, []);
+  }, 30000); // 30 seconds to match BraidPool refresh rate
+  
+  return () => clearInterval(intervalId);
+}, []);
+
+  useEffect(() => {
+  const fetchBraidPoolTransactions = async () => {
+    try {
+      setBraidpoolError(null);
+      const data = await braidpoolApi.fetchRecentTransactions(50);
+      setBraidpoolTransactions(data);
+      setBraidpoolLoading(false);
+    } catch (error) {
+      console.error('Error fetching BraidPool transactions:', error);
+      setBraidpoolError('Failed to load BraidPool transactions');
+      setBraidpoolLoading(false);
+    }
+  };
+
+  fetchBraidPoolTransactions();
+  
+  const intervalId = setInterval(fetchBraidPoolTransactions, 30000); // 30s refresh
+  
+  return () => clearInterval(intervalId);
+}, []);
 
   useEffect(() => {
     const websocket = new WebSocket(WEBSOCKET_URLS.MAIN_WEBSOCKET);
@@ -438,6 +469,16 @@ const BitcoinPriceTracker: React.FC = () => {
 
       {/* Transactions Table */}
       <TransactionTable transactions={transactions} />
+      {/* NEW: BraidPool Categorized Transactions */}
+        {/* <BraidPoolTransactionTable 
+          transactions={braidpoolTransactions}
+          loading={braidpoolLoading}
+          error={braidpoolError}
+          autoRefresh={true}
+          refreshInterval={30000}
+          maxHeight={600}
+        /> */}
+
       {/* RBF Transactions Table */}
       <RBFTransactionTable transactions={rbftransactions} />
     </div>
