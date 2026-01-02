@@ -401,7 +401,7 @@ async fn get_template(
     block_height: u32,
     network: Network,
 ) -> Result<client::BlockTemplate, Box<dyn std::error::Error>> {
-    const MIN_TEMPLATE_SIZE: usize = 256;
+    const MIN_TRANSACTION_COUNT: u64 = 1;
     const NONCE: u32 = 0;
     let config = CoinbaseConfig::for_network(network);
 
@@ -412,17 +412,19 @@ async fn get_template(
     let final_template =
         create_braidpool_template(&components.components, &config, block_height, NONCE)?;
 
+    let template_transaction_count = final_template.block_transaction_count();
+
     let complete_block_bytes = final_template.complete_block_hex;
     if complete_block_bytes.is_empty() {
         return Err("Received empty template (0 bytes)".into());
     }
 
-    if complete_block_bytes.len() < MIN_TEMPLATE_SIZE {
+    if template_transaction_count < MIN_TRANSACTION_COUNT {
         warn!(
             context = %context,
-            size_bytes = %complete_block_bytes.len(),
-            min_template_size = %MIN_TEMPLATE_SIZE,
-            "Template smaller than minimum template size - using anyway"
+            transaction_count = %template_transaction_count,
+            min_transaction_count = %MIN_TRANSACTION_COUNT,
+            "Template tx count smaller than minimum - using anyway"
         );
     }
 
