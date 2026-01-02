@@ -56,9 +56,11 @@ pub struct FinalTemplate {
 }
 
 impl FinalTemplate {
+    const BLOCK_HEADER_LENGTH: usize = 80;
+
     pub fn block_hash(&self) -> Vec<u8> {
-        if self.complete_block_hex.len() >= 80 {
-            let header = &self.complete_block_hex[0..80];
+        if self.complete_block_hex.len() >= Self::BLOCK_HEADER_LENGTH {
+            let header = &self.complete_block_hex[0..Self::BLOCK_HEADER_LENGTH];
             let hash = sha256d::Hash::hash(header).to_byte_array();
             let mut reversed_hash = hash;
             reversed_hash.reverse();
@@ -69,8 +71,8 @@ impl FinalTemplate {
     }
 
     pub fn get_nonce(&self) -> u32 {
-        if self.complete_block_hex.len() >= 80 {
-            let nonce_bytes = &self.complete_block_hex[76..80];
+        if self.complete_block_hex.len() >= Self::BLOCK_HEADER_LENGTH {
+            let nonce_bytes = &self.complete_block_hex[76..Self::BLOCK_HEADER_LENGTH];
             u32::from_le_bytes([
                 nonce_bytes[0],
                 nonce_bytes[1],
@@ -81,6 +83,7 @@ impl FinalTemplate {
             0
         }
     }
+
     /// Returns the block hash as hex string
     pub fn block_hash_hex(&self) -> String {
         hex::encode(self.block_hash())
@@ -88,8 +91,8 @@ impl FinalTemplate {
 
     /// Returns just the block header as bytes
     pub fn block_header(&self) -> Vec<u8> {
-        if self.complete_block_hex.len() >= 80 {
-            self.complete_block_hex[0..80].to_vec()
+        if self.complete_block_hex.len() >= Self::BLOCK_HEADER_LENGTH {
+            self.complete_block_hex[0..Self::BLOCK_HEADER_LENGTH].to_vec()
         } else {
             Vec::new()
         }
@@ -98,6 +101,21 @@ impl FinalTemplate {
     /// Returns the size of the complete block in bytes
     pub fn block_size(&self) -> usize {
         self.complete_block_hex.len()
+    }
+
+    /// Returns the number of transactions in the block
+    ///
+    /// The number of transactions is the first `varint` field after the block header.
+    pub fn block_transaction_count(&self) -> u64 {
+        if self.complete_block_hex.len() >= Self::BLOCK_HEADER_LENGTH {
+            let body = &self.complete_block_hex[Self::BLOCK_HEADER_LENGTH..];
+            match decode_varint(body) {
+                Ok((count, _)) => count,
+                Err(_) => 0,
+            }
+        } else {
+            0
+        }
     }
 }
 
