@@ -71,11 +71,43 @@ pub struct MiningJob {
     /// Job ID
     pub job_id: u32,
     /// Previous hash (block header)
-    pub prev_hash: [u8; 32],
+    /// None indicates the job hasn't been activated yet (for future jobs)
+    pub prev_hash: Option<[u8; 32]>,
     /// Is this a future job?
     pub is_future: bool,
     /// Channel ID this job belongs to
     pub channel_id: u32,
+}
+
+impl MiningJob {
+    /// Validate that the prev_hash is set (job has been activated)
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if prev_hash is set, `Err` otherwise
+    pub fn validate_prev_hash(&self) -> Result<(), String> {
+        if self.prev_hash.is_none() {
+            return Err(format!(
+                "MiningJob {} has not been activated - prev_hash is None",
+                self.job_id
+            ));
+        }
+        Ok(())
+    }
+
+    /// Get the prev_hash, returning an error if not set
+    ///
+    /// # Returns
+    ///
+    /// The prev_hash value if set, or an error if None
+    pub fn get_prev_hash(&self) -> Result<[u8; 32], String> {
+        self.prev_hash.ok_or_else(|| {
+            format!(
+                "MiningJob {} prev_hash not initialized - call set_new_prev_hash first",
+                self.job_id
+            )
+        })
+    }
 }
 
 /// SV2 Server state
@@ -125,15 +157,19 @@ impl Sv2Server {
         info!(
             min_version = setup.min_version,
             max_version = setup.max_version,
+            server_version = self.version,
             "Received SetupConnection request"
         );
 
         // Check protocol version compatibility
-        if setup.max_version < self.version {
+        // The version ranges should overlap: client's [min, max] should intersect with server's version
+        // Correct logic: server version must be within client's supported range
+        if self.version < setup.min_version || self.version > setup.max_version {
             warn!(
-                requested_max = setup.max_version,
+                client_min = setup.min_version,
+                client_max = setup.max_version,
                 server_version = self.version,
-                "Client version incompatible"
+                "Protocol version incompatible - no overlap between client range and server version"
             );
             return Err(SetupConnectionError {
                 flags: 0,
@@ -144,7 +180,7 @@ impl Sv2Server {
             });
         }
 
-        // Accept the connection
+        // Accept the connection with the server's version (which is within client's range)
         Ok(SetupConnectionSuccess {
             used_version: self.version,
             flags: self.flags,
@@ -353,7 +389,7 @@ impl Sv2Server {
         // Create mining job
         let job = MiningJob {
             job_id,
-            prev_hash: [0u8; 32], // Will be set by SetNewPrevHash
+            prev_hash: if is_future { None } else { Some([0u8; 32]) }, // Future jobs have None until activated
             is_future,
             channel_id,
         };
@@ -391,7 +427,7 @@ impl Sv2Server {
 
         // Update job with new prev_hash
         if let Some(job) = self.jobs.get_mut(&job_id) {
-            job.prev_hash = prev_hash;
+            job.prev_hash = Some(prev_hash);
             job.is_future = false; // No longer a future job
             self.current_job_id = Some(job_id);
 
@@ -408,14 +444,27 @@ impl Sv2Server {
                 .map(|d| d.as_secs() as u32)
                 .unwrap_or(0);
 
+            // Hardcoded nbits value - ONLY for development/testing
+            // In production, this should come from the actual block template
+            let nbits = 0x1d00ffff; // Bitcoin's genesis difficulty (very easy)
+
+            // Warn in non-debug builds to prevent production usage with hardcoded difficulty
+            #[cfg(not(debug_assertions))]
+            {
+                warn!(
+                    channel_id,
+                    job_id,
+                    nbits = %format!("{:#x}", nbits),
+                    "Using hardcoded nbits value - should retrieve from block template in production"
+                );
+            }
+
             Ok(SetNewPrevHash {
                 channel_id,
                 job_id,
                 prev_hash: prev_hash.to_vec().try_into().unwrap(),
                 min_ntime,
-                // TODO: Get nbits from actual block template
-                // 0x1d00ffff is Bitcoin's genesis difficulty (very easy)
-                nbits: 0x1d00ffff,
+                nbits,
             })
         } else {
             Err("Job not found".to_string())
@@ -454,13 +503,6 @@ mod tests {
 
     #[test]
     fn test_sv2_server_creation() {
-        let server = Sv2Server::new();
-        assert_eq!(server.version, 2);
-        assert_eq!(server.active_channel_count(), 0);
-    }
-
-    #[test]
-    fn test_setup_connection() {
         let server = Sv2Server::new();
         assert_eq!(server.version, 2);
         assert_eq!(server.active_channel_count(), 0);

@@ -398,6 +398,15 @@ impl DownstreamClient {
     ///
     /// # Return
     ///  `StratumError` or `Stratum Response`
+    ///
+    /// # Legacy Method
+    ///
+    /// This method will be gradually phased out as we migrate to sv1_api.
+    /// New code should use the IsServer trait implementation instead.
+    #[deprecated(
+        since = "0.1.0",
+        note = "Use IsServer trait's handle_submit method instead. This legacy method will be removed after complete migration to sv1_api."
+    )]
     pub async fn handle_submit_legacy(
         &mut self,
         submit_work_params: &Value,
@@ -823,6 +832,10 @@ impl DownstreamClient {
     ///
     /// This method will be gradually phased out as we migrate to sv1_api.
     /// New code should use the IsServer trait implementation instead.
+    #[deprecated(
+        since = "0.1.0",
+        note = "Use IsServer trait's handle_authorize method instead. This legacy method will be removed after complete migration to sv1_api."
+    )]
     pub async fn handle_authorize_legacy(
         &mut self,
         authorize_request_params: &Value,
@@ -889,6 +902,10 @@ impl DownstreamClient {
     ///
     /// This method will be gradually phased out as we migrate to sv1_api.
     /// New code should use the IsServer trait implementation instead.
+    #[deprecated(
+        since = "0.1.0",
+        note = "Use IsServer trait's handle_configure method instead. This legacy method will be removed after complete migration to sv1_api."
+    )]
     pub async fn handle_configure_legacy(
         &mut self,
         config_req_params: &Value,
@@ -1042,6 +1059,10 @@ impl DownstreamClient {
     ///
     /// This method will be gradually phased out as we migrate to sv1_api.
     /// New code should use the IsServer trait implementation instead.
+    #[deprecated(
+        since = "0.1.0",
+        note = "Use IsServer trait's handle_subscribe method instead. This legacy method will be removed after complete migration to sv1_api."
+    )]
     pub async fn handle_subscribe_legacy(
         &mut self,
         subscribe_req_params: &Value,
@@ -2003,11 +2024,13 @@ impl Server {
                                 }
                                 Err(e) => {
                                     // Fall back to legacy parsing
-                                    trace!(
+                                    // Use debug level during migration period to help identify parsing issues
+                                    debug!(
                                         connection_id = %connection_id_hex,
                                         peer = %peer_addr,
                                         error = %e,
-                                        "sv1_api parsing failed, trying legacy parser"
+                                        migration_phase = "sv1_to_sv1_api",
+                                        "sv1_api parsing failed, falling back to legacy parser"
                                     );
 
                                     match serde_json::from_str::<StandardRequest>(&line) {

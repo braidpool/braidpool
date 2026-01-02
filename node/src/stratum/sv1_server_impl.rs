@@ -318,12 +318,15 @@ impl<'a> IsServer<'a> for DownstreamClient {
                     connection_id = %format!("{:x}", self.connection_id()),
                     error = ?e,
                     extranonce1 = ?self.extranonce1,
-                    "Invalid extranonce1 - using empty fallback"
+                    fallback_action = "using_default_extranonce",
+                    "Invalid extranonce1 during set_extranonce1 - using empty fallback"
                 );
                 // Return empty extranonce as safe fallback
                 Sv1Extranonce::try_from(vec![]).unwrap_or_else(|_| {
                     // If even empty vec fails, use a valid 4-byte extranonce
-                    Sv1Extranonce::try_from(vec![0u8; 4]).expect("4-byte vec should be valid")
+                    // This should always succeed as 4-byte vec is a valid extranonce
+                    Sv1Extranonce::try_from(vec![0u8; 4])
+                        .expect("4-byte vec must be valid extranonce")
                 })
             }
         }
@@ -346,8 +349,9 @@ impl<'a> IsServer<'a> for DownstreamClient {
                     "Invalid extranonce1 - using fallback"
                 );
                 // Return 4-byte extranonce as safe fallback
+                // This should always succeed as 4-byte vec is a valid extranonce
                 Sv1Extranonce::try_from(vec![0u8; 4])
-                    .unwrap_or_else(|_| panic!("4-byte extranonce should always be valid"))
+                    .expect("4-byte vec must be valid extranonce")
             }
         }
     }
@@ -432,25 +436,34 @@ impl<'a> IsServer<'a> for DownstreamClient {
 
     /// Generate a mining.notify message for this connection
     ///
-    /// Sends a new mining job to the miner.
+    /// # Architectural Note
+    ///
+    /// This method is part of the `IsServer` trait interface but is intentionally
+    /// not used in Braidpool's architecture. Braidpool uses an asynchronous
+    /// notification system (`NotifyCmd` channel) for better performance and
+    /// decoupling between job generation and client notification.
+    ///
+    /// # Design Decision
+    ///
+    /// The `IsServer` trait assumes synchronous job notification through this method,
+    /// but Braidpool's architecture requires:
+    /// - Asynchronous job distribution to multiple miners
+    /// - Access to shared state (MiningJobMap, SwarmHandler)
+    /// - Database operations for job tracking
+    /// - Non-blocking notification delivery
+    ///
+    /// These requirements are incompatible with the synchronous `&mut self` signature
+    /// of this trait method.
     ///
     /// # Returns
     ///
-    /// A JSON-RPC notification message containing the mining job
-    ///
-    /// # Note
-    ///
-    /// The notify method is called by the Notifier system, not directly here.
-    /// This method is part of the IsServer trait interface for when the server
-    /// needs to construct a notification message to send to the miner.
-    ///
-    /// In Braidpool's architecture, notifications are handled asynchronously
-    /// through the NotifyCmd channel system, not through this trait method.
+    /// Always returns an error indicating this is an architectural limitation,
+    /// not a client state issue.
     fn notify(&mut self) -> Result<json_rpc::Message, Sv1Error<'_>> {
-        // Return error - no job available through this interface
-        // Notifications are handled through Braidpool's NotifyCmd system
+        // This is not a client error - it's an architectural design decision
+        // Notifications are sent through Braidpool's async NotifyCmd channel system
         Err(Sv1Error::IncorrectClientStatus(
-            "Notifications handled through NotifyCmd channel".into(),
+            "Not implemented: Braidpool uses async NotifyCmd channel for job distribution (architectural decision)".into(),
         ))
     }
 
