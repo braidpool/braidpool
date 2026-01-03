@@ -16,6 +16,7 @@ use libp2p::{
 };
 use node::db::db_handlers::{fetch_beads_in_batch, prepare_bead_tuple_data};
 use node::ibd_manager::{IBD_TRIGGER_AFTER, MAX_IBD_INCOMING_THRESHOLD, MAX_IBD_RETRIES};
+use node::payout::{DifficultyAdjuster, Payout};
 use node::utils::BeadHash;
 use node::SwarmHandler;
 use node::{
@@ -43,9 +44,8 @@ use tokio_util::sync::CancellationToken;
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
 
-use behaviour::{BraidPoolBehaviour, BraidPoolBehaviourEvent};
-
 use crate::behaviour::KADPROTOCOLNAME;
+use behaviour::{BraidPoolBehaviour, BraidPoolBehaviourEvent};
 const LATENCY_ALPHA: u64 = 10; // seconds
                                //boot nodes peerIds
 const BOOTNODES: [&str; 1] = ["12D3KooWG9z8TziaNuYyEcc9FeUC3FTtrEf2XSnSdDpLvx4Jh2w3"];
@@ -104,11 +104,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
         ibd_manager.run_ibd_handler().await;
     });
     //False if not under ibd otherwise true at start will be in IBD by default
-    let ibd_or_not: AtomicBool = AtomicBool::new(true);
+    let ibd_or_not: AtomicBool = AtomicBool::new(false);
     let ibd_spinlock = Arc::new(ibd_or_not);
     // Initializing the braid object with read write lock
     //for supporting concurrent readers and single writer
     let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(Vec::from([]))));
+    //Payout runner for handling payout generation and running payout mapping
+    let (mut payout_distributor, payout_cmd_sender) = Payout::new();
+    std::thread::spawn(move || {
+        payout_distributor.payout_runner();
+    });
     //Initializing DB and db command handler
     let (mut _db_handler, db_tx) = DBHandler::new().await.map_err(|e| {
         std::io::Error::new(
@@ -179,7 +184,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //Mining job map keeping all the jobs provided to the downstream
     let mining_job_map = Arc::new(Mutex::new(HashMap::new()));
     //Intializing `notifier` for mining.notify
-    let mut notifier: Notifier = Notifier::new(notification_rx, Arc::clone(&mining_job_map));
+    let mut notifier: Notifier<DifficultyAdjuster> =
+        Notifier::new(notification_rx, Arc::clone(&mining_job_map));
     //Stratum configuration initialization
     let stratum_config: StratumServerConfig = StratumServerConfig::default();
     let (block_submission_tx, block_submission_rx) =
@@ -475,6 +481,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                 network,
                                 template_cache,
                                 block_submission_rx,
+                                payout_cmd_sender,
                                 rpc_command_rx,
                             )
                             .await
@@ -483,7 +490,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     info!("IPC block listener exited");
                                 }
                                 Err(e) => {
-                                    error!(error = %e, "IPC block listener error");
+                                    error!(error = %e, "IPC block listener error"); 
                                 }
                             }
                         }

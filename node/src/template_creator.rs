@@ -1,8 +1,10 @@
 use crate::config::CoinbaseConfig;
 use crate::error::CoinbaseError;
 use crate::ipc::client::BlockTemplateComponents;
+use crate::payout::{OutputPair, PayoutCommands};
 use crate::EXTRANONCE_SEPARATOR;
 use bitcoin::consensus::encode::{ReadExt, WriteExt};
+use bitcoin::BlockHeader;
 use bitcoin::{
     absolute::LockTime,
     blockdata::{
@@ -377,6 +379,7 @@ pub fn build_braidpool_coinbase_from_template(
     extranonce: &[u8],
     block_height: u32,
     config: &CoinbaseConfig,
+    payout_cmd_sender: &std::sync::mpsc::Sender<PayoutCommands>,
 ) -> Result<FinalCoinbase, CoinbaseError> {
     if extranonce.len() > constants::MAX_EXTRANONCE_LEN {
         return Err(CoinbaseError::InvalidExtranonceLength);
@@ -400,29 +403,72 @@ pub fn build_braidpool_coinbase_from_template(
         );
         None
     };
-
     // Calculate the total available funds (extracted reward + fees).
     let total_available = original_coinbase.output[0].value.to_sat();
-
-    // Create the single payout output for the entire available amount.
-    let payout_address = Address::from_str(&config.pool_payout_address)
-        .map_err(CoinbaseError::AddressError)?
-        .require_network(config.network)
-        .map_err(|_| CoinbaseError::AddressNetworkMismatch)?;
-
-    let reward_payout = TxOut {
-        value: Amount::from_sat(total_available).map_err(|e| {
-            error!(error = %e, "Amount conversion failed");
-            CoinbaseError::InvalidBlockTemplateData
-        })?,
-        script_pubkey: payout_address.script_pubkey(),
+    let received_block_header = match BlockHeader::consensus_decode(&mut components.header.as_ref())
+    {
+        Ok(header) => header,
+        Err(error) => {
+            error!(
+                "An error occurred while parsing header received from tamplate via ipc - {}",
+                error.to_string()
+            );
+            panic!();
+        }
     };
+    let required_target = bitcoin::Target::from_compact(received_block_header.bits);
+    //TODO: difficulty multiplier i.e. determination of `N` for appropriate window for distributing payout essentially it is
+    //a trade-off between variance reduction and maturity time for a payout to be received by miners
+    let total_difficulty = required_target.difficulty_float(config.network.params());
 
+    //Changes to be done to accomodate payout
+    let (payout_sender, mut payout_receiver) = tokio::sync::oneshot::channel::<Vec<OutputPair>>();
+    let received_payout = payout_receiver.try_recv().unwrap();
+    match payout_cmd_sender.send(PayoutCommands::GeneratePayout {
+        payout_sender: payout_sender,
+        total_difficulty: total_difficulty,
+        total_amount: Amount::from_sat(total_available).unwrap(),
+    }) {
+        Ok(_) => {
+            info!("Payout generation command sent");
+        }
+        Err(_) => {
+            error!("An error occurred while sending payout generation command");
+        }
+    };
+    let mut final_outputs: Vec<TxOut> = Vec::new();
+    //In case of no miners are there we will distribute all to pool's address
+    if received_payout.len() == 0 {
+        // Create the single payout output for the entire available amount.
+        let payout_address = Address::from_str(&config.pool_payout_address)
+            .map_err(CoinbaseError::AddressError)?
+            .require_network(config.network)
+            .map_err(|_| CoinbaseError::AddressNetworkMismatch)?;
+
+        final_outputs.push(TxOut {
+            value: Amount::from_sat(total_available).map_err(|e| {
+                error!(error = %e, "Amount conversion failed");
+                CoinbaseError::InvalidBlockTemplateData
+            })?,
+            script_pubkey: payout_address.script_pubkey(),
+        });
+    } else {
+        for payout in received_payout.into_iter() {
+            let payout_address = Address::from_str(&payout.address.to_string())
+                .map_err(CoinbaseError::AddressError)?
+                .require_network(config.network)
+                .map_err(|_| CoinbaseError::AddressNetworkMismatch)?;
+
+            final_outputs.push(TxOut {
+                value: payout.amount,
+                script_pubkey: payout_address.script_pubkey(),
+            });
+        }
+    }
     // Build OP_RETURN output.
     let braidpool_output = build_braidpool_op_return(braidpool_commitment, extranonce)?;
 
-    // Build final outputs in the correct order: [REWARD, WTXID, BRAIDPOOL_OPRETURN].
-    let mut final_outputs = vec![reward_payout];
+    // Build final outputs in the correct order: [REWARDS, WTXID, BRAIDPOOL_OPRETURN].
     if let Some(segwit_output) = segwit_commitment {
         final_outputs.push(segwit_output);
     }
@@ -545,6 +591,7 @@ pub fn create_block_template(
     block_height: u32,
     nonce: u32,
     config: &CoinbaseConfig,
+    payout_cmd_sender: &std::sync::mpsc::Sender<PayoutCommands>,
 ) -> Result<FinalTemplate, CoinbaseError> {
     // Build the custom coinbase transaction
     let final_coinbase = build_braidpool_coinbase_from_template(
@@ -553,6 +600,7 @@ pub fn create_block_template(
         extranonce,
         block_height,
         config,
+        payout_cmd_sender,
     )?;
 
     let coinbase_txid = final_coinbase.transaction.compute_txid();

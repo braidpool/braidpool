@@ -183,7 +183,6 @@ pub async fn ipc_template_consumer(
             let merkle_branch_coinbase = ipc_template.components.coinbase_merkle_path.clone();
             let (template_header, template_transactions) = candidate_block.unwrap().into_parts();
             let _coinbase_transaction = template_transactions.get(0);
-
             debug!(template_id = %template_id, template_header = ?template_header, "New block template");
             let template: BlockTemplate = BlockTemplate {
                 version: template_header.version,
@@ -285,6 +284,7 @@ impl SwarmHandler {
         //TODO: Will be used as seperate entity after altering `uncommitted_metadata`
         extranonce_1_raw_value: u32,
     ) -> Result<(), StratumErrors> {
+        //Here itself in candidate_block_header will be committed with nbits*difficulty_adjustment_process
         let (candidate_block_header, candidate_block_transactions) = candidate_block.into_parts();
         let ids: Vec<Txid> = candidate_block_transactions
             .iter()
@@ -311,7 +311,7 @@ impl SwarmHandler {
         debug!(tip_indices = ?tips_index, tip_hashes = ?parent_hash_set,
             "Tips before extending the Braid");
         //TODO:This will be replaced via the allotted `WeakShareDifficulty` after Difficulty adjustment
-        let weak_target = CompactTarget::from_unprefixed_hex("1d00ffff").unwrap();
+        let weak_target = candidate_block_header.bits;
         //Mindiff
         let min_target = CompactTarget::from_unprefixed_hex("1d00ffff").unwrap();
         //Job sent time before downstream starts mining

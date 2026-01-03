@@ -80,6 +80,26 @@ pub fn server_endpoints(bind_host: &str, port: u16, protocol: &str) -> Vec<Strin
         vec![format!("{}://{}:{}", protocol, bind_host, port)]
     }
 }
+#[allow(unused)]
+/// Use bitcoin mainnet max attainable target to convert the hash into difficulty
+/// This global difficulty to used to track difficult adjustment by the pool, independent of the chain that is being mined.
+pub fn get_true_difficulty(
+    hash: &bitcoin::BlockHash,
+    configured_network: bitcoin::Network,
+) -> u128 {
+    let mut bytes = hash.to_byte_array();
+    bytes.reverse();
+    let diff = u128::from_str_radix(&hex::encode(&bytes[..16]), 16).unwrap();
+    let bead_diff = match configured_network {
+        bitcoin::Network::Bitcoin
+        | bitcoin::Network::Testnet(bitcoin::TestnetVersion::V4)
+        | bitcoin::Network::CPUNet => (0xFFFF_u128 << (208 - 128)) / diff,
+        bitcoin::Network::Regtest => 0x7FFF_FF00u128 << 96 / diff,
+        bitcoin::Network::Signet => 0x0377_ae00 << 80 / diff,
+        _ => 0x0377_ae00 << 80 / diff,
+    };
+    return bead_diff;
+}
 //Validation for usernames and parsing the payout_address for the downstream connected
 pub fn validate(
     username: &str,

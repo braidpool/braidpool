@@ -1,12 +1,16 @@
 use crate::error::StratumErrors;
+use crate::payout::DifficultyAdjustmentTrait;
 use crate::template_creator::calculate_merkle_root;
 use crate::utils::validate;
 use crate::{SwarmHandler, TemplateId, EXTRANONCE1_SIZE, EXTRANONCE2_SIZE, EXTRANONCE_SEPARATOR};
 use bitcoin::block::HeaderExt;
 use bitcoin::consensus::serialize;
 use bitcoin::io::Cursor;
+use bitcoin::pow::CompactTargetExt;
 use bitcoin::{absolute::Decodable, Transaction};
-use bitcoin::{BlockHash, BlockHeader, BlockTime, TxMerkleNode, Txid, Witness};
+use bitcoin::{
+    BlockHash, BlockHeader, BlockTime, CompactTarget, Target, TxMerkleNode, Txid, Witness,
+};
 use futures::{lock::Mutex, FutureExt};
 use num::ToPrimitive;
 use rand::RngCore;
@@ -620,10 +624,13 @@ impl DownstreamClient {
             prev_blockhash: submitted_job.blocktemplate.previousblockhash,
             merkle_root: merkle_root,
             time: BlockTime::from_u32(ntime_u32),
+            //This is weak_target being committed according to difficulty adjustment
             bits: submitted_job.blocktemplate.bits,
             nonce: nonce_u32,
         };
-        let compact_target = submitted_job.blocktemplate.bits;
+        //Validation will be against template.nbits only that will leave us whether the given weak share is btc valid or not
+        //it will be valid only if the weak_target which is committed in block_header currently twice
+        let compact_target = submitted_job.global_target;
         let target = bitcoin::Target::from_compact(compact_target);
         debug!(
             connection_id = %connection_id_hex,
@@ -693,7 +700,7 @@ impl DownstreamClient {
         let complete_block = bitcoin::Block::new_unchecked(header, block_transactions);
 
         //Checking with PoW of the target whether the block sent by downstream is below that or not
-        match header.validate_pow(target) {
+        let bitcoin_valid_block = match header.validate_pow(target) {
             Ok(_) => {
                 debug!(
                     connection_id = %connection_id_hex,
@@ -701,55 +708,74 @@ impl DownstreamClient {
                     hash = %header.block_hash(),
                     "Header meets target"
                 );
-
-                // If valid block found, send to submission channel
-                if let Some(ref submission_tx) = self.block_submission_tx {
-                    let submission = BlockSubmissionRequest {
-                        template_id,
-                        header: header.clone(),
-                        coinbase_transaction: coinbase_tx_for_submission.clone(),
-                    };
-
-                    match submission_tx.send(submission) {
-                        Ok(_) => {
-                            debug!(
-                                connection_id = %connection_id_hex,
-                                template_id = %template_id,
-                                "Block sent to submission handler"
-                            );
-                        }
-                        Err(e) => {
-                            error!(
-                                connection_id = %connection_id_hex,
-                                error = %e,
-                                template_id = %template_id,
-                                "Failed to send block submission"
-                            );
-                        }
-                    }
-                } else {
-                    warn!(
-                        connection_id = %connection_id_hex,
-                        context = "block_submission",
-                        template_id = %template_id,
-                        "Channel unavailable - cannot forward valid block"
-                    );
-                }
+                true
             }
             Err(e) => {
                 debug!(
                     connection_id = %connection_id_hex,
                     error = %e,
                     target = %target.to_hex(),
-                    "Header does not meet target"
+                    network=%self.network_type,
+                    "Header does not meet target of subscribed network"
                 );
-                return Ok(StratumResponses::StandardResponse {
-                    std_response: StandardResponse::new_ok(Some(client_request_id), json!(false)),
-                });
+                false
+            }
+        };
+        //Checking whether the submitted bead is valid bitcoin block or not and submitting only then
+        if bitcoin_valid_block {
+            // If valid block found, send to submission channel
+            if let Some(ref submission_tx) = self.block_submission_tx {
+                let submission = BlockSubmissionRequest {
+                    template_id,
+                    header: header.clone(),
+                    coinbase_transaction: coinbase_tx_for_submission.clone(),
+                };
+
+                match submission_tx.send(submission) {
+                    Ok(_) => {
+                        debug!(
+                            connection_id = %connection_id_hex,
+                            template_id = %template_id,
+                            "Block sent to submission handler"
+                        );
+                    }
+                    Err(e) => {
+                        error!(
+                            connection_id = %connection_id_hex,
+                            error = %e,
+                            template_id = %template_id,
+                            "Failed to send block submission"
+                        );
+                    }
+                }
+            } else {
+                warn!(
+                    connection_id = %connection_id_hex,
+                    context = "block_submission",
+                    template_id = %template_id,
+                    "Channel unavailable - cannot forward valid block"
+                );
             }
         }
-        //Passing both the extranonces for committment in uncommitted metadata
-        let extranonce_2_raw_value = match u32::from_str_radix(extranonce2, 16) {
+        //Checking wrt to braidpool network difficulty
+        let valid_weak_share_flag =
+            match header.validate_pow(Target::from_compact(submitted_job.blocktemplate.bits)) {
+                Ok(beadhash) => {
+                    info!(beadhash=%beadhash,"Weak share is a valid braidpool share !");
+                    true
+                }
+                Err(error) => {
+                    error!(
+                        "An error occurred while validating bead validation - {}",
+                        error.to_string()
+                    );
+                    false
+                }
+            };
+        if valid_weak_share_flag {
+            //TODO:Valid weak share will be handled by difficulty adjuster and current difficulty shall be adjusted accordingly
+            //Passing both the extranonces for committment in uncommitted metadata
+            let extranonce_2_raw_value = match u32::from_str_radix(extranonce2, 16) {
             Ok(v) => v,
             Err(e) => {
                 error!(connection_id = %connection_id_hex, error = %e, extranonce2 = %extranonce2, "Failed to parse extranonce2");
@@ -758,8 +784,8 @@ impl DownstreamClient {
                 });
             }
         };
-        let extranonce_1_hex_str = hex::encode(self.extranonce1.clone());
-        let extranonce_1_raw_value = match u32::from_str_radix(&extranonce_1_hex_str, 16) {
+            let extranonce_1_hex_str = hex::encode(self.extranonce1.clone());
+            let extranonce_1_raw_value = match u32::from_str_radix(&extranonce_1_hex_str, 16) {
             Ok(v) => v,
             Err(e) => {
                 error!(connection_id = %connection_id_hex, error = %e, extranonce1 = %extranonce_1_hex_str, "Failed to parse extranonce1");
@@ -768,36 +794,41 @@ impl DownstreamClient {
                 });
             }
         };
-        let _swarm_command_sent = match swarm_handler
-            .lock()
-            .await
-            .propagate_valid_bead(
-                complete_block,
-                extranonce_2_raw_value,
-                &self.downstream_ip,
-                submitted_job.job_sent_time,
-                &payout_address,
-                extranonce_1_raw_value,
-            )
-            .await
-        {
-            Ok(_) => {
-                info!(
-                    connection_id = %connection_id_hex,
-                    job_id = %numeric_job_id,
-                    template_id = %template_id,
-                    peer = %self.downstream_ip,
-                    "Candidate block submitted"
-                );
-                Ok(StratumResponses::StandardResponse {
-                    std_response: StandardResponse::new_ok(Some(client_request_id), json!(true)),
-                })
-            }
-            Err(error) => Err(error),
-        };
-        Ok(StratumResponses::StandardResponse {
-            std_response: StandardResponse::new_ok(Some(client_request_id), json!(true)),
-        })
+            let _swarm_command_sent = match swarm_handler
+                .lock()
+                .await
+                .propagate_valid_bead(
+                    complete_block,
+                    extranonce_2_raw_value,
+                    &self.downstream_ip,
+                    submitted_job.job_sent_time,
+                    &payout_address,
+                    extranonce_1_raw_value,
+                )
+                .await
+            {
+                Ok(_) => {
+                    info!(
+                        connection_id = %connection_id_hex,
+                        job_id = %numeric_job_id,
+                        template_id = %template_id,
+                        peer = %self.downstream_ip,
+                        "Candidate block submitted"
+                    );
+                    return Ok(StratumResponses::StandardResponse {
+                        std_response: StandardResponse::new_ok(
+                            Some(client_request_id),
+                            json!(true),
+                        ),
+                    });
+                }
+                Err(error) => return Err(error),
+            };
+        }
+        //Invalid block
+        return Ok(StratumResponses::StandardResponse {
+            std_response: StandardResponse::new_ok(Some(client_request_id), json!(false)),
+        });
     }
     /// Processes a `mining.set_difficulty` request from the client.
     ///
@@ -1195,6 +1226,7 @@ pub struct JobDetails {
     pub coinbase_witness_commitment: Option<Witness>,
     //Unix timestamp at which current job was sent to downstream miner
     pub job_sent_time: u32,
+    pub global_target: CompactTarget,
 }
 ///Struct storing all the jobs mapped accroding to the job id
 /// it will serve the purpose for maintaining the details received from the downstream as well as other
@@ -1225,7 +1257,6 @@ impl MiningJobMap {
         job_details: JobDetails,
     ) -> u64 {
         let numeric_job_id = self.next_job_id;
-
         debug!(job_id = %numeric_job_id, template_id = %template_id, "Inserting mining job into MiningJobMap");
 
         // Store job by template_id
@@ -1270,11 +1301,16 @@ impl MiningJobMap {
 ///`Notifier` that will serve the purpose of notifying the downstream nodes with the lates available jobs
 /// for mining to take place via `mining.notify`.
 ///
-pub struct Notifier {
+pub struct Notifier<T>
+where
+    T: DifficultyAdjustmentTrait,
+{
     ///`IpcGBT` notification receiver whenever new `template` is fethced or tip is updated .
     notification_receiver: mpsc::Receiver<NotifyCmd>,
     ///`JobMap` associated with each `peer_addr` and the jobs associated with it .
     pub job_map_arc: Arc<Mutex<HashMap<String, Arc<Mutex<MiningJobMap>>>>>,
+    //Additional member for difficulty adjuster implementing difficulty adjustmentTrait
+    difficulty_adjuster: T,
 }
 ///Since the prev_block_hash received in `gbt` is in BigEndian format it must be converted to `Little endian`.
 fn _to_little_endian(hex_str: &str) -> String {
@@ -1304,7 +1340,10 @@ pub fn reverse_four_byte_chunks(hash_hex: &str) -> Result<String, StratumErrors>
 
     Ok(hex::encode(reversed_bytes))
 }
-impl Notifier {
+impl<T> Notifier<T>
+where
+    T: DifficultyAdjustmentTrait,
+{
     ///Spawning a new notifier instance .
     pub fn new(
         notification_rx: mpsc::Receiver<NotifyCmd>,
@@ -1313,6 +1352,7 @@ impl Notifier {
         Self {
             notification_receiver: notification_rx,
             job_map_arc: job_map_arc,
+            difficulty_adjuster: T::new(),
         }
     }
     ///Constructing the mining.notify template following the corrsponding attributes to be sent as a job to the downstream miner for
@@ -1463,7 +1503,7 @@ impl Notifier {
             match notification_command {
                 //Whenever a new template is received it is broadcasted across all the downstream nodes connected .
                 NotifyCmd::SendToAll {
-                    template,
+                    mut template,
                     merkle_branch_coinbase,
                     template_id,
                 } => {
@@ -1471,6 +1511,26 @@ impl Notifier {
                         template_id = %template_id,
                         "Received new block template"
                     );
+                    //Storing original target in `JobDetails`
+                    let network_target = template.bits;
+                    //Getting the current weak_target according to difficulty adjustement
+                    //and committing it inside `template` so that notified job is constructed accordingly and sent to downstream
+                    if self
+                        .difficulty_adjuster
+                        .get_current_difficulty()
+                        .to_target()
+                        == bitcoin::Target::ZERO
+                    {
+                        let new_weak_target = self
+                            .difficulty_adjuster
+                            .get_new_difficulty(Some(network_target.clone()));
+                        let adjusted_target_hex = new_weak_target.to_target().to_hex();
+                        template.bits = CompactTarget::from_hex(&adjusted_target_hex).unwrap();
+                    } else {
+                        let new_weak_target = self.difficulty_adjuster.get_new_difficulty(None);
+                        let adjusted_target_hex = new_weak_target.to_target().to_hex();
+                        template.bits = CompactTarget::from_hex(&adjusted_target_hex).unwrap();
+                    }
                     let connection_snapshot = downstream_connection_map
                         .read()
                         .await
@@ -1548,8 +1608,9 @@ impl Notifier {
                             coinbase_witness_commitment: job_notification
                                 .coinbase_witness_commitment,
                             job_sent_time: unix_timestamp,
+                            global_target: network_target,
                         };
-
+                        //In this there will no change to nbits provided as it is required for evaluation against global target
                         let numeric_job_id = curr_peer_mining_job_map
                             .insert_mining_job(template_id, job_details)
                             .await;
@@ -1563,6 +1624,7 @@ impl Notifier {
                                 job_notification.coinbase2,
                                 job_notification.merkle_branches,
                                 job_notification.version,
+                                //This shall be adjusted according to our difficulty aadjustment
                                 job_notification.nbits,
                                 job_notification.ntime,
                                 job_notification.clean_jobs
@@ -1589,8 +1651,7 @@ impl Notifier {
                                 connection_id = %connection_id_hex,
                                 peer = %peer_adr,
                                 job_id = %numeric_job_id,
-                                "Dispatched job to peer"
-                            );
+                                "Dispatched job to peer");
                         }
                     }
                 }
@@ -1625,7 +1686,26 @@ impl Notifier {
                         continue; // Skip but keep notifier running
                     }
 
-                    let latest_template = latest_template_arc.lock().await.to_owned();
+                    let mut latest_template = latest_template_arc.lock().await.to_owned();
+                    let network_target = latest_template.bits;
+                    if self
+                        .difficulty_adjuster
+                        .get_current_difficulty()
+                        .to_target()
+                        == bitcoin::Target::ZERO
+                    {
+                        let new_weak_target = self
+                            .difficulty_adjuster
+                            .get_new_difficulty(Some(network_target.clone()));
+                        let adjusted_target_hex = new_weak_target.to_target().to_hex();
+                        latest_template.bits =
+                            CompactTarget::from_hex(&adjusted_target_hex).unwrap();
+                    } else {
+                        let new_weak_target = self.difficulty_adjuster.get_new_difficulty(None);
+                        let adjusted_target_hex = new_weak_target.to_target().to_hex();
+                        latest_template.bits =
+                            CompactTarget::from_hex(&adjusted_target_hex).unwrap();
+                    }
                     let latest_template_merkle_branch =
                         latest_template_merkle_branch_arc.lock().await.to_owned();
                     info!(
@@ -1687,6 +1767,7 @@ impl Notifier {
                                     coinbase_merkle_path: job.merkle_branches.clone(),
                                     coinbase_witness_commitment: job.coinbase_witness_commitment,
                                     job_sent_time: unix_timestamp,
+                                    global_target: network_target,
                                 };
                                 let numeric_job_id = curr_peer_mining_job_map
                                     .insert_mining_job(current_template_id, job_details)
@@ -2079,6 +2160,7 @@ mod test {
     use crate::{
         braid,
         db::db_handlers::DBHandler,
+        payout::DifficultyAdjuster,
         stratum::{ConnectionMapping, MiningJobMap, NotifyCmd, Server, StratumServerConfig},
     };
     use bitcoin::{
@@ -2450,9 +2532,14 @@ mod test {
             ..Default::default()
         };
         let mut constructed_test_notification =
-            Notifier::construct_job_notification(false, test_template.clone(), 1, vec![])
-                .await
-                .unwrap();
+            Notifier::<DifficultyAdjuster>::construct_job_notification(
+                false,
+                test_template.clone(),
+                1,
+                vec![],
+            )
+            .await
+            .unwrap();
         let constructed_test_notification_ref = constructed_test_notification.clone();
         let current_system_time = std::time::SystemTime::now();
         let duration_since_epoch = current_system_time.duration_since(UNIX_EPOCH).unwrap();
@@ -2464,6 +2551,8 @@ mod test {
         let mock_mining_job_map: Arc<Mutex<MiningJobMap>> =
             Arc::new(Mutex::new(MiningJobMap::new()));
         test_template.transactions.remove(0);
+        let test_global_network_target = test_template.bits;
+        test_template.bits = test_global_network_target;
         let job_details = JobDetails {
             blocktemplate: test_template,
             coinbase1: constructed_test_notification_ref.clone().coinbase1.clone(),
@@ -2471,6 +2560,7 @@ mod test {
             coinbase_merkle_path: vec![],
             coinbase_witness_commitment: Some(test_witness),
             job_sent_time: unix_timestamp,
+            global_target: test_global_network_target,
         };
         let numeric_job_id = mock_mining_job_map
             .lock()
