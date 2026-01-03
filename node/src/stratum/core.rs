@@ -27,6 +27,9 @@ use tokio_util::codec::{FramedRead, LinesCodec};
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
 
+// Import sv1_api types for IsServer trait usage
+use sv1_api::{json_rpc, IsServer};
+
 #[derive(Debug, Clone)]
 pub struct BlockSubmissionRequest {
     /// The template ID that this submission is for
@@ -243,6 +246,169 @@ impl DownstreamClient {
     pub fn connection_id(&self) -> u32 {
         self.connection_id
     }
+
+    /// Handle sv1_api request using IsServer trait methods
+    ///
+    /// This method demonstrates routing to IsServer trait but currently
+    /// falls back to legacy handlers for full implementation.
+    ///
+    /// # Arguments
+    ///
+    /// * `sv1_message` - The parsed sv1_api::json_rpc::Message
+    /// * `response_sender` - Channel to send responses
+    /// * `notification_sender` - Channel to send notifications
+    ///
+    /// # Returns
+    ///
+    /// Result indicating success or error (Error triggers fallback to legacy)
+    pub async fn handle_sv1_api_request(
+        &mut self,
+        sv1_message: &json_rpc::Message,
+        response_sender: mpsc::Sender<String>,
+        notification_sender: mpsc::Sender<NotifyCmd>,
+    ) -> Result<(), String> {
+        use std::convert::TryInto;
+        use sv1_api::methods::client_to_server as c2s;
+
+        let connection_id_hex = format!("{:x}", self.connection_id());
+
+        // Only process StandardRequest messages (not responses or notifications)
+        let request = match sv1_message {
+            json_rpc::Message::StandardRequest(req) => req,
+            _ => {
+                return Err("Not a StandardRequest - skipping IsServer processing".to_string());
+            }
+        };
+
+        info!(
+            connection_id = %connection_id_hex,
+            method = %request.method,
+            "Processing SV1 request via IsServer trait"
+        );
+
+        // Route based on method name
+        match request.method.as_str() {
+            "mining.configure" => {
+                // Parse configure request
+                let configure_req: c2s::Configure = request
+                    .clone()
+                    .try_into()
+                    .map_err(|e| format!("Failed to parse configure request: {:?}", e))?;
+
+                // Call IsServer trait method
+                let (version_rolling_params, min_difficulty) =
+                    self.handle_configure(&configure_req);
+
+                // Build response
+                let response = configure_req.respond(version_rolling_params, min_difficulty);
+                let response_json = serde_json::to_string(&response)
+                    .map_err(|e| format!("Failed to serialize configure response: {}", e))?;
+
+                // Send response
+                response_sender
+                    .send(response_json)
+                    .await
+                    .map_err(|e| format!("Failed to send configure response: {}", e))?;
+
+                info!(connection_id = %connection_id_hex, "Configure processed via IsServer trait");
+                Ok(())
+            }
+            "mining.subscribe" => {
+                // Parse subscribe request
+                let subscribe_req: c2s::Subscribe = request
+                    .clone()
+                    .try_into()
+                    .map_err(|e| format!("Failed to parse subscribe request: {:?}", e))?;
+
+                // Call IsServer trait method
+                let subscriptions = self.handle_subscribe(&subscribe_req);
+
+                // Get extranonce data
+                let extranonce1 = self.extranonce1();
+                let extranonce2_size = self.extranonce2_size();
+
+                // Build response
+                let response = subscribe_req.respond(subscriptions, extranonce1, extranonce2_size);
+                let response_json = serde_json::to_string(&response)
+                    .map_err(|e| format!("Failed to serialize subscribe response: {}", e))?;
+
+                // Send response
+                response_sender
+                    .send(response_json)
+                    .await
+                    .map_err(|e| format!("Failed to send subscribe response: {}", e))?;
+
+                // Mark as subscribed
+                self.subscribed = true;
+
+                info!(connection_id = %connection_id_hex, "Subscribe processed via IsServer trait");
+                Ok(())
+            }
+            "mining.authorize" => {
+                // Parse authorize request
+                let authorize_req: c2s::Authorize = request
+                    .clone()
+                    .try_into()
+                    .map_err(|e| format!("Failed to parse authorize request: {:?}", e))?;
+
+                // Store username for logging before moving authorize_req
+                let username = authorize_req.name.clone();
+
+                // Call IsServer trait method
+                let is_ok = self.handle_authorize(&authorize_req);
+
+                // Build response (consumes authorize_req)
+                let response = authorize_req.respond(is_ok);
+                let response_json = serde_json::to_string(&response)
+                    .map_err(|e| format!("Failed to serialize authorize response: {}", e))?;
+
+                // Send response
+                response_sender
+                    .send(response_json)
+                    .await
+                    .map_err(|e| format!("Failed to send authorize response: {}", e))?;
+
+                info!(connection_id = %connection_id_hex, username = %username, "Authorize processed via IsServer trait");
+
+                // Note: Template sending is handled by the main event loop
+                // when it detects both subscribed && authorized flags are true
+
+                Ok(())
+            }
+            "mining.submit" => {
+                // Parse submit request
+                let submit_req: c2s::Submit = request
+                    .clone()
+                    .try_into()
+                    .map_err(|e| format!("Failed to parse submit request: {:?}", e))?;
+
+                // Call IsServer trait method
+                let is_ok = self.handle_submit(&submit_req);
+
+                // Build response
+                let response = submit_req.respond(is_ok);
+                let response_json = serde_json::to_string(&response)
+                    .map_err(|e| format!("Failed to serialize submit response: {}", e))?;
+
+                // Send response
+                response_sender
+                    .send(response_json)
+                    .await
+                    .map_err(|e| format!("Failed to send submit response: {}", e))?;
+
+                info!(connection_id = %connection_id_hex, "Submit processed via IsServer trait");
+                Ok(())
+            }
+            _ => {
+                // Unknown method - return error to trigger fallback
+                Err(format!(
+                    "Unknown method: {} - fallback to legacy",
+                    request.method
+                ))
+            }
+        }
+    }
+
     /// Handles an incoming Stratum `Client2Server` request from a downstream miner.
     ///
     /// Routes the request to the appropriate handler based on its `method`:
@@ -1983,43 +2149,63 @@ impl Server {
                         // Try parsing with sv1_api first (new approach)
                         match serde_json::from_str::<sv1_api::json_rpc::Message>(&line) {
                                 Ok(sv1_message) => {
-                                    trace!(
+                                    info!(
                                         connection_id = %connection_id_hex,
                                         peer = %peer_addr,
-                                        "Successfully parsed message with sv1_api"
+                                        "Successfully parsed message with sv1_api - routing to IsServer trait"
                                     );
 
-                                    // Use the already-parsed sv1_message instead of re-parsing
-                                    // Convert sv1_message to StandardRequest if needed
-                                    if let Some(braidpool_request) = super::sv1_compat::sv1_message_to_braidpool_request(&sv1_message) {
-                                        let server_request_res: Result<StratumResponses, StratumErrors> = downstream_client
-                                            .lock()
-                                            .await
-                                            .handle_client_to_server_request(
-                                                braidpool_request,
-                                                mining_job_map.clone(),
-                                                downstream_message_sender.clone(),
-                                                notification_sender.clone(),
-                                                peer_addr.to_string(),
-                                                swarm_handler.clone(),
-                                            )
-                                            .await;
+                                    // Process request using IsServer trait methods
+                                    let handle_result = downstream_client
+                                        .lock()
+                                        .await
+                                        .handle_sv1_api_request(
+                                            &sv1_message,
+                                            downstream_message_sender.clone(),
+                                            notification_sender.clone(),
+                                        )
+                                        .await;
 
-                                        match server_request_res {
-                                            Ok(_) => {
-                                                // Request handled successfully
-                                            }
-                                            Err(error) => {
-                                                return Err(Box::new(error));
+                                    match handle_result {
+                                        Ok(_) => {
+                                            trace!(
+                                                connection_id = %connection_id_hex,
+                                                peer = %peer_addr,
+                                                "Request processed successfully via IsServer trait"
+                                            );
+                                        }
+                                        Err(error) => {
+                                            debug!(
+                                                connection_id = %connection_id_hex,
+                                                peer = %peer_addr,
+                                                error = %error,
+                                                "IsServer trait returned error - falling back to legacy handler"
+                                            );
+                                            // Fallback to legacy for methods not yet migrated
+                                            if let Some(braidpool_request) = super::sv1_compat::sv1_message_to_braidpool_request(&sv1_message) {
+                                                let server_request_res: Result<StratumResponses, StratumErrors> = downstream_client
+                                                    .lock()
+                                                    .await
+                                                    .handle_client_to_server_request(
+                                                        braidpool_request,
+                                                        mining_job_map.clone(),
+                                                        downstream_message_sender.clone(),
+                                                        notification_sender.clone(),
+                                                        peer_addr.to_string(),
+                                                        swarm_handler.clone(),
+                                                    )
+                                                    .await;
+
+                                                match server_request_res {
+                                                    Ok(_) => {
+                                                        debug!(connection_id = %connection_id_hex, "Processed via legacy handler");
+                                                    }
+                                                    Err(error) => {
+                                                        return Err(Box::new(error));
+                                                    }
+                                                }
                                             }
                                         }
-                                    } else {
-                                        // Not a request, might be a response or notification
-                                        trace!(
-                                            connection_id = %connection_id_hex,
-                                            peer = %peer_addr,
-                                            "sv1_message is not a request, ignoring"
-                                        );
                                     }
                                 }
                                 Err(e) => {
