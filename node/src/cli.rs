@@ -1,8 +1,6 @@
 use clap::Parser;
 use std::path::PathBuf;
 
-use crate::rpc_server::RpcCommand;
-
 #[derive(Parser, Debug, Clone)]
 #[command(name = "braid", about = "Braidpool Node CLI")]
 pub struct Cli {
@@ -28,12 +26,12 @@ pub struct Cli {
     pub rpcport: u16,
 
     /// Use this username for bitcoin RPC
-    #[arg(long)]
-    pub rpcuser: Option<String>,
+    #[arg(long, default_value = "root")]
+    pub rpcuser: String,
 
     /// Use this password for bitcoin RPC
-    #[arg(long, default_value = "")]
-    pub rpcpass: Option<String>,
+    #[arg(long, default_value = "pass")]
+    pub rpcpass: String,
 
     /// Which network to use. Valid options are mainnet, testnet4, signet, cpunet (preferred)
     #[arg(long, default_value = "main")]
@@ -42,10 +40,6 @@ pub struct Cli {
     /// Use this cookie file for bitcoin RPC
     #[arg(long, default_value = "~/.bitcoin/.cookie")]
     pub rpccookie: Option<String>,
-
-    ///Rpc endpoints for the specific methods
-    #[command(subcommand)]
-    pub command: Option<RpcCommand>,
 
     /// Path to Bitcoin Core IPC socket
     #[arg(long, default_value = "/tmp/bitcoin-cpunet.sock")]
