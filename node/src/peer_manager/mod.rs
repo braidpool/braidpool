@@ -1,5 +1,6 @@
 use libp2p::PeerId;
 use std::collections::{HashMap, HashSet};
+use std::fmt::Write;
 use std::net::IpAddr;
 use std::time::{Duration, Instant};
 
@@ -25,7 +26,7 @@ pub struct PeerInfo {
     /// Whether the peer is currently connected
     pub connected: bool,
     /// The peer's IP address
-    ip_addr: Option<IpAddr>,
+    pub ip_addr: Option<IpAddr>,
 }
 
 impl PeerInfo {
@@ -258,33 +259,28 @@ impl PeerManager {
         self.connected_peers.len()
     }
 
-    /// Get a summary of peer statistics
-    pub fn peer_stats_summary(&self) -> String {
-        let total_peers = self.peers.len();
-        let connected = self.connected_peers.len();
+    /// Get peer information as a JSON-serializable structure
+    pub fn get_peers_json(&self) -> serde_json::Value {
+        use serde_json::json;
 
-        let mut inbound = 0;
-        let mut outbound = 0;
+        let connected_peers_info: Vec<&PeerInfo> =
+            self.peers.values().filter(|p| p.connected).collect();
+        let total_peers = self.peers.len();
+        let connected = connected_peers_info.len();
+
         let mut avg_latency_ms = 0.0;
         let mut latency_count = 0;
         let mut geo_groups = HashSet::new();
+        let mut inbound_count = 0;
 
-        for info in self.peers.values() {
-            if !info.connected {
-                continue;
-            }
-
+        for info in &connected_peers_info {
             if info.inbound {
-                inbound += 1;
-            } else {
-                outbound += 1;
+                inbound_count += 1;
             }
-
             if let Some(latency) = info.latency {
                 avg_latency_ms += latency.as_millis() as f64;
                 latency_count += 1;
             }
-
             if let Some(group) = &info.geo_group {
                 geo_groups.insert(group.clone());
             }
@@ -294,10 +290,116 @@ impl PeerManager {
             avg_latency_ms /= latency_count as f64;
         }
 
-        format!(
-            "Peers: {}/{} connected ({} inbound, {} outbound), {} network groups, {:.2}ms avg latency",
-            connected, total_peers, inbound, outbound, geo_groups.len(), avg_latency_ms
-        )
+        let now = Instant::now();
+        let peers: Vec<serde_json::Value> = connected_peers_info
+            .iter()
+            .map(|info| {
+                let last_seen_secs = now.duration_since(info.last_message_time).as_secs();
+                json!({
+                    "peer_id": info.peer_id.to_base58(),
+                    "ip": info.ip_addr.map(|ip| ip.to_string()),
+                    "inbound": info.inbound,
+                    "latency_ms": info.latency.map(|l| l.as_millis() as f64),
+                    "score": info.score,
+                    "last_seen_secs": last_seen_secs,
+                    "geo_group": info.geo_group,
+                })
+            })
+            .collect();
+
+        json!({
+            "total_peers": total_peers,
+            "connected": connected,
+            "inbound": inbound_count,
+            "outbound": connected - inbound_count,
+            "network_groups": geo_groups.len(),
+            "avg_latency_ms": if latency_count > 0 { avg_latency_ms } else { 0.0 },
+            "peers": peers,
+        })
+    }
+
+    /// Get a summary of peer statistics, including a detailed list of connected peers.
+    pub fn peer_stats_summary(&self) -> String {
+        let total_peers = self.peers.len();
+        let connected_peers_info: Vec<&PeerInfo> =
+            self.peers.values().filter(|p| p.connected).collect();
+        let connected = connected_peers_info.len();
+
+        let mut avg_latency_ms = 0.0;
+        let mut latency_count = 0;
+        let mut geo_groups = HashSet::new();
+        let mut inbound_count = 0;
+
+        for info in &connected_peers_info {
+            if info.inbound {
+                inbound_count += 1;
+            }
+            if let Some(latency) = info.latency {
+                avg_latency_ms += latency.as_millis() as f64;
+                latency_count += 1;
+            }
+            if let Some(group) = &info.geo_group {
+                geo_groups.insert(group.clone());
+            }
+        }
+
+        if latency_count > 0 {
+            avg_latency_ms /= latency_count as f64;
+        }
+
+        let mut output = String::with_capacity(256 + connected * 100); // Pre-allocate memory
+
+        // Summary section
+        let _ = writeln!(output, "====== Peer Summary ======");
+        let _ = writeln!(
+            output,
+            "Connected: {}/{} ({} inbound, {} outbound)",
+            connected,
+            total_peers,
+            inbound_count,
+            connected - inbound_count
+        );
+        let _ = writeln!(output, "Network Groups: {}", geo_groups.len());
+        let _ = writeln!(output, "Average Latency: {:.2}ms", avg_latency_ms);
+        let _ = writeln!(output); // Blank line
+
+        // Peers list
+        let _ = writeln!(output, "====== Connected Peers ({}) ======", connected);
+        if connected == 0 {
+            let _ = writeln!(output, "No connected peers.");
+            return output;
+        }
+
+        let now = Instant::now();
+        for info in &connected_peers_info {
+            let direction = if info.inbound { "inbound" } else { "outbound" };
+            let peer_id_short = info.peer_id.to_base58();
+            // Truncate peer id for pretty printing, handle short IDs gracefully
+            let peer_id_display = if peer_id_short.len() > 12 {
+                format!(
+                    "{}...{}",
+                    &peer_id_short[..6],
+                    &peer_id_short[peer_id_short.len() - 6..]
+                )
+            } else {
+                peer_id_short
+            };
+
+            let ip_str = info.ip_addr.map_or("N/A".to_string(), |ip| ip.to_string());
+            let latency_str = info.latency.map_or("N/A".to_string(), |l| {
+                format!("{:.2}ms", l.as_millis() as f64)
+            });
+            let score_str = format!("{:.2}", info.score);
+            let last_seen_secs = now.duration_since(info.last_message_time).as_secs();
+
+            let _ = writeln!(
+                output,
+                "- PeerID: {} | IP: {} | Latency: {} | Score: {} | Last Seen: {}s ago ({})",
+                peer_id_display, ip_str, latency_str, score_str, last_seen_secs, direction
+            );
+        }
+
+        output
     }
 
     /// Periodic maintenance task to update peer scores and evict peers if needed

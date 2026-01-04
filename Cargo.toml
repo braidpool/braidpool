@@ -1,6 +1,6 @@
 #Virtual workspace not creating a root package along with workspace as not needed .
 [workspace]
-members = ["node"]
+members = ["node", "braidpool-cli"]
 resolver = "3"
 
 [workspace.package]
@@ -42,5 +42,6 @@ sqlx = {version="0.8.6",features=[ "sqlite",
 strum = { version = "0.26", features = ["derive"] }
 if-addrs = "0.13"
 anyhow = "1.0.100"
+reqwest = { version = "0.11", features = ["json"] }
 
 

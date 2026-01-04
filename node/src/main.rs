@@ -26,7 +26,7 @@ use node::{
     ibd_manager::{IBDCommands, IBDManager, IBD_BATCH_SIZE},
     ipc_template_consumer,
     peer_manager::PeerManager,
-    rpc_server::{parse_arguments, run_rpc_server},
+    rpc_server::{run_rpc_server, BitcoinRpcConfig, RpcProxyCommand},
     setup_tracing,
     stratum::{BlockTemplate, ConnectionMapping, Notifier, NotifyCmd, Server, StratumServerConfig},
     SwarmCommand, TemplateId,
@@ -122,6 +122,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let notification_tx_clone = notification_tx.clone();
     //Connection mapping for all the downstream connection connected to the stratum server
     let connection_mapping = Arc::new(Mutex::new(ConnectionMapping::new()));
+    // Clone connection_mapping for RPC server before it's used in async move blocks
+    let connection_mapping_for_rpc = Arc::clone(&connection_mapping);
     //Mining job map keeping all the jobs provided to the downstream
     let mining_job_map = Arc::new(Mutex::new(HashMap::new()));
     //Intializing `notifier` for mining.notify
@@ -238,25 +240,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
             keypair
         }
     };
-    //spawning the rpc server
-    let rpc_addr = "127.0.0.1:6682"; // TODO: Load from config file
-    if let Some(rpc_command) = args.command {
-        let server_address = tokio::spawn(run_rpc_server(Arc::clone(&braid), rpc_addr));
-        let socket_address = server_address.await.unwrap().unwrap();
-        let _parsing_handle =
-            tokio::spawn(parse_arguments(rpc_command, socket_address.clone())).await;
-    } else {
-        //running the rpc server and updating the reference counter
-        //for shared ownership
-        let _server_handler = tokio::spawn(run_rpc_server(Arc::clone(&braid), rpc_addr)).await;
-    }
     // load beads from db (if present) and insert in braid here
-    // Initializing the peer manager
-    let mut peer_manager = PeerManager::new(8);
+    // Initializing the peer manager (shared between swarm and RPC server)
+    // Using RwLock to allow concurrent reads (RPC server) while swarm handler can write
+    let peer_manager_arc = Arc::new(tokio::sync::RwLock::new(PeerManager::new(8)));
     //For local testing uncomment this keypair peer since it running to process will
     //result in same peerID leading to OutgoingConnectionError
 
     // let keypair = identity::Keypair::generate_ed25519();
+
+    // Get peer ID from keypair before moving it into swarm builder
+    let peer_id_for_rpc = PeerId::from(keypair.public());
+
     //creating a main topic subscribing to the current test topic
     let current_broadcast_topic: floodsub::Topic = floodsub::Topic::new(BRAIDPOOL_TOPIC);
 
@@ -330,6 +325,29 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let latest_template_for_ipc = latest_template.clone();
     let latest_template_merkle_branch_for_ipc = latest_template_merkle_branch.clone();
 
+    // Create RPC proxy command channel - sender goes to RPC server, receiver goes to IPC handler
+    let (rpc_proxy_tx, rpc_proxy_rx) = tokio::sync::mpsc::unbounded_channel::<RpcProxyCommand>();
+    let rpc_proxy_tx_for_rpc = rpc_proxy_tx;
+    let rpc_proxy_rx_for_ipc = rpc_proxy_rx;
+
+    // peer_manager_arc is created above and shared between swarm and RPC server
+
+    //spawning the rpc server
+    let rpc_addr = "127.0.0.1:6682"; // TODO: Load from config file
+
+    let bitcoin_rpc_config = BitcoinRpcConfig::from_cli_args(&args);
+    let _server_handler = tokio::spawn(run_rpc_server(
+        Arc::clone(&braid),
+        rpc_addr,
+        Some(peer_id_for_rpc),
+        peer_manager_arc.clone(),
+        connection_mapping_for_rpc.clone(),
+        latest_template.clone(),
+        rpc_proxy_tx_for_rpc,
+        bitcoin_rpc_config,
+    ))
+    .await;
+
     // Spawn IPC handler
     let _ipc_handler = tokio::task::spawn_blocking(move || {
         let rt = tokio::runtime::Builder::new_current_thread()
@@ -355,6 +373,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         let ipc_socket_path = ipc_socket_path_for_blocking.clone();
                         let ipc_template_tx = ipc_template_tx.clone();
                         let template_cache = template_cache_for_listener.clone();
+                        let rpc_command_rx = rpc_proxy_rx_for_ipc;
 
                         async move {
                             match node::ipc::ipc_block_listener(
@@ -363,6 +382,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                 network,
                                 template_cache,
                                 block_submission_rx,
+                                rpc_command_rx,
                             )
                             .await
                             {
@@ -416,8 +436,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             info!(address = %node_multiaddr, "Dialed peer node");
         }
     };
+    let peer_manager_arc_for_swarm = peer_manager_arc.clone();
     let swarm_handle = tokio::spawn(async move {
         let braid = std::sync::Arc::clone(&braid);
+        let peer_manager_arc = peer_manager_arc_for_swarm;
         loop {
             tokio::select! {
              swarm_event = swarm.select_next_some()=>{
@@ -494,7 +516,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                       //If the received  bead exceeds the timestamp of ibd completion wrt to a sync node
                                       if let braid::AddBeadStatus::ParentsNotYetReceived = status {
                                         //request the parents using request response protocol
-                                        let peer_id = peer_manager.get_top_k_peers_for_propagation(1);
+                                        let peer_id = {
+                                            let peer_manager = peer_manager_arc.read().await;
+                                            peer_manager.get_top_k_peers_for_propagation(1)
+                                        };
                                         if let Some(peer) = peer_id.first() {
                                             swarm.behaviour_mut().bead_sync.send_request(
                                                 &peer,
@@ -513,7 +538,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                         }
                                     } else if let braid::AddBeadStatus::InvalidBead = status {
                                         // update the peer manager about the invalid bead
-                                        peer_manager.penalize_for_invalid_bead(&message.source);
+                                        {
+                                            let mut peer_manager = peer_manager_arc.write().await;
+                                            peer_manager.penalize_for_invalid_bead(&message.source);
+                                        }
                                     } else if let braid::AddBeadStatus::BeadAdded = status {
                                      //Considering the index of the beads in braid will be same as the (insertion ids-1)
                                         let bead_id = braid_data
@@ -544,7 +572,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                                );
                                            }
                                         };
-                                        peer_manager.update_score(&message.source, 1.0);
+                                        {
+                                            let mut peer_manager = peer_manager_arc.write().await;
+                                            peer_manager.update_score(&message.source, 1.0);
+                                        }
                                     }
                                     for (sync_peer, ibd_ts) in timestamp_map.iter() {
                                         let threshold = *ibd_ts + LATENCY_ALPHA * 10;
@@ -590,7 +621,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                 else{
                                     if let braid::AddBeadStatus::ParentsNotYetReceived = status {
                                         //request the parents using request response protocol
-                                        let peer_id = peer_manager.get_top_k_peers_for_propagation(1);
+                                        let peer_id = {
+                                            let peer_manager = peer_manager_arc.read().await;
+                                            peer_manager.get_top_k_peers_for_propagation(1)
+                                        };
                                         if let Some(peer) = peer_id.first() {
                                             swarm.behaviour_mut().bead_sync.send_request(
                                                 &peer,
@@ -609,7 +643,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                         }
                                     } else if let braid::AddBeadStatus::InvalidBead = status {
                                         // update the peer manager about the invalid bead
-                                        peer_manager.penalize_for_invalid_bead(&message.source);
+                                        {
+                                            let mut peer_manager = peer_manager_arc.write().await;
+                                            peer_manager.penalize_for_invalid_bead(&message.source);
+                                        }
                                     } else if let braid::AddBeadStatus::BeadAdded = status {
                                         let bead_id = braid_data
                                         .bead_index_mapping
@@ -639,7 +676,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                                );
                                            }
                                         };
-                                        peer_manager.update_score(&message.source, 1.0);
+                                        {
+                                            let mut peer_manager = peer_manager_arc.write().await;
+                                            peer_manager.update_score(&message.source, 1.0);
+                                        }
                                     }
                                 }
 
@@ -724,7 +764,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                      latency_ms = %latency.as_millis(),
                                      "Ping"
                                  );
-                                peer_manager.update_latency(&peer,latency);
+                                {
+                                    let mut peer_manager = peer_manager_arc.write().await;
+                                    peer_manager.update_latency(&peer,latency);
+                                }
                              }
                              Err(err) => {
                                  warn!(
@@ -757,7 +800,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                              }
                              _ => None,
                          });
-                         peer_manager.add_peer(peer_id, !endpoint.is_dialer(), ip);
+                         {
+                             let mut peer_manager = peer_manager_arc.write().await;
+                             peer_manager.add_peer(peer_id, !endpoint.is_dialer(), ip);
+                         }
                          info!(
                             peer_id = ?peer_id,
                             remote_addr = ?remote_addr,
@@ -774,7 +820,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                      } => {
                          info!(peer = %peer_id, connection_id = %connection_id, address = %endpoint.get_remote_address(), established = %num_established, cause = ?cause, "Connection closed");
                          // Remove the peer from the peer manager
-                         peer_manager.remove_peer(&peer_id);
+                         {
+                             let mut peer_manager = peer_manager_arc.write().await;
+                             peer_manager.remove_peer(&peer_id);
+                         }
                          swarm
                              .behaviour_mut()
                              .kademlia
@@ -926,7 +975,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                         let curr_beadhash = bead.block_header.block_hash().to_string();
                                         if let braid::AddBeadStatus::InvalidBead = status {
                                             // update the peer manager about the invalid bead
-                                            peer_manager.penalize_for_invalid_bead(&peer);
+                                            {
+                                                let mut peer_manager = peer_manager_arc.write().await;
+                                                peer_manager.penalize_for_invalid_bead(&peer);
+                                            }
                                         } else if let braid::AddBeadStatus::BeadAdded = status {
                                             let bead_id = braid_data
                                             .bead_index_mapping
@@ -944,7 +996,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                                 }
                                             };
                                             // update score of the peer
-                                            peer_manager.update_score(&peer, 1.0);
+                                            {
+                                                let mut peer_manager = peer_manager_arc.write().await;
+                                                peer_manager.update_score(&peer, 1.0);
+                                            }
                                             //persisting the received beads from peer onto DB(disk)
                                             match db_tx.send(node::db::BraidpoolDBTypes::InsertTupleTypes { query: node::db::InsertTupleTypes::InsertBeadSequentially { bead_to_insert: bead,txs_json:txs_json,parent_timestamp_json:parent_timestamp_json,relative_json:relative_json,bead_id:*bead_id } }).await{
                                                 Ok(_)=>{
@@ -1246,7 +1301,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                      SwarmCommand::InitiateIBD=>{
                         info!("Initiating IBD after peer discovery and selecting peer with lowest latency score");
                         //Evicting lowest latency peer id
-                        let peer_ids = peer_manager.get_top_k_peers_for_propagation(1);
+                        let peer_ids = {
+                            let peer_manager = peer_manager_arc.read().await;
+                            peer_manager.get_top_k_peers_for_propagation(1)
+                        };
                         if peer_ids.len() == 0 {
                             warn!("No peer available for syncing to take place");
                                 tokio::spawn({
