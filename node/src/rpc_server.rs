@@ -4,6 +4,7 @@ use crate::braid::Braid;
 use crate::error::BraidRPCError;
 use crate::utils::create_test_bead;
 use crate::utils::BeadHash;
+use bitcoincore_rpc::RpcApi;
 use clap::Subcommand;
 use jsonrpsee::core::async_trait;
 use jsonrpsee::core::client::ClientT;
@@ -57,7 +58,10 @@ pub enum RpcCommand {
     },
 }
 //parsing the inital rpc command line all
-pub async fn parse_arguments(cli_command: RpcCommand, server_addr: SocketAddr) -> () {
+pub async fn execute_cli_command(
+    cli_command: RpcCommand,
+    server_addr: SocketAddr,
+) -> Result<(), BraidRPCError> {
     // //initializing a client associated with the current node
     // //for receving the response from the server
     let target_uri = format!("http://{}", server_addr.to_string());
@@ -110,11 +114,7 @@ pub async fn parse_arguments(cli_command: RpcCommand, server_addr: SocketAddr) -
             (rpc_method, method_params)
         }
     };
-    tokio::spawn(handle_request(
-        rpc_method.clone(),
-        method_params,
-        client_res,
-    ));
+    handle_request(rpc_method.clone(), method_params, client_res).await
 }
 
 //handling the request arising either from command line cli or from the external users
@@ -177,12 +177,17 @@ pub trait Rpc {
 // RPC Server implementation using channels
 pub struct RpcServerImpl {
     braid_arc: Arc<RwLock<Braid>>,
+    bitcoin_rpc: Arc<bitcoincore_rpc::Client>,
 }
 
 impl RpcServerImpl {
-    pub fn new(braid_shared_pointer: Arc<RwLock<Braid>>) -> Self {
+    pub fn new(
+        braid_shared_pointer: Arc<RwLock<Braid>>,
+        bitcoin_rpc: Arc<bitcoincore_rpc::Client>,
+    ) -> Self {
         Self {
             braid_arc: braid_shared_pointer,
+            bitcoin_rpc,
         }
     }
 }
@@ -253,6 +258,20 @@ impl RpcServer for RpcServerImpl {
             .map(|&index| braid_data.beads[index].block_header.block_hash())
             .collect();
         log::info!("Get geneses request received from client");
+
+        if geneses.is_empty() {
+            let rpc = self.bitcoin_rpc.clone();
+            let tip_hash = tokio::task::spawn_blocking(move || rpc.get_best_block_hash())
+                .await
+                .map_err(|_| ErrorObjectOwned::owned(2, "Internal error", None::<()>))?
+                .map_err(|e| {
+                    ErrorObjectOwned::owned(2, format!("Bitcoin RPC error: {}", e), None::<()>)
+                })?;
+            let geneses_str = vec![tip_hash.to_string()];
+            return serde_json::to_string(&geneses_str)
+                .map_err(|_| ErrorObjectOwned::owned(2, "Internal error", None::<()>));
+        }
+
         let geneses_str: Vec<String> = geneses.iter().map(|h| h.to_string()).collect();
 
         serde_json::to_string(&geneses_str)
@@ -353,7 +372,10 @@ where
 }
 //server building
 //running a server in seperate spawn event
-pub async fn run_rpc_server(braid_shared_pointer: Arc<RwLock<Braid>>) -> Result<SocketAddr, ()> {
+pub async fn run_rpc_server(
+    braid_shared_pointer: Arc<RwLock<Braid>>,
+    bitcoin_rpc: Arc<bitcoincore_rpc::Client>,
+) -> Result<SocketAddr, ()> {
     //Initializing the middleware
     let rpc_middleware =
         jsonrpsee::server::middleware::rpc::RpcServiceBuilder::new().layer_fn(LoggingMiddleware);
@@ -366,7 +388,7 @@ pub async fn run_rpc_server(braid_shared_pointer: Arc<RwLock<Braid>>) -> Result<
     //listening address for incoming requests/connection
     let addr = server.local_addr().unwrap();
     //context for the served server
-    let rpc_impl = RpcServerImpl::new(braid_shared_pointer);
+    let rpc_impl = RpcServerImpl::new(braid_shared_pointer, bitcoin_rpc);
     let handle = server.start(rpc_impl.into_rpc());
     log::info!(
         "RPC Server is listening at socket address http://{:?}",
@@ -379,6 +401,14 @@ pub async fn run_rpc_server(braid_shared_pointer: Arc<RwLock<Braid>>) -> Result<
     Ok(addr)
 }
 
+#[cfg(test)]
+fn get_dummy_client() -> Arc<bitcoincore_rpc::Client> {
+    Arc::new(
+        bitcoincore_rpc::Client::new("http://127.0.0.1:18332", bitcoincore_rpc::Auth::None)
+            .unwrap(),
+    )
+}
+
 #[tokio::test]
 pub async fn test_extend_rpc() {
     let test_bead1 = create_test_bead(1, None);
@@ -386,7 +416,9 @@ pub async fn test_extend_rpc() {
 
     let braid: Arc<RwLock<Braid>> = Arc::new(RwLock::new(Braid::new(genesis_beads)));
 
-    let _ = run_rpc_server(Arc::clone(&braid)).await.unwrap();
+    let _ = run_rpc_server(Arc::clone(&braid), get_dummy_client())
+        .await
+        .unwrap();
 
     let server_addr = "127.0.0.1:6682";
     let target_uri = format!("http://{}", server_addr);
@@ -427,7 +459,7 @@ pub async fn test_same_bead_extend() {
         .build("127.0.0.1:8889")
         .await
         .unwrap();
-    let rpc_impl = RpcServerImpl::new(braid);
+    let rpc_impl = RpcServerImpl::new(braid, get_dummy_client());
     let _handle = server.start(rpc_impl.into_rpc());
 
     let server_addr = "127.0.0.1:8889";
@@ -471,7 +503,7 @@ pub async fn test_cohort_count_rpc() {
         .build("127.0.0.1:9000")
         .await
         .unwrap();
-    let rpc_impl = RpcServerImpl::new(braid);
+    let rpc_impl = RpcServerImpl::new(braid, get_dummy_client());
     let _handle = server.start(rpc_impl.into_rpc());
 
     let server_addr = "127.0.0.1:9000";
@@ -542,7 +574,7 @@ pub async fn test_get_beads_in_cohort_rpc() {
         .build("127.0.0.1:9001")
         .await
         .unwrap();
-    let rpc_impl = RpcServerImpl::new(braid);
+    let rpc_impl = RpcServerImpl::new(braid, get_dummy_client());
     let _handle = server.start(rpc_impl.into_rpc());
 
     let server_addr = "127.0.0.1:9001";
@@ -603,7 +635,7 @@ pub async fn test_get_geneses_rpc() {
         .build("127.0.0.1:9002")
         .await
         .unwrap();
-    let rpc_impl = RpcServerImpl::new(braid);
+    let rpc_impl = RpcServerImpl::new(braid, get_dummy_client());
     let _handle = server.start(rpc_impl.into_rpc());
 
     let server_addr = "127.0.0.1:9002";

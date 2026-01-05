@@ -17,7 +17,7 @@ use node::{
     behaviour::{self, BEAD_ANNOUNCE_PROTOCOL},
     braid, cli, ipc, ipc_template_consumer,
     peer_manager::PeerManager,
-    rpc_server::{parse_arguments, run_rpc_server},
+    rpc_server::{execute_cli_command, run_rpc_server},
     setup_logging, setup_tracing,
     stratum::{BlockTemplate, ConnectionMapping, Notifier, NotifyCmd, Server, StratumServerConfig},
 };
@@ -55,6 +55,23 @@ mod proxy_capnp;
 #[allow(unused)]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    let args = cli::Cli::parse();
+    setup_logging();
+
+    // Check for RPC command first
+    if let Some(rpc_command) = args.command {
+        // Act as RPC client
+        // Default port 6682 as per run_rpc_server
+        let server_addr: std::net::SocketAddr = "127.0.0.1:6682".parse().unwrap();
+        match execute_cli_command(rpc_command, server_addr).await {
+            Ok(_) => return Ok(()),
+            Err(e) => {
+                log::error!("RPC command failed: {:?}", e);
+                return Err(format!("{:?}", e).into());
+            }
+        }
+    }
+
     //latest available template to be cached for the newest connection until new job is received
     let mut latest_template = Arc::new(Mutex::new(BlockTemplate::default()));
     //latest available template merkle branch
@@ -96,8 +113,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         mpsc::channel::<tokio::signal::unix::SignalKind>(32);
     let main_task_token = CancellationToken::new();
     let ipc_task_token = main_task_token.clone();
-    let args = cli::Cli::parse();
-    setup_logging();
     setup_tracing()?;
     let datadir = shellexpand::full(args.datadir.to_str().unwrap()).unwrap();
     match fs::metadata(&*datadir) {
@@ -162,16 +177,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
 
     //spawning the rpc server
-    if let Some(rpc_command) = args.command {
-        let server_address = tokio::spawn(run_rpc_server(Arc::clone(&braid)));
-        let socket_address = server_address.await.unwrap().unwrap();
-        let _parsing_handle =
-            tokio::spawn(parse_arguments(rpc_command, socket_address.clone())).await;
-    } else {
-        //running the rpc server and updating the reference counter
-        //for shared ownership
-        let _server_handler = tokio::spawn(run_rpc_server(Arc::clone(&braid))).await;
-    }
+    // Setup Bitcoin RPC
+    let bitcoin_rpc = Arc::new(rpc::setup(
+        args.bitcoin.clone(),
+        args.rpcport,
+        args.rpcuser.clone(),
+        args.rpcpass.clone(),
+        args.rpccookie.clone(),
+    )?);
+
+    //running the rpc server and updating the reference counter
+    //for shared ownership
+    let _server_handler = tokio::spawn(run_rpc_server(Arc::clone(&braid), bitcoin_rpc)).await;
     // load beads from db (if present) and insert in braid here
     // Initializing the peer manager
     let mut peer_manager = PeerManager::new(8);
