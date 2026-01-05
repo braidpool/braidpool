@@ -112,6 +112,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //Payout runner for handling payout generation and running payout mapping
     let (mut payout_distributor, payout_cmd_sender) = Payout::new();
     std::thread::spawn(move || {
+        debug!("Payout task being spawned in separate thread");
         payout_distributor.payout_runner();
     });
     //Initializing DB and db command handler

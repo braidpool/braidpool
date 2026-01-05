@@ -20,6 +20,7 @@ use bitcoin::{
 use std::convert::TryFrom;
 use std::io::Cursor;
 use std::str::FromStr;
+use std::time::Duration;
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
 
@@ -422,8 +423,7 @@ pub fn build_braidpool_coinbase_from_template(
     let total_difficulty = required_target.difficulty_float(config.network.params());
 
     //Changes to be done to accomodate payout
-    let (payout_sender, mut payout_receiver) = tokio::sync::oneshot::channel::<Vec<OutputPair>>();
-    let received_payout = payout_receiver.try_recv().unwrap();
+    let (payout_sender, payout_receiver) = std::sync::mpsc::channel::<Vec<OutputPair>>();
     match payout_cmd_sender.send(PayoutCommands::GeneratePayout {
         payout_sender: payout_sender,
         total_difficulty: total_difficulty,
@@ -436,6 +436,18 @@ pub fn build_braidpool_coinbase_from_template(
             error!("An error occurred while sending payout generation command");
         }
     };
+
+    let received_payout = match payout_receiver.recv_timeout(Duration::from_secs(5)) {
+        Ok(payout) => payout,
+        Err(error) => {
+            error!(
+                "An error occurred while receiving payout yet - {}",
+                error.to_string()
+            );
+            panic!()
+        }
+    };
+
     let mut final_outputs: Vec<TxOut> = Vec::new();
     //In case of no miners are there we will distribute all to pool's address
     if received_payout.len() == 0 {

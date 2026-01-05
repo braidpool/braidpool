@@ -9,50 +9,45 @@ use std::error::Error;
 
 pub struct DifficultyAdjuster {
     /// Current client difficulty setting
-    pub current_difficulty: Work,
+    pub current_difficulty: Target,
     /// Previous difficulty before a change
-    pub old_difficulty: Work,
+    pub old_difficulty: Target,
 }
 pub trait DifficultyAdjustmentTrait {
-    fn get_current_difficulty(&self) -> Work;
-    fn get_new_difficulty(&mut self, initial_target: Option<CompactTarget>) -> Work;
+    fn get_current_difficulty(&self) -> Target;
+    fn get_new_difficulty(&mut self, initial_target: Option<CompactTarget>) -> Target;
     fn new() -> Self;
 }
 impl DifficultyAdjustmentTrait for DifficultyAdjuster {
     fn new() -> Self {
-        let zero_work = Target::ZERO.to_work();
+        let zero_work = Target::ZERO;
         Self {
             current_difficulty: zero_work,
             //At initialization this shall be work computed according to `start_target` but for time being it is taken as Work(0)
             old_difficulty: zero_work,
         }
     }
-    fn get_current_difficulty(&self) -> Work {
+    fn get_current_difficulty(&self) -> Target {
         self.current_difficulty
     }
-    fn get_new_difficulty(&mut self, initial_target: Option<CompactTarget>) -> Work {
+    fn get_new_difficulty(&mut self, initial_target: Option<CompactTarget>) -> Target {
         if let Some(start_target) = initial_target {
-            let start_target_u32 = start_target.to_consensus();
-            //Reducing target statically
-            let dividend: u32 = 10;
-            let reduced_target_u32 = start_target_u32.div_ceil(dividend);
-            let reduced_nbits = CompactTarget::from_consensus(reduced_target_u32);
-            let reduced_expanded_target = Target::from_compact(reduced_nbits);
-            self.old_difficulty = reduced_expanded_target.to_work();
-            self.current_difficulty = reduced_expanded_target.to_work();
+            self.current_difficulty = Target::from_compact(start_target);
+            self.old_difficulty = Target::from_compact(start_target);
         };
         self.current_difficulty
     }
 }
 impl DifficultyAdjuster {
     pub fn new() -> Self {
-        let zero_work = Target::ZERO.to_work();
+        let zero_work = Target::ZERO;
         Self {
             current_difficulty: zero_work,
             old_difficulty: zero_work,
         }
     }
 }
+#[derive(Debug)]
 pub enum PayoutCommands {
     UpdatePayoutHeap {
         bead_timestamp: MedianTimePast,
@@ -60,7 +55,7 @@ pub enum PayoutCommands {
         work: Work,
     },
     GeneratePayout {
-        payout_sender: tokio::sync::oneshot::Sender<Vec<OutputPair>>,
+        payout_sender: std::sync::mpsc::Sender<Vec<OutputPair>>,
         total_difficulty: f64,
         total_amount: Amount,
     },
@@ -125,7 +120,7 @@ impl Payout {
     }
     pub fn payout_runner(&mut self) {
         while let Ok(payout_cmd) = self.payout_cmd_receiver.recv() {
-            tracing::info!("Payout runner initialized");
+            tracing::info!("Payout runner initialize and received command succesfully");
             match payout_cmd {
                 PayoutCommands::GeneratePayout {
                     payout_sender,

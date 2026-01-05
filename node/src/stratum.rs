@@ -6,7 +6,6 @@ use crate::{SwarmHandler, TemplateId, EXTRANONCE1_SIZE, EXTRANONCE2_SIZE, EXTRAN
 use bitcoin::block::HeaderExt;
 use bitcoin::consensus::serialize;
 use bitcoin::io::Cursor;
-use bitcoin::pow::CompactTargetExt;
 use bitcoin::{absolute::Decodable, Transaction};
 use bitcoin::{
     BlockHash, BlockHeader, BlockTime, CompactTarget, Target, TxMerkleNode, Txid, Witness,
@@ -702,7 +701,7 @@ impl DownstreamClient {
         //Checking with PoW of the target whether the block sent by downstream is below that or not
         let bitcoin_valid_block = match header.validate_pow(target) {
             Ok(_) => {
-                debug!(
+                info!(
                     connection_id = %connection_id_hex,
                     target = %target.to_hex(),
                     hash = %header.block_hash(),
@@ -711,7 +710,7 @@ impl DownstreamClient {
                 true
             }
             Err(e) => {
-                debug!(
+                error!(
                     connection_id = %connection_id_hex,
                     error = %e,
                     target = %target.to_hex(),
@@ -733,7 +732,7 @@ impl DownstreamClient {
 
                 match submission_tx.send(submission) {
                     Ok(_) => {
-                        debug!(
+                        info!(
                             connection_id = %connection_id_hex,
                             template_id = %template_id,
                             "Block sent to submission handler"
@@ -1513,23 +1512,30 @@ where
                     );
                     //Storing original target in `JobDetails`
                     let network_target = template.bits;
+                    debug!(
+                        "Original global target - {}",
+                        Target::from_compact(network_target).to_hex()
+                    );
                     //Getting the current weak_target according to difficulty adjustement
                     //and committing it inside `template` so that notified job is constructed accordingly and sent to downstream
-                    if self
-                        .difficulty_adjuster
-                        .get_current_difficulty()
-                        .to_target()
-                        == bitcoin::Target::ZERO
-                    {
+                    if self.difficulty_adjuster.get_current_difficulty() == bitcoin::Target::ZERO {
                         let new_weak_target = self
                             .difficulty_adjuster
                             .get_new_difficulty(Some(network_target.clone()));
-                        let adjusted_target_hex = new_weak_target.to_target().to_hex();
-                        template.bits = CompactTarget::from_hex(&adjusted_target_hex).unwrap();
+                        let _adjusted_target_hex = new_weak_target.to_hex();
+                        template.bits = new_weak_target.to_compact_lossy();
+                        debug!(
+                            "Reduced target when setting from start target- {}",
+                            Target::from_compact(template.bits).to_hex()
+                        );
                     } else {
                         let new_weak_target = self.difficulty_adjuster.get_new_difficulty(None);
-                        let adjusted_target_hex = new_weak_target.to_target().to_hex();
-                        template.bits = CompactTarget::from_hex(&adjusted_target_hex).unwrap();
+                        let _adjusted_target_hex = new_weak_target.to_hex();
+                        template.bits = new_weak_target.to_compact_lossy();
+                        debug!(
+                            "Reduced target when start target is already set - {}",
+                            Target::from_compact(template.bits).to_string()
+                        );
                     }
                     let connection_snapshot = downstream_connection_map
                         .read()
@@ -1688,27 +1694,32 @@ where
 
                     let mut latest_template = latest_template_arc.lock().await.to_owned();
                     let network_target = latest_template.bits;
-                    if self
-                        .difficulty_adjuster
-                        .get_current_difficulty()
-                        .to_target()
-                        == bitcoin::Target::ZERO
-                    {
+                    debug!(
+                        "Original global target - {}",
+                        Target::from_compact(network_target).to_string()
+                    );
+                    if self.difficulty_adjuster.get_current_difficulty() == bitcoin::Target::ZERO {
                         let new_weak_target = self
                             .difficulty_adjuster
                             .get_new_difficulty(Some(network_target.clone()));
-                        let adjusted_target_hex = new_weak_target.to_target().to_hex();
-                        latest_template.bits =
-                            CompactTarget::from_hex(&adjusted_target_hex).unwrap();
+                        let _adjusted_target_hex = new_weak_target.to_hex();
+                        latest_template.bits = new_weak_target.to_compact_lossy();
+                        debug!(
+                            "Reduced target - {}",
+                            Target::from_compact(latest_template.bits).to_string()
+                        );
                     } else {
                         let new_weak_target = self.difficulty_adjuster.get_new_difficulty(None);
-                        let adjusted_target_hex = new_weak_target.to_target().to_hex();
-                        latest_template.bits =
-                            CompactTarget::from_hex(&adjusted_target_hex).unwrap();
+                        let _adjusted_target_hex = new_weak_target.to_hex();
+                        latest_template.bits = new_weak_target.to_compact_lossy();
+                        debug!(
+                            "Reduced target - {}",
+                            Target::from_compact(latest_template.bits).to_string()
+                        );
                     }
                     let latest_template_merkle_branch =
                         latest_template_merkle_branch_arc.lock().await.to_owned();
-                    info!(
+                    debug!(
                         connection_id = %connection_id_hex,
                         template_id = %current_template_id,
                         "Sending existing latest template to new miner"
