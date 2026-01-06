@@ -4,7 +4,6 @@ use crate::{SwarmHandler, TemplateId, EXTRANONCE1_SIZE, EXTRANONCE2_SIZE, EXTRAN
 use bitcoin::block::HeaderExt;
 use bitcoin::consensus::serialize;
 use bitcoin::io::Cursor;
-use bitcoin::pow::CompactTargetExt;
 use bitcoin::{absolute::Decodable, Transaction};
 use bitcoin::{BlockHash, BlockHeader, BlockTime, TxMerkleNode, Txid, Witness};
 use futures::{lock::Mutex, FutureExt};
@@ -28,8 +27,6 @@ use tokio_stream::StreamExt;
 use tokio_util::codec::{FramedRead, LinesCodec};
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
-
-pub const DISCONNECT_SIGNAL: &str = "!!!_INTERNAL_DISCONNECT_SIGNAL_!!!";
 
 #[derive(Debug, Clone)]
 pub struct BlockSubmissionRequest {
@@ -214,6 +211,12 @@ pub struct DownstreamClient {
     version_rolling_min_bit: Option<u32>,
     /// The expected size of the extranonce2 field provided by the miner.
     extranonce2_len: usize,
+    /// Unique 2-byte prefix for this miner's extranonce partitioning which is currently supported by audit mode only,
+    /// although this will be appended into the extranonce1 field while sending to the miner, but we are appending
+    /// this to extranonce2 while submitting to the upstream pool.
+    pub extranonce2_prefix: Option<Vec<u8>>,
+    /// The size of extranonce2 that the miner rolls, after prefix is subtracted
+    pub miner_extranonce2_size: usize,
     /// Optional per-connection monitoring target (stricter than share/weak target).
     /// Used to sample miner health at a higher rate than the share target.
     pub monitor_target: Option<bitcoin::Target>,
@@ -288,41 +291,7 @@ impl DownstreamClient {
                 )
                 .await
             }
-            "mining.suggest_difficulty" => {
-                // In audit mode, ignore Braidpool's suggested difficulty and use the upstream pool's difficulty instead
-                if self.is_proxy_mode {
-                    let upstream_diff = {
-                        let mapping = connection_mapping.lock().await;
-                        mapping.upstream_difficulty
-                    };
-                    if let Some(diff) = upstream_diff {
-                        info!(
-                            connection_id = %connection_id_hex,
-                            suggested = ?req_params,
-                            upstream_diff = %diff,
-                            "Audit mode, suggest_difficulty is taking place using upstream difficulty"
-                        );
-                        // Return the upstream difficulty
-                        Ok(StratumResponses::SuggestDifficultyResponse {
-                            suggest_difficulty_resp: SuggestDifficultyResponse {
-                                method: "mining.set_difficulty".to_string(),
-                                params: vec![diff as u64],
-                            },
-                        })
-                    } else {
-                        error!(
-                            connection_id = %connection_id_hex,
-                            "Audit mode: no upstream difficulty available, rejecting suggest_difficulty"
-                        );
-                        Err(StratumErrors::UpstreamNotReady {
-                            error: "Upstream pool difficulty not available yet".to_string(),
-                        })
-                    }
-                } else {
-                    // For normal Braidpool interactions
-                    self.suggest_difficulty(&req_params).await
-                }
-            }
+            "mining.suggest_difficulty" => self.suggest_difficulty(&req_params).await,
             method => Err(StratumErrors::InvalidMethod {
                 method: method.to_string(),
             }),
@@ -533,6 +502,17 @@ impl DownstreamClient {
             }
         };
 
+        // Parse the job_id string from the miner into a numeric u64 job ID,
+        // If parsing fails, return a descriptive error for invalid job_id.
+        let numeric_job_id = match job_id_str.parse::<u64>() {
+            Ok(id) => id,
+            Err(e) => {
+                return Err(StratumErrors::JobIdCouldNotBeParsed {
+                    method: "mining.submit".to_string(),
+                    error: format!("Invalid job_id: {}", e),
+                });
+            }
+        };
         let extranonce2: &str = match param_array.get(2).and_then(|v| v.as_str()) {
             Some(extra) => extra,
             None => {
@@ -542,7 +522,7 @@ impl DownstreamClient {
                 })
             }
         };
-        let expected_hex_len = self.extranonce2_len * 2;
+        let expected_hex_len = self.miner_extranonce2_size * 2;
         if extranonce2.len() != expected_hex_len {
             error!(
                 "Miner {} submitted extranonce2 '{}' with wrong length: expected {} hex chars, got {}",
@@ -560,6 +540,14 @@ impl DownstreamClient {
                 ),
             });
         }
+
+        debug!(
+            worker = %worker_name,
+            miner_extranonce2 = %extranonce2,
+            extranonce1 = %hex::encode(&self.extranonce1),
+            prefix_in_extranonce1 = ?self.extranonce2_prefix.as_ref().map(|p| hex::encode(p)),
+            "Extranonce2 prefix handled via extranonce1; using miner-submitted extranonce2 unchanged"
+        );
 
         if hex::decode(extranonce2).is_err() {
             error!(
@@ -675,10 +663,30 @@ impl DownstreamClient {
             // Forward to upstream without validation
             // TODO: Implement validation logic.
             if let Some(ref upstream_tx) = upstream_share_tx {
+                // For upstream, we need to reconstruct the full 8-byte extranonce2
+                let full_extranonce2_for_upstream =
+                    if let Some(ref prefix) = self.extranonce2_prefix {
+                        // Prepend the prefix (2 bytes) to create the full 8 bytes extranonce2
+                        let prefix_hex = hex::encode(prefix);
+                        format!("{}{}", prefix_hex, extranonce2)
+                    } else {
+                        extranonce2.to_string()
+                    };
+                debug!(
+                    worker = %worker_name,
+                    job_id = %job_id_str,
+                    miner_extranonce2 = %extranonce2,
+                    miner_extranonce2_len_bytes = %(extranonce2.len() / 2),
+                    prefix = ?self.extranonce2_prefix.as_ref().map(|p| hex::encode(p)),
+                    full_extranonce2_for_upstream = %full_extranonce2_for_upstream,
+                    full_extranonce2_len_bytes = %(full_extranonce2_for_upstream.len() / 2),
+                    "Reconstructing full extranonce2 for upstream"
+                );
+
                 let upstream_share = crate::upstream_pool::UpstreamShare {
                     worker_name: worker_name.to_string(),
                     job_id: job_id_str.to_string(),
-                    extranonce2: extranonce2.to_string(),
+                    extranonce2: full_extranonce2_for_upstream,
                     ntime: ntime.to_string(),
                     nonce: nonce.to_string(),
                     version_bits: param_array
@@ -1064,9 +1072,11 @@ impl DownstreamClient {
         connection_mapping: Arc<RwLock<ConnectionMapping>>,
         peer_addr: String,
     ) -> Result<StratumResponses, StratumErrors> {
-        info!(
-            "Authorization is taking place -- {:?}",
-            authorize_request_params
+        let connection_id_hex = format!("{:x}", self.connection_id());
+        debug!(
+            connection_id = %connection_id_hex,
+            params = ?authorize_request_params,
+            "Authorization request"
         );
         let param_array = match authorize_request_params.as_array() {
             Some(param_array) => param_array,
@@ -1097,9 +1107,17 @@ impl DownstreamClient {
                 return Err(error);
             }
         };
+        // Validate password parameter exists (but don't log it)
+        if param_array.get(1).is_none() {
+            return Err(StratumErrors::ParamNotFound {
+                param: "password".to_string(),
+                method: "mining.authorize".to_string(),
+            });
+        }
+
         self.authorized = true;
         info!(
-            connection_id = %format!("{:x}", self.connection_id()),
+            connection_id = %connection_id_hex,
             username = %username,
             "Miner authorized"
         );
@@ -1130,78 +1148,10 @@ impl DownstreamClient {
     ) -> Result<StratumResponses, StratumErrors> {
         let connection_id_hex = format!("{:x}", self.connection_id());
         info!(
-            "{:?} configuration handling is taking place",
-            config_req_params
+            connection_id = %connection_id_hex,
+            params = ?config_req_params,
+            "Configuration handling is taking place"
         );
-        match &upstream_configure_tx {
-            Some(_) => debug!("Audit mode: upstream_configure_tx available"),
-            None => warn!("No upstream_configure_tx, using local handling"),
-        }
-        if let Some(ref upstream_tx) = upstream_configure_tx {
-            debug!("Forwarding mining.configure to upstream pool");
-            let (response_tx, mut response_rx) = mpsc::channel(1);
-
-            // Send configure request to upstream handler
-            if let Err(e) = upstream_tx
-                .send((config_req_params.clone(), client_request_id, response_tx))
-                .await
-            {
-                error!("Failed to forward configure to upstream: {}", e);
-                return Err(StratumErrors::UpstreamShareForwardFailed {
-                    error: e.to_string(),
-                });
-            }
-
-            // Wait for upstream response with some timeout
-            match tokio::time::timeout(std::time::Duration::from_secs(10), response_rx.recv()).await
-            {
-                Ok(Some(response)) => {
-                    info!("Received upstream configure response: {:?}", response);
-
-                    // Store upstream's version rolling mask if present
-                    if let Some(result) = response.get("result").and_then(|r| r.as_object()) {
-                        if let Some(mask) =
-                            result.get("version-rolling.mask").and_then(|m| m.as_str())
-                        {
-                            self.version_rolling_mask = Some(mask.to_string());
-                            info!("Using upstream version_rolling_mask: {}", mask);
-                        }
-                        if let Some(min_bits) = result.get("version-rolling.min-bit-count") {
-                            if let Some(count) = min_bits.as_u64() {
-                                self.version_rolling_min_bit = Some(count as u32);
-                            }
-                        }
-                    }
-
-                    self.channel_configured = true;
-
-                    // Forward upstream response to miner
-                    return Ok(StratumResponses::StandardResponse {
-                        std_response: StandardResponse {
-                            id: Some(client_request_id),
-                            result: response.get("result").cloned(),
-                            error: response
-                                .get("error")
-                                .and_then(|e| e.as_str())
-                                .map(String::from),
-                        },
-                    });
-                }
-                Ok(None) => {
-                    error!("Upstream configure channel closed");
-                    return Err(StratumErrors::UpstreamShareForwardFailed {
-                        error: "Upstream channel closed".to_string(),
-                    });
-                }
-                Err(_) => {
-                    error!("Upstream configure request timed out");
-                    return Err(StratumErrors::UpstreamShareForwardFailed {
-                        error: "Timeout waiting for upstream response".to_string(),
-                    });
-                }
-            }
-        }
-
         let params = match config_req_params.as_array() {
             Some(param_array) => param_array,
             None => {
@@ -1281,7 +1231,7 @@ impl DownstreamClient {
             };
             //Intersecting with the bits provided by the pool and miner's suggested one
             let final_rollable_version_bits = u32::from_be_bytes(mask_bytes) & 0x1FFFE000;
-            // `0x1FFFE000` is a reasonable default as it allows all 16 version bits to be used
+            // `0x1FFFE000` is a reasonable default as it allows all 16 version bits to be used in `hex`
             self.version_rolling_mask = Some(format!("{:08x}", final_rollable_version_bits));
             info!(
                 "Set version_rolling_mask: {:08x}",
@@ -1289,27 +1239,24 @@ impl DownstreamClient {
             );
         }
         if let Some(min_bit_count_value) = version_rolling_min_bit_count {
-            if let Some(count) = min_bit_count_value.as_u64() {
-                self.version_rolling_min_bit = Some(count as u32);
-                debug!("Parsed min-bit-count as number: {}", count);
-            } else if let Some(count_str) = min_bit_count_value.as_str() {
-                let mut mask_bytes: [u8; 4] = [0u8; 4];
-                match hex::decode_to_slice(count_str, &mut mask_bytes) {
-                    Ok(_) => {
-                        self.version_rolling_min_bit = Some(u32::from_be_bytes(mask_bytes));
-                        debug!("Parsed min-bit-count as hex string: {}", count_str);
-                    }
-                    Err(error) => {
-                        return Err(StratumErrors::VersionrollingMinBitCountHexParseError {
-                            error: error.to_string(),
-                        });
-                    }
+            let mut mask_bytes: [u8; 4] = [0u8; 4];
+            let version_rolling_min_bit_count_str = match min_bit_count_value.as_str() {
+                Some(s) => s,
+                None => {
+                    return Err(StratumErrors::VersionrollingMinBitCountHexParseError {
+                        error: "version-rolling.min-bit-count is not a string".to_string(),
+                    });
                 }
-            } else {
-                return Err(StratumErrors::VersionrollingMinBitCountHexParseError {
-                    error: "min-bit-count must be a number or hex string".to_string(),
-                });
-            }
+            };
+            match hex::decode_to_slice(version_rolling_min_bit_count_str, &mut mask_bytes) {
+                Ok(_) => {}
+                Err(error) => {
+                    return Err(StratumErrors::VersionrollingMinBitCountHexParseError {
+                        error: error.to_string(),
+                    });
+                }
+            };
+            self.version_rolling_min_bit = Some(u32::from_be_bytes(mask_bytes));
         }
         self.channel_configured = true;
         Ok(StratumResponses::StandardResponse {
@@ -1356,28 +1303,45 @@ impl DownstreamClient {
         subscribe_req_params: &Value,
         client_request_id: u64,
     ) -> Result<StratumResponses, StratumErrors> {
-        info!("Subscribing is taking place -- {:?}", subscribe_req_params);
-
+        info!(
+            connection_id = %format!("{:x}", self.connection_id()),
+            params = ?subscribe_req_params,
+            "Miner subscribing"
+        );
+        //TODO: dummy testing subscription IDs must be unique though can be changed accordingly these are just dummy values
         let subscriptions: Vec<(String, String)> = vec![
             (String::from("mining.set_difficulty"), String::from("34")),
             (String::from("mining.notify"), String::from("12")),
         ];
         self.subscribed = true;
         let extranonce1_hex_str = hex::encode(&self.extranonce1);
+
+        // In audit mode with prefix, tell miner their rollable size
+        let extranonce2_size_for_miner = if self.extranonce2_prefix.is_some() {
+            self.miner_extranonce2_size
+        } else {
+            self.extranonce2_len
+        };
         info!(
-            "Subscribe response: mode={}, extranonce1={}, extranonce2_size={}",
+            "Subscribe response: mode={}, extranonce1={}, extranonce2_size={}, prefix={:?}",
             if self.is_proxy_mode {
                 "AUDIT"
             } else {
                 "BRAIDPOOL"
             },
             extranonce1_hex_str,
-            self.extranonce2_len
+            extranonce2_size_for_miner,
+            self.extranonce2_prefix.as_ref().map(|p| hex::encode(p))
         );
+
         Ok(StratumResponses::StandardResponse {
             std_response: StandardResponse::new_ok(
                 Some(client_request_id),
-                json!([subscriptions, extranonce1_hex_str, self.extranonce2_len]),
+                json!([
+                    subscriptions,
+                    extranonce1_hex_str,
+                    extranonce2_size_for_miner
+                ]),
             ),
         })
     }
@@ -1406,6 +1370,8 @@ impl Default for DownstreamClient {
             version_rolling_mask: None,
             version_rolling_min_bit: None,
             extranonce2_len: EXTRANONCE2_SIZE,
+            extranonce2_prefix: None,
+            miner_extranonce2_size: EXTRANONCE2_SIZE,
             monitor_target: None,
             block_submission_tx: None,
             is_proxy_mode: false,
@@ -1514,26 +1480,6 @@ impl MiningJobMap {
             string_job_id_map: HashMap::new(),
         }
     }
-    pub fn clear_upstream_jobs(&mut self) {
-        if self.string_job_id_map.is_empty() {
-            return;
-        }
-        info!(
-            count = %self.string_job_id_map.len(),
-            "Clearing stale upstream jobs from map due to disconnect"
-        );
-        let stale_template_ids: Vec<TemplateId> = self
-            .string_job_id_map
-            .values()
-            .map(|(tid, _)| tid.clone())
-            .collect();
-
-        self.string_job_id_map.clear();
-        for tid in stale_template_ids {
-            self.mining_jobs.remove(&tid);
-        }
-    }
-
     ///Inserting a suitable mining job which has been passed to the downstream being constructed from a suitable block template .
     pub async fn insert_mining_job(
         &mut self,
@@ -1787,133 +1733,6 @@ impl Notifier {
             parsed_bits: None,
         })
     }
-    async fn send_upstream_job_notification_to_miner(
-        peer_addr: &str,
-        connection_entry: &ConnectionInfo,
-        job_notification: &crate::stratum::JobNotification,
-        mining_job_map: &Arc<Mutex<MiningJobMap>>,
-    ) -> Result<(), StratumErrors> {
-        let mut curr_peer_mining_job_map = mining_job_map.lock().await;
-        let compact_bits = match job_notification.parsed_bits {
-            Some(bits) => bits,
-            None => {
-                error!(
-                    peer = %peer_addr,
-                    job_id = %job_notification.job_id,
-                    "Upstream job missing parsed_bits, attempting hex parse"
-                );
-
-                // Try fallback parse, but this indicates upstream handler issue
-                bitcoin::CompactTarget::from_hex(&job_notification.nbits).map_err(|e| {
-                    StratumErrors::InvalidMethodParams {
-                        method: format!("Invalid nbits in upstream job: {}", e),
-                    }
-                })?
-            }
-        };
-
-        // Reconstruct template from job notification
-        let mut template = crate::stratum::BlockTemplate::default();
-        template.bits = compact_bits;
-
-        // Parse version
-        let version_u32 = u32::from_str_radix(&job_notification.version, 16).map_err(|e| {
-            StratumErrors::InvalidMethodParams {
-                method: format!("Invalid version hex: {}", e),
-            }
-        })?;
-        template.version = bitcoin::block::Version::from_consensus(version_u32 as i32);
-
-        // Parse and reverse prevhash
-        if let Ok(prevhash_bytes) = hex::decode(&job_notification.prevhash) {
-            if prevhash_bytes.len() != 32 {
-                return Err(StratumErrors::InvalidMethodParams {
-                    method: format!("Invalid prevhash length: {}", prevhash_bytes.len()),
-                });
-            }
-            let mut reversed = [0u8; 32];
-            for i in 0..32 {
-                reversed[i] = prevhash_bytes[31 - i];
-            }
-            template.previousblockhash = bitcoin::BlockHash::from_byte_array(reversed);
-        } else {
-            return Err(StratumErrors::InvalidMethodParams {
-                method: "Failed to decode prevhash".to_string(),
-            });
-        }
-
-        let unix_timestamp = u32::from_str_radix(&job_notification.ntime, 16).unwrap_or_else(|e| {
-            warn!(
-                peer = %peer_addr,
-                ntime = %job_notification.ntime,
-                error = %e,
-                "Failed to parse ntime from upstream job, using current time as fallback"
-            );
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_secs() as u32)
-                .unwrap_or(0)
-        });
-
-        template.curtime = bitcoin::BlockTime::from_u32(unix_timestamp);
-        let template_id = TemplateId::from_upstream_string(&job_notification.job_id);
-        let job_details = crate::stratum::JobDetails {
-            blocktemplate: template,
-            coinbase1: job_notification.coinbase1.clone(),
-            coinbase2: job_notification.coinbase2.clone(),
-            coinbase_merkle_path: job_notification.merkle_branches.clone(),
-            coinbase_witness_commitment: job_notification.coinbase_witness_commitment.clone(),
-            job_sent_time: unix_timestamp,
-            is_upstream_job: true,
-        };
-
-        let upstream_job_id = curr_peer_mining_job_map
-            .insert_upstream_job(
-                job_notification.job_id.clone(),
-                template_id.clone(),
-                job_details,
-            )
-            .await;
-
-        let job_notification_response = serde_json::json!({
-            "method": "mining.notify",
-            "params": [
-                upstream_job_id,
-                job_notification.prevhash,
-                job_notification.coinbase1,
-                job_notification.coinbase2,
-                job_notification.merkle_branches,
-                job_notification.version,
-                job_notification.nbits,
-                job_notification.ntime,
-                job_notification.clean_jobs
-            ]
-        });
-
-        let json_str = serde_json::to_string(&job_notification_response).map_err(|e| {
-            StratumErrors::InvalidMethodParams {
-                method: format!("Failed to serialize job notification: {}", e),
-            }
-        })?;
-
-        connection_entry
-            .sender
-            .send(json_str.clone())
-            .await
-            .map_err(|e| StratumErrors::NotifyMessageNotSent {
-                error: format!("Failed to send upstream job to {}: {}", peer_addr, e),
-                msg: json_str,
-                msg_type: "UpstreamJob".to_string(),
-            })?;
-
-        info!(
-            "Sent upstream job {} to {} (bits: {})",
-            upstream_job_id, peer_addr, job_notification.nbits
-        );
-
-        Ok(())
-    }
-
     /// Runs the Stratum notifier task that handles broadcasting mining jobs to downstream miners.
     ///
     /// This asynchronous function continuously listens for notification commands and performs
@@ -1937,7 +1756,6 @@ impl Notifier {
         latest_template_arc: &mut Arc<Mutex<BlockTemplate>>,
         latest_template_merkle_branch_arc: &mut Arc<Mutex<Vec<Vec<u8>>>>,
         latest_template_id: Arc<Mutex<TemplateId>>,
-        upstream_cache: Option<Arc<tokio::sync::RwLock<crate::upstream_pool::UpstreamCache>>>,
     ) -> Result<(), StratumErrors> {
         debug!("Stratum notifier task started");
         while let Some(notification_command) = self.notification_receiver.recv().await {
@@ -2439,6 +2257,21 @@ impl Notifier {
         Ok(())
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct PrefixStats {
+    pub total_assigned: usize,
+    pub available_for_reuse: usize,
+    pub next_new_prefix: u16,
+    pub total_capacity: u16,
+}
+
+impl PrefixStats {
+    pub fn utilization_percentage(&self) -> f64 {
+        (self.total_assigned as f64 / self.total_capacity as f64) * 100.0
+    }
+}
+
 ///Connection information associated with each downstream peer associated along with the mapped `Sender_channel` for sending downstream responses and communication.
 #[derive(Debug, Clone)]
 pub struct ConnectionInfo {
@@ -2454,6 +2287,12 @@ pub struct ConnectionMapping {
     pub upstream_difficulty: Option<f64>,
     worker_to_peer: HashMap<String, String>,
     pub upstream_connected: bool,
+    /// Counter for assigning unique extranonce2 prefixes in audit mode, wraps around at 65535 (2 bytes)
+    next_extranonce2_prefix: u16,
+    /// Track assigned prefixes to detect reuse, peer_addr -> prefix
+    assigned_prefixes: HashMap<String, u16>,
+    /// Pool of released prefixes available for reuse
+    available_prefixes: std::collections::VecDeque<u16>,
 }
 
 impl ConnectionMapping {
@@ -2465,6 +2304,106 @@ impl ConnectionMapping {
             upstream_difficulty: None,
             worker_to_peer: HashMap::new(),
             upstream_connected: false,
+            next_extranonce2_prefix: 1, // Start at 1, by design
+            assigned_prefixes: HashMap::new(),
+            available_prefixes: std::collections::VecDeque::new(),
+        }
+    }
+
+    /// Allocate a unique 2-byte prefix for a new miner in audit mode
+    pub fn allocate_extranonce2_prefix(&mut self) -> (Vec<u8>, usize) {
+        // This will try to reuse a released prefix first
+        let prefix = if let Some(reused_prefix) = self.available_prefixes.pop_front() {
+            debug!(
+                prefix = %hex::encode(reused_prefix.to_be_bytes()),
+                available_count = %self.available_prefixes.len(),
+                "Reusing released prefix"
+            );
+            reused_prefix
+        } else {
+            // Otherwise allocate a new prefix
+            let new_prefix: u16 = self.next_extranonce2_prefix;
+            self.next_extranonce2_prefix = self.next_extranonce2_prefix.wrapping_add(1);
+
+            if self.next_extranonce2_prefix == 0 {
+                warn!("Extranonce2 prefix wrapped around to 0, resetting to 1");
+                self.next_extranonce2_prefix = 1;
+            }
+
+            if self.next_extranonce2_prefix > 60000 && self.available_prefixes.is_empty() {
+                warn!(
+                    used_prefixes = %self.next_extranonce2_prefix,
+                    total_capacity = 65535,
+                    "Approaching prefix exhaustion!"
+                );
+            }
+
+            new_prefix
+        };
+
+        let prefix_bytes = prefix.to_be_bytes().to_vec();
+        let miner_size = self
+            .upstream_extranonce2_size
+            .map(|size| size.saturating_sub(2))
+            .unwrap_or(6);
+
+        debug!(
+            prefix = %hex::encode(&prefix_bytes),
+            miner_extranonce2_size = %miner_size,
+            allocation_type = if self.available_prefixes.len() > 0 { "reused" } else { "new" },
+            available_count = %self.available_prefixes.len(),
+            "Allocated extranonce2 prefix"
+        );
+
+        (prefix_bytes, miner_size)
+    }
+
+    /// Track which prefix was assigned to which peer
+    pub fn register_prefix(&mut self, peer_addr: String, prefix: u16) {
+        if let Some(old_prefix) = self.assigned_prefixes.insert(peer_addr.clone(), prefix) {
+            warn!(
+                peer = %peer_addr,
+                old_prefix = %hex::encode(old_prefix.to_be_bytes()),
+                new_prefix = %hex::encode(prefix.to_be_bytes()),
+                "Peer reconnected and received new prefix"
+            );
+        }
+        debug!(
+            peer = %peer_addr,
+            prefix = %hex::encode(prefix.to_be_bytes()),
+            total_assigned = %self.assigned_prefixes.len(),
+            "Registered prefix assignment"
+        );
+    }
+
+    /// Release a prefix back to the available pool when a miner disconnects
+    fn release_prefix(&mut self, peer_addr: &str) {
+        if let Some(prefix) = self.assigned_prefixes.remove(peer_addr) {
+            if prefix < 65000 {
+                self.available_prefixes.push_back(prefix);
+                info!(
+                    peer = %peer_addr,
+                    prefix = %hex::encode(prefix.to_be_bytes()),
+                    available_count = %self.available_prefixes.len(),
+                    "Released prefix for reuse"
+                );
+            } else {
+                warn!(
+                    peer = %peer_addr,
+                    prefix = %hex::encode(prefix.to_be_bytes()),
+                    "Prefix too high, not reusing (near wrap-around range)"
+                );
+            }
+        }
+    }
+
+    // Returns statistics about prefix usage
+    pub fn get_prefix_stats(&self) -> PrefixStats {
+        PrefixStats {
+            total_assigned: self.assigned_prefixes.len(),
+            available_for_reuse: self.available_prefixes.len(),
+            next_new_prefix: self.next_extranonce2_prefix,
+            total_capacity: 65535,
         }
     }
 
@@ -2478,6 +2417,9 @@ impl ConnectionMapping {
     }
 
     pub fn remove_peer(&mut self, peer_addr: &str) {
+        // Release the prefix before removing peer
+        self.release_prefix(peer_addr);
+
         // Remove from channel mapping
         self.downstream_channel_mapping.remove(peer_addr);
 
@@ -2485,7 +2427,12 @@ impl ConnectionMapping {
         self.worker_to_peer
             .retain(|_worker_name, mapped_peer| mapped_peer != peer_addr);
 
-        debug!("Removed peer {} and associated workers", peer_addr);
+        debug!(
+            peer = %peer_addr,
+            remaining_peers = %self.downstream_channel_mapping.len(),
+            available_prefixes = %self.available_prefixes.len(),
+            "Removed peer and associated workers"
+        );
     }
 
     pub async fn disconnect_all_with_message(&mut self, reason: &str) {
@@ -2493,6 +2440,9 @@ impl ConnectionMapping {
             self.downstream_channel_mapping.drain().collect();
 
         for (peer_addr, connection_info) in peers {
+            // Release prefix before disconnecting
+            self.release_prefix(&peer_addr);
+
             // Send stratum error before closing
             let error_msg = serde_json::json!({
                 "id": null,
@@ -2515,11 +2465,18 @@ impl ConnectionMapping {
             );
         }
 
+        debug!(
+            available_prefixes = %self.available_prefixes.len(),
+            "All miners disconnected, prefixes released"
+        );
         // Clear worker mappings
         self.worker_to_peer.clear();
     }
 
     pub fn disconnect_peer(&mut self, peer_addr: &str, reason: &str) {
+        // Release prefix
+        self.release_prefix(peer_addr);
+
         if let Some(connection_info) = self.downstream_channel_mapping.remove(peer_addr) {
             info!(
                 peer = %peer_addr,
@@ -2674,23 +2631,52 @@ impl Server {
                          let (reader, writer) = stream.into_split();
 
                             // This will determine extranonce before creating client
-                            let (assigned_extranonce1, assigned_extranonce2_size, is_proxy) = {
-                                let mapping = self.downstream_connection_mapping.read().await;
+                            let (assigned_extranonce1, assigned_extranonce2_size, extranonce2_prefix, is_proxy) = {
+                                let mut mapping = self.downstream_connection_mapping.write().await;
 
+                                // In audit mode use upstream extranonce1 and allocate unique prefix
                                 if self.stratum_config.audit_mode {
+                                    let upstream_ext1_clone = mapping.upstream_extranonce1.clone();
+                                    let upstream_ext2_size = mapping.upstream_extranonce2_size;
+
                                     // This must have upstream connection
-                                    if let (Some(ref upstream_ext1), Some(upstream_ext2_size)) =
-                                        (&mapping.upstream_extranonce1, mapping.upstream_extranonce2_size)
+                                    if let (Some(upstream_ext1), Some(_ext2_size)) =
+                                        (upstream_ext1_clone, upstream_ext2_size)
                                     {
                                         info!("New audit mode connection using upstream extranonce: {}", upstream_ext1);
 
-                                        match hex::decode(upstream_ext1) {
-                                            Ok(bytes) => (bytes, upstream_ext2_size, true),
+                                        // Allocate unique 2-byte prefix for this miner
+                                        let (prefix_bytes, miner_ext2_size) = mapping.allocate_extranonce2_prefix();
+                                        let prefix_u16 = u16::from_be_bytes([prefix_bytes[0], prefix_bytes[1]]);
+                                        mapping.register_prefix(peer_addr.to_string(), prefix_u16);
+
+                                        let upstream_ext1_bytes = match hex::decode(&upstream_ext1) {
+                                            Ok(bytes) => bytes,
                                             Err(e) => {
                                                 error!("Failed to decode upstream extranonce: {}", e);
-                                                continue; // Skip this connection
+                                                continue;
                                             }
-                                        }
+                                        };
+
+                                        let mut extended_extranonce1 = upstream_ext1_bytes;
+                                        extended_extranonce1.extend_from_slice(&prefix_bytes);
+
+                                        let stats = mapping.get_prefix_stats();
+                                        debug!(
+                                            audit_mode = true,
+                                            peer = %peer_addr,
+                                            upstream_extranonce1 = %upstream_ext1,
+                                            assigned_prefix = %hex::encode(&prefix_bytes),
+                                            full_extranonce1 = %hex::encode(&extended_extranonce1),
+                                            miner_extranonce2_size_bytes = %miner_ext2_size,
+                                            assigned_prefixes_count = %stats.total_assigned,
+                                            available_prefixes_count = %stats.available_for_reuse,
+                                            prefix_utilization_percent = %format!("{:.2}%", stats.utilization_percentage()),
+                                            "New audit-mode miner: extranonce1 extended with unique prefix; assigned {}-byte rollable extranonce2",
+                                            miner_ext2_size
+                                        );
+
+                                        (extended_extranonce1, miner_ext2_size, Some(prefix_bytes), true)
                                     } else {
                                         // That means audit mode enabled but upstream not ready
                                         error!("Miner {} tried to connect in audit mode, but upstream pool is not ready yet", peer_addr);
@@ -2702,7 +2688,7 @@ impl Server {
                                     let mut bytes = [0u8; 4];
                                     rand::thread_rng().fill_bytes(&mut bytes);
                                     info!("New Braidpool connection using local extranonce: {}", hex::encode(&bytes));
-                                    (bytes.to_vec(), EXTRANONCE2_SIZE, false)
+                                    (bytes.to_vec(), EXTRANONCE2_SIZE, None, false)
                                 }
                             };
                             // Create client with correct state
@@ -2717,6 +2703,8 @@ impl Server {
                                 version_rolling_mask: None,
                                 version_rolling_min_bit: None,
                                 extranonce2_len: assigned_extranonce2_size,
+                                extranonce2_prefix: extranonce2_prefix,
+                                miner_extranonce2_size: assigned_extranonce2_size,
                                 monitor_target: None,
                                 block_submission_tx: self.block_submission_tx.clone(),
                                 is_proxy_mode: is_proxy,
@@ -2839,28 +2827,22 @@ impl Server {
 
         loop {
             tokio::select! {
-                msg_option = downstream_receiver.recv() => {
-                    match msg_option {
-                        Some(message) => {
-                            if message == DISCONNECT_SIGNAL {
-                                info!(peer = %peer_addr, "Received explicit disconnect signal");
-                                break;
-                            }
-                            debug!("Sending to {}: {}", peer_addr, message);
-                            if let Err(e) = tokio::time::timeout(
-                                std::time::Duration::from_secs(5),
-                                stream_writer.write_all(format!("{}\n", message).as_bytes())
-                            ).await {
-                                error!("Write error to {}: {}", peer_addr, e);
-                                break;
-                            }
-                        }
-                        None => {
-                            info!(peer = %peer_addr, "Channel closed by main, disconnecting miner");
-                            break;
-                        }
+                Some(message) = downstream_receiver.recv() => {
+                    debug!("Message to send to {}: {}", peer_addr, message);
+
+                    if let Err(e) = stream_writer.write_all(format!("{}\n", message).as_bytes()).await {
+                        error!("Failed to write to {}: {}", peer_addr, e);
+                        break;
                     }
+
+                    if let Err(e) = stream_writer.flush().await {
+                        error!("Failed to flush to {}: {}", peer_addr, e);
+                        break;
+                    }
+
+                    info!("Response has been written to the TcpStream successfully");
                 }
+
                 // Process incoming requests from miner
                 line = framed.next().fuse() => {
                     match line {
