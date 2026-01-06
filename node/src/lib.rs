@@ -1,8 +1,7 @@
 //These implementations must be defined under lib.rs as they are required for intergration tests
-use crate::db::db_handlers::prepare_bead_tuple_data;
+use crate::{db::db_handlers::prepare_bead_tuple_data, payout::PayoutCommands};
 use bitcoin::{
-    consensus::encode::deserialize, ecdsa::Signature, pow::CompactTargetExt, BlockHash,
-    CompactTarget, EcdsaSighashType, Txid,
+    consensus::encode::deserialize, ecdsa::Signature, BlockHash, EcdsaSighashType, Target, Txid,
 };
 use num::ToPrimitive;
 use std::{
@@ -192,7 +191,10 @@ pub async fn ipc_template_consumer(
                 bits: template_header.bits,
                 ..Default::default()
             };
-
+            debug!(
+                "Received nbits expanded hex - {}",
+                Target::from_compact(template.bits).to_hex()
+            );
             let mut latest_template = latest_template_arc.lock().await;
             latest_template.version = template.version;
             latest_template.rules = template.rules.clone();
@@ -257,11 +259,13 @@ pub struct SwarmHandler {
     pub command_sender: Sender<SwarmCommand>,
     braid_arc: Arc<tokio::sync::RwLock<Braid>>,
     db_command_sender: tokio::sync::mpsc::Sender<BraidpoolDBTypes>,
+    payout_cmd_sender: std::sync::mpsc::Sender<PayoutCommands>,
 }
 impl SwarmHandler {
     pub fn new(
         braid_arc: Arc<tokio::sync::RwLock<Braid>>,
         db_command_sender: tokio::sync::mpsc::Sender<BraidpoolDBTypes>,
+        payout_cmd_sender: std::sync::mpsc::Sender<PayoutCommands>,
     ) -> (Self, Receiver<SwarmCommand>) {
         let (swarm_stratum_bridge_tx, swarm_stratum_bridge_rx) =
             mpsc::channel::<SwarmCommand>(1024);
@@ -270,6 +274,7 @@ impl SwarmHandler {
                 command_sender: swarm_stratum_bridge_tx,
                 braid_arc: Arc::clone(&braid_arc),
                 db_command_sender,
+                payout_cmd_sender,
             },
             swarm_stratum_bridge_rx,
         )
@@ -283,6 +288,8 @@ impl SwarmHandler {
         downstream_payout_addr: &str,
         //TODO: Will be used as seperate entity after altering `uncommitted_metadata`
         extranonce_1_raw_value: u32,
+        weak_target: Target,
+        min_target: Target,
     ) -> Result<(), StratumErrors> {
         //Here itself in candidate_block_header will be committed with nbits*difficulty_adjustment_process
         let (candidate_block_header, candidate_block_transactions) = candidate_block.into_parts();
@@ -310,10 +317,6 @@ impl SwarmHandler {
         }
         debug!(tip_indices = ?tips_index, tip_hashes = ?parent_hash_set,
             "Tips before extending the Braid");
-        //TODO:This will be replaced via the allotted `WeakShareDifficulty` after Difficulty adjustment
-        let weak_target = candidate_block_header.bits;
-        //Mindiff
-        let min_target = CompactTarget::from_unprefixed_hex("1d00ffff").unwrap();
         //Job sent time before downstream starts mining
         let job_notification_time_val =
             bitcoin::blockdata::locktime::absolute::Time::from_consensus(job_sent_timestamp)
@@ -325,8 +328,8 @@ impl SwarmHandler {
             parent_bead_timestamps: time_hash_set,
             payout_address: downstream_payout_addr.to_string(),
             start_timestamp: job_notification_time_val,
-            min_target: min_target,
-            weak_target: weak_target,
+            min_target: min_target.to_compact_lossy(),
+            weak_target: weak_target.to_compact_lossy(),
             miner_ip: downstream_client_ip.to_string(),
         };
         //TODO:This will be either be generated via the `Pubkey` from config parameter from `~/.braidpool`
@@ -361,6 +364,22 @@ impl SwarmHandler {
             committed_metadata: candidate_block_bead_committed_metadata,
             block_header: candidate_block_header,
             uncommitted_metadata: candidate_block_bead_uncommitted_metadata,
+        };
+        match self
+            .payout_cmd_sender
+            .send(PayoutCommands::UpdatePayoutHeap {
+                bead_timestamp: weak_share.uncommitted_metadata.broadcast_timestamp.clone(),
+                work: Target::from_compact(weak_share.committed_metadata.weak_target)
+                    .to_work()
+                    .clone(),
+                payout_address: weak_share.committed_metadata.payout_address.clone(),
+            }) {
+            Ok(_) => {
+                info!("Sent payout heap update cmd to payout runner after mining self beads");
+            }
+            Err(_) => {
+                error!("An error occurred while sending update cmd to payout runner after mining self beads");
+            }
         };
         let status = braid_data.extend(&weak_share);
         match status {

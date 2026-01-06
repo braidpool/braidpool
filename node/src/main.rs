@@ -1,5 +1,5 @@
 use bitcoin::consensus::encode::deserialize;
-use bitcoin::Network;
+use bitcoin::{Network, Target};
 use clap::Parser;
 use futures::lock::Mutex;
 use futures::StreamExt;
@@ -16,7 +16,7 @@ use libp2p::{
 };
 use node::db::db_handlers::{fetch_beads_in_batch, prepare_bead_tuple_data};
 use node::ibd_manager::{IBD_TRIGGER_AFTER, MAX_IBD_INCOMING_THRESHOLD, MAX_IBD_RETRIES};
-use node::payout::{DifficultyAdjuster, Payout};
+use node::payout::{DifficultyAdjuster, Payout, PayoutCommands};
 use node::utils::BeadHash;
 use node::SwarmHandler;
 use node::{
@@ -104,13 +104,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
         ibd_manager.run_ibd_handler().await;
     });
     //False if not under ibd otherwise true at start will be in IBD by default
-    let ibd_or_not: AtomicBool = AtomicBool::new(false);
+    let ibd_or_not: AtomicBool = AtomicBool::new(true);
     let ibd_spinlock = Arc::new(ibd_or_not);
     // Initializing the braid object with read write lock
     //for supporting concurrent readers and single writer
     let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(Vec::from([]))));
     //Payout runner for handling payout generation and running payout mapping
-    let (mut payout_distributor, payout_cmd_sender) = Payout::new();
+    let (mut payout_distributor, payout_cmd_sender) = Payout::new(network.clone());
+    let payout_cmd_sender_ref = payout_cmd_sender.clone();
     std::thread::spawn(move || {
         debug!("Payout task being spawned in separate thread");
         payout_distributor.payout_runner();
@@ -172,7 +173,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (notification_tx, notification_rx) = mpsc::channel::<NotifyCmd>(1024);
     //Communication bridge between stratum and network swarm and swarm commands also, for communicating share population and propogating them further
     let (swarm_handler, mut swarm_command_receiver) =
-        SwarmHandler::new(Arc::clone(&braid), db_tx.clone());
+        SwarmHandler::new(Arc::clone(&braid), db_tx.clone(), payout_cmd_sender.clone());
     //Swarm command sender
     let swarm_command_sender = swarm_handler.command_sender.clone();
     let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
@@ -599,7 +600,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
                          let result_bead: Result<Bead, bitcoin::consensus::DeserializeError> = deserialize(&message.data);
                          match result_bead {
                              Ok(bead) => {
-                                info!(bead = ?bead, hash = %bead.block_header.block_hash(), "Received bead");
+                                 info!(bead = ?bead, hash = %bead.block_header.block_hash(), "Received bead");
+                                 match payout_cmd_sender_ref.send(PayoutCommands::UpdatePayoutHeap{
+                                  bead_timestamp :bead.uncommitted_metadata.broadcast_timestamp.clone(),
+                                  work:Target::from_compact(bead.committed_metadata.weak_target).to_work().clone(),
+                                  payout_address:bead.committed_metadata.payout_address.clone()
+
+                                 }){
+                                    Ok(_)=>{
+                                        info!("Sent payout heap update cmd to payout runner after receiving bead from floodsub");
+                                    },
+                                    Err(_)=>{
+                                        error!("An error occurred while sending update cmd to payout runner after receiving from floodsub");
+                                    }
+                                 };
                                 // Handle the received bead here
                                 let mut braid_data = braid.write().await;
                                 let status = {
@@ -1093,6 +1107,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                         }
                                     };
                                     for bead in beads.into_iter() {
+                                        match payout_cmd_sender_ref.send(PayoutCommands::UpdatePayoutHeap{
+                                            bead_timestamp :bead.uncommitted_metadata.broadcast_timestamp.clone(),
+                                            work:Target::from_compact(bead.committed_metadata.weak_target).to_work().clone(),
+                                            payout_address:bead.committed_metadata.payout_address.clone()
+
+                                           }){
+                                              Ok(_)=>{
+                                                  info!("Sent payout heap update cmd to payout runner after receiving bead during IBD");
+                                              },
+                                              Err(_)=>{
+                                                  error!("An error occurred while sending payout heap update cmd to payout runner after receiving bead during IBD");
+                                              }
+                                           };
                                         let mut braid_data = braid.write().await;
                                         let status = braid_data.extend(&bead);
                                         let curr_beadhash = bead.block_header.block_hash().to_string();

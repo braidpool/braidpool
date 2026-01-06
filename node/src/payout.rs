@@ -1,11 +1,11 @@
 use bitcoin::absolute::MedianTimePast;
-use bitcoin::{Amount, CompactTarget, Params, Target, Work};
+use bitcoin::{Amount, CompactTarget, Network, Params, Target, Work};
 use core::ops::Add;
 use std::collections::BinaryHeap;
 use std::collections::HashMap;
 use std::error::Error;
 //Containing functionality related to difficulty adjustment for braidpool currently static
-//TODO: currently it will only be placeholder for modifying target accordingly for weaker_difficulty
+//TODO: currently it will only be placeholder for modifying min_target accordingly for weaker_difficulty
 
 pub struct DifficultyAdjuster {
     /// Current client difficulty setting
@@ -66,6 +66,8 @@ pub struct Payout {
     payout_heap: BinaryHeap<(MedianTimePast, (Work, String))>,
     //Payout command receiver
     payout_cmd_receiver: std::sync::mpsc::Receiver<PayoutCommands>,
+    //Configured network wrt which payout is being generated
+    configured_network: Network,
 }
 #[derive(Debug, Clone)]
 pub struct OutputPair {
@@ -74,12 +76,13 @@ pub struct OutputPair {
 }
 
 impl Payout {
-    pub fn new() -> (Self, std::sync::mpsc::Sender<PayoutCommands>) {
+    pub fn new(configured_network: Network) -> (Self, std::sync::mpsc::Sender<PayoutCommands>) {
         let (payout_cmd_tx, payout_cmd_rx) = std::sync::mpsc::channel::<PayoutCommands>();
         (
             Payout {
                 payout_heap: BinaryHeap::new(),
                 payout_cmd_receiver: payout_cmd_rx,
+                configured_network,
             },
             payout_cmd_tx,
         )
@@ -104,11 +107,20 @@ impl Payout {
     ) -> Result<Vec<(String, f64)>, Box<dyn Error + Send + Sync>> {
         let mut result_values: Vec<(String, f64)> = Vec::new();
         let mut running_difficulty: f64 = 0.0;
+        let network_params = match self.configured_network {
+            Network::Bitcoin => Params::BITCOIN,
+            Network::CPUNet => Params::CPUNET,
+            Network::Regtest => Params::REGTEST,
+            Network::Signet => Params::SIGNET,
+            Network::Testnet(bitcoin::TestnetVersion::V4) => Params::TESTNET4,
+            Network::Testnet(bitcoin::TestnetVersion::V3) => Params::TESTNET3,
+            _ => Params::MAINNET,
+        };
         // Query shares in batches going back in time
         for (_bead_timestamp, (bead_work, miner_payout_address)) in self.payout_heap.iter() {
             let curr_bead_difficulty = bead_work
                 .to_target()
-                .difficulty_float(Params::MAINNET.clone());
+                .difficulty_float(network_params.clone());
             if running_difficulty < total_difficulty {
                 running_difficulty += curr_bead_difficulty;
                 result_values.push((miner_payout_address.clone(), curr_bead_difficulty));
@@ -127,17 +139,18 @@ impl Payout {
                     total_difficulty,
                     total_amount,
                 } => {
-                    let payout_distribution =
-                        match self.get_output_distribuition(total_difficulty, total_amount) {
-                            Ok(reward_distribution) => reward_distribution,
-                            Err(error) => {
-                                tracing::error!(
-                                    "An error occurred while generating payout distribution - {}",
+                    let payout_distribution = match self
+                        .get_output_distribuition(total_difficulty, total_amount)
+                    {
+                        Ok(reward_distribution) => reward_distribution,
+                        Err(error) => {
+                            tracing::error!(
+                                    "An error occurred while generating payout distribution - {}, skipping generation.",
                                     error
                                 );
-                                panic!();
-                            }
-                        };
+                            continue;
+                        }
+                    };
                     match payout_sender.send(payout_distribution) {
                         Ok(_) => {
                             tracing::info!(

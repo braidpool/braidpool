@@ -109,6 +109,9 @@ pub struct CoinbaseConfig {
     pub network: Network,
     pub pool_payout_address: String,
     pub pool_identifier: String,
+    //Difficulty multiplier that will act as `N` for payout and DAA currently holding value of 2.0
+    //this is according to various pools essentially it will depend upon the trade-off between maturity period and variance reduction
+    pub difficulty_multiplier: f64,
 }
 
 impl CoinbaseConfig {
@@ -126,6 +129,7 @@ impl CoinbaseConfig {
             network,
             pool_payout_address,
             pool_identifier: "Braidpool".to_string(),
+            difficulty_multiplier: 2.0,
         }
     }
 }

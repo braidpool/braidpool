@@ -480,11 +480,33 @@ pub enum CoinbaseError {
     PushBytesError(bitcoin::script::PushBytesError),
     AddressError(AddressParseError),
     TemplateMissingOutputs,
+    PayoutGenerationRecvError,
+    PayoutGenerationSendError,
+    HeaderParseError(String),
 }
 
 impl fmt::Display for CoinbaseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            CoinbaseError::HeaderParseError(error) => {
+                write!(
+                    f,
+                    "An error occurred while parsing header received from tamplate via ipc - {}",
+                    error
+                )
+            }
+            CoinbaseError::PayoutGenerationSendError => {
+                write!(
+                    f,
+                    "Unable to send payout generation command to payout runner"
+                )
+            }
+            CoinbaseError::PayoutGenerationRecvError => {
+                write!(
+                    f,
+                    "Unable to receive payout as payout receiver timed out and channel closed"
+                )
+            }
             CoinbaseError::InvalidExtranonceLength => write!(f, "Invalid extranonce length"),
             CoinbaseError::InvalidBitcoinAddress(addr) => {
                 write!(f, "Invalid Bitcoin address: {}", addr)

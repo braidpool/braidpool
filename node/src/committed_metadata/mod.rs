@@ -72,10 +72,9 @@ pub struct CommittedMetadata {
     pub payout_address: String,
     pub start_timestamp: Time,
     pub comm_pub_key: PublicKey,
-    //minimum possible target > which will be the weak target
+    // Computed by Braidpool DAA committing this is really a duplicate commitment, because we commit to parents and can compute it using Braidpool's DAA
     pub min_target: CompactTarget,
-    //the weaker target locally apart from mainnet target ranging between the mainnet target and
-    //minimum possible target
+    // Calculated per-miner locally by Braidpool,produce 1 bead every 10 minutes given the individual miner's measured hashrate act as the criteria for determination
     pub weak_target: CompactTarget,
     pub miner_ip: String,
 }

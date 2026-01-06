@@ -7,9 +7,7 @@ use bitcoin::block::HeaderExt;
 use bitcoin::consensus::serialize;
 use bitcoin::io::Cursor;
 use bitcoin::{absolute::Decodable, Transaction};
-use bitcoin::{
-    BlockHash, BlockHeader, BlockTime, CompactTarget, Target, TxMerkleNode, Txid, Witness,
-};
+use bitcoin::{BlockHash, BlockHeader, BlockTime, Target, TxMerkleNode, Txid, Witness};
 use futures::{lock::Mutex, FutureExt};
 use num::ToPrimitive;
 use rand::RngCore;
@@ -629,7 +627,7 @@ impl DownstreamClient {
         };
         //Validation will be against template.nbits only that will leave us whether the given weak share is btc valid or not
         //it will be valid only if the weak_target which is committed in block_header currently twice
-        let compact_target = submitted_job.global_target;
+        let compact_target = submitted_job.blocktemplate.bits;
         let target = bitcoin::Target::from_compact(compact_target);
         debug!(
             connection_id = %connection_id_hex,
@@ -699,13 +697,18 @@ impl DownstreamClient {
         let complete_block = bitcoin::Block::new_unchecked(header, block_transactions);
 
         //Checking with PoW of the target whether the block sent by downstream is below that or not
+        debug!(
+            "Header nbits before bitcoin validation - {} and weak target - {}",
+            Target::from_compact(header.bits).to_hex(),
+            submitted_job.weak_target.to_hex()
+        );
         let bitcoin_valid_block = match header.validate_pow(target) {
             Ok(_) => {
                 info!(
                     connection_id = %connection_id_hex,
                     target = %target.to_hex(),
                     hash = %header.block_hash(),
-                    "Header meets target"
+                    "Header meets target for a valid bitcoin block !"
                 );
                 true
             }
@@ -756,23 +759,26 @@ impl DownstreamClient {
                 );
             }
         }
-        //Checking wrt to braidpool network difficulty
-        let valid_weak_share_flag =
-            match header.validate_pow(Target::from_compact(submitted_job.blocktemplate.bits)) {
-                Ok(beadhash) => {
-                    info!(beadhash=%beadhash,"Weak share is a valid braidpool share !");
-                    true
-                }
-                Err(error) => {
-                    error!(
-                        "An error occurred while validating bead validation - {}",
-                        error.to_string()
-                    );
-                    false
-                }
-            };
+        debug!(
+            "Header nbits before braidpool validation - {} and weak target - {}",
+            Target::from_compact(header.bits).to_hex(),
+            submitted_job.weak_target.to_hex()
+        );
+        //Checking wrt to miner weak_target computed after adjusting min_target and selecting weak_target
+        let valid_weak_share_flag = match header.validate_pow(submitted_job.weak_target) {
+            Ok(beadhash) => {
+                info!(beadhash=%beadhash,"Weak share is a valid braidpool share !");
+                true
+            }
+            Err(error) => {
+                error!(
+                    "An error occurred while validating bead validation - {}",
+                    error.to_string()
+                );
+                false
+            }
+        };
         if valid_weak_share_flag {
-            //TODO:Valid weak share will be handled by difficulty adjuster and current difficulty shall be adjusted accordingly
             //Passing both the extranonces for committment in uncommitted metadata
             let extranonce_2_raw_value = match u32::from_str_radix(extranonce2, 16) {
             Ok(v) => v,
@@ -803,6 +809,8 @@ impl DownstreamClient {
                     submitted_job.job_sent_time,
                     &payout_address,
                     extranonce_1_raw_value,
+                    submitted_job.weak_target,
+                    submitted_job.new_min_target,
                 )
                 .await
             {
@@ -1225,7 +1233,8 @@ pub struct JobDetails {
     pub coinbase_witness_commitment: Option<Witness>,
     //Unix timestamp at which current job was sent to downstream miner
     pub job_sent_time: u32,
-    pub global_target: CompactTarget,
+    pub weak_target: Target,
+    pub new_min_target: Target,
 }
 ///Struct storing all the jobs mapped accroding to the job id
 /// it will serve the purpose for maintaining the details received from the downstream as well as other
@@ -1502,7 +1511,7 @@ where
             match notification_command {
                 //Whenever a new template is received it is broadcasted across all the downstream nodes connected .
                 NotifyCmd::SendToAll {
-                    mut template,
+                    template,
                     merkle_branch_coinbase,
                     template_id,
                 } => {
@@ -1510,28 +1519,34 @@ where
                         template_id = %template_id,
                         "Received new block template"
                     );
-                    //Storing original target in `JobDetails`
+                    //Global network target received as nbits from gbt
                     let network_target = template.bits;
-                    debug!(
+                    info!(
                         "Original global target - {}",
                         Target::from_compact(network_target).to_hex()
                     );
-                    //Getting the current weak_target according to difficulty adjustement
-                    //and committing it inside `template` so that notified job is constructed accordingly and sent to downstream
+                    //Getting the current min_target according to difficulty adjustement
+                    //and then finding weak_target and committing it inside `template` so that notified job is constructed accordingly and sent to downstream
+                    //TODO: weak_target > min_target and the logic will be added along with DAA
+                    #[allow(unused)]
+                    let mut weak_target: Target = Target::ZERO;
+                    #[allow(unused)]
+                    let mut new_min_target: Target = Target::ZERO;
+                    //Start target is taken as global network currently
                     if self.difficulty_adjuster.get_current_difficulty() == bitcoin::Target::ZERO {
-                        let new_weak_target = self
+                        new_min_target = self
                             .difficulty_adjuster
                             .get_new_difficulty(Some(network_target.clone()));
-                        let _adjusted_target_hex = new_weak_target.to_hex();
-                        template.bits = new_weak_target.to_compact_lossy();
+                        let _adjusted_target_hex = new_min_target.to_hex();
+                        weak_target = new_min_target;
                         debug!(
                             "Reduced target when setting from start target- {}",
                             Target::from_compact(template.bits).to_hex()
                         );
                     } else {
-                        let new_weak_target = self.difficulty_adjuster.get_new_difficulty(None);
-                        let _adjusted_target_hex = new_weak_target.to_hex();
-                        template.bits = new_weak_target.to_compact_lossy();
+                        new_min_target = self.difficulty_adjuster.get_new_difficulty(None);
+                        let _adjusted_target_hex = new_min_target.to_hex();
+                        weak_target = new_min_target;
                         debug!(
                             "Reduced target when start target is already set - {}",
                             Target::from_compact(template.bits).to_string()
@@ -1614,7 +1629,8 @@ where
                             coinbase_witness_commitment: job_notification
                                 .coinbase_witness_commitment,
                             job_sent_time: unix_timestamp,
-                            global_target: network_target,
+                            weak_target,
+                            new_min_target,
                         };
                         //In this there will no change to nbits provided as it is required for evaluation against global target
                         let numeric_job_id = curr_peer_mining_job_map
@@ -1692,26 +1708,31 @@ where
                         continue; // Skip but keep notifier running
                     }
 
-                    let mut latest_template = latest_template_arc.lock().await.to_owned();
+                    let latest_template = latest_template_arc.lock().await.to_owned();
                     let network_target = latest_template.bits;
+                    #[allow(unused)]
+                    let mut weak_target = Target::ZERO;
+                    #[allow(unused)]
+                    let mut new_min_target = Target::ZERO;
                     debug!(
                         "Original global target - {}",
                         Target::from_compact(network_target).to_string()
                     );
+                    //TODO: weak_target > min_target and the logic will be added along with DAA
                     if self.difficulty_adjuster.get_current_difficulty() == bitcoin::Target::ZERO {
-                        let new_weak_target = self
+                        new_min_target = self
                             .difficulty_adjuster
                             .get_new_difficulty(Some(network_target.clone()));
-                        let _adjusted_target_hex = new_weak_target.to_hex();
-                        latest_template.bits = new_weak_target.to_compact_lossy();
+                        let _adjusted_target_hex = new_min_target.to_hex();
+                        weak_target = new_min_target;
                         debug!(
                             "Reduced target - {}",
                             Target::from_compact(latest_template.bits).to_string()
                         );
                     } else {
-                        let new_weak_target = self.difficulty_adjuster.get_new_difficulty(None);
-                        let _adjusted_target_hex = new_weak_target.to_hex();
-                        latest_template.bits = new_weak_target.to_compact_lossy();
+                        new_min_target = self.difficulty_adjuster.get_new_difficulty(None);
+                        let _adjusted_target_hex = new_min_target.to_hex();
+                        weak_target = new_min_target;
                         debug!(
                             "Reduced target - {}",
                             Target::from_compact(latest_template.bits).to_string()
@@ -1778,7 +1799,8 @@ where
                                     coinbase_merkle_path: job.merkle_branches.clone(),
                                     coinbase_witness_commitment: job.coinbase_witness_commitment,
                                     job_sent_time: unix_timestamp,
-                                    global_target: network_target,
+                                    weak_target,
+                                    new_min_target,
                                 };
                                 let numeric_job_id = curr_peer_mining_job_map
                                     .insert_mining_job(current_template_id, job_details)
@@ -2171,7 +2193,7 @@ mod test {
     use crate::{
         braid,
         db::db_handlers::DBHandler,
-        payout::DifficultyAdjuster,
+        payout::{DifficultyAdjuster, Payout},
         stratum::{ConnectionMapping, MiningJobMap, NotifyCmd, Server, StratumServerConfig},
     };
     use bitcoin::{
@@ -2196,8 +2218,10 @@ mod test {
         let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
         let (_test_db_handler, test_db_tx) = DBHandler::new().await.unwrap();
+        let (mut test_payout_distributor, test_payout_cmd_sender) =
+            Payout::new(bitcoin::Network::CPUNet);
         let (swarm_handler, mut swarm_command_receiver) =
-            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx);
+            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx, test_payout_cmd_sender);
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let config = StratumServerConfig {
             hostname: "127.0.0.1".to_string(),
@@ -2261,8 +2285,10 @@ mod test {
             Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
         let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let (_test_db_handler, test_db_tx) = DBHandler::new().await.unwrap();
+        let (mut test_payout_distributor, test_payout_cmd_sender) =
+            Payout::new(bitcoin::Network::CPUNet);
         let (swarm_handler, mut swarm_command_receiver) =
-            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx);
+            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx, test_payout_cmd_sender);
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
 
@@ -2313,8 +2339,10 @@ mod test {
         let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
         let (_test_db_handler, test_db_tx) = DBHandler::new().await.unwrap();
+        let (mut test_payout_distributor, test_payout_cmd_sender) =
+            Payout::new(bitcoin::Network::CPUNet);
         let (swarm_handler, mut swarm_command_receiver) =
-            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx);
+            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx, test_payout_cmd_sender);
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let config = StratumServerConfig {
             hostname: "127.0.0.1".to_string(),
@@ -2365,8 +2393,10 @@ mod test {
         let (_test_db_handler, test_db_tx) = DBHandler::new().await.unwrap();
         let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
+        let (mut test_payout_distributor, test_payout_cmd_sender) =
+            Payout::new(bitcoin::Network::CPUNet);
         let (swarm_handler, mut swarm_command_receiver) =
-            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx);
+            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx, test_payout_cmd_sender);
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let config = StratumServerConfig {
             hostname: "127.0.0.1".to_string(),
@@ -2410,8 +2440,10 @@ mod test {
         let mining_job_map: Arc<Mutex<HashMap<String, Arc<Mutex<MiningJobMap>>>>> =
             Arc::new(Mutex::new(HashMap::new()));
         let (notify_tx, _notify_rx) = mpsc::channel::<NotifyCmd>(32);
+        let (mut test_payout_distributor, test_payout_cmd_sender) =
+            Payout::new(bitcoin::Network::CPUNet);
         let (swarm_handler, mut swarm_command_receiver) =
-            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx);
+            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx, test_payout_cmd_sender);
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let config = StratumServerConfig {
             hostname: "127.0.0.1".to_string(),
@@ -2476,8 +2508,10 @@ mod test {
         let test_braid: Arc<RwLock<braid::Braid>> =
             Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
         let (_test_db_handler, test_db_tx) = DBHandler::new().await.unwrap();
+        let (mut test_payout_distributor, test_payout_cmd_sender) =
+            Payout::new(bitcoin::Network::CPUNet);
         let (swarm_handler, mut swarm_command_receiver) =
-            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx);
+            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx, test_payout_cmd_sender);
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let test_merkle_bytes: [u8; 32] = [0u8; 32];
         let mut test_witness = Witness::new();
@@ -2562,16 +2596,17 @@ mod test {
         let mock_mining_job_map: Arc<Mutex<MiningJobMap>> =
             Arc::new(Mutex::new(MiningJobMap::new()));
         test_template.transactions.remove(0);
-        let test_global_network_target = test_template.bits;
-        test_template.bits = test_global_network_target;
+
         let job_details = JobDetails {
-            blocktemplate: test_template,
+            blocktemplate: test_template.clone(),
             coinbase1: constructed_test_notification_ref.clone().coinbase1.clone(),
             coinbase2: constructed_test_notification_ref.clone().coinbase2.clone(),
             coinbase_merkle_path: vec![],
             coinbase_witness_commitment: Some(test_witness),
             job_sent_time: unix_timestamp,
-            global_target: test_global_network_target,
+            //Keeping weak_target == network_target == min_target without adjusting
+            weak_target: Target::from_compact(test_template.bits),
+            new_min_target: Target::from_compact(test_template.bits),
         };
         let numeric_job_id = mock_mining_job_map
             .lock()

@@ -410,17 +410,12 @@ pub fn build_braidpool_coinbase_from_template(
     {
         Ok(header) => header,
         Err(error) => {
-            error!(
-                "An error occurred while parsing header received from tamplate via ipc - {}",
-                error.to_string()
-            );
-            panic!();
+            return Err(CoinbaseError::HeaderParseError(error.to_string()));
         }
     };
     let required_target = bitcoin::Target::from_compact(received_block_header.bits);
-    //TODO: difficulty multiplier i.e. determination of `N` for appropriate window for distributing payout essentially it is
-    //a trade-off between variance reduction and maturity time for a payout to be received by miners
-    let total_difficulty = required_target.difficulty_float(config.network.params());
+    let total_difficulty =
+        required_target.difficulty_float(config.network.params()) * config.difficulty_multiplier;
 
     //Changes to be done to accomodate payout
     let (payout_sender, payout_receiver) = std::sync::mpsc::channel::<Vec<OutputPair>>();
@@ -434,6 +429,7 @@ pub fn build_braidpool_coinbase_from_template(
         }
         Err(_) => {
             error!("An error occurred while sending payout generation command");
+            return Err(CoinbaseError::PayoutGenerationSendError);
         }
     };
 
@@ -444,7 +440,7 @@ pub fn build_braidpool_coinbase_from_template(
                 "An error occurred while receiving payout yet - {}",
                 error.to_string()
             );
-            panic!()
+            return Err(CoinbaseError::PayoutGenerationRecvError);
         }
     };
 
