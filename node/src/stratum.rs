@@ -216,6 +216,12 @@ pub struct DownstreamClient {
     version_rolling_min_bit: Option<u32>,
     /// The expected size of the extranonce2 field provided by the miner.
     extranonce2_len: usize,
+    /// Unique 2-byte prefix for this miner's extranonce partitioning which is currently supported by audit mode only,
+    /// although this will be appended into the extranonce1 field while sending to the miner, but we are appending
+    /// this to extranonce2 while submitting to the upstream pool.
+    pub extranonce2_prefix: Option<Vec<u8>>,
+    /// The size of extranonce2 that the miner rolls, after prefix is subtracted
+    pub miner_extranonce2_size: usize,
     /// Optional per-connection monitoring target (stricter than share/weak target).
     /// Used to sample miner health at a higher rate than the share target.
     pub monitor_target: Option<bitcoin::Target>,
@@ -544,7 +550,7 @@ impl DownstreamClient {
                 })
             }
         };
-        let expected_hex_len = self.extranonce2_len * 2;
+        let expected_hex_len = self.miner_extranonce2_size * 2;
         if extranonce2.len() != expected_hex_len {
             error!(
                 "Miner {} submitted extranonce2 '{}' with wrong length: expected {} hex chars, got {}",
@@ -562,6 +568,14 @@ impl DownstreamClient {
                 ),
             });
         }
+
+        debug!(
+            worker = %worker_name,
+            miner_extranonce2 = %extranonce2,
+            extranonce1 = %hex::encode(&self.extranonce1),
+            prefix_in_extranonce1 = ?self.extranonce2_prefix.as_ref().map(|p| hex::encode(p)),
+            "Extranonce2 prefix handled via extranonce1; using miner-submitted extranonce2 unchanged"
+        );
 
         if hex::decode(extranonce2).is_err() {
             error!(
@@ -677,10 +691,30 @@ impl DownstreamClient {
             // Forward to upstream without validation
             // TODO: Implement validation logic.
             if let Some(ref upstream_tx) = upstream_share_tx {
+                // For upstream, we need to reconstruct the full 8-byte extranonce2
+                let full_extranonce2_for_upstream =
+                    if let Some(ref prefix) = self.extranonce2_prefix {
+                        // Prepend the prefix (2 bytes) to create the full 8 bytes extranonce2
+                        let prefix_hex = hex::encode(prefix);
+                        format!("{}{}", prefix_hex, extranonce2)
+                    } else {
+                        extranonce2.to_string()
+                    };
+                debug!(
+                    worker = %worker_name,
+                    job_id = %job_id_str,
+                    miner_extranonce2 = %extranonce2,
+                    miner_extranonce2_len_bytes = %(extranonce2.len() / 2),
+                    prefix = ?self.extranonce2_prefix.as_ref().map(|p| hex::encode(p)),
+                    full_extranonce2_for_upstream = %full_extranonce2_for_upstream,
+                    full_extranonce2_len_bytes = %(full_extranonce2_for_upstream.len() / 2),
+                    "Reconstructing full extranonce2 for upstream"
+                );
+
                 let upstream_share = crate::upstream_pool::UpstreamShare {
                     worker_name: worker_name.to_string(),
                     job_id: job_id_str.to_string(),
-                    extranonce2: extranonce2.to_string(),
+                    extranonce2: full_extranonce2_for_upstream,
                     ntime: ntime.to_string(),
                     nonce: nonce.to_string(),
                     version_bits: param_array
@@ -1405,20 +1439,33 @@ impl DownstreamClient {
         ];
         self.subscribed = true;
         let extranonce1_hex_str = hex::encode(&self.extranonce1);
+
+        // In audit mode with prefix, tell miner their rollable size
+        let extranonce2_size_for_miner = if self.extranonce2_prefix.is_some() {
+            self.miner_extranonce2_size
+        } else {
+            self.extranonce2_len
+        };
         info!(
-            "Subscribe response: mode={}, extranonce1={}, extranonce2_size={}",
+            "Subscribe response: mode={}, extranonce1={}, extranonce2_size={}, prefix={:?}",
             if self.is_proxy_mode {
                 "AUDIT"
             } else {
                 "BRAIDPOOL"
             },
             extranonce1_hex_str,
-            self.extranonce2_len
+            extranonce2_size_for_miner,
+            self.extranonce2_prefix.as_ref().map(|p| hex::encode(p))
         );
+
         Ok(StratumResponses::StandardResponse {
             std_response: StandardResponse::new_ok(
                 Some(client_request_id),
-                json!([subscriptions, extranonce1_hex_str, self.extranonce2_len]),
+                json!([
+                    subscriptions,
+                    extranonce1_hex_str,
+                    extranonce2_size_for_miner
+                ]),
             ),
         })
     }
@@ -1450,6 +1497,8 @@ impl Default for DownstreamClient {
             version_rolling_mask: None,
             version_rolling_min_bit: None,
             extranonce2_len: EXTRANONCE2_SIZE,
+            extranonce2_prefix: None,
+            miner_extranonce2_size: EXTRANONCE2_SIZE,
             monitor_target: None,
             block_submission_tx: None,
             is_proxy_mode: false,
@@ -2483,6 +2532,21 @@ impl Notifier {
         Ok(())
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct PrefixStats {
+    pub total_assigned: usize,
+    pub available_for_reuse: usize,
+    pub next_new_prefix: u16,
+    pub total_capacity: u16,
+}
+
+impl PrefixStats {
+    pub fn utilization_percentage(&self) -> f64 {
+        (self.total_assigned as f64 / self.total_capacity as f64) * 100.0
+    }
+}
+
 ///Connection information associated with each downstream peer associated along with the mapped `Sender_channel` for sending downstream responses and communication.
 #[derive(Debug, Clone)]
 pub struct ConnectionInfo {
@@ -2498,6 +2562,12 @@ pub struct ConnectionMapping {
     pub upstream_difficulty: Option<f64>,
     worker_to_peer: HashMap<String, String>,
     pub upstream_connected: bool,
+    /// Counter for assigning unique extranonce2 prefixes in audit mode, wraps around at 65535 (2 bytes)
+    next_extranonce2_prefix: u16,
+    /// Track assigned prefixes to detect reuse, peer_addr -> prefix
+    assigned_prefixes: HashMap<String, u16>,
+    /// Pool of released prefixes available for reuse
+    available_prefixes: std::collections::VecDeque<u16>,
 }
 
 impl ConnectionMapping {
@@ -2509,6 +2579,106 @@ impl ConnectionMapping {
             upstream_difficulty: None,
             worker_to_peer: HashMap::new(),
             upstream_connected: false,
+            next_extranonce2_prefix: 1, // Start at 1, by design
+            assigned_prefixes: HashMap::new(),
+            available_prefixes: std::collections::VecDeque::new(),
+        }
+    }
+
+    /// Allocate a unique 2-byte prefix for a new miner in audit mode
+    pub fn allocate_extranonce2_prefix(&mut self) -> (Vec<u8>, usize) {
+        // This will try to reuse a released prefix first
+        let prefix = if let Some(reused_prefix) = self.available_prefixes.pop_front() {
+            debug!(
+                prefix = %hex::encode(reused_prefix.to_be_bytes()),
+                available_count = %self.available_prefixes.len(),
+                "Reusing released prefix"
+            );
+            reused_prefix
+        } else {
+            // Otherwise allocate a new prefix
+            let new_prefix: u16 = self.next_extranonce2_prefix;
+            self.next_extranonce2_prefix = self.next_extranonce2_prefix.wrapping_add(1);
+
+            if self.next_extranonce2_prefix == 0 {
+                warn!("Extranonce2 prefix wrapped around to 0, resetting to 1");
+                self.next_extranonce2_prefix = 1;
+            }
+
+            if self.next_extranonce2_prefix > 60000 && self.available_prefixes.is_empty() {
+                warn!(
+                    used_prefixes = %self.next_extranonce2_prefix,
+                    total_capacity = 65535,
+                    "Approaching prefix exhaustion!"
+                );
+            }
+
+            new_prefix
+        };
+
+        let prefix_bytes = prefix.to_be_bytes().to_vec();
+        let miner_size = self
+            .upstream_extranonce2_size
+            .map(|size| size.saturating_sub(2))
+            .unwrap_or(6);
+
+        debug!(
+            prefix = %hex::encode(&prefix_bytes),
+            miner_extranonce2_size = %miner_size,
+            allocation_type = if self.available_prefixes.len() > 0 { "reused" } else { "new" },
+            available_count = %self.available_prefixes.len(),
+            "Allocated extranonce2 prefix"
+        );
+
+        (prefix_bytes, miner_size)
+    }
+
+    /// Track which prefix was assigned to which peer
+    pub fn register_prefix(&mut self, peer_addr: String, prefix: u16) {
+        if let Some(old_prefix) = self.assigned_prefixes.insert(peer_addr.clone(), prefix) {
+            warn!(
+                peer = %peer_addr,
+                old_prefix = %hex::encode(old_prefix.to_be_bytes()),
+                new_prefix = %hex::encode(prefix.to_be_bytes()),
+                "Peer reconnected and received new prefix"
+            );
+        }
+        debug!(
+            peer = %peer_addr,
+            prefix = %hex::encode(prefix.to_be_bytes()),
+            total_assigned = %self.assigned_prefixes.len(),
+            "Registered prefix assignment"
+        );
+    }
+
+    /// Release a prefix back to the available pool when a miner disconnects
+    fn release_prefix(&mut self, peer_addr: &str) {
+        if let Some(prefix) = self.assigned_prefixes.remove(peer_addr) {
+            if prefix < 65000 {
+                self.available_prefixes.push_back(prefix);
+                info!(
+                    peer = %peer_addr,
+                    prefix = %hex::encode(prefix.to_be_bytes()),
+                    available_count = %self.available_prefixes.len(),
+                    "Released prefix for reuse"
+                );
+            } else {
+                warn!(
+                    peer = %peer_addr,
+                    prefix = %hex::encode(prefix.to_be_bytes()),
+                    "Prefix too high, not reusing (near wrap-around range)"
+                );
+            }
+        }
+    }
+
+    // Returns statistics about prefix usage
+    pub fn get_prefix_stats(&self) -> PrefixStats {
+        PrefixStats {
+            total_assigned: self.assigned_prefixes.len(),
+            available_for_reuse: self.available_prefixes.len(),
+            next_new_prefix: self.next_extranonce2_prefix,
+            total_capacity: 65535,
         }
     }
 
@@ -2522,6 +2692,9 @@ impl ConnectionMapping {
     }
 
     pub fn remove_peer(&mut self, peer_addr: &str) {
+        // Release the prefix before removing peer
+        self.release_prefix(peer_addr);
+
         // Remove from channel mapping
         self.downstream_channel_mapping.remove(peer_addr);
 
@@ -2529,7 +2702,12 @@ impl ConnectionMapping {
         self.worker_to_peer
             .retain(|_worker_name, mapped_peer| mapped_peer != peer_addr);
 
-        debug!("Removed peer {} and associated workers", peer_addr);
+        debug!(
+            peer = %peer_addr,
+            remaining_peers = %self.downstream_channel_mapping.len(),
+            available_prefixes = %self.available_prefixes.len(),
+            "Removed peer and associated workers"
+        );
     }
 
     pub async fn disconnect_all_with_message(&mut self, reason: &str) {
@@ -2537,6 +2715,9 @@ impl ConnectionMapping {
             self.downstream_channel_mapping.drain().collect();
 
         for (peer_addr, connection_info) in peers {
+            // Release prefix before disconnecting
+            self.release_prefix(&peer_addr);
+
             // Send stratum error before closing
             let error_msg = serde_json::json!({
                 "id": null,
@@ -2559,11 +2740,18 @@ impl ConnectionMapping {
             );
         }
 
+        debug!(
+            available_prefixes = %self.available_prefixes.len(),
+            "All miners disconnected, prefixes released"
+        );
         // Clear worker mappings
         self.worker_to_peer.clear();
     }
 
     pub fn disconnect_peer(&mut self, peer_addr: &str, reason: &str) {
+        // Release prefix
+        self.release_prefix(peer_addr);
+
         if let Some(connection_info) = self.downstream_channel_mapping.remove(peer_addr) {
             info!(
                 peer = %peer_addr,
@@ -2727,23 +2915,52 @@ impl Server {
                          let (reader, writer) = stream.into_split();
 
                             // This will determine extranonce before creating client
-                            let (assigned_extranonce1, assigned_extranonce2_size, is_proxy) = {
-                                let mapping = self.downstream_connection_mapping.lock().await;
+                            let (assigned_extranonce1, assigned_extranonce2_size, extranonce2_prefix, is_proxy) = {
+                                let mut mapping = self.downstream_connection_mapping.lock().await;
 
+                                // In audit mode use upstream extranonce1 and allocate unique prefix
                                 if self.stratum_config.audit_mode {
+                                    let upstream_ext1_clone = mapping.upstream_extranonce1.clone();
+                                    let upstream_ext2_size = mapping.upstream_extranonce2_size;
+
                                     // This must have upstream connection
-                                    if let (Some(ref upstream_ext1), Some(upstream_ext2_size)) =
-                                        (&mapping.upstream_extranonce1, mapping.upstream_extranonce2_size)
+                                    if let (Some(upstream_ext1), Some(_ext2_size)) =
+                                        (upstream_ext1_clone, upstream_ext2_size)
                                     {
                                         info!("New audit mode connection using upstream extranonce: {}", upstream_ext1);
 
-                                        match hex::decode(upstream_ext1) {
-                                            Ok(bytes) => (bytes, upstream_ext2_size, true),
+                                        // Allocate unique 2-byte prefix for this miner
+                                        let (prefix_bytes, miner_ext2_size) = mapping.allocate_extranonce2_prefix();
+                                        let prefix_u16 = u16::from_be_bytes([prefix_bytes[0], prefix_bytes[1]]);
+                                        mapping.register_prefix(peer_addr.to_string(), prefix_u16);
+
+                                        let upstream_ext1_bytes = match hex::decode(&upstream_ext1) {
+                                            Ok(bytes) => bytes,
                                             Err(e) => {
                                                 error!("Failed to decode upstream extranonce: {}", e);
-                                                continue; // Skip this connection
+                                                continue;
                                             }
-                                        }
+                                        };
+
+                                        let mut extended_extranonce1 = upstream_ext1_bytes;
+                                        extended_extranonce1.extend_from_slice(&prefix_bytes);
+
+                                        let stats = mapping.get_prefix_stats();
+                                        debug!(
+                                            audit_mode = true,
+                                            peer = %peer_addr,
+                                            upstream_extranonce1 = %upstream_ext1,
+                                            assigned_prefix = %hex::encode(&prefix_bytes),
+                                            full_extranonce1 = %hex::encode(&extended_extranonce1),
+                                            miner_extranonce2_size_bytes = %miner_ext2_size,
+                                            assigned_prefixes_count = %stats.total_assigned,
+                                            available_prefixes_count = %stats.available_for_reuse,
+                                            prefix_utilization_percent = %format!("{:.2}%", stats.utilization_percentage()),
+                                            "New audit-mode miner: extranonce1 extended with unique prefix; assigned {}-byte rollable extranonce2",
+                                            miner_ext2_size
+                                        );
+
+                                        (extended_extranonce1, miner_ext2_size, Some(prefix_bytes), true)
                                     } else {
                                         // That means audit mode enabled but upstream not ready
                                         error!("Miner {} tried to connect in audit mode, but upstream pool is not ready yet", peer_addr);
@@ -2755,7 +2972,7 @@ impl Server {
                                     let mut bytes = [0u8; 4];
                                     rand::thread_rng().fill_bytes(&mut bytes);
                                     info!("New Braidpool connection using local extranonce: {}", hex::encode(&bytes));
-                                    (bytes.to_vec(), EXTRANONCE2_SIZE, false)
+                                    (bytes.to_vec(), EXTRANONCE2_SIZE, None, false)
                                 }
                             };
                             // Create client with correct state
@@ -2770,6 +2987,8 @@ impl Server {
                                 version_rolling_mask: None,
                                 version_rolling_min_bit: None,
                                 extranonce2_len: assigned_extranonce2_size,
+                                extranonce2_prefix: extranonce2_prefix,
+                                miner_extranonce2_size: assigned_extranonce2_size,
                                 monitor_target: None,
                                 block_submission_tx: self.block_submission_tx.clone(),
                                 is_proxy_mode: is_proxy,

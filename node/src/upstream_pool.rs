@@ -1377,10 +1377,21 @@ impl UpstreamPoolClient {
             json!(share.nonce),
         ];
 
+        let version_bits_for_log = share.version_bits.clone();
         if let Some(version_bits) = share.version_bits {
             params.push(json!(version_bits));
         }
-
+        debug!(
+            worker = %share.worker_name,
+            job_id = %share.job_id,
+            extranonce2 = %share.extranonce2,
+            extranonce2_len = %share.extranonce2.len(),
+            ntime = %share.ntime,
+            nonce = %share.nonce,
+            version_bits = ?version_bits_for_log,
+            upstream_username = %self.config.username,
+            "Forwarding share to upstream with params"
+        );
         let request_id = self.next_request_id;
         let submit_req = json!({
             "id": request_id,
