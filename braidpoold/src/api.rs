@@ -12,7 +12,7 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Serialize)]
@@ -64,23 +64,27 @@ impl StateStore {
     }
 }
 
-static STATE: Lazy<Mutex<StateStore>> = Lazy::new(|| Mutex::new(StateStore::new()));
-static SEEN: Lazy<Mutex<HashMap<Txid, u64>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+static STATE: Lazy<RwLock<StateStore>> = Lazy::new(|| RwLock::new(StateStore::new()));
+static SEEN: Lazy<RwLock<HashMap<Txid, u64>>> = Lazy::new(|| RwLock::new(HashMap::new()));
+
+fn get_env(key: &str) -> String {
+    std::env::var(key).unwrap_or_else(|_| panic!("Environment variable {} must be set", key))
+}
 
 fn connect_to_bitcoind() -> Client {
-    Client::new(
-        "http://127.0.0.1:18332",
-        Auth::UserPass("jevinrpc".to_string(), "securepass123".to_string()),
-    )
-    .expect("Failed to connect to bitcoind_node")
+    let url = get_env("BITCOIND_URL");
+    let user = get_env("BITCOIND_USER");
+    let pass = get_env("BITCOIND_PASS");
+
+    Client::new(&url, Auth::UserPass(user, pass)).expect("Failed to connect to bitcoind_node")
 }
 
 fn connect_to_cmempoold() -> Client {
-    Client::new(
-        "http://127.0.0.1:19443",
-        Auth::UserPass("cmempoolrpc".to_string(), "securepass456".to_string()),
-    )
-    .expect("Failed to connect to cmempoold_node")
+    let url = get_env("CMEMPOOL_URL");
+    let user = get_env("CMEMPOOL_USER");
+    let pass = get_env("CMEMPOOL_PASS");
+
+    Client::new(&url, Auth::UserPass(user, pass)).expect("Failed to connect to cmempoold_node")
 }
 
 fn now_ts() -> u64 {
@@ -105,7 +109,7 @@ fn detect_category(txid: &Txid, in_std: bool, in_cpool: bool, confirmations: u32
         return "Confirmed".to_string();
     }
 
-    let state = STATE.lock().unwrap();
+    let state = STATE.read().unwrap();
 
     // Stage 4: Scheduled (highest priority for unconfirmed)
     if state.scheduled.contains(txid) {
@@ -127,8 +131,10 @@ fn detect_category(txid: &Txid, in_std: bool, in_cpool: bool, confirmations: u32
         return "Mempool".to_string();
     }
 
+    drop(state);
+
     // Replaced
-    let mut seen = SEEN.lock().unwrap();
+    let mut seen = SEEN.write().unwrap();
     if seen.remove(txid).is_some() {
         return "Replaced".to_string();
     }
@@ -138,7 +144,7 @@ fn detect_category(txid: &Txid, in_std: bool, in_cpool: bool, confirmations: u32
 
 fn record_seen(txid: &Txid, in_any_mempool: bool, ts: u64) {
     if in_any_mempool {
-        SEEN.lock().unwrap().insert(*txid, ts);
+        SEEN.write().unwrap().insert(*txid, ts);
     }
 }
 
@@ -192,7 +198,7 @@ fn build_tx(txid: Txid, standard: &Client, committed: &Client) -> ApiTransaction
 
     // Cleanup if confirmed
     if confirmations > 0 {
-        let mut state = STATE.lock().unwrap();
+        let mut state = STATE.write().unwrap();
         state.committed.remove(&txid);
         state.proposed.remove(&txid);
         state.scheduled.remove(&txid);
@@ -261,7 +267,7 @@ pub async fn commit_transaction(Path(txid): Path<String>) -> (StatusCode, Json<s
 
     // Check if already in cmempool
     if committed.get_mempool_entry(&txid).is_ok() {
-        STATE.lock().unwrap().committed.insert(txid);
+        STATE.write().unwrap().committed.insert(txid);
         return (
             StatusCode::OK,
             Json(json!({
@@ -283,13 +289,10 @@ pub async fn commit_transaction(Path(txid): Path<String>) -> (StatusCode, Json<s
         }
     };
 
-    let std_height = standard.get_block_count().unwrap_or(0);
-    let cm_height = committed.get_block_count().unwrap_or(0);
-
     // Send to cmempool
     match committed.send_raw_transaction(&tx) {
         Ok(_) => {
-            STATE.lock().unwrap().committed.insert(txid);
+            STATE.write().unwrap().committed.insert(txid);
             (
                 StatusCode::OK,
                 Json(json!({
@@ -300,6 +303,9 @@ pub async fn commit_transaction(Path(txid): Path<String>) -> (StatusCode, Json<s
             )
         }
         Err(e) => {
+            let std_height = standard.get_block_count().unwrap_or(0);
+            let cm_height = committed.get_block_count().unwrap_or(0);
+
             let error_str = e.to_string();
             let mut diagnostics = json!({
                 "error": error_str.clone(),
@@ -308,7 +314,7 @@ pub async fn commit_transaction(Path(txid): Path<String>) -> (StatusCode, Json<s
             });
 
             if error_str.contains("-25") || error_str.contains("missing inputs") {
-                diagnostics["hint"] = json!("Nodes not synchronized");
+                diagnostics["hint"] = json!("Transaction rejected: possible causes include missing parent transactions, double-spend attempt, or node synchronization issues");
             }
 
             (
@@ -336,7 +342,7 @@ pub async fn propose_transaction(
     };
 
     // Must be committed first
-    let state = STATE.lock().unwrap();
+    let state = STATE.read().unwrap();
     if !state.committed.contains(&txid) {
         // Check if in cmempool
         if committed.get_mempool_entry(&txid).is_err() {
@@ -351,7 +357,7 @@ pub async fn propose_transaction(
     }
     drop(state);
 
-    STATE.lock().unwrap().proposed.insert(txid);
+    STATE.write().unwrap().proposed.insert(txid);
 
     (
         StatusCode::OK,
@@ -378,7 +384,7 @@ pub async fn schedule_transaction(
     };
 
     // Must be proposed first
-    if !STATE.lock().unwrap().proposed.contains(&txid) {
+    if !STATE.read().unwrap().proposed.contains(&txid) {
         return (
             StatusCode::BAD_REQUEST,
             Json(json!({
@@ -388,7 +394,7 @@ pub async fn schedule_transaction(
         );
     }
 
-    STATE.lock().unwrap().scheduled.insert(txid);
+    STATE.write().unwrap().scheduled.insert(txid);
 
     (
         StatusCode::OK,
@@ -408,11 +414,23 @@ pub async fn commit_tx_to_cmempoold(
     commit_transaction(Path(txid)).await
 }
 
-pub async fn get_transaction_detail(Path(txid): Path<String>) -> Json<ApiTransaction> {
+pub async fn get_transaction_detail(
+    Path(txid): Path<String>,
+) -> Result<Json<ApiTransaction>, (StatusCode, Json<serde_json::Value>)> {
     let standard = connect_to_bitcoind();
     let committed = connect_to_cmempoold();
-    let txid_parsed = txid.parse::<Txid>().unwrap();
-    Json(build_tx(txid_parsed, &standard, &committed))
+
+    let txid_parsed = match txid.parse::<Txid>() {
+        Ok(t) => t,
+        Err(e) => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"status":"error","error":format!("invalid txid: {e}")})),
+            ))
+        }
+    };
+
+    Ok(Json(build_tx(txid_parsed, &standard, &committed)))
 }
 
 pub async fn get_mempool_info() -> Json<ApiMempoolInfo> {
