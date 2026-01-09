@@ -90,37 +90,20 @@ xdg-open http://localhost:8000
 Or you can just click on the docs directory in the code and Github will render the math in these markdown docs.
 
 # Braidpool Dashboard
-
 A visualization dashboard for the Braidpool decentralized mining pool, and Bitcoin related data.
 
-## How to Run
+***Dashboard Features***
 
-```bash
-# Navigate to the dashboard directory 
-cd dashboard
+1. **Main Dashboard** — Overview of key metrics and overall system status.  
+2. **Braid Visualization** — Interactive graph displaying the DAG (Directed Acyclic Graph) structure.  
+3. **Bead Explorer** — Explore individual beads and their relationships within the braid.  
+4. **Mining Inventory** — View the status and performance of connected miners. 
+5. **Bitcoin Statistics** — Detailed insights into Bitcoin price ranges, historical trends, and market analysis.  
+6. **Mempool Statistics** — Provides real-time data on transactions awaiting confirmation.  
+7. **Node Health** — Tracks node uptime, connectivity, and overall performance.
 
-# Install dependencies
-npm install
+For setup instructions and environment configuration, please see the [Dashboard README](./dashboard/README.md)
 
-# Start development server
-npm run dev
-```
-
-The dashboard will open automatically at [http://localhost:3000](http://localhost:3000).
-
-## Build for Production
-
-```bash
-# Navigate to the dashboard directory 
-cd dashboard
-
-# Create optimized build
-npm run build
-
-# Preview production build locally
-npm run preview
-```
-For more details on the Dashboard, [checkout its readme file](./dashboard/README.md).
 
 # Progress
 
