@@ -1,8 +1,10 @@
 # Braidpool Dashboard
+
 The Braidpool Dashboard uses a modular, tab-based architecture.
 Dashboard sections such as Dashboard, Braid Visualization, Bead Explorer, Mining Inventory, Bitcoin Stats, Mempool, and Node Health operate independently, each with its own configuration, API endpoints, and data flow.
 
 ---
+
 ## Running the Braid Visualization
 
 To run the **Braid Visualization**, you have two options:
@@ -25,7 +27,7 @@ tests/simulator_api.py
 
 ## Running Other Dashboard Tabs
 
-*(Bead Explorer, Bitcoin Stats, Mempool, Node Health)*
+_(Bead Explorer, Bitcoin Stats, Mempool, Node Health)_
 
 These tabs rely on the **dashboard backend API**.
 
@@ -39,7 +41,7 @@ npm install
 #### 2. Configure Environment Variables
 
 Use the example file as reference:
- [https://github.com/braidpool/braidpool/blob/dev/dashboard/api/.env.example](https://github.com/braidpool/braidpool/blob/dev/dashboard/api/.env.example)
+[https://github.com/braidpool/braidpool/blob/dev/dashboard/api/.env.example](https://github.com/braidpool/braidpool/blob/dev/dashboard/api/.env.example)
 
 #### 3. Run the Backend Server
 
@@ -65,7 +67,6 @@ The dashboard will open at:
 
 ---
 
-
 ## Build for Production
 
 ```bash
@@ -90,9 +91,9 @@ docker-compose up --build
 
 #### Services
 
-* Frontend: [http://localhost:3000](http://localhost:3000)
-* API: [http://localhost:5000](http://localhost:5000)
-* Simulator API: [http://localhost:65433](http://localhost:65433)
+- Frontend: [http://localhost:3000](http://localhost:3000)
+- API: [http://localhost:5000](http://localhost:5000)
+- Simulator API: [http://localhost:65433](http://localhost:65433)
 
 #### Stop Services
 
@@ -106,44 +107,45 @@ docker-compose down
 
 #### Frontend
 
-* TypeScript 4.9+
-* TailwindCSS 3.0+
+- TypeScript 4.9+
+- TailwindCSS 3.0+
 
 ### Backend
 
 ##### API Server
 
-* Node.js
-* Express.js
-* WebSocket support
+- Node.js
+- Express.js
+- WebSocket support
 
 ##### Mining Interface
 
-* Python 3.7+
-* Flask
-* pyasic library
+- Python 3.7+
+- Flask
+- pyasic library
 
 ##### Development Tools
 
-* Docker & Docker Compose
-* ESLint & Prettier
-* Jest & React Testing Library
-* Python pytest
+- Docker & Docker Compose
+- ESLint & Prettier
+- Jest & React Testing Library
+- Python pytest
 
 ---
 
 ## Troubleshooting
 
-* **Blank screen**: Check the browser console for errors.
-* **Loading issues**: Verify API availability and response format.
-* **Visualization issues**: Use the latest Chrome or Firefox.
-  
-If the issue persists, please open a GitHub issue with relevant logs and screenshots, or reach out on our 
+- **Blank screen**: Check the browser console for errors.
+- **Loading issues**: Verify API availability and response format.
+- **Visualization issues**: Use the latest Chrome or Firefox.
+
+If the issue persists, please open a GitHub issue with relevant logs and screenshots, or reach out on our
 [Discord channel](https://discord.gg/pZYUDwkpPv).
 The maintainers will review the report and help resolve or fix the issue.
 
 ---
+
 For more information about the Braidpool project, see the
- **[Braidpool main repository](https://github.com/braidpool/braidpool)**
- 
+**[Braidpool main repository](https://github.com/braidpool/braidpool)**
+
 ---
