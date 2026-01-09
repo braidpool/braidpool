@@ -1,54 +1,70 @@
 # Braidpool Dashboard
+The Braidpool Dashboard uses a modular, tab-based architecture.
+Dashboard sections such as Dashboard, Braid Visualization, Bead Explorer, Mining Inventory, Bitcoin Stats, Mempool, and Node Health operate independently, each with its own configuration, API endpoints, and data flow.
 
-A visualization dashboard for the Braidpool decentralized mining pool, and Bitcoin related data.
-
-## How to Run
-
-###  Braid Visualization Setup Guide
+---
+## Running the Braid Visualization
 
 To run the **Braid Visualization**, you have two options:
 
-- Use the **deployed API**:
+#### Option 1: Use the deployed API
 
-  ```
-  http://french.braidpool.net:65433
-  ```
+```
+http://french.braidpool.net:65433
+```
 
-- Or, run it **locally** via the `simulator_api` located in:
+#### Option 2: Run locally using the simulator API
 
-  ```
-   tests/simulator_api.py
-  ```
+The simulator is located at:
+
+```
+tests/simulator_api.py
+```
 
 ---
 
-### ⚙️ Setup Instructions
+## Running Other Dashboard Tabs
 
-1. Install dependencies
+*(Bead Explorer, Bitcoin Stats, Mempool, Node Health)*
 
-```
+These tabs rely on the **dashboard backend API**.
+
+#### 1. Start the Backend API
+
+```bash
+cd braidpool/dashboard/api
 npm install
 ```
 
-2.  Set environment variables
-    Use the example file as a reference: [`.env.example`](https://github.com/braidpool/braidpool/blob/dev/dashboard/api/.env.example)
+#### 2. Configure Environment Variables
 
-3. Start the backend server
+Use the example file as reference:
+ [https://github.com/braidpool/braidpool/blob/dev/dashboard/api/.env.example](https://github.com/braidpool/braidpool/blob/dev/dashboard/api/.env.example)
 
-```
-cd api
+#### 3. Run the Backend Server
+
+```bash
 node server.js
 ```
 
-The server will run at http://localhost:5000
+The API will be available at:
+**[http://localhost:5000](http://localhost:5000)**
 
-4. Start the frontend development server
+---
 
-```
+#### 4. Start the Frontend Dashboard
+
+```bash
+cd braidpool/dashboard
+npm install
 npm run dev
 ```
 
-The dashboard will open automatically at [http://localhost:3000](http://localhost:3000).
+The dashboard will open at:
+**[http://localhost:3000](http://localhost:3000)**
+
+---
+
 
 ## Build for Production
 
@@ -60,65 +76,77 @@ npm run build
 npm run preview
 ```
 
+---
+
 ## 🐳 Docker Setup
 
-You can use **Docker Compose** to spin up all required services-the frontend, backend API, and simulator with a single command.
+You can use **Docker Compose** to run the frontend, backend API, and simulator together.
 
-### Run All Services
-Build and start all containers
+#### Run All Services
+
 ```bash
 docker-compose up --build
 ```
 
-Once running:
+#### Services
 
-- Frontend: http://localhost:3000
-- API: http://localhost:5000
-- Simulator API: http://localhost:65433
+* Frontend: [http://localhost:3000](http://localhost:3000)
+* API: [http://localhost:5000](http://localhost:5000)
+* Simulator API: [http://localhost:65433](http://localhost:65433)
 
-### Stop Containers
+#### Stop Services
 
-```
+```bash
 docker-compose down
 ```
 
+---
+
 ## Technology Stack
 
-### Frontend
+#### Frontend
 
-- **Core**
-  - TypeScript 4.9+
-  - TailwindCSS 3.0+
+* TypeScript 4.9+
+* TailwindCSS 3.0+
 
+#### Backend
 
-### Backend
+**API Server**
 
-- **API Server**
-  - Node.js
-  - Express.js
-  - WebSocket support
+* Node.js
+* Express.js
+* WebSocket support
 
+**Mining Interface**
 
-- **Mining Interface**
-  - Python 3.7+
-  - Flask
-  - pyasic library
+* Python 3.7+
+* Flask
+* pyasic library
 
+**Development Tools**
 
-- **Development Tools**
-  - Docker & Docker Compose
-  - ESLint & Prettier
-  - Jest & React Testing Library
-  - Python pytest
-
-
-## Troubleshooting
-
-- **Blank screen**: Check the browser console for errors.
-- **Loading issues**: Verify that data files are in the correct format.
-- **Visualization problems**: Ensure you are using a compatible browser (latest Chrome/Firefox recommended).
-- **Visualization graph keeps on loading**: Ping the API, check the url of the API at dashboard/src/component/BraidPoolDAG/BraidPoolDAG.tsx.
+* Docker & Docker Compose
+* ESLint & Prettier
+* Jest & React Testing Library
+* Python pytest
 
 ---
 
-For more details on the Braidpool project, visit the [main repository](https://github.com/braidpool/braidpool).
+## Troubleshooting
+
+* **Blank screen**: Check the browser console for errors.
+* **Loading issues**: Verify API availability and response format.
+* **Visualization issues**: Use the latest Chrome or Firefox.
+  
+If the issue persists, please open a GitHub issue with relevant logs and screenshots, or reach out on our 
+[Discord channel](https://discord.gg/pZYUDwkpPv).
+The maintainers will review the report and help resolve or fix the issue.
+
+---
+
+For more information about the Braidpool project, see the
+ **[Braidpool main repository](https://github.com/braidpool/braidpool)**
+
+---
+
+
