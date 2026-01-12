@@ -9,11 +9,11 @@ import { WEBSOCKET_URLS } from '../../URLs';
 import { ITEMS_PER_PAGE, DEFAULT_TIME_RANGE } from './Constants';
 import { PoolDominance } from './PoolDominance/PoolDominance';
 
-export default function MinedSharesExplorer({ 
-  activeTab = 'beads', 
-  setActiveTab = () => {} 
-}: { 
-  activeTab?: string; 
+export default function MinedSharesExplorer({
+  activeTab = 'beads',
+  setActiveTab = () => {},
+}: {
+  activeTab?: string;
   setActiveTab?: (tab: string) => void;
 }) {
   const [expandedBeads, setExpandedBeads] = useState<Record<BeadId, boolean>>({
