@@ -15,7 +15,7 @@ struct Cli {
 }
 
 #[derive(Debug, Subcommand)]
-#[command(rename_all = "PascalCase")]
+#[command(rename_all = "snakecase")]
 enum Commands {
     /// Get a bead by hash
     GetBead {
@@ -38,9 +38,9 @@ enum Commands {
     /// Get current DAG tips
     GetTips,
 
-    /// Get a list of bead hashes in the cohort
-    GetCohort {
-        /// The id of the Cohort
+    /// Get a list of bead hashes in a cohort by its ID
+    GetCohortById {
+        /// The ID of the cohort
         cohort_id: u64,
     },
 
@@ -50,8 +50,21 @@ enum Commands {
     /// Get a list of connected Stratum miners
     GetMinerInfo,
 
-    ///  get detailed statistics about beads mined by us, expected payout, etc.
-    GetMiningInfo,
+    /// Get detailed statistics about beads mined by us, expected payout, etc.
+    /// Requires at least one filter: public_keys or miner_ips
+    GetMiningInfo {
+        /// List of public keys (hex-encoded) to filter beads by.
+        /// Supports multiple keys for key rotation scenarios.
+        /// Example: --public_keys "0202...,0303..."
+        #[arg(long, value_delimiter = ',')]
+        public_keys: Option<Vec<String>>,
+
+        /// List of miner IP addresses to filter beads by.
+        /// Useful for pool operators tracking specific miners.
+        /// Example: --miner_ips "192.168.1.1,192.168.1.2"
+        #[arg(long, value_delimiter = ',')]
+        miner_ips: Option<Vec<String>>,
+    },
 
     /// Get the parent hashes of a bead by bead_hash
     GetParents {
@@ -65,22 +78,25 @@ enum Commands {
         bead_hash: String,
     },
 
-    /// Get the list of beads in the highest work path
-    GetHwPath {
-        /// Limit the number of results
+    /// Get the list of beads in the highest work path, limited by count
+    GetHighestWorkPathByCount {
+        /// Limit the number of results returned
         limit: u8,
     },
 
     /// Get statistics about the IPC connection
     GetIpcStats,
 
-    /// Get braid information (similar to getblockchaininfo in bitcoin-cli)
+    /// Get braid information (returns bead_count , tip_count , tips, cohort_count, orphan_count, genesis_beads, total_work)
     GetBraidInfo,
 
-    /// Get node information (libp2p PeerID, payout address, miner pubkey, etc.)
+    /// Get node information for the node that created a specific bead
+    /// Returns information about the node that created the specified bead, including:
+    /// common_pubkey (libp2p public key), miner_ip, payout_address, and minimum_target.
     GetNodeInfo {
-        /// The node identifier (bead hash)
-        node: String,
+        /// The bead hash (block hash) as a 64-character hex-encoded string representing the bead's block hash
+        /// This identifies which bead's creator node information you want to retrieve
+        bead_hash: String,
     },
 
     /// Get peer information (IP/PeerID/libp2p address of connected peers)
@@ -114,19 +130,79 @@ struct JsonRpcRequest {
     id: u64,
 }
 
-#[derive(Deserialize, Debug)]
-struct JsonRpcResponse {
-    result: serde_json::Value,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    error: Option<serde_json::Value>,
+#[derive(Deserialize, Debug, Clone)]
+pub struct JsonRpcError {
+    pub code: i32,
+    pub message: String,
+    #[serde(default)]
+    pub data: Option<serde_json::Value>,
 }
 
-/// Client-side RPC call function
+impl std::fmt::Display for JsonRpcError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Error {}: {}", self.code, self.message)
+    }
+}
+
+impl std::error::Error for JsonRpcError {}
+
+#[derive(Deserialize, Debug)]
+#[allow(dead_code)]
+struct JsonRpcResponse {
+    #[serde(default)]
+    jsonrpc: Option<String>,
+    #[serde(default)]
+    result: Option<serde_json::Value>,
+    #[serde(default)]
+    error: Option<JsonRpcError>,
+    #[serde(default)]
+    id: Option<serde_json::Value>,
+}
+
+#[derive(Debug)]
+pub enum RpcCallError {
+    HttpError(String),
+    InvalidJson { body: String, parse_error: String },
+    JsonRpcError(JsonRpcError),
+    InvalidResponse(String),
+}
+
+impl std::fmt::Display for RpcCallError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RpcCallError::HttpError(msg) => write!(f, "Connection error: {}", msg),
+            RpcCallError::InvalidJson { body, parse_error } => {
+                let truncated_body = if body.len() > 500 {
+                    format!("{}... (truncated)", &body[..500])
+                } else {
+                    body.clone()
+                };
+                write!(
+                    f,
+                    "Invalid server response (not valid JSON): {}\nServer response: {}",
+                    parse_error, truncated_body
+                )
+            }
+            RpcCallError::JsonRpcError(err) => write!(f, "{}", err),
+            RpcCallError::InvalidResponse(msg) => write!(f, "Invalid JSON-RPC response: {}", msg),
+        }
+    }
+}
+
+impl std::error::Error for RpcCallError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            RpcCallError::JsonRpcError(err) => Some(err),
+            _ => None,
+        }
+    }
+}
+
 async fn call_rpc(
     rpc_url: &str,
     method: &str,
     params: serde_json::Value,
-) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+) -> Result<serde_json::Value, RpcCallError> {
     let rpc_request = JsonRpcRequest {
         jsonrpc: "2.0",
         method: method.to_string(),
@@ -135,21 +211,34 @@ async fn call_rpc(
     };
 
     let client = reqwest::Client::new();
-    let res = client.post(rpc_url).json(&rpc_request).send().await?;
+    let res = client
+        .post(rpc_url)
+        .json(&rpc_request)
+        .send()
+        .await
+        .map_err(|e| RpcCallError::HttpError(e.to_string()))?;
 
-    if res.status().is_success() {
-        let rpc_response: JsonRpcResponse = res.json().await?;
-        if let Some(error) = rpc_response.error {
-            return Err(format!("RPC error: {}", error).into());
+    let body_text = res
+        .text()
+        .await
+        .map_err(|e| RpcCallError::HttpError(format!("Failed to read response body: {}", e)))?;
+
+    match serde_json::from_str::<JsonRpcResponse>(&body_text) {
+        Ok(rpc_response) => {
+            if let Some(error) = rpc_response.error {
+                return Err(RpcCallError::JsonRpcError(error));
+            }
+            if let Some(result) = rpc_response.result {
+                return Ok(result);
+            }
+            Err(RpcCallError::InvalidResponse(
+                "Response contains neither 'result' nor 'error' field".to_string(),
+            ))
         }
-        Ok(rpc_response.result)
-    } else {
-        let status = res.status();
-        let text = res
-            .text()
-            .await
-            .unwrap_or_else(|_| "Could not read error body".to_string());
-        Err(format!("HTTP error: {}\nResponse: {}", status, text).into())
+        Err(parse_err) => Err(RpcCallError::InvalidJson {
+            body: body_text,
+            parse_error: parse_err.to_string(),
+        }),
     }
 }
 
@@ -163,16 +252,49 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::GetBeadCount => ("getbeadcount", json!([])),
         Commands::GetCohortCount => ("getcohortcount", json!([])),
         Commands::GetTips => ("gettips", json!([])),
-        Commands::GetCohort { cohort_id } => ("getcohort", json!([cohort_id])),
+        Commands::GetCohortById { cohort_id } => ("getcohortbyid", json!([cohort_id])),
         Commands::GetGenesis => ("getgenesis", json!([])),
         Commands::GetMinerInfo => ("getminerinfo", json!([])),
-        Commands::GetMiningInfo => ("getmininginfo", json!([])),
+        Commands::GetMiningInfo {
+            public_keys,
+            miner_ips,
+        } => {
+            let mut params_obj = serde_json::Map::new();
+
+            if let Some(keys) = public_keys {
+                if !keys.is_empty() {
+                    params_obj.insert(
+                        "public_keys".to_string(),
+                        json!(keys
+                            .iter()
+                            .map(|k| k.trim().to_string())
+                            .collect::<Vec<_>>()),
+                    );
+                }
+            }
+
+            if let Some(ips) = miner_ips {
+                if !ips.is_empty() {
+                    params_obj.insert(
+                        "miner_ips".to_string(),
+                        json!(ips
+                            .iter()
+                            .map(|ip| ip.trim().to_string())
+                            .collect::<Vec<_>>()),
+                    );
+                }
+            }
+
+            ("getmininginfo", json!([params_obj]))
+        }
         Commands::GetParents { bead_hash } => ("getparents", json!([bead_hash])),
         Commands::GetChildren { bead_hash } => ("getchildren", json!([bead_hash])),
-        Commands::GetHwPath { limit } => ("gethwpath", json!([limit])),
+        Commands::GetHighestWorkPathByCount { limit } => {
+            ("gethighestworkpathbycount", json!([limit]))
+        }
         Commands::GetIpcStats => ("getipcstats", json!([])),
         Commands::GetBraidInfo => ("getbraidinfo", json!([])),
-        Commands::GetNodeInfo { node } => ("getnodeinfo", json!([node])),
+        Commands::GetNodeInfo { bead_hash } => ("getnodeinfo", json!([bead_hash])),
         Commands::GetPeerInfo => ("getpeerinfo", json!([])),
         Commands::StagedTransactions => ("stagedtransactions", json!([])),
         Commands::UnstageTransactions { tx_id } => ("unstagetransactions", json!([tx_id])),
@@ -185,12 +307,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match call_rpc(&cli.rpc_url, method, params).await {
         Ok(result) => {
-            let pretty_response = serde_json::to_string_pretty(&result)?;
+            let pretty_response = serde_json::to_string_pretty(&result).map_err(|e| {
+                Box::new(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("Failed to serialize response: {}", e),
+                ))
+            })?;
             println!("{}", pretty_response);
             Ok(())
         }
         Err(e) => {
+            // Print error to stderr with proper formatting
             eprintln!("Error: {}", e);
+
+            // For JSON-RPC errors, provide additional context if available
+            if let RpcCallError::JsonRpcError(ref json_err) = e {
+                if let Some(ref data) = json_err.data {
+                    eprintln!("\nAdditional error details:");
+                    if let Ok(pretty_data) = serde_json::to_string_pretty(data) {
+                        eprintln!("{}", pretty_data);
+                    } else {
+                        eprintln!("{:?}", data);
+                    }
+                }
+            }
+
             std::process::exit(1);
         }
     }

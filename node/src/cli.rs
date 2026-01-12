@@ -26,12 +26,12 @@ pub struct Cli {
     pub rpcport: u16,
 
     /// Use this username for bitcoin RPC
-    #[arg(long, default_value = "root")]
-    pub rpcuser: String,
+    #[arg(long)]
+    pub rpcuser: Option<String>,
 
     /// Use this password for bitcoin RPC
-    #[arg(long, default_value = "pass")]
-    pub rpcpass: String,
+    #[arg(long)]
+    pub rpcpass: Option<String>,
 
     /// Which network to use. Valid options are mainnet, testnet4, signet, cpunet (preferred)
     #[arg(long, default_value = "main")]

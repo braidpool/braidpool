@@ -242,8 +242,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
         }
     }
-    //for local testing comment this loading of keypair from keystore
-    //and use the below one
     let keypair = match fs::read(&keystore_path) {
         Ok(keypair) => {
             info!(path = %keystore_path.display(), "Loading keypair from keystore");
@@ -275,9 +273,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //result in same peerID leading to OutgoingConnectionError
 
     // let keypair = identity::Keypair::generate_ed25519();
-
-    // Get peer ID from keypair before moving it into swarm builder
-    let peer_id_for_rpc = PeerId::from(keypair.public());
 
     //creating a main topic subscribing to the current test topic
     let current_broadcast_topic: floodsub::Topic = floodsub::Topic::new(BRAIDPOOL_TOPIC);
@@ -393,23 +388,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create RPC proxy command channel - sender goes to RPC server, receiver goes to IPC handler
     let (rpc_proxy_tx, rpc_proxy_rx) = tokio::sync::mpsc::unbounded_channel::<RpcProxyCommand>();
-    let rpc_proxy_tx_for_rpc = rpc_proxy_tx;
-    let rpc_proxy_rx_for_ipc = rpc_proxy_rx;
 
     // peer_manager_arc is created above and shared between swarm and RPC server
 
     //spawning the rpc server
     let rpc_addr = "127.0.0.1:6682"; // TODO: Load from config file
 
-    let bitcoin_rpc_config = BitcoinRpcConfig::from_cli_args(&args);
+    let bitcoin_rpc_config = BitcoinRpcConfig::from_cli_args(&args).unwrap_or_else(|e| {
+        eprintln!("Error: {}", e);
+        std::process::exit(1);
+    });
     let server_join = tokio::spawn(run_rpc_server(
         Arc::clone(&braid),
         rpc_addr,
-        Some(peer_id_for_rpc),
         peer_manager_arc.clone(),
         connection_mapping_for_rpc.clone(),
         latest_template.clone(),
-        rpc_proxy_tx_for_rpc,
+        rpc_proxy_tx,
         bitcoin_rpc_config,
     ));
     match server_join.await {
@@ -461,7 +456,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         let ipc_socket_path = ipc_socket_path_for_blocking.clone();
                         let ipc_template_tx = ipc_template_tx.clone();
                         let template_cache = template_cache_for_listener.clone();
-                        let rpc_command_rx = rpc_proxy_rx_for_ipc;
+                        let rpc_command_rx = rpc_proxy_rx;
 
                         async move {
                             match node::ipc::ipc_block_listener(
