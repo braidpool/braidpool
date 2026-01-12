@@ -66,7 +66,7 @@ const Dashboard = () => {
       case Page.MINER_STATS:
         return (
           <div className="p-2">
-            <Card 
+            <Card
               title="Beads Explorer"
               headerExtra={
                 <div className="relative">
@@ -91,7 +91,10 @@ const Dashboard = () => {
               }
             >
               <div>
-                <MinedSharesExplorer activeTab={activeTab} setActiveTab={setActiveTab} />
+                <MinedSharesExplorer
+                  activeTab={activeTab}
+                  setActiveTab={setActiveTab}
+                />
               </div>
             </Card>
           </div>

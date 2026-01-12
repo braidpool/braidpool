@@ -13,7 +13,6 @@ export function TrendsTab({ timeRange }: { timeRange: string }) {
     <div className="space-y-8">
       {/* Navigation Area */}
       <div className="border-b border-gray-800">
-        
         {/* Mobile View: Dropdown (Hidden on medium screens and up) */}
         <div className="md:hidden mb-4 px-2">
           <label htmlFor="tabs" className="sr-only">
@@ -35,9 +34,17 @@ export function TrendsTab({ timeRange }: { timeRange: string }) {
             </select>
             {/* Custom downward arrow for style consistency */}
             <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-400">
-                <svg className="h-4 w-4 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                </svg>
+              <svg
+                className="h-4 w-4 fill-current"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                  clipRule="evenodd"
+                />
+              </svg>
             </div>
           </div>
         </div>
@@ -82,18 +89,14 @@ export function TrendsTab({ timeRange }: { timeRange: string }) {
       <div className={activeSubTab === 'latency' ? 'block' : 'hidden'}>
         <LatencyTab timeRange={timeRange} />
       </div>
-      <div
-        className={activeSubTab === 'transactions' ? 'block' : 'hidden'}
-      >
+      <div className={activeSubTab === 'transactions' ? 'block' : 'hidden'}>
         <TransactionsTab
           chartHovered={chartHovered}
           setChartHovered={setChartHovered}
           timeRange={timeRange}
         />
       </div>
-      <div
-        className={activeSubTab === 'difficulty' ? 'block' : 'hidden'}
-      >
+      <div className={activeSubTab === 'difficulty' ? 'block' : 'hidden'}>
         <Difficulty />
       </div>
     </div>
