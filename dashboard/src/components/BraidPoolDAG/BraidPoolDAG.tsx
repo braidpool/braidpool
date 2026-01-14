@@ -15,6 +15,9 @@ const GraphVisualization: React.FC = () => {
   const [graphData, setGraphData] = useState<GraphData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const isPlayingRef = useRef(true);
+  const pendingParsedDataRef = useRef<any | null>(null);
   const width = window.innerWidth - 100;
   const margin = { top: 0, right: 0, bottom: 0, left: 50 }; // Changed top from 50 to 100
   const height = window.innerHeight - margin.top - margin.bottom;
@@ -44,147 +47,7 @@ const GraphVisualization: React.FC = () => {
   const zoomBehavior = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(
     null
   );
-
-  useEffect(() => {
-    const url = WEBSOCKET_URLS.BRAIDPOOL_DAG_WEBSOCKET;
-    const socket = new WebSocket(url);
-    let isMounted = true;
-
-    socket.onopen = () => {
-      if (!isMounted) return;
-      console.log('Connected to WebSocket', url);
-      setConnectionStatus('Connected');
-    };
-
-    socket.onclose = () => {
-      if (!isMounted) return;
-      setConnectionStatus('Disconnected');
-    };
-
-    socket.onerror = (err) => {
-      if (!isMounted) return;
-      setConnectionStatus(`Error: ${err}`);
-    };
-
-    socket.onmessage = (event) => {
-      if (!isMounted) return;
-      try {
-        const parsed = JSON.parse(event.data);
-        const parsedData = parsed.data;
-        console.log('Received data:', parsedData);
-        if (!parsedData?.parents || typeof parsedData.parents !== 'object') {
-          return;
-        }
-
-        const children: Record<string, string[]> = {};
-        if (parsedData?.parents && typeof parsedData.parents === 'object') {
-          Object.entries(parsedData.parents).forEach(([nodeId, parents]) => {
-            (parents as string[]).forEach((parentId) => {
-              if (!children[parentId]) {
-                children[parentId] = [];
-              }
-              children[parentId].push(nodeId);
-            });
-          });
-        }
-
-        const bead_count =
-          parsedData?.parents && typeof parsedData.parents === 'object'
-            ? Object.keys(parsedData.parents).length
-            : 0;
-
-        const graphData: GraphData = {
-          highest_work_path: parsedData.highest_work_path,
-          parents: parsedData.parents,
-          cohorts: parsedData.cohorts,
-          children,
-          bead_count,
-        };
-
-        const firstCohortChanged =
-          parsedData?.cohorts?.[0]?.length &&
-          JSON.stringify(prevFirstCohortRef.current) !==
-            JSON.stringify(parsedData.cohorts[0]);
-
-        const lastCohortChanged =
-          parsedData?.cohorts?.length > 0 &&
-          JSON.stringify(prevLastCohortRef.current) !==
-            JSON.stringify(parsedData.cohorts[parsedData.cohorts.length - 1]);
-
-        if (firstCohortChanged) {
-          const top = COLORS.shift();
-          COLORS.push(top ?? `rgba(${217}, ${95}, ${2}, 1)`);
-          prevFirstCohortRef.current = parsedData.cohorts[0];
-        }
-
-        if (lastCohortChanged) {
-          prevLastCohortRef.current =
-            parsedData.cohorts[parsedData.cohorts.length - 1];
-        }
-
-        const newMapping: NodeIdMapping = {};
-        let nextId = 1;
-        Object.keys(parsedData.parents).forEach((hash) => {
-          if (!newMapping[hash]) {
-            newMapping[hash] = nextId.toString();
-            nextId++;
-          }
-        });
-
-        setNodeIdMap(newMapping);
-        setGraphData(graphData);
-
-        // Increment the counter and update the highlighted bead hash
-        setGraphUpdateCounter((prevCounter) => {
-          const newCounter = prevCounter + 1;
-          // If the counter is divisible by 100, set the latest bead's hash
-          if (
-            newCounter % 100 === 0 &&
-            parsedData.highest_work_path.length > 0
-          ) {
-            const latestBeadHash =
-              parsedData.highest_work_path[
-                parsedData.highest_work_path.length - 1
-              ];
-            setLatestBeadHashForHighlight(latestBeadHash);
-          }
-          // The `latestBeadHashForHighlight` will remain set until the next time the condition is met.
-          return newCounter;
-        });
-
-        setTotalBeads(bead_count);
-        setTotalCohorts(parsedData.cohorts.length);
-        setMaxCohortSize(
-          Math.max(...parsedData.cohorts.map((c: string | any[]) => c.length))
-        );
-        setHwpLength(parsedData.highest_work_path.length);
-        setLoading(false);
-
-        // Trigger animation if cohorts changed
-        if (firstCohortChanged || lastCohortChanged) {
-          setTimeout(() => {
-            animateCohorts(
-              firstCohortChanged ? parsedData.cohorts[0] : [],
-              lastCohortChanged
-                ? parsedData.cohorts[parsedData.cohorts.length - 1]
-                : []
-            );
-          }, 100);
-        }
-      } catch (err) {
-        setError('Error processing graph data: ');
-        console.error('Error processing graph data:', err);
-        setLoading(false);
-      }
-    };
-
-    return () => {
-      isMounted = false;
-      if (socket.readyState === WebSocket.OPEN) {
-        socket.close();
-      }
-    };
-  }, []);
+  const zoomTransformRef = useRef<d3.ZoomTransform | null>(null);
 
   const animateCohorts = (firstCohort: string[], lastCohort: string[]) => {
     if (!svgRef.current) return;
@@ -246,16 +109,180 @@ const GraphVisualization: React.FC = () => {
       animateLinkDirection(selectedLinks);
     }
   };
+
+  const applyParsedData = (parsedData: any) => {
+    if (!parsedData?.parents || typeof parsedData.parents !== 'object') {
+      return;
+    }
+
+    const children: Record<string, string[]> = {};
+    if (parsedData?.parents && typeof parsedData.parents === 'object') {
+      Object.entries(parsedData.parents).forEach(([nodeId, parents]) => {
+        (parents as string[]).forEach((parentId) => {
+          if (!children[parentId]) {
+            children[parentId] = [];
+          }
+          children[parentId].push(nodeId);
+        });
+      });
+    }
+
+    const bead_count =
+      parsedData?.parents && typeof parsedData.parents === 'object'
+        ? Object.keys(parsedData.parents).length
+        : 0;
+
+    const graphData: GraphData = {
+      highest_work_path: parsedData.highest_work_path,
+      parents: parsedData.parents,
+      cohorts: parsedData.cohorts,
+      children,
+      bead_count,
+    };
+
+    const firstCohortChanged =
+      parsedData?.cohorts?.[0]?.length &&
+      JSON.stringify(prevFirstCohortRef.current) !==
+        JSON.stringify(parsedData.cohorts[0]);
+
+    const lastCohortChanged =
+      parsedData?.cohorts?.length > 0 &&
+      JSON.stringify(prevLastCohortRef.current) !==
+        JSON.stringify(parsedData.cohorts[parsedData.cohorts.length - 1]);
+
+    if (firstCohortChanged) {
+      const top = COLORS.shift();
+      COLORS.push(top ?? `rgba(${217}, ${95}, ${2}, 1)`);
+      prevFirstCohortRef.current = parsedData.cohorts[0];
+    }
+
+    if (lastCohortChanged) {
+      prevLastCohortRef.current =
+        parsedData.cohorts[parsedData.cohorts.length - 1];
+    }
+
+    const newMapping: NodeIdMapping = {};
+    let nextId = 1;
+    Object.keys(parsedData.parents).forEach((hash) => {
+      if (!newMapping[hash]) {
+        newMapping[hash] = nextId.toString();
+        nextId++;
+      }
+    });
+
+    setNodeIdMap(newMapping);
+    setGraphData(graphData);
+
+    // Increment the counter and update the highlighted bead hash
+    setGraphUpdateCounter((prevCounter) => {
+      const newCounter = prevCounter + 1;
+      // If the counter is divisible by 100, set the latest bead's hash
+      if (newCounter % 100 === 0 && parsedData.highest_work_path.length > 0) {
+        const latestBeadHash =
+          parsedData.highest_work_path[parsedData.highest_work_path.length - 1];
+        setLatestBeadHashForHighlight(latestBeadHash);
+      }
+      // The `latestBeadHashForHighlight` will remain set until the next time the condition is met.
+      return newCounter;
+    });
+
+    setTotalBeads(bead_count);
+    setTotalCohorts(parsedData.cohorts.length);
+    setMaxCohortSize(
+      Math.max(...parsedData.cohorts.map((c: string | any[]) => c.length))
+    );
+    setHwpLength(parsedData.highest_work_path.length);
+    setLoading(false);
+
+    // Trigger animation if cohorts changed
+    if (firstCohortChanged || lastCohortChanged) {
+      setTimeout(() => {
+        if (!isPlayingRef.current) return;
+        animateCohorts(
+          firstCohortChanged ? parsedData.cohorts[0] : [],
+          lastCohortChanged
+            ? parsedData.cohorts[parsedData.cohorts.length - 1]
+            : []
+        );
+      }, 100);
+    }
+  };
+
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+    if (isPlaying && pendingParsedDataRef.current) {
+      applyParsedData(pendingParsedDataRef.current);
+      pendingParsedDataRef.current = null;
+    }
+  }, [isPlaying]);
+
+  useEffect(() => {
+    const url = WEBSOCKET_URLS.BRAIDPOOL_DAG_WEBSOCKET;
+    const socket = new WebSocket(url);
+    let isMounted = true;
+
+    socket.onopen = () => {
+      if (!isMounted) return;
+      console.log('Connected to WebSocket', url);
+      setConnectionStatus('Connected');
+    };
+
+    socket.onclose = () => {
+      if (!isMounted) return;
+      setConnectionStatus('Disconnected');
+    };
+
+    socket.onerror = (err) => {
+      if (!isMounted) return;
+      setConnectionStatus(`Error: ${err}`);
+    };
+
+    socket.onmessage = (event) => {
+      if (!isMounted) return;
+      try {
+        const parsed = JSON.parse(event.data);
+        const parsedData = parsed.data;
+        console.log('Received data:', parsedData);
+        pendingParsedDataRef.current = parsedData;
+        if (isPlayingRef.current) {
+          applyParsedData(parsedData);
+          pendingParsedDataRef.current = null;
+        }
+      } catch (err) {
+        setError('Error processing graph data: ');
+        console.error('Error processing graph data:', err);
+        setLoading(false);
+      }
+    };
+
+    return () => {
+      isMounted = false;
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.close();
+      }
+    };
+  }, []);
+
   const handleResetZoom = () => {
-    setDefaultZoom(0.3);
+    const nextZoom = 0.3;
+    setDefaultZoom(nextZoom);
+    zoomTransformRef.current = d3.zoomIdentity.scale(nextZoom);
   };
 
   const handleZoomIn = () => {
-    setDefaultZoom((prevZoom) => Math.min(prevZoom + 0.1, 5));
+    setDefaultZoom((prevZoom) => {
+      const nextZoom = Math.min(prevZoom + 0.1, 5);
+      zoomTransformRef.current = d3.zoomIdentity.scale(nextZoom);
+      return nextZoom;
+    });
   };
 
   const handleZoomOut = () => {
-    setDefaultZoom((prevZoom) => Math.max(prevZoom - 0.1, 0.3));
+    setDefaultZoom((prevZoom) => {
+      const nextZoom = Math.max(prevZoom - 0.1, 0.3);
+      zoomTransformRef.current = d3.zoomIdentity.scale(nextZoom);
+      return nextZoom;
+    });
   };
 
   // have not used it YET.. might come in handy in the future
@@ -291,11 +318,15 @@ const GraphVisualization: React.FC = () => {
       .scaleExtent([0.5, 5])
       .on('zoom', (event: d3.D3ZoomEvent<SVGSVGElement, unknown>) => {
         container.attr('transform', event.transform.toString());
+        zoomTransformRef.current = event.transform;
       });
 
     svg
       .call(zoomBehavior.current)
-      .call(zoomBehavior.current.transform, d3.zoomIdentity.scale(defaultZoom));
+      .call(
+        zoomBehavior.current.transform,
+        zoomTransformRef.current ?? d3.zoomIdentity.scale(defaultZoom)
+      );
 
     const allNodes = Object.keys(graphData.parents).map((id) => ({
       id,
@@ -631,6 +662,12 @@ const GraphVisualization: React.FC = () => {
             </option>
           ))}
         </select>
+        <button
+          onClick={() => setIsPlaying((prev) => !prev)}
+          className="bg-[#0077B6] text-white px-3 py-1 rounded hover:bg-[#005691] transition-colors"
+        >
+          {isPlaying ? 'Pause' : 'Resume'}
+        </button>
         <div className="flex gap-1 ml-auto">
           <button
             onClick={handleZoomIn}
