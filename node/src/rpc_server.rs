@@ -63,7 +63,7 @@ pub async fn execute_cli_command(
     server_addr: SocketAddr,
 ) -> Result<(), BraidRPCError> {
     // //initializing a client associated with the current node
-    // //for receving the response from the server
+    // //for receiving the response from the server
     let target_uri = format!("http://{}", server_addr.to_string());
     let client_res: HttpClient = HttpClient::builder().build(target_uri).unwrap();
 
