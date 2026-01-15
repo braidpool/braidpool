@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Miner } from './Types';
 import { DeviceCard } from './Card';
 import { API_URLS } from '../../URLs';
@@ -8,8 +8,21 @@ const MinerInventoryDashboard = () => {
   const [error, setError] = useState<string | null>(null);
   const [newMinerIP, setNewMinerIP] = useState('');
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [searchInput, setSearchInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<
+    'all' | 'efficiency' | 'hashrate' | 'power' | 'temperature'
+  >('all');
+  const [statusFilter, setStatusFilter] = useState<
+    'all' | 'online' | 'warning' | 'offline'
+  >('all');
   const [refreshInterval, setRefreshInterval] = useState(30);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const minersRef = useRef<Miner[]>([]);
+
+  useEffect(() => {
+    minersRef.current = miners;
+  }, [miners]);
 
   // Helper functions
   const determineStatus = (data: any): 'online' | 'warning' | 'offline' => {
@@ -94,25 +107,28 @@ const MinerInventoryDashboard = () => {
   };
 
   const refreshAllMiners = async () => {
-    if (miners.length === 0) return;
+    const currentMiners = minersRef.current;
+    if (currentMiners.length === 0) return;
 
     setLoading(true);
-    const updatedMiners: Miner[] = [];
 
-    for (const miner of miners) {
-      const updatedMiner = await fetchMinerData(miner.ip);
-      if (updatedMiner) {
-        updatedMiner.id = miner.id;
-        updatedMiners.push(updatedMiner);
-      } else {
-        updatedMiners.push({
-          ...miner,
-          status: 'offline' as const,
-          lastSeen: new Date().toLocaleTimeString(),
-          alerts: miner.alerts + 1,
-        });
+    const results = await Promise.all(
+      currentMiners.map((m) => fetchMinerData(m.ip).catch(() => null))
+    );
+
+    const updatedMiners: Miner[] = results.map((updated, idx) => {
+      const orig = currentMiners[idx];
+      if (updated) {
+        updated.id = orig.id;
+        return updated;
       }
-    }
+      return {
+        ...orig,
+        status: 'offline' as const,
+        lastSeen: new Date().toLocaleTimeString(),
+        alerts: (orig.alerts || 0) + 1,
+      };
+    });
 
     setMiners(updatedMiners);
     setLastUpdate(new Date());
@@ -157,6 +173,12 @@ const MinerInventoryDashboard = () => {
     setLoading(false);
   };
 
+  const handleSearch = () => setSearchQuery(searchInput.trim());
+  const clearSearch = () => {
+    setSearchInput('');
+    setSearchQuery('');
+  };
+
   const totalMiners = miners.length;
   const onlineMiners = miners.filter((m) => m.status === 'online').length;
   const warningMiners = miners.filter((m) => m.status === 'warning').length;
@@ -172,6 +194,46 @@ const MinerInventoryDashboard = () => {
           totalMiners) *
         1000
       : 0;
+
+  const displayedMiners =
+    !searchQuery || searchQuery.length === 0
+      ? miners
+      : miners.filter((m) => {
+          const q = searchQuery.toLowerCase();
+          return (
+            (m.ip || '').toLowerCase().includes(q) ||
+            (m.hostname || '').toLowerCase().includes(q)
+          );
+        });
+
+  // Apply status filter
+  const filteredByStatus =
+    statusFilter === 'all'
+      ? displayedMiners
+      : displayedMiners.filter((m) => m.status === statusFilter);
+
+  // Apply sorting to the filtered list
+  const sortedDisplayedMiners = (() => {
+    const arr = [...filteredByStatus];
+    if (sortBy === 'all') return arr;
+
+    arr.sort((a, b) => {
+      switch (sortBy) {
+        case 'efficiency':
+          return (b.efficiency || 0) - (a.efficiency || 0);
+        case 'hashrate':
+          return (b.hashrate_current || 0) - (a.hashrate_current || 0);
+        case 'power':
+          return (b.power_usage || 0) - (a.power_usage || 0);
+        case 'temperature':
+          return (b.temperature || 0) - (a.temperature || 0);
+        default:
+          return 0;
+      }
+    });
+
+    return arr;
+  })();
 
   return (
     <div className="min-h-screen  text-white p-6">
@@ -193,9 +255,10 @@ const MinerInventoryDashboard = () => {
             type="text"
             value={newMinerIP}
             onChange={(e) => setNewMinerIP(e.target.value)}
-            placeholder="Enter Miner IP "
+            placeholder="Enter Miner IP"
+            aria-label="Miner IP"
             className="px-3 py-2 text-sm border border-gray-600 bg-gray-800 rounded text-white placeholder-gray-400 w-64"
-            onKeyPress={(e) => e.key === 'Enter' && addMinerByIP()}
+            onKeyDown={(e) => e.key === 'Enter' && addMinerByIP()}
           />
           <button
             onClick={addMinerByIP}
@@ -207,18 +270,49 @@ const MinerInventoryDashboard = () => {
         </div>
 
         {/* Summary Stats */}
+
         <div className="flex flex-wrap justify-center gap-3 mt-6 text-sm">
-          <div className="px-4 py-2 rounded-md border border-gray-600 text-gray-400 ">
+          <button
+            onClick={() =>
+              setStatusFilter((s) => (s === 'online' ? 'all' : 'online'))
+            }
+            className={
+              'px-4 py-2 rounded-md border transition text-sm ' +
+              (statusFilter === 'online'
+                ? 'border-blue-400 text-white bg-gray-700'
+                : 'border-gray-600 text-gray-400')
+            }
+          >
             {onlineMiners} Online
-          </div>
-          <div className="px-4 py-2 rounded-md border border-gray-600 text-gray-400">
+          </button>
+          <button
+            onClick={() =>
+              setStatusFilter((s) => (s === 'warning' ? 'all' : 'warning'))
+            }
+            className={
+              'px-4 py-2 rounded-md border transition text-sm ' +
+              (statusFilter === 'warning'
+                ? 'border-yellow-400 text-white bg-gray-700'
+                : 'border-gray-600 text-gray-400')
+            }
+          >
             {warningMiners} Warning
-          </div>
-          <div className="px-4 py-2 rounded-md border border-gray-600 text-gray-400">
+          </button>
+          <button
+            onClick={() =>
+              setStatusFilter((s) => (s === 'offline' ? 'all' : 'offline'))
+            }
+            className={
+              'px-4 py-2 rounded-md border transition text-sm ' +
+              (statusFilter === 'offline'
+                ? 'border-red-400 text-white bg-gray-700'
+                : 'border-gray-600 text-gray-400')
+            }
+          >
             {offlineMiners} Offline
-          </div>
+          </button>
           <div className="px-4 py-2 rounded-md border border-gray-600 text-gray-400 ">
-            Total Miner : {totalMiners} Total
+            Total Miners: {totalMiners}
           </div>
           <div className="px-4 py-2 rounded-md border border-gray-600 text-gray-400 ">
             Total Hashrate : {totalHashrate.toFixed(3)} TH/s Total
@@ -231,6 +325,67 @@ const MinerInventoryDashboard = () => {
           </div>
         </div>
       </div>
+      <div className="flex w-full justify-end ">
+        <div className="flex items-end gap-3  p-3 ">
+          {/* Search Input */}
+          <div>
+            <input
+              type="text"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Search by IP or name"
+              aria-label="Search miners"
+              className="px-3 py-2 text-sm border border-gray-600 bg-gray-800 rounded text-white placeholder-gray-400 w-64 focus:outline-none focus:ring-1 focus:ring-gray-500"
+              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+            />
+
+            {/* Clear Button */}
+            <button
+              onClick={clearSearch}
+              className="px-3 py-2 text-sm text-gray-300 rounded border border-gray-600 bg-gray-900 hover:bg-gray-800 transition"
+            >
+              Clear
+            </button>
+          </div>
+          {/* Sort Dropdown */}
+          <div>
+            <select
+              value={sortBy}
+              onChange={(e) =>
+                setSortBy(
+                  e.target.value as
+                    | 'all'
+                    | 'efficiency'
+                    | 'hashrate'
+                    | 'power'
+                    | 'temperature'
+                )
+              }
+              aria-label="Sort miners"
+              className="px-3 py-2 text-sm border border-gray-600 bg-gray-800 rounded text-white focus:outline-none focus:ring-1 focus:ring-gray-500"
+            >
+              <option value="all">Sort</option>
+              <option value="efficiency">Efficiency (W/TH)</option>
+              <option value="hashrate">Hashrate (TH/s)</option>
+              <option value="power">Power (W)</option>
+              <option value="temperature">Temperature (°C)</option>
+            </select>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="text-sm text-gray-400">
+            {lastUpdate
+              ? `Last update: ${lastUpdate.toLocaleString()}`
+              : 'Never updated'}
+          </div>
+          <button
+            onClick={refreshAllMiners}
+            className="px-3 py-1 text-sm rounded border border-gray-600 text-white bg-gray-800 hover:bg-gray-700"
+          >
+            Refresh
+          </button>
+        </div>
+      </div>
 
       {miners.length === 0 ? (
         <div className="text-center py-12 text-gray-400">
@@ -239,9 +394,13 @@ const MinerInventoryDashboard = () => {
             Add your miner by entering its IP address above
           </p>
         </div>
+      ) : sortedDisplayedMiners.length === 0 ? (
+        <div className="text-center py-12 text-gray-400">
+          <p className="text-lg">No miners match your search</p>
+        </div>
       ) : (
         <div className="flex overflow-x-auto space-x-4 pb-4">
-          {miners.map((miner) => (
+          {sortedDisplayedMiners.map((miner) => (
             <DeviceCard key={miner.id} miner={miner} />
           ))}
         </div>
