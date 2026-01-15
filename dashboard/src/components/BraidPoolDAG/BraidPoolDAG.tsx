@@ -17,7 +17,6 @@ const GraphVisualization: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(true);
   const isPlayingRef = useRef(true);
-  const pendingParsedDataRef = useRef<any | null>(null);
   const width = window.innerWidth - 100;
   const margin = { top: 0, right: 0, bottom: 0, left: 50 }; // Changed top from 50 to 100
   const height = window.innerHeight - margin.top - margin.bottom;
@@ -110,111 +109,32 @@ const GraphVisualization: React.FC = () => {
     }
   };
 
-  const applyParsedData = (parsedData: any) => {
-    if (!parsedData?.parents || typeof parsedData.parents !== 'object') {
-      return;
-    }
-
-    const children: Record<string, string[]> = {};
-    if (parsedData?.parents && typeof parsedData.parents === 'object') {
-      Object.entries(parsedData.parents).forEach(([nodeId, parents]) => {
-        (parents as string[]).forEach((parentId) => {
-          if (!children[parentId]) {
-            children[parentId] = [];
-          }
-          children[parentId].push(nodeId);
-        });
-      });
-    }
-
-    const bead_count =
-      parsedData?.parents && typeof parsedData.parents === 'object'
-        ? Object.keys(parsedData.parents).length
-        : 0;
-
-    const graphData: GraphData = {
-      highest_work_path: parsedData.highest_work_path,
-      parents: parsedData.parents,
-      cohorts: parsedData.cohorts,
-      children,
-      bead_count,
-    };
-
-    const firstCohortChanged =
-      parsedData?.cohorts?.[0]?.length &&
-      JSON.stringify(prevFirstCohortRef.current) !==
-        JSON.stringify(parsedData.cohorts[0]);
-
-    const lastCohortChanged =
-      parsedData?.cohorts?.length > 0 &&
-      JSON.stringify(prevLastCohortRef.current) !==
-        JSON.stringify(parsedData.cohorts[parsedData.cohorts.length - 1]);
-
-    if (firstCohortChanged) {
-      const top = COLORS.shift();
-      COLORS.push(top ?? `rgba(${217}, ${95}, ${2}, 1)`);
-      prevFirstCohortRef.current = parsedData.cohorts[0];
-    }
-
-    if (lastCohortChanged) {
-      prevLastCohortRef.current =
-        parsedData.cohorts[parsedData.cohorts.length - 1];
-    }
-
-    const newMapping: NodeIdMapping = {};
-    let nextId = 1;
-    Object.keys(parsedData.parents).forEach((hash) => {
-      if (!newMapping[hash]) {
-        newMapping[hash] = nextId.toString();
-        nextId++;
-      }
-    });
-
-    setNodeIdMap(newMapping);
-    setGraphData(graphData);
-
-    // Increment the counter and update the highlighted bead hash
-    setGraphUpdateCounter((prevCounter) => {
-      const newCounter = prevCounter + 1;
-      // If the counter is divisible by 100, set the latest bead's hash
-      if (newCounter % 100 === 0 && parsedData.highest_work_path.length > 0) {
-        const latestBeadHash =
-          parsedData.highest_work_path[parsedData.highest_work_path.length - 1];
-        setLatestBeadHashForHighlight(latestBeadHash);
-      }
-      // The `latestBeadHashForHighlight` will remain set until the next time the condition is met.
-      return newCounter;
-    });
-
-    setTotalBeads(bead_count);
-    setTotalCohorts(parsedData.cohorts.length);
-    setMaxCohortSize(
-      Math.max(...parsedData.cohorts.map((c: string | any[]) => c.length))
-    );
-    setHwpLength(parsedData.highest_work_path.length);
-    setLoading(false);
-
-    // Trigger animation if cohorts changed
-    if (firstCohortChanged || lastCohortChanged) {
-      setTimeout(() => {
-        if (!isPlayingRef.current) return;
-        animateCohorts(
-          firstCohortChanged ? parsedData.cohorts[0] : [],
-          lastCohortChanged
-            ? parsedData.cohorts[parsedData.cohorts.length - 1]
-            : []
-        );
-      }, 100);
-    }
-  };
-
   useEffect(() => {
     isPlayingRef.current = isPlaying;
-    if (isPlaying && pendingParsedDataRef.current) {
-      applyParsedData(pendingParsedDataRef.current);
-      pendingParsedDataRef.current = null;
-    }
   }, [isPlaying]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      if (event.key === ' ' || event.key === 'p' || event.key === 'P') {
+        event.preventDefault();
+        setIsPlaying((prev) => !prev);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   useEffect(() => {
     const url = WEBSOCKET_URLS.BRAIDPOOL_DAG_WEBSOCKET;
@@ -243,10 +163,108 @@ const GraphVisualization: React.FC = () => {
         const parsed = JSON.parse(event.data);
         const parsedData = parsed.data;
         console.log('Received data:', parsedData);
-        pendingParsedDataRef.current = parsedData;
-        if (isPlayingRef.current) {
-          applyParsedData(parsedData);
-          pendingParsedDataRef.current = null;
+        if (!isPlayingRef.current) {
+          return;
+        }
+        if (!parsedData?.parents || typeof parsedData.parents !== 'object') {
+          return;
+        }
+
+        const children: Record<string, string[]> = {};
+        if (parsedData?.parents && typeof parsedData.parents === 'object') {
+          Object.entries(parsedData.parents).forEach(([nodeId, parents]) => {
+            (parents as string[]).forEach((parentId) => {
+              if (!children[parentId]) {
+                children[parentId] = [];
+              }
+              children[parentId].push(nodeId);
+            });
+          });
+        }
+
+        const bead_count =
+          parsedData?.parents && typeof parsedData.parents === 'object'
+            ? Object.keys(parsedData.parents).length
+            : 0;
+
+        const graphData: GraphData = {
+          highest_work_path: parsedData.highest_work_path,
+          parents: parsedData.parents,
+          cohorts: parsedData.cohorts,
+          children,
+          bead_count,
+        };
+
+        const firstCohortChanged =
+          parsedData?.cohorts?.[0]?.length &&
+          JSON.stringify(prevFirstCohortRef.current) !==
+            JSON.stringify(parsedData.cohorts[0]);
+
+        const lastCohortChanged =
+          parsedData?.cohorts?.length > 0 &&
+          JSON.stringify(prevLastCohortRef.current) !==
+            JSON.stringify(parsedData.cohorts[parsedData.cohorts.length - 1]);
+
+        if (firstCohortChanged) {
+          const top = COLORS.shift();
+          COLORS.push(top ?? `rgba(${217}, ${95}, ${2}, 1)`);
+          prevFirstCohortRef.current = parsedData.cohorts[0];
+        }
+
+        if (lastCohortChanged) {
+          prevLastCohortRef.current =
+            parsedData.cohorts[parsedData.cohorts.length - 1];
+        }
+
+        const newMapping: NodeIdMapping = {};
+        let nextId = 1;
+        Object.keys(parsedData.parents).forEach((hash) => {
+          if (!newMapping[hash]) {
+            newMapping[hash] = nextId.toString();
+            nextId++;
+          }
+        });
+
+        setNodeIdMap(newMapping);
+        setGraphData(graphData);
+
+        // Increment the counter and update the highlighted bead hash
+        setGraphUpdateCounter((prevCounter) => {
+          const newCounter = prevCounter + 1;
+          // If the counter is divisible by 100, set the latest bead's hash
+          if (
+            newCounter % 100 === 0 &&
+            parsedData.highest_work_path.length > 0
+          ) {
+            const latestBeadHash =
+              parsedData.highest_work_path[
+                parsedData.highest_work_path.length - 1
+              ];
+            setLatestBeadHashForHighlight(latestBeadHash);
+          }
+          // The `latestBeadHashForHighlight` will remain set until the next time the condition is met.
+          return newCounter;
+        });
+
+        setTotalBeads(bead_count);
+        setTotalCohorts(parsedData.cohorts.length);
+        setMaxCohortSize(
+          Math.max(...parsedData.cohorts.map((c: string | any[]) => c.length))
+        );
+        setHwpLength(parsedData.highest_work_path.length);
+        setLoading(false);
+
+        // Trigger animation if cohorts changed
+        if (firstCohortChanged || lastCohortChanged) {
+          setTimeout(() => {
+            if (!isPlayingRef.current) return;
+            animateCohorts(
+              firstCohortChanged ? parsedData.cohorts[0] : [],
+              lastCohortChanged
+                ? parsedData.cohorts[parsedData.cohorts.length - 1]
+                : []
+            );
+          }, 100);
         }
       } catch (err) {
         setError('Error processing graph data: ');
@@ -662,12 +680,6 @@ const GraphVisualization: React.FC = () => {
             </option>
           ))}
         </select>
-        <button
-          onClick={() => setIsPlaying((prev) => !prev)}
-          className="bg-[#0077B6] text-white px-3 py-1 rounded hover:bg-[#005691] transition-colors"
-        >
-          {isPlaying ? 'Pause' : 'Resume'}
-        </button>
         <div className="flex gap-1 ml-auto">
           <button
             onClick={handleZoomIn}
@@ -686,6 +698,12 @@ const GraphVisualization: React.FC = () => {
             className="bg-[#0077B6] text-white px-3 py-1 rounded hover:bg-[#005691] transition-colors"
           >
             Reset Zoom
+          </button>
+          <button
+            onClick={() => setIsPlaying((prev) => !prev)}
+            className="bg-[#0077B6] text-white px-3 py-1 rounded hover:bg-[#005691] transition-colors"
+          >
+            {isPlaying ? 'Pause' : 'Resume'}
           </button>
         </div>
       </div>
