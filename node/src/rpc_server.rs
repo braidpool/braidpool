@@ -57,7 +57,7 @@ pub enum RpcCommand {
         i: Option<usize>,
     },
 }
-//parsing the inital rpc command line all
+//parsing the initial rpc command line all
 pub async fn execute_cli_command(
     cli_command: RpcCommand,
     server_addr: SocketAddr,
