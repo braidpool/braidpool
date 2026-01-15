@@ -16,7 +16,7 @@ export function TrendsTab({ timeRange }: { timeRange: string }) {
         {/* Mobile View: Dropdown (Hidden on medium screens and up) */}
         <div className="md:hidden mb-4 px-2">
           <label htmlFor="tabs" className="sr-only">
-            Select a tab
+            Select a network trend
           </label>
           <div className="relative">
             <select
