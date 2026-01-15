@@ -1,55 +1,12 @@
-# Braidpool Node RPC API Documentation
+# Braidpool Node RPC API Documentation (Moved)
 
-This document describes all available RPC endpoints for the Braidpool node. The RPC API follows the JSON-RPC 2.0 specification and supports both HTTP and WebSocket transport.
+This file is deprecated and kept only for backward compatibility.
 
-## Server Configuration
+The up-to-date Braidpool Node RPC API documentation has been moved to the canonical location:
 
-- **Default Address**: `127.0.0.1:6682`
-- **Protocol**: JSON-RPC 2.0
-- **Transport**: HTTP, WebSocket
+- [`docs/rpc/rpc_api_docs.md`](../docs/rpc/rpc_api_docs.md)
 
-## Available Endpoints
-
-### 1. `getbead`
-
-Retrieves a specific bead by its hash.
-
-**Parameters:**
-- `bead_hash` (string): The bead hash as a hex string
-
-**Returns:**
-- JSON string containing the complete bead data
-
-**Example:**
-```bash
-curl -X POST http://127.0.0.1:6682 \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc": "2.0", "method": "getbead", "params": ["1234567890abcdef..."], "id": 1}'
-```
-
-**Response:**
-```json
-{
-  "jsonrpc": "2.0",
-  "result": "{\"block_header\": {...}, \"committed_metadata\": {...}, \"uncommitted_metadata\": {...}}",
-  "id": 1
-}
-```
-
-**Error Codes:**
-- **1**: Invalid bead hash format
-- **2**: Internal error (JSON serialization failed)
-- **3**: Bead not found
-
----
-
-### 2. `addbead`
-
-Adds a new bead to the braid.
-
-**Parameters:**
-- `bead_data` (string): JSON-formatted bead data
-
+Please refer to that file for the full list of RPC endpoints, parameters, responses, and examples.
 **Returns:**
 - Status message string
 
