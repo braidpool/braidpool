@@ -392,7 +392,7 @@ pub async fn run_rpc_server(
 fn get_dummy_client() -> Arc<bitcoincore_rpc::Client> {
     Arc::new(
         bitcoincore_rpc::Client::new("http://127.0.0.1:18332", bitcoincore_rpc::Auth::None)
-            .unwrap(),
+            .expect("Failed to create dummy Bitcoin RPC client for tests"),
     )
 }
 
