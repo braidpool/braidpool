@@ -259,19 +259,6 @@ impl RpcServer for RpcServerImpl {
             .collect();
         log::info!("Get geneses request received from client");
 
-        if geneses.is_empty() {
-            let rpc = self.bitcoin_rpc.clone();
-            let tip_hash = tokio::task::spawn_blocking(move || rpc.get_best_block_hash())
-                .await
-                .map_err(|_| ErrorObjectOwned::owned(2, "Internal error", None::<()>))?
-                .map_err(|e| {
-                    ErrorObjectOwned::owned(2, format!("Bitcoin RPC error: {}", e), None::<()>)
-                })?;
-            let geneses_str = vec![tip_hash.to_string()];
-            return serde_json::to_string(&geneses_str)
-                .map_err(|_| ErrorObjectOwned::owned(2, "Internal error", None::<()>));
-        }
-
         let geneses_str: Vec<String> = geneses.iter().map(|h| h.to_string()).collect();
 
         serde_json::to_string(&geneses_str)
