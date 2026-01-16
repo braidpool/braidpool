@@ -24,7 +24,25 @@ After verifying the git context, if the user hasn't specified a task and is in t
 2.  Review the project as a whole
 3.  Start a new sprint to add a feature
 
-## 2. Code Review Standards
+## 2. Workflow Guidelines
+
+### 📥 Reviewing a Pull Request
+If the user selects "Review a pull request":
+1.  **List Open PRs**:
+    ```bash
+    gh pr list --limit 10
+    ```
+2.  **Isolate & Checkout**: Ask the user to choose a PR ID. Then, create a dedicated worktree for it:
+    ```bash
+    # Replace <PR_ID> with the selected number
+    mkdir -p .worktrees
+    git worktree add .worktrees/pr-<PR_ID> origin/master
+    cd .worktrees/pr-<PR_ID>
+    gh pr checkout <PR_ID>
+    ```
+3.  **Analyze**: Perform the review within that worktree.
+
+## 3. Code Review Standards
 When reviewing or writing code, enforce these specific rules:
 
 ### Pull Requests
@@ -37,7 +55,7 @@ When reviewing or writing code, enforce these specific rules:
 - **Dashboard**: Ensure `npm run build` passes.
 - **Docs**: Updates to code must be accompanied by updates to `docs/` or docstrings.
 
-## 3. Reference Material
+## 4. Reference Material
 - **`CONTRIBUTING.md`**: Human-readable guide.
 - **`SPRINT.md`**: Current systematic review goals.
 - **`node/`**: Core Rust logic.
