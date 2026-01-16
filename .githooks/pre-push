@@ -1,10 +1,9 @@
 #!/bin/bash
 # .githooks/pre-push
-# Blocks push if required AI reviews are missing or have NEEDS-WORK grade
+# Blocks push if required AI reviews are missing or have unresolved critical/high findings.
+# Interactively prompts user to resolve findings when blocked.
 #
 # Bypass with: git push --no-verify
-
-set -e
 
 REVIEWS_DIR=".reviews"
 BRANCH=$(git branch --show-current 2>/dev/null)
@@ -93,9 +92,21 @@ persona_full_name() {
     esac
 }
 
-# Check each required persona has a passing review
+persona_short_name() {
+    case "$1" in
+        "Security Researcher") echo "security" ;;
+        "Cryptographer") echo "cryptographer" ;;
+        "Senior Rust Developer") echo "rust" ;;
+        "Senior TypeScript Developer") echo "typescript" ;;
+        "Senior Software Architect") echo "architect" ;;
+        "Senior Database Engineer") echo "database" ;;
+        *) echo "$1" ;;
+    esac
+}
+
+# Check each required persona and collect blocking findings
 MISSING=""
-NEEDS_WORK=""
+BLOCKING_REVIEWS=""
 
 for persona_short in $REQUIRED_PERSONAS; do
     persona_full=$(persona_full_name "$persona_short")
@@ -118,53 +129,135 @@ for persona_short in $REQUIRED_PERSONAS; do
     if [ -z "$latest_review" ]; then
         MISSING="$MISSING $persona_short"
     elif [ "$latest_grade" = "NEEDS-WORK" ]; then
-        NEEDS_WORK="$NEEDS_WORK $persona_short"
+        # Check for open critical/high findings
+        open_blockers=$(jq '[.findings[] | select(.severity == "critical" or .severity == "high") | select(.status == "open" or .status == null)] | length' "$latest_review" 2>/dev/null || echo "0")
+        if [ "$open_blockers" -gt 0 ]; then
+            BLOCKING_REVIEWS="$BLOCKING_REVIEWS $latest_review"
+        fi
     fi
 done
 
-# Report results
-if [ -n "$MISSING" ] || [ -n "$NEEDS_WORK" ]; then
+# Handle missing reviews (can't resolve interactively)
+if [ -n "$MISSING" ]; then
     echo ""
     echo "🛑 Push blocked by AI review gate"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    
-    if [ -n "$MISSING" ]; then
-        echo ""
-        echo "❌ Missing required reviews:"
-        for p in $MISSING; do
-            echo "   • $p"
-        done
-    fi
-    
-    if [ -n "$NEEDS_WORK" ]; then
-        echo ""
-        echo "❌ Reviews with NEEDS-WORK grade:"
-        for p in $NEEDS_WORK; do
-            echo "   • $p"
-        done
-    fi
-    
     echo ""
-    echo "To proceed:"
-    echo "  1. Run missing reviews"
-    echo "  2. Address NEEDS-WORK findings and re-review"
-    echo "  3. Or bypass with: git push --no-verify"
+    echo "❌ Missing required reviews:"
+    for p in $MISSING; do
+        echo "   • $p"
+    done
+    echo ""
+    echo "Run the missing reviews before pushing."
+    echo "Or bypass with: git push --no-verify"
     echo ""
     exit 1
 fi
 
+# Handle blocking findings interactively
+if [ -n "$BLOCKING_REVIEWS" ]; then
+    echo ""
+    echo "🛑 Push blocked: Unresolved critical/high findings"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    
+    for review_file in $BLOCKING_REVIEWS; do
+        persona=$(jq -r '.persona' "$review_file")
+        echo ""
+        echo "📋 $persona"
+        echo ""
+        
+        # Get open critical/high findings
+        findings=$(jq -c '[.findings | to_entries[] | select(.value.severity == "critical" or .value.severity == "high") | select(.value.status == "open" or .value.status == null)]' "$review_file")
+        count=$(echo "$findings" | jq 'length')
+        
+        for i in $(seq 0 $((count - 1))); do
+            finding=$(echo "$findings" | jq ".[$i]")
+            idx=$(echo "$finding" | jq '.key')
+            severity=$(echo "$finding" | jq -r '.value.severity')
+            file=$(echo "$finding" | jq -r '.value.file')
+            line=$(echo "$finding" | jq -r '.value.line // "?"')
+            desc=$(echo "$finding" | jq -r '.value.description')
+            
+            if [ "$severity" = "critical" ]; then
+                echo "  🔴 #$idx [$severity] $file:$line"
+            else
+                echo "  🟠 #$idx [$severity] $file:$line"
+            fi
+            echo "     $desc"
+            echo ""
+            
+            # Prompt for action
+            while true; do
+                echo "  Action for finding #$idx:"
+                echo "    [w] wont-fix (with reason)"
+                echo "    [r] resolved (I fixed it)"
+                echo "    [s] skip (abort push, fix later)"
+                echo ""
+                read -p "  Choice [w/r/s]: " choice </dev/tty
+                
+                case "$choice" in
+                    w|W)
+                        read -p "  Reason: " reason </dev/tty
+                        if [ -z "$reason" ]; then
+                            echo "  ❌ Reason required for wont-fix"
+                            continue
+                        fi
+                        # Update the JSON file
+                        jq ".findings[$idx].status = \"wont-fix\" | .findings[$idx].resolution = \"$reason\"" "$review_file" > "${review_file}.tmp"
+                        mv "${review_file}.tmp" "$review_file"
+                        echo "  ✅ Marked as wont-fix"
+                        echo ""
+                        break
+                        ;;
+                    r|R)
+                        read -p "  Resolution note (optional): " resolution </dev/tty
+                        if [ -n "$resolution" ]; then
+                            jq ".findings[$idx].status = \"resolved\" | .findings[$idx].resolution = \"$resolution\"" "$review_file" > "${review_file}.tmp"
+                        else
+                            jq ".findings[$idx].status = \"resolved\"" "$review_file" > "${review_file}.tmp"
+                        fi
+                        mv "${review_file}.tmp" "$review_file"
+                        echo "  ✅ Marked as resolved"
+                        echo ""
+                        break
+                        ;;
+                    s|S)
+                        echo ""
+                        echo "Push aborted. Fix the findings and try again."
+                        exit 1
+                        ;;
+                    *)
+                        echo "  Invalid choice. Enter w, r, or s."
+                        ;;
+                esac
+            done
+        done
+    done
+    
+    echo ""
+    echo "✅ All blocking findings addressed. Continuing push..."
+fi
+
 # All checks passed
+echo ""
 echo "✅ AI review gate passed"
+SHOWN=""
 for review in $(echo "$REVIEW_FILES" | tr ' ' '\n' | sort -r); do
     if [ -f "$review" ]; then
         persona=$(jq -r '.persona // empty' "$review" 2>/dev/null)
         grade=$(jq -r '.grade // empty' "$review" 2>/dev/null)
+        wontfix=$(jq '[.findings[] | select(.status == "wont-fix")] | length' "$review" 2>/dev/null || echo "0")
         # Only show each persona once (most recent)
         if ! echo "$SHOWN" | grep -q "|${persona}|"; then
-            echo "   • $persona: $grade"
+            if [ "$wontfix" -gt 0 ]; then
+                echo "   • $persona: $grade ($wontfix wont-fix)"
+            else
+                echo "   • $persona: $grade"
+            fi
             SHOWN="${SHOWN}|${persona}|"
         fi
     fi
 done
+echo ""
 
 exit 0

@@ -392,29 +392,41 @@ Reviewed-by: Senior Rust Developer (claude-sonnet-4.5) [PASS-WITH-NOTES]
 
 ### 🚫 Pre-Push Review Gate
 
-The `pre-push` hook **blocks pushes** if required reviews are missing or have `NEEDS-WORK` grade.
+The `pre-push` hook **blocks pushes** if required reviews are missing or have unresolved critical/high findings.
 
 **What it checks**:
 1. Determines required personas from changed files (same rules as auto-selection)
 2. Verifies each required persona has a review in `.reviews/`
-3. Ensures no reviews have `NEEDS-WORK` grade
+3. For NEEDS-WORK reviews, checks if all critical/high findings are resolved or wont-fix
 
-**Example block**:
+**Interactive resolution**: When blocking findings exist, the hook prompts you to resolve each one:
+
 ```
-🛑 Push blocked by AI review gate
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🛑 Push blocked: Unresolved critical/high findings
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-❌ Missing required reviews:
-   • Security
+📋 Security Researcher
 
-❌ Reviews with NEEDS-WORK grade:
-   • Rust
+  🔴 #0 [critical] node/src/parser.rs:42
+     Using unwrap() on untrusted input could panic
 
-To proceed:
-  1. Run missing reviews
-  2. Address NEEDS-WORK findings and re-review
-  3. Or bypass with: git push --no-verify
+  Action for finding #0:
+    [w] wont-fix (with reason)
+    [r] resolved (I fixed it)
+    [s] skip (abort push, fix later)
+
+  Choice [w/r/s]: w
+  Reason: Input validated upstream in validate_request()
+  ✅ Marked as wont-fix
+
+✅ All blocking findings addressed. Continuing push...
 ```
+
+**Finding statuses**:
+- `open` - Not yet addressed (blocks push)
+- `resolved` - Fixed in code
+- `wont-fix` - Deliberately not fixing (requires reason)
+- `regressed` - Was fixed, now broken again
 
 **Bypass**: `git push --no-verify` (use sparingly, e.g., for urgent hotfixes)
 
