@@ -12,9 +12,9 @@ Establish a systematic, automated, and human-in-the-loop code review process for
 ## Tasks
 
 ### Phase 1: Foundations & Templates
-- [ ] **Create Pull Request Template** (`.github/PULL_REQUEST_TEMPLATE.md`)
+- [x] **Create Pull Request Template** (`.github/PULL_REQUEST_TEMPLATE.md`)
   - Include sections for: Description, Type of Change, Checklist (Tests, Docs, Linting), and Related Issues.
-- [ ] **Create Code Review Checklist** (`docs/CODE_REVIEW_CHECKLIST.md`)
+- [x] **Create Code Review Checklist** (`docs/CODE_REVIEW_CHECKLIST.md`)
   - Detailed checklist for reviewers covering: Functionality, Security, Performance, Style, and Documentation.
 - [ ] **Update Contributing Guide** (`CONTRIBUTING.md`)
   - Link to the new PR template and Review Checklist.
@@ -30,7 +30,7 @@ Establish a systematic, automated, and human-in-the-loop code review process for
   - Consider adding tools like `cargo-audit` or `dependabot` configuration if not present.
 
 ### Phase 3: Governance
-- [ ] **Create/Update CODEOWNERS** (`.github/CODEOWNERS`)
+- [x] **Create/Update CODEOWNERS** (`.github/CODEOWNERS`)
   - Define owners for `node/` (Rust experts), `dashboard/` (Frontend experts), and `docs/`.
 - [ ] **Define Merge Policy**
   - Document requirements for merging (e.g., "At least 1 approval", "CI passing").
