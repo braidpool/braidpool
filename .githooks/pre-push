@@ -91,6 +91,7 @@ persona_full_name() {
         TypeScript) echo "Senior TypeScript Developer" ;;
         Architect) echo "Senior Software Architect" ;;
         Database) echo "Senior Database Engineer" ;;
+        Performance) echo "Performance Engineer" ;;
         *) echo "$1" ;;
     esac
 }

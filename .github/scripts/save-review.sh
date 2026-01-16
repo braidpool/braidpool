@@ -64,6 +64,7 @@ case "$PERSONA_FULL" in
     "Senior TypeScript Developer") PERSONA="typescript" ;;
     "Senior Software Architect") PERSONA="architect" ;;
     "Senior Database Engineer") PERSONA="database" ;;
+    "Performance Engineer") PERSONA="performance" ;;
     *)
         echo "Error: Unknown persona '$PERSONA_FULL'" >&2
         exit 1
