@@ -43,4 +43,8 @@ strum = { version = "0.26", features = ["derive"] }
 if-addrs = "0.13"
 anyhow = "1.0.100"
 
+# Dev dependencies for integration tests
+bitcoind = { version = "0.36.1", features = ["26_0"] }
+tempfile = "3.14"
+
 
