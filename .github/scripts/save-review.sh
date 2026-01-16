@@ -14,14 +14,18 @@
 
 set -e
 
-# Current workflow version - update when making breaking changes
-CURRENT_VERSION="1.0"
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 REVIEWS_DIR="$REPO_ROOT/.reviews"
-SCHEMA="$SCRIPT_DIR/../schemas/review.schema.json"
 VALIDATOR="$SCRIPT_DIR/validate-review.py"
+VERSION_FILE="$SCRIPT_DIR/../WORKFLOW_VERSION"
+
+# Read current version from single source of truth
+if [ -f "$VERSION_FILE" ]; then
+    CURRENT_VERSION=$(cat "$VERSION_FILE")
+else
+    CURRENT_VERSION="1.0"
+fi
 
 # Read JSON from stdin
 JSON=$(cat)
@@ -66,10 +70,13 @@ case "$PERSONA_FULL" in
         ;;
 esac
 
+# Sanitize branch name for safe filename (replace special chars with -)
+BRANCH_SAFE=$(echo "$BRANCH" | tr -c '[:alnum:]-_.' '-')
+
 # Create output path with timestamp to allow multiple reviews per day
 mkdir -p "$REVIEWS_DIR"
 TIMESTAMP=$(date +%H%M%S)
-OUTPUT_FILE="$REVIEWS_DIR/${BRANCH}-${PERSONA}-${DATE}-${TIMESTAMP}.json"
+OUTPUT_FILE="$REVIEWS_DIR/${BRANCH_SAFE}-${PERSONA}-${DATE}-${TIMESTAMP}.json"
 
 # Write to temp file first for validation
 TEMP_FILE=$(mktemp)
