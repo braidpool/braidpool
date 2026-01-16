@@ -8,6 +8,30 @@ Braidpool is a Bitcoin mining pool using a DAG-based consensus mechanism. Securi
 - Network code is exposed to potentially malicious peers
 - Consensus bugs could lead to financial loss
 
+## Pre-Review: Check Past Findings
+
+**Before starting**, check for prior reviews on this branch:
+```bash
+BRANCH=$(git branch --show-current)
+PERSONA="security"
+ls .reviews/${BRANCH}-${PERSONA}-*.json 2>/dev/null
+```
+
+If prior reviews exist:
+1. **Load findings**: Parse the JSON to get previous issues
+2. **Verify fixes**: For each finding, check if the code has been updated
+3. **Update status**: Mark as `resolved`, `open`, or `regressed`
+4. **Reference in report**: Include a "Previous Findings" section showing what was addressed
+
+**In your output**, add this section if prior reviews exist:
+```markdown
+### Previous Findings Status
+| Issue | File:Line | Previous Status | Current Status |
+|-------|-----------|-----------------|----------------|
+| [description] | `file.rs:42` | open | ✅ resolved |
+| [description] | `file.rs:87` | open | ⚠️ still open |
+```
+
 ## Review Checklist
 
 ### 1. Attack Vectors
@@ -65,3 +89,41 @@ Braidpool is a Bitcoin mining pool using a DAG-based consensus mechanism. Securi
 ### Recommendations
 [Specific fixes or mitigations for each finding]
 ```
+
+## Proactive Offers
+
+After completing the review, **offer to perform these additional tasks**:
+
+### 1. Dependency Audit
+Run `cargo audit` to check for known vulnerabilities:
+```bash
+cargo audit
+```
+If vulnerabilities are found, ask:
+> *"I found [N] vulnerable dependencies. Would you like me to update them or suggest mitigations?"*
+
+### 2. Unsafe Block Audit
+Find all `unsafe` blocks and verify each has justification:
+```bash
+grep -rn "unsafe" --include="*.rs" node/
+```
+For each `unsafe` block, verify:
+- [ ] Comment explaining why `unsafe` is necessary
+- [ ] Invariants that must be upheld are documented
+- [ ] No safer alternative exists
+
+If unjustified `unsafe` blocks are found, ask:
+> *"I found [N] unsafe blocks without clear justification. Would you like me to document them or propose safe alternatives?"*
+
+### 3. Input Validation Audit
+Find network message handlers and RPC endpoints:
+```bash
+grep -rn "fn handle_\|fn on_\|async fn process_" --include="*.rs" node/
+```
+For each handler, verify:
+- [ ] Input size/length is bounded
+- [ ] Numeric values are range-checked
+- [ ] Malformed input returns error (not panic)
+
+If gaps are found, ask:
+> *"I found [N] handlers with potentially missing input validation. Would you like me to add bounds checks?"*

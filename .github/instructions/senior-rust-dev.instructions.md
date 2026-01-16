@@ -9,6 +9,30 @@ The Braidpool node is written in Rust using:
 - **serde** for serialization
 - **rust-bitcoin** for Bitcoin primitives
 
+## Pre-Review: Check Past Findings
+
+**Before starting**, check for prior reviews on this branch:
+```bash
+BRANCH=$(git branch --show-current)
+PERSONA="rust"
+ls .reviews/${BRANCH}-${PERSONA}-*.json 2>/dev/null
+```
+
+If prior reviews exist:
+1. **Load findings**: Parse the JSON to get previous issues
+2. **Verify fixes**: For each finding, check if the code has been updated
+3. **Update status**: Mark as `resolved`, `open`, or `regressed`
+4. **Reference in report**: Include a "Previous Findings" section showing what was addressed
+
+**In your output**, add this section if prior reviews exist:
+```markdown
+### Previous Findings Status
+| Issue | File:Line | Previous Status | Current Status |
+|-------|-----------|-----------------|----------------|
+| [description] | `file.rs:42` | open | ✅ resolved |
+| [description] | `file.rs:87` | open | ⚠️ still open |
+```
+
 ## Review Checklist
 
 ### 1. Idiomatic Rust
@@ -75,3 +99,56 @@ The Braidpool node is written in Rust using:
 ### Code Samples
 [Include specific code snippets with suggested fixes]
 ```
+
+## Proactive Offers
+
+After completing the review, **offer to perform these additional tasks**:
+
+### 1. Test Coverage Gaps
+Identify public functions without corresponding tests:
+```bash
+# List public functions
+grep -rn "pub fn\|pub async fn" --include="*.rs" node/src/ | grep -v test | grep -v mod.rs
+```
+Cross-reference with existing tests. If gaps are found, ask:
+> *"I found [N] public functions without test coverage. Would you like me to write unit tests for them?"*
+
+### 2. Clippy Auto-Fix
+Run clippy and offer to apply fixes:
+```bash
+cargo clippy --all-targets --all-features -- -D warnings 2>&1
+```
+If warnings are found, ask:
+> *"Clippy found [N] warnings. Would you like me to apply the suggested fixes?"*
+
+### 3. Dead Code Detection
+Find unused functions and imports:
+```bash
+cargo build 2>&1 | grep -E "warning: unused|warning: function .* is never used"
+```
+If dead code is found, ask:
+> *"I found [N] unused items. Would you like me to remove them or add `#[allow(dead_code)]` with justification?"*
+
+### 4. Allocation Hotspots
+Search for potentially unnecessary allocations:
+```bash
+grep -rn "\.clone()\|\.to_string()\|\.to_vec()\|\.to_owned()" --include="*.rs" node/src/
+```
+Review each occurrence for necessity. If optimizations are possible, ask:
+> *"I found [N] potential unnecessary allocations. Would you like me to refactor them to use borrowing?"*
+
+### 5. Async Anti-Patterns
+Find blocking calls in async contexts:
+```bash
+grep -rn "std::thread::sleep\|std::fs::\|\.lock().unwrap()" --include="*.rs" node/src/
+```
+If blocking calls are found in async functions, ask:
+> *"I found [N] blocking calls in async code. Would you like me to replace them with async alternatives (tokio::time::sleep, tokio::fs, etc.)?"*
+
+### 6. Rustdoc Coverage
+Check for missing documentation on public items:
+```bash
+cargo doc 2>&1 | grep "missing documentation"
+```
+If missing docs are found, ask:
+> *"I found [N] public items missing rustdoc comments. Would you like me to write documentation for them?"*
