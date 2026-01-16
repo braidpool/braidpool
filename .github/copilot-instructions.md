@@ -90,11 +90,14 @@ git diff --name-only origin/dev...HEAD
 | `node/src/braid/**`, `node/src/consensus/**` | Cryptographer, Security, Rust |
 | `node/src/bead*`, `**/sign*`, `**/hash*` | Cryptographer, Rust |
 | `node/src/db/**`, `**/schema.sql` | Database, Rust |
+| `node/src/ipc/**`, `node/src/stratum*` | Security, Rust |
+| `tests/**`, `node/tests/**` | Rust (test coverage) |
 | `node/**/*.rs` (other) | Rust |
 | `dashboard/**` | TypeScript |
 | `Cargo.toml`, `Cargo.lock` | Security (dependency audit) |
 | `docs/**` | None (skip review) |
 | Large PR (>500 lines) or new module | Architect |
+| New `CREATE TABLE` or `ALTER TABLE` | Database |
 
 **Example auto-selection**:
 ```
@@ -112,8 +115,10 @@ When multiple personas are required, **run them in priority order**:
 
 1. **Security Researcher** (first - may find blockers)
 2. **Cryptographer** (second - protocol correctness)
-3. **Senior Rust Developer** (third - implementation quality)
-4. **Senior TypeScript Developer** (parallel with Rust if both needed)
+3. **Senior Software Architect** (third - design/modularity issues)
+4. **Senior Database Engineer** (fourth - if SQL/schema changes)
+5. **Senior Rust Developer** (fifth - implementation quality)
+6. **Senior TypeScript Developer** (parallel with Rust if both needed)
 
 **Orchestration workflow**:
 ```
@@ -155,6 +160,8 @@ After escalation completes, include the additional findings in the original pers
 
 [Cryptographer's findings here]
 ```
+
+**Anti-loop rule**: A persona that was invoked via escalation **cannot escalate back** to the original persona. If a circular escalation would occur, note it in the report but do not invoke again.
 
 ### ✅ Merge Readiness Check
 
@@ -300,14 +307,9 @@ If prior reviews exist, load them and:
 3. Mark resolved issues as ✅ in the new review
 4. Flag regressions (issues that returned)
 
-**After completing a review**, save findings:
+**After completing a review**, save findings using the helper script:
 ```bash
-mkdir -p .reviews
-cat > .reviews/${BRANCH}-<persona>-$(date +%Y-%m-%d).json
-```
-
-**JSON format**:
-```json
+cat << 'EOF' | .github/scripts/save-review.sh
 {
   "branch": "feat-bead-validation",
   "persona": "Senior Rust Developer",
@@ -324,7 +326,24 @@ cat > .reviews/${BRANCH}-<persona>-$(date +%Y-%m-%d).json
     }
   ]
 }
+EOF
 ```
+
+The script automatically:
+- Validates against the JSON schema
+- Maps persona to short filename
+- Saves to `.reviews/<branch>-<persona>-<date>.json`
+- Exits with error if validation fails
+
+**Persona names** (use exact strings in JSON):
+| Persona | Short Name |
+|---------|------------|
+| Security Researcher | `security` |
+| Cryptographer | `cryptographer` |
+| Senior Rust Developer | `rust` |
+| Senior TypeScript Developer | `typescript` |
+| Senior Software Architect | `architect` |
+| Senior Database Engineer | `database` |
 
 **Cleanup**: Reviews are automatically removed when the worktree is deleted after PR merge.
 
