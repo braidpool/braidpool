@@ -75,6 +75,7 @@ Launch personas using the **task** tool with `agent_type="general-purpose"` and 
 | Senior TypeScript Developer | `.github/instructions/senior-ts-dev.instructions.md` | `dashboard/**/*.ts`, `dashboard/**/*.tsx` |
 | Senior Software Architect | `.github/instructions/senior-architect.instructions.md` | Large PRs, new modules, API changes |
 | Senior Database Engineer | `.github/instructions/senior-db-engineer.instructions.md` | `node/src/db/`, `**/schema.sql`, `**/*_db*` |
+| Performance Engineer | `.github/instructions/performance-engineer.instructions.md` | Hot paths: `braid/`, `consensus/`, `stratum`, `BraidPoolDAG` |
 
 ### 🤖 Persona Auto-Selection
 
@@ -90,12 +91,13 @@ git diff --name-only origin/dev...HEAD
 | Changed Path Pattern | Required Personas |
 |---------------------|-------------------|
 | `node/src/network/**`, `node/src/rpc/**` | Security, Rust |
-| `node/src/braid/**`, `node/src/consensus/**` | Cryptographer, Security, Rust |
+| `node/src/braid/**`, `node/src/consensus/**` | Cryptographer, Security, Rust, Performance |
 | `node/src/bead*`, `**/sign*`, `**/hash*` | Cryptographer, Rust |
 | `node/src/db/**`, `**/schema.sql` | Database, Rust |
-| `node/src/ipc/**`, `node/src/stratum*` | Security, Rust |
+| `node/src/ipc/**`, `node/src/stratum*` | Security, Rust, Performance |
 | `tests/**`, `node/tests/**` | Rust (test coverage) |
 | `node/**/*.rs` (other) | Rust |
+| `dashboard/**/BraidPoolDAG*`, `dashboard/**/DAG*` | TypeScript, Performance |
 | `dashboard/**` | TypeScript |
 | `Cargo.toml`, `Cargo.lock` | Security (dependency audit) |
 | `docs/**` | None (skip review) |
@@ -122,6 +124,7 @@ When multiple personas are required, **run them in priority order**:
 4. **Senior Database Engineer** (fourth - if SQL/schema changes)
 5. **Senior Rust Developer** (fifth - implementation quality)
 6. **Senior TypeScript Developer** (parallel with Rust if both needed)
+7. **Performance Engineer** (last - optimization after correctness)
 
 **Orchestration workflow**:
 ```
@@ -356,6 +359,7 @@ The script automatically:
 | Senior TypeScript Developer | `typescript` |
 | Senior Software Architect | `architect` |
 | Senior Database Engineer | `database` |
+| Performance Engineer | `performance` |
 
 **Cleanup**: Reviews are automatically removed when the worktree is deleted after PR merge.
 
