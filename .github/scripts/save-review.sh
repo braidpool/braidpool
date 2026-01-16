@@ -8,10 +8,14 @@
 # The script:
 # 1. Reads JSON from stdin
 # 2. Validates against schema
-# 3. Saves to .reviews/<branch>-<persona>-<date>.json
-# 4. Exits 0 on success, 1 on validation failure
+# 3. Checks workflow version compatibility
+# 4. Saves to .reviews/<branch>-<persona>-<date>-<time>.json
+# 5. Exits 0 on success, 1 on validation failure
 
 set -e
+
+# Current workflow version - update when making breaking changes
+CURRENT_VERSION="1.0"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -25,6 +29,17 @@ JSON=$(cat)
 if [ -z "$JSON" ]; then
     echo "Error: No JSON provided on stdin" >&2
     exit 1
+fi
+
+# Check workflow version
+REVIEW_VERSION=$(echo "$JSON" | jq -r '.workflow_version // empty')
+if [ -n "$REVIEW_VERSION" ]; then
+    REVIEW_MAJOR=$(echo "$REVIEW_VERSION" | cut -d. -f1)
+    CURRENT_MAJOR=$(echo "$CURRENT_VERSION" | cut -d. -f1)
+    if [ "$REVIEW_MAJOR" != "$CURRENT_MAJOR" ]; then
+        echo "Error: Review workflow version $REVIEW_VERSION incompatible with current $CURRENT_VERSION" >&2
+        exit 1
+    fi
 fi
 
 # Extract required fields for filename

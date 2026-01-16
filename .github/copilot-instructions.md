@@ -319,6 +319,7 @@ cat << 'EOF' | .github/scripts/save-review.sh
   "model": "claude-sonnet-4.5",
   "date": "2026-01-16",
   "grade": "PASS-WITH-NOTES",
+  "workflow_version": "1.0",
   "findings": [
     {
       "severity": "medium",
@@ -334,9 +335,12 @@ EOF
 
 The script automatically:
 - Validates against the JSON schema
+- Checks workflow version compatibility (major version must match)
 - Maps persona to short filename
-- Saves to `.reviews/<branch>-<persona>-<date>.json`
+- Saves to `.reviews/<branch>-<persona>-<date>-<time>.json`
 - Exits with error if validation fails
+
+**Workflow versioning**: Include `"workflow_version": "1.0"` in all reviews. When the workflow changes significantly (new required fields, changed schema), the major version increments and old reviews are rejected.
 
 **Persona names** (use exact strings in JSON):
 | Persona | Short Name |
