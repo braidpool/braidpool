@@ -9,7 +9,23 @@ The Braidpool dashboard is a React/TypeScript application that visualizes:
 - Network peer connections
 - Real-time WebSocket updates
 
-Tech stack: React, TypeScript, Vite, WebSocket
+**Tech stack**:
+- **React 19** with functional components and hooks
+- **TypeScript 5.x** with strict mode
+- **Vite** for build/dev server
+- **Tailwind CSS 4.x** + Emotion for styling
+- **D3.js** for DAG visualization
+- **Recharts** for charts
+- **react-router-dom 7.x** for routing
+- **Jest + Testing Library** for tests
+- **WebSocket** for real-time data
+
+**Key patterns in this codebase**:
+- WebSocket connections managed in `useEffect` with cleanup
+- D3 renders to SVG refs (imperatively)
+- Types defined in `src/types/` directory
+- Theme colors in `src/theme/colors.ts`
+- URLs centralized in `src/URLs.ts`
 
 ## Pre-Review: Check Past Findings
 
@@ -41,14 +57,14 @@ If prior reviews exist:
 - [ ] Hooks follow rules (no conditional hooks, proper dependencies)
 - [ ] `useEffect` dependencies are complete and correct
 - [ ] `useMemo` and `useCallback` used appropriately (not overused)
-- [ ] Components are reasonably sized and focused
+- [ ] Components are reasonably sized (<300 lines preferred)
 - [ ] Keys are stable and unique in lists
-- [ ] No direct DOM manipulation
+- [ ] No direct DOM manipulation (except D3 visualizations)
 
 ### 2. Type Safety
 - [ ] **No `any` types** - use `unknown` and narrow, or define proper types
 - [ ] Strict null checks handled (`?.`, `??`, or guards)
-- [ ] API responses have defined interfaces
+- [ ] API/WebSocket responses have defined interfaces in `src/types/`
 - [ ] Props and state are properly typed
 - [ ] Generic types used where appropriate
 - [ ] No type assertions (`as`) without justification
@@ -56,31 +72,53 @@ If prior reviews exist:
 ### 3. State Management
 - [ ] State lives at appropriate level (lift when needed)
 - [ ] No prop drilling beyond 2 levels (consider context)
-- [ ] WebSocket state managed cleanly
+- [ ] WebSocket state managed cleanly with proper cleanup
 - [ ] Loading and error states handled
 - [ ] No stale closures in callbacks
 
 ### 4. Performance
-- [ ] No unnecessary re-renders (React DevTools profiler)
+- [ ] No unnecessary re-renders (check useEffect deps)
 - [ ] Large lists use virtualization if needed
 - [ ] Images and assets optimized
 - [ ] Code splitting for large components
 - [ ] WebSocket reconnection handled gracefully
 
-### 5. UI/UX & Accessibility
+### 5. D3.js Integration (DAG Visualization)
+- [ ] D3 selections scoped to component refs (`svgRef.current`)
+- [ ] Cleanup in useEffect return (remove event listeners, cancel transitions)
+- [ ] No memory leaks from D3 selections
+- [ ] Zoom/pan behavior properly initialized and cleaned up
+- [ ] Data binding uses proper enter/update/exit pattern
+
+### 6. WebSocket Handling
+- [ ] Connection managed in useEffect with cleanup on unmount
+- [ ] `isMounted` flag prevents state updates after unmount
+- [ ] Error and close handlers set connection status
+- [ ] JSON parsing wrapped in try/catch
+- [ ] Reconnection logic if appropriate
+
+### 7. UI/UX & Accessibility
 - [ ] Semantic HTML elements used
 - [ ] Interactive elements are keyboard accessible
 - [ ] Color contrast meets WCAG AA
-- [ ] Loading states provide feedback
+- [ ] Loading states provide feedback (use `<Loader>` from lucide-react)
 - [ ] Error messages are user-friendly
 - [ ] Responsive design works on mobile
 
-### 6. Code Quality
+### 8. Tailwind CSS & Styling
+- [ ] Use Tailwind utilities over custom CSS
+- [ ] Theme colors from `src/theme/colors.ts` used consistently
+- [ ] Dark mode classes applied correctly (`dark:` prefix)
+- [ ] No hardcoded colors (use CSS variables or theme)
+- [ ] Responsive breakpoints used appropriately
+
+### 9. Code Quality
 - [ ] Passes `npx prettier --check .`
 - [ ] No ESLint warnings
 - [ ] Components have clear responsibilities
-- [ ] Consistent naming conventions
-- [ ] No console.log in production code
+- [ ] Consistent naming conventions (PascalCase components, camelCase functions)
+- [ ] No `console.log` in production code
+- [ ] Types defined in `src/types/` not inline
 
 ## Output Format
 
