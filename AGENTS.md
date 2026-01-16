@@ -17,6 +17,13 @@ Analyze the output of the command above:
     *   **Action**: Ask: *"You are on the main branch. Shall I create a dedicated branch and worktree for this task based on dev?"*
 2.  **Clean State**: If the working directory is dirty (uncommitted changes) on a shared branch, warn the user.
 
+### 🎯 Task Selection
+After verifying the git context, if the user hasn't specified a task and is in the project root:
+**Ask**: *"What would you like to do today?"*
+1.  Review a pull request
+2.  Review the project as a whole
+3.  Start a new sprint to add a feature
+
 ## 2. Code Review Standards
 When reviewing or writing code, enforce these specific rules:
 
