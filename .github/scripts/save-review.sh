@@ -51,9 +51,10 @@ case "$PERSONA_FULL" in
         ;;
 esac
 
-# Create output path
+# Create output path with timestamp to allow multiple reviews per day
 mkdir -p "$REVIEWS_DIR"
-OUTPUT_FILE="$REVIEWS_DIR/${BRANCH}-${PERSONA}-${DATE}.json"
+TIMESTAMP=$(date +%H%M%S)
+OUTPUT_FILE="$REVIEWS_DIR/${BRANCH}-${PERSONA}-${DATE}-${TIMESTAMP}.json"
 
 # Write to temp file first for validation
 TEMP_FILE=$(mktemp)
