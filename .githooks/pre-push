@@ -1,0 +1,170 @@
+#!/bin/bash
+# .githooks/pre-push
+# Blocks push if required AI reviews are missing or have NEEDS-WORK grade
+#
+# Bypass with: git push --no-verify
+
+set -e
+
+REVIEWS_DIR=".reviews"
+BRANCH=$(git branch --show-current 2>/dev/null)
+
+# Skip if not on a branch (detached HEAD)
+if [ -z "$BRANCH" ]; then
+    exit 0
+fi
+
+# Skip for main/master/dev branches (direct pushes should be rare anyway)
+if [ "$BRANCH" = "main" ] || [ "$BRANCH" = "master" ] || [ "$BRANCH" = "dev" ]; then
+    exit 0
+fi
+
+# Check if .reviews directory exists
+if [ ! -d "$REVIEWS_DIR" ]; then
+    echo "⚠️  Warning: No .reviews/ directory found."
+    echo "   Run AI reviews before pushing. Continuing anyway..."
+    exit 0
+fi
+
+# Find review files for this branch
+REVIEW_FILES=$(ls "${REVIEWS_DIR}/${BRANCH}"-*.json 2>/dev/null || true)
+if [ -z "$REVIEW_FILES" ]; then
+    echo "⚠️  Warning: No reviews found for branch '$BRANCH'."
+    echo "   Consider running AI reviews before pushing."
+    exit 0
+fi
+
+# Check if jq is available
+if ! command -v jq &> /dev/null; then
+    echo "⚠️  Warning: jq not installed, skipping review check"
+    exit 0
+fi
+
+# Determine required personas based on changed files
+CHANGED_FILES=$(git diff --name-only origin/dev...HEAD 2>/dev/null || git diff --name-only HEAD~1 2>/dev/null || echo "")
+
+REQUIRED_PERSONAS=""
+
+for file in $CHANGED_FILES; do
+    case "$file" in
+        node/src/network/*|node/src/rpc/*|node/src/ipc/*|node/src/stratum*)
+            REQUIRED_PERSONAS="$REQUIRED_PERSONAS Security"
+            REQUIRED_PERSONAS="$REQUIRED_PERSONAS Rust"
+            ;;
+        node/src/braid/*|node/src/consensus/*)
+            REQUIRED_PERSONAS="$REQUIRED_PERSONAS Security"
+            REQUIRED_PERSONAS="$REQUIRED_PERSONAS Cryptographer"
+            REQUIRED_PERSONAS="$REQUIRED_PERSONAS Rust"
+            ;;
+        node/src/db/*|*schema.sql*)
+            REQUIRED_PERSONAS="$REQUIRED_PERSONAS Database"
+            REQUIRED_PERSONAS="$REQUIRED_PERSONAS Rust"
+            ;;
+        node/*.rs)
+            REQUIRED_PERSONAS="$REQUIRED_PERSONAS Rust"
+            ;;
+        dashboard/*)
+            REQUIRED_PERSONAS="$REQUIRED_PERSONAS TypeScript"
+            ;;
+        Cargo.toml|Cargo.lock)
+            REQUIRED_PERSONAS="$REQUIRED_PERSONAS Security"
+            ;;
+    esac
+done
+
+# Deduplicate
+REQUIRED_PERSONAS=$(echo "$REQUIRED_PERSONAS" | tr ' ' '\n' | sort -u | grep -v '^$' || true)
+
+if [ -z "$REQUIRED_PERSONAS" ]; then
+    # No code changes requiring review (docs only, etc.)
+    exit 0
+fi
+
+# Map short names to full persona names for matching
+persona_full_name() {
+    case "$1" in
+        Security) echo "Security Researcher" ;;
+        Cryptographer) echo "Cryptographer" ;;
+        Rust) echo "Senior Rust Developer" ;;
+        TypeScript) echo "Senior TypeScript Developer" ;;
+        Architect) echo "Senior Software Architect" ;;
+        Database) echo "Senior Database Engineer" ;;
+        *) echo "$1" ;;
+    esac
+}
+
+# Check each required persona has a passing review
+MISSING=""
+NEEDS_WORK=""
+
+for persona_short in $REQUIRED_PERSONAS; do
+    persona_full=$(persona_full_name "$persona_short")
+    
+    # Find most recent review for this persona (sort by timestamp in filename)
+    latest_review=""
+    latest_grade=""
+    
+    for review in $(echo "$REVIEW_FILES" | tr ' ' '\n' | sort -r); do
+        if [ -f "$review" ]; then
+            review_persona=$(jq -r '.persona // empty' "$review" 2>/dev/null)
+            if [ "$review_persona" = "$persona_full" ]; then
+                latest_review="$review"
+                latest_grade=$(jq -r '.grade // empty' "$review" 2>/dev/null)
+                break
+            fi
+        fi
+    done
+    
+    if [ -z "$latest_review" ]; then
+        MISSING="$MISSING $persona_short"
+    elif [ "$latest_grade" = "NEEDS-WORK" ]; then
+        NEEDS_WORK="$NEEDS_WORK $persona_short"
+    fi
+done
+
+# Report results
+if [ -n "$MISSING" ] || [ -n "$NEEDS_WORK" ]; then
+    echo ""
+    echo "🛑 Push blocked by AI review gate"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    
+    if [ -n "$MISSING" ]; then
+        echo ""
+        echo "❌ Missing required reviews:"
+        for p in $MISSING; do
+            echo "   • $p"
+        done
+    fi
+    
+    if [ -n "$NEEDS_WORK" ]; then
+        echo ""
+        echo "❌ Reviews with NEEDS-WORK grade:"
+        for p in $NEEDS_WORK; do
+            echo "   • $p"
+        done
+    fi
+    
+    echo ""
+    echo "To proceed:"
+    echo "  1. Run missing reviews"
+    echo "  2. Address NEEDS-WORK findings and re-review"
+    echo "  3. Or bypass with: git push --no-verify"
+    echo ""
+    exit 1
+fi
+
+# All checks passed
+echo "✅ AI review gate passed"
+for review in $(echo "$REVIEW_FILES" | tr ' ' '\n' | sort -r); do
+    if [ -f "$review" ]; then
+        persona=$(jq -r '.persona // empty' "$review" 2>/dev/null)
+        grade=$(jq -r '.grade // empty' "$review" 2>/dev/null)
+        # Only show each persona once (most recent)
+        if ! echo "$SHOWN" | grep -q "|${persona}|"; then
+            echo "   • $persona: $grade"
+            SHOWN="${SHOWN}|${persona}|"
+        fi
+    fi
+done
+
+exit 0

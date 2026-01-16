@@ -287,13 +287,16 @@ Store review findings locally (gitignored) so re-reviews can check if issues wer
 
 **Directory**: `.reviews/` (add to `.gitignore`)
 
-**File naming**: `<branch-name>-<persona>-<date>.json`
+**File naming**: `<branch>-<persona>-<date>-<HHMMSS>.json`
 ```
 .reviews/
-├── feat-bead-validation-security-2026-01-16.json
-├── feat-bead-validation-rust-2026-01-16.json
-└── fix-websocket-typescript-2026-01-15.json
+├── feat-bead-validation-security-2026-01-16-093042.json
+├── feat-bead-validation-security-2026-01-16-141523.json  # re-review after fixes
+├── feat-bead-validation-rust-2026-01-16-094512.json
+└── fix-websocket-typescript-2026-01-15-160030.json
 ```
+
+Multiple reviews per persona are preserved. The git hook uses only the **most recent** for commit trailers.
 
 **Before starting a review**, check for prior reviews:
 ```bash
@@ -382,6 +385,34 @@ Reviewed-by: Senior Rust Developer (claude-sonnet-4.5) [PASS-WITH-NOTES]
 - Hook requires `jq` to parse JSON (skips gracefully if not installed)
 - Trailers are added for regular commits only (not merges/squashes)
 - The grade reflects the highest severity finding from that persona's review
+
+### 🚫 Pre-Push Review Gate
+
+The `pre-push` hook **blocks pushes** if required reviews are missing or have `NEEDS-WORK` grade.
+
+**What it checks**:
+1. Determines required personas from changed files (same rules as auto-selection)
+2. Verifies each required persona has a review in `.reviews/`
+3. Ensures no reviews have `NEEDS-WORK` grade
+
+**Example block**:
+```
+🛑 Push blocked by AI review gate
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+❌ Missing required reviews:
+   • Security
+
+❌ Reviews with NEEDS-WORK grade:
+   • Rust
+
+To proceed:
+  1. Run missing reviews
+  2. Address NEEDS-WORK findings and re-review
+  3. Or bypass with: git push --no-verify
+```
+
+**Bypass**: `git push --no-verify` (use sparingly, e.g., for urgent hotfixes)
 
 ## 3. Code Review Standards
 When reviewing or writing code, enforce these specific rules:
