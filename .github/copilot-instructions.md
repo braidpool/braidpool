@@ -26,7 +26,7 @@ Before reviewing code, ensure you understand Braidpool's core concepts:
 
 **Do not run multiple git commands.** Run this **SINGLE** command to populate your context:
 ```bash
-git branch -vv && git worktree list && git status --short --branch
+git branch -vv && git worktree list && git status --short --branch && gh auth status 2>&1 | head -4
 ```
 
 ### 🛑 Workflow Enforcement Rules
@@ -35,6 +35,9 @@ Analyze the output of the command above:
     *   If the user is on `master` or `main`: **STOP**.
     *   **Action**: Ask: *"You are on the main branch. Shall I create a dedicated branch and worktree for this task based on dev?"*
 2.  **Clean State**: If the working directory is dirty (uncommitted changes) on a shared branch, warn the user.
+3.  **GitHub Auth**: If `gh auth status` shows "token.*invalid" or "Failed to log in":
+    *   **Action**: Prompt: *"⚠️ GitHub CLI token expired. Please run: `gh auth login -h github.com`"*
+    *   Wait for user to re-authenticate before proceeding with PR operations.
 
 ### 🎯 Task Selection
 After verifying the git context, if the user hasn't specified a task and is in the project root:
