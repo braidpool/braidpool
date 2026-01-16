@@ -387,9 +387,12 @@ impl Sv2Server {
         }
 
         // Create mining job
+        // prev_hash will be populated with a real block prev_hash once the
+        // block template system is integrated. Using `None` avoids emitting
+        // an invalid zero hash as if it were real data.
         let job = MiningJob {
             job_id,
-            prev_hash: if is_future { None } else { Some([0u8; 32]) }, // Future jobs have None until activated
+            prev_hash: None,
             is_future,
             channel_id,
         };
@@ -848,7 +851,7 @@ mod tests {
     }
 
     #[test]
-    fn test_current_job_has_some_prev_hash() {
+    fn test_current_job_starts_with_none_prev_hash() {
         let mut server = Sv2Server::new();
 
         // Create a channel
@@ -862,15 +865,18 @@ mod tests {
         let channel_id = channel_success.channel_id;
 
         // Send a current job (not future)
+        // Note: All jobs now start with prev_hash = None until the block template
+        // system is integrated and provides a real prev_hash via set_new_prev_hash
         server.send_new_mining_job(channel_id, 1, false).unwrap();
 
-        // Access the job directly to verify prev_hash is Some
+        // Access the job directly to verify prev_hash is None
+        // (will be populated when block template system is integrated)
         let job = server.jobs.get(&1).unwrap();
-        assert!(job.prev_hash.is_some());
+        assert!(job.prev_hash.is_none());
         assert!(!job.is_future);
 
-        // validate_prev_hash should succeed
-        assert!(job.validate_prev_hash().is_ok());
+        // validate_prev_hash should fail until set_new_prev_hash is called
+        assert!(job.validate_prev_hash().is_err());
     }
 
     // ------------------------------------------------------------------------

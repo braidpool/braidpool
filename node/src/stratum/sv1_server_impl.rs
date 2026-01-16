@@ -326,7 +326,7 @@ impl<'a> IsServer<'a> for DownstreamClient {
                     // If even empty vec fails, use a valid 4-byte extranonce
                     // This should always succeed as 4-byte vec is a valid extranonce
                     Sv1Extranonce::try_from(vec![0u8; 4])
-                        .expect("4-byte vec must be valid extranonce")
+                        .expect("Failed to create fallback extranonce")
                 })
             }
         }
@@ -350,7 +350,7 @@ impl<'a> IsServer<'a> for DownstreamClient {
                 );
                 // Return 4-byte extranonce as safe fallback
                 // This should always succeed as 4-byte vec is a valid extranonce
-                Sv1Extranonce::try_from(vec![0u8; 4]).expect("4-byte vec must be valid extranonce")
+                Sv1Extranonce::try_from(vec![0u8; 4]).expect("Failed to create fallback extranonce")
             }
         }
     }
