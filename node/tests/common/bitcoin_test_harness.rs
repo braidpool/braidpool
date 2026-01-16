@@ -38,8 +38,8 @@ pub struct BitcoinTestHarness {
 impl BitcoinTestHarness {
     /// Create a new regtest harness with default configuration (cookie auth)
     pub fn new_regtest() -> Result<Self, TestHarnessError> {
-        let exe_path = bitcoind::exe_path()
-            .map_err(|e| TestHarnessError::BitcoindStart(e.to_string()))?;
+        let exe_path =
+            bitcoind::exe_path().map_err(|e| TestHarnessError::BitcoindStart(e.to_string()))?;
 
         let bitcoind = bitcoind::BitcoinD::new(exe_path)
             .map_err(|e| TestHarnessError::BitcoindStart(e.to_string()))?;
@@ -69,15 +69,17 @@ impl BitcoinTestHarness {
         _username: &str,
         _password: &str,
     ) -> Result<Self, TestHarnessError> {
-        let exe_path = bitcoind::exe_path()
-            .map_err(|e| TestHarnessError::BitcoindStart(e.to_string()))?;
+        let exe_path =
+            bitcoind::exe_path().map_err(|e| TestHarnessError::BitcoindStart(e.to_string()))?;
 
         let bitcoind = bitcoind::BitcoinD::new(exe_path)
             .map_err(|e| TestHarnessError::BitcoindStart(e.to_string()))?;
 
         // Read the cookie file to get the actual username:password
-        let cookie_content = std::fs::read_to_string(&bitcoind.params.cookie_file)
-            .map_err(|e| TestHarnessError::RpcConnection(format!("Failed to read cookie: {}", e)))?;
+        let cookie_content =
+            std::fs::read_to_string(&bitcoind.params.cookie_file).map_err(|e| {
+                TestHarnessError::RpcConnection(format!("Failed to read cookie: {}", e))
+            })?;
 
         // Cookie format is: __cookie__:random_password
         let parts: Vec<&str> = cookie_content.trim().split(':').collect();

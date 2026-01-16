@@ -164,7 +164,11 @@ fn test_getblocktemplate() {
     use bitcoincore_rpc::json::{GetBlockTemplateModes, GetBlockTemplateRules};
     let template = harness
         .client()
-        .get_block_template(GetBlockTemplateModes::Template, &[GetBlockTemplateRules::SegWit], &[])
+        .get_block_template(
+            GetBlockTemplateModes::Template,
+            &[GetBlockTemplateRules::SegWit],
+            &[],
+        )
         .expect("getblocktemplate should succeed");
 
     assert!(template.height > 0);
