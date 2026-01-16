@@ -328,32 +328,41 @@ cat > .reviews/${BRANCH}-<persona>-$(date +%Y-%m-%d).json
 
 **Cleanup**: Reviews are automatically removed when the worktree is deleted after PR merge.
 
-### 📝 Post-Review Commit Annotation
-After completing a review, **amend the latest commit** to record which reviews were performed, the AI model used, and the review grade. Use `git commit --amend` to append a trailer line for each persona that reviewed the code:
+### 📝 Automatic Commit Trailers (Git Hook)
 
+Review acknowledgements are **automatically appended** to commit messages via the `prepare-commit-msg` git hook. When you commit, the hook reads `.reviews/` and adds trailers.
+
+**Setup** (one-time, per clone):
 ```bash
-git commit --amend -m "$(git log -1 --format=%B)" -m "Reviewed-by: <Persona> (<Model>) [<Grade>]"
+git config core.hooksPath .githooks
+```
+
+**How it works**:
+1. Agent completes review and saves to `.reviews/<branch>-<persona>-<date>.json`
+2. Developer makes fixes and commits
+3. Hook automatically appends trailers from all review files for this branch
+4. Commit message includes review acknowledgements
+
+**Result** (automatic):
+```
+feat: Add bead validation
+
+Reviewed-by: Security Researcher (claude-sonnet-4.5) [PASS]
+Reviewed-by: Senior Rust Developer (claude-sonnet-4.5) [PASS-WITH-NOTES]
 ```
 
 **Trailer format**: `Reviewed-by: <Persona> (<Model>) [<Grade>]`
 
-**Grades** (use one):
+**Grades**:
 - `PASS` - No critical or high-severity issues found
 - `PASS-WITH-NOTES` - Minor issues noted, but acceptable
 - `NEEDS-WORK` - High-severity issues require changes before merge
 
-| Persona | Trailer Example |
-|---------|-----------------|
-| Security Researcher | `Reviewed-by: Security Researcher (claude-sonnet-4.5) [PASS]` |
-| Cryptographer | `Reviewed-by: Cryptographer (claude-sonnet-4.5) [PASS-WITH-NOTES]` |
-| Senior Rust Developer | `Reviewed-by: Senior Rust Developer (claude-sonnet-4.5) [NEEDS-WORK]` |
-| Senior TypeScript Developer | `Reviewed-by: Senior TypeScript Developer (claude-sonnet-4.5) [PASS]` |
-
-**Rules**:
-1. Add one trailer line per persona that performed a review.
-2. Use the exact model name from the `model` parameter (e.g., `claude-sonnet-4.5`, `gpt-5.2-codex`).
-3. Multiple reviews accumulate as separate trailer lines in the commit message.
-4. The grade reflects the highest severity finding from that persona's review.
+**Notes**:
+- Only the most recent review per persona is included (avoids duplicates)
+- Hook requires `jq` to parse JSON (skips gracefully if not installed)
+- Trailers are added for regular commits only (not merges/squashes)
+- The grade reflects the highest severity finding from that persona's review
 
 ## 3. Code Review Standards
 When reviewing or writing code, enforce these specific rules:
