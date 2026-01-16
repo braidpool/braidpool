@@ -10,12 +10,12 @@ export default function DashboardHeader({
       {/* --- Mobile View: Dropdown --- */}
       {/* Using ! to force responsive behavior against external overrides */}
       <div className="block md:!hidden py-4">
-        <label htmlFor="tabs" className="sr-only">
+        <label htmlFor="beads-explorer-tabs" className="sr-only">
           Select a tab
         </label>
         <select
-          id="tabs"
-          name="tabs"
+          id="beads-explorer-tabs"
+          name="beads-explorer-tabs"
           className="block w-full rounded-md border border-gray-700 bg-gray-800 py-2 pl-3 pr-3 text-base text-white focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
           value={activeTab}
           onChange={(e) => setActiveTab(e.target.value)}
