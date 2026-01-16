@@ -142,6 +142,7 @@ During a review, **automatically invoke additional personas** when specific issu
 |---------|-------------|--------|
 | Security finds crypto-related issue | Cryptographer | Verify cryptographic correctness |
 | Security finds consensus-related issue | Cryptographer | Verify protocol adherence |
+| Cryptographer finds memory-unsafe pattern | Security | Audit memory safety |
 | Rust finds `unsafe` block | Security | Audit memory safety |
 | Rust finds concurrency issue | Security | Check for race conditions |
 | TypeScript finds auth/session code | Security | Verify no credential leaks |
@@ -161,7 +162,8 @@ After escalation completes, include the additional findings in the original pers
 [Cryptographer's findings here]
 ```
 
-**Anti-loop rule**: A persona that was invoked via escalation **cannot escalate back** to the original persona. If a circular escalation would occur, note it in the report but do not invoke again.
+**Anti-loop rule**: A persona invoked via escalation **cannot escalate back** to the invoking persona in the same review chain. Example: Security → Cryptographer → (cannot go back to Security). If a circular escalation would occur, note it in the report:
+> ⚠️ **Escalation suppressed**: Would escalate to Security, but Security initiated this chain.
 
 ### ✅ Merge Readiness Check
 

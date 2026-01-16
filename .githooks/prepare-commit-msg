@@ -19,14 +19,17 @@ if [ -z "$BRANCH" ]; then
     exit 0
 fi
 
+# Sanitize branch name for safe filename matching
+BRANCH_SAFE=$(echo "$BRANCH" | tr -c '[:alnum:]-_.' '-')
+
 # Check if .reviews directory exists and has files for this branch
 REVIEWS_DIR=".reviews"
 if [ ! -d "$REVIEWS_DIR" ]; then
     exit 0
 fi
 
-# Find review files for this branch
-REVIEW_FILES=$(ls "${REVIEWS_DIR}/${BRANCH}"-*.json 2>/dev/null)
+# Find review files for this branch (use find for safer handling)
+REVIEW_FILES=$(find "$REVIEWS_DIR" -maxdepth 1 -name "${BRANCH_SAFE}-*.json" 2>/dev/null | sort -r)
 if [ -z "$REVIEW_FILES" ]; then
     exit 0
 fi
@@ -49,7 +52,7 @@ fi
 ADDED_PERSONAS=""
 
 # Process each review file (newest first based on date in filename)
-for review in $(echo "$REVIEW_FILES" | tr ' ' '\n' | sort -r); do
+while IFS= read -r review; do
     if [ -f "$review" ]; then
         # Extract fields from JSON
         PERSONA=$(jq -r '.persona // empty' "$review" 2>/dev/null)
@@ -74,6 +77,6 @@ for review in $(echo "$REVIEW_FILES" | tr ' ' '\n' | sort -r); do
             echo "Reviewed-by: ${PERSONA} [${GRADE}]" >> "$COMMIT_MSG_FILE"
         fi
     fi
-done
+done <<< "$REVIEW_FILES"
 
 exit 0

@@ -13,6 +13,9 @@ if [ -z "$BRANCH" ]; then
     exit 0
 fi
 
+# Sanitize branch name for safe filename matching (replace special chars with -)
+BRANCH_SAFE=$(echo "$BRANCH" | tr -c '[:alnum:]-_.' '-')
+
 # Skip for main/master/dev branches (direct pushes should be rare anyway)
 if [ "$BRANCH" = "main" ] || [ "$BRANCH" = "master" ] || [ "$BRANCH" = "dev" ]; then
     exit 0
@@ -25,8 +28,8 @@ if [ ! -d "$REVIEWS_DIR" ]; then
     exit 0
 fi
 
-# Find review files for this branch
-REVIEW_FILES=$(ls "${REVIEWS_DIR}/${BRANCH}"-*.json 2>/dev/null || true)
+# Find review files for this branch (use sanitized name)
+REVIEW_FILES=$(find "$REVIEWS_DIR" -maxdepth 1 -name "${BRANCH_SAFE}-*.json" 2>/dev/null | sort -r)
 if [ -z "$REVIEW_FILES" ]; then
     echo "⚠️  Warning: No reviews found for branch '$BRANCH'."
     echo "   Consider running AI reviews before pushing."
@@ -88,18 +91,6 @@ persona_full_name() {
         TypeScript) echo "Senior TypeScript Developer" ;;
         Architect) echo "Senior Software Architect" ;;
         Database) echo "Senior Database Engineer" ;;
-        *) echo "$1" ;;
-    esac
-}
-
-persona_short_name() {
-    case "$1" in
-        "Security Researcher") echo "security" ;;
-        "Cryptographer") echo "cryptographer" ;;
-        "Senior Rust Developer") echo "rust" ;;
-        "Senior TypeScript Developer") echo "typescript" ;;
-        "Senior Software Architect") echo "architect" ;;
-        "Senior Database Engineer") echo "database" ;;
         *) echo "$1" ;;
     esac
 }
@@ -193,11 +184,11 @@ if [ -n "$BLOCKING_REVIEWS" ]; then
                 echo "    [r] resolved (I fixed it)"
                 echo "    [s] skip (abort push, fix later)"
                 echo ""
-                read -p "  Choice [w/r/s]: " choice </dev/tty
+                read -rp "  Choice [w/r/s]: " choice </dev/tty
                 
                 case "$choice" in
                     w|W)
-                        read -p "  Reason: " reason </dev/tty
+                        read -rp "  Reason: " reason </dev/tty
                         if [ -z "$reason" ]; then
                             echo "  ❌ Reason required for wont-fix"
                             continue
@@ -210,7 +201,7 @@ if [ -n "$BLOCKING_REVIEWS" ]; then
                         break
                         ;;
                     r|R)
-                        read -p "  Resolution note (optional): " resolution </dev/tty
+                        read -rp "  Resolution note (optional): " resolution </dev/tty
                         if [ -n "$resolution" ]; then
                             jq ".findings[$idx].status = \"resolved\" | .findings[$idx].resolution = \"$resolution\"" "$review_file" > "${review_file}.tmp"
                         else
