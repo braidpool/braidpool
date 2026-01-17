@@ -17,6 +17,19 @@ Before diving in, understand these core concepts:
 
 📖 **For detailed explanations**, see [`docs/CODEBASE_PRIMER.md`](docs/CODEBASE_PRIMER.md)
 
+## Development Tools
+
+Before contributing, ensure you have the following tools installed:
+
+- **Rust & Cargo** - Required to build the node (`cargo build`, `cargo test`)
+- **Node.js & npm** - Required for dashboard development and formatting (`npx prettier --write .`)
+- **jq** - Required for git hooks to parse AI review results
+  - On Ubuntu/Debian: `sudo apt-get install jq`
+  - On macOS: `brew install jq`
+  - On Windows: Download from [jqlang.org](https://jqlang.github.io/jq/)
+
+If `jq` is not installed, the git hooks will skip AI review checks with a warning.
+
 ## Initials
 
 We deeply value each and every contributions made to Braidpool, we take this as a huge step to make Bitcoin safer and sustainable in future. So, new contributors are always needed and appreciated. <br><br>

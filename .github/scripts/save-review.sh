@@ -21,6 +21,9 @@ REVIEWS_DIR="$REPO_ROOT/.reviews"
 VALIDATOR="$SCRIPT_DIR/validate-review.py"
 VERSION_FILE="$SCRIPT_DIR/../WORKFLOW_VERSION"
 
+# Source common functions
+source "$SCRIPT_DIR/common.sh"
+
 # Read current version from single source of truth
 if [ -f "$VERSION_FILE" ]; then
     CURRENT_VERSION=$(cat "$VERSION_FILE")
@@ -71,8 +74,8 @@ case "$PERSONA_FULL" in
         ;;
 esac
 
-# Sanitize branch name for safe filename (replace special chars, collapse multiple dashes, trim)
-BRANCH_SAFE=$(echo "$BRANCH" | tr -c '[:alnum:]-_.' '-' | tr -s '-' | sed 's/^-//;s/-$//')
+# Sanitize branch name for safe filename
+BRANCH_SAFE=$(sanitize_branch "$BRANCH")
 
 # Generate timestamp for filename (YYYYMMDD-HHMMSS)
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
