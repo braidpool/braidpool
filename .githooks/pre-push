@@ -13,8 +13,8 @@ if [ -z "$BRANCH" ]; then
     exit 0
 fi
 
-# Sanitize branch name for safe filename matching (replace special chars with -)
-BRANCH_SAFE=$(echo "$BRANCH" | tr -c '[:alnum:]-_.' '-')
+# Sanitize branch name for safe filename matching (replace special chars, collapse dashes, trim)
+BRANCH_SAFE=$(echo "$BRANCH" | tr -c '[:alnum:]-_.' '-' | tr -s '-' | sed 's/^-//;s/-$//')
 
 # Skip for main/master/dev branches (direct pushes should be rare anyway)
 if [ "$BRANCH" = "main" ] || [ "$BRANCH" = "master" ] || [ "$BRANCH" = "dev" ]; then
@@ -53,7 +53,7 @@ for file in $CHANGED_FILES; do
             REQUIRED_PERSONAS="$REQUIRED_PERSONAS Security"
             REQUIRED_PERSONAS="$REQUIRED_PERSONAS Rust"
             ;;
-        node/src/braid/*|node/src/consensus/*)
+        node/src/braid/*|node/src/consensus/*|*payout*)
             REQUIRED_PERSONAS="$REQUIRED_PERSONAS Security"
             REQUIRED_PERSONAS="$REQUIRED_PERSONAS Cryptographer"
             REQUIRED_PERSONAS="$REQUIRED_PERSONAS Rust"
