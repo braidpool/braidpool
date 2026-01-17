@@ -48,67 +48,6 @@ const GraphVisualization: React.FC = () => {
   );
   const zoomTransformRef = useRef<d3.ZoomTransform | null>(null);
 
-  const animateCohorts = (firstCohort: string[], lastCohort: string[]) => {
-    if (!svgRef.current) return;
-
-    const svg = d3.select(svgRef.current);
-
-    // Animate first cohort nodes
-    if (firstCohort.length > 0) {
-      svg
-        .selectAll('.node')
-        .filter((d: any) => firstCohort.includes(d.id))
-        .select('ellipse')
-        .attr('stroke', '#FF8500')
-        .attr('stroke-width', 3)
-        .transition()
-        .duration(1000)
-        .attr('stroke-width', 2)
-        .attr('stroke', '#fff');
-    }
-
-    // Animate last cohort nodes
-    if (lastCohort.length > 0) {
-      svg
-        .selectAll('.node')
-        .filter((d: any) => lastCohort.includes(d.id))
-        .select('ellipse')
-        .attr('stroke', '#FF8500')
-        .attr('stroke-width', 3)
-        .transition()
-        .duration(1000)
-        .attr('stroke-width', 2)
-        .attr('stroke', '#fff');
-    }
-
-    if (firstCohort.length > 0) {
-      const selectedLinks = svg
-        .selectAll('.link')
-        .filter(
-          (d: any) =>
-            firstCohort.includes(d.source) || firstCohort.includes(d.target)
-        )
-        .attr('stroke-width', 2)
-        .attr('stroke', '#FF8500');
-
-      animateLinkDirection(selectedLinks);
-    }
-
-    // Animate links connected to last cohort
-    if (lastCohort.length > 0) {
-      const selectedLinks = svg
-        .selectAll('.link')
-        .filter(
-          (d: any) =>
-            lastCohort.includes(d.source) || lastCohort.includes(d.target)
-        )
-        .attr('stroke-width', 2)
-        .attr('stroke', '#FF8500');
-
-      animateLinkDirection(selectedLinks);
-    }
-  };
-
   useEffect(() => {
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
@@ -280,6 +219,67 @@ const GraphVisualization: React.FC = () => {
       }
     };
   }, []);
+
+  const animateCohorts = (firstCohort: string[], lastCohort: string[]) => {
+    if (!svgRef.current) return;
+
+    const svg = d3.select(svgRef.current);
+
+    // Animate first cohort nodes
+    if (firstCohort.length > 0) {
+      svg
+        .selectAll('.node')
+        .filter((d: any) => firstCohort.includes(d.id))
+        .select('ellipse')
+        .attr('stroke', '#FF8500')
+        .attr('stroke-width', 3)
+        .transition()
+        .duration(1000)
+        .attr('stroke-width', 2)
+        .attr('stroke', '#fff');
+    }
+
+    // Animate last cohort nodes
+    if (lastCohort.length > 0) {
+      svg
+        .selectAll('.node')
+        .filter((d: any) => lastCohort.includes(d.id))
+        .select('ellipse')
+        .attr('stroke', '#FF8500')
+        .attr('stroke-width', 3)
+        .transition()
+        .duration(1000)
+        .attr('stroke-width', 2)
+        .attr('stroke', '#fff');
+    }
+
+    if (firstCohort.length > 0) {
+      const selectedLinks = svg
+        .selectAll('.link')
+        .filter(
+          (d: any) =>
+            firstCohort.includes(d.source) || firstCohort.includes(d.target)
+        )
+        .attr('stroke-width', 2)
+        .attr('stroke', '#FF8500');
+
+      animateLinkDirection(selectedLinks);
+    }
+
+    // Animate links connected to last cohort
+    if (lastCohort.length > 0) {
+      const selectedLinks = svg
+        .selectAll('.link')
+        .filter(
+          (d: any) =>
+            lastCohort.includes(d.source) || lastCohort.includes(d.target)
+        )
+        .attr('stroke-width', 2)
+        .attr('stroke', '#FF8500');
+
+      animateLinkDirection(selectedLinks);
+    }
+  };
 
   const handleResetZoom = () => {
     const nextZoom = 0.3;
