@@ -10,6 +10,7 @@ Usage:
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -69,7 +70,6 @@ def basic_validate(data: dict, filepath: str) -> list[str]:
         errors.append(f"Invalid grade: {data['grade']}. Must be one of: {VALID_GRADES}")
     
     # Validate date format (YYYY-MM-DD)
-    import re
     if not re.match(r"^\d{4}-\d{2}-\d{2}$", data["date"]):
         errors.append(f"Invalid date format: {data['date']}. Must be YYYY-MM-DD")
     
