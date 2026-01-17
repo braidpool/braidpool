@@ -30,7 +30,8 @@ pub fn test_extend_functionality() {
         beads: vec![test_bead_0.clone()],
         genesis_beads: HashSet::from([0]),
         tips: HashSet::from([0]),
-        orphan_beads: Vec::new(),
+        orphan_beads: std::collections::VecDeque::new(),
+        bead_to_cohort_index: std::collections::HashMap::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([(
@@ -243,7 +244,8 @@ pub fn test_orphan_beads_functinality() {
         beads: vec![test_bead_0.clone()],
         genesis_beads: HashSet::from([0]),
         tips: HashSet::from([0]),
-        orphan_beads: Vec::new(),
+        orphan_beads: std::collections::VecDeque::new(),
+        bead_to_cohort_index: std::collections::HashMap::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([(
@@ -322,7 +324,8 @@ pub fn test_genesis1() {
         ],
         genesis_beads: HashSet::from([0]),
         tips: HashSet::from([3]),
-        orphan_beads: Vec::new(),
+        orphan_beads: std::collections::VecDeque::new(),
+        bead_to_cohort_index: std::collections::HashMap::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
@@ -372,7 +375,8 @@ pub fn test_genesis2() {
         ],
         genesis_beads: HashSet::from([0]),
         tips: HashSet::from([3]),
-        orphan_beads: Vec::new(),
+        orphan_beads: std::collections::VecDeque::new(),
+        bead_to_cohort_index: std::collections::HashMap::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
@@ -424,7 +428,8 @@ pub fn test_genesis3() {
         ],
         genesis_beads: HashSet::from([0, 1, 2]),
         tips: HashSet::from([3]),
-        orphan_beads: Vec::new(),
+        orphan_beads: std::collections::VecDeque::new(),
+        bead_to_cohort_index: std::collections::HashMap::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
@@ -512,7 +517,8 @@ pub fn test_tips1() {
         ],
         genesis_beads: HashSet::from([0]),
         tips: HashSet::from([3]),
-        orphan_beads: Vec::new(),
+        orphan_beads: std::collections::VecDeque::new(),
+        bead_to_cohort_index: std::collections::HashMap::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
@@ -568,7 +574,8 @@ pub fn test_tips2() {
         ],
         genesis_beads: HashSet::from([0]),
         tips: HashSet::from([3]),
-        orphan_beads: Vec::new(),
+        orphan_beads: std::collections::VecDeque::new(),
+        bead_to_cohort_index: std::collections::HashMap::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
@@ -652,7 +659,8 @@ pub fn test_tips3() {
         ],
         genesis_beads: HashSet::from([0, 1, 2]),
         tips: HashSet::from([3, 4, 5]),
-        orphan_beads: Vec::new(),
+        orphan_beads: std::collections::VecDeque::new(),
+        bead_to_cohort_index: std::collections::HashMap::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
@@ -740,7 +748,8 @@ pub fn test_reverse() {
         ],
         genesis_beads: HashSet::from([0, 1, 2]),
         tips: HashSet::from([3, 4, 5]),
-        orphan_beads: Vec::new(),
+        orphan_beads: std::collections::VecDeque::new(),
+        bead_to_cohort_index: std::collections::HashMap::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
@@ -850,7 +859,8 @@ pub fn test_cohorts_parents_1() {
         ],
         genesis_beads: HashSet::from([0]),
         tips: HashSet::from([3]),
-        orphan_beads: Vec::new(),
+        orphan_beads: std::collections::VecDeque::new(),
+        bead_to_cohort_index: std::collections::HashMap::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
@@ -985,7 +995,8 @@ pub fn test_highest_work_path_1() {
         ],
         genesis_beads: HashSet::from([0]),
         tips: HashSet::from([3]),
-        orphan_beads: Vec::new(),
+        orphan_beads: std::collections::VecDeque::new(),
+        bead_to_cohort_index: std::collections::HashMap::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
@@ -1052,7 +1063,8 @@ pub fn test_diamond_path_highest_work() {
         ],
         genesis_beads: HashSet::from([0]),
         tips: HashSet::from([3]),
-        orphan_beads: Vec::new(),
+        orphan_beads: std::collections::VecDeque::new(),
+        bead_to_cohort_index: std::collections::HashMap::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
@@ -1408,7 +1420,8 @@ fn test_extend_function() {
             tips: genesis_set.clone(),
             cohorts: vec![Cohort(genesis_set.clone())],
             cohort_tips: vec![genesis_set.clone()],
-            orphan_beads: Vec::new(),
+            orphan_beads: std::collections::VecDeque::new(),
+            bead_to_cohort_index: std::collections::HashMap::new(),
             genesis_beads: genesis_set,
             bead_index_mapping,
         };
@@ -1496,7 +1509,8 @@ fn test_get_beads_after() {
         tips: genesis_set.clone(),
         cohorts: vec![Cohort(genesis_set.clone())],
         cohort_tips: vec![genesis_set.clone()],
-        orphan_beads: Vec::new(),
+        orphan_beads: std::collections::VecDeque::new(),
+        bead_to_cohort_index: std::collections::HashMap::new(),
         genesis_beads: genesis_set,
         bead_index_mapping,
     };
@@ -1599,7 +1613,8 @@ fn test_get_beads_after_diamond_structure() {
         tips: genesis_set.clone(),
         cohorts: vec![Cohort(genesis_set.clone())],
         cohort_tips: vec![genesis_set.clone()],
-        orphan_beads: Vec::new(),
+        orphan_beads: std::collections::VecDeque::new(),
+        bead_to_cohort_index: std::collections::HashMap::new(),
         genesis_beads: genesis_set,
         bead_index_mapping,
     };
@@ -1696,7 +1711,8 @@ fn test_get_beads_after_complex_braid() {
         tips: genesis_set.clone(),
         cohorts: vec![Cohort(genesis_set.clone())],
         cohort_tips: vec![genesis_set.clone()],
-        orphan_beads: Vec::new(),
+        orphan_beads: std::collections::VecDeque::new(),
+        bead_to_cohort_index: std::collections::HashMap::new(),
         genesis_beads: genesis_set,
         bead_index_mapping,
     };
@@ -1777,7 +1793,8 @@ fn test_get_beads_after_edge_cases() {
         tips: genesis_set.clone(),
         cohorts: vec![Cohort(genesis_set.clone())],
         cohort_tips: vec![genesis_set.clone()],
-        orphan_beads: Vec::new(),
+        orphan_beads: std::collections::VecDeque::new(),
+        bead_to_cohort_index: std::collections::HashMap::new(),
         genesis_beads: genesis_set,
         bead_index_mapping,
     };
@@ -1873,7 +1890,8 @@ fn test_get_beads_after_multiple_tips() {
         tips: genesis_set.clone(),
         cohorts: vec![Cohort(genesis_set.clone())],
         cohort_tips: vec![genesis_set.clone()],
-        orphan_beads: Vec::new(),
+        orphan_beads: std::collections::VecDeque::new(),
+        bead_to_cohort_index: std::collections::HashMap::new(),
         genesis_beads: genesis_set,
         bead_index_mapping,
     };
@@ -1904,5 +1922,315 @@ fn test_get_beads_after_multiple_tips() {
         returned_beads.len(),
         returned_beads2.len(),
         "Order of input tips should not affect result"
+    );
+}
+
+// ============================================================================
+// Tests for optimization correctness
+// ============================================================================
+
+/// Test that bead_to_cohort_index is correctly maintained during extend operations
+#[test]
+pub fn test_bead_to_cohort_index_consistency() {
+    // Create a simple chain: 0 -> 1 -> 2 -> 3
+    let bead_0 = emit_bead();
+    let mut braid = Braid::new(vec![bead_0.clone()]);
+
+    // Verify genesis bead is in cohort 0
+    assert_eq!(
+        braid.bead_to_cohort_index.get(&0),
+        Some(&0),
+        "Genesis bead should be in cohort 0"
+    );
+
+    // Add bead 1
+    let mut bead_1 = emit_bead();
+    bead_1
+        .committed_metadata
+        .parents
+        .insert(bead_0.block_header.block_hash());
+    braid.extend(&bead_1);
+
+    // Verify bead 1 is tracked
+    assert!(
+        braid.bead_to_cohort_index.contains_key(&1),
+        "Bead 1 should be in bead_to_cohort_index"
+    );
+
+    // Add bead 2
+    let mut bead_2 = emit_bead();
+    bead_2
+        .committed_metadata
+        .parents
+        .insert(bead_1.block_header.block_hash());
+    braid.extend(&bead_2);
+
+    // Add bead 3
+    let mut bead_3 = emit_bead();
+    bead_3
+        .committed_metadata
+        .parents
+        .insert(bead_2.block_header.block_hash());
+    braid.extend(&bead_3);
+
+    // Verify all beads are tracked in bead_to_cohort_index
+    assert_eq!(
+        braid.bead_to_cohort_index.len(),
+        4,
+        "All 4 beads should be in bead_to_cohort_index"
+    );
+
+    // Verify each bead maps to a valid cohort
+    for (&bead_idx, &cohort_idx) in &braid.bead_to_cohort_index {
+        assert!(
+            cohort_idx < braid.cohorts.len(),
+            "Cohort index {} for bead {} should be valid",
+            cohort_idx,
+            bead_idx
+        );
+        assert!(
+            braid.cohorts[cohort_idx].0.contains(&bead_idx),
+            "Bead {} should be in cohort {}",
+            bead_idx,
+            cohort_idx
+        );
+    }
+}
+
+/// Test orphan chain processing with iterative approach
+#[test]
+pub fn test_orphan_chain_processing() {
+    // Create a chain where beads arrive out of order: 0, then 3, 2, 1
+    // This tests that the iterative orphan processing correctly handles chains
+    let bead_0 = emit_bead();
+    let mut braid = Braid::new(vec![bead_0.clone()]);
+
+    // Create beads 1, 2, 3 as a chain
+    let mut bead_1 = emit_bead();
+    bead_1
+        .committed_metadata
+        .parents
+        .insert(bead_0.block_header.block_hash());
+
+    let mut bead_2 = emit_bead();
+    bead_2
+        .committed_metadata
+        .parents
+        .insert(bead_1.block_header.block_hash());
+
+    let mut bead_3 = emit_bead();
+    bead_3
+        .committed_metadata
+        .parents
+        .insert(bead_2.block_header.block_hash());
+
+    // Add bead 3 first - should become orphan
+    let status_3 = braid.extend(&bead_3);
+    assert!(
+        matches!(status_3, crate::braid::AddBeadStatus::ParentsNotYetReceived),
+        "Bead 3 should be orphaned"
+    );
+    assert_eq!(braid.orphan_beads.len(), 1, "Should have 1 orphan");
+
+    // Add bead 2 - should also become orphan
+    let status_2 = braid.extend(&bead_2);
+    assert!(
+        matches!(status_2, crate::braid::AddBeadStatus::ParentsNotYetReceived),
+        "Bead 2 should be orphaned"
+    );
+    assert_eq!(braid.orphan_beads.len(), 2, "Should have 2 orphans");
+
+    // Add bead 1 - should be added AND trigger processing of orphans 2 and 3
+    let status_1 = braid.extend(&bead_1);
+    assert!(
+        matches!(status_1, crate::braid::AddBeadStatus::BeadAdded),
+        "Bead 1 should be added"
+    );
+
+    // After processing, all orphans should be resolved
+    assert_eq!(
+        braid.orphan_beads.len(),
+        0,
+        "All orphans should be processed"
+    );
+    assert_eq!(braid.beads.len(), 4, "All 4 beads should be in braid");
+
+    // Verify order in bead_index_mapping
+    assert!(braid
+        .bead_index_mapping
+        .contains_key(&bead_1.block_header.block_hash()));
+    assert!(braid
+        .bead_index_mapping
+        .contains_key(&bead_2.block_header.block_hash()));
+    assert!(braid
+        .bead_index_mapping
+        .contains_key(&bead_3.block_header.block_hash()));
+}
+
+/// Test that VecDeque orphan operations work correctly
+#[test]
+pub fn test_vecdeque_orphan_operations() {
+    let bead_0 = emit_bead();
+    let mut braid = Braid::new(vec![bead_0.clone()]);
+
+    // Create multiple orphan beads (parents don't exist)
+    let mut orphan_1 = emit_bead();
+    orphan_1.committed_metadata.parents.insert(
+        bitcoin::BlockHash::from_str(
+            "0000000000000000000000000000000000000000000000000000000000000001",
+        )
+        .unwrap(),
+    );
+
+    let mut orphan_2 = emit_bead();
+    orphan_2.committed_metadata.parents.insert(
+        bitcoin::BlockHash::from_str(
+            "0000000000000000000000000000000000000000000000000000000000000002",
+        )
+        .unwrap(),
+    );
+
+    // Add orphans
+    braid.extend(&orphan_1);
+    braid.extend(&orphan_2);
+
+    assert_eq!(braid.orphan_beads.len(), 2, "Should have 2 orphans");
+
+    // Verify VecDeque maintains insertion order
+    let first_orphan = braid.orphan_beads.front().unwrap();
+    assert_eq!(
+        first_orphan.block_header.block_hash(),
+        orphan_1.block_header.block_hash(),
+        "First orphan should be orphan_1"
+    );
+}
+
+/// Test parent_indices cache correctness
+#[test]
+pub fn test_parent_indices_cache() {
+    // Test with multiple parents (diamond structure)
+    //     1
+    //    / \
+    //   0   3
+    //    \ /
+    //     2
+    let bead_0 = emit_bead();
+    let mut braid = Braid::new(vec![bead_0.clone()]);
+
+    let mut bead_1 = emit_bead();
+    bead_1
+        .committed_metadata
+        .parents
+        .insert(bead_0.block_header.block_hash());
+    braid.extend(&bead_1);
+
+    let mut bead_2 = emit_bead();
+    bead_2
+        .committed_metadata
+        .parents
+        .insert(bead_0.block_header.block_hash());
+    braid.extend(&bead_2);
+
+    // Bead 3 has two parents: bead_1 and bead_2
+    let mut bead_3 = emit_bead();
+    bead_3
+        .committed_metadata
+        .parents
+        .insert(bead_1.block_header.block_hash());
+    bead_3
+        .committed_metadata
+        .parents
+        .insert(bead_2.block_header.block_hash());
+
+    let status = braid.extend(&bead_3);
+    assert!(
+        matches!(status, crate::braid::AddBeadStatus::BeadAdded),
+        "Bead with multiple parents should be added"
+    );
+
+    // Verify tips are updated correctly (only bead_3 should be tip now)
+    assert_eq!(braid.tips.len(), 1, "Should have only 1 tip");
+    assert!(braid.tips.contains(&3), "Bead 3 should be the only tip");
+
+    // Verify parents are no longer tips
+    assert!(!braid.tips.contains(&1), "Bead 1 should not be a tip");
+    assert!(!braid.tips.contains(&2), "Bead 2 should not be a tip");
+}
+
+/// Test duplicate bead detection with O(1) HashMap lookup
+#[test]
+pub fn test_duplicate_bead_detection() {
+    let bead_0 = emit_bead();
+    let mut braid = Braid::new(vec![bead_0.clone()]);
+
+    let mut bead_1 = emit_bead();
+    bead_1
+        .committed_metadata
+        .parents
+        .insert(bead_0.block_header.block_hash());
+
+    // Add bead_1 first time
+    let status_1 = braid.extend(&bead_1);
+    assert!(
+        matches!(status_1, crate::braid::AddBeadStatus::BeadAdded),
+        "First add should succeed"
+    );
+
+    // Try to add bead_1 again
+    let status_2 = braid.extend(&bead_1);
+    assert!(
+        matches!(
+            status_2,
+            crate::braid::AddBeadStatus::DagAlreadyContainsBead
+        ),
+        "Duplicate should be detected"
+    );
+
+    // Braid should still have only 2 beads
+    assert_eq!(braid.beads.len(), 2, "Should have only 2 beads");
+}
+
+/// Test long orphan chain to verify iterative approach doesn't stack overflow
+#[test]
+pub fn test_long_orphan_chain() {
+    let bead_0 = emit_bead();
+    let mut braid = Braid::new(vec![bead_0.clone()]);
+
+    const CHAIN_LENGTH: usize = 100;
+    let mut beads = vec![bead_0.clone()];
+
+    // Create a long chain of beads
+    for i in 1..=CHAIN_LENGTH {
+        let mut new_bead = emit_bead();
+        new_bead
+            .committed_metadata
+            .parents
+            .insert(beads[i - 1].block_header.block_hash());
+        beads.push(new_bead);
+    }
+
+    // Add all beads in reverse order (except genesis which is already in braid)
+    for i in (1..=CHAIN_LENGTH).rev() {
+        braid.extend(&beads[i]);
+    }
+
+    // At this point, all beads except bead_1 are orphans
+    // bead_1's parent (bead_0) exists, so it should be added
+    // This triggers iterative orphan processing
+
+    // Verify all beads are now in the braid
+    assert_eq!(
+        braid.beads.len(),
+        CHAIN_LENGTH + 1,
+        "All {} beads should be in braid",
+        CHAIN_LENGTH + 1
+    );
+    assert_eq!(braid.orphan_beads.len(), 0, "No orphans should remain");
+
+    // Verify bead_to_cohort_index has all beads
+    assert_eq!(
+        braid.bead_to_cohort_index.len(),
+        CHAIN_LENGTH + 1,
+        "All beads should be in bead_to_cohort_index"
     );
 }

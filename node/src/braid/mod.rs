@@ -29,9 +29,11 @@ pub struct Braid {
     pub tips: HashSet<usize>,
     pub cohorts: Vec<Cohort>,
     pub cohort_tips: Vec<HashSet<usize>>,
-    pub orphan_beads: Vec<Bead>,
+    pub orphan_beads: VecDeque<Bead>,
     pub genesis_beads: HashSet<usize>,
     pub bead_index_mapping: HashMap<BeadHash, usize>,
+    /// Maps bead index to cohort index for O(1) cohort lookup
+    pub bead_to_cohort_index: HashMap<usize, usize>,
 }
 
 impl Braid {
@@ -40,24 +42,27 @@ impl Braid {
         let mut beads = Vec::new();
         let mut bead_indices = HashSet::new();
         let mut bead_index_mapping = HashMap::new();
+        let mut bead_to_cohort_index = HashMap::new();
 
         for (index, bead) in genesis_beads.into_iter().enumerate() {
             beads.push(bead.clone());
             bead_indices.insert(index);
             bead_index_mapping.insert(bead.block_header.block_hash(), index);
+            bead_to_cohort_index.insert(index, 0); // Genesis beads are in cohort 0
         }
         let mut genesis_cohort: Vec<Cohort> = Vec::new();
-        if bead_indices.len() != 0 {
-            genesis_cohort.push(Cohort(HashSet::from(bead_indices.clone())));
+        if !bead_indices.is_empty() {
+            genesis_cohort.push(Cohort(bead_indices.clone()));
         }
         Braid {
             beads,
             tips: bead_indices.clone(),
             cohorts: genesis_cohort,
-            cohort_tips: vec![HashSet::from(bead_indices.clone())],
-            orphan_beads: Vec::new(),
+            cohort_tips: vec![bead_indices.clone()],
+            orphan_beads: VecDeque::new(),
             genesis_beads: bead_indices,
             bead_index_mapping,
+            bead_to_cohort_index,
         }
     }
     pub fn reset(&mut self) {
@@ -68,6 +73,7 @@ impl Braid {
         self.orphan_beads.clear();
         self.genesis_beads.clear();
         self.bead_index_mapping.clear();
+        self.bead_to_cohort_index.clear();
     }
 }
 #[allow(unused)]
@@ -75,6 +81,15 @@ impl Braid {
     /// Attempts to extend the braid with the given bead.
     /// Returns true if the bead successfully extended the braid, false otherwise.
     pub fn extend(&mut self, bead: &Bead) -> AddBeadStatus {
+        let status = self.extend_internal(bead);
+        if matches!(status, AddBeadStatus::BeadAdded) {
+            self.process_orphan_beads();
+        }
+        status
+    }
+
+    /// Internal extend without orphan processing - used to avoid recursion
+    fn extend_internal(&mut self, bead: &Bead) -> AddBeadStatus {
         // If the braid is empty and bead has no parents, treat as genesis bead
         if self.beads.is_empty() && bead.committed_metadata.parents.is_empty() {
             *self = Braid::new(vec![bead.clone()]);
@@ -85,25 +100,24 @@ impl Braid {
         if bead.committed_metadata.parents.is_empty() {
             return AddBeadStatus::InvalidBead;
         }
-        // Don't have all parents
-        for parent_hash in &bead.committed_metadata.parents {
-            let parent_exists = self.bead_index_mapping.contains_key(parent_hash);
 
-            if !parent_exists {
-                // Try to retrieve the parent
-                //This is not required if a bead exists in DB it would already been extended to local braid as well
-                // Parent not found and can't be retrieved
-                self.orphan_beads.push(bead.clone());
-                return AddBeadStatus::ParentsNotYetReceived;
-            }
-        }
-        // Already seen this bead
-        let bead_hash = bead.block_header.block_hash();
-        if self
-            .beads
+        // Cache parent indices - O(P) lookups done once instead of 3 times
+        let parent_indices: Vec<usize> = bead
+            .committed_metadata
+            .parents
             .iter()
-            .any(|b| b.block_header.block_hash() == bead_hash)
-        {
+            .filter_map(|h| self.bead_index_mapping.get(h).copied())
+            .collect();
+
+        // Check if all parents exist
+        if parent_indices.len() != bead.committed_metadata.parents.len() {
+            self.orphan_beads.push_back(bead.clone());
+            return AddBeadStatus::ParentsNotYetReceived;
+        }
+
+        // Already seen this bead - O(1) lookup using HashMap
+        let bead_hash = bead.block_header.block_hash();
+        if self.bead_index_mapping.contains_key(&bead_hash) {
             return AddBeadStatus::DagAlreadyContainsBead;
         }
 
@@ -120,12 +134,10 @@ impl Braid {
         // We'll collect the indices to remove from cohorts
         let mut remove_after = None;
         for (i, cohort) in self.cohorts.iter().enumerate().rev() {
-            // Find which parent indices are in this cohort
-            for parent_hash in &bead.committed_metadata.parents {
-                if let Some(&parent_index) = self.bead_index_mapping.get(parent_hash) {
-                    if cohort.0.contains(&parent_index) {
-                        found_parent_indices.insert(parent_index);
-                    }
+            // Find which parent indices are in this cohort (using cached indices)
+            for &parent_index in &parent_indices {
+                if cohort.0.contains(&parent_index) {
+                    found_parent_indices.insert(parent_index);
                 }
             }
             // If this cohort contains exactly all parent beads or all the tips
@@ -136,7 +148,7 @@ impl Braid {
                 && (self.cohort_tips[i] == found_parent_indices)
             {
                 remove_after = Some(i + 1);
-                dangling.insert(new_bead_index);
+                // new_bead_index already in dangling (inserted at line 132)
                 break;
             } else {
                 // Add all bead indices in this cohort to dangling
@@ -150,21 +162,25 @@ impl Braid {
             }
         }
 
-        // Remove all cohorts after the found index
+        // Remove all cohorts after the found index and update bead_to_cohort_index
         if let Some(idx) = remove_after {
+            // Remove bead_to_cohort_index entries for beads in truncated cohorts
+            for cohort in self.cohorts.iter().skip(idx) {
+                for &bead_idx in &cohort.0 {
+                    self.bead_to_cohort_index.remove(&bead_idx);
+                }
+            }
             self.cohorts.truncate(idx);
             self.cohort_tips.truncate(idx);
         } else {
+            self.bead_to_cohort_index.clear();
             self.cohorts.clear();
             self.cohort_tips.clear();
         }
 
-        // Remove parents from tips if present
-        for parent_hash in &bead.committed_metadata.parents {
-            // Find the index of the parent bead
-            if let Some(&parent_index) = self.bead_index_mapping.get(parent_hash) {
-                self.tips.remove(&parent_index);
-            }
+        // Remove parents from tips (using cached indices)
+        for &parent_index in &parent_indices {
+            self.tips.remove(&parent_index);
         }
 
         // Add the new bead's index to tips
@@ -173,61 +189,65 @@ impl Braid {
         // Construct a sub-braid from dangling and compute any new cohorts
         // Here, we just create a new cohort with dangling beads
         if !dangling.is_empty() {
+            let new_cohort_index = self.cohorts.len();
+            // Update bead_to_cohort_index for all beads in new cohort
+            for &bead_idx in &dangling {
+                self.bead_to_cohort_index.insert(bead_idx, new_cohort_index);
+            }
             self.cohorts.push(Cohort(dangling));
             self.cohort_tips.push(self.tips.clone());
         }
-
-        self.process_orphan_beads();
 
         AddBeadStatus::BeadAdded
     }
 
     /// Process orphan beads to see if any can now be added to the braid
-    /// This method checks if all parents of orphan beads are now available
-    /// and recursively extends the braid with those beads
+    /// This method uses an iterative approach to avoid recursion overhead - O(O × P) instead of O(O² × P)
     fn process_orphan_beads(&mut self) {
-        // Process orphans in reverse order to maintain proper indexing
-        let mut i = self.orphan_beads.len();
-        while i > 0 {
-            i -= 1;
+        loop {
+            let mut made_progress = false;
+            let mut remaining_orphans = VecDeque::new();
 
-            // Check if all parents are now available for this orphan
-            let mut all_parents_available = true;
-            for parent_hash in &self.orphan_beads[i].committed_metadata.parents {
-                if !self.bead_index_mapping.contains_key(parent_hash) {
-                    all_parents_available = false;
-                    break;
+            // Process all current orphans - O(1) pop from VecDeque
+            while let Some(orphan_bead) = self.orphan_beads.pop_front() {
+                // Check if all parents are now available for this orphan
+                let all_parents_available = orphan_bead
+                    .committed_metadata
+                    .parents
+                    .iter()
+                    .all(|h| self.bead_index_mapping.contains_key(h));
+
+                if all_parents_available {
+                    // Try to extend with the orphan bead (without triggering orphan processing)
+                    match self.extend_internal(&orphan_bead) {
+                        AddBeadStatus::BeadAdded => {
+                            made_progress = true;
+                        }
+                        AddBeadStatus::DagAlreadyContainsBead | AddBeadStatus::InvalidBead => {
+                            // Discard invalid/duplicate orphans
+                        }
+                        AddBeadStatus::ParentsNotYetReceived => {
+                            // Should not happen since we checked, but handle gracefully
+                            remaining_orphans.push_back(orphan_bead);
+                        }
+                    }
+                } else {
+                    remaining_orphans.push_back(orphan_bead);
                 }
             }
 
-            if all_parents_available {
-                // Remove the orphan bead first, then process it
-                let orphan_bead = self.orphan_beads.remove(i);
+            self.orphan_beads = remaining_orphans;
 
-                // Now extend with the orphan bead
-                match self.extend(&orphan_bead) {
-                    AddBeadStatus::BeadAdded => {
-                        // Recursively process remaining orphans as this addition
-                        // might enable more orphans to be processed
-                        self.process_orphan_beads();
-                        return; // Exit current processing as recursion will handle the rest
-                    }
-                    AddBeadStatus::DagAlreadyContainsBead => {
-                        continue;
-                    }
-                    AddBeadStatus::InvalidBead => {
-                        continue;
-                    }
-                    AddBeadStatus::ParentsNotYetReceived => {
-                        self.orphan_beads.push(orphan_bead);
-                    }
-                }
+            // If no progress was made, we're done
+            if !made_progress {
+                break;
             }
+            // Otherwise, loop again to check if newly added beads enable more orphans
         }
     }
 
     pub fn check_genesis_beads(&self, genesis_beads: &Vec<BeadHash>) -> GenesisCheckStatus {
-        if (genesis_beads.len() != self.genesis_beads.len()) {
+        if genesis_beads.len() != self.genesis_beads.len() {
             return GenesisCheckStatus::GenesisBeadsCountMismatch;
         }
         for bead_hash in genesis_beads {
@@ -251,6 +271,7 @@ impl Braid {
                 let new_index = self.beads.len() - 1;
                 self.bead_index_mapping.insert(bead_hash, new_index);
                 self.genesis_beads.insert(new_index);
+                self.bead_to_cohort_index.insert(new_index, 0); // Genesis beads are in cohort 0
             }
         }
     }

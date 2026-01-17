@@ -120,7 +120,8 @@ pub mod test_utility_functions {
                 genesis_beads: current_braid_genesis,
                 cohorts: current_bead_cohorots,
                 cohort_tips: vec![HashSet::new()], // Cohorts tips are only used in extend(), so we can skip them here.
-                orphan_beads: Vec::new(),
+                orphan_beads: std::collections::VecDeque::new(),
+                bead_to_cohort_index: HashMap::new(),
             },
             file_braid.clone(),
         )
