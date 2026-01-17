@@ -92,7 +92,7 @@ git diff --name-only origin/dev...HEAD
 |---------------------|-------------------|
 | `node/src/network/**`, `node/src/rpc/**` | Security, Rust |
 | `node/src/braid/**`, `node/src/consensus/**` | Cryptographer, Security, Rust, Performance |
-| `node/src/bead*`, `**/sign*`, `**/hash*` | Cryptographer, Rust |
+| `node/src/bead*`, `**/sign*`, `**/hash*`, `**/payout*` | Cryptographer, Rust |
 | `node/src/db/**`, `**/schema.sql` | Database, Rust |
 | `node/src/ipc/**`, `node/src/stratum*` | Security, Rust, Performance |
 | `tests/**`, `node/tests/**` | Rust (test coverage) |
@@ -323,9 +323,10 @@ If prior reviews exist, load them and:
 cat << 'EOF' | .github/scripts/save-review.sh
 {
   "branch": "feat-bead-validation",
+  "pr_number": 350,
   "persona": "Senior Rust Developer",
   "model": "claude-sonnet-4.5",
-  "date": "2026-01-16",
+  "summary": "Well-structured code with one performance concern in hot path",
   "grade": "PASS-WITH-NOTES",
   "workflow_version": "1.0",
   "findings": [
@@ -345,8 +346,10 @@ The script automatically:
 - Validates against the JSON schema
 - Checks workflow version compatibility (major version must match)
 - Maps persona to short filename
-- Saves to `.reviews/<branch>-<persona>-<date>-<time>.json`
+- Generates timestamp and saves to `.reviews/<branch>-<persona>-<timestamp>.json`
 - Exits with error if validation fails
+
+**Note**: Date/time is derived from the system clock when saving, not from the JSON. This simplifies review creation and ensures consistent timestamps.
 
 **Workflow versioning**: Include `"workflow_version": "1.0"` in all reviews. When the workflow changes significantly (new required fields, changed schema), the major version increments and old reviews are rejected.
 
