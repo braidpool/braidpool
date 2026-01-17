@@ -5,6 +5,10 @@
 #
 # Bypass with: git push --no-verify
 
+# Source common functions
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/../.github/scripts/common.sh"
+
 REVIEWS_DIR=".reviews"
 BRANCH=$(git branch --show-current 2>/dev/null)
 
@@ -13,8 +17,8 @@ if [ -z "$BRANCH" ]; then
     exit 0
 fi
 
-# Sanitize branch name for safe filename matching (replace special chars, collapse dashes, trim)
-BRANCH_SAFE=$(echo "$BRANCH" | tr -c '[:alnum:]-_.' '-' | tr -s '-' | sed 's/^-//;s/-$//')
+# Sanitize branch name for safe filename matching
+BRANCH_SAFE=$(sanitize_branch "$BRANCH")
 
 # Skip for main/master/dev branches (direct pushes should be rare anyway)
 if [ "$BRANCH" = "main" ] || [ "$BRANCH" = "master" ] || [ "$BRANCH" = "dev" ]; then

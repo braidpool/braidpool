@@ -5,6 +5,10 @@
 # This hook reads from .reviews/ directory and adds "Reviewed-by:" lines
 # for any completed reviews on the current branch.
 
+# Source common functions
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/../.github/scripts/common.sh"
+
 COMMIT_MSG_FILE=$1
 COMMIT_SOURCE=$2
 
@@ -19,8 +23,8 @@ if [ -z "$BRANCH" ]; then
     exit 0
 fi
 
-# Sanitize branch name for safe filename matching (collapse dashes, trim)
-BRANCH_SAFE=$(echo "$BRANCH" | tr -c '[:alnum:]-_.' '-' | tr -s '-' | sed 's/^-//;s/-$//')
+# Sanitize branch name for safe filename matching
+BRANCH_SAFE=$(sanitize_branch "$BRANCH")
 
 # Check if .reviews directory exists and has files for this branch
 REVIEWS_DIR=".reviews"
