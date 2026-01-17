@@ -1,20 +1,71 @@
 # Braidpool Dashboard
 
-A visualization dashboard for the Braidpool decentralized mining pool, and Bitcoin related data.
+The Braidpool Dashboard uses a modular, tab-based architecture.
+Dashboard sections such as Dashboard, Braid Visualization, Bead Explorer, Mining Inventory, Bitcoin Stats, Mempool, and Node Health operate independently, each with its own configuration, API endpoints, and data flow.
 
-## How to Run
+---
 
-First and foremost, for the braid visualisation to work, either use the deployed API url http://french.braidpool.net:65433, or run it locally via the `simulator_api` located in the `tests` directory in the `main` directory.
+## Running the Braid Visualization
+
+To run the **Braid Visualization**, you have two options:
+
+#### Option 1: Use the deployed API
+
+```
+http://french.braidpool.net:65433
+```
+
+#### Option 2: Run locally using the simulator API
+
+The simulator is located at:
+
+```
+tests/simulator_api.py
+```
+
+---
+
+## Running Other Dashboard Tabs
+
+_(Bead Explorer, Bitcoin Stats, Mempool, Node Health)_
+
+These tabs rely on the **dashboard backend API**.
+
+#### 1. Start the Backend API
 
 ```bash
-# Install dependencies
+cd braidpool/dashboard/api
 npm install
+```
 
-# Start development server
+#### 2. Configure Environment Variables
+
+Use the example file as reference:
+[https://github.com/braidpool/braidpool/blob/dev/dashboard/api/.env.example](https://github.com/braidpool/braidpool/blob/dev/dashboard/api/.env.example)
+
+#### 3. Run the Backend Server
+
+```bash
+node server.js
+```
+
+The API will be available at:
+**[http://localhost:5000](http://localhost:5000)**
+
+---
+
+#### 4. Start the Frontend Dashboard
+
+```bash
+cd braidpool/dashboard
+npm install
 npm run dev
 ```
 
-The dashboard will open automatically at [http://localhost:3000](http://localhost:3000).
+The dashboard will open at:
+**[http://localhost:3000](http://localhost:3000)**
+
+---
 
 ## Build for Production
 
@@ -26,27 +77,75 @@ npm run build
 npm run preview
 ```
 
-## Features
+---
 
-- **Braid Visualization**: Interactive graph of the braid structure.
-- **Performance Metrics**: Real-time mining pool statistics.
-- **Miner Management**: Monitor and manage connected miners.
-- **Network Analysis**: View network health and performance.
+## 🐳 Docker Setup
 
-## Dashboard Sections
+You can use **Docker Compose** to run the frontend, backend API, and simulator together.
 
-1. **Main Dashboard**: Overview of key metrics and status.
-2. **Braid Visualization**: Interactive graph showing the DAG structure.
-3. **Mining Inventory**: Status of connected mining hardware.
-4. **Statistics**: Detailed performance metrics and history.
+#### Run All Services
+
+```bash
+docker-compose up --build
+```
+
+#### Services
+
+- Frontend: [http://localhost:3000](http://localhost:3000)
+- API: [http://localhost:5000](http://localhost:5000)
+- Simulator API: [http://localhost:65433](http://localhost:65433)
+
+#### Stop Services
+
+```bash
+docker-compose down
+```
+
+---
+
+## Technology Stack
+
+#### Frontend
+
+- TypeScript 4.9+
+- TailwindCSS 3.0+
+
+### Backend
+
+##### API Server
+
+- Node.js
+- Express.js
+- WebSocket support
+
+##### Mining Interface
+
+- Python 3.7+
+- Flask
+- pyasic library
+
+##### Development Tools
+
+- Docker & Docker Compose
+- ESLint & Prettier
+- Jest & React Testing Library
+- Python pytest
+
+---
 
 ## Troubleshooting
 
 - **Blank screen**: Check the browser console for errors.
-- **Loading issues**: Verify that data files are in the correct format.
-- **Visualization problems**: Ensure you are using a compatible browser (latest Chrome/Firefox recommended).
-- **Visualization graph keeps on loading**: Ping the API, check the url of the API at dashboard/src/component/BraidPoolDAG/BraidPoolDAG.tsx.
+- **Loading issues**: Verify API availability and response format.
+- **Visualization issues**: Use the latest Chrome or Firefox.
+
+If the issue persists, please open a GitHub issue with relevant logs and screenshots, or reach out on our
+[Discord channel](https://discord.gg/pZYUDwkpPv).
+The maintainers will review the report and help resolve or fix the issue.
 
 ---
 
-For more details on the Braidpool project, visit the [main repository](https://github.com/braidpool/braidpool).
+For more information about the Braidpool project, see the
+**[Braidpool main repository](https://github.com/braidpool/braidpool)**
+
+---
