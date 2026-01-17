@@ -1,4 +1,3 @@
-#!/bin/bash
 # .github/scripts/save-review.sh
 # Saves and validates an AI review JSON file
 #
@@ -9,8 +8,10 @@
 # 1. Reads JSON from stdin
 # 2. Validates against schema
 # 3. Checks workflow version compatibility
-# 4. Saves to .reviews/<branch>-<persona>-<date>-<time>.json
+# 4. Saves to .reviews/<branch>-<persona>-<timestamp>.json
 # 5. Exits 0 on success, 1 on validation failure
+#
+# Note: Date/time is derived from system clock, not from JSON
 
 set -e
 
@@ -49,10 +50,9 @@ fi
 # Extract required fields for filename
 BRANCH=$(echo "$JSON" | jq -r '.branch // empty')
 PERSONA_FULL=$(echo "$JSON" | jq -r '.persona // empty')
-DATE=$(echo "$JSON" | jq -r '.date // empty')
 
-if [ -z "$BRANCH" ] || [ -z "$PERSONA_FULL" ] || [ -z "$DATE" ]; then
-    echo "Error: Missing required fields (branch, persona, date)" >&2
+if [ -z "$BRANCH" ] || [ -z "$PERSONA_FULL" ]; then
+    echo "Error: Missing required fields (branch, persona)" >&2
     exit 1
 fi
 
@@ -71,13 +71,15 @@ case "$PERSONA_FULL" in
         ;;
 esac
 
-# Sanitize branch name for safe filename (replace special chars with -)
-BRANCH_SAFE=$(echo "$BRANCH" | tr -c '[:alnum:]-_.' '-')
+# Sanitize branch name for safe filename (replace special chars, collapse multiple dashes, trim)
+BRANCH_SAFE=$(echo "$BRANCH" | tr -c '[:alnum:]-_.' '-' | tr -s '-' | sed 's/^-//;s/-$//')
 
-# Create output path with timestamp to allow multiple reviews per day
+# Generate timestamp for filename (YYYYMMDD-HHMMSS)
+TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+
+# Create output path
 mkdir -p "$REVIEWS_DIR"
-TIMESTAMP=$(date +%H%M%S)
-OUTPUT_FILE="$REVIEWS_DIR/${BRANCH_SAFE}-${PERSONA}-${DATE}-${TIMESTAMP}.json"
+OUTPUT_FILE="$REVIEWS_DIR/${BRANCH_SAFE}-${PERSONA}-${TIMESTAMP}.json"
 
 # Write to temp file first for validation
 TEMP_FILE=$(mktemp)

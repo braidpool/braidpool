@@ -19,8 +19,8 @@ if [ -z "$BRANCH" ]; then
     exit 0
 fi
 
-# Sanitize branch name for safe filename matching
-BRANCH_SAFE=$(echo "$BRANCH" | tr -c '[:alnum:]-_.' '-')
+# Sanitize branch name for safe filename matching (collapse dashes, trim)
+BRANCH_SAFE=$(echo "$BRANCH" | tr -c '[:alnum:]-_.' '-' | tr -s '-' | sed 's/^-//;s/-$//')
 
 # Check if .reviews directory exists and has files for this branch
 REVIEWS_DIR=".reviews"

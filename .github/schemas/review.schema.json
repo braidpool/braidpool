@@ -4,12 +4,17 @@
   "title": "AI Review",
   "description": "Schema for AI agent review findings",
   "type": "object",
-  "required": ["branch", "persona", "model", "date", "grade", "findings"],
+  "required": ["branch", "persona", "model", "grade", "findings"],
   "properties": {
     "branch": {
       "type": "string",
       "description": "Git branch name that was reviewed",
       "minLength": 1
+    },
+    "pr_number": {
+      "type": "integer",
+      "description": "GitHub PR number if reviewing a PR",
+      "minimum": 1
     },
     "persona": {
       "type": "string",
@@ -30,10 +35,11 @@
       "pattern": "^[a-z0-9]+([-.]?[a-z0-9]+)*$",
       "examples": ["claude-sonnet-4.5", "gpt-5.2-codex", "claude-haiku-4.5"]
     },
-    "date": {
+    "summary": {
       "type": "string",
-      "description": "Date of the review in ISO format",
-      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+      "description": "Brief summary of the review findings",
+      "minLength": 10,
+      "maxLength": 500
     },
     "grade": {
       "type": "string",
@@ -116,14 +122,9 @@
         }
       }
     },
-    "previous_review_date": {
+    "previous_review": {
       "type": "string",
-      "description": "Date of the previous review that was compared against",
-      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
-    },
-    "summary": {
-      "type": "string",
-      "description": "Brief summary of the review"
+      "description": "Filename of the previous review that was compared against"
     }
   },
   "allOf": [
