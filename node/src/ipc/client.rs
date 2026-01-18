@@ -191,23 +191,8 @@ impl PriorityRequestQueue {
         let result = match priority {
             RequestPriority::Critical => {
                 if self.critical_queue.len() >= self.max_queue_sizes.critical {
-                    error!(
-                        queue_type = "Critical",
-                        queue_len = self.critical_queue.len(),
-                        queue_limit = self.max_queue_sizes.critical,
-                        "BITCOIN IPC QUEUE FULL - CRITICAL QUEUE EXCEEDED LIMIT"
-                    );
-                    error!(
-                        "FATAL: Cannot communicate with Bitcoin Core. Queue is full. This breaks consensus."
-                    );
-                    error!(
-                        "The node must halt to prevent falling out of consensus with the Braid."
-                    );
-                    panic!(
-                        "FATAL: Bitcoin IPC Critical queue is full ({} >= {}). Cannot process consensus-critical operations. Node must crash to prevent consensus failure.",
-                        self.critical_queue.len(),
-                        self.max_queue_sizes.critical
-                    );
+                    error!("BITCOIN IPC QUEUE FULL - CRITICAL QUEUE EXCEEDED LIMIT");
+                    panic!("FATAL: Cannot communicate with Bitcoin Core. Queue is full.");
                 } else {
                     self.critical_queue.push_back(request);
                     self.metrics
@@ -218,23 +203,8 @@ impl PriorityRequestQueue {
             }
             RequestPriority::High => {
                 if self.high_queue.len() >= self.max_queue_sizes.high {
-                    error!(
-                        queue_type = "High",
-                        queue_len = self.high_queue.len(),
-                        queue_limit = self.max_queue_sizes.high,
-                        "BITCOIN IPC QUEUE FULL - HIGH PRIORITY QUEUE EXCEEDED LIMIT"
-                    );
-                    error!(
-                        "FATAL: Cannot communicate with Bitcoin Core. Queue is full. This breaks consensus."
-                    );
-                    error!(
-                        "The node must halt to prevent falling out of consensus with the Braid."
-                    );
-                    panic!(
-                        "FATAL: Bitcoin IPC High priority queue is full ({} >= {}). Cannot process consensus-critical operations. Node must crash to prevent consensus failure.",
-                        self.high_queue.len(),
-                        self.max_queue_sizes.high
-                    );
+                    error!("BITCOIN IPC QUEUE FULL - HIGH PRIORITY QUEUE EXCEEDED LIMIT");
+                    panic!("FATAL: Cannot communicate with Bitcoin Core. Queue is full.");
                 } else {
                     self.high_queue.push_back(request);
                     self.metrics
@@ -245,23 +215,8 @@ impl PriorityRequestQueue {
             }
             RequestPriority::Normal => {
                 if self.normal_queue.len() >= self.max_queue_sizes.normal {
-                    error!(
-                        queue_type = "Normal",
-                        queue_len = self.normal_queue.len(),
-                        queue_limit = self.max_queue_sizes.normal,
-                        "BITCOIN IPC QUEUE FULL - NORMAL PRIORITY QUEUE EXCEEDED LIMIT"
-                    );
-                    error!(
-                        "FATAL: Cannot communicate with Bitcoin Core. Queue is full. This breaks consensus."
-                    );
-                    error!(
-                        "The node must halt to prevent falling out of consensus with the Braid."
-                    );
-                    panic!(
-                        "FATAL: Bitcoin IPC Normal priority queue is full ({} >= {}). Cannot process operations. Node must crash to prevent consensus failure.",
-                        self.normal_queue.len(),
-                        self.max_queue_sizes.normal
-                    );
+                    error!("BITCOIN IPC QUEUE FULL - NORMAL PRIORITY QUEUE EXCEEDED LIMIT");
+                    panic!("FATAL: Cannot communicate with Bitcoin Core. Queue is full.");
                 } else {
                     self.normal_queue.push_back(request);
                     self.metrics
@@ -272,23 +227,8 @@ impl PriorityRequestQueue {
             }
             RequestPriority::Low => {
                 if self.low_queue.len() >= self.max_queue_sizes.low {
-                    error!(
-                        queue_type = "Low",
-                        queue_len = self.low_queue.len(),
-                        queue_limit = self.max_queue_sizes.low,
-                        "BITCOIN IPC QUEUE FULL - LOW PRIORITY QUEUE EXCEEDED LIMIT"
-                    );
-                    error!(
-                        "FATAL: Cannot communicate with Bitcoin Core. Queue is full. This breaks consensus."
-                    );
-                    error!(
-                        "The node must halt to prevent falling out of consensus with the Braid."
-                    );
-                    panic!(
-                        "FATAL: Bitcoin IPC Low priority queue is full ({} >= {}). Cannot process operations. Node must crash to prevent consensus failure.",
-                        self.low_queue.len(),
-                        self.max_queue_sizes.low
-                    );
+                    error!("BITCOIN IPC QUEUE FULL - LOW PRIORITY QUEUE EXCEEDED LIMIT");
+                    panic!("FATAL: Cannot communicate with Bitcoin Core. Queue is full.");
                 } else {
                     self.low_queue.push_back(request);
                     self.metrics
