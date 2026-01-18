@@ -195,8 +195,10 @@ const GraphVisualization: React.FC = () => {
 
         // Trigger animation if cohorts changed
         if (firstCohortChanged || lastCohortChanged) {
+          if (!isPlayingRef.current) {
+            return;
+          }
           setTimeout(() => {
-            if (!isPlayingRef.current) return;
             animateCohorts(
               firstCohortChanged ? parsedData.cohorts[0] : [],
               lastCohortChanged
