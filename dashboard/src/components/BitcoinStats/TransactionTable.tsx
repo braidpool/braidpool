@@ -251,9 +251,9 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                     {tx.feeRate && <span className="text-xs text-gray-500 ml-1">sat/vB</span>}
                   </td>
                   <td className="px-4 py-3 text-right font-mono" style={{ color: colors.textPrimary }}>
-                    {tx.size || tx.size ? (
+                    {tx.size ? (
                       <>
-                        {(tx.size || tx.size).toLocaleString()}
+                        {tx.size.toLocaleString()}
                         <span className="text-xs text-gray-500 ml-1">vB</span>
                       </>
                     ) : '-'}
