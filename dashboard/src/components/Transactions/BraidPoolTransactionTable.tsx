@@ -5,7 +5,7 @@ import {
   TransactionTableProps,
 } from "./Types";
 import {
-  truncateHash,
+  shortenAddress,
   formatFee,
   formatFeeRate,
   formatTime,
@@ -200,7 +200,7 @@ const BraidPoolTransactionTable: React.FC<TransactionTableProps> = ({
                   className="hover:bg-white/5 transition-colors duration-150"
                 >
                   <td className="px-4 py-3 font-mono text-blue-400">
-                    {truncateHash(tx.txid)}
+                    {shortenAddress(tx.txid)}
                   </td>
                   <td className="px-4 py-3">
                     <span

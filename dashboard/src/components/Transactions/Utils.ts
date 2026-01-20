@@ -1,12 +1,5 @@
 import { TransactionCategory } from "./Types";
-
-/**
- * truncates a transaction hash to show first 8 and last 8 characters
- */
-export const truncateHash = (hash: string): string => {
-  if (!hash) return "N/A";
-  return hash.substring(0, 8) + "..." + hash.substring(hash.length - 8);
-};
+export { shortenAddress } from "../BitcoinStats/Utils";
 
 /**
  * formats fee to 8 decimal places
@@ -39,42 +32,49 @@ export const formatTime = (timestamp?: number): string => {
 /**
  * returns Tailwind CSS classes for transaction category badge.
  */
-export const getCategoryColor = (category: TransactionCategory): string => {
-  switch (category) {
-    case TransactionCategory.MEMPOOL:
-      return "bg-blue-500/20 text-blue-400";
-    case TransactionCategory.COMMITTED:
-      return "bg-indigo-500/20 text-indigo-400";
-    case TransactionCategory.PROPOSED:
-      return "bg-green-500/20 text-green-400";
-    case TransactionCategory.SCHEDULED:
-      return "bg-yellow-500/20 text-yellow-400";
-    case TransactionCategory.CONFIRMED:
-      return "bg-emerald-500/20 text-emerald-400";
-    case TransactionCategory.REPLACED:
-      return "bg-red-500/20 text-red-400";
-    default:
-      return "bg-gray-500/20 text-gray-400";
-  }
-};
 
+const CATEGORY_STYLE_MAP: {
+  [key in TransactionCategory]?: {
+    badge: string;
+    bordered: string;
+  };
+} = {
+  [TransactionCategory.MEMPOOL]: {
+    badge: "bg-blue-500/20 text-blue-400",
+    bordered: "bg-blue-500/10 border-blue-500/20 text-blue-400",
+  },
+  [TransactionCategory.COMMITTED]: {
+    badge: "bg-indigo-500/20 text-indigo-400",
+    bordered: "bg-indigo-500/10 border-indigo-500/20 text-indigo-400",
+  },
+  [TransactionCategory.PROPOSED]: {
+    badge: "bg-green-500/20 text-green-400",
+    bordered: "bg-green-500/10 border-green-500/20 text-green-400",
+  },
+  [TransactionCategory.SCHEDULED]: {
+    badge: "bg-yellow-500/20 text-yellow-400",
+    bordered: "bg-yellow-500/10 border-yellow-500/20 text-yellow-400",
+  },
+  [TransactionCategory.CONFIRMED]: {
+    badge: "bg-emerald-500/20 text-emerald-400",
+    bordered: "bg-emerald-500/10 border-emerald-500/20 text-emerald-400",
+  },
+  [TransactionCategory.REPLACED]: {
+    badge: "bg-red-500/20 text-red-400",
+    bordered: "bg-red-500/10 border-red-500/20 text-red-400",
+  },
+};
+/**
+ * returns Tailwind CSS classes for transaction category badge.
+ */
+export const getCategoryColor = (category: TransactionCategory): string => {
+  const styles = CATEGORY_STYLE_MAP[category];
+  return styles?.badge ?? "bg-gray-500/20 text-gray-400";
+};
 /**
  * returns Tailwind CSS classes for transaction category with border styles.
  */
 export const getCategoryStyles = (category: TransactionCategory): string => {
-  const styles = {
-    [TransactionCategory.MEMPOOL]:
-      "bg-blue-500/10 border-blue-500/20 text-blue-400",
-    [TransactionCategory.COMMITTED]:
-      "bg-indigo-500/10 border-indigo-500/20 text-indigo-400",
-    [TransactionCategory.PROPOSED]:
-      "bg-green-500/10 border-green-500/20 text-green-400",
-    [TransactionCategory.SCHEDULED]:
-      "bg-yellow-500/10 border-yellow-500/20 text-yellow-400",
-    [TransactionCategory.CONFIRMED]:
-      "bg-emerald-500/10 border-emerald-500/20 text-emerald-400",
-    [TransactionCategory.REPLACED]:
-      "bg-red-500/10 border-red-500/20 text-red-400",
-  };
-  return styles[category] || "bg-gray-500/10 border-gray-500/20 text-gray-400";
+  const styles = CATEGORY_STYLE_MAP[category];
+  return styles?.bordered ?? "bg-gray-500/10 border-gray-500/20 text-gray-400";
 };

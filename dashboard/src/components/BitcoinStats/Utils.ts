@@ -5,8 +5,7 @@ import {
   getMempoolTransactionUrl,
   getBraidPoolReplacementsUrl,
 } from '../../URLs';
-import { TransactionCategory } from "./Types";
-
+export { getCategoryColor, getCategoryStyles } from '../Transactions/Utils';
 
 export const getCurrencySymbol = (curr: string) => {
   switch (curr) {
@@ -94,15 +93,6 @@ export const useCopyToClipboard = (
   return [copied, copy];
 };
 
-
-/**
- * truncates a transaction hash to show first 8 and last 8 characters
- */
-export const truncateHash = (hash: string): string => {
-  if (!hash) return "N/A";
-  return hash.substring(0, 8) + "..." + hash.substring(hash.length - 8);
-};
-
 /**
  * formats fee to 8 decimal places
  */
@@ -134,43 +124,3 @@ export const formatTime = (timestamp?: number): string => {
 /**
  * returns Tailwind CSS classes for transaction category badge.
  */
-export const getCategoryColor = (category: TransactionCategory): string => {
-  switch (category) {
-    case TransactionCategory.MEMPOOL:
-      return "bg-blue-500/20 text-blue-400";
-    case TransactionCategory.COMMITTED:
-      return "bg-indigo-500/20 text-indigo-400";
-    case TransactionCategory.PROPOSED:
-      return "bg-green-500/20 text-green-400";
-    case TransactionCategory.SCHEDULED:
-      return "bg-yellow-500/20 text-yellow-400";
-    case TransactionCategory.CONFIRMED:
-      return "bg-emerald-500/20 text-emerald-400";
-    case TransactionCategory.REPLACED:
-      return "bg-red-500/20 text-red-400";
-    default:
-      return "bg-gray-500/20 text-gray-400";
-  }
-};
-
-/**
- * returns Tailwind CSS classes for transaction category with border styles.
- */
-export const getCategoryStyles = (category: TransactionCategory): string => {
-  const styles = {
-    [TransactionCategory.MEMPOOL]:
-      "bg-blue-500/10 border-blue-500/20 text-blue-400",
-    [TransactionCategory.COMMITTED]:
-      "bg-indigo-500/10 border-indigo-500/20 text-indigo-400",
-    [TransactionCategory.PROPOSED]:
-      "bg-green-500/10 border-green-500/20 text-green-400",
-    [TransactionCategory.SCHEDULED]:
-      "bg-yellow-500/10 border-yellow-500/20 text-yellow-400",
-    [TransactionCategory.CONFIRMED]:
-      "bg-emerald-500/10 border-emerald-500/20 text-emerald-400",
-    [TransactionCategory.REPLACED]:
-      "bg-red-500/10 border-red-500/20 text-red-400",
-  };
-  return styles[category] || "bg-gray-500/10 border-gray-500/20 text-gray-400";
-};
-

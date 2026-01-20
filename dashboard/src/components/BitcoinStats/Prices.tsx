@@ -59,30 +59,13 @@ const BitcoinPriceTracker: React.FC = () => {
     currencyRef.current = currency;
   }, [currency]);
 
-  useEffect(() => {
+useEffect(() => {
   const fetchTransactions = async () => {
-    try {
-      const data = await braidpoolApi.fetchRecentTransactions(50);
-      setTransactions(data);
-    } catch (error) {
-      console.error('Error fetching BraidPool transactions:', error);
-    }
-  };
-  
-  fetchTransactions();
-  
-  const intervalId = setInterval(() => {
-    fetchTransactions();
-  }, 30000); // 30 seconds to match BraidPool refresh rate
-  
-  return () => clearInterval(intervalId);
-}, []);
-
-  useEffect(() => {
-  const fetchBraidPoolTransactions = async () => {
     try {
       setBraidpoolError(null);
       const data = await braidpoolApi.fetchRecentTransactions(50);
+      
+      setTransactions(data);
       setBraidpoolTransactions(data);
       setBraidpoolLoading(false);
     } catch (error) {
@@ -92,9 +75,9 @@ const BitcoinPriceTracker: React.FC = () => {
     }
   };
 
-  fetchBraidPoolTransactions();
+  fetchTransactions();
   
-  const intervalId = setInterval(fetchBraidPoolTransactions, 30000); // 30s refresh
+  const intervalId = setInterval(fetchTransactions, 30000);
   
   return () => clearInterval(intervalId);
 }, []);
@@ -501,15 +484,6 @@ const BitcoinPriceTracker: React.FC = () => {
 
       {/* Transactions Table */}
       <TransactionTable transactions={transactions} />
-      {/* NEW: BraidPool Categorized Transactions */}
-        {/* <BraidPoolTransactionTable 
-          transactions={braidpoolTransactions}
-          loading={braidpoolLoading}
-          error={braidpoolError}
-          autoRefresh={true}
-          refreshInterval={30000}
-          maxHeight={600}
-        /> */}
 
       {/* RBF Transactions Table */}
       <RBFTransactionTable transactions={rbftransactions} />
