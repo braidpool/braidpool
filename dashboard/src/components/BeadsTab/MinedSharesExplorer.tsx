@@ -10,12 +10,23 @@ import { ITEMS_PER_PAGE, DEFAULT_TIME_RANGE } from './Constants';
 import { PoolDominance } from './PoolDominance/PoolDominance';
 
 export default function MinedSharesExplorer({
-  activeTab = 'beads',
-  setActiveTab = () => {},
+  activeTab: propActiveTab,
+  setActiveTab: propSetActiveTab,
 }: {
   activeTab?: string;
   setActiveTab?: (tab: string) => void;
 }) {
+  // Support both controlled (via props) and uncontrolled (internal state) modes.
+  // This allows the component to work standalone (e.g. /minedsharesexplorer route)
+  // while still being controllable by a parent component.
+  const [internalActiveTab, setInternalActiveTab] = useState('beads');
+  const activeTab =
+    propActiveTab !== undefined ? propActiveTab : internalActiveTab;
+  const setActiveTab = (tab: string) => {
+    if (propSetActiveTab) propSetActiveTab(tab);
+    if (propActiveTab === undefined) setInternalActiveTab(tab);
+  };
+
   const [expandedBeads, setExpandedBeads] = useState<Record<BeadId, boolean>>({
     bead1: true,
     bead2: false,
