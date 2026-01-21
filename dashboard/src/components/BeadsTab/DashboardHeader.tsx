@@ -7,6 +7,27 @@ export default function DashboardHeader({
 }: DashboardHeaderProps) {
   return (
     <header>
+      {/* --- Mobile View: Dropdown for Tabs --- */}
+      <div className="md:hidden mb-4">
+        <label
+          htmlFor="dashboard-tab-select"
+          className="sr-only"
+        >
+          Select dashboard tab
+        </label>
+        <select
+          id="dashboard-tab-select"
+          className="block w-full rounded-md bg-gray-900 border border-gray-700 px-3 py-2 text-sm text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          value={activeTab}
+          onChange={(e) => setActiveTab(e.target.value as any)}
+        >
+          {TABS.map((tab) => (
+            <option key={tab.id} value={tab.id}>
+              {tab.label}
+            </option>
+          ))}
+        </select>
+      </div>
       {/* --- Desktop View: Tabs (Original) --- */}
       <div className="hidden md:block border-b border-gray-700">
         <nav className="mb-px flex flex-wrap gap-x-6" aria-label="Tabs">
