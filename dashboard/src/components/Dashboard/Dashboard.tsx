@@ -73,11 +73,11 @@ const Dashboard = () => {
                   <label htmlFor="beads-explorer-tabs" className="sr-only">
                     Select a beads view
                   </label>
-                  {/* Using ! to force responsive behavior against external overrides */}
+
                   <select
                     id="beads-explorer-tabs"
                     name="beads-explorer-tabs"
-                    className="block md:!hidden rounded-md border border-gray-700 bg-gray-800 py-1 px-3 text-sm text-white focus:border-blue-500 focus:outline-none focus:ring-blue-500 min-w-[150px]"
+                    className="block md:hidden rounded-md border border-gray-700 bg-gray-800 py-1 px-3 text-sm text-white focus:border-blue-500 focus:outline-none focus:ring-blue-500 min-w-[150px]"
                     value={activeTab}
                     onChange={(e) => setActiveTab(e.target.value)}
                   >

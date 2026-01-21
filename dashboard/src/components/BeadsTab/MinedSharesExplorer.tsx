@@ -159,7 +159,7 @@ export default function MinedSharesExplorer({
   return (
     <div className="min-h-screen  text-white relative">
       <div className="container mx-auto px-2 sm:px-4 py-8">
-        <div className="!hidden md:!block">
+        <div className="hidden md:block">
           <DashboardHeader activeTab={activeTab} setActiveTab={setActiveTab} />
         </div>
 
