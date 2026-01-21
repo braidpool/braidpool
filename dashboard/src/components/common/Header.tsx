@@ -74,7 +74,7 @@ const Header: React.FC<HeaderNavProps> = ({
               <button
                 key={item.label}
                 onClick={() => setCurrentPage(item.page)}
-                className={`flex items-center px-3 py-1.5 rounded-full border-b-2 transition-colors font-medium text-sm
+                className={`flex items-center px-3 py-1.5 rounded border-b-2 transition-colors font-medium text-sm
                   ${
                     currentPage === item.page
                       ? 'text-blue-500 border-blue-500 bg-blue-500/10 font-bold'
@@ -89,7 +89,7 @@ const Header: React.FC<HeaderNavProps> = ({
 
           {/* Mobile Menu Toggle  */}
           <button
-            className="lg:hidden gap-2 cursor-pointer ml-2 p-2 rounded hover:bg-white/10 text-white"
+            className="lg:hidden cursor-pointer ml-2 p-2 rounded hover:bg-white/10 text-white"
             onClick={() => setSidebarOpen(true)}
           >
             <Menu size={22} />
@@ -112,7 +112,7 @@ const Header: React.FC<HeaderNavProps> = ({
             <X size={22} />
           </button>
         </div>
-        <nav className="flex flex-col py-4">
+        <nav className="flex flex-col gap-2 py-4">
           {NAV_ITEMS.map((item) => (
             <button
               key={item.label}
@@ -120,7 +120,7 @@ const Header: React.FC<HeaderNavProps> = ({
                 setCurrentPage(item.page);
                 setSidebarOpen(false);
               }}
-              className={`flex items-center px-5 py-3 border-l-4 text-left transition-colors font-medium text-base
+              className={` cursor-pointer flex items-center px-5 py-3 border-l-4 text-left transition-colors font-medium text-base
                 ${
                   currentPage === item.page
                     ? 'text-blue-500 border-blue-500 bg-blue-500/10 font-bold'
