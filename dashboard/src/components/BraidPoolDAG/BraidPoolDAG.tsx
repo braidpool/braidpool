@@ -283,26 +283,23 @@ const GraphVisualization: React.FC = () => {
     }
   };
 
-  const handleResetZoom = () => {
-    const nextZoom = 0.3;
-    setDefaultZoom(nextZoom);
+  const buildZoomTransform = (nextZoom: number) => {
     const currentTransform = zoomTransformRef.current;
     const currentX = currentTransform ? currentTransform.x : 0;
     const currentY = currentTransform ? currentTransform.y : 0;
-    zoomTransformRef.current = d3.zoomIdentity
-      .translate(currentX, currentY)
-      .scale(nextZoom);
+    return d3.zoomIdentity.translate(currentX, currentY).scale(nextZoom);
+  };
+
+  const handleResetZoom = () => {
+    const nextZoom = 0.3;
+    setDefaultZoom(nextZoom);
+    zoomTransformRef.current = buildZoomTransform(nextZoom);
   };
 
   const handleZoomIn = () => {
     setDefaultZoom((prevZoom) => {
       const nextZoom = Math.min(prevZoom + 0.1, 5);
-      const currentTransform = zoomTransformRef.current;
-      const currentX = currentTransform ? currentTransform.x : 0;
-      const currentY = currentTransform ? currentTransform.y : 0;
-      zoomTransformRef.current = d3.zoomIdentity
-        .translate(currentX, currentY)
-        .scale(nextZoom);
+      zoomTransformRef.current = buildZoomTransform(nextZoom);
       return nextZoom;
     });
   };
@@ -310,12 +307,7 @@ const GraphVisualization: React.FC = () => {
   const handleZoomOut = () => {
     setDefaultZoom((prevZoom) => {
       const nextZoom = Math.max(prevZoom - 0.1, 0.3);
-      const currentTransform = zoomTransformRef.current;
-      const currentX = currentTransform ? currentTransform.x : 0;
-      const currentY = currentTransform ? currentTransform.y : 0;
-      zoomTransformRef.current = d3.zoomIdentity
-        .translate(currentX, currentY)
-        .scale(nextZoom);
+      zoomTransformRef.current = buildZoomTransform(nextZoom);
       return nextZoom;
     });
   };
