@@ -115,4 +115,23 @@ describe('<TrendsTab />', () => {
       screen.getByRole('button', { name: /transactions/i })
     ).toBeInTheDocument();
   });
+
+  it('switches tabs using the mobile dropdown', () => {
+    render(<TrendsTab timeRange="24h" />);
+
+    // The dropdown initially displays "Hashrate" (because activeSubTab defaults to 'hashrate')
+    const mobileSelect = screen.getByDisplayValue('Hashrate');
+    expect(mobileSelect).toBeInTheDocument();
+
+    // Switch to Latency using the dropdown
+    fireEvent.change(mobileSelect, { target: { value: 'latency' } });
+
+    // Assert Latency content is now visible
+    const latencyTab = screen.getByTestId('latency-tab');
+    expect(latencyTab.parentElement).toHaveClass('block');
+
+    // Assert Hashrate content is now hidden
+    const hashrateTab = screen.getByTestId('hashrate-tab');
+    expect(hashrateTab.parentElement).toHaveClass('hidden');
+  });
 });
