@@ -1,4 +1,10 @@
-import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  cleanup,
+  within,
+} from '@testing-library/react';
 import { TrendsTab } from '../TrendsTab';
 import '@testing-library/jest-dom';
 
@@ -107,7 +113,7 @@ describe('<TrendsTab />', () => {
     render(<TrendsTab timeRange="24h" />);
     // Target the desktop navigation specifically to avoid conflict with mobile dropdown trigger
     const desktopNav = screen.getByRole('navigation', { name: /tabs/i });
-    
+
     expect(
       within(desktopNav).getByRole('button', { name: /hashrate/i })
     ).toBeInTheDocument();
@@ -125,7 +131,7 @@ describe('<TrendsTab />', () => {
     // Find and click the mobile dropdown trigger
     const mobileTrigger = screen.getByTestId('mobile-dropdown-trigger');
     expect(mobileTrigger).toBeInTheDocument();
-    
+
     // Open dropdown
     fireEvent.click(mobileTrigger);
 
