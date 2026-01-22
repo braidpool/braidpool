@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
 import { TrendsTab } from '../TrendsTab';
 import '@testing-library/jest-dom';
 
@@ -72,11 +72,11 @@ describe('<TrendsTab />', () => {
     render(<TrendsTab timeRange="24h" />);
     const hashrateTab = screen.getByTestId('hashrate-tab');
     expect(hashrateTab).toBeInTheDocument();
-    expect(hashrateTab.parentElement).toHaveClass('block');
+    expect(hashrateTab.parentElement).toHaveStyle('display: block');
     const latencyTab = screen.getByTestId('latency-tab');
     const transactionsTab = screen.getByTestId('transactions-tab');
-    expect(latencyTab.parentElement).toHaveClass('hidden');
-    expect(transactionsTab.parentElement).toHaveClass('hidden');
+    expect(latencyTab.parentElement).toHaveStyle('display: none');
+    expect(transactionsTab.parentElement).toHaveStyle('display: none');
   });
 
   it('switches to latency tab when clicked', () => {
@@ -86,12 +86,12 @@ describe('<TrendsTab />', () => {
 
     const latencyTab = screen.getByTestId('latency-tab');
     expect(latencyTab).toBeInTheDocument();
-    expect(latencyTab.parentElement).toHaveClass('block');
+    expect(latencyTab.parentElement).toHaveStyle('display: block');
 
     const hashrateTab = screen.getByTestId('hashrate-tab');
     const transactionsTab = screen.getByTestId('transactions-tab');
-    expect(hashrateTab.parentElement).toHaveClass('hidden');
-    expect(transactionsTab.parentElement).toHaveClass('hidden');
+    expect(hashrateTab.parentElement).toHaveStyle('display: none');
+    expect(transactionsTab.parentElement).toHaveStyle('display: none');
   });
 
   it('switches to transactions tab and passes props', () => {
@@ -105,33 +105,41 @@ describe('<TrendsTab />', () => {
 
   it('renders all tab buttons correctly', () => {
     render(<TrendsTab timeRange="24h" />);
+    // Target the desktop navigation specifically to avoid conflict with mobile dropdown trigger
+    const desktopNav = screen.getByRole('navigation', { name: /tabs/i });
+    
     expect(
-      screen.getByRole('button', { name: /hashrate/i })
+      within(desktopNav).getByRole('button', { name: /hashrate/i })
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: /latency/i })
+      within(desktopNav).getByRole('button', { name: /latency/i })
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: /transactions/i })
+      within(desktopNav).getByRole('button', { name: /transactions/i })
     ).toBeInTheDocument();
   });
 
   it('switches tabs using the mobile dropdown', () => {
     render(<TrendsTab timeRange="24h" />);
 
-    // The dropdown initially displays "Hashrate" (because activeSubTab defaults to 'hashrate')
-    const mobileSelect = screen.getByDisplayValue('Hashrate');
-    expect(mobileSelect).toBeInTheDocument();
+    // Find and click the mobile dropdown trigger
+    const mobileTrigger = screen.getByTestId('mobile-dropdown-trigger');
+    expect(mobileTrigger).toBeInTheDocument();
+    
+    // Open dropdown
+    fireEvent.click(mobileTrigger);
 
-    // Switch to Latency using the dropdown
-    fireEvent.change(mobileSelect, { target: { value: 'latency' } });
+    // Find and click the Latency option in the opened dropdown
+    const latencyOption = screen.getByTestId('mobile-option-latency');
+    expect(latencyOption).toBeInTheDocument();
+    fireEvent.click(latencyOption);
 
     // Assert Latency content is now visible
     const latencyTab = screen.getByTestId('latency-tab');
-    expect(latencyTab.parentElement).toHaveClass('block');
+    expect(latencyTab.parentElement).toHaveStyle('display: block');
 
     // Assert Hashrate content is now hidden
     const hashrateTab = screen.getByTestId('hashrate-tab');
-    expect(hashrateTab.parentElement).toHaveClass('hidden');
+    expect(hashrateTab.parentElement).toHaveStyle('display: none');
   });
 });
