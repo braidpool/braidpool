@@ -191,9 +191,8 @@ impl PriorityRequestQueue {
         let result = match priority {
             RequestPriority::Critical => {
                 if self.critical_queue.len() >= self.max_queue_sizes.critical {
-                    Err(BraidpoolError::QueueFull {
-                        queue_type: "Critical".to_string(),
-                    })
+                    error!("BITCOIN IPC QUEUE FULL - CRITICAL QUEUE EXCEEDED LIMIT");
+                    panic!("FATAL: Cannot communicate with Bitcoin Core. Queue is full.");
                 } else {
                     self.critical_queue.push_back(request);
                     self.metrics
@@ -204,9 +203,8 @@ impl PriorityRequestQueue {
             }
             RequestPriority::High => {
                 if self.high_queue.len() >= self.max_queue_sizes.high {
-                    Err(BraidpoolError::QueueFull {
-                        queue_type: "High".to_string(),
-                    })
+                    error!("BITCOIN IPC QUEUE FULL - HIGH PRIORITY QUEUE EXCEEDED LIMIT");
+                    panic!("FATAL: Cannot communicate with Bitcoin Core. Queue is full.");
                 } else {
                     self.high_queue.push_back(request);
                     self.metrics
@@ -217,9 +215,8 @@ impl PriorityRequestQueue {
             }
             RequestPriority::Normal => {
                 if self.normal_queue.len() >= self.max_queue_sizes.normal {
-                    Err(BraidpoolError::QueueFull {
-                        queue_type: "Normal".to_string(),
-                    })
+                    error!("BITCOIN IPC QUEUE FULL - NORMAL PRIORITY QUEUE EXCEEDED LIMIT");
+                    panic!("FATAL: Cannot communicate with Bitcoin Core. Queue is full.");
                 } else {
                     self.normal_queue.push_back(request);
                     self.metrics
@@ -230,16 +227,15 @@ impl PriorityRequestQueue {
             }
             RequestPriority::Low => {
                 if self.low_queue.len() >= self.max_queue_sizes.low {
-                    // Drop oldest low priority request
-                    if let Some(dropped) = self.low_queue.pop_front() {
-                        self.send_queue_full_error(dropped);
-                    }
+                    error!("BITCOIN IPC QUEUE FULL - LOW PRIORITY QUEUE EXCEEDED LIMIT");
+                    panic!("FATAL: Cannot communicate with Bitcoin Core. Queue is full.");
+                } else {
+                    self.low_queue.push_back(request);
+                    self.metrics
+                        .queue_size_low
+                        .store(self.low_queue.len(), Ordering::Relaxed);
+                    Ok(())
                 }
-                self.low_queue.push_back(request);
-                self.metrics
-                    .queue_size_low
-                    .store(self.low_queue.len(), Ordering::Relaxed);
-                Ok(())
             }
         };
 
@@ -248,35 +244,6 @@ impl PriorityRequestQueue {
         }
 
         result
-    }
-
-    fn send_queue_full_error(&self, dropped_request: BitcoinRequest) {
-        match dropped_request {
-            BitcoinRequest::RemoveTransaction { response, .. } => {
-                let _ = response.send(Err("Queue full - request dropped".to_string()));
-            }
-            BitcoinRequest::RemoveMultipleTransactions { response, .. } => {
-                let _ = response.send(Err("Queue full - request dropped".to_string()));
-            }
-            BitcoinRequest::GetBlockTemplate { response, .. } => {
-                let _ = response.send(Err("Queue full - request dropped".to_string()));
-            }
-            BitcoinRequest::GetBlockTemplateComponents { response, .. } => {
-                let _ = response.send(Err("Queue full - request dropped".to_string()));
-            }
-            BitcoinRequest::IsInitialBlockDownload { response, .. } => {
-                let _ = response.send(Err("Queue full - request dropped".to_string()));
-            }
-            BitcoinRequest::CheckBlock { response, .. } => {
-                let _ = response.send(Err("Queue full - request dropped".to_string()));
-            }
-            BitcoinRequest::GetMiningTipInfo { response, .. } => {
-                let _ = response.send(Err("Queue full - request dropped".to_string()));
-            }
-            BitcoinRequest::SubmitSolution { response, .. } => {
-                let _ = response.send(Err("Queue full - request dropped".to_string()));
-            }
-        }
     }
 
     fn dequeue(&mut self) -> Option<BitcoinRequest> {
