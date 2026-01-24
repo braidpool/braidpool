@@ -8,7 +8,7 @@ export default function DashboardHeader({
   return (
     <header>
       {/* --- Desktop View: Tabs (Original) --- */}
-      <div className="hidden md:block border-b border-gray-700">
+      <div className="hidden sm:block border-b border-gray-700">
         <nav className="mb-px flex flex-wrap gap-x-6" aria-label="Tabs">
           {TABS.map((tab) => (
             <button

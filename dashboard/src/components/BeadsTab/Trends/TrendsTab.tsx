@@ -30,8 +30,8 @@ export function TrendsTab({ timeRange }: { timeRange: string }) {
     <div className="space-y-8">
       {/* Navigation Area */}
       <div className="border-b border-gray-800">
-        {/* Mobile View: Dropdown (Hidden on medium screens and up) */}
-        <div className="md:hidden mb-4 px-2">
+        {/* Mobile View: Dropdown (Hidden on small screens and up) */}
+        <div className="sm:hidden mb-4 px-2">
           <div className="relative" ref={dropdownRef}>
             <button
               type="button"
@@ -76,39 +76,31 @@ export function TrendsTab({ timeRange }: { timeRange: string }) {
 
             {isDropdownOpen && (
               <div className="absolute right-0 top-full mt-1 w-full overflow-hidden rounded-md border border-gray-700 bg-gray-800 shadow-lg z-50">
-                {TrendsTABS.map((tab) => (
-                  <button
-                    key={tab.id}
-                    data-testid={`mobile-option-${tab.id}`}
-                    className={`flex items-center gap-2 w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700 transition-colors ${
-                      activeSubTab === tab.id
-                        ? 'bg-gray-700/50 text-blue-400'
-                        : ''
-                    }`}
-                    onClick={() => {
-                      setActiveSubTab(tab.id);
-                      setIsDropdownOpen(false);
-                    }}
-                  >
-                    <tab.icon
-                      className={`w-4 h-4 ${
-                        activeSubTab === tab.id
-                          ? 'text-blue-400'
-                          : 'text-gray-500'
-                      }`}
-                    />
-                    {tab.label}
-                  </button>
-                ))}
+                {TrendsTABS.filter((tab) => tab.id !== activeSubTab).map(
+                  (tab) => (
+                    <button
+                      key={tab.id}
+                      data-testid={`mobile-option-${tab.id}`}
+                      className="flex items-center gap-2 w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700 transition-colors"
+                      onClick={() => {
+                        setActiveSubTab(tab.id);
+                        setIsDropdownOpen(false);
+                      }}
+                    >
+                      <tab.icon className="w-4 h-4 text-gray-500" />
+                      {tab.label}
+                    </button>
+                  )
+                )}
               </div>
             )}
           </div>
         </div>
 
-        {/* Desktop View: Tabs (Hidden on small screens, Flex on medium+) */}
+        {/* Desktop View: Tabs (Hidden on extra small screens, Flex on small+) */}
 
         <nav
-          className="hidden md:flex -mb-px flex-wrap justify-center gap-x-10"
+          className="hidden sm:flex -mb-px flex-wrap justify-center gap-x-10"
           aria-label="Tabs"
         >
           {TrendsTABS.map((tab) => (

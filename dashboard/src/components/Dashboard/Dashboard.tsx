@@ -92,7 +92,7 @@ const Dashboard = () => {
                   </label>
 
                   <div
-                    className="relative block md:hidden min-w-[150px]"
+                    className="relative block sm:hidden min-w-[150px]"
                     ref={dropdownRef}
                   >
                     <button
@@ -121,22 +121,20 @@ const Dashboard = () => {
 
                     {isDropdownOpen && (
                       <div className="absolute right-0 top-full mt-1 w-full overflow-hidden rounded-md border border-gray-700 bg-gray-800 shadow-lg z-50">
-                        {TABS.map((tab) => (
-                          <button
-                            key={tab.id}
-                            className={`block w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700 transition-colors ${
-                              activeTab === tab.id
-                                ? 'bg-gray-700/50 text-blue-400'
-                                : ''
-                            }`}
-                            onClick={() => {
-                              setActiveTab(tab.id);
-                              setIsDropdownOpen(false);
-                            }}
-                          >
-                            {tab.label}
-                          </button>
-                        ))}
+                        {TABS.filter((tab) => tab.id !== activeTab).map(
+                          (tab) => (
+                            <button
+                              key={tab.id}
+                              className="block w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700 transition-colors"
+                              onClick={() => {
+                                setActiveTab(tab.id);
+                                setIsDropdownOpen(false);
+                              }}
+                            >
+                              {tab.label}
+                            </button>
+                          )
+                        )}
                       </div>
                     )}
                   </div>
