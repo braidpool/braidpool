@@ -60,6 +60,7 @@ pub enum PayoutCommands {
         total_amount: Amount,
     },
 }
+#[derive(Debug)]
 pub struct Payout {
     //Intializing mapping heap that will listen for new beads and update accordingly
     //Sorted mapping of only required information instead of complete `Bead` which will be updated on the arrival of beads
@@ -229,5 +230,339 @@ impl Payout {
             &mut distribution,
         )?;
         Ok(distribution)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::UNIX_EPOCH;
+
+    use super::*;
+    use bitcoin::absolute::MedianTimePast;
+    use bitcoin::pow::CompactTargetExt;
+    use bitcoin::{Amount, Network, Target, Work};
+
+    fn work_from_compact(compact: bitcoin::CompactTarget) -> Work {
+        let target = Target::from_compact(compact);
+        target.to_work()
+    }
+
+    #[test]
+    fn test_group_shares_by_address_single_address() {
+        let pairs = vec![
+            (
+                "tc1qkuw7jx4f5m9vd7kdm4cfz0vgdxsrg6vr0xd25z".to_string(),
+                1.0,
+            ),
+            (
+                "tc1qkuw7jx4f5m9vd7kdm4cfz0vgdxsrg6vr0xd25z".to_string(),
+                2.0,
+            ),
+            (
+                "tc1qkuw7jx4f5m9vd7kdm4cfz0vgdxsrg6vr0xd25z".to_string(),
+                3.0,
+            ),
+        ];
+        let map = Payout::group_shares_by_address(&pairs);
+        assert_eq!(map.len(), 1);
+        assert_eq!(
+            map.get("tc1qkuw7jx4f5m9vd7kdm4cfz0vgdxsrg6vr0xd25z")
+                .copied()
+                .unwrap_or(0.0),
+            6.0
+        );
+    }
+
+    #[test]
+    fn test_group_shares_by_address_multiple_addresses() {
+        let pairs = vec![
+            (
+                "tc1q7trhdr48sjm2p3lpcjvyqv49gu3yztuff0pqg9".to_string(),
+                1.0,
+            ),
+            (
+                "tc1qe4f5g0d4cmh97ypn2zdzcd8kp5a57ak0xp4v37".to_string(),
+                2.0,
+            ),
+            (
+                "tc1q7trhdr48sjm2p3lpcjvyqv49gu3yztuff0pqg9".to_string(),
+                3.5,
+            ),
+            (
+                "tc1qkuw7jx4f5m9vd7kdm4cfz0vgdxsrg6vr0xd25z".to_string(),
+                1.5,
+            ),
+        ];
+        let map = Payout::group_shares_by_address(&pairs);
+        assert_eq!(map.len(), 3);
+        assert_eq!(
+            map.get("tc1q7trhdr48sjm2p3lpcjvyqv49gu3yztuff0pqg9")
+                .copied()
+                .unwrap_or(0.0),
+            4.5
+        );
+        assert_eq!(
+            map.get("tc1qe4f5g0d4cmh97ypn2zdzcd8kp5a57ak0xp4v37")
+                .copied()
+                .unwrap_or(0.0),
+            2.0
+        );
+        assert_eq!(
+            map.get("tc1qkuw7jx4f5m9vd7kdm4cfz0vgdxsrg6vr0xd25z")
+                .copied()
+                .unwrap_or(0.0),
+            1.5
+        );
+    }
+
+    #[test]
+    fn test_group_shares_by_address_empty() {
+        let pairs: Vec<(String, f64)> = vec![];
+        let map = Payout::group_shares_by_address(&pairs);
+        assert_eq!(map.len(), 0);
+    }
+
+    #[test]
+    fn test_append_proportional_distribution_equal_difficulty() {
+        let mut distribution = Vec::new();
+        let mut map = std::collections::HashMap::new();
+        map.insert(
+            "tc1qe4f5g0d4cmh97ypn2zdzcd8kp5a57ak0xp4v37".to_string(),
+            1.0,
+        );
+        map.insert(
+            "tc1qkuw7jx4f5m9vd7kdm4cfz0vgdxsrg6vr0xd25z".to_string(),
+            1.0,
+        );
+        let total_amount = Amount::from_sat(100).unwrap();
+
+        Payout::append_proportional_distribution(map, total_amount, &mut distribution)
+            .expect("append should succeed");
+
+        assert_eq!(distribution.len(), 2);
+        let sum: u64 = distribution.iter().map(|o| o.amount.to_sat()).sum();
+        assert_eq!(sum, 100);
+    }
+    #[test]
+    fn test_payout_command_update_heap() {
+        let (mut payout, tx) = Payout::new(Network::CPUNet);
+
+        let handle = std::thread::spawn(move || {
+            payout.payout_runner();
+            payout
+        });
+
+        let compact = bitcoin::CompactTarget::from_hex("0x1d00ffff").unwrap();
+        let w = work_from_compact(compact);
+        let now = MedianTimePast::from_u32(
+            std::time::SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs() as u32,
+        )
+        .unwrap();
+
+        tx.send(PayoutCommands::UpdatePayoutHeap {
+            bead_timestamp: now,
+            payout_address: "tc1qkuw7jx4f5m9vd7kdm4cfz0vgdxsrg6vr0xd25z".to_string(),
+            work: w,
+        })
+        .unwrap();
+        //Dropping the channel sender to break infinite loop of runner after updating command is processed forceably
+        drop(tx);
+        let payout = handle.join().unwrap();
+        assert!(!payout.payout_heap.is_empty());
+        let heap_top = &payout.payout_heap.peek().unwrap().1;
+        assert_eq!(
+            heap_top.1,
+            "tc1qkuw7jx4f5m9vd7kdm4cfz0vgdxsrg6vr0xd25z".to_string()
+        );
+        println!(
+            "Work - {}",
+            heap_top.0.to_target().difficulty(Params::CPUNET)
+        );
+    }
+
+    #[test]
+    fn test_append_proportional_distribution_different_difficulty() {
+        let mut distribution = Vec::new();
+        let mut map = std::collections::HashMap::new();
+        map.insert(
+            "tc1qkuw7jx4f5m9vd7kdm4cfz0vgdxsrg6vr0xd25z".to_string(),
+            1.0,
+        );
+        map.insert(
+            "tc1qe4f5g0d4cmh97ypn2zdzcd8kp5a57ak0xp4v37".to_string(),
+            3.0,
+        );
+        let total_amount = Amount::from_sat(100).unwrap();
+
+        Payout::append_proportional_distribution(map, total_amount, &mut distribution)
+            .expect("append should succeed");
+
+        // 1:3 ratio means 25% and 75%
+        assert_eq!(distribution.len(), 2);
+        let sum: u64 = distribution.iter().map(|o| o.amount.to_sat()).sum();
+        assert_eq!(sum, 100);
+    }
+
+    #[test]
+    fn test_append_proportional_distribution_rounding_with_remainder() {
+        let mut distribution = Vec::new();
+        let mut map = std::collections::HashMap::new();
+        map.insert(
+            "tc1qkuw7jx4f5m9vd7kdm4cfz0vgdxsrg6vr0xd25z".to_string(),
+            1.0,
+        );
+        map.insert(
+            "tc1q7trhdr48sjm2p3lpcjvyqv49gu3yztuff0pqg9".to_string(),
+            1.0,
+        );
+        let total_amount = Amount::from_sat(101).unwrap(); // odd satoshi to test remainder
+
+        Payout::append_proportional_distribution(map, total_amount, &mut distribution)
+            .expect("append should succeed");
+
+        assert_eq!(distribution.len(), 2);
+        let sum: u64 = distribution.iter().map(|o| o.amount.to_sat()).sum();
+        assert_eq!(sum, 101); // All sats must be distributed
+    }
+
+    #[test]
+    fn test_append_proportional_distribution_invalid_address() {
+        let mut distribution = Vec::new();
+        let mut map = std::collections::HashMap::new();
+        map.insert("invalid_addr".to_string(), 1.0);
+        let total_amount = Amount::from_sat(100).unwrap();
+
+        let result = Payout::append_proportional_distribution(map, total_amount, &mut distribution);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_get_output_distribution_empty_heap() {
+        let (payout, _tx) = Payout::new(Network::CPUNet);
+        let out = payout
+            .get_output_distribuition(1000.0, Amount::from_sat(100).unwrap())
+            .unwrap();
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn test_get_output_distribution_zero_total_difficulty() {
+        let (payout, _tx) = Payout::new(Network::CPUNet);
+        let out = payout
+            .get_output_distribuition(0.0, Amount::from_sat(100).unwrap())
+            .unwrap();
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn test_get_difficulty_window_shares_empty_heap() {
+        let (payout, _tx) = Payout::new(Network::CPUNet);
+        let shares = payout.get_difficulty_window_shares(1.0).unwrap();
+        assert!(shares.is_empty());
+    }
+
+    #[test]
+    fn test_get_difficulty_window_shares_single_bead() {
+        let (mut payout, _tx) = Payout::new(Network::CPUNet);
+
+        let compact = bitcoin::CompactTarget::from_hex("0x1d00ffff").unwrap();
+        let w = work_from_compact(compact);
+        let current_system_time = std::time::SystemTime::now();
+        let duration_since_epoch = match current_system_time.duration_since(UNIX_EPOCH) {
+            Ok(duration) => duration,
+            Err(error) => {
+                panic!("{}", error);
+            }
+        };
+        let now = MedianTimePast::from_u32(duration_since_epoch.as_secs() as u32).unwrap();
+        payout.payout_heap.push((
+            now,
+            (w, "tc1q7trhdr48sjm2p3lpcjvyqv49gu3yztuff0pqg9".to_string()),
+        ));
+
+        let shares = payout.get_difficulty_window_shares(0.0000001).unwrap();
+        assert!(!shares.is_empty());
+        assert_eq!(shares.len(), 1);
+        assert_eq!(shares[0].0, "tc1q7trhdr48sjm2p3lpcjvyqv49gu3yztuff0pqg9");
+    }
+
+    #[test]
+    fn test_get_difficulty_window_shares_respects_limit() {
+        let (mut payout, _tx) = Payout::new(Network::CPUNet);
+
+        let compact = bitcoin::CompactTarget::from_hex("0x1d00ffff").unwrap();
+        let w = work_from_compact(compact);
+        //Current UNIX timestamp during broadcast of bead
+        let current_system_time = std::time::SystemTime::now();
+        let duration_since_epoch = match current_system_time.duration_since(UNIX_EPOCH) {
+            Ok(duration) => duration,
+            Err(error) => {
+                panic!("{}", error);
+            }
+        };
+        let now = MedianTimePast::from_u32(duration_since_epoch.as_secs() as u32).unwrap();
+
+        for i in 0..5 {
+            payout.payout_heap.push((now, (w, format!("addr{}", i))));
+        }
+
+        let shares = payout.get_difficulty_window_shares(0.00000001).unwrap();
+        assert!(!shares.is_empty());
+        assert!(shares.len() <= 5);
+    }
+
+    #[test]
+    fn test_difficulty_adjuster_creation() {
+        let adjuster = DifficultyAdjuster::new();
+        assert_eq!(adjuster.current_difficulty, Target::ZERO);
+        assert_eq!(adjuster.old_difficulty, Target::ZERO);
+    }
+
+    #[test]
+    fn test_difficulty_adjuster_trait_get_current() {
+        let adjuster = DifficultyAdjuster::new();
+        assert_eq!(adjuster.get_current_difficulty(), Target::ZERO);
+    }
+
+    #[test]
+    fn test_difficulty_adjuster_trait_get_new_difficulty_with_target() {
+        let mut adjuster = DifficultyAdjuster::new();
+        let compact = bitcoin::CompactTarget::from_hex("0x1d00ffff").unwrap();
+        let new_diff = adjuster.get_new_difficulty(Some(compact));
+        assert_eq!(new_diff, Target::from_compact(compact));
+        assert_eq!(adjuster.current_difficulty, Target::from_compact(compact));
+        assert_eq!(adjuster.old_difficulty, Target::from_compact(compact));
+    }
+
+    #[test]
+    fn test_difficulty_adjuster_trait_get_new_difficulty_none() {
+        let mut adjuster = DifficultyAdjuster::new();
+        let new_diff = adjuster.get_new_difficulty(None);
+        assert_eq!(new_diff, Target::ZERO);
+    }
+
+    #[test]
+    fn test_payout_creation() {
+        let (payout, _tx) = Payout::new(Network::Bitcoin);
+        assert_eq!(payout.configured_network, Network::Bitcoin);
+    }
+
+    #[test]
+    fn test_output_pair_creation() {
+        let addr_str = "tc1qtrru7yc0gx48vusca35jyvzh0xvgle8c0m8fy6";
+        let addr = addr_str
+            .parse::<bitcoin::Address<_>>()
+            .unwrap()
+            .assume_checked();
+        let amount = Amount::from_sat(1000).unwrap();
+
+        let pair = OutputPair {
+            address: addr,
+            amount,
+        };
+        assert_eq!(pair.amount.to_sat(), 1000);
     }
 }
