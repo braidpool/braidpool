@@ -9,6 +9,7 @@ use crate::stratum;
 use crate::stratum::BlockTemplate;
 use crate::utils::BeadHash;
 use bitcoin::block::HeaderExt;
+use bitcoin::Transaction;
 use futures::lock::Mutex;
 use jsonrpsee::core::async_trait;
 use jsonrpsee::core::middleware::Batch;
@@ -31,9 +32,8 @@ use tracing::{info, warn};
 
 #[cfg(test)]
 use {
-    crate::braid, crate::utils::create_test_bead, bitcoin::Transaction,
-    jsonrpsee::core::client::ClientT, jsonrpsee::core::params::ArrayParams,
-    jsonrpsee::http_client::HttpClient,
+    crate::braid, crate::utils::create_test_bead, jsonrpsee::core::client::ClientT,
+    jsonrpsee::core::params::ArrayParams, jsonrpsee::http_client::HttpClient,
 };
 
 //server side trait to be implemented for the handler
@@ -52,13 +52,13 @@ pub trait Rpc {
     async fn get_tips(&self) -> Result<Vec<String>, ErrorObjectOwned>;
 
     #[method(name = "getbeadcount")]
-    async fn get_bead_count(&self) -> Result<String, ErrorObjectOwned>;
+    async fn get_bead_count(&self) -> Result<u64, ErrorObjectOwned>;
 
     #[method(name = "getcohortcount")]
     async fn get_cohort_count(&self) -> Result<u64, ErrorObjectOwned>;
 
     #[method(name = "getcohortbyid")]
-    async fn get_cohort_by_id(&self, cohort_id: u64) -> Result<String, ErrorObjectOwned>;
+    async fn get_cohort_by_id(&self, cohort_id: u64) -> Result<Vec<String>, ErrorObjectOwned>;
 
     #[method(name = "getgenesis")]
     async fn get_genesis(&self) -> Result<String, ErrorObjectOwned>;
@@ -73,16 +73,19 @@ pub trait Rpc {
     async fn get_miner_info(&self) -> Result<Vec<String>, ErrorObjectOwned>;
 
     #[method(name = "getparents")]
-    async fn get_parents(&self, bead_hash: String) -> Result<String, ErrorObjectOwned>;
+    async fn get_parents(&self, bead_hash: String) -> Result<Vec<String>, ErrorObjectOwned>;
 
     #[method(name = "getchildren")]
     async fn get_children(&self, bead_hash: String) -> Result<Vec<String>, ErrorObjectOwned>;
 
     #[method(name = "gethighestworkpathbycount")]
-    async fn get_highest_work_path_by_count(&self, limit: u8) -> Result<String, ErrorObjectOwned>;
+    async fn get_highest_work_path_by_count(
+        &self,
+        limit: u8,
+    ) -> Result<Vec<String>, ErrorObjectOwned>;
 
     #[method(name = "getipcstats")]
-    async fn get_ipc_stats(&self) -> Result<String, ErrorObjectOwned>;
+    async fn get_ipc_stats(&self) -> Result<Value, ErrorObjectOwned>;
 
     #[method(name = "getbraidinfo")]
     async fn get_braid_info(&self) -> Result<Value, ErrorObjectOwned>;
@@ -97,7 +100,7 @@ pub trait Rpc {
     async fn staged_transactions(&self) -> Result<Value, ErrorObjectOwned>;
 
     #[method(name = "unstagetransactions")]
-    async fn unstage_transactions(&self, txid: String) -> Result<String, ErrorObjectOwned>;
+    async fn unstage_transactions(&self, txid: String) -> Result<bool, ErrorObjectOwned>;
 
     #[method(name = "bitcoinproxy")]
     async fn bitcoin_proxy(
@@ -147,6 +150,14 @@ struct NodeInfo {
     minimum_target: String,
 }
 
+/// Per-tx entry returned by stagedtransactions. Includes txid so callers can pass it to unstagetransactions.
+#[derive(Serialize, Deserialize)]
+struct StagedTxEntry {
+    /// Transaction ID (64-char hex). Use this as the argument to unstagetransactions.
+    txid: String,
+    tx: Transaction,
+}
+
 /// JSON-RPC request structure
 #[derive(Serialize)]
 struct JsonRpcRequest {
@@ -170,6 +181,7 @@ pub struct BitcoinRpcConfig {
     pub port: u16,
     pub username: String,
     pub password: String,
+    pub client: reqwest::Client,
 }
 
 impl BitcoinRpcConfig {
@@ -201,11 +213,17 @@ impl BitcoinRpcConfig {
             );
         }
 
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
         Ok(Some(Self {
             host: args.bitcoin.clone(),
             port: args.rpcport,
             username: username.clone(),
             password: password.clone(),
+            client,
         }))
     }
 
@@ -307,11 +325,11 @@ impl RpcServer for RpcServerImpl {
         Ok(tips_str)
     }
 
-    async fn get_bead_count(&self) -> Result<String, ErrorObjectOwned> {
+    async fn get_bead_count(&self) -> Result<u64, ErrorObjectOwned> {
         let braid_data = self.braid_arc.read().await;
         let count = braid_data.beads.len();
         info!(count = %count, "Get bead count request received");
-        Ok(count.to_string())
+        Ok(count as u64)
     }
 
     async fn get_cohort_count(&self) -> Result<u64, ErrorObjectOwned> {
@@ -322,7 +340,7 @@ impl RpcServer for RpcServerImpl {
         Ok(count as u64)
     }
 
-    async fn get_cohort_by_id(&self, cohort_id: u64) -> Result<String, ErrorObjectOwned> {
+    async fn get_cohort_by_id(&self, cohort_id: u64) -> Result<Vec<String>, ErrorObjectOwned> {
         info!(id = %cohort_id, "Get cohort by id request received");
 
         let braid_data = self.braid_arc.read().await;
@@ -339,8 +357,7 @@ impl RpcServer for RpcServerImpl {
                 })
                 .collect();
 
-            serde_json::to_string(&cohort_hashes)
-                .map_err(|_| ErrorObjectOwned::owned(2, "Internal Error", None::<()>))
+            Ok(cohort_hashes)
         } else {
             Err(ErrorObjectOwned::owned(
                 3,
@@ -578,7 +595,7 @@ impl RpcServer for RpcServerImpl {
             .map_err(|e| ErrorObjectOwned::owned(2, format!("Internal Error: {}", e), None::<()>))
     }
 
-    async fn get_parents(&self, bead_hash: String) -> Result<String, ErrorObjectOwned> {
+    async fn get_parents(&self, bead_hash: String) -> Result<Vec<String>, ErrorObjectOwned> {
         info!(bead = %bead_hash, "Get parent bead request received");
 
         let hash = bead_hash
@@ -595,10 +612,14 @@ impl RpcServer for RpcServerImpl {
 
         match bead {
             Some(bead) => {
-                let parents: Vec<BeadHash> = bead.committed_metadata.parents.into_iter().collect();
+                let parent_hashes: Vec<String> = bead
+                    .committed_metadata
+                    .parents
+                    .iter()
+                    .map(|h| h.to_string())
+                    .collect();
 
-                serde_json::to_string(&parents)
-                    .map_err(|_| ErrorObjectOwned::owned(2, "Internal Error ", None::<()>))
+                Ok(parent_hashes)
             }
             None => Err(ErrorObjectOwned::owned(3, "Bead not found", None::<()>)),
         }
@@ -646,7 +667,10 @@ impl RpcServer for RpcServerImpl {
         Ok(children_hashes)
     }
 
-    async fn get_highest_work_path_by_count(&self, limit: u8) -> Result<String, ErrorObjectOwned> {
+    async fn get_highest_work_path_by_count(
+        &self,
+        limit: u8,
+    ) -> Result<Vec<String>, ErrorObjectOwned> {
         info!(limit = %limit, "Get highest work path by count request received");
 
         let braid_data = self.braid_arc.read().await;
@@ -723,13 +747,10 @@ impl RpcServer for RpcServerImpl {
             })
             .collect();
 
-        let json = serde_json::to_string(&hw_path_hashes)
-            .map_err(|_| ErrorObjectOwned::owned(2, "Internal Server Error ", None::<()>))?;
-
-        Ok(json)
+        Ok(hw_path_hashes)
     }
 
-    async fn get_ipc_stats(&self) -> Result<String, ErrorObjectOwned> {
+    async fn get_ipc_stats(&self) -> Result<Value, ErrorObjectOwned> {
         let (responder, receiver) = oneshot::channel();
         let command = RpcProxyCommand::GetStats { responder };
 
@@ -743,17 +764,27 @@ impl RpcServer for RpcServerImpl {
 
         match receiver.await {
             Ok(Ok(stats)) => {
-                let stats_msg = format!(
-                   "IPC queue statistics : failed={} avg_ms={} critical={} high={} normal={} low={}",
-                   stats.failed_requests,
-                   stats.avg_processing_time_ms,
-                   stats.queue_sizes.critical,
-                   stats.queue_sizes.high,
-                   stats.queue_sizes.normal,
-                   stats.queue_sizes.low
-               );
-                info!("{}", stats_msg);
-                Ok(stats_msg)
+                let value = serde_json::json!({
+                    "failed_requests": stats.failed_requests,
+                    "pending_requests": stats.pending_requests,
+                    "avg_processing_time_ms": stats.avg_processing_time_ms,
+                    "queue_sizes": {
+                        "critical": stats.queue_sizes.critical,
+                        "high": stats.queue_sizes.high,
+                        "normal": stats.queue_sizes.normal,
+                        "low": stats.queue_sizes.low,
+                    }
+                });
+                info!(
+                    "IPC queue statistics: failed={} avg_ms={} critical={} high={} normal={} low={}",
+                    stats.failed_requests,
+                    stats.avg_processing_time_ms,
+                    stats.queue_sizes.critical,
+                    stats.queue_sizes.high,
+                    stats.queue_sizes.normal,
+                    stats.queue_sizes.low
+                );
+                Ok(value)
             }
             Ok(Err(e)) => Err(ErrorObjectOwned::owned(
                 6,
@@ -876,8 +907,14 @@ impl RpcServer for RpcServerImpl {
 
         // The `transactions` in the block template include the coinbase transaction at index 0.
         // "Staged transactions" for mining should only include the non-coinbase transactions.
-        let staged_txs = if latest_block_template_guard.transactions.len() > 1 {
-            latest_block_template_guard.transactions[1..].to_vec()
+        let staged_txs: Vec<StagedTxEntry> = if latest_block_template_guard.transactions.len() > 1 {
+            latest_block_template_guard.transactions[1..]
+                .iter()
+                .map(|tx| StagedTxEntry {
+                    txid: tx.compute_txid().to_string(),
+                    tx: tx.clone(),
+                })
+                .collect()
         } else {
             Vec::new()
         };
@@ -891,7 +928,7 @@ impl RpcServer for RpcServerImpl {
         })
     }
 
-    async fn unstage_transactions(&self, txid: String) -> Result<String, ErrorObjectOwned> {
+    async fn unstage_transactions(&self, txid: String) -> Result<bool, ErrorObjectOwned> {
         info!(txid = %txid, "unstage_transactions request received");
         let (responder, receiver) = oneshot::channel();
         let command = RpcProxyCommand::RemoveTransaction { txid, responder };
@@ -905,7 +942,7 @@ impl RpcServer for RpcServerImpl {
         }
 
         match receiver.await {
-            Ok(Ok(was_removed)) => Ok(was_removed.to_string()),
+            Ok(Ok(was_removed)) => Ok(was_removed),
             Ok(Err(e)) => Err(ErrorObjectOwned::owned(
                 6,
                 &format!("Transaction removal failed: {}", e),
@@ -1052,13 +1089,7 @@ async fn call_bitcoin_rpc_direct(
         id: 1,
     };
 
-    // Build HTTP client with timeout
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()
-        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
-
-    let mut request_builder = client.post(&url).json(&request);
+    let mut request_builder = config.client.post(&url).json(&request);
 
     // Add authentication using username/password
     if !config.username.is_empty() {
@@ -1146,10 +1177,10 @@ pub async fn test_extend_rpc() {
 
     let get_bead_params = ArrayParams::new();
     //Checking for the updated bead count after successful extension of braid
-    let num_beads: Result<String, jsonrpsee::core::ClientError> =
+    let num_beads: Result<u64, jsonrpsee::core::ClientError> =
         client.request("getbeadcount", get_bead_params).await;
 
-    assert_eq!(num_beads.unwrap(), "2".to_string());
+    assert_eq!(num_beads.unwrap(), 2);
 }
 
 #[tokio::test]
@@ -1311,11 +1342,11 @@ pub async fn test_get_bead_count_cli_flow() {
     let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
 
     let params = ArrayParams::new();
-    let num_beads: Result<String, jsonrpsee::core::ClientError> =
+    let num_beads: Result<u64, jsonrpsee::core::ClientError> =
         client.request("getbeadcount", params).await;
 
     assert!(num_beads.is_ok());
-    assert_eq!(num_beads.unwrap(), "1"); // We have 1 genesis bead
+    assert_eq!(num_beads.unwrap(), 1); // We have 1 genesis bead
 }
 
 #[tokio::test]
@@ -1454,11 +1485,11 @@ pub async fn test_get_cohort_rpc() {
     // Test getcohortbyid for existing cohort
     let mut params = ArrayParams::new();
     params.insert(1 as u64).unwrap(); // Get cohort 1
-    let response: Result<String, jsonrpsee::core::ClientError> =
+    let response: Result<Vec<String>, jsonrpsee::core::ClientError> =
         client.request("getcohortbyid", params).await;
 
     assert!(response.is_ok());
-    let cohort_hashes: Vec<String> = serde_json::from_str(&response.unwrap()).unwrap();
+    let cohort_hashes = response.unwrap();
     assert_eq!(cohort_hashes.len(), 1);
     assert_eq!(
         cohort_hashes[0],
@@ -1547,11 +1578,11 @@ pub async fn test_get_parents_and_children_rpc() {
     let bead2_hash = test_bead2.block_header.block_hash().to_string();
     let mut params = ArrayParams::new();
     params.insert(bead2_hash.clone()).unwrap();
-    let response: Result<String, jsonrpsee::core::ClientError> =
+    let response: Result<Vec<String>, jsonrpsee::core::ClientError> =
         client.request("getparents", params).await;
 
     assert!(response.is_ok());
-    let parent_hashes: Vec<String> = serde_json::from_str(&response.unwrap()).unwrap();
+    let parent_hashes = response.unwrap();
     assert_eq!(parent_hashes.len(), 1);
     assert_eq!(
         parent_hashes[0],
@@ -1614,21 +1645,21 @@ pub async fn test_get_hwpath_rpc() {
 
     let mut params = ArrayParams::new();
     params.insert(10 as u8).unwrap();
-    let response: Result<String, jsonrpsee::core::ClientError> =
+    let response: Result<Vec<String>, jsonrpsee::core::ClientError> =
         client.request("gethighestworkpathbycount", params).await;
 
-    if let Ok(hw_path_str) = response {
-        let _hw_path: Vec<String> = serde_json::from_str(&hw_path_str).unwrap_or_default();
+    if let Ok(hw_path) = response {
+        assert!(!hw_path.is_empty());
     }
 
     // Test with limit
     let mut params = ArrayParams::new();
     params.insert(2 as u8).unwrap();
-    let response: Result<String, jsonrpsee::core::ClientError> =
+    let response: Result<Vec<String>, jsonrpsee::core::ClientError> =
         client.request("gethighestworkpathbycount", params).await;
 
-    if let Ok(hw_path_str) = response {
-        let _hw_path: Vec<String> = serde_json::from_str(&hw_path_str).unwrap_or_default();
+    if let Ok(hw_path) = response {
+        assert!(hw_path.len() <= 2);
     }
 }
 
@@ -1900,7 +1931,7 @@ pub async fn test_staged_transactions_rpc() {
         .await;
 
     assert!(response_empty.is_ok());
-    let returned_txs_empty: Vec<Transaction> =
+    let returned_txs_empty: Vec<StagedTxEntry> =
         serde_json::from_value(response_empty.unwrap()).unwrap();
     assert!(returned_txs_empty.is_empty());
 
@@ -1918,7 +1949,7 @@ pub async fn test_staged_transactions_rpc() {
         .await;
 
     assert!(response_coinbase_only.is_ok());
-    let returned_txs_coinbase_only: Vec<Transaction> =
+    let returned_txs_coinbase_only: Vec<StagedTxEntry> =
         serde_json::from_value(response_coinbase_only.unwrap()).unwrap();
     assert!(
         returned_txs_coinbase_only.is_empty(),
@@ -1939,7 +1970,8 @@ pub async fn test_staged_transactions_rpc() {
         .await;
 
     assert!(response_with_tx.is_ok());
-    let returned_txs: Vec<Transaction> = serde_json::from_value(response_with_tx.unwrap()).unwrap();
+    let returned_txs: Vec<StagedTxEntry> =
+        serde_json::from_value(response_with_tx.unwrap()).unwrap();
 
     assert_eq!(
         returned_txs.len(),
@@ -1947,9 +1979,14 @@ pub async fn test_staged_transactions_rpc() {
         "Should return one regular transaction"
     );
     assert_eq!(
-        returned_txs[0].compute_txid(),
-        regular_tx.compute_txid(),
+        returned_txs[0].txid,
+        regular_tx.compute_txid().to_string(),
         "Returned txid should match the regular mock txid"
+    );
+    assert_eq!(
+        returned_txs[0].tx.compute_txid(),
+        regular_tx.compute_txid(),
+        "Returned tx should match the regular mock tx"
     );
 
     handle.stop().unwrap();
@@ -1998,11 +2035,13 @@ pub async fn test_get_ipc_stats_rpc() {
     });
 
     assert!(response.is_ok());
-    let stats_msg: String = response.unwrap();
-    assert_eq!(
-        stats_msg,
-        "IPC queue statistics : failed=1 avg_ms=123 critical=1 high=2 normal=3 low=4"
-    );
+    let stats: Value = response.unwrap();
+    assert_eq!(stats["failed_requests"], 1);
+    assert_eq!(stats["avg_processing_time_ms"], 123);
+    assert_eq!(stats["queue_sizes"]["critical"], 1);
+    assert_eq!(stats["queue_sizes"]["high"], 2);
+    assert_eq!(stats["queue_sizes"]["normal"], 3);
+    assert_eq!(stats["queue_sizes"]["low"], 4);
 }
 
 #[tokio::test]
@@ -2051,10 +2090,12 @@ pub async fn test_get_ipc_stats_rpc_simple() {
     });
 
     assert!(response.is_ok());
-    let stats_msg: String = response.unwrap();
-    assert!(stats_msg.contains("IPC queue statistics"));
-    assert!(stats_msg.contains("failed=0"));
-    assert!(stats_msg.contains("avg_ms=50"));
+    let stats: Value = response.unwrap();
+    assert_eq!(stats["failed_requests"], 0);
+    assert_eq!(stats["avg_processing_time_ms"], 50);
+    assert_eq!(stats["queue_sizes"]["high"], 1);
+    assert_eq!(stats["queue_sizes"]["normal"], 2);
+    assert_eq!(stats["queue_sizes"]["low"], 3);
 }
 
 #[tokio::test]
@@ -2087,10 +2128,8 @@ pub async fn test_unstage_transactions_rpc_simple() {
     let mut params = ArrayParams::new();
     params.insert(test_txid.to_string()).unwrap();
 
-    let request_future: futures::future::BoxFuture<
-        '_,
-        Result<String, jsonrpsee::core::ClientError>,
-    > = Box::pin(client.request("unstagetransactions", params));
+    let request_future: futures::future::BoxFuture<'_, Result<bool, jsonrpsee::core::ClientError>> =
+        Box::pin(client.request("unstagetransactions", params));
 
     let (response, _) = tokio::join!(request_future, async {
         if let Some(RpcProxyCommand::RemoveTransaction { txid, responder }) = proxy_rx.recv().await
@@ -2101,7 +2140,7 @@ pub async fn test_unstage_transactions_rpc_simple() {
     });
 
     assert!(response.is_ok());
-    assert_eq!(response.unwrap(), "true");
+    assert_eq!(response.unwrap(), true);
 }
 
 #[tokio::test]

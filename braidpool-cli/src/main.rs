@@ -15,43 +15,51 @@ struct Cli {
 }
 
 #[derive(Debug, Subcommand)]
-#[command(rename_all = "snakecase")]
 enum Commands {
     /// Get a bead by hash
+    #[command(name = "getbead")]
     GetBead {
         /// The bead hash (as a hex string)
         bead_hash: String,
     },
 
     /// Add a bead via serialized JSON string
+    #[command(name = "addbead")]
     AddBead {
         /// JSON-formatted bead
         bead_data: String,
     },
 
     /// Get total number of beads
+    #[command(name = "getbeadcount")]
     GetBeadCount,
 
     /// Get total number of cohorts
+    #[command(name = "getcohortcount")]
     GetCohortCount,
 
     /// Get current DAG tips
+    #[command(name = "gettips")]
     GetTips,
 
     /// Get a list of bead hashes in a cohort by its ID
+    #[command(name = "getcohortbyid")]
     GetCohortById {
         /// The ID of the cohort
         cohort_id: u64,
     },
 
     /// Get the genesis bead hash for this epoch
+    #[command(name = "getgenesis")]
     GetGenesis,
 
     /// Get a list of connected Stratum miners
+    #[command(name = "getminerinfo")]
     GetMinerInfo,
 
     /// Get detailed statistics about beads mined by us, expected payout, etc.
     /// Requires at least one filter: public_keys or miner_ips
+    #[command(name = "getmininginfo")]
     GetMiningInfo {
         /// List of public keys (hex-encoded) to filter beads by.
         /// Supports multiple keys for key rotation scenarios.
@@ -67,32 +75,38 @@ enum Commands {
     },
 
     /// Get the parent hashes of a bead by bead_hash
+    #[command(name = "getparents")]
     GetParents {
         /// The bead hash (as a hex string)
         bead_hash: String,
     },
 
     /// Get the children hashes of a bead by bead hash
+    #[command(name = "getchildren")]
     GetChildren {
         /// The bead hash (as a hex string)
         bead_hash: String,
     },
 
     /// Get the list of beads in the highest work path, limited by count
+    #[command(name = "gethighestworkpathbycount")]
     GetHighestWorkPathByCount {
         /// Limit the number of results returned
         limit: u8,
     },
 
     /// Get statistics about the IPC connection
+    #[command(name = "getipcstats")]
     GetIpcStats,
 
     /// Get braid information (returns bead_count , tip_count , tips, cohort_count, orphan_count, genesis_beads, total_work)
+    #[command(name = "getbraidinfo")]
     GetBraidInfo,
 
     /// Get node information for the node that created a specific bead
     /// Returns information about the node that created the specified bead, including:
     /// common_pubkey (libp2p public key), miner_ip, payout_address, and minimum_target.
+    #[command(name = "getnodeinfo")]
     GetNodeInfo {
         /// The bead hash (block hash) as a 64-character hex-encoded string representing the bead's block hash
         /// This identifies which bead's creator node information you want to retrieve
@@ -100,12 +114,15 @@ enum Commands {
     },
 
     /// Get peer information (IP/PeerID/libp2p address of connected peers)
+    #[command(name = "getpeerinfo")]
     GetPeerInfo,
 
     /// Get the list of transactions staged for the next bead we mine
+    #[command(name = "stagedtransactions")]
     StagedTransactions,
 
     /// Remove a transaction from our stage list by txid
+    #[command(name = "unstagetransactions")]
     UnstageTransactions {
         /// Transaction ID to remove
         tx_id: String,
@@ -113,6 +130,7 @@ enum Commands {
 
     /// Proxy a Bitcoin RPC call to bitcoind
     /// Example: braidpool-cli bitcoin getblockchaininfo
+    #[command(name = "bitcoin")]
     Bitcoin {
         /// Bitcoin RPC method name (e.g., "getblockchaininfo", "getblockhash", etc.)
         method: String,
@@ -199,6 +217,7 @@ impl std::error::Error for RpcCallError {
 }
 
 async fn call_rpc(
+    client: &reqwest::Client,
     rpc_url: &str,
     method: &str,
     params: serde_json::Value,
@@ -210,7 +229,6 @@ async fn call_rpc(
         id: 1,
     };
 
-    let client = reqwest::Client::new();
     let res = client
         .post(rpc_url)
         .json(&rpc_request)
@@ -245,6 +263,10 @@ async fn call_rpc(
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()?;
 
     let (method, params) = match &cli.commands {
         Commands::GetBead { bead_hash } => ("getbead", json!([bead_hash])),
@@ -305,7 +327,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    match call_rpc(&cli.rpc_url, method, params).await {
+    match call_rpc(&client, &cli.rpc_url, method, params).await {
         Ok(result) => {
             let pretty_response = serde_json::to_string_pretty(&result).map_err(|e| {
                 Box::new(std::io::Error::new(
