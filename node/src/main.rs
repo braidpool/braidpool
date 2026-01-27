@@ -5,7 +5,7 @@ use futures::lock::Mutex;
 use futures::StreamExt;
 use libp2p::kad::BootstrapOk;
 use libp2p::{
-    core::multiaddr::Multiaddr,
+    core::multiaddr::{Multiaddr, Protocol},
     floodsub::{self},
     identify,
     identity::Keypair,
@@ -14,6 +14,7 @@ use libp2p::{
     swarm::SwarmEvent,
     PeerId,
 };
+use node::config::BraidpoolConfig;
 use node::db::db_handlers::{fetch_beads_in_batch, prepare_bead_tuple_data};
 use node::ibd_manager::{IBD_TRIGGER_AFTER, MAX_IBD_INCOMING_THRESHOLD, MAX_IBD_RETRIES};
 use node::utils::BeadHash;
@@ -33,7 +34,7 @@ use node::{
 };
 use std::collections::HashSet;
 use std::os::unix::fs::PermissionsExt;
-use std::path::Path;
+use std::path::{PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -54,10 +55,55 @@ const SEED_DNS: &str = "/dnsaddr/french.braidpool.net";
 //combined addr for dns resolution and dialing of boot for peer discovery
 const ADDR_REFRENCE: &str =
     "/dnsaddr/french.braidpool.net/p2p/12D3KooWG9z8TziaNuYyEcc9FeUC3FTtrEf2XSnSdDpLvx4Jh2w3";
+const DEFAULT_CONFIG_PATH: &str =
+    concat!(env!("CARGO_MANIFEST_DIR"), "/src/default_braidpool_config.toml");
 use tokio::sync::{
     mpsc::{self},
     RwLock,
 };
+
+fn expand_path(path: &str) -> PathBuf {
+    PathBuf::from(
+        shellexpand::full(path)
+            .expect("Failed to expand path")
+            .into_owned(),
+    )
+}
+
+fn expand_pathbuf(path: &PathBuf) -> PathBuf {
+    expand_path(&path.to_string_lossy())
+}
+
+fn parse_network_arg(network_name: &str) -> Option<Network> {
+    match network_name {
+        "main" | "mainnet" => Some(Network::Bitcoin),
+        "testnet" | "testnet4" => Some(Network::Testnet(bitcoin::TestnetVersion::V4)),
+        "signet" => Some(Network::Signet),
+        "regtest" => Some(Network::Regtest),
+        "cpunet" => Some(Network::CPUNet),
+        _ => None,
+    }
+}
+
+fn socket_from_multiaddr(address: &str) -> Option<String> {
+    let multiaddr: Multiaddr = address.parse().ok()?;
+    let mut ip = None;
+    let mut port = None;
+
+    for protocol in multiaddr.into_iter() {
+        match protocol {
+            Protocol::Ip4(ipv4) => ip = Some(ipv4.to_string()),
+            Protocol::Ip6(ipv6) => ip = Some(ipv6.to_string()),
+            Protocol::Tcp(p) | Protocol::Udp(p) => port = Some(p),
+            _ => {}
+        }
+    }
+
+    match (ip, port) {
+        (Some(ip), Some(port)) => Some(format!("{ip}:{port}")),
+        _ => None,
+    }
+}
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     // Initialize tracing with colors and module prefixes
@@ -182,21 +228,130 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let main_task_token = CancellationToken::new();
     let ipc_task_token = main_task_token.clone();
     let args = cli::Cli::parse();
-    let datadir = shellexpand::full(args.datadir.to_str().unwrap()).unwrap();
-    match fs::metadata(&*datadir) {
+
+    let default_config_path = PathBuf::from(DEFAULT_CONFIG_PATH);
+    let config_path = args
+        .config
+        .as_ref()
+        .map(expand_pathbuf)
+        .unwrap_or(default_config_path);
+    if !config_path.exists() {
+        error!(path = %config_path.display(), "Config file not found");
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Config file not found at {}", config_path.display()),
+        )
+        .into());
+    }
+    info!(path = %config_path.display(), "Loading braidpool config");
+    let braidpool_config = BraidpoolConfig::load_from_config_file(
+        config_path
+            .to_str()
+            .expect("Failed to convert config path to string"),
+    );
+
+    let datadir = match args.datadir.as_ref() {
+        Some(path) => expand_pathbuf(path),
+        None => expand_path(&braidpool_config.braid_directory.path),
+    };
+
+    let bind_addr = args
+        .bind
+        .clone()
+        .or_else(|| socket_from_multiaddr(&braidpool_config.braidnetwork_config.listen_address))
+        .unwrap_or_else(|| "0.0.0.0:6680".to_string());
+
+    let mut peer_nodes = braidpool_config.braidnetwork_config.peer_nodes.clone();
+    if let Some(nodes) = args.addnode.clone() {
+        peer_nodes.extend(nodes);
+    }
+
+    let network = match args.network.as_deref() {
+        Some(network_name) => match parse_network_arg(network_name) {
+            Some(parsed) => parsed,
+            None => {
+                error!(
+                    network = %network_name,
+                    valid_networks = "main, testnet, testnet4, signet, regtest, cpunet",
+                    "Invalid network specified, falling back to config value"
+                );
+                braidpool_config.bitcoin_config.network
+            }
+        },
+        None => braidpool_config.bitcoin_config.network,
+    };
+
+    let ipc_socket = args
+        .ipc_socket
+        .clone()
+        .unwrap_or_else(|| "/tmp/bitcoin-cpunet.sock".to_string());
+
+    let rpc_server_addr = braidpool_config
+        .braid_rpc_config
+        .rpc_server_addr
+        .clone();
+
+    // Parse Bitcoin RPC configuration from args or config
+    let bitcoin_node = args
+        .bitcoin
+        .clone()
+        .unwrap_or_else(|| braidpool_config.bitcoin_config.bitcoind_ip.clone());
+
+    let rpc_port = args
+        .rpcport
+        .or_else(|| {
+            braidpool_config
+                .bitcoin_config
+                .port
+                .parse::<u16>()
+                .map_err(|e| {
+                    error!("Invalid port number in config: {}", e);
+                    e
+                })
+                .ok()
+        })
+        .unwrap_or(18443);
+
+    let rpc_user = args
+        .rpcuser
+        .clone()
+        .unwrap_or_else(|| braidpool_config.bitcoin_config.username.clone());
+
+    let _rpc_pass = args
+        .rpcpass
+        .clone()
+        .unwrap_or_else(|| braidpool_config.bitcoin_config.password.clone());
+
+    let _rpc_cookie = args
+        .rpccookie
+        .clone()
+        .map(|p| expand_path(&p))
+        .or_else(|| Some(expand_path(&braidpool_config.bitcoin_config.cookie_path)));
+
+    info!(
+        bitcoin_node = %bitcoin_node,
+        rpc_port = %rpc_port,
+        rpc_user = %rpc_user,
+        "Bitcoin RPC configuration loaded"
+    );
+
+    match fs::metadata(&datadir) {
         Ok(m) => {
             if !m.is_dir() {
-                error!(datadir = %datadir, "Data directory exists but is not a directory");
+                error!(
+                    datadir = %datadir.display(),
+                    "Data directory exists but is not a directory"
+                );
             }
-            info!(datadir = %datadir, "Using existing data directory");
+            info!(datadir = %datadir.display(), "Using existing data directory");
         }
         Err(_) => {
-            info!(datadir = %datadir, "Creating data directory");
-            fs::create_dir_all(&*datadir)?;
+            info!(datadir = %datadir.display(), "Creating data directory");
+            fs::create_dir_all(&datadir)?;
         }
     }
 
-    let datadir_path = Path::new(&*datadir);
+    let datadir_path = datadir.as_path();
     let keystore_path = datadir_path.join("keystore");
     #[cfg(unix)]
     {
@@ -239,16 +394,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     };
     //spawning the rpc server
-    let rpc_addr = "127.0.0.1:6682"; // TODO: Load from config file
-    if let Some(rpc_command) = args.command {
-        let server_address = tokio::spawn(run_rpc_server(Arc::clone(&braid), rpc_addr));
+    if let Some(rpc_command) = args.command.clone() {
+        let braid_clone = Arc::clone(&braid);
+        let rpc_server_addr_clone = rpc_server_addr.clone();
+        let server_address = tokio::spawn(async move {
+            run_rpc_server(braid_clone, rpc_server_addr_clone.as_str()).await
+        });
         let socket_address = server_address.await.unwrap().unwrap();
         let _parsing_handle =
             tokio::spawn(parse_arguments(rpc_command, socket_address.clone())).await;
     } else {
         //running the rpc server and updating the reference counter
         //for shared ownership
-        let _server_handler = tokio::spawn(run_rpc_server(Arc::clone(&braid), rpc_addr)).await;
+        let braid_clone = Arc::clone(&braid);
+        let rpc_server_addr_clone = rpc_server_addr.clone();
+        let _server_handler = tokio::spawn(async move {
+            run_rpc_server(braid_clone, rpc_server_addr_clone.as_str()).await
+        })
+        .await;
     }
     // load beads from db (if present) and insert in braid here
     // Initializing the peer manager
@@ -268,9 +431,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_behaviour(|local_key| BraidPoolBehaviour::new(local_key).unwrap())?
         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX)))
         .build();
-    let socket_addr: std::net::SocketAddr = match args.bind.parse() {
+    let socket_addr: std::net::SocketAddr = match bind_addr.parse() {
         Ok(addr) => addr,
-        Err(_) => format!("{}:6680", args.bind)
+        Err(_) => format!("{}:6680", bind_addr)
             .parse()
             .expect("Failed to parse bind address"),
     };
@@ -301,31 +464,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     swarm.dial(ADDR_REFRENCE.parse::<Multiaddr>().unwrap())?;
     info!(address = %ADDR_REFRENCE, "Dialed boot node");
     //IPC(inter process communication) based `getblocktemplate` and `notification` to send to the downstream via the `cmempoold` architecture
-    info!(socket = %args.ipc_socket, "IPC socket path");
+    info!(socket = %ipc_socket, "IPC socket path");
+    info!(network = ?network, "Network selected");
 
-    let network = if let Some(network_name) = &args.network {
-        info!(network = %network_name, "Network selected");
-        match network_name.as_str() {
-            "main" | "mainnet" => Network::Bitcoin,
-            "testnet" | "testnet4" => Network::Testnet(bitcoin::TestnetVersion::V4),
-            "signet" => Network::Signet,
-            "regtest" => Network::Regtest,
-            "cpunet" => Network::CPUNet,
-            _ => {
-                error!(
-                    network = %network_name,
-                    valid_networks = "main, testnet, testnet4, signet, regtest, cpunet",
-                    "Invalid network specified"
-                );
-                info!(fallback = "regtest", "Using fallback network");
-                Network::Regtest
-            }
-        }
-    } else {
-        Network::Bitcoin
-    };
-
-    let ipc_socket_path_for_blocking = args.ipc_socket.clone();
+    let ipc_socket_path_for_blocking = ipc_socket.clone();
     let notification_tx_for_ipc = notification_tx.clone();
     let latest_template_for_ipc = latest_template.clone();
     let latest_template_merkle_branch_for_ipc = latest_template_merkle_branch.clone();
@@ -405,8 +547,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         });
     });
 
-    if let Some(addnode) = args.addnode {
-        for node in addnode.iter() {
+    if !peer_nodes.is_empty() {
+        for node in peer_nodes.iter() {
             let node_multiaddr: Multiaddr = node.parse().expect("Failed to parse to multiaddr");
             let dial_result = swarm.dial(node_multiaddr.clone());
             if let Some(err) = dial_result.err() {
