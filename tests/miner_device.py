@@ -181,8 +181,8 @@ def normalize_data(data):
         "fan_speeds": fan_speeds,
         "chip_count": safe_int(getattr(data, "total_chips", None)),
         "is_mining": getattr(data, "is_mining", None),
+        "errors": [str(err) for err in getattr(data, "errors", [])],
         "uptime": safe_int(getattr(data, "uptime", None)),
-        "errors": getattr(data, "errors", []),
         "pools": pools_data,
         "primary_pool": primary_pool,
         "api_version": getattr(data, "api_ver", None),
@@ -198,7 +198,8 @@ async def get_miner_data_async(ip):
         normalized_data = normalize_data(raw_data)
         return {"success": True, "ip": ip, "data": normalized_data}
     except Exception as e:
-        return {"success": False, "error": f"Failed to connect to miner at {ip}: {str(e)}"}
+        error_message = str(e) if isinstance(e, Exception) else repr(e)
+        return {"success": False, "error": f"Failed to connect to miner at {ip}: {error_message}"}
 
 
 @app.route('/api/miners', methods=['GET'])
@@ -210,7 +211,8 @@ def get_miner_data():
     try:
         result = asyncio.run(get_miner_data_async(ip))
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 502
+        error_message = str(e) if isinstance(e, Exception) else repr(e)
+        return jsonify({"success": False, "error": error_message}), 502
 
     if result["success"]:
         return jsonify(result)
@@ -220,3 +222,4 @@ def get_miner_data():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5001, debug=False)
+    

@@ -5,6 +5,7 @@ import { Block } from './Types';
 import { fetchPreviousBlocks } from './Utils';
 import BlockInfoDialog from './BlockDialog';
 import { WEBSOCKET_URLS } from '../../URLs';
+import { Loader } from 'lucide-react';
 
 const BlockViewer: React.FC = () => {
   const [nextBlock, setNextBlock] = useState<Block | null>(null);
@@ -82,8 +83,11 @@ const BlockViewer: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64 p-4">
-        <div className="text-white">Loading blocks...</div>
+      <div className="flex items-center justify-center h-full w-full">
+        <div className="flex flex-col items-center">
+          <Loader className="h-8 w-8 text-[#0077B6] animate-spin" />
+          <p className="mt-4 text-[#0077B6]">Loading blocks...</p>
+        </div>
       </div>
     );
   }

@@ -133,7 +133,7 @@ export default function LatencyTab({ timeRange }: { timeRange: string }) {
   // ✅ Loading UI
   if (isLoading || !isConnected) {
     return (
-      <div className="p-8 text-center text-purple-300">
+      <div className="p-8 text-center text-gray-400">
         Loading latency data...
       </div>
     );
