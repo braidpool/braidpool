@@ -2,8 +2,8 @@
 use crate::config::CoinbaseConfig;
 use crate::error::CoinbaseError;
 use crate::error::{classify_error, ErrorKind};
-use crate::rpc_server::RpcProxyCommand;
 use crate::payout::PayoutCommands;
+use crate::rpc_server::RpcProxyCommand;
 use crate::template_creator::{create_block_template, FinalTemplate};
 use crate::{TemplateId, MAX_CACHED_TEMPLATES};
 use std::collections::HashMap;

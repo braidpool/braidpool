@@ -223,6 +223,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 &mut latest_template_ref,
                 &mut latest_template_merkle_branch_ref,
                 latest_template_id_for_notifier,
+                network,
             )
             .await;
     });
@@ -483,8 +484,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                 network,
                                 template_cache,
                                 block_submission_rx,
-                                payout_cmd_sender,
                                 rpc_command_rx,
+                                payout_cmd_sender,
                             )
                             .await
                             {
