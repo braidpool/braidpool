@@ -893,9 +893,13 @@ impl DownstreamClient {
             }
         };
         let username_res: Result<&str, StratumErrors> = match param_array.get(0) {
-            Some(user) => user.as_str().ok_or(StratumErrors::InvalidMethodParams {
-                method: "mining.authorize".to_string(),
-            }),
+            Some(user) => match user.as_str() {
+                Some(username_str) => Ok(username_str),
+                None => Err(StratumErrors::ParamNotFound {
+                    param: "username must be a string".to_string(),
+                    method: "mining.authorize".to_string(),
+                }),
+            },
             None => {
                 return Err(StratumErrors::ParamNotFound {
                     param: "username".to_string(),
