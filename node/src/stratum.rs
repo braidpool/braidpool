@@ -404,7 +404,7 @@ impl DownstreamClient {
             Some(worker_name) => worker_name
                 .as_str()
                 .ok_or(StratumErrors::InvalidMethodParams {
-                    method: "mining.submit".to_string(),
+                    method: "mining.submit: worker_name must be a string".to_string(),
                 }),
             None => Err(StratumErrors::ParamNotFound {
                 param: "worker_name".to_string(),
