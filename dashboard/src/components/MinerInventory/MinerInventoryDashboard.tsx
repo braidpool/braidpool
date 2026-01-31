@@ -263,7 +263,7 @@ const MinerInventoryDashboard = () => {
           <button
             onClick={addMinerByIP}
             disabled={loading}
-            className="px-4 py-2 text-sm  text-white rounded bg-gray-800"
+            className="px-4 py-2 text-sm cursor-pointer active:scale-95 text-white rounded bg-gray-900 hover:bg-gray-700 transition"
           >
             {loading ? 'Adding...' : 'Add Miner'}
           </button>
@@ -325,10 +325,10 @@ const MinerInventoryDashboard = () => {
           </div>
         </div>
       </div>
-      <div className="flex w-full justify-end ">
-        <div className="flex items-end gap-3  p-3 ">
+      <div className="flex w-full justify-center md:justify-between items-center mb-4 flex-wrap gap-3">
+        <div className="flex flex-wrap items-end gap-3  p-3 ">
           {/* Search Input */}
-          <div>
+          <div className="flex items-center gap-2">
             <input
               type="text"
               value={searchInput}
@@ -342,7 +342,7 @@ const MinerInventoryDashboard = () => {
             {/* Clear Button */}
             <button
               onClick={clearSearch}
-              className="px-3 py-2 text-sm text-gray-300 rounded border border-gray-600 bg-gray-900 hover:bg-gray-800 transition"
+              className="px-3 py-2 text-sm cursor-pointer active:scale-95 text-gray-300 rounded border border-gray-600 bg-gray-900 hover:bg-gray-800 transition"
             >
               Clear
             </button>
@@ -362,7 +362,7 @@ const MinerInventoryDashboard = () => {
                 )
               }
               aria-label="Sort miners"
-              className="px-3 py-2 text-sm border border-gray-600 bg-gray-800 rounded text-white focus:outline-none focus:ring-1 focus:ring-gray-500"
+              className="px-3 py-2 text-sm border cursor-pointer border-gray-600 bg-gray-800 rounded text-white focus:outline-none focus:ring-1 focus:ring-gray-500"
             >
               <option value="all">Sort</option>
               <option value="efficiency">Efficiency (W/TH)</option>
@@ -380,7 +380,7 @@ const MinerInventoryDashboard = () => {
           </div>
           <button
             onClick={refreshAllMiners}
-            className="px-3 py-1 text-sm rounded border border-gray-600 text-white bg-gray-800 hover:bg-gray-700"
+            className="px-3 py-1 text-sm cursor-pointer active:scale-95 rounded border border-gray-600 text-white bg-gray-900 hover:bg-gray-700 transition"
           >
             Refresh
           </button>
