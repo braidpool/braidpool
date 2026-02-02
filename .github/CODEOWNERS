@@ -1,0 +1,22 @@
+# Braidpool Code Owners
+# These owners will be automatically requested for review when a PR modifies matching paths.
+# See: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owners for everything
+* @mcelrath
+
+# Rust node implementation
+/node/ @zaidmstrr @sansh2356
+
+# Dashboard frontend
+/dashboard/ @zaidmstrr @priyashuu
+
+# Documentation
+/docs/ @mcelrath @zaidmstrr @priyashuu
+*.md @mcelrath @zaidmstrr @priyashuu
+
+# CI/CD and GitHub configuration
+/.github/ @mcelrath @zaidmstrr
+
+# Tests
+/tests/ @mcelrath @zaidmstrr @priyashuu

@@ -1,0 +1,151 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://braidpool.net/schemas/review.json",
+  "title": "AI Review",
+  "description": "Schema for AI agent review findings",
+  "type": "object",
+  "required": ["branch", "persona", "model", "grade", "findings"],
+  "properties": {
+    "branch": {
+      "type": "string",
+      "description": "Git branch name that was reviewed",
+      "minLength": 1
+    },
+    "pr_number": {
+      "type": "integer",
+      "description": "GitHub PR number if reviewing a PR",
+      "minimum": 1
+    },
+    "persona": {
+      "type": "string",
+      "description": "Full name of the reviewing persona",
+      "enum": [
+        "Security Researcher",
+        "Cryptographer",
+        "Senior Rust Developer",
+        "Senior TypeScript Developer",
+        "Senior Software Architect",
+        "Senior Database Engineer",
+        "Performance Engineer"
+      ]
+    },
+    "model": {
+      "type": "string",
+      "description": "AI model used for the review",
+      "pattern": "^[a-z0-9]+([-.]?[a-z0-9]+)*$",
+      "examples": ["claude-sonnet-4.5", "gpt-5.2-codex", "claude-haiku-4.5"]
+    },
+    "summary": {
+      "type": "string",
+      "description": "Brief summary of the review findings",
+      "minLength": 10,
+      "maxLength": 500
+    },
+    "grade": {
+      "type": "string",
+      "description": "Overall review grade",
+      "enum": ["PASS", "PASS-WITH-NOTES", "NEEDS-WORK"]
+    },
+    "workflow_version": {
+      "type": "string",
+      "description": "Version of the review workflow used",
+      "pattern": "^[0-9]+\\.[0-9]+$",
+      "examples": ["1.0", "1.1", "2.0"]
+    },
+    "findings": {
+      "type": "array",
+      "description": "List of findings from the review",
+      "items": {
+        "type": "object",
+        "required": ["severity", "file", "description", "status"],
+        "properties": {
+          "severity": {
+            "type": "string",
+            "description": "Severity level of the finding",
+            "enum": ["critical", "high", "medium", "low"]
+          },
+          "file": {
+            "type": "string",
+            "description": "File path where the issue was found",
+            "minLength": 1
+          },
+          "line": {
+            "type": "integer",
+            "description": "Line number of the issue",
+            "minimum": 1
+          },
+          "description": {
+            "type": "string",
+            "description": "Description of the finding",
+            "minLength": 10
+          },
+          "status": {
+            "type": "string",
+            "description": "Current status of the finding",
+            "enum": ["open", "resolved", "wont-fix", "regressed"]
+          },
+          "resolution": {
+            "type": "string",
+            "description": "How the finding was resolved (if applicable)"
+          },
+          "code_snippet": {
+            "type": "string",
+            "description": "Relevant code snippet"
+          },
+          "suggestion": {
+            "type": "string",
+            "description": "Suggested fix"
+          }
+        }
+      }
+    },
+    "checklist_completed": {
+      "type": "array",
+      "description": "List of checklist items that were verified",
+      "items": {
+        "type": "string"
+      }
+    },
+    "escalations": {
+      "type": "array",
+      "description": "Personas this review escalated to",
+      "items": {
+        "type": "object",
+        "required": ["to_persona", "reason"],
+        "properties": {
+          "to_persona": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "previous_review": {
+      "type": "string",
+      "description": "Filename of the previous review that was compared against"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "grade": { "const": "NEEDS-WORK" }
+        }
+      },
+      "then": {
+        "properties": {
+          "findings": {
+            "contains": {
+              "properties": {
+                "severity": { "enum": ["critical", "high"] }
+              },
+              "required": ["severity"]
+            }
+          }
+        }
+      }
+    }
+  ]
+}
