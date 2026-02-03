@@ -5,7 +5,7 @@ export default function MempoolPanel({ mempool }: { mempool: MempoolInfo }) {
   const mempoolUsage = (mempool.usage / mempool.maxmempool) * 100;
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div className="grid grid-cols-1 gap-6 w-full">
       {/* Stats Card */}
       <div className="bg-[#1e1e1e] border border-gray-700 rounded-lg p-6 backdrop-blur-sm">
         <div className="mb-4">
