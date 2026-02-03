@@ -12,6 +12,7 @@ use num::ToPrimitive;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::VecDeque;
 use std::sync::atomic::AtomicBool;
 use std::time::UNIX_EPOCH;
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
@@ -29,6 +30,13 @@ use tokio_util::codec::{FramedRead, LinesCodec};
 use tracing::{debug, error, info, trace, warn};
 
 pub const DISCONNECT_SIGNAL: &str = "!!!_INTERNAL_DISCONNECT_SIGNAL_!!!";
+const PREFIX_EXHAUSTION_WARNING_THRESHOLD: u16 = 60000;
+const PREFIX_MAX_VALUE: u16 = u16::MAX; // Maximum prefix value in audit mode
+const PREFIX_BYTES_SIZE: usize = 2; // Size of prefix in bytes
+const COMMITMENT_SIZE: usize = 5; // Size of bead hash commitment in bytes
+const DEFAULT_VERSION_ROLLING_MASK: u32 = 0x1FFFE000; // BIP 310 default mask
+const UPSTREAM_EXTRANONCE1_SIZE: usize = 4; // Standard upstream extranonce1 size
+const COMMITMENT_HISTORY_SIZE: usize = 5; // Number of historical commitments to track
 
 #[derive(Debug, Clone)]
 pub struct BlockSubmissionRequest {
@@ -115,8 +123,10 @@ pub struct StratumServerConfig {
     pub maximum_difficulty: Option<u64>,
     /// Optional payout address for solo mining mode.
     pub solo_address: Option<String>,
-    /// Indicate for audit mode
+    /// Indicates audit mode.
     pub audit_mode: bool,
+    /// Audit mode miner weak difficulty
+    pub audit_miner_difficulty: f64,
 }
 
 impl Default for StratumServerConfig {
@@ -130,6 +140,7 @@ impl Default for StratumServerConfig {
             maximum_difficulty: None,
             solo_address: None,
             audit_mode: false,
+            audit_miner_difficulty: 100.0,
         }
     }
 }
@@ -207,6 +218,8 @@ pub struct DownstreamClient {
     connection_id: u32,
     /// The extranonce1 value assigned to this downstream miner.
     extranonce1: Vec<u8>,
+    // Stores the extranonce commitment history for audit mode
+    pub extranonce_history: VecDeque<Vec<u8>>,
     /// `extranonce1` to be sent to the Downstream in the SV1 `mining.subscribe` message response.
     //extranonce1: Vec<u8>,
     //extranonce2_size: usize,
@@ -229,6 +242,10 @@ pub struct DownstreamClient {
     pub block_submission_tx: Option<mpsc::UnboundedSender<BlockSubmissionRequest>>,
     /// Indicates whether this downstream client is operating in proxy/audit mode (connected via an upstream pool).
     pub is_proxy_mode: bool,
+    // Payout address used in the audit mode
+    pub payout_address: Option<String>,
+    // Refers to the miner difficulty in audit mode
+    pub audit_miner_difficulty: f64,
 }
 impl DownstreamClient {
     /// A helper function to keep connection_id immutable after assignment
@@ -285,6 +302,10 @@ impl DownstreamClient {
                 .await
             }
             "mining.submit" => {
+                let upstream_diff = {
+                    let mapping = connection_mapping.lock().await;
+                    mapping.upstream_difficulty
+                };
                 Self::handle_submit(
                     self,
                     &req_params,
@@ -293,6 +314,7 @@ impl DownstreamClient {
                     swarm_handler,
                     audit_dag,
                     upstream_share_tx,
+                    upstream_diff,
                 )
                 .await
             }
@@ -390,21 +412,27 @@ impl DownstreamClient {
                     let upstream_diff = {
                         let mapping = connection_mapping.lock().await;
                         mapping.upstream_difficulty
-                    }; // Lock is always dropped here
-
+                    };
                     if let Some(diff) = upstream_diff {
+                        let miner_difficulty: f64 = if self.is_proxy_mode {
+                            self.audit_miner_difficulty
+                        } else {
+                            diff
+                        };
                         let set_difficulty_msg = serde_json::json!({
                             "method": "mining.set_difficulty",
-                            "params": [diff]
+                            "params": [miner_difficulty]
                         });
-
                         if let Err(e) = response_message_sender
                             .send(serde_json::to_string(&set_difficulty_msg).unwrap())
                             .await
                         {
-                            error!("Failed to send upstream difficulty to miner: {}", e);
+                            error!("Failed to send difficulty to miner: {}", e);
                         } else {
-                            info!("Sent upstream difficulty {} to miner {}", diff, peer_addr);
+                            info!(
+                                "Sent difficulty {} to miner {}",
+                                miner_difficulty, peer_addr
+                            );
                         }
                     }
                 }
@@ -485,6 +513,7 @@ impl DownstreamClient {
         swarm_handler: Arc<Mutex<SwarmHandler>>,
         audit_dag: Option<Arc<Mutex<crate::audit::AuditDAG>>>,
         upstream_share_tx: Option<mpsc::Sender<crate::upstream_pool::UpstreamShare>>,
+        upstream_difficulty: Option<f64>,
     ) -> Result<StratumResponses, StratumErrors> {
         let connection_id_hex = format!("{:x}", self.connection_id());
         let param_array = match submit_work_params.as_array() {
@@ -515,7 +544,7 @@ impl DownstreamClient {
             Ok(name) => name,
             Err(error) => return Err(error),
         };
-        info!(
+        debug!(
             connection_id = %connection_id_hex,
             worker = %worker_name,
             "Mining worker connected"
@@ -606,13 +635,16 @@ impl DownstreamClient {
                 })
             }
         };
+
+        let rolled_version_bits: Option<&str> = param_array.get(5).and_then(|v| v.as_str());
+
         //Acquiring lock on the mining map and fetching the submitted job from the memory
         let (submitted_job, template_id) = {
             let job_mapping = mining_job_map.lock().await;
 
             // Try string lookup first (upstream jobs)
             if let Ok((job, tid)) = job_mapping.get_by_string_job_id(job_id_str) {
-                info!(
+                debug!(
                     jobid = job_id_str,
                     mode = "upstream",
                     "Found job by string ID"
@@ -651,91 +683,23 @@ impl DownstreamClient {
         };
 
         if submitted_job.is_upstream_job {
-            info!("Forwarding upstream job share from {}", worker_name);
-
-            let share_id = crate::audit::ShareId::from_share(
-                job_id_str,
-                extranonce2,
-                nonce,
-                ntime,
-                worker_name,
-            );
-            // Record in audit record
-            // Note: For now its only adding entry one-by-one in records without any DAG, this feature does not represent the final audit records, it's just the
-            // initial way of showing things, subsequent changes will use proper DAG based auditing and validation of shares.
-            // TODO: Implement DAG based auditing
-            if let Some(ref audit_dag_arc) = audit_dag {
-                let audit_record = crate::audit::AuditRecord {
-                    share_id: share_id.clone(),
-                    timestamp: std::time::SystemTime::now(),
-                    miner_ip: self.downstream_ip.clone(),
-                    worker_name: worker_name.to_string(),
-                    job_id: job_id_str.to_string(),
-                    share_difficulty: submitted_job.blocktemplate.bits,
-                    extranonce2: extranonce2.to_string(),
-                    nonce: nonce.to_string(),
-                    ntime: ntime.to_string(),
-                    block_hash: None,
-                    valid: true,
-                    upstream_accepted: None,
-                    parent_shares: vec![],
-                };
-
-                let mut dag = audit_dag_arc.lock().await;
-                match dag.add_record(audit_record).await {
-                    Ok(id) => info!("Recorded share {} in audit DAG", id),
-                    Err(e) => warn!("Failed to record audit entry: {}", e),
-                }
-            }
-
-            // Forward to upstream without validation
-            // TODO: Implement validation logic.
-            if let Some(ref upstream_tx) = upstream_share_tx {
-                // For upstream, we need to reconstruct the full 8-byte extranonce2
-                let full_extranonce2_for_upstream =
-                    if let Some(ref prefix) = self.extranonce2_prefix {
-                        // Prepend the prefix (2 bytes) to create the full 8 bytes extranonce2
-                        let prefix_hex = hex::encode(prefix);
-                        format!("{}{}", prefix_hex, extranonce2)
-                    } else {
-                        extranonce2.to_string()
-                    };
-                debug!(
-                    worker = %worker_name,
-                    job_id = %job_id_str,
-                    miner_extranonce2 = %extranonce2,
-                    miner_extranonce2_len_bytes = %(extranonce2.len() / 2),
-                    prefix = ?self.extranonce2_prefix.as_ref().map(|p| hex::encode(p)),
-                    full_extranonce2_for_upstream = %full_extranonce2_for_upstream,
-                    full_extranonce2_len_bytes = %(full_extranonce2_for_upstream.len() / 2),
-                    "Reconstructing full extranonce2 for upstream"
-                );
-
-                let upstream_share = crate::upstream_pool::UpstreamShare {
-                    worker_name: worker_name.to_string(),
-                    job_id: job_id_str.to_string(),
-                    extranonce2: full_extranonce2_for_upstream,
-                    ntime: ntime.to_string(),
-                    nonce: nonce.to_string(),
-                    version_bits: param_array
-                        .get(5)
-                        .and_then(|v| v.as_str())
-                        .map(String::from),
-                    original_request_id: client_request_id,
-                };
-                info!(
-                    "Forwarding share to upstream pool (worker: {}, job: {})",
-                    worker_name, job_id_str
-                );
-
-                if let Err(e) = upstream_tx.send(upstream_share).await {
-                    error!("Failed to forward share to upstream: {}", e);
-                    return Err(StratumErrors::UpstreamShareForwardFailed {
-                        error: e.to_string(),
-                    });
-                }
-            }
-            return Ok(StratumResponses::PendingUpstreamResponse);
+            return self
+                .validate_and_forward_upstream_share(
+                    &connection_id_hex,
+                    worker_name,
+                    job_id_str,
+                    extranonce2,
+                    ntime,
+                    nonce,
+                    rolled_version_bits,
+                    &submitted_job,
+                    client_request_id,
+                    audit_dag,
+                    upstream_share_tx,
+                    upstream_difficulty,
+                    swarm_handler,
+                )
+                .await;
         }
 
         //Building the coinbase and then eventually the block and testing for the validation against the
@@ -1023,7 +987,7 @@ impl DownstreamClient {
                 }
             }
             Err(e) => {
-                debug!(
+                warn!(
                     connection_id = %connection_id_hex,
                     error = %e,
                     target = %target.to_hex(),
@@ -1085,6 +1049,473 @@ impl DownstreamClient {
             std_response: StandardResponse::new_ok(Some(client_request_id), json!(true)),
         })
     }
+
+    /// Validate an upstream job share and create a bead then forward to the upstream pool if valid
+    async fn validate_and_forward_upstream_share(
+        &self,
+        connection_id_hex: &str,
+        worker_name: &str,
+        job_id_str: &str,
+        extranonce2: &str,
+        ntime: &str,
+        nonce: &str,
+        rolled_version_bits: Option<&str>,
+        submitted_job: &JobDetails,
+        client_request_id: u64,
+        audit_dag: Option<Arc<Mutex<crate::audit::AuditDAG>>>,
+        upstream_share_tx: Option<mpsc::Sender<crate::upstream_pool::UpstreamShare>>,
+        upstream_difficulty: Option<f64>,
+        swarm_handler: Arc<Mutex<SwarmHandler>>,
+    ) -> Result<StratumResponses, StratumErrors> {
+        let ntime_u32 =
+            u32::from_str_radix(ntime, 16).map_err(|e| StratumErrors::InvalidMethodParams {
+                method: format!("mining.submit: invalid ntime hex: {}", e),
+            })?;
+
+        let nonce_u32 =
+            u32::from_str_radix(nonce, 16).map_err(|e| StratumErrors::InvalidMethodParams {
+                method: format!("mining.submit: invalid nonce hex: {}", e),
+            })?;
+
+        let raw_bytes = submitted_job
+            .blocktemplate
+            .previousblockhash
+            .to_byte_array();
+        let mut prevhash_for_header = [0u8; 32];
+
+        for chunk_idx in 0..8 {
+            let offset = chunk_idx * 4;
+            prevhash_for_header[offset] = raw_bytes[offset + 3];
+            prevhash_for_header[offset + 1] = raw_bytes[offset + 2];
+            prevhash_for_header[offset + 2] = raw_bytes[offset + 1];
+            prevhash_for_header[offset + 3] = raw_bytes[offset];
+        }
+
+        let base_version = submitted_job.blocktemplate.version.to_consensus();
+        let final_version = if let Some(rolled_hex) = rolled_version_bits {
+            let rolled = u32::from_str_radix(rolled_hex, 16).unwrap_or(0) as i32;
+            let mask = self
+                .version_rolling_mask
+                .as_ref()
+                .and_then(|s| u32::from_str_radix(s, 16).ok())
+                .unwrap_or(DEFAULT_VERSION_ROLLING_MASK) as i32;
+            (base_version & !mask) | (rolled & mask)
+        } else {
+            base_version
+        };
+
+        let mut valid_header = None;
+        let mut valid_block_hash = None;
+        let mut used_extranonce1 = vec![];
+        let mut meets_upstream = false;
+        let mut candidates = vec![self.extranonce1.clone()];
+        candidates.extend(self.extranonce_history.iter().cloned());
+        let miner_difficulty = if self.is_proxy_mode {
+            self.audit_miner_difficulty
+        } else {
+            100.0
+        };
+        let miner_target = Self::target_from_difficulty(miner_difficulty);
+        let upstream_target = upstream_difficulty
+            .map(|d| Self::target_from_difficulty(d))
+            .unwrap_or_else(|| bitcoin::Target::from_compact(submitted_job.blocktemplate.bits));
+
+        for (idx, extranonce1_candidate) in candidates.iter().enumerate() {
+            let coinbase_tx_hex = format!(
+                "{}{}{}{}",
+                submitted_job.coinbase1,
+                hex::encode(extranonce1_candidate),
+                extranonce2.to_ascii_lowercase(),
+                submitted_job.coinbase2
+            );
+            let coinbase_bytes = match hex::decode(&coinbase_tx_hex) {
+                Ok(b) => b,
+                Err(_) => continue,
+            };
+            let mut cursor = Cursor::new(coinbase_bytes);
+            let coinbase_tx: Transaction = match bitcoin::Transaction::consensus_decode(&mut cursor)
+            {
+                Ok(tx) => tx,
+                Err(_) => continue,
+            };
+
+            let mut merkle_branches_bytes: Vec<Vec<u8>> = Vec::new();
+            for merkle_branch in &submitted_job.coinbase_merkle_path {
+                let mut bytes = [0u8; 32];
+                if hex::decode_to_slice(merkle_branch, &mut bytes).is_err() {
+                    continue;
+                }
+                merkle_branches_bytes.push(bytes.to_vec());
+            }
+
+            let merkle_root_bytes =
+                calculate_merkle_root(coinbase_tx.compute_txid(), &merkle_branches_bytes);
+            let merkle_root = TxMerkleNode::from_byte_array(merkle_root_bytes);
+            let header = BlockHeader {
+                version: bitcoin::block::Version::from_consensus(final_version),
+                prev_blockhash: BlockHash::from_byte_array(prevhash_for_header),
+                merkle_root,
+                time: BlockTime::from_u32(ntime_u32),
+                bits: submitted_job.blocktemplate.bits,
+                nonce: nonce_u32,
+            };
+            let header_bytes = bitcoin::consensus::serialize(&header);
+            let block_hash_d = bitcoin::hashes::sha256d::Hash::hash(&header_bytes);
+            let block_hash = bitcoin::BlockHash::from_byte_array(block_hash_d.to_byte_array());
+
+            if Self::validate_share_against_target(block_hash, &miner_target) {
+                valid_header = Some(header);
+                valid_block_hash = Some(block_hash);
+                used_extranonce1 = extranonce1_candidate.clone();
+                meets_upstream = Self::validate_share_against_target(block_hash, &upstream_target);
+                debug!(
+                    connection_id = %connection_id_hex,
+                    worker = %worker_name,
+                    job_id = %job_id_str,
+                    block_hash = %block_hash,
+                    miner_target = %miner_target.to_hex(),
+                    upstream_target = %upstream_target.to_hex(),
+                    meets_miner_diff = true,
+                    meets_upstream_diff = %meets_upstream,
+                    "Share difficulty validation results"
+                );
+                if idx > 0 {
+                    debug!(
+                        "Valid upstream share found using extranonce1 (Depth: {})",
+                        idx
+                    );
+                }
+                break;
+            }
+        }
+
+        if let (Some(header), Some(block_hash)) = (valid_header, valid_block_hash) {
+            let share_id = block_hash;
+
+            let bead = {
+                let swarm = swarm_handler.lock().await;
+                let payout_address = self
+                    .payout_address
+                    .as_ref()
+                    .ok_or_else(|| StratumErrors::InvalidMethodParams {
+                        method: "mining.submit: payout address not set".to_string(),
+                    })?
+                    .parse::<bitcoin::Address<bitcoin::address::NetworkUnchecked>>()
+                    .map_err(|e| {
+                        error!(
+                            worker = %worker_name,
+                            error = %e,
+                            "Invalid payout address during share submission"
+                        );
+                        StratumErrors::InvalidMethodParams {
+                            method: format!("mining.submit: invalid payout address: {}", e),
+                        }
+                    })?
+                    .require_network(bitcoin::Network::Bitcoin)
+                    .map_err(|e| {
+                        error!(
+                            worker = %worker_name,
+                            error = ?e,
+                            "Payout address network mismatch, please use mainnet address"
+                        );
+                        StratumErrors::InvalidMethodParams {
+                            method: format!("mining.submit: address is for wrong network: {:?}", e),
+                        }
+                    })?
+                    .to_string();
+
+                let (parent_hash_set, time_hash_set) = {
+                    let braid = swarm.braid_arc.read().await;
+                    let mut parents = std::collections::HashSet::new();
+                    let mut timestamps = crate::committed_metadata::TimeVec(Vec::new());
+                    for &tip_idx in braid.tips.iter() {
+                        if let Some(tip_bead) = braid.beads.get(tip_idx) {
+                            let standard_hash = tip_bead.block_header.block_hash();
+                            parents.insert(crate::utils::BeadHash::from(standard_hash));
+                            timestamps
+                                .0
+                                .push(tip_bead.committed_metadata.start_timestamp);
+                        }
+                    }
+                    if parents.is_empty() {
+                        info!(worker = %worker_name, "Genesis bead, no parents exist");
+                    }
+                    (parents, timestamps)
+                };
+
+                let weak_target = miner_target.to_compact_lossy();
+                let min_target = upstream_difficulty
+                    .map(|d| Self::target_from_difficulty(d).to_compact_lossy())
+                    .unwrap_or(submitted_job.blocktemplate.bits);
+                debug!(
+                    worker = %worker_name,
+                    weak_target_bits = %format!("{:08x}", weak_target.to_consensus()),
+                    min_target_bits = %format!("{:08x}", min_target.to_consensus()),
+                    upstream_difficulty = ?upstream_difficulty,
+                    "Calculated bead difficulty targets"
+                );
+                let public_key =
+                    "020202020202020202020202020202020202020202020202020202020202020202"
+                        .parse::<bitcoin::PublicKey>()
+                        .unwrap();
+                let job_time = bitcoin::absolute::Time::from_consensus(submitted_job.job_sent_time)
+                    .map_err(|e| {
+                        error!(
+                            worker = %worker_name,
+                            error = %e,
+                            "Invalid job timestamp"
+                        );
+                        StratumErrors::InvalidMethodParams {
+                            method: format!("mining.submit: invalid job timestamp: {}", e),
+                        }
+                    })?;
+
+                let committed_metadata = crate::committed_metadata::CommittedMetadata {
+                    comm_pub_key: public_key,
+                    miner_ip: self.downstream_ip.clone(),
+                    start_timestamp: job_time,
+                    transaction_ids: crate::committed_metadata::TxIdVec(Vec::new()),
+                    parents: parent_hash_set,
+                    parent_bead_timestamps: time_hash_set,
+                    payout_address: payout_address,
+                    min_target,
+                    weak_target,
+                };
+
+                let broadcast_time = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| {
+                        bitcoin::absolute::MedianTimePast::from_u32(d.as_secs() as u32).unwrap()
+                    })
+                    .unwrap();
+                let (extranonce_1_raw_value, extranonce_2_raw_value) = {
+                    if used_extranonce1.len() < UPSTREAM_EXTRANONCE1_SIZE {
+                        error!(
+                            worker = %worker_name,
+                            extranonce1_len = %used_extranonce1.len(),
+                            required = UPSTREAM_EXTRANONCE1_SIZE,
+                            "extranonce1 too short, expected at least 4 bytes, this upstream pool is not supported yet."
+                        );
+                        return Err(StratumErrors::InvalidMethodParams {
+                            method: "mining.submit: extranonce1 too short for audit mode"
+                                .to_string(),
+                        });
+                    }
+                    let upstream_bytes = &used_extranonce1[..UPSTREAM_EXTRANONCE1_SIZE];
+                    let upstream_u32 = u32::from_be_bytes([
+                        upstream_bytes[0],
+                        upstream_bytes[1],
+                        upstream_bytes[2],
+                        upstream_bytes[3],
+                    ]);
+                    const MAX_AUDIT_BYTES: usize = 64;
+                    let audit_bytes = &used_extranonce1[UPSTREAM_EXTRANONCE1_SIZE..];
+                    if audit_bytes.len() > MAX_AUDIT_BYTES {
+                        return Err(StratumErrors::InvalidMethodParams {
+                            method: "mining.submit: audit extranonce too long".to_string(),
+                        });
+                    }
+                    let audit_hash = bitcoin::hashes::sha256::Hash::hash(audit_bytes);
+                    let audit_hash_bytes = audit_hash.to_byte_array();
+                    let audit_hash_u32 = u32::from_be_bytes([
+                        audit_hash_bytes[0],
+                        audit_hash_bytes[1],
+                        audit_hash_bytes[2],
+                        audit_hash_bytes[3],
+                    ]);
+                    debug!(
+                        worker = %worker_name,
+                        extranonce1_len = %used_extranonce1.len(),
+                        upstream_ext1 = %hex::encode(upstream_bytes),
+                        upstream_ext1_u32 = %format!("{:08x}", upstream_u32),
+                        audit_portion_len = %audit_bytes.len(),
+                        audit_portion = %hex::encode(audit_bytes),
+                        audit_hash_u32 = %format!("{:08x}", audit_hash_u32),
+                        "Parsed extranonce values for bead metadata"
+                    );
+
+                    (upstream_u32, audit_hash_u32)
+                };
+                let placeholder_sig_bytes = [0u8; 64];
+                let sig = bitcoin::ecdsa::Signature {
+                    signature: secp256k1::ecdsa::Signature::from_compact(&placeholder_sig_bytes)
+                        .expect("Valid placeholder signature"),
+                    sighash_type: bitcoin::EcdsaSighashType::All,
+                };
+
+                let uncommitted_metadata = crate::uncommitted_metadata::UnCommittedMetadata {
+                    broadcast_timestamp: broadcast_time,
+                    extra_nonce_1: extranonce_1_raw_value,
+                    extra_nonce_2: extranonce_2_raw_value,
+                    signature: sig,
+                };
+
+                let bead = crate::bead::Bead {
+                    committed_metadata,
+                    block_header: header,
+                    uncommitted_metadata,
+                };
+
+                debug!(
+                    worker = %worker_name,
+                    block_hash = %bead.block_header.block_hash(),
+                    parent_count = %bead.committed_metadata.parents.len(),
+                    parents = ?bead.committed_metadata.parents.iter().map(|p| format!("{:?}", p)).collect::<Vec<_>>(),
+                    weak_target = %format!("{:08x}", bead.committed_metadata.weak_target.to_consensus()),
+                    min_target = %format!("{:08x}", bead.committed_metadata.min_target.to_consensus()),
+                    "Constructed audit mode bead"
+                );
+                bead
+            };
+
+            let audit_record = crate::audit::AuditRecord {
+                share_id: share_id.clone(),
+                timestamp: std::time::SystemTime::now(),
+                miner_ip: self.downstream_ip.clone(),
+                worker_name: worker_name.to_string(),
+                job_id: job_id_str.to_string(),
+                extranonce2: extranonce2.to_string(),
+                nonce: nonce.to_string(),
+                ntime: ntime.to_string(),
+                audit_verified: false,
+                audit_commitment: None,
+                upstream_accepted: None,
+                upstream_eligible: meets_upstream,
+                bead_hash: block_hash,
+            };
+
+            if let Some(ref audit_dag_arc) = audit_dag {
+                let mut dag = audit_dag_arc.lock().await;
+                match dag
+                    .add_and_record_bead(audit_record, bead, &used_extranonce1)
+                    .await
+                {
+                    Ok((_, bead_added)) => {
+                        if !bead_added {
+                            warn!("Bead already in DAG, rejecting share and skipping upstream forward");
+                            return Ok(StratumResponses::StandardResponse {
+                                std_response: StandardResponse::new_ok(
+                                    Some(client_request_id),
+                                    json!(false),
+                                ),
+                            });
+                        }
+                        if meets_upstream {
+                            if let Some(ref upstream_tx) = upstream_share_tx {
+                                dag.mark_upstream_forwarded(&share_id);
+                                drop(dag);
+                                let full_extranonce2 = if let Some(ref prefix) =
+                                    self.extranonce2_prefix
+                                {
+                                    let commitment_start =
+                                        UPSTREAM_EXTRANONCE1_SIZE + PREFIX_BYTES_SIZE;
+                                    let commitment_end = commitment_start + COMMITMENT_SIZE;
+                                    if used_extranonce1.len() < commitment_end {
+                                        error!(
+                                            worker = %worker_name,
+                                            extranonce1_len = %used_extranonce1.len(),
+                                            required = %commitment_end,
+                                            "Extranonce1 too short"
+                                        );
+                                        return Err(StratumErrors::InvalidMethodParams {
+                                            method: "mining.submit: malformed extranonce1"
+                                                .to_string(),
+                                        });
+                                    }
+                                    let commitment = hex::encode(
+                                        &used_extranonce1[commitment_start..commitment_end],
+                                    );
+                                    format!("{}{}{}", hex::encode(prefix), commitment, extranonce2)
+                                } else {
+                                    extranonce2.to_string()
+                                };
+                                let upstream_share = crate::upstream_pool::UpstreamShare {
+                                    worker_name: worker_name.to_string(),
+                                    job_id: job_id_str.to_string(),
+                                    extranonce2: full_extranonce2,
+                                    ntime: ntime.to_string(),
+                                    nonce: nonce.to_string(),
+                                    version_bits: rolled_version_bits.map(String::from),
+                                    original_request_id: client_request_id,
+                                    share_id: share_id.clone(),
+                                };
+                                if let Err(e) = upstream_tx.send(upstream_share).await {
+                                    error!("Failed to forward to upstream: {}", e);
+                                    return Ok(StratumResponses::StandardResponse {
+                                        std_response: StandardResponse::new_ok(
+                                            Some(client_request_id),
+                                            json!(false),
+                                        ),
+                                    });
+                                } else {
+                                    return Ok(StratumResponses::StandardResponse {
+                                        std_response: StandardResponse::new_ok(
+                                            Some(client_request_id),
+                                            json!(true),
+                                        ),
+                                    });
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Audit DAG rejected bead: {}", e);
+                        return Ok(StratumResponses::StandardResponse {
+                            std_response: StandardResponse::new_ok(
+                                Some(client_request_id),
+                                json!(false),
+                            ),
+                        });
+                    }
+                }
+            }
+            return Ok(StratumResponses::StandardResponse {
+                std_response: StandardResponse::new_ok(Some(client_request_id), json!(true)),
+            });
+        } else {
+            warn!("Share below minimum difficulty");
+            return Ok(StratumResponses::StandardResponse {
+                std_response: StandardResponse::new_ok(Some(client_request_id), json!(false)),
+            });
+        }
+    }
+
+    fn target_from_difficulty(difficulty: f64) -> bitcoin::Target {
+        if difficulty < 1.0 || !difficulty.is_finite() {
+            return bitcoin::Target::from_compact(bitcoin::CompactTarget::from_consensus(
+                0x1d00ffff,
+            ));
+        }
+
+        let diff1_target =
+            bitcoin::Target::from_compact(bitcoin::CompactTarget::from_consensus(0x1d00ffff));
+
+        let mut diff1_f64: f64 = 0.0;
+        let diff1_bytes = diff1_target.to_le_bytes();
+        for (i, byte) in diff1_bytes.iter().enumerate() {
+            diff1_f64 += (*byte as f64) * 256.0f64.powi(i as i32);
+        }
+
+        let new_target_val = diff1_f64 / difficulty;
+        let mut le_bytes = [0u8; 32];
+        let mut v = new_target_val;
+        for i in (0..32).rev() {
+            let power = 256.0f64.powi(i as i32);
+            let byte_val = (v / power).floor();
+            if byte_val >= 256.0 {
+                le_bytes[i] = 0xff;
+            } else {
+                le_bytes[i] = byte_val as u8;
+            }
+            v -= le_bytes[i] as f64 * power;
+        }
+        bitcoin::Target::from_le_bytes(le_bytes)
+    }
+
+    fn validate_share_against_target(block_hash: BlockHash, target: &bitcoin::Target) -> bool {
+        target.is_met_by(block_hash)
+    }
+
     /// Processes a `mining.set_difficulty` request from the client.
     ///
     /// Attempts to read a new difficulty value from the first element of the
@@ -1172,13 +1603,23 @@ impl DownstreamClient {
                 return Err(error);
             }
         };
+
+        let bitcoin_address = if let Some(dot_pos) = username.rfind('.') {
+            username[..dot_pos].to_string()
+        } else {
+            username.to_string()
+        };
+
+        self.payout_address = Some(bitcoin_address.clone());
         self.authorized = true;
         info!(
             connection_id = %format!("{:x}", self.connection_id()),
             username = %username,
+            payout_address = %bitcoin_address,
             "Miner authorized"
         );
-        let mut conn_map = connection_mapping.lock().await;
+        let mut conn_map: futures::lock::MutexGuard<'_, ConnectionMapping> =
+            connection_mapping.lock().await;
         conn_map.register_worker(peer_addr.clone(), username.to_string());
         drop(conn_map);
         info!("Registered worker '{}' for peer {}", username, peer_addr);
@@ -1475,7 +1916,7 @@ impl Default for DownstreamClient {
     fn default() -> Self {
         //ExtraNonce1. - Hex-encoded, per-connection unique string which will be used for creating generation transactions later.
         //4 bytes
-        let mut extranonce1_bytes = [0; 4];
+        let mut extranonce1_bytes = [0; UPSTREAM_EXTRANONCE1_SIZE];
         rand::thread_rng().fill_bytes(&mut extranonce1_bytes);
         let connection_id = rand::thread_rng().next_u32(); // FIXME use a counter here, not an RNG
                                                            // (will collide with 65k mining devices)
@@ -1494,6 +1935,7 @@ impl Default for DownstreamClient {
             //generating a random u32 client connection id
             connection_id,
             extranonce1: Vec::from(extranonce1_bytes),
+            extranonce_history: VecDeque::new(),
             version_rolling_mask: None,
             version_rolling_min_bit: None,
             extranonce2_len: EXTRANONCE2_SIZE,
@@ -1502,6 +1944,8 @@ impl Default for DownstreamClient {
             monitor_target: None,
             block_submission_tx: None,
             is_proxy_mode: false,
+            payout_address: None,
+            audit_miner_difficulty: 100.0,
         }
     }
 }
@@ -1537,6 +1981,9 @@ pub enum NotifyCmd {
     },
     BroadcastDifficulty {
         difficulty: f64,
+    },
+    UpdateExtranonce {
+        new_bead_hash: bitcoin::BlockHash,
     },
 }
 /// Represents a `mining.notify` job message in the Stratum protocol.
@@ -1904,37 +2351,32 @@ impl Notifier {
                 })?
             }
         };
-
-        // Reconstruct template from job notification
         let mut template = crate::stratum::BlockTemplate::default();
         template.bits = compact_bits;
-
-        // Parse version
         let version_u32 = u32::from_str_radix(&job_notification.version, 16).map_err(|e| {
             StratumErrors::InvalidMethodParams {
                 method: format!("Invalid version hex: {}", e),
             }
         })?;
         template.version = bitcoin::block::Version::from_consensus(version_u32 as i32);
-
-        // Parse and reverse prevhash
-        if let Ok(prevhash_bytes) = hex::decode(&job_notification.prevhash) {
-            if prevhash_bytes.len() != 32 {
+        match hex::decode(&job_notification.prevhash) {
+            Ok(bytes) => {
+                if bytes.len() == 32 {
+                    let mut hash_bytes = [0u8; 32];
+                    hash_bytes.copy_from_slice(&bytes);
+                    template.previousblockhash = bitcoin::BlockHash::from_byte_array(hash_bytes);
+                } else {
+                    return Err(StratumErrors::InvalidMethodParams {
+                        method: format!("Invalid prevhash length: {}", bytes.len()),
+                    });
+                }
+            }
+            Err(e) => {
                 return Err(StratumErrors::InvalidMethodParams {
-                    method: format!("Invalid prevhash length: {}", prevhash_bytes.len()),
+                    method: format!("Failed to decode prevhash: {}", e),
                 });
             }
-            let mut reversed = [0u8; 32];
-            for i in 0..32 {
-                reversed[i] = prevhash_bytes[31 - i];
-            }
-            template.previousblockhash = bitcoin::BlockHash::from_byte_array(reversed);
-        } else {
-            return Err(StratumErrors::InvalidMethodParams {
-                method: "Failed to decode prevhash".to_string(),
-            });
         }
-
         let unix_timestamp = u32::from_str_radix(&job_notification.ntime, 16).unwrap_or_else(|e| {
             warn!(
                 peer = %peer_addr,
@@ -1947,7 +2389,6 @@ impl Notifier {
                 .map(|d| d.as_secs() as u32)
                 .unwrap_or(0)
         });
-
         template.curtime = bitcoin::BlockTime::from_u32(unix_timestamp);
         let template_id = TemplateId::from_upstream_string(&job_notification.job_id);
         let job_details = crate::stratum::JobDetails {
@@ -1959,7 +2400,6 @@ impl Notifier {
             job_sent_time: unix_timestamp,
             is_upstream_job: true,
         };
-
         let upstream_job_id = curr_peer_mining_job_map
             .insert_upstream_job(
                 job_notification.job_id.clone(),
@@ -1967,7 +2407,6 @@ impl Notifier {
                 job_details,
             )
             .await;
-
         let job_notification_response = serde_json::json!({
             "method": "mining.notify",
             "params": [
@@ -1982,13 +2421,11 @@ impl Notifier {
                 job_notification.clean_jobs
             ]
         });
-
         let json_str = serde_json::to_string(&job_notification_response).map_err(|e| {
             StratumErrors::InvalidMethodParams {
                 method: format!("Failed to serialize job notification: {}", e),
             }
         })?;
-
         connection_entry
             .sender
             .send(json_str.clone())
@@ -1998,7 +2435,6 @@ impl Notifier {
                 msg: json_str,
                 msg_type: "UpstreamJob".to_string(),
             })?;
-
         info!(
             "Sent upstream job {} to {} (bits: {})",
             upstream_job_id, peer_addr, job_notification.nbits
@@ -2031,6 +2467,7 @@ impl Notifier {
         latest_template_merkle_branch_arc: &mut Arc<Mutex<Vec<Vec<u8>>>>,
         latest_template_id: Arc<Mutex<TemplateId>>,
         upstream_cache: Option<Arc<tokio::sync::RwLock<crate::upstream_pool::UpstreamCache>>>,
+        audit_dag: Option<Arc<Mutex<crate::audit::AuditDAG>>>,
     ) -> Result<(), StratumErrors> {
         debug!("Stratum notifier task started");
         while let Some(notification_command) = self.notification_receiver.recv().await {
@@ -2274,7 +2711,6 @@ impl Notifier {
                         current_template_id, new_downstream_addr
                     );
 
-                    let latest_template = latest_template_arc.lock().await.to_owned();
                     let latest_template_merkle_branch =
                         latest_template_merkle_branch_arc.lock().await.to_owned();
                     info!(
@@ -2394,10 +2830,50 @@ impl Notifier {
                                 job_notification.job_id
                             );
                             error!("   Raw nbits from upstream: '{}'", job_notification.nbits);
-                            // Don't broadcast invalid jobs, miners would submit unpayable shares
+                            // Don't broadcast invalid jobs, miners would submit invalid shares
                             continue;
                         }
                     };
+                    let mut base_template = crate::stratum::BlockTemplate::default();
+                    base_template.bits = compact_bits;
+                    if let Ok(version_u32) = u32::from_str_radix(&job_notification.version, 16) {
+                        base_template.version =
+                            bitcoin::block::Version::from_consensus(version_u32 as i32);
+                    }
+                    match hex::decode(&job_notification.prevhash) {
+                        Ok(bytes) => {
+                            if bytes.len() == 32 {
+                                let mut hash_bytes = [0u8; 32];
+                                hash_bytes.copy_from_slice(&bytes);
+                                base_template.previousblockhash =
+                                    bitcoin::BlockHash::from_byte_array(hash_bytes);
+                            } else {
+                                error!("Invalid upstream prevhash length: {}", bytes.len());
+                                continue;
+                            }
+                        }
+                        Err(e) => {
+                            error!("Failed to decode upstream prevhash in notifier: {}", e);
+                            continue;
+                        }
+                    }
+                    let unix_timestamp = match u32::from_str_radix(&job_notification.ntime, 16) {
+                        Ok(ts) => ts,
+                        Err(e) => {
+                            error!(
+                                job_id = %job_notification.job_id,
+                                ntime = %job_notification.ntime,
+                                error = %e,
+                                "Upstream job has malformed ntime, skipping broadcast to prevent invalid shares"
+                            );
+                            continue;
+                        }
+                    };
+                    let current_system_time = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs() as u32)
+                        .unwrap_or(0);
+                    base_template.curtime = bitcoin::BlockTime::from_u32(unix_timestamp);
 
                     let downstream_channel_mapping = downstream_connection_map
                         .lock()
@@ -2407,41 +2883,17 @@ impl Notifier {
 
                     let miner_count = downstream_channel_mapping.len();
                     if miner_count == 0 {
-                        // TODO: Implement the job caching logic
                         info!(
                             "No miners connected, caching job {} for future connections",
                             job_notification.job_id
                         );
                         continue;
                     }
-                    let unix_timestamp = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .map(|d| d.as_secs() as u32)
-                        .unwrap_or_else(|e| {
-                            error!("System time is before Unix epoch: {}", e);
-                            0u32
-                        });
 
                     // Broadcast to all connected miners
                     for (peer_addr, mining_job_arc) in self.job_map_arc.lock().await.iter() {
                         let mut curr_peer_mining_job_map = mining_job_arc.lock().await;
-                        let mut template = crate::stratum::BlockTemplate::default();
-                        template.bits = compact_bits;
-                        if let Ok(version_u32) = u32::from_str_radix(&job_notification.version, 16)
-                        {
-                            template.version =
-                                bitcoin::block::Version::from_consensus(version_u32 as i32);
-                        }
-                        if let Ok(prevhash_bytes) = hex::decode(&job_notification.prevhash) {
-                            if prevhash_bytes.len() == 32 {
-                                let mut reversed = [0u8; 32];
-                                for i in 0..32 {
-                                    reversed[i] = prevhash_bytes[31 - i];
-                                }
-                                let hash = bitcoin::BlockHash::from_byte_array(reversed);
-                                template.previousblockhash = hash;
-                            }
-                        }
+                        let template = base_template.clone();
                         let template_id =
                             TemplateId::from_upstream_string(&job_notification.job_id);
 
@@ -2454,7 +2906,7 @@ impl Notifier {
                             coinbase_witness_commitment: job_notification
                                 .coinbase_witness_commitment
                                 .clone(),
-                            job_sent_time: unix_timestamp,
+                            job_sent_time: current_system_time,
                             is_upstream_job: true,
                         };
 
@@ -2499,6 +2951,111 @@ impl Notifier {
                         }
                     }
                 }
+                NotifyCmd::UpdateExtranonce { new_bead_hash } => {
+                    info!(
+                        bead_hash = %new_bead_hash,
+                        "Updating extranonce1 for all miners with new bead commitment"
+                    );
+                    let (
+                        old_commitment_bytes,
+                        new_commitment,
+                        upstream_ext1_bytes,
+                        downstream_mapping,
+                        assigned_prefixes,
+                    ) = {
+                        let mut mapping = downstream_connection_map.lock().await;
+                        let old = mapping.current_bead_commitment.clone();
+                        mapping.update_bead_commitment(new_bead_hash);
+                        let new = mapping.get_current_bead_commitment();
+                        let upstream = if let Some(ref s) = mapping.upstream_extranonce1 {
+                            match hex::decode(s) {
+                                Ok(bytes) => Some(bytes),
+                                Err(e) => {
+                                    error!(error = %e, upstream = %s, "Failed to decode upstream extranonce");
+                                    None
+                                }
+                            }
+                        } else {
+                            None
+                        };
+                        let downstream = mapping.downstream_channel_mapping.clone();
+                        let prefixes = mapping.assigned_prefixes.clone();
+                        (old, new, upstream, downstream, prefixes)
+                    };
+
+                    if let Some(ref audit_dag_arc) = audit_dag {
+                        let mut dag = audit_dag_arc.lock().await;
+                        for (peer_addr, miner_state) in dag.miner_states.iter_mut() {
+                            if miner_state.current_commitment.commitment_bytes
+                                != new_commitment.as_slice()
+                            {
+                                miner_state.previous_commitment =
+                                    Some(miner_state.current_commitment.clone());
+                                miner_state.current_commitment =
+                                    crate::audit::AuditCommitment::from_hash_prefix(
+                                        &new_commitment,
+                                    );
+                                debug!(
+                                    peer = %peer_addr,
+                                    old = %hex::encode(&old_commitment_bytes),
+                                    new = %hex::encode(&new_commitment),
+                                    "Updated miner commitment with fallback"
+                                );
+                            } else {
+                                debug!(peer = %peer_addr, "Skipping duplicate commitment update");
+                            }
+                        }
+                    }
+
+                    if let Some(upstream_bytes) = upstream_ext1_bytes {
+                        let mut failed_peers = Vec::new();
+                        for (peer_addr, connection_entry) in downstream_mapping.iter() {
+                            if let Some(&prefix_u16) = assigned_prefixes.get(peer_addr) {
+                                let prefix_bytes = prefix_u16.to_be_bytes().to_vec();
+                                let mut new_extranonce1 = upstream_bytes.clone();
+                                new_extranonce1.extend_from_slice(&prefix_bytes);
+                                new_extranonce1.extend_from_slice(&new_commitment);
+
+                                let new_extranonce1_hex = hex::encode(&new_extranonce1);
+                                if let Err(e) = connection_entry.control_tx.try_send(
+                                    crate::stratum::ControlMsg::UpdateExtranonce(
+                                        new_extranonce1.clone(),
+                                    ),
+                                ) {
+                                    error!(peer = %peer_addr, "Failed to send internal control msg: {}. Flagging for disconnect.", e);
+                                    failed_peers.push(peer_addr.clone());
+                                    continue;
+                                }
+                                let set_extranonce_msg = serde_json::json!({
+                                    "id": null,
+                                    "method": "mining.set_extranonce",
+                                    "params": [new_extranonce1_hex, 1]
+                                });
+                                if let Err(e) = connection_entry
+                                    .sender
+                                    .try_send(serde_json::to_string(&set_extranonce_msg).unwrap())
+                                {
+                                    error!(peer = %peer_addr, "Miner buffer full or closed. Disconnecting: {}", e);
+                                    failed_peers.push(peer_addr.clone());
+                                } else {
+                                    info!(peer = %peer_addr, commitment = %hex::encode(&new_commitment), "Sent mining.set_extranonce");
+                                }
+                            }
+                        }
+                        if !failed_peers.is_empty() {
+                            let mut mapping = downstream_connection_map.lock().await;
+                            for peer in failed_peers {
+                                mapping.disconnect_peer(
+                                    &peer,
+                                    "Failed to update extranonce, stale connection",
+                                );
+                            }
+                        }
+                    } else {
+                        warn!("Cannot update extranonce, upstream not configured");
+                    }
+                }
+
                 NotifyCmd::BroadcastDifficulty { difficulty } => {
                     info!("Broadcasting difficulty {} to all miners", difficulty);
 
@@ -2546,12 +3103,16 @@ impl PrefixStats {
         (self.total_assigned as f64 / self.total_capacity as f64) * 100.0
     }
 }
+pub enum ControlMsg {
+    UpdateExtranonce(Vec<u8>),
+}
 
 ///Connection information associated with each downstream peer associated along with the mapped `Sender_channel` for sending downstream responses and communication.
 #[derive(Debug, Clone)]
 pub struct ConnectionInfo {
     pub connection_id: u32,
     pub sender: mpsc::Sender<String>,
+    pub control_tx: mpsc::Sender<ControlMsg>,
 }
 
 #[derive(Debug, Clone)]
@@ -2565,9 +3126,10 @@ pub struct ConnectionMapping {
     /// Counter for assigning unique extranonce2 prefixes in audit mode, wraps around at 65535 (2 bytes)
     next_extranonce2_prefix: u16,
     /// Track assigned prefixes to detect reuse, peer_addr -> prefix
-    assigned_prefixes: HashMap<String, u16>,
+    pub assigned_prefixes: HashMap<String, u16>,
     /// Pool of released prefixes available for reuse
     available_prefixes: std::collections::VecDeque<u16>,
+    pub current_bead_commitment: Vec<u8>,
 }
 
 impl ConnectionMapping {
@@ -2582,7 +3144,23 @@ impl ConnectionMapping {
             next_extranonce2_prefix: 1, // Start at 1, by design
             assigned_prefixes: HashMap::new(),
             available_prefixes: std::collections::VecDeque::new(),
+            current_bead_commitment: vec![0u8; COMMITMENT_SIZE],
         }
+    }
+
+    pub fn update_bead_commitment(&mut self, bead_hash: bitcoin::BlockHash) {
+        let hash_bytes = bead_hash.to_byte_array();
+        self.current_bead_commitment = hash_bytes[..COMMITMENT_SIZE].to_vec();
+        info!(
+            commitment = %hex::encode(&self.current_bead_commitment),
+            bead_hash = %bead_hash,
+            "Updated global bead commitment"
+        );
+    }
+
+    /// Get current bead commitment (used when assigning extranonce1 to new miners)
+    pub fn get_current_bead_commitment(&self) -> Vec<u8> {
+        self.current_bead_commitment.clone()
     }
 
     /// Allocate a unique 2-byte prefix for a new miner in audit mode
@@ -2605,10 +3183,12 @@ impl ConnectionMapping {
                 self.next_extranonce2_prefix = 1;
             }
 
-            if self.next_extranonce2_prefix > 60000 && self.available_prefixes.is_empty() {
+            if self.next_extranonce2_prefix > PREFIX_EXHAUSTION_WARNING_THRESHOLD
+                && self.available_prefixes.is_empty()
+            {
                 warn!(
                     used_prefixes = %self.next_extranonce2_prefix,
-                    total_capacity = 65535,
+                    total_capacity = PREFIX_MAX_VALUE,
                     "Approaching prefix exhaustion!"
                 );
             }
@@ -2619,8 +3199,8 @@ impl ConnectionMapping {
         let prefix_bytes = prefix.to_be_bytes().to_vec();
         let miner_size = self
             .upstream_extranonce2_size
-            .map(|size| size.saturating_sub(2))
-            .unwrap_or(6);
+            .expect("Upstream extranonce2 size must be set before allocating prefix")
+            .saturating_sub(PREFIX_BYTES_SIZE);
 
         debug!(
             prefix = %hex::encode(&prefix_bytes),
@@ -2654,7 +3234,7 @@ impl ConnectionMapping {
     /// Release a prefix back to the available pool when a miner disconnects
     fn release_prefix(&mut self, peer_addr: &str) {
         if let Some(prefix) = self.assigned_prefixes.remove(peer_addr) {
-            if prefix < 65000 {
+            if prefix < PREFIX_MAX_VALUE {
                 self.available_prefixes.push_back(prefix);
                 info!(
                     peer = %peer_addr,
@@ -2678,7 +3258,7 @@ impl ConnectionMapping {
             total_assigned: self.assigned_prefixes.len(),
             available_for_reuse: self.available_prefixes.len(),
             next_new_prefix: self.next_extranonce2_prefix,
-            total_capacity: 65535,
+            total_capacity: PREFIX_MAX_VALUE,
         }
     }
 
@@ -2815,12 +3395,14 @@ impl ConnectionMapping {
         peer_addr: String,
         connection_id: u32,
         peer_msg_sender: mpsc::Sender<String>,
+        control_tx: mpsc::Sender<ControlMsg>,
     ) {
         self.downstream_channel_mapping.insert(
             peer_addr,
             ConnectionInfo {
                 connection_id,
                 sender: peer_msg_sender,
+                control_tx,
             },
         );
     }
@@ -2930,7 +3512,7 @@ impl Server {
                                         info!("New audit mode connection using upstream extranonce: {}", upstream_ext1);
 
                                         // Allocate unique 2-byte prefix for this miner
-                                        let (prefix_bytes, miner_ext2_size) = mapping.allocate_extranonce2_prefix();
+                                        let (prefix_bytes, _miner_ext2_size) = mapping.allocate_extranonce2_prefix();
                                         let prefix_u16 = u16::from_be_bytes([prefix_bytes[0], prefix_bytes[1]]);
                                         mapping.register_prefix(peer_addr.to_string(), prefix_u16);
 
@@ -2944,6 +3526,46 @@ impl Server {
 
                                         let mut extended_extranonce1 = upstream_ext1_bytes;
                                         extended_extranonce1.extend_from_slice(&prefix_bytes);
+                                        let bead_hash_commitment = mapping.get_current_bead_commitment();
+                                        extended_extranonce1.extend_from_slice(&bead_hash_commitment);
+                                        let upstream_ext2_size = mapping.upstream_extranonce2_size.unwrap_or(8);
+                                        let miner_ext2_size = upstream_ext2_size
+                                            .saturating_sub(prefix_bytes.len())
+                                            .saturating_sub(bead_hash_commitment.len());
+
+                                        if miner_ext2_size < 1 {
+                                            error!(
+                                                "Insufficient extranonce space! Upstream: {}, Prefix: {}, Commitment: {}",
+                                                upstream_ext2_size,
+                                                prefix_bytes.len(),
+                                                bead_hash_commitment.len()
+                                            );
+                                            continue;
+                                        }
+
+                                        if let Some(ref dag) = audit_dag {
+                                            info!(
+                                                "Registering miner {} with prefix {} and commitment {} in AuditDAG",
+                                                peer_addr,
+                                                hex::encode(&prefix_bytes),
+                                                hex::encode(&bead_hash_commitment)
+                                            );
+                                            {
+                                                let mut dag_guard = dag.lock().await;
+                                                dag_guard.register_miner(peer_addr.to_string(), prefix_bytes.clone());
+                                                if let Some(miner_state) = dag_guard.miner_states.get_mut(&peer_addr.to_string()) {
+                                                    let commitment = crate::audit::AuditCommitment::from_hash_prefix(&bead_hash_commitment);
+                                                    miner_state.current_commitment = commitment;
+                                                    miner_state.previous_commitment = None;
+                                                    miner_state.commitment_pending = false;
+                                                } else {
+                                                    // If we can't register the miner, we must reject the connection.
+                                                    // Otherwise, they will mine "ghost/stale" shares that fail every audit.
+                                                    error!(peer = %peer_addr, "Failed to initialize AuditDAG state for miner. Rejecting.");
+                                                    continue;
+                                                }
+                                            }
+                                        }
 
                                         let stats = mapping.get_prefix_stats();
                                         debug!(
@@ -2975,6 +3597,7 @@ impl Server {
                                     (bytes.to_vec(), EXTRANONCE2_SIZE, None, false)
                                 }
                             };
+
                             // Create client with correct state
                             let downstream_client = Arc::new(Mutex::new(DownstreamClient {
                                 authorized: false,
@@ -2984,6 +3607,7 @@ impl Server {
                                 channel_configured: false,
                                 connection_id: rand::thread_rng().next_u32(),
                                 extranonce1: assigned_extranonce1,
+                                extranonce_history: VecDeque::new(),
                                 version_rolling_mask: None,
                                 version_rolling_min_bit: None,
                                 extranonce2_len: assigned_extranonce2_size,
@@ -2992,6 +3616,8 @@ impl Server {
                                 monitor_target: None,
                                 block_submission_tx: self.block_submission_tx.clone(),
                                 is_proxy_mode: is_proxy,
+                                payout_address: None,
+                                audit_miner_difficulty: self.stratum_config.audit_miner_difficulty,
                             }));
 
                          //Notification sender to the `Notifier` task
@@ -3002,11 +3628,12 @@ impl Server {
                          mining_job_map.lock().await.insert(peer_addr.to_string(), self_mining_map.clone());
                          //downstream channel for server2client communication to take place
                          let (downstream_tx,mut downstream_rx) = mpsc::channel(1024);
+                         let (control_tx, control_rx) = mpsc::channel(10);
                          //adding the new connection to the connection map
                          self.downstream_connection_mapping
                                     .lock()
                                     .await
-                                    .new_connection(peer_addr.to_string(), connection_id, downstream_tx.clone());
+                                    .new_connection(peer_addr.to_string(), connection_id, downstream_tx.clone(), control_tx,);
                          info!(
                                     connection_id = %connection_id_hex,
                                     peer = %peer_addr,
@@ -3025,7 +3652,7 @@ impl Server {
 
                             // catering each new connection as seperate process
                             tokio::spawn(async move{
-                                let _=  Self::handle_connection(downstream_client.clone(),peer_addr,reader,writer,&mut downstream_rx,self_mining_map.clone(),downstream_tx,notification_sender,swarm_handler_arc_ref,audit_dag_clone,upstream_share_tx_clone,connection_mapping_clone,upstream_configure_tx_clone,).await;
+                                let _=  Self::handle_connection(downstream_client.clone(),peer_addr,reader,writer,&mut downstream_rx,self_mining_map.clone(),downstream_tx,notification_sender,swarm_handler_arc_ref,audit_dag_clone,upstream_share_tx_clone,connection_mapping_clone,upstream_configure_tx_clone,control_rx,).await;
                                 debug!("Cleaning up disconnected miner: {}", peer_addr_string);
 
                                 // cleanup after connection closes, remove from connection mapping
@@ -3093,6 +3720,7 @@ impl Server {
         upstream_share_tx: Option<mpsc::Sender<crate::upstream_pool::UpstreamShare>>,
         connection_mapping: Arc<Mutex<ConnectionMapping>>,
         upstream_configure_tx: Option<mpsc::Sender<(Value, u64, mpsc::Sender<Value>)>>,
+        mut control_rx: mpsc::Receiver<ControlMsg>,
     ) -> Result<(), Box<StratumErrors>> {
         const MAX_LINE_LENGTH: usize = 2_usize.pow(16);
         //It can be excessively inefficient to work directly with a AsyncRead instance. A BufReader performs large, infrequent reads on the underlying AsyncRead and maintains an in-memory buffer of the results.
@@ -3133,6 +3761,27 @@ impl Server {
                         }
                     }
                 }
+                ctrl_msg = control_rx.recv() => {
+                    match ctrl_msg {
+                        Some(ControlMsg::UpdateExtranonce(new_bytes)) => {
+                            // We are inside the miner's own task. We can lock quickly because we own this loop. This does not block the Notifier.
+                            let mut client = downstream_client.lock().await;
+                            let old_extranonce = client.extranonce1.clone();
+                            client.extranonce_history.push_front(old_extranonce);
+                            // This specify the size of extranonce commitment we need to track, so we can't forefully reject the shares
+                            // from the miner due to latency.
+                            if client.extranonce_history.len() > COMMITMENT_HISTORY_SIZE {
+                                client.extranonce_history.pop_back();
+                            }
+
+                            client.extranonce1 = new_bytes;
+                            debug!("Internal state updated, extranonce1 changed via control msg");
+                        }
+                        None => {
+                        }
+                    }
+                }
+
                 // Process incoming requests from miner
                 line = framed.next().fuse() => {
                     match line {
@@ -3244,6 +3893,162 @@ mod test {
     };
 
     #[tokio::test]
+    async fn test_connection_mapping_prefix_allocation() {
+        let mut mapping = ConnectionMapping::new();
+
+        mapping.set_upstream_extranonce("aabbccdd".to_string(), 8);
+
+        // Allocate multiple prefixes
+        let (prefix1, size1) = mapping.allocate_extranonce2_prefix();
+        let (prefix2, size2) = mapping.allocate_extranonce2_prefix();
+        let (prefix3, size3) = mapping.allocate_extranonce2_prefix();
+
+        // Each prefix should be unique
+        assert_ne!(prefix1, prefix2, "Prefixes should be unique");
+        assert_ne!(prefix2, prefix3, "Prefixes should be unique");
+        assert_ne!(prefix1, prefix3, "Prefixes should be unique");
+
+        assert_eq!(size1, size2);
+        assert_eq!(size2, size3);
+    }
+
+    #[tokio::test]
+    async fn test_connection_mapping_prefix_reuse() {
+        let mut mapping = ConnectionMapping::new();
+        mapping.set_upstream_extranonce("aabbccdd".to_string(), 8);
+
+        // Allocate and register a prefix
+        let (prefix1, _) = mapping.allocate_extranonce2_prefix();
+        let prefix1_u16 = u16::from_be_bytes([prefix1[0], prefix1[1]]);
+        mapping.register_prefix("peer1".to_string(), prefix1_u16);
+
+        // Get stats before release
+        let stats_before = mapping.get_prefix_stats();
+        assert_eq!(stats_before.total_assigned, 1);
+        assert_eq!(stats_before.available_for_reuse, 0);
+
+        // Release the prefix
+        mapping.remove_peer("peer1");
+
+        // Get stats after release
+        let stats_after = mapping.get_prefix_stats();
+        assert_eq!(stats_after.total_assigned, 0);
+        assert_eq!(stats_after.available_for_reuse, 1);
+
+        // Allocate again, this should reuse the released prefix
+        let (prefix2, _) = mapping.allocate_extranonce2_prefix();
+        assert_eq!(prefix1, prefix2, "Should reuse released prefix");
+    }
+
+    #[tokio::test]
+    async fn test_mining_job_map_operations() {
+        let mut job_map = MiningJobMap::new();
+
+        // Create test job details
+        let template = BlockTemplate::default();
+        let job_details = JobDetails {
+            blocktemplate: template,
+            coinbase1: "test_coinbase1".to_string(),
+            coinbase2: "test_coinbase2".to_string(),
+            coinbase_merkle_path: vec![],
+            coinbase_witness_commitment: None,
+            job_sent_time: 1234567890,
+            is_upstream_job: false,
+        };
+
+        // Insert Braidpool job
+        let job_id = job_map
+            .insert_mining_job(TemplateId::Braidpool(1), job_details.clone())
+            .await;
+        assert_eq!(job_id, 0, "First job ID should be 0");
+
+        // Retrieve by job_id
+        let retrieved = job_map.get_by_job_id(job_id);
+        assert!(retrieved.is_ok(), "Should retrieve inserted job");
+
+        // Retrieve by template_id
+        let retrieved_by_template = job_map.get_by_template_id(&TemplateId::Braidpool(1));
+        assert!(
+            retrieved_by_template.is_ok(),
+            "Should retrieve by template_id"
+        );
+
+        // Insert another job
+        let job_id_2 = job_map
+            .insert_mining_job(TemplateId::Braidpool(2), job_details.clone())
+            .await;
+        assert_eq!(job_id_2, 1, "Second job ID should be 1");
+    }
+
+    #[tokio::test]
+    async fn test_upstream_job_storage() {
+        let mut job_map = MiningJobMap::new();
+
+        let template = BlockTemplate::default();
+        let job_details = JobDetails {
+            blocktemplate: template,
+            coinbase1: "upstream_coinbase1".to_string(),
+            coinbase2: "upstream_coinbase2".to_string(),
+            coinbase_merkle_path: vec![],
+            coinbase_witness_commitment: None,
+            job_sent_time: 1234567890,
+            is_upstream_job: true,
+        };
+
+        // Insert upstream job with string ID
+        let upstream_id = "upstream_job_abc123";
+        let returned_id = job_map
+            .insert_upstream_job(
+                upstream_id.to_string(),
+                TemplateId::from_upstream_string(upstream_id),
+                job_details.clone(),
+            )
+            .await;
+
+        assert_eq!(
+            returned_id, upstream_id,
+            "Should return same upstream job ID"
+        );
+
+        // Retrieve by string job_id
+        let retrieved = job_map.get_by_string_job_id(upstream_id);
+        assert!(
+            retrieved.is_ok(),
+            "Should retrieve upstream job by string ID"
+        );
+
+        let (retrieved_job, retrieved_template_id) = retrieved.unwrap();
+        assert!(
+            retrieved_job.is_upstream_job,
+            "Job should be marked as upstream"
+        );
+    }
+
+    #[test]
+    fn test_difficulty_100_conversion() {
+        let difficulty = 100.5;
+        let target_100 = DownstreamClient::target_from_difficulty(difficulty);
+
+        let compact_100 = target_100.to_compact_lossy();
+        println!("--- Difficulty 100.0 Test ---");
+        println!("Difficulty: {}", difficulty);
+        println!("Target (Hex): {}", target_100.to_hex());
+        println!("Target (nBits): {:#x}", compact_100.to_consensus());
+
+        let expected_prefix = "00000000028c";
+        let actual_hex = target_100.to_hex();
+
+        assert!(
+            actual_hex.starts_with(expected_prefix),
+            "Target for Diff 100 should start with {}, got {}",
+            expected_prefix,
+            actual_hex
+        );
+
+        println!("Assertion Passed: Target matches expected value for Diff 100.");
+    }
+
+    #[tokio::test]
     pub async fn server_start_test() {
         let ibd_or_not: AtomicBool = AtomicBool::new(false);
         let test_ibd_spinlock = Arc::new(ibd_or_not);
@@ -3267,7 +4072,7 @@ mod test {
 
         let server_task = tokio::spawn(async move {
             let _ = server
-                .run_stratum_service(    
+                .run_stratum_service(
                     mining_job_map,
                     notify_tx,
                     swarm_handler_arc,
@@ -3673,6 +4478,7 @@ mod test {
                 swarm_handler_arc,
                 None,
                 None,
+                None, // Add upstream_difficulty argument
             )
             .await
             .unwrap();

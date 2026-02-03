@@ -1,39 +1,258 @@
-use bitcoin::hashes::sha256;
-use bitcoin::{BlockHash, CompactTarget};
+use crate::bead::Bead;
+use crate::braid::{AddBeadStatus, Braid};
+use bitcoin::consensus::serialize;
+use bitcoin::hashes::sha256d;
+use bitcoin::BlockHash;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::SystemTime;
-use tracing::{info, warn};
-#[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
-pub struct ShareId(pub [u8; 32]);
+use tokio::sync::RwLock;
+use tracing::{debug, error, info, warn};
 
-impl ShareId {
-    pub fn from_share(
-        job_id: &str,
-        extranonce2: &str,
-        nonce: &str,
-        ntime: &str,
-        worker_name: &str,
-    ) -> Self {
-        let mut engine = sha256::Hash::engine();
-        bitcoin::hashes::HashEngine::input(&mut engine, job_id.as_bytes());
-        bitcoin::hashes::HashEngine::input(&mut engine, extranonce2.as_bytes());
-        bitcoin::hashes::HashEngine::input(&mut engine, nonce.as_bytes());
-        bitcoin::hashes::HashEngine::input(&mut engine, ntime.as_bytes());
-        bitcoin::hashes::HashEngine::input(&mut engine, worker_name.as_bytes());
-        let result = sha256::Hash::from_engine(engine);
-        let mut id = [0u8; 32];
-        id.copy_from_slice(result.as_ref());
-        ShareId(id)
+pub const UPSTREAM_EXTRANONCE1_BYTES: usize = 4;
+pub const MINER_PREFIX_BYTES: usize = 2;
+pub const COMMITMENT_BYTES: usize = 5;
+pub const MINER_ROLL_BYTES: usize = 1;
+pub const TOTAL_EXTRANONCE1_BYTES: usize =
+    UPSTREAM_EXTRANONCE1_BYTES + MINER_PREFIX_BYTES + COMMITMENT_BYTES;
+
+pub type ShareId = BlockHash;
+
+/// Compute composite hash for audit mode: hash(block_header || committed_metadata)
+/// This is ONLY used in audit mode where we cannot use OP_RETURN commitments, which
+/// we will use as an extranonce commitment.
+pub fn compute_audit_bead_hash(bead: &Bead) -> BlockHash {
+    let header_bytes = serialize(&bead.block_header);
+    let metadata_bytes = serialize(&bead.committed_metadata);
+    let mut combined = Vec::with_capacity(header_bytes.len() + metadata_bytes.len());
+    combined.extend_from_slice(&header_bytes);
+    combined.extend_from_slice(&metadata_bytes);
+    BlockHash::from_byte_array(sha256d::Hash::hash(&combined).to_byte_array())
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuditCommitment {
+    pub commitment_bytes: [u8; COMMITMENT_BYTES],
+    pub parent_bead_hash: Option<BlockHash>,
+}
+
+impl Default for AuditCommitment {
+    fn default() -> Self {
+        Self {
+            commitment_bytes: [0u8; COMMITMENT_BYTES],
+            parent_bead_hash: None,
+        }
     }
 }
 
-impl std::fmt::Display for ShareId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", hex::encode(&self.0[..8]))
+impl AuditCommitment {
+    pub fn genesis() -> Self {
+        Self::default()
+    }
+
+    pub fn from_audit_bead(bead: &Bead) -> Self {
+        let composite_hash = compute_audit_bead_hash(bead);
+        Self::from_bead_hash(composite_hash)
+    }
+
+    pub fn from_hash_prefix(hash_prefix: &[u8]) -> Self {
+        let mut commitment_bytes = [0u8; COMMITMENT_BYTES];
+        let len = hash_prefix.len().min(COMMITMENT_BYTES);
+        commitment_bytes[..len].copy_from_slice(&hash_prefix[..len]);
+
+        Self {
+            commitment_bytes,
+            parent_bead_hash: None,
+        }
+    }
+
+    pub fn from_bead_hash(bead_hash: BlockHash) -> Self {
+        let hash_bytes = bead_hash.to_byte_array();
+        let mut commitment_bytes = [0u8; COMMITMENT_BYTES];
+        commitment_bytes.copy_from_slice(&hash_bytes[..COMMITMENT_BYTES]);
+
+        Self {
+            commitment_bytes,
+            parent_bead_hash: Some(bead_hash),
+        }
+    }
+
+    pub fn to_hex(&self) -> String {
+        hex::encode(&self.commitment_bytes)
+    }
+
+    pub fn verify_in_extranonce1(&self, extranonce1_bytes: &[u8], miner_prefix: &[u8]) -> bool {
+        if extranonce1_bytes.len() != TOTAL_EXTRANONCE1_BYTES {
+            return false;
+        }
+        if &extranonce1_bytes
+            [UPSTREAM_EXTRANONCE1_BYTES..UPSTREAM_EXTRANONCE1_BYTES + MINER_PREFIX_BYTES]
+            != miner_prefix
+        {
+            return false;
+        }
+        let commitment_start = UPSTREAM_EXTRANONCE1_BYTES + MINER_PREFIX_BYTES;
+        let commitment_end = commitment_start + COMMITMENT_BYTES;
+        &extranonce1_bytes[commitment_start..commitment_end] == &self.commitment_bytes
+    }
+
+    pub fn extract_miner_prefix_from_ext1(extranonce1_bytes: &[u8]) -> Option<Vec<u8>> {
+        if extranonce1_bytes.len() < UPSTREAM_EXTRANONCE1_BYTES + MINER_PREFIX_BYTES {
+            return None;
+        }
+        Some(
+            extranonce1_bytes
+                [UPSTREAM_EXTRANONCE1_BYTES..UPSTREAM_EXTRANONCE1_BYTES + MINER_PREFIX_BYTES]
+                .to_vec(),
+        )
     }
 }
 
+/// Per miner audit state tracking commitment chain
+#[derive(Debug, Clone)]
+pub struct MinerAuditState {
+    pub current_commitment: AuditCommitment,
+    pub miner_prefix: Vec<u8>,
+    pub commitment_pending: bool,
+    pub previous_commitment: Option<AuditCommitment>,
+}
+
+impl MinerAuditState {
+    pub fn new(miner_prefix: Vec<u8>) -> Self {
+        Self {
+            current_commitment: AuditCommitment::genesis(),
+            miner_prefix,
+            commitment_pending: false,
+            previous_commitment: None,
+        }
+    }
+
+    pub fn update_commitment_audit(&mut self, bead: &Bead) {
+        self.previous_commitment = Some(self.current_commitment.clone());
+        let composite_hash = compute_audit_bead_hash(bead);
+        let new_commitment = AuditCommitment::from_bead_hash(composite_hash);
+        info!(
+            miner_prefix = %hex::encode(&self.miner_prefix),
+            old_commitment = %self.current_commitment.to_hex(),
+            new_commitment = %new_commitment.to_hex(),
+            block_hash = %bead.block_header.block_hash(),
+            composite_hash = %composite_hash,
+            "Updating miner audit commitment"
+        );
+        self.current_commitment = new_commitment;
+        self.commitment_pending = true;
+    }
+
+    pub fn verify_share(
+        &self,
+        extranonce1_bytes: &[u8],
+        extranonce2_hex: &str,
+    ) -> AuditVerificationResult {
+        if extranonce1_bytes.len() != TOTAL_EXTRANONCE1_BYTES {
+            return AuditVerificationResult::Invalid {
+                reason: format!(
+                    "Wrong extranonce1 length: expected {} bytes, got {}",
+                    TOTAL_EXTRANONCE1_BYTES,
+                    extranonce1_bytes.len()
+                ),
+            };
+        }
+        if extranonce2_hex.len() != MINER_ROLL_BYTES * 2 {
+            return AuditVerificationResult::Invalid {
+                reason: format!(
+                    "Wrong extranonce2 length: expected {} hex chars, got {}",
+                    MINER_ROLL_BYTES * 2,
+                    extranonce2_hex.len()
+                ),
+            };
+        }
+        if let Some(prefix) = AuditCommitment::extract_miner_prefix_from_ext1(extranonce1_bytes) {
+            if prefix != self.miner_prefix {
+                return AuditVerificationResult::Invalid {
+                    reason: format!(
+                        "Miner prefix mismatch: expected {}, got {}",
+                        hex::encode(&self.miner_prefix),
+                        hex::encode(&prefix)
+                    ),
+                };
+            }
+        } else {
+            return AuditVerificationResult::Invalid {
+                reason: "Could not extract miner prefix from extranonce1".to_string(),
+            };
+        }
+        if self
+            .current_commitment
+            .verify_in_extranonce1(extranonce1_bytes, &self.miner_prefix)
+        {
+            let miner_roll = hex::decode(extranonce2_hex)
+                .ok()
+                .and_then(|bytes| bytes.first().copied());
+
+            AuditVerificationResult::Valid {
+                commitment: self.current_commitment.clone(),
+                miner_roll,
+            }
+        } else {
+            let commitment_start = UPSTREAM_EXTRANONCE1_BYTES + MINER_PREFIX_BYTES;
+            let commitment_end = commitment_start + COMMITMENT_BYTES;
+            let actual = hex::encode(&extranonce1_bytes[commitment_start..commitment_end]);
+
+            AuditVerificationResult::Invalid {
+                reason: format!(
+                    "Commitment mismatch in extranonce1: expected {}, got {}",
+                    self.current_commitment.to_hex(),
+                    actual
+                ),
+            }
+        }
+    }
+
+    pub fn verify_share_with_fallback(
+        &self,
+        extranonce1_bytes: &[u8],
+        extranonce2_hex: &str,
+        previous_commitment: Option<&AuditCommitment>,
+    ) -> AuditVerificationResult {
+        let result = self.verify_share(extranonce1_bytes, extranonce2_hex);
+        if matches!(result, AuditVerificationResult::Invalid { .. }) {
+            if let Some(prev_commitment) = previous_commitment {
+                if prev_commitment.verify_in_extranonce1(extranonce1_bytes, &self.miner_prefix) {
+                    warn!(
+                        old = %prev_commitment.to_hex(),
+                        current = %self.current_commitment.to_hex(),
+                        "Share used previous commitment, accepting it as valid under conditions"
+                    );
+                    return AuditVerificationResult::Valid {
+                        commitment: prev_commitment.clone(),
+                        miner_roll: hex::decode(extranonce2_hex)
+                            .ok()
+                            .and_then(|bytes| bytes.first().copied()),
+                    };
+                }
+            }
+        }
+        result
+    }
+
+    pub fn mark_commitment_sent(&mut self) {
+        self.commitment_pending = false;
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum AuditVerificationResult {
+    Valid {
+        commitment: AuditCommitment,
+        miner_roll: Option<u8>,
+    },
+    Invalid {
+        reason: String,
+    },
+}
+
+/// Links a share to audit verification
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditRecord {
     pub share_id: ShareId,
@@ -41,66 +260,181 @@ pub struct AuditRecord {
     pub miner_ip: String,
     pub worker_name: String,
     pub job_id: String,
-    pub share_difficulty: CompactTarget,
     pub extranonce2: String,
     pub nonce: String,
     pub ntime: String,
-    pub block_hash: Option<BlockHash>,
-    pub valid: bool,
+    pub audit_verified: bool,
+    pub audit_commitment: Option<AuditCommitment>,
     pub upstream_accepted: Option<bool>,
-    pub parent_shares: Vec<ShareId>,
+    pub upstream_eligible: bool,
+    pub bead_hash: BlockHash,
 }
 
+/// Wraps Braid and adds audit verification layer
 pub struct AuditDAG {
+    /// The underlying braid structure
+    pub braid: Arc<RwLock<Braid>>,
+    /// Audit records for shares
     records: HashMap<ShareId, AuditRecord>,
-    latest_shares: HashMap<String, ShareId>,
+    /// Per miner audit state for commitment verification
+    pub miner_states: HashMap<String, MinerAuditState>,
+    /// Mapping from composite bead hash to share ID that created it
+    bead_to_share: HashMap<BlockHash, ShareId>,
 }
 
 impl AuditDAG {
-    pub fn new() -> Self {
+    pub fn new(braid: Arc<RwLock<Braid>>) -> Self {
         Self {
+            braid,
             records: HashMap::new(),
-            latest_shares: HashMap::new(),
+            miner_states: HashMap::new(),
+            bead_to_share: HashMap::new(),
         }
     }
 
-    pub async fn add_record(&mut self, mut record: AuditRecord) -> Result<ShareId, String> {
+    pub async fn add_and_record_bead(
+        &mut self,
+        mut record: AuditRecord,
+        bead: Bead,
+        extranonce1_bytes: &[u8],
+    ) -> Result<(ShareId, bool), String> {
         let share_id = record.share_id.clone();
-
-        if let Some(parent_id) = self.latest_shares.get(&record.miner_ip) {
-            record.parent_shares.push(parent_id.clone());
+        let miner_ip = record.miner_ip.clone();
+        let composite_hash = compute_audit_bead_hash(&bead);
+        if let Some(miner_state) = self.miner_states.get_mut(&miner_ip) {
+            let verification = miner_state.verify_share_with_fallback(
+                extranonce1_bytes,
+                &record.extranonce2,
+                miner_state.previous_commitment.as_ref(),
+            );
+            match verification {
+                AuditVerificationResult::Valid {
+                    commitment,
+                    miner_roll,
+                } => {
+                    record.audit_commitment = Some(commitment);
+                    record.audit_verified = true;
+                    debug!(
+                        share_id = %share_id,
+                        miner = %miner_ip,
+                        miner_roll = ?miner_roll,
+                        extranonce1 = %hex::encode(extranonce1_bytes),
+                        extranonce2 = %record.extranonce2,
+                        block_hash = %bead.block_header.block_hash(),
+                        composite_hash = %composite_hash,
+                        "Bead passed audit verification"
+                    );
+                }
+                AuditVerificationResult::Invalid { reason } => {
+                    record.audit_verified = false;
+                    error!(
+                        share_id = %share_id,
+                        miner = %miner_ip,
+                        reason = %reason,
+                        extranonce1 = %hex::encode(extranonce1_bytes),
+                        extranonce2 = %record.extranonce2,
+                        "Bead failed audit verification thus rejecting."
+                    );
+                    return Err(format!("Audit verification failed: {}", reason));
+                }
+            }
+        } else {
+            warn!(miner = %miner_ip, "No miner state for audit verification");
+            record.audit_verified = false;
+            return Err("No miner state".to_string());
         }
-
-        info!(
-            "Recording share {} from {} (job: {}, parents: {})",
-            share_id,
-            record.worker_name,
-            record.job_id,
-            record.parent_shares.len()
-        );
-
-        // Update latest share for this miner
-        self.latest_shares
-            .insert(record.miner_ip.clone(), share_id.clone());
-
-        // Store the record
+        record.bead_hash = composite_hash;
+        let mut bead_added = false;
+        {
+            let mut braid = self.braid.write().await;
+            let status = braid.extend(&bead);
+            match status {
+                AddBeadStatus::BeadAdded => {
+                    bead_added = true;
+                    info!(
+                        block_hash = %bead.block_header.block_hash(),
+                        composite_hash = %composite_hash,
+                        parents = ?bead.committed_metadata.parents,
+                        miner = %miner_ip,
+                        "Bead added to braid"
+                    );
+                }
+                AddBeadStatus::DagAlreadyContainsBead => {
+                    warn!(
+                        composite_hash = %composite_hash,
+                        "Bead already in DAG, treating as idempotent success"
+                    );
+                    // Do not return error as this process can be re-trigger by the same miner who got disconnect
+                    // for a reason but and now retrying to submit that share again
+                    bead_added = false;
+                }
+                AddBeadStatus::InvalidBead => {
+                    error!(
+                        composite_hash = %composite_hash,
+                        "Invalid bead"
+                    );
+                    return Err("Invalid bead".to_string());
+                }
+                AddBeadStatus::ParentsNotYetReceived => {
+                    warn!(
+                        composite_hash = %composite_hash,
+                        parents = ?bead.committed_metadata.parents,
+                        "Parents not yet received, treating as orphan"
+                    );
+                }
+            }
+        }
         self.records.insert(share_id.clone(), record);
-
-        info!("Audit DAG now contains {} records", self.records.len());
-
-        Ok(share_id)
+        self.bead_to_share.insert(composite_hash, share_id.clone());
+        info!(
+            composite_hash = %composite_hash,
+            block_hash = %bead.block_header.block_hash(),
+            share_id = %share_id,
+            miner = %miner_ip,
+            total_beads = %self.records.len(),
+            "Bead recorded successfully"
+        );
+        Ok((share_id, bead_added))
     }
 
-    pub fn update_upstream_result(&mut self, share_id: &ShareId, accepted: bool) {
+    pub fn mark_upstream_forwarded(&mut self, share_id: &ShareId) {
+        if let Some(record) = self.records.get_mut(share_id) {
+            record.upstream_eligible = true;
+            info!(
+                share_id = %share_id,
+                "Bead marked as forwarded to upstream"
+            );
+        }
+    }
+
+    pub fn update_upstream_response(&mut self, share_id: &ShareId, accepted: bool) {
         if let Some(record) = self.records.get_mut(share_id) {
             record.upstream_accepted = Some(accepted);
             info!(
-                "Updated share {} upstream_accepted = {}",
-                share_id, accepted
+                share_id = %share_id,
+                accepted = %accepted,
+                "Updated upstream response"
             );
-        } else {
-            warn!("Cannot update share {} - not found in record", share_id);
         }
+    }
+
+    pub fn register_miner(&mut self, miner_ip: String, prefix: Vec<u8>) {
+        let prefix_hex = hex::encode(&prefix);
+        let state = MinerAuditState::new(prefix);
+        self.miner_states.insert(miner_ip.clone(), state);
+        info!(
+            miner = %miner_ip,
+            prefix = %prefix_hex,
+            "Registered miner for audit tracking"
+        );
+    }
+
+    pub fn get_record(&self, share_id: &ShareId) -> Option<&AuditRecord> {
+        self.records.get(share_id)
+    }
+
+    pub fn get_share_for_bead(&self, bead_hash: &BlockHash) -> Option<&ShareId> {
+        self.bead_to_share.get(bead_hash)
     }
 
     pub fn get_miner_stats(&self, miner_ip: &str) -> MinerStats {
@@ -110,46 +444,51 @@ impl AuditDAG {
             .filter(|r| r.miner_ip == miner_ip)
             .collect();
 
-        let total_shares = miner_records.len();
-        let valid_shares = miner_records.iter().filter(|r| r.valid).count();
-        let accepted_shares = miner_records
+        let total_beads = miner_records.len();
+        let upstream_eligible = miner_records.iter().filter(|r| r.upstream_eligible).count();
+        let upstream_accepted = miner_records
             .iter()
             .filter(|r| r.upstream_accepted == Some(true))
             .count();
-        let rejected_shares = miner_records
+        let upstream_rejected = miner_records
             .iter()
             .filter(|r| r.upstream_accepted == Some(false))
             .count();
-        let pending_shares = miner_records
-            .iter()
-            .filter(|r| r.upstream_accepted.is_none())
-            .count();
+        let audit_verified = miner_records.iter().filter(|r| r.audit_verified).count();
+
+        let miner_state = self.miner_states.get(miner_ip);
 
         MinerStats {
-            total_shares,
-            valid_shares,
-            accepted_shares,
-            rejected_shares,
-            pending_shares,
-            rejection_rate: if total_shares > 0 {
-                rejected_shares as f64 / total_shares as f64
+            total_beads,
+            audit_verified_beads: audit_verified,
+            audit_failed_beads: total_beads - audit_verified,
+            upstream_eligible_beads: upstream_eligible,
+            upstream_accepted_beads: upstream_accepted,
+            upstream_rejected_beads: upstream_rejected,
+            current_commitment: miner_state.map(|s| s.current_commitment.to_hex()),
+            audit_rate: if total_beads > 0 {
+                audit_verified as f64 / total_beads as f64
+            } else {
+                0.0
+            },
+            upstream_acceptance_rate: if upstream_eligible > 0 {
+                upstream_accepted as f64 / upstream_eligible as f64
             } else {
                 0.0
             },
         }
     }
-
-    pub fn len(&self) -> usize {
-        self.records.len()
-    }
 }
 
 #[derive(Debug, Clone)]
 pub struct MinerStats {
-    pub total_shares: usize,
-    pub valid_shares: usize,
-    pub accepted_shares: usize,
-    pub rejected_shares: usize,
-    pub pending_shares: usize,
-    pub rejection_rate: f64,
+    pub total_beads: usize,
+    pub audit_verified_beads: usize,
+    pub audit_failed_beads: usize,
+    pub upstream_eligible_beads: usize,
+    pub upstream_accepted_beads: usize,
+    pub upstream_rejected_beads: usize,
+    pub current_commitment: Option<String>,
+    pub audit_rate: f64,
+    pub upstream_acceptance_rate: f64,
 }

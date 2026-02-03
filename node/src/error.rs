@@ -169,6 +169,9 @@ pub enum StratumErrors {
         error: std::io::Error,
     },
     InvalidCoinbase,
+    InvalidShare {
+        reason: String,
+    },
     PeerNotFoundInConnectionMapping {
         peer_addr: String,
     },
@@ -313,6 +316,9 @@ impl fmt::Display for StratumErrors {
             }
             StratumErrors::InvalidCoinbase => {
                 write!(f, "Provided coinbase is invalid")
+            }
+            StratumErrors::InvalidShare { reason } => {
+                write!(f, "Invalid share: {}", reason)
             }
             StratumErrors::ResponseWriteError { error } => {
                 write!(f, "{:?}", error)

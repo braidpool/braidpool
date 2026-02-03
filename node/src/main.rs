@@ -17,8 +17,8 @@ use libp2p::{
 use node::audit;
 use node::db::db_handlers::{fetch_beads_in_batch, prepare_bead_tuple_data};
 use node::ibd_manager::{IBD_TRIGGER_AFTER, MAX_IBD_INCOMING_THRESHOLD, MAX_IBD_RETRIES};
-use node::utils::BeadHash;
 use node::upstream_pool;
+use node::utils::BeadHash;
 use node::SwarmHandler;
 use node::{
     bead::{Bead, BeadHashes, BeadRequest, BeadResponse, BeadSyncError},
@@ -70,8 +70,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let _ibd_handler = tokio::spawn(async move {
         ibd_manager.run_ibd_handler().await;
     });
-    //False if not under ibd otherwise true at start will be in IBD by default
-    let ibd_or_not: AtomicBool = AtomicBool::new(true);
+    //False if not under ibd or in audit mode otherwise true at start will be in IBD by default
+    let ibd_or_not: AtomicBool = if args.audit {
+        AtomicBool::new(false)
+    } else {
+        AtomicBool::new(true)
+    };
     let ibd_spinlock = Arc::new(ibd_or_not);
     // Initializing the braid object with read write lock
     //for supporting concurrent readers and single writer
@@ -149,27 +153,32 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //Stratum configuration initialization
     let stratum_config = StratumServerConfig {
         audit_mode: args.audit,
+        audit_miner_difficulty: args.miner_difficulty,
         ..Default::default()
     };
     let (block_submission_tx, block_submission_rx) =
         tokio::sync::mpsc::unbounded_channel::<node::stratum::BlockSubmissionRequest>();
     //IBD notifier task after peer_discovery
     let swarm_command_sender_ref = swarm_command_sender.clone();
-    let _ibd_trigger_handler = tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_secs(IBD_TRIGGER_AFTER)).await;
-        //Sending IBD initiating command
-        match swarm_command_sender_ref
-            .send(SwarmCommand::InitiateIBD)
-            .await
-        {
-            Ok(_) => {
-                info!("IBD trigger sent");
-            }
-            Err(error) => {
-                error!(error=?error,"An error occurred while initiating IBD after waiting for peer discovery - ");
-            }
-        };
-    });
+    if !args.audit {
+        let _ibd_trigger_handler = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(IBD_TRIGGER_AFTER)).await;
+            //Sending IBD initiating command
+            match swarm_command_sender_ref
+                .send(SwarmCommand::InitiateIBD)
+                .await
+            {
+                Ok(_) => {
+                    info!("IBD trigger sent");
+                }
+                Err(error) => {
+                    error!(error=?error,"An error occurred while initiating IBD after waiting for peer discovery - ");
+                }
+            };
+        });
+    } else {
+        info!("Skipping IBD invoking, currently in audit mode.")
+    }
     //Initializing stratum server
     let mut stratum_server = Server::new(
         stratum_config,
@@ -183,7 +192,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let ipc_task_token = main_task_token.clone();
     let mut upstream_cache_for_notifier = None;
     let (upstream_ready_tx, upstream_ready_rx) = tokio::sync::oneshot::channel::<()>();
-    let (upstream_share_tx_option, upstream_configure_tx_option, audit_dag_option) = if args.audit {
+    let (
+        upstream_share_tx_option,
+        upstream_configure_tx_option,
+        audit_dag_option,
+        audit_dag_for_notifier,
+    ) = if args.audit {
         // Validate CLI arguments for audit mode
         if args.upstream_host.is_none() {
             error!("--upstream-host is required when --audit is enabled");
@@ -193,7 +207,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             error!("--upstream-username is required when --audit is enabled");
             std::process::exit(1);
         }
-
         info!("Audit mode is enabled acting as a proxy to the upstream pool");
         info!(
             "Upstream: {}:{}",
@@ -202,9 +215,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
         );
 
         // Initialize audit records
-        let audit_dag = Arc::new(Mutex::new(audit::AuditDAG::new()));
+        let audit_dag = Arc::new(Mutex::new(audit::AuditDAG::new(Arc::clone(&braid))));
+        let audit_dag_for_notifier_inner: Option<Arc<Mutex<audit::AuditDAG>>> =
+            Some(audit_dag.clone());
         let audit_dag_for_stratum = audit_dag.clone();
-
+        let audit_dag_for_audit_log = audit_dag.clone();
         // Setting upstream pool configuration from CLI args
         let upstream_config = upstream_pool::UpstreamPoolConfig {
             hostname: args.upstream_host.clone().unwrap(),
@@ -212,40 +227,106 @@ async fn main() -> Result<(), Box<dyn Error>> {
             username: args.upstream_username.clone().unwrap(),
             password: args.upstream_password.clone(),
         };
-
         // Initialize upstream cache
         let upstream_cache = upstream_pool::UpstreamCache::new();
         let upstream_cache_clone = upstream_cache.clone();
         upstream_cache_for_notifier = Some(upstream_cache.clone());
         let mining_job_map_for_upstream_cleanup = mining_job_map.clone();
-
         // For forwarding shares to upstream pool (stratum server -> upstream client), using Arc<Mutex<Receiver>> so the receiver survives reconnections,
         // Buffer 50,000 shares to survive upstream lag spikes without blocking miners
         let (upstream_share_tx, upstream_share_rx) =
             mpsc::channel::<upstream_pool::UpstreamShare>(50000);
         let upstream_share_rx = Arc::new(tokio::sync::Mutex::new(upstream_share_rx));
-
         // For receiving jobs from upstream pool (upstream client -> notifier)
         let (upstream_job_tx, upstream_job_rx) =
             mpsc::channel::<node::stratum::JobNotification>(1024);
         let upstream_job_rx = Arc::new(tokio::sync::Mutex::new(upstream_job_rx));
-
         // For receiving responses from upstream (upstream client -> stratum server)
         let (upstream_response_tx, upstream_response_rx) =
             mpsc::channel::<(String, serde_json::Value, u64)>(1024);
         let upstream_response_rx = Arc::new(tokio::sync::Mutex::new(upstream_response_rx));
-
+        let (audit_log_tx, mut audit_log_rx) =
+            tokio::sync::mpsc::channel::<(crate::audit::ShareId, serde_json::Value)>(2048);
         // For forwarding configure requests to upstream pool
         let (configure_tx, configure_rx) =
             mpsc::channel::<(serde_json::Value, u64, mpsc::Sender<serde_json::Value>)>(50000);
         let configure_rx = Arc::new(tokio::sync::Mutex::new(configure_rx));
-
         // cancellation tokens
         let upstream_response_task_token = main_task_token.clone();
         let upstream_job_task_token = main_task_token.clone();
 
         let connection_mapping_for_responses = connection_mapping.clone();
         let upstream_response_rx_clone = upstream_response_rx.clone();
+        tokio::spawn(async move {
+            info!(component = "audit", "Starting audit log listener");
+            let mut total_shares = 0u64;
+            let mut accepted_shares = 0u64;
+            let mut rejected_shares = 0u64;
+
+            while let Some((share_id, response)) = audit_log_rx.recv().await {
+                total_shares += 1;
+                let error = response.get("error").filter(|v| !v.is_null());
+                let result_is_success = match response.get("result") {
+                    Some(val) if val.is_boolean() => val.as_bool().unwrap_or(false),
+                    Some(val) if val.is_null() => true,
+                    None => error.is_none(),
+                    _ => false,
+                };
+
+                let mut dag = audit_dag_for_audit_log.lock().await;
+                dag.update_upstream_response(&share_id, result_is_success);
+                debug!(
+                    share_id = %share_id,
+                    accepted = %result_is_success,
+                    "Updated audit record with upstream response"
+                );
+                drop(dag);
+
+                if let Some(err) = error {
+                    rejected_shares += 1;
+                    warn!(
+                        component = "audit",
+                        total = total_shares,
+                        accepted = accepted_shares,
+                        rejected = rejected_shares,
+                        acceptance_rate = format!(
+                            "{:.2}%",
+                            (accepted_shares as f64 / total_shares as f64) * 100.0
+                        ),
+                        "Upstream REJECTED share: {:?}",
+                        err
+                    );
+                } else if result_is_success {
+                    accepted_shares += 1;
+                    debug!(
+                        component = "audit",
+                        total = total_shares,
+                        acceptance_rate = format!(
+                            "{:.2}%",
+                            (accepted_shares as f64 / total_shares as f64) * 100.0
+                        ),
+                        "Upstream confirmed share"
+                    );
+                } else {
+                    rejected_shares += 1;
+                    warn!(component = "audit", "Upstream returned invalid result");
+                }
+                if total_shares % 10 == 0 {
+                    info!(
+                        component = "audit",
+                        total = total_shares,
+                        accepted = accepted_shares,
+                        rejected = rejected_shares,
+                        acceptance_rate = format!(
+                            "{:.2}%",
+                            (accepted_shares as f64 / total_shares as f64) * 100.0
+                        ),
+                        "Audit statistics"
+                    );
+                }
+            }
+        });
+
         tokio::spawn(async move {
             info!("Starting upstream response handler");
             loop {
@@ -347,6 +428,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let connection_mapping_for_upstream = connection_mapping.clone();
         let upstream_task_token = main_task_token.clone();
         let mut upstream_ready_tx_option = Some(upstream_ready_tx);
+        let braid_for_upstream = braid.clone();
         tokio::spawn(async move {
             // Reconnection state
             let mut retry_count: u32 = 0;
@@ -447,6 +529,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     Some(upstream_difficulty_tx),
                     configure_rx.clone(),
                     upstream_cache_clone.clone(),
+                    Arc::clone(&braid_for_upstream),
+                    audit_log_tx.clone(),
                 );
 
                 // Mark upstream as connected
@@ -551,10 +635,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
             Some(upstream_share_tx),
             Some(configure_tx),
             Some(audit_dag_for_stratum),
+            audit_dag_for_notifier_inner,
         )
     } else {
         info!("Audit mode disabled, running in normal pool mode");
-        (None, None, None)
+        (None, None, None, None)
     };
 
     if args.audit {
@@ -587,6 +672,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 &mut latest_template_merkle_branch_ref,
                 latest_template_id_for_notifier,
                 upstream_cache_for_notifier,
+                audit_dag_for_notifier,
             )
             .await;
     });
@@ -606,11 +692,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .await;
     });
 
-    let (main_shutdown_tx, _main_shutdown_rx) =
-        mpsc::channel::<tokio::signal::unix::SignalKind>(32);
-    let main_task_token = CancellationToken::new();
-    let ipc_task_token = main_task_token.clone();
-    let args = cli::Cli::parse();
     let datadir_str = args.datadir.to_str().ok_or_else(|| {
         std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
