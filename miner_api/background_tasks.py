@@ -4,7 +4,6 @@ import logging
 
 logger = logging.getLogger("miner_api")
 
-
 class MinerPollingService:
     def __init__(self):
         self._task = None
