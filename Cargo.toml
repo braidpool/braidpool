@@ -1,7 +1,7 @@
 #Virtual workspace not creating a root package along with workspace as not needed .
 [workspace]
 members = ["node"]
-resolver = "3"
+resolver = "2"
 
 [workspace.package]
 version = "0.1.0"
