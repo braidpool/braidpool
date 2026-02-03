@@ -1,4 +1,3 @@
-// src/upstream_pool.rs
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use tokio::{
@@ -272,6 +271,7 @@ pub struct UpstreamShare {
     pub nonce: String,
     pub version_bits: Option<String>,
     pub original_request_id: u64,
+    pub share_id: crate::audit::ShareId,
 }
 
 /// Upstream pool client that acts as a miner to the upstream pool
@@ -294,8 +294,8 @@ pub struct UpstreamPoolClient {
     upstream_difficulty: Option<f64>,
     /// Next request ID to use for upstream requests
     next_request_id: u64,
-    /// Tracks pending share submissions: request_id -> (worker_name, original_request_id, sent_at)
-    pending_shares: HashMap<u64, (String, u64, std::time::Instant)>,
+    /// Tracks pending share submissions: request_id -> (worker_name, original_request_id, sent_at, share_id)
+    pending_shares: HashMap<u64, (String, u64, std::time::Instant, crate::audit::ShareId)>,
     /// Tracks pending configure requests: request_id -> response channel
     pending_requests: HashMap<u64, mpsc::Sender<Value>>,
     /// Sends updated extranonce values to the stratum server
@@ -306,6 +306,14 @@ pub struct UpstreamPoolClient {
     configure_rx: Arc<tokio::sync::Mutex<mpsc::Receiver<(Value, u64, mpsc::Sender<Value>)>>>,
     /// Shared cache for upstream responses and state
     upstream_cache: Arc<RwLock<UpstreamCache>>,
+    /// Shared reference to the Braid structure for bead/audit operations
+    braid_arc: Arc<tokio::sync::RwLock<crate::braid::Braid>>,
+    /// Channel for sending upstream share responses and events with ShareId to the audit log
+    audit_log_tx: mpsc::Sender<(crate::audit::ShareId, Value)>,
+    // Track subscribe handshake request ID
+    subscribe_req_id: Option<u64>,
+    // Track authorize handshake requet ID
+    authorize_req_id: Option<u64>,
 }
 
 impl UpstreamPoolClient {
@@ -319,6 +327,8 @@ impl UpstreamPoolClient {
         difficulty_tx: Option<mpsc::Sender<f64>>,
         configure_rx: Arc<tokio::sync::Mutex<mpsc::Receiver<(Value, u64, mpsc::Sender<Value>)>>>,
         upstream_cache: Arc<RwLock<UpstreamCache>>,
+        braid_arc: Arc<tokio::sync::RwLock<crate::braid::Braid>>,
+        audit_log_tx: mpsc::Sender<(crate::audit::ShareId, Value)>,
     ) -> Self {
         Self {
             config,
@@ -336,6 +346,10 @@ impl UpstreamPoolClient {
             difficulty_tx,
             configure_rx,
             upstream_cache,
+            braid_arc,
+            audit_log_tx,
+            subscribe_req_id: None,
+            authorize_req_id: None,
         }
     }
 
@@ -378,7 +392,7 @@ impl UpstreamPoolClient {
         {
             use std::time::Duration as StdDuration;
             let keepalive = socket2::TcpKeepalive::new()
-                .with_time(StdDuration::from_secs(30))
+                .with_time(StdDuration::from_secs(300))
                 .with_interval(StdDuration::from_secs(2))
                 .with_retries(3);
 
@@ -389,14 +403,14 @@ impl UpstreamPoolClient {
                     error: format!("Keepalive config failed: {}", e),
                 });
             }
-            info!("TCP keepalive enabled: idle=30s, interval=2s, retries=3 (dead connection detected in ~36s)");
+            info!("TCP keepalive enabled: idle=300s, interval=2s, retries=3 (dead connection detected in ~306s)");
         }
 
         #[cfg(not(target_os = "linux"))]
         {
             use std::time::Duration as StdDuration;
             let keepalive = socket2::TcpKeepalive::new()
-                .with_time(StdDuration::from_secs(30))
+                .with_time(StdDuration::from_secs(300))
                 .with_interval(StdDuration::from_secs(2));
 
             let sockref = socket2::SockRef::from(&stream);
@@ -404,10 +418,10 @@ impl UpstreamPoolClient {
                 warn!("Failed to set TCP keepalive: {}", e);
             } else {
                 #[cfg(any(target_os = "macos", target_os = "windows"))]
-                info!("TCP keepalive enabled: idle=30s, interval=2s (dead connection detected in ~60-90s, system default retries)");
+                info!("TCP keepalive enabled: idle=30s, interval=2s (dead connection detected in ~310-330s, system default retries)");
 
                 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-                info!("TCP keepalive enabled: idle=30s, interval=2s (platform-specific detection time)");
+                info!("TCP keepalive enabled: idle=300s, interval=2s (platform-specific detection time)");
             }
         }
 
@@ -421,6 +435,8 @@ impl UpstreamPoolClient {
         self.pending_requests.clear();
         self.next_request_id = 1;
         self.upstream_cache.write().await.clear();
+        self.subscribe_req_id = None;
+        self.authorize_req_id = None;
 
         // Send initial handshake
         self.send_subscribe(&mut writer).await?;
@@ -690,7 +706,7 @@ impl UpstreamPoolClient {
                     let now = std::time::Instant::now();
                     let timeout = Duration::from_secs(60);
                     let before_shares = self.pending_shares.len();
-                    self.pending_shares.retain(|request_id, (worker_name, _original_id, sent_at)| {
+                    self.pending_shares.retain(|request_id, (worker_name, _original_id, sent_at, _share_id)| {
                         let age = now.duration_since(*sent_at);
                         if age > timeout {
                             warn!(
@@ -748,6 +764,9 @@ impl UpstreamPoolClient {
         &mut self,
         writer: &mut tokio::net::tcp::OwnedWriteHalf,
     ) -> Result<(), StratumErrors> {
+        let request_id = self.next_request_id;
+        self.subscribe_req_id = Some(request_id);
+
         let subscribe_req = json!({
             "id": self.next_request_id,
             "method": "mining.subscribe",
@@ -775,6 +794,9 @@ impl UpstreamPoolClient {
         &mut self,
         writer: &mut tokio::net::tcp::OwnedWriteHalf,
     ) -> Result<(), StratumErrors> {
+        let request_id = self.next_request_id;
+        self.authorize_req_id = Some(request_id);
+
         let authorize_req = json!({
             "id": self.next_request_id,
             "method": "mining.authorize",
@@ -831,87 +853,52 @@ impl UpstreamPoolClient {
                     }
 
                     // Check if this is a pending share response
-                    if let Some((worker_name, original_request_id, _sent_at)) =
+                    if let Some((worker_name, original_request_id, _sent_at, share_id)) =
                         self.pending_shares.remove(&request_id)
                     {
                         info!(
                             "Received share response for {} (upstream_id={}, miner_id={})",
                             worker_name, request_id, original_request_id
                         );
-
-                        // Check if share was accepted or rejected
-                        if let Some(result) = msg.get("result") {
+                        let accepted = if let Some(result) = msg.get("result") {
                             if result.is_null() {
-                                // Result is null, check error field
-                                if let Some(error) = msg.get("error") {
-                                    if error.is_null() {
-                                        // Both result and error are null, but treat as success
-                                        warn!(
-                                            "Share response has null result and null error for {}",
-                                            worker_name
-                                        );
-                                    } else {
-                                        // Error is not null, share rejected
-                                        error!(
-                                            "SHARE REJECTED by upstream pool for worker: {}",
-                                            worker_name
-                                        );
-                                        error!("Error code: {:?}", error);
-                                        // Parse error details
-                                        if let Some(error_arr) = error.as_array() {
-                                            let error_code = error_arr
-                                                .get(0)
-                                                .and_then(|v| v.as_i64())
-                                                .unwrap_or(-1);
-                                            let error_msg = error_arr
-                                                .get(1)
-                                                .and_then(|v| v.as_str())
-                                                .unwrap_or("unknown");
-                                            error!("Error [{}]: {}", error_code, error_msg);
-                                        } else {
-                                            error!("Error details: {:?}", error);
-                                        }
-                                    }
-                                } else {
-                                    // Result is null but no error field
-                                    warn!(
-                                        "Share response for {} has null result and no error field",
-                                        worker_name
-                                    );
-                                }
+                                msg.get("error").map_or(false, |e| e.is_null())
                             } else {
-                                // Result is not null, check if true
-                                if result == &json!(true) {
-                                    info!(
-                                        "SHARE ACCEPTED!!! by upstream pool for worker: {}",
-                                        worker_name
-                                    );
-                                    info!("Share successfully submitted to Ocean!");
-                                } else {
-                                    warn!(
-                                        "Share response for {} has unexpected result: {:?}",
-                                        worker_name, result
-                                    );
-                                }
+                                result == &json!(true)
                             }
                         } else {
-                            // No result field at all
-                            error!("Share response for {} missing 'result' field", worker_name);
+                            false
+                        };
+                        if accepted {
+                            info!("SHARE ACCEPTED by upstream pool for {}", worker_name);
+                        } else {
+                            error!("SHARE REJECTED by upstream pool for {}", worker_name);
+                            if let Some(error) = msg.get("error") {
+                                if let Some(error_arr) = error.as_array() {
+                                    let error_code =
+                                        error_arr.get(0).and_then(|v| v.as_i64()).unwrap_or(-1);
+                                    let error_msg = error_arr
+                                        .get(1)
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("unknown");
+                                    error!("Rejection details [{}]: {}", error_code, error_msg);
+                                } else {
+                                    error!("Rejection reason: {:?}", error);
+                                }
+                            }
                         }
-
-                        // Forward the response back to main.rs
                         if let Err(e) = self
-                            .response_tx
-                            .send((worker_name.clone(), msg.clone(), original_request_id))
+                            .audit_log_tx
+                            .send((share_id.clone(), msg.clone()))
                             .await
                         {
-                            error!("Failed to forward share response to main: {}", e);
+                            error!("Failed to send to audit log: {}", e);
                         }
                         return Ok(());
                     }
 
                     // Handle subscribe response
-                    if request_id == 1
+                    if Some(request_id) == self.subscribe_req_id
                         && msg.get("result").is_some()
                         && msg.get("error").map_or(true, |e| e.is_null())
                     {
@@ -1006,8 +993,8 @@ impl UpstreamPoolClient {
                         return Ok(());
                     }
 
-                    // Handle authorize response (id=2 typically)
-                    if request_id == 2 && msg.get("result").is_some() {
+                    // Handle authorize response
+                    if Some(request_id) == self.authorize_req_id && msg.get("result").is_some() {
                         if let Some(result) = msg.get("result") {
                             if result == &json!(true) {
                                 info!("Upstream authorize successful!");
@@ -1045,7 +1032,38 @@ impl UpstreamPoolClient {
                         job.job_id, job.clean_jobs
                     );
                     debug!("Upstream parsed job: {:?}", job);
-                    let should_log_stats = self.next_request_id % 10 == 0;
+
+                    let bead_hash = {
+                        let braid = self.braid_arc.read().await;
+
+                        if let Some(&latest_tip_idx) = braid.tips.iter().next() {
+                            if let Some(bead) = braid.beads.get(latest_tip_idx) {
+                                crate::audit::compute_audit_bead_hash(bead)
+                            } else {
+                                bitcoin::BlockHash::from_byte_array([0u8; 32])
+                            }
+                        } else {
+                            bitcoin::BlockHash::from_byte_array([0u8; 32])
+                        }
+                    };
+                    if let Err(e) = self
+                        .notification_tx
+                        .send(NotifyCmd::UpdateExtranonce {
+                            new_bead_hash: bead_hash,
+                        })
+                        .await
+                    {
+                        error!(
+                            bead_hash = %bead_hash,
+                            error = %e,
+                            "Failed to send extranonce update command to notifier"
+                        );
+                    } else {
+                        debug!(
+                            bead_hash = %bead_hash,
+                            "Sent extranonce update command to notifier"
+                        );
+                    }
 
                     // cache the job
                     {
@@ -1053,6 +1071,7 @@ impl UpstreamPoolClient {
                         cache.set_latest_job(job.clone());
                     }
 
+                    let should_log_stats = self.next_request_id % 10 == 0;
                     // Log cache stats every 10 jobs
                     if should_log_stats {
                         let cache = self.upstream_cache.read().await;
@@ -1407,6 +1426,7 @@ impl UpstreamPoolClient {
                 share.worker_name.clone(),
                 share.original_request_id,
                 std::time::Instant::now(),
+                share.share_id.clone(),
             ),
         );
         let msg = format!("{}\n", submit_req);
