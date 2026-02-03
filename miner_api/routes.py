@@ -48,6 +48,3 @@ async def get_miner_data_live(
     """Query miner directly in real-time."""
     result = await MinerService.get_miner_data(ip)
     return result
-
-
-
