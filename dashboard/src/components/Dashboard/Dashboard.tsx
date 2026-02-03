@@ -9,8 +9,14 @@ import NodeHealth from '../NodeHealth/NodeHealth';
 import BitcoinStats from '../BitcoinStats/BitcoinStats';
 import { Page } from './Types';
 import BlockViewer from './BlockViewer';
+import { ThemeType } from '../../theme/colors';
 
-const Dashboard = () => {
+interface DashboardProps {
+  currentTheme: ThemeType;
+  setCurrentTheme: (theme: ThemeType) => void;
+}
+
+const Dashboard = ({ currentTheme, setCurrentTheme }: DashboardProps) => {
   const [currentPage, setCurrentPage] = useState<Page>(Page.DASHBOARD);
 
   // Render the main content based on selected page
@@ -92,11 +98,13 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#121212]">
+    <div className="min-h-screen bg-background">
       <Header
         title="Braidpool"
         currentPage={currentPage}
         setCurrentPage={setCurrentPage}
+        currentTheme={currentTheme}
+        setCurrentTheme={setCurrentTheme}
       />
       <main
         className="flex-grow w-full pt-16 px-3 md:px-8"

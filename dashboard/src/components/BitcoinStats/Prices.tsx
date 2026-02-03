@@ -156,7 +156,7 @@ const BitcoinPriceTracker: React.FC = () => {
     <div className="p-4">
       {/* Currency Selector */}
       <div className="flex flex-wrap justify-center items-center gap-4 md:gap-20 p-4 md:p-6 rounded-lg shadow-sm mb-6">
-        <label className="block text-lg font-medium text-white mb-1">
+        <label className="block text-lg font-medium text-textPrimary mb-1">
           Currency
         </label>
         <select
@@ -174,7 +174,7 @@ const BitcoinPriceTracker: React.FC = () => {
             {currency}
           </option>
           {CURRENCIES.filter((curr) => curr !== currency).map((curr) => (
-            <option key={curr} className="bg-gray-500" value={curr}>
+            <option key={curr} className="bg-paper" value={curr}>
               {curr}
             </option>
           ))}
@@ -184,7 +184,7 @@ const BitcoinPriceTracker: React.FC = () => {
       {/* Price Display */}
       <div className="flex flex-wrap justify-center items-center gap-4 md:gap-20 p-4 md:p-6 rounded-lg shadow-sm mb-6">
         {error ? (
-          <div className="w-full p-3 bg-red-100 text-red-700 rounded-md">
+          <div className="w-full p-3 bg-red-100 text-red-700 rounded-md border border-red-300">
             {error}
           </div>
         ) : showSkeletons ? (
@@ -205,9 +205,7 @@ const BitcoinPriceTracker: React.FC = () => {
             ].map(({ label, skeletonClass }) => (
               <div key={label} className="flex flex-col gap-1 items-center">
                 <span className="text-sm text-gray-500">{label}</span>
-                <div
-                  className={`animate-pulse bg-gray-200 rounded ${skeletonClass}`}
-                />
+                <div className="animate-pulse bg-paper rounded border border-border ${skeletonClass}" />
               </div>
             ))}
           </div>
@@ -250,7 +248,7 @@ const BitcoinPriceTracker: React.FC = () => {
                   </svg>
                 )}
               </div>
-              <span className="text-sm text-gray-500">
+              <span className="text-sm text-textSecondary">
                 Current Price in {currency}
               </span>
             </div>
@@ -260,7 +258,7 @@ const BitcoinPriceTracker: React.FC = () => {
                 {priceData.currencySymbol}
                 {formatPrice(priceData.low24h)}
               </p>
-              <span className="text-sm text-gray-500">24h Low</span>
+              <span className="text-sm text-textSecondary">24h Low</span>
             </div>
             {/* Display 24h High */}
             <div className="flex flex-col">
@@ -268,7 +266,7 @@ const BitcoinPriceTracker: React.FC = () => {
                 {priceData.currencySymbol}
                 {formatPrice(priceData.high24h)}
               </p>
-              <span className="text-sm text-gray-500">24h High</span>
+              <span className="text-sm text-textSecondary">24h High</span>
             </div>
           </>
         ) : null}
@@ -285,8 +283,8 @@ const BitcoinPriceTracker: React.FC = () => {
             'Last Updated',
           ].map((label) => (
             <div key={label} className="flex flex-col gap-1 items-center">
-              <span className="text-sm text-gray-500">{label}</span>
-              <div className="animate-pulse bg-gray-200 rounded h-6 w-24"></div>
+              <span className="text-sm text-textSecondary">{label}</span>
+              <div className="animate-pulse bg-paper border border-border rounded h-6 w-24"></div>
             </div>
           ))}
         </div>
@@ -299,26 +297,26 @@ const BitcoinPriceTracker: React.FC = () => {
 
           <div className="flex flex-col">
             <p className="text-base">{globalStats.activeCryptocurrencies}</p>
-            <span className="text-sm text-gray-500">
+            <span className="text-sm text-textSecondary">
               Active Cryptocurrencies
             </span>
           </div>
 
           <div className="flex flex-col">
             <p className="text-base">{globalStats.activeMarkets}</p>
-            <span className="text-sm text-gray-500">Active Markets</span>
+            <span className="text-sm text-textSecondary">Active Markets</span>
           </div>
 
           <div className="flex flex-col">
             <p className="text-base">
               {globalStats.bitcoinDominance.toFixed(2)}%
             </p>
-            <span className="text-sm text-gray-500">BTC Dominance</span>
+            <span className="text-sm text-textSecondary">BTC Dominance</span>
           </div>
 
           <div className="flex flex-col">
             <p className="text-base">{globalStats.lastUpdated}</p>
-            <span className="text-sm text-gray-500">Last Updated</span>
+            <span className="text-sm text-textSecondary">Last Updated</span>
           </div>
         </div>
       ) : null}
@@ -328,7 +326,7 @@ const BitcoinPriceTracker: React.FC = () => {
         {/* Price Range Bar Chart */}
         <div className="flex flex-col w-full h-80 -mx-6 sm:mx-0 px-6 sm:px-0">
           <p className="font-semibold text-base">Bitcoin Price Range (24h)</p>
-          <span className="text-sm text-gray-500 mb-2">
+          <span className="text-sm text-textSecondary mb-2">
             Displays the 24-hour low, current, and 24-hour high prices in{' '}
             {currency}
           </span>
@@ -372,17 +370,23 @@ const BitcoinPriceTracker: React.FC = () => {
               />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: 'black',
-                  border: '1px solid #ccc',
+                  backgroundColor: 'var(--color-paper)',
+                  border: '1px solid var(--color-border)',
                   fontSize: '12px',
+                  color: 'var(--color-text-primary)',
                 }}
                 formatter={(value) => [
                   `${getCurrencySymbol(currency)}${formatPrice(Number(value))}`,
                   'Price',
                 ]}
               />
-              <Legend wrapperStyle={{ fontSize: '12px' }} />
-              <Bar dataKey="value" fill="#8884d8" />
+              <Legend
+                wrapperStyle={{
+                  fontSize: '12px',
+                  color: 'var(--color-text-primary)',
+                }}
+              />
+              <Bar dataKey="value" fill="var(--color-primary)" />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -392,7 +396,7 @@ const BitcoinPriceTracker: React.FC = () => {
           <p className="font-semibold text-base">
             Bitcoin Price History (Live)
           </p>
-          <span className="text-sm text-gray-500 mb-2">
+          <span className="text-sm text-textSecondary mb-2">
             Live updates in {currency}
           </span>
           <ResponsiveContainer width="99%" height="100%">
@@ -410,8 +414,9 @@ const BitcoinPriceTracker: React.FC = () => {
               />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: 'black',
-                  border: '1px solid #ccc',
+                  backgroundColor: 'var(--color-paper)',
+                  border: '1px solid var(--color-border)',
+                  color: 'var(--color-text-primary)',
                 }}
                 formatter={(value) => [
                   `${getCurrencySymbol(currency)}${formatPrice(Number(value))}`,
@@ -422,7 +427,7 @@ const BitcoinPriceTracker: React.FC = () => {
               <Line
                 type="monotone"
                 dataKey="price"
-                stroke="#8884d8"
+                stroke="var(--color-primary)"
                 dot={false}
                 isAnimationActive={false}
               />
@@ -436,11 +441,11 @@ const BitcoinPriceTracker: React.FC = () => {
         {/* Fear-Greed Meter */}
         <div className="flex flex-col">
           <p className="font-semibold text-base">Fear & Greed Index</p>
-          <span className="text-sm text-gray-500 mb-3">
+          <span className="text-sm text-textSecondary mb-3">
             Market sentiment indicator
           </span>
 
-          <div className="w-full aspect-[4/3] max-w-lg mx-auto border border-gray-700 rounded-lg flex items-center justify-center">
+          <div className="w-full aspect-[4/3] max-w-lg mx-auto border border-border rounded-lg flex items-center justify-center">
             <img
               src="https://alternative.me/crypto/fear-and-greed-index.png"
               alt="Latest Crypto Fear & Greed Index"
@@ -452,10 +457,10 @@ const BitcoinPriceTracker: React.FC = () => {
         {/* Market Trends */}
         <div className="flex flex-col">
           <p className="font-semibold text-base">Market Trends</p>
-          <span className="text-sm text-gray-500 mb-3">Coming soon...</span>
+          <span className="text-sm text-textSecondary mb-3">Coming soon...</span>
 
-          <div className="w-full aspect-[4/3] max-w-lg mx-auto border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center">
-            <p className="text-gray-500">Additional visualization</p>
+          <div className="w-full aspect-[4/3] max-w-lg mx-auto border-2 border-dashed border-border rounded-lg flex items-center justify-center">
+            <p className="text-textSecondary">Additional visualization</p>
           </div>
         </div>
       </div>

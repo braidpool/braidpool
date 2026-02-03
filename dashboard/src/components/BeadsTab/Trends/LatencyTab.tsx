@@ -133,7 +133,10 @@ export default function LatencyTab({ timeRange }: { timeRange: string }) {
   // ✅ Loading UI
   if (isLoading || !isConnected) {
     return (
-      <div className="p-8 text-center text-gray-400">
+      <div
+        style={{ color: 'var(--color-text-secondary)' }}
+        className="p-8 text-center"
+      >
         Loading latency data...
       </div>
     );
@@ -144,13 +147,27 @@ export default function LatencyTab({ timeRange }: { timeRange: string }) {
     <div className="space-y-4 ">
       <div className="flex justify-between items-center">
         <div>
-          <h3 className="text-xl font-bold text-blue-300">Network Latency</h3>
-          <p className="text-sm text-gray-400 mt-1">
+          <h3
+            style={{ color: 'var(--color-primary)' }}
+            className="text-xl font-bold"
+          >
+            Network Latency
+          </h3>
+          <p
+            style={{ color: 'var(--color-text-secondary)' }}
+            className="text-sm mt-1"
+          >
             Real-time latency measurements from peer nodes
           </p>
         </div>
-        <div className="bg-purple-900/30 px-3 py-1 rounded-md">
-          <span className="text-purple-300 font-mono">
+        <div
+          style={{
+            backgroundColor: 'var(--color-surface)',
+            color: 'var(--color-text-primary)',
+          }}
+          className="px-3 py-1 rounded-md"
+        >
+          <span className="font-mono">
             Avg: {latencyData.averageLatency} | {latencyData.validPings}/
             {latencyData.peerCount} peers
           </span>

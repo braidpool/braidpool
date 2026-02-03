@@ -19,9 +19,9 @@ export default function BeadRow({
 
   const { copied, copy } = useCopyToClipboard();
   return (
-    <div className="border-b border-gray-800/80">
+    <div className="border-b border-border">
       <div
-        className="grid max-md:grid-cols-3 md:grid-cols-5 gap-2 p-4 cursor-pointer hover:bg-gray-600"
+        className="grid max-md:grid-cols-3 md:grid-cols-5 gap-2 p-4 cursor-pointer hover:bg-paper/50 transition-colors"
         onClick={() => onToggle(bead.id)}
         onKeyDown={handleKeyToggle}
         role="button"
@@ -35,7 +35,7 @@ export default function BeadRow({
             <ChevronDown className="h-5 w-5 text-blue-400" />
           </div>
           <span
-            className={`text-sm sm:text-base truncate ${isExpanded ? 'text-white' : 'text-blue-200'}
+            className={`text-sm sm:text-base truncate ${isExpanded ? 'text-primary' : 'text-primary'}
         font-medium font-mono`}
           >
             {bead.name.replace(/^#/, '')}
@@ -43,27 +43,29 @@ export default function BeadRow({
         </div>
 
         {/* Timestamp */}
-        <div className="text-white text-sm sm:text-base">{bead.timestamp}</div>
+        <div className="text-textPrimary text-sm sm:text-base">
+          {bead.timestamp}
+        </div>
 
         {/* Work */}
-        <div className="text-white font-medium text-sm sm:text-base">
+        <div className="text-textPrimary font-medium text-sm sm:text-base">
           {formattedWork} {workUnit}
         </div>
 
         {/* Transactions */}
-        <div className="text-white font-medium text-sm sm:text-base max-md:hidden">
+        <div className="text-textPrimary font-medium text-sm sm:text-base max-md:hidden">
           {bead.transactions}
         </div>
 
         {/* Reward */}
-        <div className="text-white font-medium text-sm sm:text-base max-md:hidden">
+        <div className="text-textPrimary font-medium text-sm sm:text-base max-md:hidden">
           {`${bead.reward.toFixed(2)} BTC`}
         </div>
       </div>
 
       {/* Parents */}
       {bead.parents?.length > 0 && (
-        <div className="pl-4 sm:pl-10 pr-4 py-2 bg-gray-900/20 border-t border-b border-gray-800/50 overflow-x-auto">
+        <div className="pl-4 sm:pl-10 pr-4 py-2 bg-paper/20 border-t border-b border-border overflow-x-auto">
           <div className="flex flex-wrap items-center gap-2 min-w-0">
             <span className="text-blue-300 font-medium text-sm whitespace-nowrap">
               Parents:
@@ -72,7 +74,7 @@ export default function BeadRow({
               {bead.parents.map((parent) => (
                 <div key={parent} className="relative">
                   <button
-                    className="text-white font-mono text-xs sm:text-sm hover:text-cyan-300 hover:underline truncate max-w-[150px] sm:max-w-[200px]"
+                    className="text-textPrimary font-mono text-xs sm:text-sm hover:text-cyan-300 hover:underline truncate max-w-[150px] sm:max-w-[200px]"
                     onClick={(e) => {
                       e.stopPropagation();
                       copy(parent);

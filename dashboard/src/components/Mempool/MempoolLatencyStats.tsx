@@ -123,7 +123,7 @@ const MempoolLatencyStats = () => {
   );
 
   return (
-    <div className="flex flex-col gap-8 p-6 text-gray-100">
+    <div className="flex flex-col gap-8 p-6 text-textPrimary">
       {/* --- Overview --- */}
       <section className="rounded-xl p-3 shadow-sm">
         <div className="grid sm:grid-cols-1 md:grid-cols-4 gap-4 mb-6">
@@ -152,7 +152,7 @@ const MempoolLatencyStats = () => {
 
         {/* --- Fee Estimates --- */}
         <div className="mb-6">
-          <h3 className="text-sm uppercase text-gray-400 mb-2">
+          <h3 className="text-sm uppercase text-textSecondary mb-2">
             Fee Estimates
           </h3>
           <div className="grid sm:grid-cols-1 md:grid-cols-4 lg:grid-cols-4 gap-4">
@@ -197,15 +197,18 @@ const MempoolLatencyStats = () => {
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={feeDistChartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis dataKey="name" stroke="#9ca3af" />
-                <YAxis stroke="#9ca3af" />
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke={colors.chartGrid}
+                />
+                <XAxis dataKey="name" stroke={colors.textSecondary} />
+                <YAxis stroke={colors.textSecondary} />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: '#1f2937',
+                    backgroundColor: colors.paper,
                     borderRadius: '8px',
                     border: 'none',
-                    color: '#ffffff',
+                    color: colors.textPrimary,
                     padding: '10px',
                     fontSize: '14px',
                   }}
@@ -227,7 +230,7 @@ const MempoolLatencyStats = () => {
             onChange={(e) =>
               setSelectedView(e.target.value as typeof selectedView)
             }
-            className="px-4 py-2 bg-[#1a1a1a] text-gray-300 rounded-md shadow-md border border-white"
+            className="bg-paper text-textPrimary px-4 py-2 rounded-md shadow-md border border-border"
           >
             <option value={selectedView} hidden disabled>
               {selectedView.toUpperCase()}
@@ -244,15 +247,15 @@ const MempoolLatencyStats = () => {
 
         <ResponsiveContainer width="100%" height={400}>
           <LineChart data={blockFeeChartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-            <XAxis dataKey="time" stroke="#9ca3af" />
-            <YAxis stroke="#9ca3af" />
+            <CartesianGrid strokeDasharray="3 3" stroke={colors.chartGrid} />
+            <XAxis dataKey="time" stroke={colors.textSecondary} />
+            <YAxis stroke={colors.textSecondary} />
             <Tooltip
               contentStyle={{
-                backgroundColor: '#1f2937',
+                backgroundColor: colors.paper,
                 borderRadius: '8px',
                 border: 'none',
-                color: '#ffffff',
+                color: colors.textPrimary,
                 padding: '15px',
                 fontSize: '14px',
               }}

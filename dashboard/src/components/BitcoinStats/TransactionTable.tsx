@@ -10,10 +10,10 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
   const [selectedTx, setSelectedTx] = useState<string | null>(null);
   return (
     <div
-      className="rounded-2xl border border-white/10 bg-[#1e1e1e] shadow-md p-4"
+      className="rounded-2xl border border-border bg-paper shadow-md p-4"
       style={{ borderColor: colors.cardAccentSecondary }}
     >
-      <div className="mb-2  text-gray-400">Latest Transactions</div>
+      <div className="mb-2 text-textSecondary">Latest Transactions</div>
       <div
         className="overflow-auto rounded-md scrollbar-thin"
         style={{
@@ -57,7 +57,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
               <tr>
                 <td
                   colSpan={4}
-                  className="p-4 text-center text-sm text-gray-400"
+                  className="p-4 text-center text-sm text-textSecondary"
                 >
                   No transactions found
                 </td>
@@ -67,7 +67,9 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                 <tr
                   key={tx.txid}
                   className={`transition-colors duration-150 ${
-                    selectedTx === tx.txid ? 'bg-white/10' : 'hover:bg-white/10'
+                    selectedTx === tx.txid
+                      ? 'bg-primary/20'
+                      : 'hover:bg-primary/10'
                   }`}
                   onClick={() => setSelectedTx(tx.txid)}
                 >
@@ -81,7 +83,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                       </span>
                       <div
                         className="absolute z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 
-                  bg-gray-800 text-white p-2 rounded shadow-lg text-xs whitespace-nowrap
+                  bg-paper text-textPrimary border border-border p-2 rounded shadow-lg text-xs whitespace-nowrap
                   left-full top-1/2 -translate-y-1/2 ml-2"
                       >
                         {tx.txid}

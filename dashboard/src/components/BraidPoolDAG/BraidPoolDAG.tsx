@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import * as d3 from 'd3';
 import { Loader } from 'lucide-react';
 import { GraphData, GraphNode, NodeIdMapping, Position } from './Types';
+import colors from '../../theme/colors';
 import {
   layoutNodes,
   getEllipseEdgePoint,
@@ -233,12 +234,12 @@ const GraphVisualization: React.FC = () => {
         .selectAll('.node')
         .filter((d: any) => firstCohort.includes(d.id))
         .select('ellipse')
-        .attr('stroke', '#FF8500')
+        .attr('stroke', colors.secondary)
         .attr('stroke-width', 3)
         .transition()
         .duration(1000)
         .attr('stroke-width', 2)
-        .attr('stroke', '#fff');
+        .attr('stroke', colors.nodeStroke);
     }
 
     // Animate last cohort nodes
@@ -247,12 +248,12 @@ const GraphVisualization: React.FC = () => {
         .selectAll('.node')
         .filter((d: any) => lastCohort.includes(d.id))
         .select('ellipse')
-        .attr('stroke', '#FF8500')
+        .attr('stroke', colors.secondary)
         .attr('stroke-width', 3)
         .transition()
         .duration(1000)
         .attr('stroke-width', 2)
-        .attr('stroke', '#fff');
+        .attr('stroke', colors.nodeStroke);
     }
 
     if (firstCohort.length > 0) {
@@ -263,7 +264,7 @@ const GraphVisualization: React.FC = () => {
             firstCohort.includes(d.source) || firstCohort.includes(d.target)
         )
         .attr('stroke-width', 2)
-        .attr('stroke', '#FF8500');
+        .attr('stroke', colors.secondary);
 
       animateLinkDirection(selectedLinks);
     }
@@ -277,7 +278,7 @@ const GraphVisualization: React.FC = () => {
             lastCohort.includes(d.source) || lastCohort.includes(d.target)
         )
         .attr('stroke-width', 2)
-        .attr('stroke', '#FF8500');
+        .attr('stroke', colors.secondary);
 
       animateLinkDirection(selectedLinks);
     }
@@ -324,9 +325,9 @@ const GraphVisualization: React.FC = () => {
       .select(tooltipRef.current)
       .style('position', 'fixed')
       .style('visibility', 'hidden')
-      .style('background', '#0077B6')
-      .style('color', 'white')
-      .style('border', '1px solid #FF8500')
+      .style('background', colors.paper)
+      .style('color', colors.textPrimary)
+      .style('border', `1px solid ${colors.secondary}`)
       .style('border-radius', '5px')
       .style('padding', '10px')
       .style('box-shadow', '2px 2px 5px rgba(0,0,0,0.2)')
@@ -491,8 +492,8 @@ const GraphVisualization: React.FC = () => {
       })
       .attr('stroke', (d) =>
         hwPathSet.has(d.source) && hwPathSet.has(d.target)
-          ? '#FF8500'
-          : '#48CAE4'
+          ? colors.secondary
+          : colors.primaryLight
       )
       .attr('stroke-width', 1.5)
       .attr('marker-end', (d) =>
@@ -524,8 +525,8 @@ const GraphVisualization: React.FC = () => {
             .attr('height', nodeRadius * 2)
             .attr('rx', 5) // rounded corners
             .attr('ry', 5)
-            .attr('fill', 'red') // Red for the highlighted bead
-            .attr('stroke', '#fff')
+            .attr('fill', colors.tipNode) // Red for the highlighted bead
+            .attr('stroke', colors.nodeStroke)
             .attr('stroke-width', 2);
         } else {
           nodeSelection
@@ -538,14 +539,14 @@ const GraphVisualization: React.FC = () => {
               if (cohortIndex === undefined) return COLORS[0];
               return COLORS[cohortIndex % COLORS.length];
             })
-            .attr('stroke', '#fff')
+            .attr('stroke', colors.nodeStroke)
             .attr('stroke-width', 2);
         }
       })
       .on('mouseover', function (event: MouseEvent, d: GraphNode) {
         d3.select(this)
           .select('ellipse, rect')
-          .attr('stroke', '#FF8500')
+          .attr('stroke', colors.secondary)
           .attr('stroke-width', 3);
 
         const cohortIndex = cohortMap.get(d.id);
@@ -567,7 +568,7 @@ const GraphVisualization: React.FC = () => {
       .on('mouseout', function () {
         d3.select(this)
           .select('ellipse, rect')
-          .attr('stroke', '#fff')
+          .attr('stroke', colors.nodeStroke)
           .attr('stroke-width', 2);
         tooltip.style('visibility', 'hidden');
       });
@@ -577,7 +578,7 @@ const GraphVisualization: React.FC = () => {
       .attr('dy', 5)
       .attr('text-anchor', 'middle')
       .text((d) => `${d.id.slice(-4)}`)
-      .attr('fill', '#fff')
+      .attr('fill', colors.textPrimary)
       .style('font-size', 25)
       .on('mouseover', function (event: MouseEvent, d: GraphNode) {
         const cohortIndex = cohortMap.get(d.id);
@@ -609,8 +610,8 @@ const GraphVisualization: React.FC = () => {
       .append('defs')
       .selectAll('marker')
       .data([
-        { id: 'arrow-blue', color: '#48CAE4' },
-        { id: 'arrow-orange', color: '#FF8500' },
+        { id: 'arrow-blue', color: colors.primaryLight },
+        { id: 'arrow-orange', color: colors.secondary },
       ])
       .enter()
       .append('marker')
@@ -672,7 +673,7 @@ const GraphVisualization: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen p-2 bg-gray">
+    <div className="min-h-screen p-2 bg-background">
       <div className="m-2 relative flex gap-2 items-center">
         <select
           value={selectedCohorts}
@@ -680,7 +681,7 @@ const GraphVisualization: React.FC = () => {
             const value = e.target.value;
             setSelectedCohorts(value === 'all' ? 'all' : Number(value));
           }}
-          className="px-2 py-1 rounded border border-[#0077B6] bg-gray text-[#0077B6]"
+          className="px-2 py-1 rounded border border-primary bg-paper text-primary"
         >
           <option value="all">Show all cohorts</option>
           {[1, 2, 3, 4, 5].map((value) => (
@@ -718,33 +719,33 @@ const GraphVisualization: React.FC = () => {
       </div>
 
       <div className="m-2 relative">
-        <div className="border border-[#FF8500] rounded-lg bg-gray shadow-lg">
+        <div className="border border-border rounded-lg bg-paper shadow-lg">
           <svg ref={svgRef} width={width} height={height} />
           <div
             ref={tooltipRef}
-            className="fixed bg-[#0077B6] text-white border border-[#FF8500] rounded p-2 shadow-lg pointer-events-none z-10 bottom-5 right-5"
+            className="fixed bg-paper text-textPrimary border border-secondary rounded p-2 shadow-lg pointer-events-none z-10 bottom-5 right-5"
           ></div>
         </div>
       </div>
 
-      <div className="m-2 border border-[#0077B6] rounded-lg bg-gray shadow-lg p-4">
-        <h3 className="text-xl font-semibold text-[#FF8500] mb-4">Metrics</h3>
+      <div className="m-2 border border-border rounded-lg bg-paper shadow-lg p-4">
+        <h3 className="text-xl font-semibold text-textPrimary mb-4">Metrics</h3>
         <div className="flex flex-col gap-2">
-          <div className="font-medium text-[#0077B6]">
+          <div className="font-medium text-textSecondary">
             Total Beads:{' '}
-            <span className="font-normal text-[#FF8500]">{totalBeads}</span>
+            <span className="font-normal text-primary">{totalBeads}</span>
           </div>
-          <div className="font-medium text-[#0077B6]">
+          <div className="font-medium text-textSecondary">
             Total Cohorts:{' '}
-            <span className="font-normal text-[#FF8500]">{totalCohorts}</span>
+            <span className="font-normal text-primary">{totalCohorts}</span>
           </div>
-          <div className="font-medium text-[#0077B6]">
+          <div className="font-medium text-textSecondary">
             Max Cohort Size:{' '}
-            <span className="font-normal text-[#FF8500]">{maxCohortSize}</span>
+            <span className="font-normal text-primary">{maxCohortSize}</span>
           </div>
-          <div className="font-medium text-[#0077B6]">
+          <div className="font-medium text-textSecondary">
             HWP Length:{' '}
-            <span className="font-normal text-[#FF8500]">{hwpLength}</span>
+            <span className="font-normal text-primary">{hwpLength}</span>
           </div>
         </div>
       </div>

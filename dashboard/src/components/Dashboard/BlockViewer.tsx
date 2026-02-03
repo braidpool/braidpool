@@ -100,7 +100,7 @@ const BlockViewer: React.FC = () => {
   if (allBlocks.length === 0) {
     return (
       <div className="flex items-center justify-center h-50 p-4">
-        <div className="text-white">No blocks available</div>
+        <div className="text-textPrimary">No blocks available</div>
       </div>
     );
   }
@@ -111,7 +111,9 @@ const BlockViewer: React.FC = () => {
   return (
     <div className="max-w-screen w-full overflow-x-hidden">
       <div className="p-4">
-        <h2 className="text-white text-xl font-bold mb-4">Block Explorer</h2>
+        <h2 className="text-textPrimary text-xl font-bold mb-4">
+          Block Explorer
+        </h2>
         <div
           className="flex items-end gap-4 overflow-x-auto pb-4"
           style={{
@@ -160,14 +162,14 @@ const BlockViewer: React.FC = () => {
                 </div>
 
                 {/* Block footer */}
-                <div className="w-full bg-gray-800 rounded-b-md p-3">
-                  <div className="text-white text-center text-sm">
+                <div className="w-full bg-paper rounded-b-md p-3 border border-t-0 border-border">
+                  <div className="text-textPrimary text-center text-sm">
                     Height: {block.height}
                   </div>
                   <div className="text-yellow-400 text-center text-xs">
                     {minFee} - {maxFee} sat/vB
                   </div>
-                  <div className="text-gray-400 text-center text-xs mt-1">
+                  <div className="text-textSecondary text-center text-xs mt-1">
                     ~{Math.round(block.extras?.medianFee) || 0} sat/vB median
                   </div>
                 </div>
@@ -176,7 +178,7 @@ const BlockViewer: React.FC = () => {
           })}
         </div>
 
-        <div className="text-gray-500 text-xs mt-2">
+        <div className="text-textSecondary text-xs mt-2">
           {isConnected ? (
             <span className="text-green-400">●</span>
           ) : (

@@ -152,7 +152,7 @@ export default function MinedSharesExplorer() {
   };
 
   return (
-    <div className="min-h-screen  text-white relative">
+    <div className="min-h-screen text-textPrimary relative">
       <div className="container mx-auto px-2 sm:px-4 py-8">
         <DashboardHeader activeTab={activeTab} setActiveTab={setActiveTab} />
 
@@ -162,8 +162,8 @@ export default function MinedSharesExplorer() {
               <div className=" rounded-sm overflow-hidden">
                 {/* Table header */}
                 <div
-                  className="grid max-md:grid-cols-3 md:grid-cols-5  p-4 border-b text-xs sm:text-sm md:text-base
- gap-4 border-gray-800/80 font-medium"
+                  className="grid max-md:grid-cols-3 md:grid-cols-5 p-4 border-b text-xs sm:text-sm md:text-base
+ gap-4 border-border font-medium"
                 >
                   {[
                     { label: 'Bead Hash' },
@@ -174,7 +174,7 @@ export default function MinedSharesExplorer() {
                   ].map(({ label, className }) => (
                     <div
                       key={label}
-                      className={`text-white font-semibold ${className || ''}`}
+                      className={`text-textPrimary font-semibold ${className || ''}`}
                     >
                       {label}
                     </div>
@@ -183,19 +183,19 @@ export default function MinedSharesExplorer() {
 
                 {!wsConnected ? (
                   <div className="p-8 text-center">
-                    <div className="text-gray-400 mb-4">
+                    <div className="text-textSecondary mb-4">
                       Connecting to server...
                     </div>
-                    <div className="h-12 bg-gray-800/50 rounded-md animate-pulse mb-4"></div>
-                    <div className="h-12 bg-gray-800/50 rounded-md animate-pulse"></div>
+                    <div className="h-12 bg-paper/50 rounded-md animate-pulse mb-4"></div>
+                    <div className="h-12 bg-paper/50 rounded-md animate-pulse"></div>
                   </div>
                 ) : paginatedBeads.length === 0 ? (
                   <div className="p-8 text-center">
-                    <div className="text-gray-400 mb-4">
+                    <div className="text-textSecondary mb-4">
                       Waiting for block data...
                     </div>
-                    <div className="h-12 bg-gray-800/50 rounded-md animate-pulse mb-4"></div>
-                    <div className="h-12 bg-gray-800/50 rounded-md animate-pulse"></div>
+                    <div className="h-12 bg-paper/50 rounded-md animate-pulse mb-4"></div>
+                    <div className="h-12 bg-paper/50 rounded-md animate-pulse"></div>
                   </div>
                 ) : (
                   paginatedBeads.map((bead) => (
@@ -220,8 +220,8 @@ export default function MinedSharesExplorer() {
                       onClick={() => setCurrentPage((prev) => prev - 1)}
                       className={`px-3 py-1 rounded-md ${
                         currentPage === 1
-                          ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
-                          : 'bg-gray-800 hover:bg-gray-700'
+                          ? 'bg-paper text-textDisabled cursor-not-allowed'
+                          : 'bg-paper hover:bg-paper/80'
                       }`}
                     >
                       Previous
@@ -234,8 +234,8 @@ export default function MinedSharesExplorer() {
                       onClick={() => setCurrentPage((prev) => prev + 1)}
                       className={`px-3 py-1 rounded-md ${
                         currentPage === totalPages
-                          ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
-                          : 'bg-gray-800 hover:bg-gray-700'
+                          ? 'bg-paper text-textDisabled cursor-not-allowed'
+                          : 'bg-paper hover:bg-paper/80'
                       }`}
                     >
                       Next
@@ -251,7 +251,7 @@ export default function MinedSharesExplorer() {
           </div>
           <div
             style={{ display: activeTab === 'rewards' ? 'block' : 'none' }}
-            className="border border-gray-800/50 rounded-xl p-6"
+            className="border border-border rounded-xl p-6"
           >
             <RewardsDashboard />
           </div>

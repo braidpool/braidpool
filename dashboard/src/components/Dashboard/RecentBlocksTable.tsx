@@ -14,10 +14,10 @@ const RecentBlocksTable: React.FC<RecentBlocksTableProps> = ({
   return (
     <div className="max-w-screen w-full overflow-x-hidden">
       <div
-        className="rounded-2xl border border-white/10 bg-[#1e1e1e] shadow-md p-4"
+        className="rounded-2xl border border-border bg-paper shadow-md p-4"
         style={{ borderColor: colors.cardAccentSecondary }}
       >
-        <div className="mb-2  text-gray-400">
+        <div className="mb-2 text-textSecondary">
           Latest blocks found by the pool
         </div>
         <div
@@ -57,8 +57,8 @@ const RecentBlocksTable: React.FC<RecentBlocksTableProps> = ({
                   key={index}
                   className={`transition-colors duration-150 ${
                     selectedBlock === block.id
-                      ? 'bg-white/10'
-                      : 'hover:bg-white/10'
+                      ? 'bg-primary/20'
+                      : 'hover:bg-primary/10'
                   }`}
                   onClick={() => setSelectedBlock(block.id)}
                 >

@@ -24,10 +24,10 @@ const RBFTransactionTable: React.FC<TransactionTableProps> = ({
 
   return (
     <div
-      className="rounded-2xl border mt-10 border-white/10 bg-[#1e1e1e] shadow-md p-4"
+      className="rounded-2xl border mt-10 border-border bg-paper shadow-md p-4"
       style={{ borderColor: colors.cardAccentSecondary }}
     >
-      <div className="mb-2  text-gray-400">Latest RBF Transactions</div>
+      <div className="mb-2 text-textSecondary">Latest RBF Transactions</div>
       <div
         className="overflow-auto rounded-md scrollbar-thin"
         style={{
@@ -76,7 +76,7 @@ const RBFTransactionTable: React.FC<TransactionTableProps> = ({
               <tr>
                 <td
                   colSpan={5}
-                  className="p-4 text-center text-sm text-gray-400"
+                  className="p-4 text-center text-sm text-textSecondary"
                 >
                   No RBF transactions found
                 </td>

@@ -56,8 +56,19 @@ export function PoolDominance() {
     <div>
       <div className="flex justify-between items-center mt-4">
         <div className="flex items-center gap-2">
-          <h2 className="text-white text-xl font-semibold">Pool Ranking</h2>
-          <span className="bg-gray-700 text-gray-300 px-2 py-1 rounded text-xs w-fit mt-2">
+          <h2
+            style={{ color: 'var(--color-text-primary)' }}
+            className="text-xl font-semibold"
+          >
+            Pool Ranking
+          </h2>
+          <span
+            style={{
+              backgroundColor: 'var(--color-surface)',
+              color: 'var(--color-text-secondary)',
+            }}
+            className="px-2 py-1 rounded text-xs w-fit mt-2"
+          >
             1 Week
           </span>
         </div>
@@ -67,7 +78,10 @@ export function PoolDominance() {
         <div className="w-full">
           <div className="sm:hidden max-md:hidden  lg:block ">
             {/* Table Header */}
-            <div className="grid grid-cols-8 gap-2 lg:gap-4 p-3 lg:p-4 border-b text-sm border-gray-800/80 font-medium">
+            <div
+              style={{ borderColor: 'var(--color-border)' }}
+              className="grid grid-cols-8 gap-2 lg:gap-4 p-3 lg:p-4 border-b text-sm font-medium"
+            >
               {[
                 'Rank',
                 'Pool',
@@ -80,7 +94,8 @@ export function PoolDominance() {
               ].map((label) => (
                 <div
                   key={label}
-                  className="text-white font-semibold text-xs lg:text-sm"
+                  style={{ color: 'var(--color-text-primary)' }}
+                  className="font-semibold text-xs lg:text-sm"
                 >
                   {label}
                 </div>
@@ -91,7 +106,8 @@ export function PoolDominance() {
             {poolDominance.map((pool, index) => (
               <div
                 key={index}
-                className="grid grid-cols-8 gap-2 lg:gap-4 text-xs lg:text-sm text-gray-300 py-3 lg:py-5 px-3 lg:px-4 hover:bg-gray-900/30 transition-colors"
+                style={{ color: 'var(--color-text-secondary)' }}
+                className="grid grid-cols-8 gap-2 lg:gap-4 text-xs lg:text-sm py-3 lg:py-5 px-3 lg:px-4 hover:bg-[var(--color-surface-hover)] transition-colors"
               >
                 <div>{pool.rank}</div>
                 <div className="hover:text-blue-400 truncate">
@@ -132,15 +148,25 @@ export function PoolDominance() {
               {poolDominance.map((pool, index) => (
                 <div
                   key={index}
-                  className=" border border-gray-800 rounded-lg p-3 sm:p-4 space-y-2 sm:space-y-3"
+                  style={{ borderColor: 'var(--color-border)' }}
+                  className="border rounded-lg p-3 sm:p-4 space-y-2 sm:space-y-3"
                 >
                   {/* Pool Header */}
                   <div className="flex justify-between items-start">
                     <div className="flex items-center gap-2">
-                      <span className="bg-gray-700 text-white text-xs px-2 py-1 rounded font-medium">
+                      <span
+                        style={{
+                          backgroundColor: 'var(--color-surface)',
+                          color: 'var(--color-text-primary)',
+                        }}
+                        className="text-xs px-2 py-1 rounded font-medium"
+                      >
                         #{pool.rank}
                       </span>
-                      <h3 className="text-white font-semibold text-sm sm:text-base hover:text-blue-400">
+                      <h3
+                        style={{ color: 'var(--color-text-primary)' }}
+                        className="font-semibold text-sm sm:text-base hover:text-blue-400"
+                      >
                         <a
                           href={pool.poolLink}
                           target="_blank"
@@ -155,32 +181,54 @@ export function PoolDominance() {
                   {/* Pool Stats Grid */}
                   <div className="grid grid-cols-2 gap-2 sm:gap-3 text-xs sm:text-sm">
                     <div>
-                      <span className="text-gray-400">Recent Block:</span>
-                      <div className="text-white font-medium">
+                      <span style={{ color: 'var(--color-text-secondary)' }}>
+                        Recent Block:
+                      </span>
+                      <div
+                        style={{ color: 'var(--color-text-primary)' }}
+                        className="font-medium"
+                      >
                         {pool.latestBlockHeight}
                       </div>
                     </div>
                     <div>
-                      <span className="text-gray-400">Hashrate:</span>
-                      <div className="text-white font-medium">
+                      <span style={{ color: 'var(--color-text-secondary)' }}>
+                        Hashrate:
+                      </span>
+                      <div
+                        style={{ color: 'var(--color-text-primary)' }}
+                        className="font-medium"
+                      >
                         {formatWork(pool.hashrate).value}{' '}
                         {formatWork(pool.hashrate).unit}
                       </div>
                     </div>
                     <div>
-                      <span className="text-gray-400">Blocks:</span>
-                      <div className="text-white font-medium">
+                      <span style={{ color: 'var(--color-text-secondary)' }}>
+                        Blocks:
+                      </span>
+                      <div
+                        style={{ color: 'var(--color-text-primary)' }}
+                        className="font-medium"
+                      >
                         {pool.blocks}
                       </div>
                     </div>
                     <div>
-                      <span className="text-gray-400">Avg Health:</span>
-                      <div className="text-white font-medium">
+                      <span style={{ color: 'var(--color-text-secondary)' }}>
+                        Avg Health:
+                      </span>
+                      <div
+                        style={{ color: 'var(--color-text-primary)' }}
+                        className="font-medium"
+                      >
                         {pool.avgHealth}
                       </div>
                     </div>
                     <div>
-                      <span className="text-gray-400">Avg Block Fees:</span>
+                      <span style={{ color: 'var(--color-text-secondary)' }}>
+                        Avg Block Fees:
+                      </span>
                       <div
                         className={`font-medium ${
                           typeof pool.avgBlockFees === 'string' &&
@@ -193,8 +241,13 @@ export function PoolDominance() {
                       </div>
                     </div>
                     <div>
-                      <span className="text-gray-400">Empty Blocks:</span>
-                      <div className="text-white font-medium">
+                      <span style={{ color: 'var(--color-text-secondary)' }}>
+                        Empty Blocks:
+                      </span>
+                      <div
+                        style={{ color: 'var(--color-text-primary)' }}
+                        className="font-medium"
+                      >
                         {pool.emptyBlocks}
                       </div>
                     </div>
