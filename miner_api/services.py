@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Tuple, List
 import urllib.parse
 import asyncio
 import logging
@@ -25,7 +25,7 @@ class MinerService:
             return None
     
     @staticmethod
-    def _extract_temperatures(data) -> tuple[Optional[float], Optional[float], Optional[float]]:
+    def _extract_temperatures(data) -> Tuple[Optional[float], Optional[float], Optional[float]]:
         temperature = None
         temperature_max = None
         vr_temperature = None
@@ -59,7 +59,7 @@ class MinerService:
         return temperature, temperature_max, vr_temperature
     
     @staticmethod
-    def _extract_fans(data) -> list[int]:
+    def _extract_fans(data) -> List[int]:
         fans = getattr(data, 'fans', [])
         return [
             MinerService._safe_int(fan.speed) 
@@ -68,7 +68,7 @@ class MinerService:
         ]
     
     @staticmethod
-    def _extract_pools(data) -> list[PoolInfo]:
+    def _extract_pools(data) -> List[PoolInfo]:
         """Extract pool configuration from miner response."""
         pools_data = []
         
@@ -105,7 +105,7 @@ class MinerService:
         return pools_data
     
     @staticmethod
-    def _extract_primary_pool(pools_data: list[PoolInfo]) -> str:
+    def _extract_primary_pool(pools_data: List[PoolInfo]) -> str:
         valid_pools = [p for p in pools_data if p.status != "invalid" and p.url]
         
         if not valid_pools:
@@ -171,6 +171,7 @@ class MinerService:
     
     @staticmethod
     async def get_miner_data(ip: str) -> dict:
+        """Retrieve and normalize data from a miner at the specified IP address."""
         try:
             # Add timeout to prevent hanging connections
             miner = await asyncio.wait_for(

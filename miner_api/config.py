@@ -8,6 +8,6 @@ class Settings:
     API_KEY: str = ""  # Set to enable authentication
     ALLOWED_ORIGINS: List[str] = ["*"]  # Allow all origins
     MINER_TIMEOUT: int = 10  # seconds
-    POLL_INTERVAL: int = 10  # seconds between poll cycles
-    LOG_LEVEL: str = "INFO"  
+    LOG_LEVEL: str = "INFO"
+
 settings = Settings()

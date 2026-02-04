@@ -8,7 +8,6 @@ import logging
 import sys
 from .config import settings
 from .routes import router
-from .background_tasks import polling_service
 from . import __version__
 
 # Setup logging
@@ -24,17 +23,13 @@ logger = logging.getLogger("miner_api")
 async def lifespan(app: FastAPI):
     """Lifecycle manager."""
     logger.info(f"Starting Miner API v{__version__}")
-    logger.info(f"Config: Host={settings.HOST}, Port={settings.PORT}, Poll= 10 s")
+    logger.info(f"Config: Host={settings.HOST}, Port={settings.PORT}")
     
     if not settings.API_KEY:
         logger.info("Authentication disabled (no API key)")
     
-    await polling_service.start()
-    logger.info("Polling service started")
-    
     yield
     
-    await polling_service.stop()
     logger.info("Shutting down")
 
 

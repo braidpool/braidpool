@@ -1,9 +1,7 @@
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from fastapi.security import APIKeyHeader
-from datetime import datetime
-from typing import List, Optional
 from pydantic import BaseModel
-from .models import MinerData as MinerDataModel, PoolInfo
+from ipaddress import ip_address, AddressValueError
 from .services import MinerService
 from .config import settings
 from . import __version__
@@ -27,6 +25,14 @@ async def verify_api_key(api_key: str = Depends(api_key_header)) -> str:
     return api_key
 
 
+def validate_ip_address(ip: str) -> str:
+    try:
+        ip_address(ip)
+        return ip
+    except AddressValueError:
+        raise HTTPException(status_code=400, detail="Invalid IP address format")
+
+
 # Request/Response models
 class HealthResponse(BaseModel):
     status: str
@@ -47,5 +53,6 @@ async def get_miner_data_live(
     _: str = Depends(verify_api_key)
 ):
     """Query miner directly in real-time."""
-    result = await MinerService.get_miner_data(ip)
+    validated_ip = validate_ip_address(ip)
+    result = await MinerService.get_miner_data(validated_ip)
     return result

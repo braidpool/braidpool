@@ -39,5 +39,3 @@ class MinerData(BaseModel):
     primary_pool: str = "No Pool"
     api_version: Optional[str] = None
     timestamp: Optional[datetime] = None
-
-
