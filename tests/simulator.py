@@ -580,7 +580,7 @@ class Node:
         a = (T / N_C) * w_val
         
         # Clamp 'a' to a physical minimum (defined NETWORK_SIZE)
-        a_min = NETWORK_SIZE
+        a_min = 0.010
         a = max(a, a_min)
 
         # 6. Calculate Optimal Target (x_0)
