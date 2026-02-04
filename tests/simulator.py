@@ -24,12 +24,13 @@ import string
 import struct
 import sys
 import time
-from scipy.special import lambertw as W
-from numpy import real
+#from scipy.special import lambertw as W
+#from numpy import real
 import braid
 import matplotlib.pyplot as plt
 from decimal import Decimal, getcontext, ROUND_HALF_EVEN
-from mpmath  import lambertw, e                 # small‑number maths
+from mpmath import lambertw, e as mp_e                 # small‑number maths
+W = lambertw
 
 sys.setrecursionlimit(10000) # all_ancestors is recursive. If you generate large cohorts you'll blow
                              # out the maximum recursion depth.
@@ -191,10 +192,13 @@ class Network:
 
     def tick(self, mine=True):
         """ Execute one tick. """
-
         next_bead_dt = min(self.nodes, key=lambda n:n.tremaining).tremaining
         next_recv_dt = min(self.inflightdelay.values()) if self.inflightdelay else next_bead_dt+NETWORK_SIZE
-        dt = self.ticksize if mine else min(next_bead_dt, next_recv_dt)
+        
+        # Safety clamp to prevent infinite loops of 0-time steps
+        calculated_dt = min(next_bead_dt, next_recv_dt)
+        dt = self.ticksize if mine else max(calculated_dt, 1e-9)
+        
         self.t += dt
         for (nodeid, bead) in copy(self.inflightdelay):
             self.inflightdelay[(nodeid, bead)] -= dt
@@ -224,7 +228,7 @@ class Network:
         self.inflightdelay       = {}
         for node in self.nodes:
             node.reset(target, target_algo)
-
+            
     def print_in_flight_delays(self):
         """ print in flight delays for debugging. """
         for (node, bead) in self.inflightdelay:
@@ -302,6 +306,8 @@ class Node:
             self.calc_target = self.calc_target_simple_asym
         elif target_algo == "simple_asym_damped":
             self.calc_target = self.calc_target_simple_asym_damped
+        elif target_algo == "braid_consensus":
+            self.calc_target = self.calc_target_braid_consensus
         elif target_algo == "zeno":
             self.calc_target = self.calc_target_zeno
 
@@ -507,6 +513,116 @@ class Node:
         # Harmonic average parent targets
         x_1 = len(parents)*MAX_HASH//sum(MAX_HASH//p.target for p in parents)
         return 2*x_1*W(1/2)/W(Nb_Nc-1)
+    
+    def calc_target_braid_consensus(self, parents):
+        """
+        Braid Consensus DAA
+        
+        Implements the specification from docs/braid_consensus.md:
+        
+        x̄        = (1/N_B ∑(1/x_i))^(-1)              # average target (ALL beads)
+        λ̄        = N_B / (x̄ * T)                      # average hashrate
+        a        = max(a_min, (T/N_C) * W(N_B/N_C-1)) # latency parameter
+        x̄₁       = (1/N_p ∑(1/x_p))^(-1)              # average parental target
+        x₀       = 2*W(1/2) / (a * λ̄)                 # optimal target
+        x        = (x₀ + (x̄₁ - x₀)*e^(-πa/T)) * 2^(-max(0,N_PC-4))
+        
+        Key fix: Distinguishes between x̄ (all beads, for hashrate) and x̄₁ (parents, for damping)
+        """
+        # 1. Configuration
+        WINDOW = 100  # Look back 100 cohorts for statistics
+        
+        # We need enough history to calculate stats
+        if len(self.braid.cohorts) < WINDOW:
+            return self.target 
+
+        # 2. Get the history window
+        relevant_cohorts = self.braid.cohorts[-WINDOW:]
+        
+        # 3. Calculate Inputs
+        N_B = sum(len(c) for c in relevant_cohorts)  # Total beads in window
+        N_C = len(relevant_cohorts)                  # Total cohorts in window
+        
+        # Calculate Time T (End time - Start time)
+        t_start = list(relevant_cohorts[0])[0].t
+        t_end = list(relevant_cohorts[-1])[0].t
+        T = t_end - t_start
+        
+        if T <= 0.001: 
+            return self.target  # Avoid division by zero at startup
+
+        # This is used for estimating the network hashrate
+        # Spec: x̄ = (1/N_B ∑(1/x_i))^(-1) where i ranges over all beads
+        all_beads = []
+        for cohort in relevant_cohorts:
+            for bead in cohort:
+                all_beads.append(bead)
+        
+        # Harmonic mean over all beads: x̄ = n * H / ∑(H/x_i)
+        sum_inv_targets_all = sum(MAX_HASH // bead.target for bead in all_beads)
+        if sum_inv_targets_all == 0: 
+            sum_inv_targets_all = 1
+        
+        x_bar_all_beads = (len(all_beads) * MAX_HASH) // sum_inv_targets_all
+        
+        # 4. Calculate Lambda (Hashrate estimate) using x̄
+        # Spec: λ̄ = N_B / (x̄ * T)
+        lambda_val = N_B / (x_bar_all_beads * T)
+
+        # 5. Calculate Latency Parameter 'a' using Lambert W
+        # Spec: a = max(a_min, (T/N_C) * W(N_B/N_C - 1))
+        ratio = (N_B / N_C) - 1
+        if ratio < 0: 
+            ratio = 0  # Safety clamp
+        
+        # Use mpmath's lambertw (returns complex, take real)
+        w_val = float(lambertw(ratio).real)
+        a = (T / N_C) * w_val
+        
+        # Clamp 'a' to a physical minimum (defined NETWORK_SIZE)
+        a_min = NETWORK_SIZE
+        a = max(a, a_min)
+
+        # 6. Calculate Optimal Target (x_0)
+        # Spec: x₀ = 2*W(1/2) / (a * λ̄)
+        W_HALF = 0.35173371  # W(1/2) constant
+        if lambda_val <= 0:
+            x_0 = x_bar_all_beads
+        else:
+            x_0 = (2 * W_HALF) / (a * lambda_val)
+
+        # This represents the most recent consensus target
+        # Spec: x̄₁ = (1/N_p ∑(1/x_p))^(-1) where p ranges over parents
+        sum_inv_targets_parents = sum(MAX_HASH // p.target for p in parents)
+        if sum_inv_targets_parents == 0: 
+            sum_inv_targets_parents = 1
+        
+        x_bar_parents = (len(parents) * MAX_HASH) // sum_inv_targets_parents
+
+        # 7. Calculate Damping Factor
+        # Spec: e^(-π*a/T) - critical damping to prevent oscillations
+        damping = float(mp_e ** (-pi * a / T))
+
+        # 8. Calculate "Thick DAG" Penalty
+        # If parents form a cohort larger than 4, punish them exponentially
+        # Spec: 2^(-max(0, N_PC - 4))
+        N_PC = len(parents)
+        penalty_pow = max(0, N_PC - 4)
+        penalty_factor = 2 ** penalty_pow
+
+        # 9. Final Formula
+        # Spec: x = (x₀ + (x̄₁ - x₀) * e^(-πa/T)) / 2^max(0,N_PC-4)
+        # Use x̄₁ (parent average) for smooth transition from recent consensus
+        new_target_float = (x_0 + (x_bar_parents - x_0) * damping) / penalty_factor
+        
+        # Ensure target is within valid bounds
+        if DEBUG:
+            print(f"\n[DAA] Node {self.nodeid}: N_B={N_B}, N_C={N_C}, N_B/N_C={N_B/N_C:.3f}")
+            print(f"      x̄(all)={x_bar_all_beads:.2e}, x̄₁(parents)={x_bar_parents:.2e}")
+            print(f"      λ̄={lambda_val:.2e}, a={a:.4f}, x₀={x_0:.2e}")
+            print(f"      damping={damping:.4f}, penalty={penalty_factor}, final={new_target_float:.2e}")
+        
+        return int(max(1, min(MAX_HASH, new_target_float)))
 
     # Model function for Nb/Nc ratio
     def model_nb_nc_ratio(self, x, a, lambda_val):
@@ -1295,7 +1411,7 @@ class Node:
         """
         # --- 1.  current measurement R = Nb / Nc ------------------------
         if len(self.braid.cohorts) < 2:                          # safety at start‑up
-            return harmonic_mean_target(parents)
+            return self.calc_target_harmonic(parents)
 
         Nc = min(TARGET_NC, len(self.braid.cohorts))
         Nb = sum(len(c) for c in self.braid.cohorts[-Nc:])
@@ -1530,8 +1646,8 @@ class Braid:
                             cohort_cache.popitem(last=False)
 
                 self.cohorts.extend(new_cohorts)
-                if DEBUG:
-                    print(f"    Computed new cohorts: ", print_hash(new_cohorts))
+                #if DEBUG:
+                    #print(f"    Computed new cohorts: ", print_hash(new_cohorts))
 
         return True
 
@@ -1767,7 +1883,7 @@ def run_stats(filename, nodes=25, beads=100, peers=4, target=241, log=False, ran
     return stats_file
 
 def main():
-    """ Main function so it doesn't make a bunch of globals. """
+    """ Main function so it doesn't make a bunch of globals."""
     global NETWORK_HASHRATE, TARGET_NB, TARGET_NC, TARGET_DAMPING, DEBUG
     parser = ArgumentParser()
     parser.add_argument("-o", "--output-file", dest="filename",
@@ -1804,9 +1920,8 @@ def main():
         help="Damping factor for difficulty adjustment",
         default=TARGET_DAMPING)
     parser.add_argument("-A", "--algorithm",
-        help="Select the Difficulty Algorithm ('fixed', 'exp', 'parents', 'simple', 'pid', 'model', 'simple_asym', "
-             "'simple_asym_damped', 'zeno')",
-        default="exp")
+        help="Select the Difficulty Algorithm ('fixed', 'exp', 'parents', 'simple', 'braid_consensus', ...)",
+        default="braid_consensus") # <--- UPDATE DEFAULT AND HELP TEXT
     parser.add_argument("-S", "--stats", action=BooleanOptionalAction,
         help="Run statistics to evaluate difficulty adjustment algorithms",
         default=False)
@@ -1845,9 +1960,15 @@ def main():
     if args.mine:
         start = time.process_time()
         N_HASHES = 10000 # number of hashes to compute for benchmarking purposes
-        for nonce in range(N_HASHES):
-            sha256d(nonce)
-        stop = time.process_time()
+        dt = 0
+        while dt == 0:
+            start = time.process_time()
+            for nonce in range(N_HASHES):
+                sha256d(nonce)
+            stop = time.process_time()
+            dt = stop - start
+            if dt == 0:
+                N_HASHES *= 10  # Too fast! Increase load 10x
         print(f"# Network hashrate (single core) benchmark: {int(N_HASHES/(stop-start)/1000)} kh/s")
         NETWORK_HASHRATE = N_HASHES/(stop-start)
         bead_time     = MAX_HASH/(2**int(args.target)-1)/NETWORK_HASHRATE

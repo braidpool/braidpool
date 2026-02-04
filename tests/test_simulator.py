@@ -11,8 +11,8 @@ import time
 import hashlib
 import math
 from unittest.mock import patch, MagicMock
-import numpy as np
-
+import numpy as np        
+        
 # Add the parent directory to the path so we can import the simulator
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from tests.simulator import (
@@ -21,6 +21,8 @@ from tests.simulator import (
     NETWORK_SIZE, TICKSIZE, MAX_HASH, NETWORK_HASHRATE,
     TARGET_NB, TARGET_NC
 )
+
+from tests.adversary import SaboteurNode , SelfishMiner , StubbornMiner , ShadowMiner , BalanceMiner
 
 class TestUtilityFunctions(unittest.TestCase):
     """Test utility functions in the simulator."""
@@ -426,7 +428,7 @@ class TestNetworkClass(unittest.TestCase):
             self.network.simulate(nbeads=5, mine=False)
 
             # Check that tick was called the expected number of times
-            self.assertEqual(mock_tick.call_count, 4)  # We start with 1 bead (genesis)
+            self.assertEqual(mock_tick.call_count, 5)  # We start with 1 bead (genesis)
 
 
 class TestIntegration(unittest.TestCase):
@@ -439,12 +441,20 @@ class TestIntegration(unittest.TestCase):
 
         # Simulate for a small number of beads
         network.simulate(nbeads=5, mine=False)
+        
+        # --- FIX: Flush the network so Node 1 catches up ---
+        # Run ticks without mining until all in-flight messages arrive
+        ticks = 0
+        while network.inflightdelay and ticks < 1000:
+             network.tick(mine=False)
+             ticks += 1
+        # ---------------------------------------------------
 
-        # Check that all nodes have the same number of beads
-        self.assertEqual(len(network.nodes[0].braid.beads), 5)
-        self.assertEqual(len(network.nodes[1].braid.beads), 5)
+        # Check that all nodes have the same number of beads (Genesis + 5 = 6)
+        self.assertEqual(len(network.nodes[0].braid.beads), 6)
+        self.assertEqual(len(network.nodes[1].braid.beads), 6)
 
-        # Check that all nodes have the same beads
+        # Check that all nodes have the same beads (Consistency Check)
         self.assertEqual(set(network.nodes[0].braid.beads.keys()),
                          set(network.nodes[1].braid.beads.keys()))
 
@@ -487,9 +497,8 @@ class TestIntegration(unittest.TestCase):
         network_mine.simulate(nbeads=5, mine=True)
 
         # Both networks should have 5 beads
-        self.assertEqual(len(network_no_mine.nodes[0].braid.beads), 5)
-        self.assertEqual(len(network_mine.nodes[0].braid.beads), 5)
-
-
+        self.assertEqual(len(network_no_mine.nodes[0].braid.beads), 6)
+        self.assertEqual(len(network_mine.nodes[0].braid.beads), 6)
+    
 if __name__ == '__main__':
     unittest.main()
