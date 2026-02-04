@@ -54,5 +54,4 @@ Here are few steps you can follow while reviewing PRs.
 
 ## Communication Channels
 
->>>>>>> origin/main
   For all the other queries, or if you're stuck somewhere while working, or you want to communicate with the community, you can join the [Discord](https://discord.gg/pZYUDwkpPv) channel.
