@@ -4,7 +4,7 @@ Contributing to open source is one of the best things you can do. It not only be
 <br/> <br>
 With this responsibility, we also want to put the right efforts into development so everything goes smoothly and in a collaborative way. For this, there are some guidelines designed that will help us to work together so we can read, write and understand each other's code in an efficient way.
 
-## Key Concepts (Quick Reference)Expand commentComment on line L7Resolved
+## Key Concepts (Quick Reference)
 
 Before diving in, understand these core concepts:
 
