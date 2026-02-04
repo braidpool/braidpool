@@ -22,8 +22,6 @@ from tests.simulator import (
     TARGET_NB, TARGET_NC
 )
 
-from tests.adversary import SaboteurNode , SelfishMiner , StubbornMiner , ShadowMiner , BalanceMiner
-
 class TestUtilityFunctions(unittest.TestCase):
     """Test utility functions in the simulator."""
 
