@@ -9,7 +9,7 @@ from .config import settings
 logger = logging.getLogger("miner_api")
 
 
-class MinerService:    
+class MinerService:
     @staticmethod
     def _safe_int(val) -> Optional[int]:
         try:
