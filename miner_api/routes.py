@@ -14,17 +14,6 @@ router = APIRouter()
 # Simple API key auth
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
-async def verify_api_key(api_key: str = Depends(api_key_header)) -> str:
-    """Verify API key if configured."""
-    if not settings.API_KEY:
-        return "no-auth"
-    if not api_key:
-        raise HTTPException(status_code=401, detail="Missing API Key")
-    if api_key != settings.API_KEY:
-        raise HTTPException(status_code=403, detail="Invalid API Key")
-    return api_key
-
-
 def validate_ip_address(ip: str) -> str:
     try:
         ip_address(ip)
@@ -49,8 +38,7 @@ async def health_check():
 
 @router.get("/miners/live", tags=["miners"])
 async def get_miner_data_live(
-    ip: str = Query(..., description="IP address"),
-    _: str = Depends(verify_api_key)
+    ip: str = Query(..., description="IP address"),   
 ):
     """Query miner directly in real-time."""
     validated_ip = validate_ip_address(ip)
