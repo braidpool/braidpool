@@ -5,7 +5,6 @@ class Settings:
     HOST: str = "0.0.0.0"
     PORT: int = 5001
     RELOAD: bool = False
-    API_KEY: str = ""  # Set to enable authentication
     ALLOWED_ORIGINS: List[str] = ["*"]  # Allow all origins
     MINER_TIMEOUT: int = 10  # seconds
     LOG_LEVEL: str = "INFO"

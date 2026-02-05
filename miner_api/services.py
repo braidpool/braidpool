@@ -68,6 +68,12 @@ class MinerService:
         ]
     
     @staticmethod
+    def _validate_pool_info(pool_info: PoolInfo) -> None:
+        """Validate pool info and mark as invalid if missing required fields."""
+        if not pool_info.url or not pool_info.user:
+            pool_info.status = "invalid"
+    
+    @staticmethod
     def _extract_pools(data) -> List[PoolInfo]:
         """Extract pool configuration from miner response."""
         pools_data = []
@@ -80,8 +86,7 @@ class MinerService:
                 user=getattr(pool, 'user', None),
                 status=getattr(pool, 'status', None)
             )
-            if not pool_info.url or not pool_info.user:
-                pool_info.status = "invalid"
+            MinerService._validate_pool_info(pool_info)
             pools_data.append(pool_info)
         
         # Fallback to config pools if none found
@@ -98,8 +103,7 @@ class MinerService:
                                     user=getattr(pool, 'user', None),
                                     status="configured"
                                 )
-                                if not pool_info.url or not pool_info.user:
-                                    pool_info.status = "invalid"
+                                MinerService._validate_pool_info(pool_info)
                                 pools_data.append(pool_info)
         
         return pools_data
@@ -129,6 +133,9 @@ class MinerService:
         fan_speeds = MinerService._extract_fans(raw_data)
         pools_data = MinerService._extract_pools(raw_data)
         primary_pool = MinerService._extract_primary_pool(pools_data)
+        raw_hashrate = getattr(raw_data, "raw_hashrate", None)
+        hashrate = getattr(raw_data, "hashrate", None)
+        expected_hashrate = getattr(raw_data, "expected_hashrate", None)
         
         return MinerData(
             ip=getattr(raw_data, "ip", None),
@@ -137,18 +144,9 @@ class MinerService:
             make=getattr(raw_data, "make", None),
             model=getattr(raw_data, "model", None),
             firmware=getattr(raw_data, "fw_ver", None),
-            hashrate_current=MinerService._safe_float(
-                getattr(raw_data, "raw_hashrate", None).rate 
-                if getattr(raw_data, "raw_hashrate", None) else None
-            ),
-            hashrate_avg=MinerService._safe_float(
-                getattr(raw_data, "hashrate", None).rate 
-                if getattr(raw_data, "hashrate", None) else None
-            ),
-            expected_hashrate=MinerService._safe_float(
-                getattr(raw_data, "expected_hashrate", None).rate 
-                if getattr(raw_data, "expected_hashrate", None) else None
-            ),
+            hashrate_current=MinerService._safe_float(raw_hashrate.rate if raw_hashrate else None),
+            hashrate_avg=MinerService._safe_float(hashrate.rate if hashrate else None),
+            expected_hashrate=MinerService._safe_float(expected_hashrate.rate if expected_hashrate else None),
             temperature=temperature,
             temperature_max=temperature_max,
             vr_temperature=vr_temperature,

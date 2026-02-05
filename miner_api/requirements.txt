@@ -1,12 +1,5 @@
-# Production dependencies for Miner API
-
-# Web framework
-fastapi>=0.104.0
 uvicorn[standard]>=0.24.0
-pydantic>=2.4.0
-
-# Mining hardware interface
+fastapi>=0.104.0,<1.0.0
+pydantic>=2.4.0,<3.0.0
 pyasic>=0.50.0
-
-# Security
 python-multipart>=0.0.6

@@ -24,18 +24,13 @@ async def lifespan(app: FastAPI):
     """Lifecycle manager."""
     logger.info(f"Starting Miner API v{__version__}")
     logger.info(f"Config: Host={settings.HOST}, Port={settings.PORT}")
-    
-    if not settings.API_KEY:
-        logger.info("Authentication disabled (no API key)")
-    
     yield
-    
     logger.info("Shutting down")
 
 
 app = FastAPI(
     title="Braidpool Miner API",
-    description="Production-ready API for managing and monitoring Bitcoin mining hardware",
+    description="API for managing and monitoring Bitcoin mining hardware",
     version=__version__,
     lifespan=lifespan,
     docs_url="/docs",
