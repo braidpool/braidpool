@@ -6,6 +6,19 @@ Read the
 [Overview](https://github.com/braidpool/braidpool/blob/master/docs/overview.md)
 for [General Considerations for Decentralized Mining Pools](https://github.com/braidpool/braidpool/blob/master/docs/general_considerations.md), or [Braidpool Spec](https://github.com/braidpool/braidpool/blob/master/docs/braidpool_spec.md) in increasing levels of complexity. You may also be interested in our [Roadmap](https://github.com/braidpool/braidpool/blob/master/docs/roadmap.md)
 
+## Contributing
+
+Contributions are welcome and appreciated.
+
+If you are interested in contributing to Braidpool, please read
+[CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines on:
+
+1. setting up the development environment.
+2. understanding the project structure.
+3. development workflow and conventions.
+4. creating branches and submitting pull requests.
+
+
 The goals of the pool are:
 
 1. Lower variance for independent miners, even when large miners join the pool.
