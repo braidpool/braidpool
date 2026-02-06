@@ -15,11 +15,7 @@ miner_pubkey = ""
 [bitcoin_config]
 # The network can be "main", "testnet4" or "signet or cpunet(preferred)"
 network = "cpunet"
-#rpcuser
-username = "username"
-#rpc password
-password = "password"
-#cookie authentication file 
+#cookie authentication file
 cookie_path="~/.bitcoin/regtest/.cookie"
 #port specific where to listen for the bitcoind 
 port="18443"
