@@ -31,15 +31,15 @@ pub struct Cli {
     #[arg(long, default_value = "main")]
     pub network: Option<String>,
 
-    /// Use this cookie file for bitcoin RPC
-    #[arg(long, default_value = "~/.bitcoin/.cookie")]
+    /// Cookie file for bitcoind authentication. Auto-detected per network if not specified.
+    #[arg(long)]
     pub rpccookie: Option<String>,
 
     ///Rpc endpoints for the specific methods
     #[command(subcommand)]
     pub command: Option<RpcCommand>,
 
-    /// Path to Bitcoin Core IPC socket
-    #[arg(long, default_value = "/tmp/bitcoin-cpunet.sock")]
-    pub ipc_socket: String,
+    /// Path to Bitcoin Core IPC socket. Auto-detected per network if not specified.
+    #[arg(long)]
+    pub ipc_socket: Option<String>,
 }
