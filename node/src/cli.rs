@@ -19,14 +19,6 @@ pub struct Cli {
     #[arg(long)]
     pub addnode: Option<Vec<String>>,
 
-    /// Connect to this bitcoin node
-    #[arg(long, default_value = "0.0.0.0")]
-    pub bitcoin: String,
-
-    /// Use this port for bitcoin RPC
-    #[arg(long, default_value = "8332")]
-    pub rpcport: u16,
-
     /// Which network to use. Valid options are mainnet, testnet4, signet, cpunet (preferred)
     #[arg(long, default_value = "main")]
     pub network: Option<String>,
