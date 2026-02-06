@@ -22,15 +22,9 @@ use tracing::warn;
 
 #[derive(Debug)]
 pub enum CookieError {
-    NotFound {
-        path: PathBuf,
-    },
-    PermissionDenied {
-        path: PathBuf,
-    },
-    InvalidFormat {
-        path: PathBuf,
-    },
+    NotFound { path: PathBuf },
+    PermissionDenied { path: PathBuf },
+    InvalidFormat { path: PathBuf },
 }
 
 impl fmt::Display for CookieError {
