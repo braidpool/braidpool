@@ -92,12 +92,12 @@ const Dashboard = () => {
                   </label>
 
                   <div
-                    className="relative block sm:hidden min-w-[150px]"
+                    className="relative block sm:hidden w-[45vw]"
                     ref={dropdownRef}
                   >
                     <button
                       type="button"
-                      className="flex w-full items-center justify-between rounded-md border border-gray-700 bg-gray-800 py-1 px-3 text-sm text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className="flex w-full items-center justify-between rounded-lg border border-gray-700 bg-gray-800 py-2.5 px-4 text-base text-white shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                       onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                     >
                       <span>{TABS.find((t) => t.id === activeTab)?.label}</span>
@@ -120,12 +120,12 @@ const Dashboard = () => {
                     </button>
 
                     {isDropdownOpen && (
-                      <div className="absolute right-0 top-full mt-1 w-full overflow-hidden rounded-md border border-gray-700 bg-gray-800 shadow-lg z-50">
+                      <div className="absolute right-0 top-full mt-2 w-full overflow-hidden rounded-lg border border-gray-700 bg-gray-800 shadow-xl z-50">
                         {TABS.filter((tab) => tab.id !== activeTab).map(
                           (tab) => (
                             <button
                               key={tab.id}
-                              className="block w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700 transition-colors"
+                              className="block w-full text-left px-4 py-3 text-base text-white hover:bg-gray-700 transition-colors"
                               onClick={() => {
                                 setActiveTab(tab.id);
                                 setIsDropdownOpen(false);
