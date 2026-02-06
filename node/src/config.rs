@@ -19,7 +19,6 @@ pub const DEFAULT_DATA_DIR: &str = "~/.braidpool";
 pub const DEFAULT_COOKIE_PATH: &str = "~/.bitcoin/regtest/.cookie";
 /// Default pool identifier
 pub const DEFAULT_POOL_IDENTIFIER: &str = "Braidpool";
-
 #[derive(Deserialize, Serialize, Clone)]
 pub struct NetworkConfig {
     //Address to which the current braidpool node will bind to
