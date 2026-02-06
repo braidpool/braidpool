@@ -22,6 +22,7 @@ use node::{
     bead::{Bead, BeadHashes, BeadRequest, BeadResponse, BeadSyncError},
     behaviour::{self, BEAD_ANNOUNCE_PROTOCOL, BRAIDPOOL_TOPIC},
     braid, cli,
+    connection::{resolve_cookie_path, resolve_ipc_socket, wait_for_cookie},
     db::db_handlers::DBHandler,
     ibd_manager::{IBDCommands, IBDManager, IBD_BATCH_SIZE},
     ipc_template_consumer,
@@ -300,9 +301,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     info!(boot_node_count = %BOOTNODES.len(), "Boot nodes added to DHT");
     swarm.dial(ADDR_REFRENCE.parse::<Multiaddr>().unwrap())?;
     info!(address = %ADDR_REFRENCE, "Dialed boot node");
-    //IPC(inter process communication) based `getblocktemplate` and `notification` to send to the downstream via the `cmempoold` architecture
-    info!(socket = %args.ipc_socket, "IPC socket path");
-
     let network = if let Some(network_name) = &args.network {
         info!(network = %network_name, "Network selected");
         match network_name.as_str() {
@@ -325,7 +323,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Network::Bitcoin
     };
 
-    let ipc_socket_path_for_blocking = args.ipc_socket.clone();
+    // Resolve IPC socket path (auto-detect per network or use explicit override)
+    let ipc_socket_path = resolve_ipc_socket(args.ipc_socket.as_deref(), network);
+    info!(socket = %ipc_socket_path, "IPC socket path");
+
+    // Validate bitcoind is accessible via cookie file (startup gate)
+    let cookie_path = resolve_cookie_path(args.rpccookie.as_deref(), network);
+    info!(cookie = %cookie_path.display(), "Checking bitcoind readiness");
+    wait_for_cookie(&cookie_path).await.map_err(|e| {
+        error!(error = %e, "Failed to validate bitcoind cookie file");
+        e
+    })?;
+    info!("bitcoind confirmed running (cookie file found)");
+
+    let ipc_socket_path_for_blocking = ipc_socket_path.clone();
     let notification_tx_for_ipc = notification_tx.clone();
     let latest_template_for_ipc = latest_template.clone();
     let latest_template_merkle_branch_for_ipc = latest_template_merkle_branch.clone();
