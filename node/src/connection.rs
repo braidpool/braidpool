@@ -2,7 +2,7 @@ use bitcoin::Network;
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
-use tracing::{info, warn};
+use tracing::warn;
 
 #[derive(Debug)]
 pub enum CookieError {
