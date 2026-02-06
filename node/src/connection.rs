@@ -1,3 +1,19 @@
+//! Bitcoind connection helpers.
+//!
+//! Resolves cookie file and IPC socket paths per network, with smart defaults
+//! for the bundled install model (bitcoind + braidpool on same host).
+//!
+//! The cookie file is used as a startup gate: its presence confirms bitcoind
+//! is running before braidpool attempts IPC connection.
+//!
+//! | Network   | Cookie path default             | IPC socket default            |
+//! |-----------|---------------------------------|-------------------------------|
+//! | mainnet   | `~/.bitcoin/.cookie`            | `/tmp/bitcoin-main.sock`      |
+//! | testnet4  | `~/.bitcoin/testnet4/.cookie`   | `/tmp/bitcoin-testnet4.sock`  |
+//! | signet    | `~/.bitcoin/signet/.cookie`     | `/tmp/bitcoin-signet.sock`    |
+//! | regtest   | `~/.bitcoin/regtest/.cookie`    | `/tmp/bitcoin-regtest.sock`   |
+//! | cpunet    | `~/.bitcoin/cpunet/.cookie`     | `/tmp/bitcoin-cpunet.sock`    |
+
 use bitcoin::Network;
 use std::fmt;
 use std::fs;
