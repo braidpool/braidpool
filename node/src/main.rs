@@ -1,5 +1,4 @@
 use bitcoin::consensus::encode::deserialize;
-use bitcoin::Network;
 use clap::Parser;
 use futures::lock::Mutex;
 use futures::StreamExt;
@@ -14,6 +13,7 @@ use libp2p::{
     swarm::SwarmEvent,
     PeerId,
 };
+use node::config::BraidpoolConfig;
 use node::db::db_handlers::{fetch_beads_in_batch, prepare_bead_tuple_data};
 use node::ibd_manager::{IBD_TRIGGER_AFTER, MAX_IBD_INCOMING_THRESHOLD, MAX_IBD_RETRIES};
 use node::utils::BeadHash;
@@ -33,7 +33,6 @@ use node::{
 };
 use std::collections::HashSet;
 use std::os::unix::fs::PermissionsExt;
-use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -54,10 +53,12 @@ const SEED_DNS: &str = "/dnsaddr/french.braidpool.net";
 //combined addr for dns resolution and dialing of boot for peer discovery
 const ADDR_REFRENCE: &str =
     "/dnsaddr/french.braidpool.net/p2p/12D3KooWG9z8TziaNuYyEcc9FeUC3FTtrEf2XSnSdDpLvx4Jh2w3";
+
 use tokio::sync::{
     mpsc::{self},
     RwLock,
 };
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     // Initialize tracing with colors and module prefixes
@@ -200,32 +201,137 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let main_task_token = CancellationToken::new();
     let ipc_task_token = main_task_token.clone();
     let args = cli::Cli::parse();
-    let datadir_str = args.datadir.to_str().ok_or_else(|| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "Invalid datadir path encoding",
+
+    let config_path = node::config::expand_pathbuf(&args.config);
+    if !config_path.exists() {
+        error!(path = %config_path.display(), "Config file not found");
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Config file not found at {}", config_path.display()),
         )
-    })?;
-    let datadir = shellexpand::full(datadir_str).map_err(|e| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("Shell expansion failed: {}", e),
-        )
-    })?;
-    match fs::metadata(&*datadir) {
+        .into());
+    }
+    info!(path = %config_path.display(), "Loading braidpool config");
+    let braidpool_config = match BraidpoolConfig::load_from_config_file(
+        config_path
+            .to_str()
+            .expect("Failed to convert config path to string"),
+    ) {
+        Ok(c) => c,
+        Err(e) => {
+            error!(error = %e, path = %config_path.display(), "Invalid configuration file");
+            return Err(e);
+        }
+    };
+
+    let datadir = match args.datadir.as_ref() {
+        Some(path) => node::config::expand_pathbuf(path),
+        None => node::config::expand_path(&braidpool_config.braid_directory.path),
+    };
+
+    let bind_addr = args
+        .bind
+        .clone()
+        .or_else(|| {
+            node::config::socket_from_multiaddr(
+                &braidpool_config.braidnetwork_config.listen_address,
+            )
+        })
+        .unwrap_or_else(|| "0.0.0.0:6680".to_string());
+
+    let mut peer_nodes = braidpool_config.braidnetwork_config.peer_nodes.clone();
+    if let Some(nodes) = args.addnode.clone() {
+        peer_nodes.extend(nodes);
+    }
+
+    let network = match args.network.as_deref() {
+        Some(network_name) => match node::config::parse_network_arg(network_name) {
+            Some(parsed) => parsed,
+            None => {
+                error!(
+                    network = %network_name,
+                    valid_networks = "main, testnet, testnet4, signet, regtest, cpunet",
+                    "Invalid network specified, falling back to config value"
+                );
+                braidpool_config.bitcoin_config.network
+            }
+        },
+        None => braidpool_config.bitcoin_config.network,
+    };
+
+    let ipc_socket = braidpool_config
+        .bitcoin_config
+        .ipc_socket
+        .clone()
+        .unwrap_or(args.ipc_socket.clone());
+
+    let rpc_server_addr = braidpool_config.braid_rpc_config.rpc_server_addr.clone();
+
+    // Parse Bitcoin RPC configuration from args or config
+    let bitcoin_node = args
+        .bitcoin
+        .clone()
+        .unwrap_or_else(|| braidpool_config.bitcoin_config.bitcoind_ip.clone());
+
+    let rpc_port = args
+        .rpcport
+        .or_else(|| {
+            braidpool_config
+                .bitcoin_config
+                .port
+                .parse::<u16>()
+                .map_err(|e| {
+                    error!("Invalid port number in config: {}", e);
+                    e
+                })
+                .ok()
+        })
+        .unwrap_or(18443);
+
+    let rpc_user = args
+        .rpcuser
+        .clone()
+        .unwrap_or_else(|| braidpool_config.bitcoin_config.username.clone());
+
+    let _rpc_pass = args
+        .rpcpass
+        .clone()
+        .unwrap_or_else(|| braidpool_config.bitcoin_config.password.clone());
+
+    let _rpc_cookie = args
+        .rpccookie
+        .clone()
+        .map(|p| node::config::expand_path(&p))
+        .or_else(|| {
+            Some(node::config::expand_path(
+                &braidpool_config.bitcoin_config.cookie_path,
+            ))
+        });
+
+    info!(
+        bitcoin_node = %bitcoin_node,
+        rpc_port = %rpc_port,
+        rpc_user = %rpc_user,
+        "Bitcoin RPC configuration loaded"
+    );
+
+    match fs::metadata(&datadir) {
         Ok(m) => {
             if !m.is_dir() {
-                error!(datadir = %datadir, "Data directory exists but is not a directory");
+                error!(
+                    datadir = %datadir.display(),
+                    "Data directory exists but is not a directory"
+                );
             }
-            info!(datadir = %datadir, "Using existing data directory");
+            info!(datadir = %datadir.display(), "Using existing data directory");
         }
         Err(_) => {
-            info!(datadir = %datadir, "Creating data directory");
-            fs::create_dir_all(&*datadir)?;
+            info!(datadir = %datadir.display(), "Creating data directory");
+            fs::create_dir_all(&datadir)?;
         }
     }
 
-    let datadir_path = Path::new(&*datadir);
+    let datadir_path = datadir.as_path();
     let keystore_path = datadir_path.join("keystore");
     #[cfg(unix)]
     {
@@ -294,9 +400,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         })?
         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX)))
         .build();
-    let socket_addr: std::net::SocketAddr = match args.bind.parse() {
+    let socket_addr: std::net::SocketAddr = match bind_addr.parse() {
         Ok(addr) => addr,
-        Err(_) => format!("{}:6680", args.bind).parse().map_err(|e| {
+        Err(_) => format!("{}:6680", bind_addr).parse().map_err(|e| {
             std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 format!("Failed to parse bind address: {}", e),
@@ -355,31 +461,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     swarm.dial(boot_addr)?;
     info!(address = %ADDR_REFRENCE, "Dialed boot node");
     //IPC(inter process communication) based `getblocktemplate` and `notification` to send to the downstream via the `cmempoold` architecture
-    info!(socket = %args.ipc_socket, "IPC socket path");
+    info!(socket = %ipc_socket, "IPC socket path");
+    info!(network = ?network, "Network selected");
 
-    let network = if let Some(network_name) = &args.network {
-        info!(network = %network_name, "Network selected");
-        match network_name.as_str() {
-            "main" | "mainnet" => Network::Bitcoin,
-            "testnet" | "testnet4" => Network::Testnet(bitcoin::TestnetVersion::V4),
-            "signet" => Network::Signet,
-            "regtest" => Network::Regtest,
-            "cpunet" => Network::CPUNet,
-            _ => {
-                error!(
-                    network = %network_name,
-                    valid_networks = "main, testnet, testnet4, signet, regtest, cpunet",
-                    "Invalid network specified"
-                );
-                info!(fallback = "regtest", "Using fallback network");
-                Network::Regtest
-            }
-        }
-    } else {
-        Network::Bitcoin
-    };
-
-    let ipc_socket_path_for_blocking = args.ipc_socket.clone();
+    let ipc_socket_path_for_blocking = ipc_socket.clone();
     let notification_tx_for_ipc = notification_tx.clone();
     let latest_template_for_ipc = latest_template.clone();
     let latest_template_merkle_branch_for_ipc = latest_template_merkle_branch.clone();
@@ -503,8 +588,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         });
     });
 
-    if let Some(addnode) = args.addnode {
-        for node in addnode.iter() {
+    if !peer_nodes.is_empty() {
+        for node in peer_nodes.iter() {
             let node_multiaddr: Multiaddr = match node.parse() {
                 Ok(addr) => addr,
                 Err(e) => {

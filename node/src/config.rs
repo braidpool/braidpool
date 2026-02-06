@@ -1,7 +1,9 @@
 use bitcoin::Network;
-use core::panic;
+use libp2p::core::multiaddr::{Multiaddr, Protocol};
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::path::PathBuf;
+
 #[derive(Deserialize, Serialize, Clone)]
 pub struct NetworkConfig {
     //Address to which the current braidpool node will bind to
@@ -17,6 +19,7 @@ pub struct BitcoinConfig {
     pub port: String,
     pub bitcoind_ip: String,
     pub cookie_path: String,
+    pub ipc_socket: Option<String>,
 }
 #[derive(Serialize, Deserialize, Clone)]
 pub struct BraidDirectoryConfig {
@@ -48,16 +51,13 @@ impl Default for BraidRpcConfig {
 }
 #[allow(dead_code)]
 impl BraidpoolConfig {
-    pub fn load_from_config_file(path: &str) -> BraidpoolConfig {
-        let contents = match fs::read_to_string(path) {
-            Ok(c) => c,
-            Err(error) => {
-                panic!("An error occurred while reading the file {}", error);
-            }
-        };
-        let config: BraidpoolConfig = toml::from_str(&contents).unwrap();
+    pub fn load_from_config_file(
+        path: &str,
+    ) -> Result<BraidpoolConfig, Box<dyn std::error::Error>> {
+        let contents = fs::read_to_string(path)?;
+        let config: BraidpoolConfig = toml::from_str(&contents)?;
 
-        config
+        Ok(config)
     }
     pub fn with_listen_address(mut self, listen_address: String) -> Self {
         self.braidnetwork_config.listen_address = listen_address;
@@ -145,7 +145,7 @@ mod test {
             .unwrap()
             .join(Path::new("src/default_braidpool_config.toml"));
 
-        let from_file = BraidpoolConfig::load_from_config_file(cwd.to_str().unwrap());
+        let from_file = BraidpoolConfig::load_from_config_file(cwd.to_str().unwrap()).unwrap();
 
         let built = BraidpoolConfig {
             braidnetwork_config: NetworkConfig {
@@ -162,6 +162,7 @@ mod test {
                 port: "18443".to_string(),
                 bitcoind_ip: "0.0.0.0".to_string(),
                 cookie_path: "~/.bitcoin/regtest/.cookie".to_string(),
+                ipc_socket: None,
             },
             braid_directory: BraidDirectoryConfig {
                 path: "~/.braidpool".to_string(),
@@ -205,5 +206,48 @@ mod test {
             from_file.braid_rpc_config.rpc_server_addr,
             built.braid_rpc_config.rpc_server_addr
         );
+    }
+}
+
+pub fn expand_path(path: &str) -> PathBuf {
+    PathBuf::from(
+        shellexpand::full(path)
+            .expect(&format!("Failed to expand path: {}", path))
+            .into_owned(),
+    )
+}
+
+pub fn expand_pathbuf(path: &PathBuf) -> PathBuf {
+    expand_path(&path.to_string_lossy())
+}
+
+pub fn parse_network_arg(network_name: &str) -> Option<Network> {
+    match network_name {
+        "main" | "mainnet" => Some(Network::Bitcoin),
+        "testnet" | "testnet4" => Some(Network::Testnet(bitcoin::TestnetVersion::V4)),
+        "signet" => Some(Network::Signet),
+        "regtest" => Some(Network::Regtest),
+        "cpunet" => Some(Network::CPUNet),
+        _ => None,
+    }
+}
+
+pub fn socket_from_multiaddr(address: &str) -> Option<String> {
+    let multiaddr: Multiaddr = address.parse().ok()?;
+    let mut ip = None;
+    let mut port = None;
+
+    for protocol in multiaddr.into_iter() {
+        match protocol {
+            Protocol::Ip4(ipv4) => ip = Some(ipv4.to_string()),
+            Protocol::Ip6(ipv6) => ip = Some(ipv6.to_string()),
+            Protocol::Tcp(p) | Protocol::Udp(p) => port = Some(p),
+            _ => {}
+        }
+    }
+
+    match (ip, port) {
+        (Some(ip), Some(port)) => Some(format!("{ip}:{port}")),
+        _ => None,
     }
 }

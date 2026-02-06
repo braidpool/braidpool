@@ -25,6 +25,8 @@ cookie_path="~/.bitcoin/regtest/.cookie"
 port="18443"
 #ip of the bitcoind node
 bitcoind_ip = "0.0.0.0"
+#path to the bitcoin ipc socket
+ipc_socket = "/tmp/bitcoin-cpunet.sock"
 
 #rpc server configuration
 [braid_rpc_config]

@@ -1194,7 +1194,7 @@ pub async fn test_same_bead_extend() {
         jsonrpsee::server::middleware::rpc::RpcServiceBuilder::new().layer_fn(LoggingMiddleware);
     let server = jsonrpsee::server::Server::builder()
         .set_rpc_middleware(rpc_middleware)
-        .build("127.0.0.1:8889")
+        .build("127.0.0.1:0")
         .await
         .unwrap();
     let rpc_impl = RpcServerImpl::new(
@@ -1210,8 +1210,8 @@ pub async fn test_same_bead_extend() {
     );
     let _handle = server.start(rpc_impl.into_rpc());
 
-    let server_addr = "127.0.0.1:8889";
-    let target_uri = format!("http://{}", server_addr);
+    let addr = server.local_addr().unwrap();
+    let target_uri = format!("http://{}", addr);
     let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
 
     let new_bead = create_test_bead(2, Some(test_bead1.block_header.block_hash()));
@@ -1249,7 +1249,7 @@ pub async fn test_cohort_count_rpc() {
         jsonrpsee::server::middleware::rpc::RpcServiceBuilder::new().layer_fn(LoggingMiddleware);
     let server = jsonrpsee::server::Server::builder()
         .set_rpc_middleware(rpc_middleware)
-        .build("127.0.0.1:9000")
+        .build("127.0.0.1:0")
         .await
         .unwrap();
     let rpc_impl = RpcServerImpl::new(
@@ -1265,8 +1265,8 @@ pub async fn test_cohort_count_rpc() {
     );
     let _handle = server.start(rpc_impl.into_rpc());
 
-    let server_addr = "127.0.0.1:9000";
-    let target_uri = format!("http://{}", server_addr);
+    let addr = server.local_addr().unwrap();
+    let target_uri = format!("http://{}", addr);
     let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
 
     let test_bead_2_json_str =

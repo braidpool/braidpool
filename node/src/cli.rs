@@ -4,13 +4,17 @@ use std::path::PathBuf;
 #[derive(Parser, Debug, Clone)]
 #[command(name = "braid", about = "Braidpool Node CLI")]
 pub struct Cli {
+    /// Path to braidpool config file (TOML)
+    #[arg(long, default_value = concat!(env!("CARGO_MANIFEST_DIR"), "/src/default_braidpool_config.toml"))]
+    pub config: PathBuf,
+
     /// Braid data directory
-    #[arg(long, default_value = "~/.braidpool/")]
-    pub datadir: PathBuf,
+    #[arg(long)]
+    pub datadir: Option<PathBuf>,
 
     /// Bind to a given address and always listen on it
-    #[arg(long, default_value = "0.0.0.0:6680")]
-    pub bind: String,
+    #[arg(long)]
+    pub bind: Option<String>,
 
     /// Add a node to connect to and attempt to keep the connection open. This option can be
     /// specified multiple times
@@ -18,12 +22,12 @@ pub struct Cli {
     pub addnode: Option<Vec<String>>,
 
     /// Connect to this bitcoin node
-    #[arg(long, default_value = "0.0.0.0")]
-    pub bitcoin: String,
+    #[arg(long)]
+    pub bitcoin: Option<String>,
 
     /// Use this port for bitcoin RPC
-    #[arg(long, default_value = "8332")]
-    pub rpcport: u16,
+    #[arg(long)]
+    pub rpcport: Option<u16>,
 
     /// Use this username for bitcoin RPC
     #[arg(long)]
@@ -34,11 +38,11 @@ pub struct Cli {
     pub rpcpass: Option<String>,
 
     /// Which network to use. Valid options are mainnet, testnet4, signet, cpunet (preferred)
-    #[arg(long, default_value = "main")]
+    #[arg(long)]
     pub network: Option<String>,
 
     /// Use this cookie file for bitcoin RPC
-    #[arg(long, default_value = "~/.bitcoin/.cookie")]
+    #[arg(long)]
     pub rpccookie: Option<String>,
 
     /// Path to Bitcoin Core IPC socket
