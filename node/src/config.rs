@@ -14,7 +14,7 @@ pub struct BitcoinConfig {
     pub network: bitcoin::Network,
     pub port: String,
     pub bitcoind_ip: String,
-    pub cookie_path: String,
+    pub cookie_path: Option<String>,
 }
 #[derive(Serialize, Deserialize, Clone)]
 pub struct BraidDirectoryConfig {
@@ -81,7 +81,7 @@ impl BraidpoolConfig {
         self
     }
 
-    pub fn with_cookie_path(mut self, path: String) -> Self {
+    pub fn with_cookie_path(mut self, path: Option<String>) -> Self {
         self.bitcoin_config.cookie_path = path;
         self
     }
@@ -147,7 +147,7 @@ mod test {
                 network: Network::CPUNet,
                 port: "18443".to_string(),
                 bitcoind_ip: "0.0.0.0".to_string(),
-                cookie_path: "~/.bitcoin/regtest/.cookie".to_string(),
+                cookie_path: None,
             },
             braid_directory: BraidDirectoryConfig {
                 path: "~/.braidpool".to_string(),
