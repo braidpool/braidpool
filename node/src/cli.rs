@@ -23,7 +23,11 @@ pub struct Cli {
     #[arg(long, default_value = "main")]
     pub network: Option<String>,
 
-    /// Cookie file for bitcoind authentication. Auto-detected per network if not specified.
+    /// Full path to bitcoind .cookie file for authentication.
+    /// When bitcoind uses a custom -datadir (e.g., -datadir=/data/node1),
+    /// the cookie file is at <datadir>/<network>/.cookie.
+    /// Example: --rpccookie /data/node1/signet/.cookie
+    /// Precedence: --rpccookie > config file cookie_path > auto-detect from ~/.bitcoin/
     #[arg(long)]
     pub rpccookie: Option<String>,
 

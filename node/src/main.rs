@@ -21,7 +21,7 @@ use node::SwarmHandler;
 use node::{
     bead::{Bead, BeadHashes, BeadRequest, BeadResponse, BeadSyncError},
     behaviour::{self, BEAD_ANNOUNCE_PROTOCOL, BRAIDPOOL_TOPIC},
-    braid, cli,
+    braid, cli, config,
     connection::{resolve_cookie_path, resolve_ipc_socket, wait_for_cookie},
     db::db_handlers::DBHandler,
     ibd_manager::{IBDCommands, IBDManager, IBD_BATCH_SIZE},
@@ -403,8 +403,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let ipc_socket_path = resolve_ipc_socket(args.ipc_socket.as_deref(), network);
     info!(socket = %ipc_socket_path, "IPC socket path");
 
+    // Load config file for cookie_path (if present in datadir)
+    let config_file = datadir_path.join("braidpool_config.toml");
+    let config_cookie_path = config_file
+        .to_str()
+        .and_then(|p| config::BraidpoolConfig::load_from_config_file(p).ok())
+        .and_then(|c| c.bitcoin_config.cookie_path);
+    if config_cookie_path.is_none() {
+        debug!(
+            config = %config_file.display(),
+            "No config file found or no cookie_path set, using auto-detection"
+        );
+    }
+
     // Validate bitcoind is accessible via cookie file (startup gate)
-    let cookie_path = resolve_cookie_path(args.rpccookie.as_deref(), network);
+    let cookie_path = resolve_cookie_path(
+        args.rpccookie.as_deref(),
+        config_cookie_path.as_deref(),
+        network,
+    );
     info!(cookie = %cookie_path.display(), "Checking bitcoind readiness");
     wait_for_cookie(&cookie_path).await.map_err(|e| {
         error!(error = %e, "Failed to validate bitcoind cookie file");

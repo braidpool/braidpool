@@ -1,6 +1,6 @@
 use bitcoin::Network;
-use core::panic;
 use serde::{Deserialize, Serialize};
+use std::error::Error;
 use std::fs;
 #[derive(Deserialize, Serialize, Clone)]
 pub struct NetworkConfig {
@@ -46,16 +46,10 @@ impl Default for BraidRpcConfig {
 }
 #[allow(dead_code)]
 impl BraidpoolConfig {
-    pub fn load_from_config_file(path: &str) -> BraidpoolConfig {
-        let contents = match fs::read_to_string(path) {
-            Ok(c) => c,
-            Err(error) => {
-                panic!("An error occurred while reading the file {}", error);
-            }
-        };
-        let config: BraidpoolConfig = toml::from_str(&contents).unwrap();
-
-        config
+    pub fn load_from_config_file(path: &str) -> Result<BraidpoolConfig, Box<dyn Error>> {
+        let contents = fs::read_to_string(path)?;
+        let config: BraidpoolConfig = toml::from_str(&contents)?;
+        Ok(config)
     }
     pub fn with_listen_address(mut self, listen_address: String) -> Self {
         self.braidnetwork_config.listen_address = listen_address;
@@ -133,7 +127,7 @@ mod test {
             .unwrap()
             .join(Path::new("src/default_braidpool_config.toml"));
 
-        let from_file = BraidpoolConfig::load_from_config_file(cwd.to_str().unwrap());
+        let from_file = BraidpoolConfig::load_from_config_file(cwd.to_str().unwrap()).unwrap();
 
         let built = BraidpoolConfig {
             braidnetwork_config: NetworkConfig {

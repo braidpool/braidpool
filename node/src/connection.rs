@@ -6,6 +6,18 @@
 //! The cookie file is used as a startup gate: its presence confirms bitcoind
 //! is running before braidpool attempts IPC connection.
 //!
+//! ## Cookie Path Resolution
+//!
+//! The cookie file path is resolved with three-tier precedence:
+//! 1. CLI `--rpccookie` flag (explicit full path)
+//! 2. TOML config file `cookie_path` field
+//! 3. Network-based auto-detection from `~/.bitcoin/{network}/.cookie`
+//!
+//! For custom `bitcoind -datadir` setups, provide the cookie path explicitly
+//! via either mechanism. The path format is `<datadir>/<network>/.cookie`.
+//!
+//! ## Default paths
+//!
 //! | Network   | Cookie path default             | IPC socket default            |
 //! |-----------|---------------------------------|-------------------------------|
 //! | mainnet   | `~/.bitcoin/.cookie`            | `/tmp/bitcoin-main.sock`      |
@@ -58,12 +70,26 @@ impl fmt::Display for CookieError {
 
 impl std::error::Error for CookieError {}
 
-/// Resolve the cookie file path based on an explicit override or network defaults.
+/// Resolve the cookie file path using three-tier precedence:
 ///
-/// If `explicit` is `Some`, uses that path (with tilde expansion).
-/// Otherwise, returns the default cookie path for the given network.
-pub fn resolve_cookie_path(explicit: Option<&str>, network: Network) -> PathBuf {
-    if let Some(path) = explicit {
+/// 1. `cli_path` — CLI `--rpccookie` flag (highest priority)
+/// 2. `config_path` — TOML config `cookie_path` field
+/// 3. Network-based auto-detection from `~/.bitcoin/{network}/.cookie`
+///
+/// Both `cli_path` and `config_path` support tilde expansion.
+/// When using a custom `bitcoind -datadir`, pass the full cookie path
+/// via `--rpccookie` or set `cookie_path` in the config file.
+pub fn resolve_cookie_path(
+    cli_path: Option<&str>,
+    config_path: Option<&str>,
+    network: Network,
+) -> PathBuf {
+    if let Some(path) = cli_path {
+        let expanded = shellexpand::tilde(path);
+        return PathBuf::from(expanded.as_ref());
+    }
+
+    if let Some(path) = config_path {
         let expanded = shellexpand::tilde(path);
         return PathBuf::from(expanded.as_ref());
     }
@@ -194,49 +220,84 @@ mod tests {
 
     #[test]
     fn resolve_cookie_path_cpunet() {
-        let path = resolve_cookie_path(None, Network::CPUNet);
+        let path = resolve_cookie_path(None, None, Network::CPUNet);
         let expected = PathBuf::from(shellexpand::tilde("~/.bitcoin/cpunet/.cookie").as_ref());
         assert_eq!(path, expected);
     }
 
     #[test]
     fn resolve_cookie_path_mainnet() {
-        let path = resolve_cookie_path(None, Network::Bitcoin);
+        let path = resolve_cookie_path(None, None, Network::Bitcoin);
         let expected = PathBuf::from(shellexpand::tilde("~/.bitcoin/.cookie").as_ref());
         assert_eq!(path, expected);
     }
 
     #[test]
     fn resolve_cookie_path_testnet() {
-        let path = resolve_cookie_path(None, Network::Testnet(bitcoin::TestnetVersion::V4));
+        let path = resolve_cookie_path(None, None, Network::Testnet(bitcoin::TestnetVersion::V4));
         let expected = PathBuf::from(shellexpand::tilde("~/.bitcoin/testnet4/.cookie").as_ref());
         assert_eq!(path, expected);
     }
 
     #[test]
     fn resolve_cookie_path_signet() {
-        let path = resolve_cookie_path(None, Network::Signet);
+        let path = resolve_cookie_path(None, None, Network::Signet);
         let expected = PathBuf::from(shellexpand::tilde("~/.bitcoin/signet/.cookie").as_ref());
         assert_eq!(path, expected);
     }
 
     #[test]
     fn resolve_cookie_path_regtest() {
-        let path = resolve_cookie_path(None, Network::Regtest);
+        let path = resolve_cookie_path(None, None, Network::Regtest);
         let expected = PathBuf::from(shellexpand::tilde("~/.bitcoin/regtest/.cookie").as_ref());
         assert_eq!(path, expected);
     }
 
     #[test]
     fn resolve_cookie_path_explicit_override() {
-        let path = resolve_cookie_path(Some("/custom/path/.cookie"), Network::CPUNet);
+        let path = resolve_cookie_path(Some("/custom/path/.cookie"), None, Network::CPUNet);
         assert_eq!(path, PathBuf::from("/custom/path/.cookie"));
     }
 
     #[test]
     fn resolve_cookie_path_tilde_expansion() {
-        let path = resolve_cookie_path(Some("~/my-bitcoin/.cookie"), Network::CPUNet);
+        let path = resolve_cookie_path(Some("~/my-bitcoin/.cookie"), None, Network::CPUNet);
         let expected = PathBuf::from(shellexpand::tilde("~/my-bitcoin/.cookie").as_ref());
+        assert_eq!(path, expected);
+    }
+
+    #[test]
+    fn resolve_cookie_path_config_override() {
+        let path = resolve_cookie_path(None, Some("/data/node1/signet/.cookie"), Network::Signet);
+        assert_eq!(path, PathBuf::from("/data/node1/signet/.cookie"));
+    }
+
+    #[test]
+    fn resolve_cookie_path_cli_overrides_config() {
+        let path = resolve_cookie_path(
+            Some("/cli/path/.cookie"),
+            Some("/config/path/.cookie"),
+            Network::Signet,
+        );
+        assert_eq!(path, PathBuf::from("/cli/path/.cookie"));
+    }
+
+    #[test]
+    fn resolve_cookie_path_config_with_tilde() {
+        let path = resolve_cookie_path(
+            None,
+            Some("~/custom-datadir/signet/.cookie"),
+            Network::Signet,
+        );
+        let expected =
+            PathBuf::from(shellexpand::tilde("~/custom-datadir/signet/.cookie").as_ref());
+        assert_eq!(path, expected);
+    }
+
+    #[test]
+    fn resolve_cookie_path_both_none_falls_to_default() {
+        let path = resolve_cookie_path(None, None, Network::Signet);
+        let expected = PathBuf::from(shellexpand::tilde("~/.bitcoin/signet/.cookie").as_ref());
         assert_eq!(path, expected);
     }
 
