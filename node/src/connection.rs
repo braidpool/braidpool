@@ -141,9 +141,9 @@ pub fn resolve_cookie_path(
     }
 
     // Canonicalize the path (resolves symlinks, normalizes)
-    let canonical = path.canonicalize().map_err(|_| CookieError::CanonicalizeFailure {
-        path: path.clone(),
-    })?;
+    let canonical = path
+        .canonicalize()
+        .map_err(|_| CookieError::CanonicalizeFailure { path: path.clone() })?;
 
     // Validate path doesn't escape home directory
     let home_dir = dirs::home_dir().ok_or_else(|| CookieError::CanonicalizeFailure {
@@ -154,9 +154,7 @@ pub fn resolve_cookie_path(
         && !canonical.starts_with("/root")
         && !canonical.starts_with("/tmp")
     {
-        return Err(CookieError::PathTraversalDetected {
-            path: canonical,
-        });
+        return Err(CookieError::PathTraversalDetected { path: canonical });
     }
 
     Ok(canonical)
@@ -301,7 +299,8 @@ mod tests {
 
     #[test]
     fn resolve_cookie_path_testnet() {
-        let path = resolve_cookie_path(None, None, Network::Testnet(bitcoin::TestnetVersion::V4)).unwrap();
+        let path =
+            resolve_cookie_path(None, None, Network::Testnet(bitcoin::TestnetVersion::V4)).unwrap();
         assert!(path.ends_with(".cookie"));
     }
 
@@ -321,7 +320,10 @@ mod tests {
     fn resolve_cookie_path_rejects_parent_traversal() {
         let result = resolve_cookie_path(Some("~/../../../etc/passwd"), None, Network::CPUNet);
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), CookieError::PathTraversalDetected { .. }));
+        assert!(matches!(
+            result.unwrap_err(),
+            CookieError::PathTraversalDetected { .. }
+        ));
     }
 
     #[test]
@@ -330,7 +332,11 @@ mod tests {
         let path = resolve_cookie_path(Some("~/.cookie-test"), None, Network::CPUNet);
         match path {
             Ok(canonical) => {
-                assert!(canonical.starts_with(&home) || canonical.starts_with("/root") || canonical.starts_with("/tmp"));
+                assert!(
+                    canonical.starts_with(&home)
+                        || canonical.starts_with("/root")
+                        || canonical.starts_with("/tmp")
+                );
             }
             Err(CookieError::CanonicalizeFailure { .. }) => {
                 // Expected if file doesn't exist or no permissions
@@ -345,7 +351,11 @@ mod tests {
         let result = resolve_cookie_path(None, Some("~/.cookie"), Network::Signet);
         match result {
             Ok(path) => {
-                assert!(path.starts_with(&home) || path.starts_with("/root") || path.starts_with("/tmp"));
+                assert!(
+                    path.starts_with(&home)
+                        || path.starts_with("/root")
+                        || path.starts_with("/tmp")
+                );
             }
             Err(_) => {
                 // Expected if file doesn't exist
@@ -355,11 +365,7 @@ mod tests {
 
     #[test]
     fn resolve_cookie_path_cli_overrides_config() {
-        let result = resolve_cookie_path(
-            Some("~/.cookie"),
-            Some("/etc/passwd"),
-            Network::Signet,
-        );
+        let result = resolve_cookie_path(Some("~/.cookie"), Some("/etc/passwd"), Network::Signet);
         let _ = result;
     }
 
@@ -400,14 +406,14 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         let target = dir.join("target.cookie");
         let symlink = dir.join(".cookie-symlink");
-        
+
         fs::write(&target, "__cookie__:abcdef0123456789").unwrap();
-        
+
         #[cfg(unix)]
         {
             use std::os::unix::fs as unix_fs;
             unix_fs::symlink(&target, &symlink).unwrap();
-            
+
             let result = validate_cookie_file(&symlink);
             assert!(result.is_err());
             assert!(matches!(
@@ -415,7 +421,7 @@ mod tests {
                 CookieError::SymlinkDetected { .. }
             ));
         }
-        
+
         fs::remove_dir_all(&dir).unwrap();
     }
 

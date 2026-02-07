@@ -422,11 +422,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
         args.rpccookie.as_deref(),
         config_cookie_path.as_deref(),
         network,
-    ).map_err(|e| {
+    )
+    .map_err(|e| {
         error!(error = %e, "Failed to resolve cookie file path");
         e
     })?;
-    
+
     info!("Checking bitcoind readiness via cookie validation");
     wait_for_cookie(&cookie_path).await.map_err(|e| {
         error!(error = %e, "Failed to validate bitcoind cookie file");
