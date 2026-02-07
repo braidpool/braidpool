@@ -4,6 +4,22 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
+// Default network configuration constants
+/// Default bind address for the braidpool node
+pub const DEFAULT_BIND_ADDRESS: &str = "0.0.0.0:6680";
+/// Default port for braidpool P2P communication
+pub const DEFAULT_P2P_PORT: u16 = 6680;
+/// Default Bitcoin RPC port (regtest)
+pub const DEFAULT_BITCOIN_RPC_PORT: u16 = 18443;
+/// Default braidpool RPC server address
+pub const DEFAULT_RPC_SERVER_ADDR: &str = "127.0.0.1:6682";
+/// Default data directory path
+pub const DEFAULT_DATA_DIR: &str = "~/.braidpool";
+/// Default Bitcoin cookie path
+pub const DEFAULT_COOKIE_PATH: &str = "~/.bitcoin/regtest/.cookie";
+/// Default pool identifier
+pub const DEFAULT_POOL_IDENTIFIER: &str = "Braidpool";
+
 #[derive(Deserialize, Serialize, Clone)]
 pub struct NetworkConfig {
     //Address to which the current braidpool node will bind to
@@ -11,6 +27,16 @@ pub struct NetworkConfig {
     //peer nodes to be added subscribed to the same topic
     pub peer_nodes: Vec<String>,
 }
+
+impl Default for NetworkConfig {
+    fn default() -> Self {
+        NetworkConfig {
+            listen_address: format!("/ip4/0.0.0.0/udp/{}/quic-v1", DEFAULT_P2P_PORT),
+            peer_nodes: Vec::new(),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct BitcoinConfig {
     pub network: bitcoin::Network,
@@ -21,14 +47,47 @@ pub struct BitcoinConfig {
     pub cookie_path: String,
     pub ipc_socket: Option<String>,
 }
+
+impl Default for BitcoinConfig {
+    fn default() -> Self {
+        BitcoinConfig {
+            network: Network::Regtest,
+            username: String::new(),
+            password: String::new(),
+            port: DEFAULT_BITCOIN_RPC_PORT.to_string(),
+            bitcoind_ip: "127.0.0.1".to_string(),
+            cookie_path: DEFAULT_COOKIE_PATH.to_string(),
+            ipc_socket: None,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct BraidDirectoryConfig {
     pub path: String,
 }
+
+impl Default for BraidDirectoryConfig {
+    fn default() -> Self {
+        BraidDirectoryConfig {
+            path: DEFAULT_DATA_DIR.to_string(),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct MinerConfig {
     pub miner_pubkey: String,
 }
+
+impl Default for MinerConfig {
+    fn default() -> Self {
+        MinerConfig {
+            miner_pubkey: String::new(),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct BraidpoolConfig {
     pub braidnetwork_config: NetworkConfig,
@@ -37,6 +96,19 @@ pub struct BraidpoolConfig {
     pub miner_config: MinerConfig,
     pub braid_rpc_config: BraidRpcConfig,
 }
+
+impl Default for BraidpoolConfig {
+    fn default() -> Self {
+        BraidpoolConfig {
+            braidnetwork_config: NetworkConfig::default(),
+            bitcoin_config: BitcoinConfig::default(),
+            braid_directory: BraidDirectoryConfig::default(),
+            miner_config: MinerConfig::default(),
+            braid_rpc_config: BraidRpcConfig::default(),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 //Rpc server configuration
 pub struct BraidRpcConfig {
@@ -45,7 +117,7 @@ pub struct BraidRpcConfig {
 impl Default for BraidRpcConfig {
     fn default() -> Self {
         BraidRpcConfig {
-            rpc_server_addr: String::from("127.0.0.1:6682"),
+            rpc_server_addr: DEFAULT_RPC_SERVER_ADDR.to_string(),
         }
     }
 }

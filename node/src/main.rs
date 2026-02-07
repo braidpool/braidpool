@@ -13,7 +13,9 @@ use libp2p::{
     swarm::SwarmEvent,
     PeerId,
 };
-use node::config::BraidpoolConfig;
+use node::config::{
+    BraidpoolConfig, DEFAULT_BIND_ADDRESS, DEFAULT_BITCOIN_RPC_PORT, DEFAULT_P2P_PORT,
+};
 use node::db::db_handlers::{fetch_beads_in_batch, prepare_bead_tuple_data};
 use node::ibd_manager::{IBD_TRIGGER_AFTER, MAX_IBD_INCOMING_THRESHOLD, MAX_IBD_RETRIES};
 use node::utils::BeadHash;
@@ -237,7 +239,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 &braidpool_config.braidnetwork_config.listen_address,
             )
         })
-        .unwrap_or_else(|| "0.0.0.0:6680".to_string());
+        .unwrap_or_else(|| DEFAULT_BIND_ADDRESS.to_string());
 
     let mut peer_nodes = braidpool_config.braidnetwork_config.peer_nodes.clone();
     if let Some(nodes) = args.addnode.clone() {
@@ -286,7 +288,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 })
                 .ok()
         })
-        .unwrap_or(18443);
+        .unwrap_or(DEFAULT_BITCOIN_RPC_PORT);
 
     let rpc_user = args
         .rpcuser
@@ -402,12 +404,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .build();
     let socket_addr: std::net::SocketAddr = match bind_addr.parse() {
         Ok(addr) => addr,
-        Err(_) => format!("{}:6680", bind_addr).parse().map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("Failed to parse bind address: {}", e),
-            )
-        })?,
+        Err(_) => format!("{}:{}", bind_addr, DEFAULT_P2P_PORT)
+            .parse()
+            .map_err(|e| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("Failed to parse bind address: {}", e),
+                )
+            })?,
     };
     let multi_addr: Multiaddr = format!(
         "/ip4/{}/udp/{}/quic-v1",
