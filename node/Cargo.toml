@@ -33,6 +33,7 @@ sqlx = { workspace = true}
 strum = { workspace = true }
 if-addrs = { workspace = true }
 anyhow = { workspace = true }
+dirs = "5.0"
 
 
 [build-dependencies]

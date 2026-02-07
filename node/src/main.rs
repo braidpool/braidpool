@@ -417,12 +417,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Validate bitcoind is accessible via cookie file (startup gate)
+    // Security: Path is validated for traversal, symlinks, and canonicalization
     let cookie_path = resolve_cookie_path(
         args.rpccookie.as_deref(),
         config_cookie_path.as_deref(),
         network,
-    );
-    info!(cookie = %cookie_path.display(), "Checking bitcoind readiness");
+    ).map_err(|e| {
+        error!(error = %e, "Failed to resolve cookie file path");
+        e
+    })?;
+    
+    info!("Checking bitcoind readiness via cookie validation");
     wait_for_cookie(&cookie_path).await.map_err(|e| {
         error!(error = %e, "Failed to validate bitcoind cookie file");
         e
