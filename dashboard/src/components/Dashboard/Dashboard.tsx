@@ -92,7 +92,7 @@ const Dashboard = () => {
                   </label>
 
                   <div
-                    className="relative block sm:hidden w-[45vw]"
+                    className="relative block sm:hidden w-full"
                     ref={dropdownRef}
                   >
                     <button

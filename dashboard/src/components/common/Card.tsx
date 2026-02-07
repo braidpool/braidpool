@@ -27,14 +27,14 @@ const Card: React.FC<CardProps> = ({
 
       {/* Header section */}
       {(title || subtitle || headerExtra) && (
-        <div className="px-3 py-3 border-b border-black/5 flex justify-between items-center bg-black/[0.01]">
-          <div>
+        <div className="px-3 py-3 border-b border-black/5 flex items-center bg-black/[0.01]">
+          <div className="shrink-0 mr-4">
             {title && (
               <h3 className="text-base font-medium text-white">{title}</h3>
             )}
             {subtitle && <p className="text-xs text-gray-300">{subtitle}</p>}
           </div>
-          {headerExtra && <div>{headerExtra}</div>}
+          {headerExtra && <div className="flex-1 min-w-0">{headerExtra}</div>}
         </div>
       )}
 
