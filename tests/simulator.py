@@ -29,7 +29,7 @@ import time
 import braid
 import matplotlib.pyplot as plt
 from decimal import Decimal, getcontext, ROUND_HALF_EVEN
-from mpmath import lambertw, e as mp_e                 # small‑number maths
+from mpmath import lambertw , e as mp_e                 # small‑number maths
 W = lambertw
 
 sys.setrecursionlimit(10000) # all_ancestors is recursive. If you generate large cohorts you'll blow
@@ -208,12 +208,29 @@ class Network:
         for n in self.nodes:
             n.tick(mine=mine, dt=dt)
 
-    def simulate(self, nbeads=20, mine=False):
-        """ Simulate the network until we have added <nbeads> beads """
-        initial_beads = len(self.nodes[0].braid.beads)
-        while len(self.nodes[0].braid.beads) < initial_beads + nbeads:
+    def simulate(self, nbeads, mine=False):
+        """Simulate mining nbeads"""
+        beads_mined = 0
+        last_log_time = time.time()
+        log_interval = 10.0  # Log every 10 seconds
+        
+        while len(self.nodes[0].braid.beads) < nbeads + 1:
             self.tick(mine=mine)
-
+            
+            current_beads = len(self.nodes[0].braid.beads)
+            
+            # Log progress periodically
+            if time.time() - last_log_time > log_interval:
+                cohorts = len(self.nodes[0].braid.cohorts)
+                ratio = current_beads / cohorts if cohorts > 0 else 0
+                target = self.nodes[0].target
+                
+                print(f"# Progress: {current_beads}/{nbeads} beads, "
+                      f"{cohorts} cohorts, "
+                      f"N_B/N_C={ratio:.2f}, "
+                      f"target={target:.2e}")
+                
+                last_log_time = time.time()
     def broadcast(self, node, bead, delay):
         """ Announce a block/bead discovery to a node who is <delay> away. """
         if bead not in node.braid:
@@ -259,6 +276,10 @@ class Node:
         self.tremaining   = None      # Ticks remaining before this node produces a bead
         self.incoming     = set()     # Initialize incoming set
         self.calc_target  = self.calc_target_pid # Default target calculation method
+        # Add progress monitoring
+        self.last_bead_time = 0
+        self.no_progress_count = 0
+        self.emergency_resets = 0
         # A braid of all beads for this node
         self.braid        = Braid([genesis_bead])
         self.braid.tips   = {list(self.braid.beads.values())[0]}
@@ -335,12 +356,36 @@ class Node:
         except ZeroDivisionError as e:
             print(f"{e}: p={p} target={self.target}")
             raise
+                
+        if self.hashrate <= 0:
+            return float('inf')  # Never mine if hashrate is zero
+        
         return nhashes/self.hashrate
 
     def add_peers(self, peers, latencies):
         """ Add a peer separated by a latency <delay>. """
         self.peers.extend(peers)
         self.latencies.extend(latencies)
+
+    def get_recent_bead_times(self, count=100):
+        """Get inter-arrival times of recent beads"""
+        if len(self.braid.beads) < count + 1:
+            return []
+        
+        # Get recent beads sorted by time
+        recent_beads = sorted(
+            list(self.braid.beads.values())[-count-1:],
+            key=lambda b: b.t
+        )
+        
+        # Calculate inter-arrival times
+        times = []
+        for i in range(1, len(recent_beads)):
+            dt = recent_beads[i].t - recent_beads[i-1].t
+            if dt > 0:
+                times.append(dt)
+        
+        return times
 
     def tick(self, mine=True, dt=0):
         """ Add a Bead satisfying <target>. """
@@ -349,6 +394,30 @@ class Node:
             self.tremaining -= dt
             if not self.incoming and self.braid.tips == self.working_bead.parents and self.tremaining > 0:
                 return
+            # WATCHDOG: Check for progress
+        current_time = self.braid.beads[max(self.braid.beads.keys())].t if self.braid.beads else 0
+    
+        if current_time - self.last_bead_time > 100.0:  # 100 seconds with no bead
+            self.no_progress_count += 1
+        
+            if self.no_progress_count > 3:
+                # Emergency: Reset difficulty
+                print(f"\n[WATCHDOG] Node {self.nodeid}: No progress for {current_time - self.last_bead_time:.1f}s")
+                print(f"[WATCHDOG] Current target: {self.target:.2e}")
+                print(f"[WATCHDOG] Performing emergency difficulty reset...")
+                
+                # Make difficulty MUCH easier
+                self.target = int(self.target * 100)  # 100x easier
+                self.emergency_resets += 1
+                self.no_progress_count = 0
+                
+                print(f"[WATCHDOG] New target: {self.target:.2e}")
+        else:
+            self.no_progress_count = 0
+    
+        # Update last bead time
+        if len(self.braid.beads) > 0:
+            self.last_bead_time = max(b.t for b in self.braid.beads.values())
         oldtips = copy(self.braid.tips)
         added_bead = None
         if oldtips != self.working_bead.parents:
@@ -530,7 +599,9 @@ class Node:
         Key fix: Distinguishes between x̄ (all beads, for hashrate) and x̄₁ (parents, for damping)
         """
         # 1. Configuration
-        WINDOW = 100  # Look back 100 cohorts for statistics
+        if not hasattr(self, '_daa_window'):
+            self._daa_window = 100
+        WINDOW = self._daa_window
         
         # We need enough history to calculate stats
         if len(self.braid.cohorts) < WINDOW:
@@ -550,6 +621,68 @@ class Node:
         
         if T <= 0.001: 
             return self.target  # Avoid division by zero at startup
+        
+        # ===== RECURSIVE WINDOW EXPANSION (FAIL-SAFE #1) =====
+        # Handle N_B ≈ N_C singularity by expanding window
+        
+        ratio = (N_B / N_C) - 1
+        expansion_count = 0
+        max_expansions = 5  # Prevent infinite loop
+        
+        while ratio <= 0.0001 and expansion_count < max_expansions:
+            # Double the window
+            WINDOW *= 2
+            
+            # Check if we've hit the cohort limit
+            if WINDOW > len(self.braid.cohorts):
+                WINDOW = len(self.braid.cohorts)
+                relevant_cohorts = self.braid.cohorts
+                N_B = sum(len(c) for c in relevant_cohorts)
+                N_C = len(relevant_cohorts)
+                
+                # Recalculate time
+                t_start = list(relevant_cohorts[0])[0].t
+                t_end = list(relevant_cohorts[-1])[0].t
+                T = t_end - t_start
+                
+                ratio = (N_B / N_C) - 1 if N_C > 0 else 0
+                break
+            
+            # Recalculate with expanded window
+            relevant_cohorts = self.braid.cohorts[-WINDOW:]
+            N_B = sum(len(c) for c in relevant_cohorts)
+            N_C = len(relevant_cohorts)
+            
+            # Recalculate time
+            t_start = list(relevant_cohorts[0])[0].t
+            t_end = list(relevant_cohorts[-1])[0].t
+            T = t_end - t_start
+        
+            ratio = (N_B / N_C) - 1
+            expansion_count += 1
+        
+            if DEBUG:
+                print(f"[DAA] Window expanded to {WINDOW}, ratio={ratio:.4f}")
+    
+        # Save successful window size
+        self._daa_window = WINDOW
+    
+         # Safety: ensure ratio is positive for Lambert W
+        if ratio <= 0:
+            ratio = 0.001
+        
+        if not hasattr(self, '_blockchain_mode_count'):
+            self._blockchain_mode_count = 0
+    
+        if ratio < 0.1:
+            self._blockchain_mode_count += 1
+            
+            if self._blockchain_mode_count > 50:
+                #print(f"\n[EMERGENCY] Stuck in blockchain mode! Resetting difficulty...")
+                self._blockchain_mode_count = 0
+                return MAX_HASH // (2**25)  # Very easy
+        else:
+            self._blockchain_mode_count = max(0, self._blockchain_mode_count - 1)
 
         # This is used for estimating the network hashrate
         # Spec: x̄ = (1/N_B ∑(1/x_i))^(-1) where i ranges over all beads
@@ -571,17 +704,26 @@ class Node:
 
         # 5. Calculate Latency Parameter 'a' using Lambert W
         # Spec: a = max(a_min, (T/N_C) * W(N_B/N_C - 1))
-        ratio = (N_B / N_C) - 1
-        if ratio < 0: 
-            ratio = 0  # Safety clamp
-        
         # Use mpmath's lambertw (returns complex, take real)
-        w_val = float(lambertw(ratio).real)
-        a = (T / N_C) * w_val
+        w_val = float(W(ratio).real)
+        a = (T / N_B) * w_val
         
-        # Clamp 'a' to a physical minimum (defined NETWORK_SIZE)
-        a_min = 0.010
-        a = max(a, a_min)
+        # Clamp 'a' to a physical minimum
+        recent_times = self.get_recent_bead_times(100)
+
+        if len(recent_times) > 10:
+            import numpy as np
+            median_bead_time = np.median(recent_times)
+            a_min = max(0.001, median_bead_time * 0.1)  # 10% of median
+            a_min = min(0.1, a_min)  # Cap at 100ms
+        else:
+            a_min = 0.01  # Startup: use conservative value
+
+        if DEBUG:
+            print(f"[DAA] Adaptive a_min={a_min:.4f}s")
+            
+        a_max = 0.1       
+        a = max(a_min, min(a_max, a))
 
         # 6. Calculate Optimal Target (x_0)
         # Spec: x₀ = 2*W(1/2) / (a * λ̄)
@@ -615,6 +757,38 @@ class Node:
         # Use x̄₁ (parent average) for smooth transition from recent consensus
         new_target_float = (x_0 + (x_bar_parents - x_0) * damping) / penalty_factor
         
+        cohort_count = len(self.braid.cohorts)
+
+        if cohort_count < 100:
+            # Startup phase: Allow very large adjustments
+            max_jump = 1000.0
+            if DEBUG:
+                print(f"[DAA] Startup mode: max_jump={max_jump}")
+        
+        elif cohort_count < 300:
+            # Early phase: Allow moderate adjustments
+            max_jump = 100.0
+            if DEBUG:
+                print(f"[DAA] Early phase: max_jump={max_jump}")
+
+        else:
+            # Stable phase: Conservative adjustments
+            max_jump = 10.0
+        
+        if new_target_float > self.target * max_jump:
+            new_target_float = self.target * max_jump
+            if DEBUG:
+                print(f"[DAA] Clamped jump: {self.target:.2e} -> {new_target_float:.2e}")
+        elif new_target_float < self.target / max_jump:
+            new_target_float = self.target / max_jump
+            if DEBUG:
+                print(f"[DAA] Clamped jump: {self.target:.2e} -> {new_target_float:.2e}")
+        
+        # ===== ABSOLUTE BOUNDS =====
+        min_target = MAX_HASH // (2**40)
+        max_target = MAX_HASH // (2**20)
+        new_target_float = max(min_target, min(max_target, new_target_float))
+            
         # Ensure target is within valid bounds
         if DEBUG:
             print(f"\n[DAA] Node {self.nodeid}: N_B={N_B}, N_C={N_C}, N_B/N_C={N_B/N_C:.3f}")
