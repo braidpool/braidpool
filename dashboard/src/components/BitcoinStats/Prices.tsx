@@ -168,7 +168,18 @@ const BitcoinPriceTracker: React.FC = () => {
             setPriceHistory([]);
             setPriceDirection(null);
           }}
-          className="block py-2 px-4 ml-5 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+          style={{
+            backgroundColor: 'var(--color-paper)',
+            color: 'var(--color-text-primary)',
+            appearance: 'none',
+            backgroundImage:
+              'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="white"><path d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 011.08 1.04l-4.24 4.5a.75.75 0 01-1.08 0L5.23 8.27a.75.75 0 01.02-1.06z"/></svg>\')',
+            backgroundRepeat: 'no-repeat',
+            backgroundPosition: 'right 0.75rem center',
+            backgroundSize: '1rem',
+            paddingRight: '2rem',
+          }}
+          className="block py-2 px-4 ml-5 border border-border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
         >
           <option value={currency} hidden disabled>
             {currency}
@@ -205,7 +216,9 @@ const BitcoinPriceTracker: React.FC = () => {
             ].map(({ label, skeletonClass }) => (
               <div key={label} className="flex flex-col gap-1 items-center">
                 <span className="text-sm text-gray-500">{label}</span>
-                <div className="animate-pulse bg-paper rounded border border-border ${skeletonClass}" />
+                <div
+                  className={`animate-pulse bg-paper rounded border border-border ${skeletonClass}`}
+                />
               </div>
             ))}
           </div>

@@ -9,11 +9,14 @@ const Card: React.FC<CardProps> = ({
   title,
   subtitle,
   children,
-  accentColor = 'var(--color-primary)',
+  accentColor = '#1976d2',
   headerExtra,
 }) => {
   return (
-    <div className="relative px-3 rounded border border-border overflow-hidden h-full shadow-sm pb-3 bg-paper">
+    <div
+      className="relative px-3 rounded border border-black/5 overflow-hidden h-full shadow-sm pb-3"
+      style={{ backgroundColor: 'var(--color-card-paper)' }}
+    >
       {/* Accent color border */}
       {accentColor && (
         <div
@@ -24,7 +27,10 @@ const Card: React.FC<CardProps> = ({
 
       {/* Header section */}
       {(title || subtitle || headerExtra) && (
-        <div className="px-3 py-3 border-b border-border flex justify-between items-center bg-paper">
+        <div
+          className="px-3 py-3 border-b border-black/5 flex justify-between items-center"
+          style={{ backgroundColor: 'var(--color-card-paper)' }}
+        >
           <div>
             {title && (
               <h3 className="text-base font-medium text-textPrimary">

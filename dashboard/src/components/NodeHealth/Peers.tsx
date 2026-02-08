@@ -20,10 +20,12 @@ export default function Peers({ peers }: { peers: PeerInfo[] }) {
   };
 
   return (
-    <div className="bg-[#1e1e1e] border border-gray-700 rounded-xl shadow-md">
-      <div className="px-6 py-4 border-b border-gray-700">
-        <h2 className="text-white text-xl font-semibold">Connected Peers</h2>
-        <p className="text-gray-300 text-sm">
+    <div className="bg-paper border border-border rounded-xl shadow-md">
+      <div className="px-6 py-4 border-b border-border">
+        <h2 className="text-textPrimary text-xl font-semibold">
+          Connected Peers
+        </h2>
+        <p className="text-textSecondary text-sm">
           {peers.length} total peers connected
         </p>
       </div>
@@ -32,33 +34,37 @@ export default function Peers({ peers }: { peers: PeerInfo[] }) {
         {paginatedPeers.map((peer) => (
           <div
             key={peer.id}
-            className="flex max-sm:flex-col md:flex-row md:items-start md:justify-between gap-4 p-4 border border-gray-700 rounded-lg bg-gray-900/30 hover:bg-gray-900/50 transition-colors overflow-x-hidden"
+            className="flex max-sm:flex-col md:flex-row md:items-start md:justify-between gap-4 p-4 border border-border rounded-lg bg-background hover:bg-paper transition-colors overflow-x-hidden"
           >
             <div className="flex-1 space-y-1 min-w-0">
-              <p className="text-white font-medium">{peer.addr}</p>
+              <p className="text-textPrimary font-medium">{peer.addr}</p>
 
               <div
                 className={`text-sm w-fit px-2 py-0.5 rounded-full font-medium ${
                   peer.inbound
-                    ? 'text-white bg-blue-600'
-                    : 'text-gray-200 bg-gray-600'
+                    ? 'text-textPrimary bg-blue-600'
+                    : 'text-textSecondary bg-gray-600'
                 }`}
               >
                 {peer.inbound ? 'Inbound' : 'Outbound'}
               </div>
 
               <div className="flex max-sm:flex-col md:flex-row lg:gap-1">
-                <p className="text-sm text-gray-400">Version:</p>
-                <p className="text-sm text-white break-words">{peer.subver}</p>
+                <p className="text-sm text-textSecondary">Version:</p>
+                <p className="text-sm text-textPrimary break-words">
+                  {peer.subver}
+                </p>
               </div>
             </div>
 
             <div className="flex flex-col max-sm:w-full max-sm:pt-2 md:text-right gap-1">
-              <p className="text-sm text-gray-400">
+              <p className="text-sm text-textSecondary">
                 Ping:{' '}
-                <span className="text-white font-mono">{peer.pingtime}ms</span>
+                <span className="text-textPrimary font-mono">
+                  {peer.pingtime}ms
+                </span>
               </p>
-              <p className="text-sm text-gray-400">
+              <p className="text-sm text-textSecondary">
                 ↑ {formatBytes(peer.bytessent)} ↓ {formatBytes(peer.bytesrecv)}
               </p>
             </div>
@@ -74,14 +80,14 @@ export default function Peers({ peers }: { peers: PeerInfo[] }) {
       </div>
 
       {/* Pagination Controls */}
-      <div className="px-6 py-4 flex justify-between items-center border-t border-gray-700 text-sm text-gray-300">
+      <div className="px-6 py-4 flex justify-between items-center border-t border-border text-sm text-textSecondary">
         <button
           onClick={handlePrev}
           disabled={currentPage === 1}
           className={`px-3 py-1 rounded ${
             currentPage === 1
               ? 'opacity-50 cursor-not-allowed'
-              : 'hover:bg-gray-800'
+              : 'hover:bg-paper-accent'
           }`}
         >
           Previous
@@ -97,7 +103,7 @@ export default function Peers({ peers }: { peers: PeerInfo[] }) {
           className={`px-3 py-1 rounded ${
             currentPage === totalPages
               ? 'opacity-50 cursor-not-allowed'
-              : 'hover:bg-gray-800'
+              : 'hover:bg-paper-accent'
           }`}
         >
           Next

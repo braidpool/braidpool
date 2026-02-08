@@ -150,10 +150,7 @@ const Header: React.FC<HeaderNavProps> = ({
               ))}
 
               {/* Theme Toggle */}
-              <div
-                className="ml-4 pl-4 flex items-center"
-                style={{ borderLeft: '1px solid var(--color-border)' }}
-              >
+              <div className="ml-4 pl-4 flex items-center">
                 <button
                   onClick={cycleTheme}
                   className="p-1.5 rounded transition-colors"

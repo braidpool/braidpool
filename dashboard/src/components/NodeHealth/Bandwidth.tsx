@@ -17,15 +17,15 @@ const BandwidthPanel: React.FC<BandwidthPanelProps> = ({
 }) => {
   if (bandwidthHistory.length === 0) {
     return (
-      <div className="bg-[#1e1e1e] border border-gray-700 rounded-xl shadow-md p-4 text-center text-white">
+      <div className="bg-paper border border-border rounded-xl shadow-md p-4 text-center text-textPrimary">
         <p>No bandwidth data available.</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-[#1e1e1e] border border-gray-700 rounded-xl shadow-md p-4">
-      <h3 className="text-lg font-semibold text-white mb-4 text-center">
+    <div className="bg-paper border border-border rounded-xl shadow-md p-4">
+      <h3 className="text-lg font-semibold text-textPrimary mb-4 text-center">
         Real-Time Bandwidth Usage
       </h3>
 
@@ -34,19 +34,22 @@ const BandwidthPanel: React.FC<BandwidthPanelProps> = ({
           data={bandwidthHistory}
           margin={{ top: 30, right: 30, left: 0, bottom: 5 }}
         >
-          <CartesianGrid strokeDasharray="3 3" stroke="#444" />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
           <XAxis
             dataKey="timestamp"
             tickFormatter={(ts) => new Date(ts).toLocaleTimeString()}
-            stroke="#aaa"
+            stroke="var(--color-text-secondary)"
           />
           <YAxis
-            stroke="#aaa"
+            stroke="var(--color-text-secondary)"
             tickFormatter={(value) => formatBytes(value)}
             allowDataOverflow
           />
           <Tooltip
-            contentStyle={{ backgroundColor: '#222', borderColor: '#555' }}
+            contentStyle={{
+              backgroundColor: 'var(--color-background)',
+              borderColor: 'var(--color-border)',
+            }}
             labelFormatter={(ts) => new Date(ts).toLocaleTimeString()}
             formatter={(value: number, name: string) => [
               formatBytes(value),
