@@ -123,16 +123,10 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
     <div className="space-y-4 ">
       <div className="flex justify-between items-center">
         <div>
-          <h3
-            style={{ color: 'var(--color-primary)' }}
-            className="text-xl font-bold"
-          >
+          <h3 className="text-xl font-bold text-blue-300">
             Transaction Activity
           </h3>
-          <p
-            style={{ color: 'var(--color-text-secondary)' }}
-            className="text-sm mt-1"
-          >
+          <p className="text-sm text-gray-400 mt-1">
             Real-time transaction statistics
           </p>
           {error && <p className="text-sm text-red-400 mt-1">Error: {error}</p>}
@@ -141,27 +135,16 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
           )}
         </div>
         <div className="flex items-center gap-4">
-          <div
-            style={{
-              backgroundColor: 'var(--color-surface)',
-              color: 'var(--color-text-primary)',
-            }}
-            className="px-3 py-1 rounded-md"
-          >
+          <div className="bg-purple-900/30 px-3 py-1 rounded-md">
             <div className="text-center">
-              <span className="font-mono text-lg">
+              <span className="text-purple-300 font-mono text-lg">
                 {getCurrentRate()
                   ? `${getCurrentRate().toFixed(1)} tx/min`
                   : isLoading
                     ? 'Loading...'
                     : 'No data'}
               </span>
-              <div
-                style={{ color: 'var(--color-text-secondary)' }}
-                className="text-xs mt-1"
-              >
-                {getRateLabel()}
-              </div>
+              <div className="text-gray-400 text-xs mt-1">{getRateLabel()}</div>
             </div>
           </div>
         </div>

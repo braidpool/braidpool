@@ -20,8 +20,8 @@ export default function Peers({ peers }: { peers: PeerInfo[] }) {
   };
 
   return (
-    <div className="bg-paper border border-border rounded-xl shadow-md">
-      <div className="px-6 py-4 border-b border-border">
+    <div className="bg-paper border border-gray-700 rounded-xl shadow-md">
+      <div className="px-6 py-4 border-b border-gray-700">
         <h2 className="text-textPrimary text-xl font-semibold">
           Connected Peers
         </h2>
@@ -34,7 +34,7 @@ export default function Peers({ peers }: { peers: PeerInfo[] }) {
         {paginatedPeers.map((peer) => (
           <div
             key={peer.id}
-            className="flex max-sm:flex-col md:flex-row md:items-start md:justify-between gap-4 p-4 border border-border rounded-lg bg-background hover:bg-paper transition-colors overflow-x-hidden"
+            className="flex max-sm:flex-col md:flex-row md:items-start md:justify-between gap-4 p-4 border border-gray-700 rounded-lg bg-background hover:bg-paper transition-colors overflow-x-hidden"
           >
             <div className="flex-1 space-y-1 min-w-0">
               <p className="text-textPrimary font-medium">{peer.addr}</p>
@@ -80,7 +80,7 @@ export default function Peers({ peers }: { peers: PeerInfo[] }) {
       </div>
 
       {/* Pagination Controls */}
-      <div className="px-6 py-4 flex justify-between items-center border-t border-border text-sm text-textSecondary">
+      <div className="px-6 py-4 flex justify-between items-center border-t border-gray-700 text-sm text-textSecondary">
         <button
           onClick={handlePrev}
           disabled={currentPage === 1}

@@ -36,7 +36,7 @@ function App() {
             />
           </Routes>
         </main>
-        <footer className="py-6 mt-6 bg-paper border-t border-border">
+        <footer className="py-6 mt-6 bg-[#1e1e1e] border-t border-white/10">
           <Footer />
         </footer>
       </BrowserRouter>

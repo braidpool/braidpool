@@ -14,7 +14,7 @@ const Footer: React.FC = () => {
   ];
 
   return (
-    <footer className="text-textSecondary px-8 sm:px-10 md:px-20 py-8">
+    <footer className="text-gray-300 px-8 sm:px-10 md:px-20 py-8">
       <div
         className="max-w-6xl mx-auto grid 
         sm:grid-cols-1 md:grid-cols-3 lg:grid-cols-5 
@@ -28,11 +28,11 @@ const Footer: React.FC = () => {
               alt="Braidpool Logo"
               className="h-10 w-10"
             />
-            <h1 className="text-xl font-bold text-textPrimary tracking-wide">
+            <h1 className="text-xl font-bold text-white tracking-wide">
               Braidpool
             </h1>
           </div>
-          <p className="text-sm text-textSecondary leading-relaxed mr-7">
+          <p className="text-sm text-white leading-relaxed mr-7">
             A fully decentralized Bitcoin mining protocol.
             <br />
             Miner-owned. Censorship-resistant. Open-source.
@@ -41,7 +41,7 @@ const Footer: React.FC = () => {
 
         {/* Project Links */}
         <div>
-          <h2 className="text-base font-semibold text-textPrimary mb-2 mt-2">
+          <h2 className="text-base font-semibold text-white mb-2 mt-2">
             Project
           </h2>
           <ul className="space-y-1 text-sm">
@@ -51,7 +51,7 @@ const Footer: React.FC = () => {
                   href={link}
                   target="_blank"
                   rel="noreferrer"
-                  className="hover:text-textPrimary hover:translate-x-1 transition-all duration-200 inline-block"
+                  className="hover:text-white hover:translate-x-1 transition-all duration-200 inline-block"
                 >
                   {label}
                 </a>
@@ -62,7 +62,7 @@ const Footer: React.FC = () => {
 
         {/* Community */}
         <div>
-          <h2 className="text-base font-semibold text-textPrimary mb-2 mt-2">
+          <h2 className="text-base font-semibold text-white mb-2 mt-2">
             Community
           </h2>
           <ul className="space-y-2 text-sm">
@@ -72,7 +72,7 @@ const Footer: React.FC = () => {
                 href={EXTERNAL_LINKS.GITHUB}
                 target="_blank"
                 rel="noreferrer"
-                className="hover:text-textPrimary"
+                className="hover:text-white"
               >
                 GitHub
               </a>
@@ -84,7 +84,7 @@ const Footer: React.FC = () => {
                 href={EXTERNAL_LINKS.TWITTER}
                 target="_blank"
                 rel="noreferrer"
-                className="hover:text-textPrimary"
+                className="hover:text-white"
               >
                 Twitter
               </a>
@@ -96,7 +96,7 @@ const Footer: React.FC = () => {
                 href={EXTERNAL_LINKS.DISCORD}
                 target="_blank"
                 rel="noreferrer"
-                className="hover:text-textPrimary"
+                className="hover:text-white"
               >
                 Discord
               </a>
@@ -106,7 +106,7 @@ const Footer: React.FC = () => {
 
         {/* Legal */}
         <div>
-          <h2 className="text-base font-semibold text-textPrimary mb-2 mt-2">
+          <h2 className="text-base font-semibold text-white mb-2 mt-2">
             Legal
           </h2>
           <ul className="space-y-1 text-sm">
@@ -116,7 +116,7 @@ const Footer: React.FC = () => {
                   href={link}
                   target="_blank"
                   rel="noreferrer"
-                  className="hover:text-textPrimary hover:translate-x-1 transition-all duration-200 inline-block"
+                  className="hover:text-white hover:translate-x-1 transition-all duration-200 inline-block"
                 >
                   {label}
                 </a>
@@ -127,23 +127,21 @@ const Footer: React.FC = () => {
 
         {/* Newsletter */}
         <div className="flex-col sm:flex-row">
-          <h3 className="text-textPrimary font-bold mb-4 text-lg">
-            Stay Updated
-          </h3>
-          <p className="text-textSecondary mb-4 text-sm">
+          <h3 className="text-white font-bold mb-4 text-lg">Stay Updated</h3>
+          <p className="text-gray-400 mb-4 text-sm">
             Subscribe to our newsletter for the latest updates and insights.
           </p>
           <div className="flex flex-col  w-full max-w-xs sm:max-w-none">
             <input
               type="email"
               placeholder="Your email"
-              className="bg-paper border border-border
+              className="bg-gray-900/80 border border-gray-700/80
               rounded-t-lg
               p-2 text-sm flex-grow
-              focus:outline-none focus:border-gray-500 text-center text-textPrimary"
+              focus:outline-none focus:border-gray-500 text-center"
             />
             <button
-              className="bg-buttonBackground hover:bg-buttonBackgroundHover text-buttonText
+              className="bg-gray-900 hover:bg-gray-600 text-white
            px-3 py-2
            rounded-b-lg
            text-sm transition-colors duration-200 whitespace-nowrap"
@@ -155,7 +153,7 @@ const Footer: React.FC = () => {
       </div>
 
       {/* Bottom Bar */}
-      <div className="border-t border-border mt-8 pt-4 text-center text-xs text-textDisabled">
+      <div className="border-t border-gray-800 mt-8 pt-4 text-center text-xs text-gray-500">
         &copy; {new Date().getFullYear()} Braidpool. Empowering decentralized
         mining.
       </div>

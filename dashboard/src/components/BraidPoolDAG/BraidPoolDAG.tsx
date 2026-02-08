@@ -719,7 +719,7 @@ const GraphVisualization: React.FC = () => {
       </div>
 
       <div className="m-2 relative">
-        <div className="border border-border rounded-lg bg-paper shadow-lg">
+        <div className="border border-[#FF8500] rounded-lg bg-paper shadow-lg">
           <svg ref={svgRef} width={width} height={height} />
           <div
             ref={tooltipRef}
@@ -728,7 +728,7 @@ const GraphVisualization: React.FC = () => {
         </div>
       </div>
 
-      <div className="m-2 border border-border rounded-lg bg-paper shadow-lg p-4">
+      <div className="m-2 border border-[#0077B6] rounded-lg bg-paper shadow-lg p-4">
         <h3 className="text-xl font-semibold text-textPrimary mb-4">Metrics</h3>
         <div className="flex flex-col gap-2">
           <div className="font-medium text-textSecondary">

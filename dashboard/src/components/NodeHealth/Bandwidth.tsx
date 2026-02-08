@@ -17,14 +17,14 @@ const BandwidthPanel: React.FC<BandwidthPanelProps> = ({
 }) => {
   if (bandwidthHistory.length === 0) {
     return (
-      <div className="bg-paper border border-border rounded-xl shadow-md p-4 text-center text-textPrimary">
+      <div className="bg-paper border border-gray-700 rounded-xl shadow-md p-4 text-center text-textPrimary">
         <p>No bandwidth data available.</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-paper border border-border rounded-xl shadow-md p-4">
+    <div className="bg-paper border border-gray-700 rounded-xl shadow-md p-4">
       <h3 className="text-lg font-semibold text-textPrimary mb-4 text-center">
         Real-Time Bandwidth Usage
       </h3>
@@ -34,7 +34,7 @@ const BandwidthPanel: React.FC<BandwidthPanelProps> = ({
           data={bandwidthHistory}
           margin={{ top: 30, right: 30, left: 0, bottom: 5 }}
         >
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+          <CartesianGrid strokeDasharray="3 3" stroke="#444" />
           <XAxis
             dataKey="timestamp"
             tickFormatter={(ts) => new Date(ts).toLocaleTimeString()}
@@ -47,8 +47,8 @@ const BandwidthPanel: React.FC<BandwidthPanelProps> = ({
           />
           <Tooltip
             contentStyle={{
-              backgroundColor: 'var(--color-background)',
-              borderColor: 'var(--color-border)',
+              backgroundColor: '#222',
+              borderColor: '#555',
             }}
             labelFormatter={(ts) => new Date(ts).toLocaleTimeString()}
             formatter={(value: number, name: string) => [

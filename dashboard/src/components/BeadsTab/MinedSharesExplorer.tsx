@@ -163,7 +163,7 @@ export default function MinedSharesExplorer() {
                 {/* Table header */}
                 <div
                   className="grid max-md:grid-cols-3 md:grid-cols-5 p-4 border-b text-xs sm:text-sm md:text-base
- gap-4 border-border font-medium"
+ gap-4 border-gray-800/80 font-medium"
                 >
                   {[
                     { label: 'Bead Hash' },
@@ -251,7 +251,7 @@ export default function MinedSharesExplorer() {
           </div>
           <div
             style={{ display: activeTab === 'rewards' ? 'block' : 'none' }}
-            className="border border-border rounded-xl p-6"
+            className="border border-gray-800/50 rounded-xl p-6"
           >
             <RewardsDashboard />
           </div>

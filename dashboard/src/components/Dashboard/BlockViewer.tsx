@@ -162,7 +162,7 @@ const BlockViewer: React.FC = () => {
                 </div>
 
                 {/* Block footer */}
-                <div className="w-full bg-paper rounded-b-md p-3 border border-t-0 border-border">
+                <div className="w-full bg-paper rounded-b-md p-3 border border-t-0 border-white/10">
                   <div className="text-textPrimary text-center text-sm">
                     Height: {block.height}
                   </div>

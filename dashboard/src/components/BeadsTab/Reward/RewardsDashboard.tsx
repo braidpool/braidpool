@@ -79,7 +79,7 @@ export function RewardsDashboard() {
   return (
     <div className="space-y-6">
       {/* Analytics Cards */}
-      <div className="w-full bg-paper p-6 rounded-xl border border-border">
+      <div className="w-full bg-paper p-6 rounded-xl border border-gray-700">
         <h2 className="text-textPrimary text-lg font-semibold mb-4">
           Reward Analytics
         </h2>
@@ -124,7 +124,7 @@ export function RewardsDashboard() {
       </div>
 
       {/* Block Rewards Chart */}
-      <div className="w-full h-[400px] bg-paper p-6 rounded-xl border border-border">
+      <div className="w-full h-[400px] bg-paper p-6 rounded-xl border border-gray-700">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-textPrimary text-lg font-semibold">
             Block Rewards
@@ -140,14 +140,11 @@ export function RewardsDashboard() {
         ) : (
           <ResponsiveContainer width="100%" height="90%">
             <LineChart data={rewardHistory}>
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="var(--color-border)"
-              />
+              <CartesianGrid strokeDasharray="3 3" stroke="#333" />
               <XAxis
                 dataKey="height"
                 tick={{ fill: 'var(--color-text-secondary)' }}
-                stroke="var(--color-border)"
+                stroke="#aaa"
               />
               <YAxis
                 yAxisId="left"
@@ -171,7 +168,7 @@ export function RewardsDashboard() {
                       : 'N/A';
 
                     return (
-                      <div className="bg-paper text-textPrimary border border-border p-2 rounded-sm shadow-lg">
+                      <div className="bg-paper text-textPrimary border border-gray-500 p-2 rounded-sm shadow-lg">
                         <p>Height: {label}</p>
                         <p>Time: {formattedTime}</p>
                         {payload.map((item, index) => {

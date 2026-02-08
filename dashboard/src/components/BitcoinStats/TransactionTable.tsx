@@ -10,7 +10,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
   const [selectedTx, setSelectedTx] = useState<string | null>(null);
   return (
     <div
-      className="rounded-2xl border border-border bg-paper shadow-md p-4"
+      className="rounded-2xl border border-white/10 bg-paper shadow-md p-4"
       style={{ borderColor: colors.cardAccentSecondary }}
     >
       <div className="mb-2 text-textSecondary">Latest Transactions</div>
@@ -83,7 +83,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                       </span>
                       <div
                         className="absolute z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 
-                  bg-paper text-textPrimary border border-border p-2 rounded shadow-lg text-xs whitespace-nowrap
+                  bg-gray-800 text-white p-2 rounded shadow-lg text-xs whitespace-nowrap
                   left-full top-1/2 -translate-y-1/2 ml-2"
                       >
                         {tx.txid}

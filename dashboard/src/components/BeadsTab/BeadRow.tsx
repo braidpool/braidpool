@@ -19,7 +19,7 @@ export default function BeadRow({
 
   const { copied, copy } = useCopyToClipboard();
   return (
-    <div className="border-b border-border">
+    <div className="border-b border-gray-800/80">
       <div
         className="grid max-md:grid-cols-3 md:grid-cols-5 gap-2 p-4 cursor-pointer hover:bg-paper/50 transition-colors"
         onClick={() => onToggle(bead.id)}
@@ -65,7 +65,7 @@ export default function BeadRow({
 
       {/* Parents */}
       {bead.parents?.length > 0 && (
-        <div className="pl-4 sm:pl-10 pr-4 py-2 bg-paper/20 border-t border-b border-border overflow-x-auto">
+        <div className="pl-4 sm:pl-10 pr-4 py-2 bg-paper/20 border-t border-b border-gray-800/50 overflow-x-auto">
           <div className="flex flex-wrap items-center gap-2 min-w-0">
             <span className="text-blue-300 font-medium text-sm whitespace-nowrap">
               Parents:

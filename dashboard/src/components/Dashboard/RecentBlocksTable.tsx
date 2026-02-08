@@ -14,7 +14,7 @@ const RecentBlocksTable: React.FC<RecentBlocksTableProps> = ({
   return (
     <div className="max-w-screen w-full overflow-x-hidden">
       <div
-        className="rounded-2xl border border-border bg-paper shadow-md p-4"
+        className="rounded-2xl border border-white/10 bg-paper shadow-md p-4"
         style={{ borderColor: colors.cardAccentSecondary }}
       >
         <div className="mb-2 text-textSecondary">
