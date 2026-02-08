@@ -205,12 +205,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             "Invalid datadir path encoding",
         )
     })?;
-    let datadir = shellexpand::full(datadir_str).map_err(|e| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("Shell expansion failed: {}", e),
-        )
-    })?;
+    let datadir = shellexpand::tilde(datadir_str);
     match fs::metadata(&*datadir) {
         Ok(m) => {
             if !m.is_dir() {
