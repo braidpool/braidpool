@@ -53,7 +53,7 @@ impl BraidpoolConfig {
     }
     pub fn with_listen_address(mut self, listen_address: String) -> Self {
         self.braidnetwork_config.listen_address = listen_address;
-        return self;
+        self
     }
     pub fn with_peer_nodes(mut self, peers: Vec<String>) -> Self {
         self.braidnetwork_config.peer_nodes = peers;

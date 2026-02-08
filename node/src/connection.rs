@@ -32,6 +32,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tracing::warn;
 
+/// Maximum cookie file size (1 KiB). Real cookies are ~70 bytes.
+const MAX_COOKIE_FILE_SIZE: u64 = 1024;
+
 #[derive(Debug)]
 pub enum CookieError {
     NotFound { path: PathBuf },
@@ -40,6 +43,9 @@ pub enum CookieError {
     SymlinkDetected { path: PathBuf },
     PathTraversalDetected { path: PathBuf },
     CanonicalizeFailure { path: PathBuf },
+    HomeDirUnavailable,
+    FileTooLarge { path: PathBuf, size: u64 },
+    IoError { path: PathBuf, source: String },
 }
 
 impl fmt::Display for CookieError {
@@ -86,6 +92,29 @@ impl fmt::Display for CookieError {
                     f,
                     "Failed to canonicalize cookie path {}. Path may be invalid or inaccessible",
                     path.display()
+                )
+            }
+            CookieError::HomeDirUnavailable => {
+                write!(
+                    f,
+                    "Cannot determine home directory. Set cookie path explicitly with --rpccookie"
+                )
+            }
+            CookieError::FileTooLarge { path, size } => {
+                write!(
+                    f,
+                    "Cookie file at {} is too large ({} bytes, max {}). File may be corrupted",
+                    path.display(),
+                    size,
+                    MAX_COOKIE_FILE_SIZE
+                )
+            }
+            CookieError::IoError { path, source } => {
+                write!(
+                    f,
+                    "Unexpected IO error reading cookie file at {}: {}",
+                    path.display(),
+                    source
                 )
             }
         }
@@ -140,24 +169,34 @@ pub fn resolve_cookie_path(
         return Err(CookieError::PathTraversalDetected { path });
     }
 
-    // Canonicalize the path (resolves symlinks, normalizes)
-    let canonical = path
+    // Canonicalize the parent directory only — the cookie file itself may not
+    // exist yet (bitcoind still starting). The parent dir should already exist.
+    let file_name = path
+        .file_name()
+        .ok_or_else(|| CookieError::CanonicalizeFailure { path: path.clone() })?
+        .to_os_string();
+
+    let parent = path
+        .parent()
+        .ok_or_else(|| CookieError::CanonicalizeFailure { path: path.clone() })?;
+
+    let canonical_parent = parent
         .canonicalize()
         .map_err(|_| CookieError::CanonicalizeFailure { path: path.clone() })?;
 
-    // Validate path doesn't escape home directory
-    let home_dir = dirs::home_dir().ok_or_else(|| CookieError::CanonicalizeFailure {
-        path: canonical.clone(),
-    })?;
+    // Validate parent doesn't escape home directory
+    let home_dir = dirs::home_dir().ok_or(CookieError::HomeDirUnavailable)?;
 
-    if !canonical.starts_with(&home_dir)
-        && !canonical.starts_with("/root")
-        && !canonical.starts_with("/tmp")
+    if !canonical_parent.starts_with(&home_dir)
+        && !canonical_parent.starts_with("/root")
+        && !canonical_parent.starts_with("/tmp")
     {
-        return Err(CookieError::PathTraversalDetected { path: canonical });
+        return Err(CookieError::PathTraversalDetected {
+            path: canonical_parent.join(&file_name),
+        });
     }
 
-    Ok(canonical)
+    Ok(canonical_parent.join(file_name))
 }
 
 /// Resolve the IPC socket path based on an explicit override or network defaults.
@@ -191,6 +230,17 @@ pub fn validate_cookie_file(path: &Path) -> Result<(), CookieError> {
         });
     }
 
+    // Security: Reject oversized files to prevent OOM (real cookies are ~70 bytes)
+    if let Ok(metadata) = fs::metadata(path) {
+        let size = metadata.len();
+        if size > MAX_COOKIE_FILE_SIZE {
+            return Err(CookieError::FileTooLarge {
+                path: path.to_path_buf(),
+                size,
+            });
+        }
+    }
+
     let content = match fs::read_to_string(path) {
         Ok(c) => c,
         Err(e) => {
@@ -203,8 +253,9 @@ pub fn validate_cookie_file(path: &Path) -> Result<(), CookieError> {
                 }),
                 _ => {
                     warn!(error = %e, path = %path.display(), "Unexpected IO error reading cookie file");
-                    Err(CookieError::NotFound {
+                    Err(CookieError::IoError {
                         path: path.to_path_buf(),
+                        source: e.to_string(),
                     })
                 }
             };
@@ -212,12 +263,6 @@ pub fn validate_cookie_file(path: &Path) -> Result<(), CookieError> {
     };
 
     let trimmed = content.trim();
-    if !trimmed.contains(':') {
-        return Err(CookieError::InvalidFormat {
-            path: path.to_path_buf(),
-        });
-    }
-
     let parts: Vec<&str> = trimmed.splitn(2, ':').collect();
     if parts.len() != 2 || parts[0].is_empty() || parts[1].is_empty() {
         return Err(CookieError::InvalidFormat {
@@ -237,7 +282,7 @@ pub fn validate_cookie_file(path: &Path) -> Result<(), CookieError> {
 
 /// Wait for the cookie file to become available with optimized startup timeout.
 ///
-/// Retries with exponential backoff (100ms -> 5s, max 10 attempts ~ 60s total).
+/// Retries with exponential backoff.
 /// Optimized for fast failure detection in misconfiguration scenarios.
 /// Only retries on `NotFound` (bitcoind may still be starting).
 /// `PermissionDenied`, `InvalidFormat`, `SymlinkDetected`, and `PathTraversalDetected` fail immediately.
@@ -271,6 +316,9 @@ pub async fn wait_for_cookie(path: &Path) -> Result<(), CookieError> {
             Err(e @ CookieError::SymlinkDetected { .. }) => return Err(e),
             Err(e @ CookieError::PathTraversalDetected { .. }) => return Err(e),
             Err(e @ CookieError::CanonicalizeFailure { .. }) => return Err(e),
+            Err(e @ CookieError::HomeDirUnavailable) => return Err(e),
+            Err(e @ CookieError::FileTooLarge { .. }) => return Err(e),
+            Err(e @ CookieError::IoError { .. }) => return Err(e),
         }
     }
 
@@ -288,32 +336,37 @@ mod tests {
     #[test]
     fn resolve_cookie_path_cpunet() {
         let path = resolve_cookie_path(None, None, Network::CPUNet).unwrap();
-        assert!(path.ends_with(".cookie"));
+        let expected = PathBuf::from(shellexpand::tilde("~/.bitcoin/cpunet/.cookie").as_ref());
+        assert_eq!(path, expected);
     }
 
     #[test]
     fn resolve_cookie_path_mainnet() {
         let path = resolve_cookie_path(None, None, Network::Bitcoin).unwrap();
-        assert!(path.ends_with(".cookie"));
+        let expected = PathBuf::from(shellexpand::tilde("~/.bitcoin/.cookie").as_ref());
+        assert_eq!(path, expected);
     }
 
     #[test]
     fn resolve_cookie_path_testnet() {
         let path =
             resolve_cookie_path(None, None, Network::Testnet(bitcoin::TestnetVersion::V4)).unwrap();
-        assert!(path.ends_with(".cookie"));
+        let expected = PathBuf::from(shellexpand::tilde("~/.bitcoin/testnet4/.cookie").as_ref());
+        assert_eq!(path, expected);
     }
 
     #[test]
     fn resolve_cookie_path_signet() {
         let path = resolve_cookie_path(None, None, Network::Signet).unwrap();
-        assert!(path.ends_with(".cookie"));
+        let expected = PathBuf::from(shellexpand::tilde("~/.bitcoin/signet/.cookie").as_ref());
+        assert_eq!(path, expected);
     }
 
     #[test]
     fn resolve_cookie_path_regtest() {
         let path = resolve_cookie_path(None, None, Network::Regtest).unwrap();
-        assert!(path.ends_with(".cookie"));
+        let expected = PathBuf::from(shellexpand::tilde("~/.bitcoin/regtest/.cookie").as_ref());
+        assert_eq!(path, expected);
     }
 
     #[test]
@@ -327,52 +380,66 @@ mod tests {
     }
 
     #[test]
-    fn resolve_cookie_path_tilde_expansion() {
-        let home = std::env::home_dir().expect("Cannot determine home directory");
-        let path = resolve_cookie_path(Some("~/.cookie-test"), None, Network::CPUNet);
-        match path {
-            Ok(canonical) => {
-                assert!(
-                    canonical.starts_with(&home)
-                        || canonical.starts_with("/root")
-                        || canonical.starts_with("/tmp")
-                );
-            }
-            Err(CookieError::CanonicalizeFailure { .. }) => {
-                // Expected if file doesn't exist or no permissions
-            }
-            e => panic!("Unexpected error: {:?}", e),
-        }
+    fn resolve_cookie_path_explicit_in_home() {
+        // Create a real temp dir inside home to test canonicalization
+        let home = dirs::home_dir().expect("Cannot determine home directory");
+        let test_dir = home.join(".braidpool_test_cookie_resolve");
+        fs::create_dir_all(&test_dir).unwrap();
+
+        let result = resolve_cookie_path(
+            Some(&format!("{}/.cookie", test_dir.display())),
+            None,
+            Network::CPUNet,
+        );
+        let path = result.unwrap();
+        assert!(path.starts_with(&home));
+        assert!(path.ends_with(".cookie"));
+
+        fs::remove_dir_all(&test_dir).unwrap();
     }
 
     #[test]
     fn resolve_cookie_path_config_override() {
-        let home = std::env::home_dir().expect("Cannot determine home directory");
-        let result = resolve_cookie_path(None, Some("~/.cookie"), Network::Signet);
-        match result {
-            Ok(path) => {
-                assert!(
-                    path.starts_with(&home)
-                        || path.starts_with("/root")
-                        || path.starts_with("/tmp")
-                );
-            }
-            Err(_) => {
-                // Expected if file doesn't exist
-            }
-        }
+        // Config path works when parent dir exists
+        let home = dirs::home_dir().expect("Cannot determine home directory");
+        let test_dir = home.join(".braidpool_test_config_override");
+        fs::create_dir_all(&test_dir).unwrap();
+
+        let result = resolve_cookie_path(
+            None,
+            Some(&format!("{}/.cookie", test_dir.display())),
+            Network::Signet,
+        );
+        let path = result.unwrap();
+        assert!(path.starts_with(&home));
+        assert!(path.ends_with(".cookie"));
+
+        fs::remove_dir_all(&test_dir).unwrap();
     }
 
     #[test]
     fn resolve_cookie_path_cli_overrides_config() {
-        let result = resolve_cookie_path(Some("~/.cookie"), Some("/etc/passwd"), Network::Signet);
-        let _ = result;
+        // CLI path takes precedence: even though config points to /etc/passwd,
+        // the CLI path (in home dir) is the one used
+        let home = dirs::home_dir().expect("Cannot determine home directory");
+        let test_dir = home.join(".braidpool_test_cli_override");
+        fs::create_dir_all(&test_dir).unwrap();
+
+        let cli_path = format!("{}/.cookie", test_dir.display());
+        let result = resolve_cookie_path(Some(&cli_path), Some("/etc/passwd"), Network::Signet);
+        let path = result.unwrap();
+        // Must resolve from CLI, not from config
+        assert!(path.starts_with(&home));
+        assert!(path.ends_with(".cookie"));
+
+        fs::remove_dir_all(&test_dir).unwrap();
     }
 
     #[test]
     fn resolve_cookie_path_both_none_falls_to_default() {
         let path = resolve_cookie_path(None, None, Network::Signet).unwrap();
-        assert!(path.ends_with(".cookie"));
+        let expected = PathBuf::from(shellexpand::tilde("~/.bitcoin/signet/.cookie").as_ref());
+        assert_eq!(path, expected);
     }
 
     #[test]
