@@ -2,7 +2,7 @@ import { NetworkPanelProps } from './Types';
 
 export default function NetworkPanel({ network }: NetworkPanelProps) {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div className="grid grid-cols-1 gap-6 px-4 w-full">
       <div className="bg-[#1e1e1e] border border-gray-700 rounded-xl backdrop-blur-sm p-6">
         <h2 className="text-white text-lg font-semibold mb-4">
           Network Status
