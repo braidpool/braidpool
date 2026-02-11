@@ -141,3 +141,6 @@ impl Decodable for CommittedMetadata {
         })
     }
 }
+
+#[cfg(test)]
+mod tests;
