@@ -29,14 +29,14 @@ export default function MempoolPanel({ mempool }: { mempool: MempoolInfo }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="flex justify-between">
             <div>
               <p className="text-sm font-medium text-gray-300">Transactions</p>
               <p className="text-2xl font-bold text-white">
                 {mempool.size.toLocaleString()}
               </p>
             </div>
-            <div>
+            <div className="text-right">
               <p className="text-sm font-medium text-gray-300">Min Fee Rate</p>
               <p className="font-mono text-white">
                 {mempool.mempoolminfee.toFixed(8)} BTC/kvB
