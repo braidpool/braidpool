@@ -29,7 +29,7 @@ use node::{
     db::db_handlers::DBHandler,
     ipc_template_consumer,
     peer_manager::PeerManager,
-    peer_manager::{IBD_BATCH_SIZE, IBD_TRIGGER_AFTER, MAX_IBD_RETRIES},
+    peer_manager::{IBD_BATCH_SIZE, IBD_RETRY_DELAY, MAX_IBD_RETRIES, MIN_PEERS_FOR_IBD},
     rpc_server::{run_rpc_server, BitcoinRpcConfig, RpcProxyCommand},
     setup_tracing,
     stratum::{BlockTemplate, ConnectionMapping, Notifier, NotifyCmd, Server, StratumServerConfig},
@@ -145,23 +145,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let stratum_config: StratumServerConfig = StratumServerConfig::default();
     let (block_submission_tx, block_submission_rx) =
         tokio::sync::mpsc::unbounded_channel::<node::stratum::BlockSubmissionRequest>();
-    //IBD notifier task after peer_discovery
-    let swarm_command_sender_ref = swarm_command_sender.clone();
-    let _ibd_trigger_handler = tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_secs(IBD_TRIGGER_AFTER)).await;
-        //Sending IBD initiating command
-        match swarm_command_sender_ref
-            .send(SwarmCommand::InitiateIBD)
-            .await
-        {
-            Ok(_) => {
-                info!("IBD trigger sent");
-            }
-            Err(error) => {
-                error!(error=?error,"An error occurred while initiating IBD after waiting for peer discovery - ");
-            }
-        };
-    });
+
+    // IBD will be triggered when peer count threshold is reached
+    let mut ibd_initiated = false;
+
     //Initializing stratum server
     let mut stratum_server = Server::new(
         stratum_config,
@@ -951,6 +938,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             "Connection established to peer"
                         );
 
+                         // Trigger IBD when peer count threshold is reached
+                         if !ibd_initiated && peer_manager.num_connected_peers() >= MIN_PEERS_FOR_IBD {
+                             info!(
+                                 peer_count = peer_manager.num_connected_peers(),
+                                 threshold = MIN_PEERS_FOR_IBD,
+                                 "Peer threshold reached, initiating IBD"
+                             );
+                             match swarm_command_sender.send(SwarmCommand::InitiateIBD).await {
+                                 Ok(_) => {
+                                     ibd_initiated = true;
+                                     info!("IBD trigger sent based on peer count");
+                                 }
+                                 Err(error) => {
+                                     error!(error=?error, "Failed to send IBD initiation command");
+                                 }
+                             }
+                         }
+
                      }
                      SwarmEvent::ConnectionClosed {
                          peer_id,
@@ -1075,7 +1080,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                 | BeadResponse::GetAllBeads(beads) => {
                                     let (beads_tx, beads_rx) = tokio::sync::oneshot::channel::<Vec<BeadHash>>();
                                     //Fetching the pruned bead-hashes received during `GetBeadAfter` request
-                                    peer_manager.handle_fetch_get_bead_mapping(peer, beads_tx);
+                                    peer_manager.handle_fetch_ibd_bead_queue(peer, beads_tx);
                                     let pruned_beads = match beads_rx.await{
                                         Ok(received_beads)=>{
                                             received_beads
@@ -1093,11 +1098,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                             continue;
                                         }
                                     };
-                                    for bead in beads.into_iter() {
+
+                                    // Collect orphans for batch insertion
+                                    let mut all_removed_orphans = Vec::new();
+                                    let mut bead_index_mapping = HashMap::new();
+
+                                    for bead in beads.iter() {
                                         let mut braid_data = braid.write().await;
                                         let status = braid_data.extend(&bead);
-                                        let bead_index_mapping = braid_data.bead_index_mapping.clone();
-                                        let curr_beadhash = bead.block_header.block_hash().to_string();
+                                        let curr_beadhash = bead.block_header.block_hash();
+
                                         if let braid::AddBeadStatus::InvalidBead = status {
                                             // update the peer manager about the invalid bead
                                             {
@@ -1125,33 +1135,52 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                                     continue;
                                                 }
                                             };
-                                             //If the current bead's extension has further led to removal of orphan beads then
+                                            // Update bead index mapping for batch insert
+                                            bead_index_mapping = braid_data.bead_index_mapping.clone();
+
+                                            //If the current bead's extension has further led to removal of orphan beads then
                                             //we can get the orphan beads that we can persist in DB also
                                             let mut removed_orphans: Vec<Bead> = Vec::new();
+                                            let bead_id = bead_index_mapping
+                                                .get(&curr_beadhash)
+                                                .unwrap()
+                                                .0;
+
                                             if bead_id + 1 < braid_data.beads.len() {
-                                                warn!("Orphan beads removed from the orphan set upon extension of current bead");
-                                                removed_orphans = braid_data.beads[bead_id + 1..].iter().cloned().collect();
-                                            } else {
-                                                debug!("No orphan beads to remove upon extension of current bead");
+                                                debug!("Orphan beads removed from the orphan set upon extension of current bead");
+                                                let removed_orphans: Vec<Bead> = braid_data.beads[bead_id + 1..].iter().cloned().collect();
+                                                all_removed_orphans.extend(removed_orphans);
                                             }
-                                            // update score of the peer
+
+                                            // Update score of the peer
                                             {
                                                 let mut peer_manager = peer_manager_arc.write().await;
                                                 peer_manager.update_score(&peer, 1.0);
                                             }
-                                            //persisting the received beads from peer onto DB(disk)
-                                            match db_tx.send(node::db::BraidpoolDBTypes::InsertTupleTypes { query: node::db::InsertTupleTypes::InsertBeadSequentially { bead_to_insert: bead,removed_orphans:removed_orphans,bead_index_mapping:bead_index_mapping,bead_id:bead_id} }).await{
-                                                Ok(_)=>{
-                                                    debug!(beadhash=?curr_beadhash,"Bead received in IBD persisted over disk with beadhash and status BeadAdded");
-                                                },
-                                                Err(error)=>{
-                                                    tracing::error!(
-                                                        peer = %peer,
-                                                        err = ?error.0,
-                                                        "An error occurred while persisting received bead from peer"
-                                                    );
-                                                }
-                                            };
+
+                                            debug!(beadhash = %curr_beadhash, "Bead added to batch for insertion");
+                                        }
+                                    }
+
+                                    // Perform batch insertion for all successfully added beads
+                                    if !beads.to_vec().is_empty() {
+                                        match db_tx.send(node::db::BraidpoolDBTypes::InsertTupleTypes {
+                                            query: node::db::InsertTupleTypes::InsertBeadsBatch {
+                                                beads_to_insert:beads.to_vec(),
+                                                removed_orphans: all_removed_orphans,
+                                                bead_index_mapping: bead_index_mapping,
+                                            }
+                                        }).await {
+                                            Ok(_) => {
+                                                info!("Batch insert command sent successfully to db handler for IBD beads");
+                                            },
+                                            Err(error) => {
+                                                error!(
+                                                    peer = %peer,
+                                                    err = ?error.0,
+                                                    "An error occurred while sending batch insert command for IBD beads"
+                                                );
+                                            }
                                         }
                                     }
                                     //Preparing next batch request to be sent to the sync node
@@ -1258,7 +1287,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                         info!("Peer already synced to tip");
                                         continue;
                                     }
-                                    peer_manager.handle_update_ibd_tips_mapping(peer, tips.0);
+                                    peer_manager.handle_update_ibd_peer_tips(peer, tips.0);
                                     // After storing tips we will issue `GetBeads` command that will find the oldest
                                     // common bead if any and will send the beadhashes of all the next beads this will either be the current tips or
                                     // the current genesis in all the cases in case of new braid-node this will be genesis otherwise it will always be tips
@@ -1334,7 +1363,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     let swarm_command_sender = swarm_command_sender.clone();
                                     //Retrying at fixed interval in case of no sync peers being available
                                     async move {
-                                        tokio::time::sleep(Duration::from_secs(IBD_TRIGGER_AFTER)).await;
+                                        tokio::time::sleep(Duration::from_secs(IBD_RETRY_DELAY)).await;
                                         match swarm_command_sender.send(SwarmCommand::InitiateIBD).await {
                                             Ok(_) => {
                                                 warn!("Retrying IBD when no sync peers are available");
@@ -1391,7 +1420,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     //Retrying at fixed interval in case of all available sync peer retry count has exceeded
                                     //Probe at fixed interval for any new peer
                                     async move {
-                                        tokio::time::sleep(Duration::from_secs(IBD_TRIGGER_AFTER)).await;
+                                        tokio::time::sleep(Duration::from_secs(IBD_RETRY_DELAY)).await;
                                         match swarm_command_sender.send(SwarmCommand::InitiateIBD).await {
                                             Ok(_) => {
                                                 warn!("Retrying IBD when no sync peers are available");
