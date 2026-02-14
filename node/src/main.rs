@@ -74,7 +74,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //for supporting concurrent readers and single writer
     let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(Vec::from([]))));
     //Initializing DB and db command handler
-    let (mut _db_handler, db_tx) = DBHandler::new().await.unwrap();
+    let (mut _db_handler, db_tx) = DBHandler::new().await.map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Database initialization failed: {:?}", e),
+        )
+    })?;
     let db_connection_pool = _db_handler.db_connection_pool.clone();
     //Reconstructing local braid upon startup
     let db_connection_pool_ref = _db_handler.db_connection_pool.clone();
@@ -83,9 +88,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // starting from that block as genesis
     let initial_bead_fetch_handle = tokio::spawn(async move {
         let mut guard = braid_ref.write().await;
-        let fetched_beads = fetch_beads_in_batch(db_connection_pool_ref, 1000)
-            .await
-            .unwrap();
+        let fetched_beads = fetch_beads_in_batch(db_connection_pool_ref, 1000).await?;
         for bead in &fetched_beads {
             let curr_bead_status = guard.extend(&bead);
             debug!(
@@ -95,8 +98,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
             );
         }
         info!(beads = fetched_beads.len(), "Beads loaded from DB");
+        Ok::<(), node::error::DBErrors>(())
     });
-    let _yield_result = initial_bead_fetch_handle.await.unwrap();
+    match initial_bead_fetch_handle.await {
+        Ok(Ok(())) => {
+            info!("Initial bead fetch completed successfully");
+        }
+        Ok(Err(e)) => {
+            error!(error = ?e, "Failed to fetch beads from DB during startup");
+            return Err(format!("Database bead fetch failed: {:?}", e).into());
+        }
+        Err(e) => {
+            error!(error = ?e, "Initial bead fetch task panicked");
+            return Err(format!("Initial bead fetch task panicked: {}", e).into());
+        }
+    }
     let latest_template_id = Arc::new(Mutex::new(TemplateId::default()));
     let latest_template_id_for_notifier = latest_template_id.clone();
     let latest_template_id_for_consumer = latest_template_id.clone();
@@ -182,7 +198,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let main_task_token = CancellationToken::new();
     let ipc_task_token = main_task_token.clone();
     let args = cli::Cli::parse();
-    let datadir = shellexpand::full(args.datadir.to_str().unwrap()).unwrap();
+    let datadir_str = args.datadir.to_str().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Invalid datadir path encoding",
+        )
+    })?;
+    let datadir = shellexpand::full(datadir_str).map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("Shell expansion failed: {}", e),
+        )
+    })?;
     match fs::metadata(&*datadir) {
         Ok(m) => {
             if !m.is_dir() {
@@ -242,7 +269,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let rpc_addr = "127.0.0.1:6682"; // TODO: Load from config file
     if let Some(rpc_command) = args.command {
         let server_address = tokio::spawn(run_rpc_server(Arc::clone(&braid), rpc_addr));
-        let socket_address = server_address.await.unwrap().unwrap();
+        let socket_address = server_address
+            .await
+            .map_err(|e| {
+                std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("RPC server task failed: {}", e),
+                )
+            })?
+            .map_err(|_| {
+                std::io::Error::new(std::io::ErrorKind::Other, "RPC server startup failed")
+            })?;
         let _parsing_handle =
             tokio::spawn(parse_arguments(rpc_command, socket_address.clone())).await;
     } else {
@@ -260,19 +297,33 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //creating a main topic subscribing to the current test topic
     let current_broadcast_topic: floodsub::Topic = floodsub::Topic::new(BRAIDPOOL_TOPIC);
 
-    let mut swarm = libp2p::SwarmBuilder::with_existing_identity(keypair)
+    let swarm_builder = libp2p::SwarmBuilder::with_existing_identity(keypair)
         .with_tokio()
         .with_quic()
         .with_dns()
-        .unwrap()
-        .with_behaviour(|local_key| BraidPoolBehaviour::new(local_key).unwrap())?
+        .map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("DNS setup failed: {:?}", e),
+            )
+        })?;
+    // Note: with_behaviour closure must return behaviour directly (not Result), using expect for clear error message
+    let mut swarm = swarm_builder
+        .with_behaviour(|local_key| {
+            BraidPoolBehaviour::new(local_key).expect(
+                "Failed to create BraidPoolBehaviour - check keypair and network configuration",
+            )
+        })?
         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX)))
         .build();
     let socket_addr: std::net::SocketAddr = match args.bind.parse() {
         Ok(addr) => addr,
-        Err(_) => format!("{}:6680", args.bind)
-            .parse()
-            .expect("Failed to parse bind address"),
+        Err(_) => format!("{}:6680", args.bind).parse().map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Failed to parse bind address: {}", e),
+            )
+        })?,
     };
     let multi_addr: Multiaddr = format!(
         "/ip4/{}/udp/{}/quic-v1",
@@ -280,7 +331,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
         socket_addr.port()
     )
     .parse()
-    .expect("Failed to create multiaddress");
+    .map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("Failed to create multiaddress: {}", e),
+        )
+    })?;
     //subscribing to the braidpool topic for broadcasting bead_found and other peer_communications belonging to a particular topic
     swarm
         .behaviour_mut()
@@ -292,13 +348,33 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //adding the boot nodes for peer discovery
     swarm.listen_on(multi_addr.clone())?;
     for boot_peer in BOOTNODES {
-        swarm.behaviour_mut().kademlia.add_address(
-            &boot_peer.parse::<PeerId>().unwrap(),
-            SEED_DNS.parse::<Multiaddr>().unwrap(),
-        );
+        let peer_id = match boot_peer.parse::<PeerId>() {
+            Ok(id) => id,
+            Err(e) => {
+                error!(boot_peer = %boot_peer, error = %e, "Failed to parse boot peer ID, skipping");
+                continue;
+            }
+        };
+        let seed_addr = match SEED_DNS.parse::<Multiaddr>() {
+            Ok(addr) => addr,
+            Err(e) => {
+                error!(seed_dns = %SEED_DNS, error = %e, "Failed to parse seed DNS, skipping");
+                continue;
+            }
+        };
+        swarm
+            .behaviour_mut()
+            .kademlia
+            .add_address(&peer_id, seed_addr);
     }
     info!(boot_node_count = %BOOTNODES.len(), "Boot nodes added to DHT");
-    swarm.dial(ADDR_REFRENCE.parse::<Multiaddr>().unwrap())?;
+    let boot_addr: Multiaddr = ADDR_REFRENCE.parse().map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("Failed to parse boot address: {}", e),
+        )
+    })?;
+    swarm.dial(boot_addr)?;
     info!(address = %ADDR_REFRENCE, "Dialed boot node");
     //IPC(inter process communication) based `getblocktemplate` and `notification` to send to the downstream via the `cmempoold` architecture
     info!(socket = %args.ipc_socket, "IPC socket path");
@@ -332,10 +408,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Spawn IPC handler
     let _ipc_handler = tokio::task::spawn_blocking(move || {
-        let rt = tokio::runtime::Builder::new_current_thread()
+        let rt = match tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
-            .expect("Failed to create tokio runtime");
+        {
+            Ok(rt) => rt,
+            Err(e) => {
+                error!(error = %e, "Failed to create tokio runtime for IPC handler");
+                return;
+            }
+        };
         rt.block_on(async {
             let local_set = tokio::task::LocalSet::new();
 
@@ -407,7 +489,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     if let Some(addnode) = args.addnode {
         for node in addnode.iter() {
-            let node_multiaddr: Multiaddr = node.parse().expect("Failed to parse to multiaddr");
+            let node_multiaddr: Multiaddr = match node.parse() {
+                Ok(addr) => addr,
+                Err(e) => {
+                    error!(node = %node, error = %e, "Failed to parse multiaddr, skipping");
+                    continue;
+                }
+            };
             let dial_result = swarm.dial(node_multiaddr.clone());
             if let Some(err) = dial_result.err() {
                 error!(address = %node_multiaddr, error = %err, "Failed to dial peer node");
@@ -516,10 +604,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                         peer_manager.penalize_for_invalid_bead(&message.source);
                                     } else if let braid::AddBeadStatus::BeadAdded = status {
                                      //Considering the index of the beads in braid will be same as the (insertion ids-1)
-                                        let bead_id = braid_data
-                                        .bead_index_mapping
-                                        .get(&bead.block_header.block_hash())
-                                        .unwrap();
+                                        let bead_id = match braid_data
+                                            .bead_index_mapping
+                                            .get(&bead.block_header.block_hash()) {
+                                            Some(id) => id,
+                                            None => {
+                                                error!(bead_hash = ?bead.block_header.block_hash(), "Bead ID not found in index mapping");
+                                                continue;
+                                            }
+                                        };
                                         let (txs_json, relative_json, parent_timestamp_json) = match prepare_bead_tuple_data(
                                             &braid_data.beads,
                                             &braid_data.bead_index_mapping,
@@ -548,7 +641,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     }
                                     for (sync_peer, ibd_ts) in timestamp_map.iter() {
                                         let threshold = *ibd_ts + LATENCY_ALPHA * 10;
-                                        let sync_peer_id = sync_peer.parse::<PeerId>().unwrap();
+                                        let sync_peer_id = match sync_peer.parse::<PeerId>() {
+                                            Ok(id) => id,
+                                            Err(e) => {
+                                                error!(sync_peer = %sync_peer, error = %e, "Failed to parse sync peer ID");
+                                                continue;
+                                            }
+                                        };
                                         // broadcast_timestamp < timestamp + alpha * 10
                                         if broadcast_ts  < threshold as u32 {
                                             info!("Incoming BEAD received during IBD within threshold limit with broadcast timestamp - {:?} and threshold is - {:?}",broadcast_ts,threshold);
@@ -611,10 +710,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                         // update the peer manager about the invalid bead
                                         peer_manager.penalize_for_invalid_bead(&message.source);
                                     } else if let braid::AddBeadStatus::BeadAdded = status {
-                                        let bead_id = braid_data
-                                        .bead_index_mapping
-                                        .get(&bead.block_header.block_hash())
-                                        .unwrap();
+                                        let bead_id = match braid_data
+                                            .bead_index_mapping
+                                            .get(&bead.block_header.block_hash()) {
+                                            Some(id) => id,
+                                            None => {
+                                                error!(bead_hash = ?bead.block_header.block_hash(), "Bead ID not found in index mapping (GetAllBeads)");
+                                                continue;
+                                            }
+                                        };
                                         let (txs_json, relative_json, parent_timestamp_json) = match prepare_bead_tuple_data(
                                             &braid_data.beads,
                                             &braid_data.bead_index_mapping,
@@ -928,10 +1032,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                             // update the peer manager about the invalid bead
                                             peer_manager.penalize_for_invalid_bead(&peer);
                                         } else if let braid::AddBeadStatus::BeadAdded = status {
-                                            let bead_id = braid_data
-                                            .bead_index_mapping
-                                            .get(&bead.block_header.block_hash())
-                                            .unwrap();
+                                            let bead_id = match braid_data
+                                                .bead_index_mapping
+                                                .get(&bead.block_header.block_hash()) {
+                                                Some(id) => id,
+                                                None => {
+                                                    error!(bead_hash = ?bead.block_header.block_hash(), "Bead ID not found in index mapping (GetBeadsAfter)");
+                                                    continue;
+                                                }
+                                            };
                                             let (txs_json, relative_json, parent_timestamp_json) = match prepare_bead_tuple_data(
                                                 &braid_data.beads,
                                                 &braid_data.bead_index_mapping,
@@ -1014,9 +1123,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                         );
                                         // Get current time and create recent timestamps (within last hour)
                                         let current_time = SystemTime::now()
-                                        .duration_since(UNIX_EPOCH)
-                                        .unwrap()
-                                        .as_secs();
+                                            .duration_since(UNIX_EPOCH)
+                                            .map(|d| d.as_secs())
+                                            .unwrap_or_else(|e| {
+                                                error!(error = %e, "System time before UNIX epoch");
+                                                0
+                                            });
                                         match ibd_command_tx.send(IBDCommands::UpdateTimestampMapping { peer_id: peer.to_string(), end_timestamp: current_time }).await{
                                             Ok(_)=>{
                                                 debug!("Timestamp updated command sent successfully");
@@ -1145,7 +1257,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                             continue;
                                         }
                                     };
-                                    let _val = _ibd_bridge_rx.await.unwrap();
+                                    let _val = match _ibd_bridge_rx.await {
+                                        Ok(v) => v,
+                                        Err(e) => {
+                                            error!(error = %e, "Failed to receive IBD batch offset");
+                                            continue;
+                                        }
+                                    };
                                     let braid_data = braid.read().await;
 
                                     let bead_hash_set: HashSet<BeadHash> = braid_data
@@ -1179,10 +1297,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     // common bead if any and will send the beadhashes of all the next beads this will either be the current tips or
                                     // the current genesis in all the cases in case of new braid-node this will be genesis otherwise it will always be tips
                                     let mut current_tip_hashes = Vec::new();
-                                    let _ = braid_data.tips.iter().for_each(|curr_bead_idx|{
-                                       let current_bead = braid_data.beads.get(*curr_bead_idx).unwrap();
-                                       current_tip_hashes.push(current_bead.block_header.block_hash());
-                                    });
+                                    for curr_bead_idx in braid_data.tips.iter() {
+                                        if let Some(current_bead) = braid_data.beads.get(*curr_bead_idx) {
+                                            current_tip_hashes.push(current_bead.block_header.block_hash());
+                                        } else {
+                                            error!(bead_idx = %curr_bead_idx, "Tip bead not found in beads list");
+                                        }
+                                    }
                                     // Sending the current bead hashes for the receiving of beads to start in batches
                                     let get_bead_start_request:BeadRequest = BeadRequest::GetBeadsAfter(BeadHashes(current_tip_hashes));
                                     swarm.behaviour_mut().bead_sync.send_request(&peer,get_bead_start_request);

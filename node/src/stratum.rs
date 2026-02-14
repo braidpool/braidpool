@@ -273,11 +273,21 @@ impl DownstreamClient {
             Ok(stratum_response) => {
                 let response_json_string = match stratum_response.clone() {
                     StratumResponses::StandardResponse { std_response } => {
-                        serde_json::to_string(&std_response).unwrap()
+                        serde_json::to_string(&std_response).map_err(|e| {
+                            error!(error = %e, "Failed to serialize standard response");
+                            StratumErrors::InvalidMethod {
+                                method: "serialization_error".to_string(),
+                            }
+                        })?
                     }
                     StratumResponses::SuggestDifficultyResponse {
                         suggest_difficulty_resp,
-                    } => serde_json::to_string(&suggest_difficulty_resp).unwrap(),
+                    } => serde_json::to_string(&suggest_difficulty_resp).map_err(|e| {
+                        error!(error = %e, "Failed to serialize suggest difficulty response");
+                        StratumErrors::InvalidMethod {
+                            method: "serialization_error".to_string(),
+                        }
+                    })?,
                 };
                 debug!(
                     connection_id = %connection_id_hex,
@@ -391,7 +401,11 @@ impl DownstreamClient {
             });
         }
         let worker_name_res: Result<&str, StratumErrors> = match param_array.get(0) {
-            Some(worker_name) => Ok(worker_name.as_str().unwrap()),
+            Some(worker_name) => worker_name
+                .as_str()
+                .ok_or(StratumErrors::InvalidMethodParams {
+                    method: "mining.submit: worker_name must be a string".to_string(),
+                }),
             None => Err(StratumErrors::ParamNotFound {
                 param: "worker_name".to_string(),
                 method: "mining.submit".to_string(),
@@ -478,7 +492,13 @@ impl DownstreamClient {
             extranonce2.to_ascii_lowercase(),
             submitted_job.coinbase2
         );
-        let coinbase_bytes = hex::decode(coinbase_tx_hex).unwrap();
+        let coinbase_bytes = match hex::decode(&coinbase_tx_hex) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                error!(connection_id = %connection_id_hex, error = %e, "Failed to decode coinbase hex");
+                return Err(StratumErrors::InvalidCoinbase);
+            }
+        };
 
         // Log the coinbase transaction in hex
         debug!(
@@ -488,15 +508,25 @@ impl DownstreamClient {
         );
 
         let mut coinbase_cursor = Cursor::new(coinbase_bytes);
-        let mut coinbase_tx: Transaction =
-            bitcoin::Transaction::consensus_decode(&mut coinbase_cursor).unwrap();
+        let mut coinbase_tx: Transaction = match bitcoin::Transaction::consensus_decode(
+            &mut coinbase_cursor,
+        ) {
+            Ok(tx) => tx,
+            Err(e) => {
+                error!(connection_id = %connection_id_hex, error = %e, "Failed to decode coinbase transaction");
+                return Err(StratumErrors::InvalidCoinbase);
+            }
+        };
 
         //computing merkle new merkle path due to updated coinbase transaction
         let mut merkle_branches_bytes: Vec<Vec<u8>> = Vec::new();
         for merkle_branch in submitted_job.coinbase_merkle_path.clone() {
             let mut merkle_branch_bytes: [u8; 32] = [0u8; 32];
             //Computing hex of merkle branch in big-endian as expected by the miner
-            hex::decode_to_slice(merkle_branch, &mut merkle_branch_bytes).unwrap();
+            if let Err(e) = hex::decode_to_slice(&merkle_branch, &mut merkle_branch_bytes) {
+                error!(connection_id = %connection_id_hex, error = %e, merkle_branch = %merkle_branch, "Failed to decode merkle branch hex");
+                return Err(StratumErrors::InvalidCoinbase);
+            }
             merkle_branches_bytes.push(Vec::from(merkle_branch_bytes));
         }
         let merkle_root_bytes =
@@ -541,15 +571,23 @@ impl DownstreamClient {
 
             // Mask set during mining.configure
             let mut mask_bytes = [0u8; 4];
-            let version_rolling_mask =
-                match self.version_rolling_mask.clone().unwrap().parse::<u32>() {
-                    Ok(version_mask) => version_mask,
-                    Err(error) => {
-                        return Err(StratumErrors::ParsingVersionMask {
-                            error: error.to_string(),
-                        });
-                    }
-                };
+            let version_rolling_mask_str = match self.version_rolling_mask.clone() {
+                Some(mask) => mask,
+                None => {
+                    error!(connection_id = %connection_id_hex, "Version rolling mask not set");
+                    return Err(StratumErrors::ParsingVersionMask {
+                        error: "Version rolling mask not configured".to_string(),
+                    });
+                }
+            };
+            let version_rolling_mask = match version_rolling_mask_str.parse::<u32>() {
+                Ok(version_mask) => version_mask,
+                Err(error) => {
+                    return Err(StratumErrors::ParsingVersionMask {
+                        error: error.to_string(),
+                    });
+                }
+            };
 
             let version_rolling_mask_bytes = version_rolling_mask.to_be_bytes();
             let version_rolling_mask_hex = hex::encode(version_rolling_mask_bytes);
@@ -586,13 +624,31 @@ impl DownstreamClient {
                 (header_version & !mask_version_bits) | (version_bits & mask_version_bits);
         }
         //Computing the block header
+        let ntime_u32 = match u32::from_str_radix(ntime, 16) {
+            Ok(v) => v,
+            Err(e) => {
+                error!(connection_id = %connection_id_hex, error = %e, ntime = %ntime, "Failed to parse ntime");
+                return Err(StratumErrors::InvalidMethodParams {
+                    method: "mining.submit".to_string(),
+                });
+            }
+        };
+        let nonce_u32 = match u32::from_str_radix(nonce, 16) {
+            Ok(v) => v,
+            Err(e) => {
+                error!(connection_id = %connection_id_hex, error = %e, nonce = %nonce, "Failed to parse nonce");
+                return Err(StratumErrors::InvalidMethodParams {
+                    method: "mining.submit".to_string(),
+                });
+            }
+        };
         let header = BlockHeader {
             version: bitcoin::blockdata::block::Version::from_consensus(final_masked_version),
             prev_blockhash: submitted_job.blocktemplate.previousblockhash,
             merkle_root: merkle_root,
-            time: BlockTime::from_u32(u32::from_str_radix(ntime, 16).unwrap()),
+            time: BlockTime::from_u32(ntime_u32),
             bits: submitted_job.blocktemplate.bits,
-            nonce: u32::from_str_radix(nonce, 16).unwrap(),
+            nonce: nonce_u32,
         };
         let compact_target = submitted_job.blocktemplate.bits;
         let target = bitcoin::Target::from_compact(compact_target);
@@ -642,13 +698,20 @@ impl DownstreamClient {
                 return Err(StratumErrors::InvalidCoinbase);
             }
         };
-        let witness_bytes = witness.get(0);
-        coinbase_tx
-            .inputs_mut()
-            .get_mut(0)
-            .unwrap()
-            .witness
-            .push(witness_bytes.unwrap());
+        let witness_bytes = match witness.get(0) {
+            Some(w) => w,
+            None => {
+                error!(connection_id = %connection_id_hex, "Witness commitment is empty");
+                return Err(StratumErrors::InvalidCoinbase);
+            }
+        };
+        match coinbase_tx.inputs_mut().get_mut(0) {
+            Some(input) => input.witness.push(witness_bytes),
+            None => {
+                error!(connection_id = %connection_id_hex, "Coinbase transaction has no inputs");
+                return Err(StratumErrors::InvalidCoinbase);
+            }
+        };
         let coinbase_tx_for_submission = coinbase_tx.clone();
         let mut block_transactions = vec![coinbase_tx];
         block_transactions.extend(submitted_job.blocktemplate.transactions.clone());
@@ -713,9 +776,25 @@ impl DownstreamClient {
             }
         }
         //Passing both the extranonces for committment in uncommitted metadata
-        let extranonce_2_raw_value = u32::from_str_radix(extranonce2, 16).unwrap();
+        let extranonce_2_raw_value = match u32::from_str_radix(extranonce2, 16) {
+            Ok(v) => v,
+            Err(e) => {
+                error!(connection_id = %connection_id_hex, error = %e, extranonce2 = %extranonce2, "Failed to parse extranonce2");
+                return Err(StratumErrors::InvalidMethodParams {
+                    method: "mining.submit".to_string(),
+                });
+            }
+        };
         let extranonce_1_hex_str = hex::encode(self.extranonce1.clone());
-        let extranonce_1_raw_value = u32::from_str_radix(&extranonce_1_hex_str, 16).unwrap();
+        let extranonce_1_raw_value = match u32::from_str_radix(&extranonce_1_hex_str, 16) {
+            Ok(v) => v,
+            Err(e) => {
+                error!(connection_id = %connection_id_hex, error = %e, extranonce1 = %extranonce_1_hex_str, "Failed to parse extranonce1");
+                return Err(StratumErrors::InvalidMethodParams {
+                    method: "mining.submit".to_string(),
+                });
+            }
+        };
         let _swarm_command_sent = match swarm_handler
             .lock()
             .await
@@ -767,11 +846,16 @@ impl DownstreamClient {
                 params = ?suggest_difficulty_params,
                 "Handling suggested difficulty"
             );
+            let difficulty_u64 = difficulty
+                .as_u64()
+                .ok_or(StratumErrors::InvalidMethodParams {
+                    method: "mining.set_difficulty".to_string(),
+                })?;
             self.suggest_difficulty_done = true;
             Ok(StratumResponses::SuggestDifficultyResponse {
                 suggest_difficulty_resp: SuggestDifficultyResponse {
                     method: "mining.set_difficulty".to_string(),
-                    params: vec![difficulty.as_u64().unwrap()],
+                    params: vec![difficulty_u64],
                 },
             })
         } else {
@@ -809,7 +893,13 @@ impl DownstreamClient {
             }
         };
         let username_res: Result<&str, StratumErrors> = match param_array.get(0) {
-            Some(user) => Ok(user.as_str().unwrap()),
+            Some(user) => match user.as_str() {
+                Some(username_str) => Ok(username_str),
+                None => Err(StratumErrors::ParamNotFound {
+                    param: "username must be a string".to_string(),
+                    method: "mining.authorize".to_string(),
+                }),
+            },
             None => {
                 return Err(StratumErrors::ParamNotFound {
                     param: "username".to_string(),
@@ -921,9 +1011,9 @@ impl DownstreamClient {
         //Minimum bits rollable of version
         let version_rolling_min_bit_count =
             config_map.get("version-rolling.min-bit-count").or(None);
-        if version_rolling_mask.is_none() == false {
+        if let Some(mask_value) = version_rolling_mask {
             let mut mask_bytes: [u8; 4] = [0u8; 4];
-            let version_rolling_mask_str = match version_rolling_mask.unwrap().as_str() {
+            let version_rolling_mask_str = match mask_value.as_str() {
                 Some(version_str) => version_str,
                 None => {
                     return Err(StratumErrors::VersionRollingStringParseError {
@@ -945,10 +1035,16 @@ impl DownstreamClient {
             let hex_str = u32::to_string(&final_rollable_version_bits);
             self.version_rolling_mask = Some(hex_str);
         }
-        if version_rolling_min_bit_count.is_none() == false {
+        if let Some(min_bit_count_value) = version_rolling_min_bit_count {
             let mut mask_bytes: [u8; 4] = [0u8; 4];
-            let version_rolling_min_bit_count_str =
-                version_rolling_min_bit_count.unwrap().as_str().unwrap();
+            let version_rolling_min_bit_count_str = match min_bit_count_value.as_str() {
+                Some(s) => s,
+                None => {
+                    return Err(StratumErrors::VersionrollingMinBitCountHexParseError {
+                        error: "version-rolling.min-bit-count is not a string".to_string(),
+                    });
+                }
+            };
             match hex::decode_to_slice(version_rolling_min_bit_count_str, &mut mask_bytes) {
                 Ok(_) => {}
                 Err(error) => {
@@ -1212,7 +1308,7 @@ fn _to_little_endian(hex_str: &str) -> String {
     hex_str
         .as_bytes()
         .chunks(2)
-        .map(|chunk| std::str::from_utf8(chunk).unwrap())
+        .filter_map(|chunk| std::str::from_utf8(chunk).ok())
         .rev()
         .collect::<Vec<&str>>()
         .join("")
@@ -1224,7 +1320,9 @@ pub fn reverse_four_byte_chunks(hash_hex: &str) -> Result<String, StratumErrors>
             error: "Hash length is incorrect".to_string(),
         });
     }
-    let bytes = hex::decode(hash_hex).unwrap();
+    let bytes = hex::decode(hash_hex).map_err(|e| StratumErrors::PrevHashNotReversed {
+        error: format!("Failed to decode hash hex: {}", e),
+    })?;
     // Reverse the byte order in 4-byte chunks
     let mut reversed_bytes = Vec::with_capacity(bytes.len());
     for chunk in bytes.chunks(4).rev() {
@@ -1285,12 +1383,13 @@ impl Notifier {
                 });
             }
         };
-        let coinbase_witness_commitment = coinbase_transaction
-            .inputs()
-            .get(0)
-            .unwrap()
-            .witness
-            .clone();
+        let coinbase_witness_commitment = match coinbase_transaction.inputs().get(0) {
+            Some(input) => input.witness.clone(),
+            None => {
+                error!(template_id = %template_id, "Coinbase transaction has no inputs");
+                return Err(StratumErrors::InvalidCoinbase);
+            }
+        };
         if let Some(input) = coinbase_transaction.inputs_mut().get_mut(0) {
             input.witness.clear();
         };
@@ -1460,7 +1559,13 @@ impl Notifier {
                                 }
                             };
 
-                        let unix_timestamp = duration_since_epoch.as_secs().to_u32().unwrap();
+                        let unix_timestamp = match duration_since_epoch.as_secs().to_u32() {
+                            Some(ts) => ts,
+                            None => {
+                                error!("System timestamp overflow");
+                                continue;
+                            }
+                        };
 
                         let job_details = JobDetails {
                             blocktemplate: template_for_job,
@@ -1491,11 +1596,15 @@ impl Notifier {
                             ]),
                         };
 
-                        if let Err(e) = connection_info
-                            .sender
-                            .send(serde_json::to_string(&job_notification_response).unwrap())
-                            .await
-                        {
+                        let job_notification_json =
+                            match serde_json::to_string(&job_notification_response) {
+                                Ok(json) => json,
+                                Err(e) => {
+                                    error!(error = %e, "Failed to serialize job notification");
+                                    continue;
+                                }
+                            };
+                        if let Err(e) = connection_info.sender.send(job_notification_json).await {
                             error!(
                                 connection_id = %connection_id_hex,
                                 peer = %peer_adr,
@@ -1552,9 +1661,14 @@ impl Notifier {
                         "Sending existing latest template to new miner"
                     );
                     let global_peer_mining_job_map_arc = self.job_map_arc.lock().await;
-                    let current_peer_mining_job_map_arc = global_peer_mining_job_map_arc
-                        .get(&new_downstream_addr)
-                        .unwrap();
+                    let current_peer_mining_job_map_arc =
+                        match global_peer_mining_job_map_arc.get(&new_downstream_addr) {
+                            Some(map) => map,
+                            None => {
+                                error!(peer = %new_downstream_addr, "No job map found for peer");
+                                continue;
+                            }
+                        };
                     let mut curr_peer_mining_job_map = current_peer_mining_job_map_arc.lock().await;
 
                     // Clean Jobs. If true, miners should abort their current work and immediately use the new job, even if it degrades hashrate in the short term.
@@ -1578,7 +1692,13 @@ impl Notifier {
                         }
                     };
 
-                    let unix_timestamp = duration_since_epoch.as_secs().to_u32().unwrap();
+                    let unix_timestamp = match duration_since_epoch.as_secs().to_u32() {
+                        Some(ts) => ts,
+                        None => {
+                            error!("System timestamp overflow for new miner notification");
+                            continue;
+                        }
+                    };
                     let serialized_notification: Result<String, StratumErrors> =
                         match job_notification {
                             Ok(job) => {
@@ -1612,7 +1732,11 @@ impl Notifier {
                                         job.clean_jobs
                                     ]),
                                 };
-                                Ok(serde_json::to_string(&job_notification_response).unwrap())
+                                serde_json::to_string(&job_notification_response).map_err(|_| {
+                                    StratumErrors::JobNotificationNotConstructed {
+                                        job_template: latest_template.clone(),
+                                    }
+                                })
                             }
                             Err(error) => Err(error),
                         };
@@ -1916,8 +2040,8 @@ impl Server {
                         //Parsing the lines read from buffer to find out whether they are valid JSON request type to be server as per
                         //stratum or not .
                         match serde_json::from_str::<StandardRequest>(&line) {
-                                Ok(_request) => {
-                         let server_request_res:Result<StratumResponses, StratumErrors> = downstream_client.lock().await.handle_client_to_server_request(serde_json::from_str(&line).unwrap(),mining_job_map.clone(),downstream_message_sender.clone(),notification_sender.clone(),peer_addr.to_string(),swarm_handler.clone()).await;
+                                Ok(request) => {
+                         let server_request_res:Result<StratumResponses, StratumErrors> = downstream_client.lock().await.handle_client_to_server_request(request,mining_job_map.clone(),downstream_message_sender.clone(),notification_sender.clone(),peer_addr.to_string(),swarm_handler.clone()).await;
                          match server_request_res{
                             Ok(_)=>{
 

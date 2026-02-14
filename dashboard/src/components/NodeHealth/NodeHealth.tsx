@@ -286,7 +286,7 @@ const NodeHealth: React.FC = () => {
           {TABS.map((tab) => (
             <button
               key={tab.value}
-              className={`py-2 border-b-2 ${activeTab === tab.value ? 'text-white border-blue-900' : 'text-gray-500 border-transparent'}`}
+              className={`py-2 border-b-2 ${activeTab === tab.value ? 'text-white border-blue-900' : 'text-gray-500 cursor-pointer border-transparent'}`}
               onClick={() => setActiveTab(tab.value)}
             >
               {tab.label}
@@ -298,7 +298,7 @@ const NodeHealth: React.FC = () => {
       {/* Tab Content */}
       <div className="mt-6">
         {activeTab === 'blockchain' && blockchainInfo && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+          <div className="grid grid-cols-1 gap-6 px-3 w-full">
             <div className="rounded-xl border border-gray-700 p-4">
               <h3 className="text-base md:text-lg text-white font-semibold text-center mb-4">
                 Blockchain Information
