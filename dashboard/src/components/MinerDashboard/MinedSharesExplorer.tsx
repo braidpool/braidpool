@@ -12,7 +12,7 @@ import { Layers } from 'lucide-react';
 import { TrendsTab } from './Trends/TrendsTab';
 
 export default function MinedSharesExplorer() {
-  const [expandedBeads, setExpandedBeads] = useState({
+  const [expandedBeads, setExpandedBeads] = useState<Record<string, boolean>>({
     bead1: true,
     bead2: false,
   });
@@ -27,19 +27,7 @@ export default function MinedSharesExplorer() {
   const {
     data: chartData,
     isLoading: isChartLoading,
-    error: chartError,
-    refetch,
   } = useChartData(timeRange);
-
-  useEffect(() => {
-    if (chartError) {
-      setError(
-        'Failed to load mining data. Please check your connection and try again.'
-      );
-    } else {
-      setError(null);
-    }
-  }, [chartError]);
 
   // Refs for scroll animations
   const containerRef = useRef(null);
@@ -79,7 +67,6 @@ export default function MinedSharesExplorer() {
 
   const handleRetry = () => {
     setError(null);
-    refetch?.();
   };
 
   return (
@@ -168,9 +155,37 @@ export default function MinedSharesExplorer() {
 
           {!error && activeTab === 'blocks' && (
             <div className=" border border-gray-800/50 rounded-xl p-6 bg-black/30 backdrop-blur-md overflow-hidden">
-              {!error && activeTab === 'blocks' && (
                 <EnhancedBlocksTab timeRange={timeRange} />
-              )}
+            </div>
+          )}
+
+          {!error && activeTab === 'errors' && (
+            <div className="border border-gray-800/50 rounded-xl p-6 bg-black/30 backdrop-blur-md overflow-hidden">
+               <h3 className="text-xl font-semibold mb-4 text-red-400">System Errors & Warnings</h3>
+               <div className="space-y-4">
+                 {[
+                   { id: 1, type: 'Warning', message: 'High latency detected on pool connection', timestamp: '2 mins ago' },
+                   { id: 2, type: 'Error', message: 'Miner #004 failed to submit share: rapid difficulty change', timestamp: '15 mins ago' },
+                   { id: 3, type: 'Info', message: 'Reconnected to backup stratum server', timestamp: '1 hour ago' },
+                 ].map((err) => (
+                   <div key={err.id} className="flex items-start gap-4 p-4 rounded-lg bg-black/40 border border-gray-800">
+                     <div className={`w-2 h-2 mt-2 rounded-full ${
+                       err.type === 'Error' ? 'bg-red-500' : 
+                       err.type === 'Warning' ? 'bg-yellow-500' : 'bg-blue-500'
+                     }`} />
+                     <div>
+                       <div className="flex items-center gap-2 mb-1">
+                         <span className={`text-sm font-medium ${
+                           err.type === 'Error' ? 'text-red-400' : 
+                           err.type === 'Warning' ? 'text-yellow-400' : 'text-blue-400'
+                         }`}>{err.type}</span>
+                         <span className="text-xs text-gray-500">• {err.timestamp}</span>
+                       </div>
+                       <p className="text-gray-300">{err.message}</p>
+                     </div>
+                   </div>
+                 ))}
+               </div>
             </div>
           )}
         </div>

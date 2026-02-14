@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { BarChart3, Layers, Cpu, Database, GitCompare } from 'lucide-react';
+import { BarChart3, Layers, Cpu, Database, GitCompare, AlertCircle } from 'lucide-react';
 
 interface DashboardHeaderProps {
   headerOpacity: any;
@@ -100,6 +100,11 @@ export default function DashboardHeader({
             id: 'blocks',
             label: 'Blocks',
             icon: <Layers className="w-4 h-4" />,
+          },
+          {
+            id: 'errors',
+            label: 'Errors',
+            icon: <AlertCircle className="w-4 h-4" />,
           },
         ].map((tab) => (
           <motion.button
