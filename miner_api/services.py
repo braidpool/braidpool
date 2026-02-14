@@ -198,7 +198,7 @@ class MinerService:
             return {
                 "success": True,
                 "ip": ip,
-                "data": normalized_data.dict()
+                "data": normalized_data.model_dump()
             }
             
         except asyncio.TimeoutError:
