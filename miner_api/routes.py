@@ -41,4 +41,10 @@ async def get_miner_data_live(
     """Query miner directly in real-time."""
     validated_ip = validate_ip_address(ip)
     result = await MinerService.get_miner_data(validated_ip)
+    # If the miner lookup/connection failed, propagate an appropriate HTTP status code
+    if isinstance(result, dict) and not result.get("success", True):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=result,
+        )
     return result
