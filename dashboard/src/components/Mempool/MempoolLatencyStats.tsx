@@ -25,15 +25,31 @@ import { Loader } from 'lucide-react';
 
 const MempoolLatencyStats = () => {
   const wsRef = useRef<WebSocket | null>(null);
+  const viewDropdownRef = useRef<HTMLDivElement>(null);
 
   const [mempoolData, setMempoolData] = useState<MempoolData | null>(null);
   const [selectedView, setSelectedView] = useState<
     'btc' | 'usd' | 'eur' | 'jpy' | 'all'
   >('all');
+  const [isViewDropdownOpen, setIsViewDropdownOpen] = useState(false);
   const [blockFeeHistory, setBlockFeeHistory] = useState<BlockFeeHistoryItem[]>(
     []
   );
   const [wsConnected, setWsConnected] = useState(false);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        viewDropdownRef.current &&
+        !viewDropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsViewDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     const ws = new WebSocket(WEBSOCKET_URLS.MAIN_WEBSOCKET);
@@ -222,21 +238,47 @@ const MempoolLatencyStats = () => {
         <div className="flex justify-between items-center mb-4 flex-wrap">
           <h2 className="text-lg font-semibold">Live Block Fees</h2>
 
-          <select
-            value={selectedView}
-            onChange={(e) =>
-              setSelectedView(
-                e.target.value as 'btc' | 'usd' | 'eur' | 'jpy' | 'all'
-              )
-            }
-            className="bg-[#1a1a1a] text-gray-300 px-4 py-2 rounded-md shadow-md border border-white"
-          >
-            {['btc', 'usd', 'eur', 'jpy', 'all'].map((view) => (
-              <option key={view} value={view}>
-                {view.toUpperCase()}
-              </option>
-            ))}
-          </select>
+          <div className="relative" ref={viewDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setIsViewDropdownOpen(!isViewDropdownOpen)}
+              className="flex items-center gap-2 px-4 py-2 bg-[#1a1a1a] text-gray-300 rounded-md shadow-md border border-white"
+            >
+              {selectedView.toUpperCase()}
+              <svg
+                className={`w-4 h-4 transition-transform ${isViewDropdownOpen ? 'rotate-180' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
+              </svg>
+            </button>
+            {isViewDropdownOpen && (
+              <div className="absolute z-50 mt-1 w-full bg-gray-500 border border-gray-600 shadow-lg">
+                {(['btc', 'usd', 'eur', 'jpy', 'all'] as const)
+                  .filter((view) => view !== selectedView)
+                  .map((view) => (
+                    <button
+                      key={view}
+                      type="button"
+                      onClick={() => {
+                        setSelectedView(view);
+                        setIsViewDropdownOpen(false);
+                      }}
+                      className="w-full px-4 py-2 text-left text-white hover:bg-blue-600"
+                    >
+                      {view.toUpperCase()}
+                    </button>
+                  ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <ResponsiveContainer width="100%" height={400}>
