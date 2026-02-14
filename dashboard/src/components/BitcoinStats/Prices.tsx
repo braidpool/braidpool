@@ -23,14 +23,14 @@ import TransactionTable from './TransactionTable';
 import RBFTransactionTable from './RBFTransactionTable';
 import { useRef } from 'react';
 import { WEBSOCKET_URLS } from '../../URLs';
+
+const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY'] as const;
 import { MAX_HISTORY_ITEMS } from './Constants';
 
 const BitcoinPriceTracker: React.FC = () => {
   const [currency, setCurrency] = useState<'USD' | 'EUR' | 'GBP' | 'JPY'>(
     'USD'
   );
-  const [isCurrencyDropdownOpen, setIsCurrencyDropdownOpen] = useState(false);
-  const currencyDropdownRef = useRef<HTMLDivElement>(null);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [rbftransactions, setrbfTransactions] = useState<any[]>([]);
   const [priceData, setPriceData] = useState<PriceData | null>(null);
@@ -68,20 +68,6 @@ const BitcoinPriceTracker: React.FC = () => {
       fetchRbfTransactions();
     }, 5000);
     return () => clearInterval(intervalId);
-  }, []);
-
-  // Close currency dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        currencyDropdownRef.current &&
-        !currencyDropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsCurrencyDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   useEffect(() => {
@@ -173,51 +159,30 @@ const BitcoinPriceTracker: React.FC = () => {
         <label className="block text-lg font-medium text-white mb-1">
           Currency
         </label>
-        <div className="relative ml-5" ref={currencyDropdownRef}>
-          <button
-            type="button"
-            onClick={() => setIsCurrencyDropdownOpen(!isCurrencyDropdownOpen)}
-            className="flex items-center gap-2 py-2 px-4 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-          >
-            {currency}
-            <svg
-              className={`w-4 h-4 transition-transform ${isCurrencyDropdownOpen ? 'rotate-180' : ''
-                }`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+        <select
+          value={currency}
+          onChange={(e) => {
+            const newCurrency = e.target.value as typeof currency;
+            setCurrency(newCurrency);
+            setPriceData(null);
+            setPriceHistory([]);
+            setPriceDirection(null);
+          }}
+          className="block py-2 px-4 ml-5 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+        >
+          {CURRENCIES.map((curr) => (
+            <option
+              key={curr}
+              className={
+                curr === currency ? 'bg-gray-500 text-gray-400' : 'bg-gray-500'
+              }
+              value={curr}
+              disabled={curr === currency}
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M19 9l-7 7-7-7"
-              />
-            </svg>
-          </button>
-          {isCurrencyDropdownOpen && (
-            <div className="absolute z-50 mt-1 w-full bg-gray-500 border border-gray-600 shadow-lg">
-              {(['USD', 'EUR', 'GBP', 'JPY'] as const)
-                .filter((curr) => curr !== currency)
-                .map((curr) => (
-                  <button
-                    key={curr}
-                    type="button"
-                    onClick={() => {
-                      setCurrency(curr);
-                      setPriceData(null);
-                      setPriceHistory([]);
-                      setPriceDirection(null);
-                      setIsCurrencyDropdownOpen(false);
-                    }}
-                    className="w-full px-4 py-2 text-left text-white hover:bg-blue-600"
-                  >
-                    {curr}
-                  </button>
-                ))}
-            </div>
-          )}
-        </div>
+              {curr}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Price Display */}
@@ -393,16 +358,16 @@ const BitcoinPriceTracker: React.FC = () => {
                   (dataMin: number) =>
                     Math.floor(
                       dataMin -
-                      (priceData
-                        ? (priceData.high24h - priceData.low24h) * 0.1
-                        : 0)
+                        (priceData
+                          ? (priceData.high24h - priceData.low24h) * 0.1
+                          : 0)
                     ),
                   (dataMax: number) =>
                     Math.ceil(
                       dataMax +
-                      (priceData
-                        ? (priceData.high24h - priceData.low24h) * 0.1
-                        : 0)
+                        (priceData
+                          ? (priceData.high24h - priceData.low24h) * 0.1
+                          : 0)
                     ),
                 ]}
                 tickFormatter={(value) =>
