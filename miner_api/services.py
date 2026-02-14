@@ -61,11 +61,13 @@ class MinerService:
     @staticmethod
     def _extract_fans(data) -> List[int]:
         fans = getattr(data, 'fans', [])
-        return [
-            MinerService._safe_int(fan.speed) 
-            for fan in fans 
+        fan_speeds = [
+            MinerService._safe_int(fan.speed)
+            for fan in fans
             if getattr(fan, 'speed', None) is not None
         ]
+        # Filter out any None values returned by _safe_int to satisfy List[int] typing
+        return [speed for speed in fan_speeds if speed is not None]
     
     @staticmethod
     def _validate_pool_info(pool_info: PoolInfo) -> None:
