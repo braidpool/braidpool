@@ -11,8 +11,6 @@ from datetime import datetime, timezone
 logger = logging.getLogger("miner_api")
 router = APIRouter()
 
-# Simple API key auth
-api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 def validate_ip_address(ip: str) -> str:
     try:
