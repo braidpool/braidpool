@@ -4,8 +4,105 @@ use bitcoin::absolute::MedianTimePast;
 use bitcoin::consensus::encode::deserialize;
 use bitcoin::consensus::serialize;
 use bitcoin::BlockHash;
+use serde::Deserialize;
 use std::collections::HashSet;
+use std::fs;
+use std::path::Path;
 use std::str::FromStr;
+use std::sync::OnceLock;
+
+#[derive(Debug, Deserialize)]
+struct TestData {
+    committed_metadata: CommittedMetadataTestData,
+}
+
+#[derive(Debug, Deserialize)]
+struct CommittedMetadataTestData {
+    txids: TxidsData,
+    block_hashes: BlockHashesData,
+    timestamps: TimestampsData,
+    public_keys: PublicKeysData,
+    targets: TargetsData,
+    payout_addresses: PayoutAddressesData,
+    miner_ips: MinerIpsData,
+}
+
+#[derive(Debug, Deserialize)]
+struct TxidsData {
+    genesis: String,
+    second: String,
+    third: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct BlockHashesData {
+    parent1: String,
+    parent2: String,
+    parent3: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct TimestampsData {
+    first: u32,
+    second: u32,
+    third: u32,
+}
+
+#[derive(Debug, Deserialize)]
+struct PublicKeysData {
+    default_committed: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct TargetsData {
+    default_bits: u32,
+}
+
+#[derive(Debug, Deserialize)]
+struct PayoutAddressesData {
+    default: String,
+    populated: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct MinerIpsData {
+    loopback: String,
+    lan: String,
+    internal: String,
+}
+
+fn test_data() -> &'static CommittedMetadataTestData {
+    static TEST_DATA: OnceLock<TestData> = OnceLock::new();
+    &TEST_DATA
+        .get_or_init(|| {
+            let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/test_data.json");
+            let content = fs::read_to_string(&path)
+                .unwrap_or_else(|e| panic!("failed reading {}: {}", path.display(), e));
+            serde_json::from_str(&content)
+                .unwrap_or_else(|e| panic!("failed parsing {}: {}", path.display(), e))
+        })
+        .committed_metadata
+}
+
+fn parse_txid(value: &str) -> Txid {
+    Txid::from_str(value).unwrap()
+}
+
+fn parse_block_hash(value: &str) -> BlockHash {
+    BlockHash::from_str(value).unwrap()
+}
+
+fn parse_time(value: u32) -> Time {
+    Time::from_consensus(value).unwrap()
+}
+
+fn parse_public_key(value: &str) -> PublicKey {
+    PublicKey::from_str(value).unwrap()
+}
+
+fn parse_target(value: u32) -> CompactTarget {
+    CompactTarget::from_consensus(value)
+}
 
 #[test]
 fn test_timevec_roundtrip_empty() {
@@ -17,7 +114,8 @@ fn test_timevec_roundtrip_empty() {
 
 #[test]
 fn test_timevec_roundtrip_single() {
-    let time = Time::from_consensus(1653195600).unwrap();
+    let data = test_data();
+    let time = parse_time(data.timestamps.first);
     let original = TimeVec(vec![time]);
     let bytes = serialize(&original);
     let decoded: TimeVec = deserialize(&bytes).unwrap();
@@ -26,10 +124,11 @@ fn test_timevec_roundtrip_single() {
 
 #[test]
 fn test_timevec_roundtrip_multiple() {
+    let data = test_data();
     let times = vec![
-        Time::from_consensus(1653195600).unwrap(),
-        Time::from_consensus(1653195700).unwrap(),
-        Time::from_consensus(1653195800).unwrap(),
+        parse_time(data.timestamps.first),
+        parse_time(data.timestamps.second),
+        parse_time(data.timestamps.third),
     ];
     let original = TimeVec(times);
     let bytes = serialize(&original);
@@ -47,8 +146,8 @@ fn test_txidvec_roundtrip_empty() {
 
 #[test]
 fn test_txidvec_roundtrip_single() {
-    let txid =
-        Txid::from_str("4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b").unwrap();
+    let data = test_data();
+    let txid = parse_txid(&data.txids.genesis);
     let original = TxIdVec(vec![txid]);
     let bytes = serialize(&original);
     let decoded: TxIdVec = deserialize(&bytes).unwrap();
@@ -57,10 +156,11 @@ fn test_txidvec_roundtrip_single() {
 
 #[test]
 fn test_txidvec_roundtrip_multiple() {
+    let data = test_data();
     let txids = vec![
-        Txid::from_str("4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b").unwrap(),
-        Txid::from_str("0e3e2357e806b6cdb1f70b54c3a3a17b6714ee1f0e68bebb44a74b1efd512098").unwrap(),
-        Txid::from_str("9b0fc92260312ce44e74ef369f5c66bbb85848f2eddd5a7a1cde251e54ccfdd5").unwrap(),
+        parse_txid(&data.txids.genesis),
+        parse_txid(&data.txids.second),
+        parse_txid(&data.txids.third),
     ];
     let original = TxIdVec(txids);
     let bytes = serialize(&original);
@@ -70,27 +170,27 @@ fn test_txidvec_roundtrip_multiple() {
 
 #[test]
 fn test_committed_metadata_default() {
+    let data = test_data();
     let metadata = CommittedMetadata::default();
 
     assert_eq!(metadata.transaction_ids, TxIdVec(Vec::new()));
     assert!(metadata.parents.is_empty());
     assert_eq!(metadata.parent_bead_timestamps, TimeVec(Vec::new()));
-    assert_eq!(metadata.payout_address, "bc1");
+    assert_eq!(
+        metadata.payout_address,
+        data.payout_addresses.default.as_str()
+    );
     assert_eq!(metadata.start_timestamp, MedianTimePast::MIN);
     assert_eq!(
         metadata.comm_pub_key,
-        PublicKey::from_str("020202020202020202020202020202020202020202020202020202020202020202")
-            .unwrap()
+        parse_public_key(&data.public_keys.default_committed)
     );
-    assert_eq!(
-        metadata.min_target,
-        CompactTarget::from_consensus(486604799)
-    );
+    assert_eq!(metadata.min_target, parse_target(data.targets.default_bits));
     assert_eq!(
         metadata.weak_target,
-        CompactTarget::from_consensus(486604799)
+        parse_target(data.targets.default_bits)
     );
-    assert_eq!(metadata.miner_ip, "127.0.0.1");
+    assert_eq!(metadata.miner_ip, data.miner_ips.loopback.as_str());
 }
 
 #[test]
@@ -103,40 +203,35 @@ fn test_committed_metadata_roundtrip_default() {
 
 #[test]
 fn test_committed_metadata_roundtrip_populated() {
-    let public_key =
-        PublicKey::from_str("020202020202020202020202020202020202020202020202020202020202020202")
-            .unwrap();
+    let data = test_data();
+    let public_key = parse_public_key(&data.public_keys.default_committed);
 
     let txids = vec![
-        Txid::from_str("4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b").unwrap(),
-        Txid::from_str("0e3e2357e806b6cdb1f70b54c3a3a17b6714ee1f0e68bebb44a74b1efd512098").unwrap(),
+        parse_txid(&data.txids.genesis),
+        parse_txid(&data.txids.second),
     ];
 
-    let parent1 =
-        BlockHash::from_str("000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f")
-            .unwrap();
-    let parent2 =
-        BlockHash::from_str("00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048")
-            .unwrap();
+    let parent1 = parse_block_hash(&data.block_hashes.parent1);
+    let parent2 = parse_block_hash(&data.block_hashes.parent2);
     let mut parents = HashSet::new();
     parents.insert(parent1);
     parents.insert(parent2);
 
     let timestamps = TimeVec(vec![
-        Time::from_consensus(1653195600).unwrap(),
-        Time::from_consensus(1653195700).unwrap(),
+        parse_time(data.timestamps.first),
+        parse_time(data.timestamps.second),
     ]);
 
     let original = TestCommittedMetadataBuilder::new()
         .transactions(txids)
         .parents(parents)
         .parent_bead_timestamps(timestamps)
-        .payout_address("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4".to_string())
-        .start_timestamp(Time::from_consensus(1653195600).unwrap())
+        .payout_address(data.payout_addresses.populated.clone())
+        .start_timestamp(parse_time(data.timestamps.first))
         .comm_pub_key(public_key)
-        .min_target(CompactTarget::from_consensus(486604799))
-        .weak_target(CompactTarget::from_consensus(486604799))
-        .miner_ip("192.168.1.100".to_string())
+        .min_target(parse_target(data.targets.default_bits))
+        .weak_target(parse_target(data.targets.default_bits))
+        .miner_ip(data.miner_ips.lan.clone())
         .build();
 
     let bytes = serialize(&original);
@@ -146,19 +241,12 @@ fn test_committed_metadata_roundtrip_populated() {
 
 #[test]
 fn test_committed_metadata_deterministic_parent_encoding() {
-    let parent1 =
-        BlockHash::from_str("000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f")
-            .unwrap();
-    let parent2 =
-        BlockHash::from_str("00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048")
-            .unwrap();
-    let parent3 =
-        BlockHash::from_str("000000006a625f06636b8bb6ac7b960a8d03705d1ace08b1a19da3fdcc99ddbd")
-            .unwrap();
+    let data = test_data();
+    let parent1 = parse_block_hash(&data.block_hashes.parent1);
+    let parent2 = parse_block_hash(&data.block_hashes.parent2);
+    let parent3 = parse_block_hash(&data.block_hashes.parent3);
 
-    let public_key =
-        PublicKey::from_str("020202020202020202020202020202020202020202020202020202020202020202")
-            .unwrap();
+    let public_key = parse_public_key(&data.public_keys.default_committed);
 
     // Build the same metadata multiple times — HashSet iteration order is
     // non-deterministic, but the encoded bytes must always be identical
@@ -174,12 +262,12 @@ fn test_committed_metadata_deterministic_parent_encoding() {
             .transactions(vec![])
             .parents(parents)
             .parent_bead_timestamps(TimeVec(vec![]))
-            .payout_address("bc1".to_string())
-            .start_timestamp(Time::from_consensus(1653195600).unwrap())
+            .payout_address(data.payout_addresses.default.clone())
+            .start_timestamp(parse_time(data.timestamps.first))
             .comm_pub_key(public_key)
-            .min_target(CompactTarget::from_consensus(486604799))
-            .weak_target(CompactTarget::from_consensus(486604799))
-            .miner_ip("127.0.0.1".to_string())
+            .min_target(parse_target(data.targets.default_bits))
+            .weak_target(parse_target(data.targets.default_bits))
+            .miner_ip(data.miner_ips.loopback.clone())
             .build();
 
         encodings.push(serialize(&metadata));
@@ -196,29 +284,25 @@ fn test_committed_metadata_deterministic_parent_encoding() {
 
 #[test]
 fn test_committed_metadata_serde_json_roundtrip() {
-    let public_key =
-        PublicKey::from_str("020202020202020202020202020202020202020202020202020202020202020202")
-            .unwrap();
+    let data = test_data();
+    let public_key = parse_public_key(&data.public_keys.default_committed);
 
-    let txid =
-        Txid::from_str("4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b").unwrap();
+    let txid = parse_txid(&data.txids.genesis);
 
-    let parent =
-        BlockHash::from_str("000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f")
-            .unwrap();
+    let parent = parse_block_hash(&data.block_hashes.parent1);
     let mut parents = HashSet::new();
     parents.insert(parent);
 
     let original = TestCommittedMetadataBuilder::new()
         .transactions(vec![txid])
         .parents(parents)
-        .parent_bead_timestamps(TimeVec(vec![Time::from_consensus(1653195600).unwrap()]))
-        .payout_address("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4".to_string())
-        .start_timestamp(Time::from_consensus(1653195600).unwrap())
+        .parent_bead_timestamps(TimeVec(vec![parse_time(data.timestamps.first)]))
+        .payout_address(data.payout_addresses.populated.clone())
+        .start_timestamp(parse_time(data.timestamps.first))
         .comm_pub_key(public_key)
-        .min_target(CompactTarget::from_consensus(486604799))
-        .weak_target(CompactTarget::from_consensus(486604799))
-        .miner_ip("10.0.0.1".to_string())
+        .min_target(parse_target(data.targets.default_bits))
+        .weak_target(parse_target(data.targets.default_bits))
+        .miner_ip(data.miner_ips.internal.clone())
         .build();
 
     let json = serde_json::to_string(&original).expect("serialize to JSON");
