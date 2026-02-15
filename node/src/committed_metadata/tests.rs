@@ -1,4 +1,5 @@
 use super::*;
+use crate::utils::hashset_to_vec_deterministic;
 use crate::utils::test_utils::test_utility_functions::TestCommittedMetadataBuilder;
 use bitcoin::absolute::MedianTimePast;
 use bitcoin::consensus::encode::deserialize;
@@ -308,4 +309,142 @@ fn test_committed_metadata_serde_json_roundtrip() {
     let json = serde_json::to_string(&original).expect("serialize to JSON");
     let decoded: CommittedMetadata = serde_json::from_str(&json).expect("deserialize from JSON");
     assert_eq!(original, decoded);
+}
+
+#[test]
+fn test_committed_metadata_consensus_field_order_decode() {
+    let data = test_data();
+    let public_key = parse_public_key(&data.public_keys.default_committed);
+    let txids = vec![
+        parse_txid(&data.txids.genesis),
+        parse_txid(&data.txids.second),
+    ];
+
+    let mut parents = HashSet::new();
+    parents.insert(parse_block_hash(&data.block_hashes.parent2));
+    parents.insert(parse_block_hash(&data.block_hashes.parent1));
+    parents.insert(parse_block_hash(&data.block_hashes.parent3));
+
+    let metadata = TestCommittedMetadataBuilder::new()
+        .transactions(txids.clone())
+        .parents(parents.clone())
+        .parent_bead_timestamps(TimeVec(vec![
+            parse_time(data.timestamps.first),
+            parse_time(data.timestamps.second),
+            parse_time(data.timestamps.third),
+        ]))
+        .payout_address(data.payout_addresses.populated.clone())
+        .start_timestamp(parse_time(data.timestamps.first))
+        .comm_pub_key(public_key)
+        .min_target(parse_target(data.targets.default_bits))
+        .weak_target(parse_target(data.targets.default_bits))
+        .miner_ip(data.miner_ips.lan.clone())
+        .build();
+
+    let bytes = serialize(&metadata);
+    let mut reader = &bytes[..];
+
+    let decoded_txids = TxIdVec::consensus_decode(&mut reader).unwrap();
+    let decoded_parents = Vec::<BeadHash>::consensus_decode(&mut reader).unwrap();
+    let decoded_parent_times = TimeVec::consensus_decode(&mut reader).unwrap();
+    let decoded_payout = String::consensus_decode(&mut reader).unwrap();
+    let decoded_start_timestamp =
+        Time::from_consensus(u32::consensus_decode(&mut reader).unwrap()).unwrap();
+    let decoded_pubkey =
+        PublicKey::from_slice(&Vec::<u8>::consensus_decode(&mut reader).unwrap()).unwrap();
+    let decoded_min_target = CompactTarget::consensus_decode(&mut reader).unwrap();
+    let decoded_weak_target = CompactTarget::consensus_decode(&mut reader).unwrap();
+    let decoded_miner_ip = String::consensus_decode(&mut reader).unwrap();
+
+    assert_eq!(decoded_txids, TxIdVec(txids));
+    assert_eq!(decoded_parents, hashset_to_vec_deterministic(&parents));
+    assert_eq!(
+        decoded_parent_times,
+        TimeVec(vec![
+            parse_time(data.timestamps.first),
+            parse_time(data.timestamps.second),
+            parse_time(data.timestamps.third),
+        ])
+    );
+    assert_eq!(decoded_payout, data.payout_addresses.populated);
+    assert_eq!(decoded_start_timestamp, parse_time(data.timestamps.first));
+    assert_eq!(
+        decoded_pubkey,
+        parse_public_key(&data.public_keys.default_committed)
+    );
+    assert_eq!(decoded_min_target, parse_target(data.targets.default_bits));
+    assert_eq!(decoded_weak_target, parse_target(data.targets.default_bits));
+    assert_eq!(decoded_miner_ip, data.miner_ips.lan);
+    assert!(reader.is_empty(), "consensus decode left trailing bytes");
+}
+
+#[test]
+fn test_committed_metadata_consensus_parents_are_canonical() {
+    let data = test_data();
+    let public_key = parse_public_key(&data.public_keys.default_committed);
+
+    let parent1 = parse_block_hash(&data.block_hashes.parent1);
+    let parent2 = parse_block_hash(&data.block_hashes.parent2);
+    let parent3 = parse_block_hash(&data.block_hashes.parent3);
+
+    let mut parents = HashSet::new();
+    parents.insert(parent3);
+    parents.insert(parent1);
+    parents.insert(parent2);
+
+    let metadata = TestCommittedMetadataBuilder::new()
+        .transactions(vec![])
+        .parents(parents.clone())
+        .parent_bead_timestamps(TimeVec(vec![]))
+        .payout_address(data.payout_addresses.default.clone())
+        .start_timestamp(parse_time(data.timestamps.first))
+        .comm_pub_key(public_key)
+        .min_target(parse_target(data.targets.default_bits))
+        .weak_target(parse_target(data.targets.default_bits))
+        .miner_ip(data.miner_ips.loopback.clone())
+        .build();
+
+    let bytes = serialize(&metadata);
+    let mut reader = &bytes[..];
+    let _ = TxIdVec::consensus_decode(&mut reader).unwrap();
+    let decoded_parents = Vec::<BeadHash>::consensus_decode(&mut reader).unwrap();
+
+    assert_eq!(decoded_parents, hashset_to_vec_deterministic(&parents));
+}
+
+#[test]
+fn test_committed_metadata_consensus_txid_order_is_significant() {
+    let data = test_data();
+    let public_key = parse_public_key(&data.public_keys.default_committed);
+    let txid_a = parse_txid(&data.txids.genesis);
+    let txid_b = parse_txid(&data.txids.second);
+
+    let mut parents = HashSet::new();
+    parents.insert(parse_block_hash(&data.block_hashes.parent1));
+
+    let metadata_ab = TestCommittedMetadataBuilder::new()
+        .transactions(vec![txid_a, txid_b])
+        .parents(parents.clone())
+        .parent_bead_timestamps(TimeVec(vec![parse_time(data.timestamps.first)]))
+        .payout_address(data.payout_addresses.populated.clone())
+        .start_timestamp(parse_time(data.timestamps.first))
+        .comm_pub_key(public_key)
+        .min_target(parse_target(data.targets.default_bits))
+        .weak_target(parse_target(data.targets.default_bits))
+        .miner_ip(data.miner_ips.internal.clone())
+        .build();
+
+    let metadata_ba = TestCommittedMetadataBuilder::new()
+        .transactions(vec![txid_b, txid_a])
+        .parents(parents)
+        .parent_bead_timestamps(TimeVec(vec![parse_time(data.timestamps.first)]))
+        .payout_address(data.payout_addresses.populated.clone())
+        .start_timestamp(parse_time(data.timestamps.first))
+        .comm_pub_key(public_key)
+        .min_target(parse_target(data.targets.default_bits))
+        .weak_target(parse_target(data.targets.default_bits))
+        .miner_ip(data.miner_ips.internal.clone())
+        .build();
+
+    assert_ne!(serialize(&metadata_ab), serialize(&metadata_ba));
 }
