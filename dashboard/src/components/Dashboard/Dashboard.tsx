@@ -9,6 +9,7 @@ import NodeHealth from '../NodeHealth/NodeHealth';
 import BitcoinStats from '../BitcoinStats/BitcoinStats';
 import { Page } from './Types';
 import BlockViewer from './BlockViewer';
+import ErrorBoundary from '../common/ErrorBoundary';
 
 const Dashboard = () => {
   const [currentPage, setCurrentPage] = useState<Page>(Page.DASHBOARD);
@@ -102,7 +103,7 @@ const Dashboard = () => {
         className="flex-grow w-full pt-16 px-3 md:px-8"
         style={{ minHeight: 'calc(100vh - 56px)' }}
       >
-        {renderPage()}
+        <ErrorBoundary>{renderPage()}</ErrorBoundary>
       </main>
     </div>
   );
