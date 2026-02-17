@@ -1,5 +1,4 @@
-from fastapi import APIRouter, Depends, Query, HTTPException, status
-from fastapi.security import APIKeyHeader
+from fastapi import APIRouter, Query, HTTPException, status
 from pydantic import BaseModel
 from ipaddress import ip_address, AddressValueError
 from .services import MinerService
