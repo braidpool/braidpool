@@ -3,7 +3,6 @@ from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 from ipaddress import ip_address, AddressValueError
 from .services import MinerService
-from .config import settings
 from . import __version__
 import logging
 from datetime import datetime, timezone
