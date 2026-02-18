@@ -50,7 +50,7 @@ const ErrorFallback: React.FC<Props> = ({ error, onReset }) => {
 
         {/* Description */}
         <p className="text-gray-400 text-center mb-6">
-          We encountered an error loading this page. Our team has been notified.
+          We encountered an error loading this page. Please try again, and contact support if the problem persists.
         </p>
 
         {/* Error Details (Development Only) */}
