@@ -218,7 +218,9 @@ pub fn prepare_bead_tuple_data(
     for (idx, b) in beads.iter().enumerate() {
         let mut set = HashSet::new();
         for p in &b.committed_metadata.parents {
-            let parent_idx = *bead_index_mapping.get(p).unwrap();
+            let parent_idx = *bead_index_mapping.get(p).ok_or_else(|| {
+                anyhow::anyhow!("Parent bead hash missing from bead_index_mapping")
+            })?;
             set.insert(parent_idx);
         }
         parent_set.insert(idx, set);
@@ -226,20 +228,28 @@ pub fn prepare_bead_tuple_data(
 
     let bead_id = *bead_index_mapping
         .get(&bead.block_header.block_hash())
-        .unwrap();
-    let current_parents = parent_set.get(&bead_id).cloned().unwrap_or_default();
+        .ok_or_else(|| anyhow::anyhow!("Bead hash missing from bead_index_mapping"))?;
+
+    let current_parents = parent_set
+        .get(&bead_id)
+        .cloned()
+        .ok_or_else(|| anyhow::anyhow!("Missing parent set for bead"))?;
 
     let mut relatives = Vec::new();
     let mut parent_ts = Vec::new();
     let mut txs = Vec::new();
 
     for parent in current_parents {
-        let ts = beads[parent]
+        let parent_bead = beads
+            .get(parent)
+            .ok_or_else(|| anyhow::anyhow!("Parent bead index out of bounds"))?;
+
+        let ts = parent_bead
             .committed_metadata
             .start_timestamp
             .to_u32()
             .to_u64()
-            .expect("An error occurred while casting u32 to u64");
+            .ok_or_else(|| anyhow::anyhow!("Failed converting timestamp u32 -> u64"))?;
 
         relatives.push((parent as u64, bead_id as u64));
         parent_ts.push((parent as u64, bead_id as u64, ts));
