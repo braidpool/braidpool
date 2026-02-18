@@ -356,19 +356,40 @@ pub async fn fetch_beads_in_batch(
             bead.committed_metadata.miner_ip = row.get("miner_ip");
 
             bead.committed_metadata.start_timestamp =
-                MedianTimePast::from_u32(row.get::<u32, _>("start_timestamp")).unwrap();
-
-            bead.uncommitted_metadata.broadcast_timestamp =
-                MedianTimePast::from_u32(row.get::<u32, _>("broadcast_timestamp")).unwrap();
-
+                MedianTimePast::from_u32(row.get::<u32, _>("start_timestamp")).map_err(|_| {
+                    DBErrors::TupleAttributeParsingError {
+                        error: "Invalid start_timestamp (MedianTimePast::from_u32 failed)".into(),
+                        attribute: "start_timestamp".into(),
+                    }
+                })?;
+            bead.uncommitted_metadata.broadcast_timestamp = MedianTimePast::from_u32(
+                row.get::<u32, _>("broadcast_timestamp"),
+            )
+            .map_err(|_| DBErrors::TupleAttributeParsingError {
+                error: "Invalid broadcast_timestamp (MedianTimePast::from_u32 failed)".into(),
+                attribute: "broadcast_timestamp".into(),
+            })?;
             bead.uncommitted_metadata.extra_nonce_1 =
-                u32::from_str_radix(&row.get::<String, _>("extranonce1"), 16).unwrap();
+                u32::from_str_radix(&row.get::<String, _>("extranonce1"), 16).map_err(|_| {
+                    DBErrors::TupleAttributeParsingError {
+                        error: "Invalid extranonce1".into(),
+                        attribute: "extranonce1".into(),
+                    }
+                })?;
             bead.uncommitted_metadata.extra_nonce_2 =
-                u32::from_str_radix(&row.get::<String, _>("extranonce2"), 16).unwrap();
-
+                u32::from_str_radix(&row.get::<String, _>("extranonce2"), 16).map_err(|_| {
+                    DBErrors::TupleAttributeParsingError {
+                        error: "Invalid extranonce2".into(),
+                        attribute: "extranonce2".into(),
+                    }
+                })?;
             bead.uncommitted_metadata.signature =
-                Signature::from_slice(&row.get::<Vec<u8>, _>("signature")).unwrap();
-
+                Signature::from_slice(&row.get::<Vec<u8>, _>("signature")).map_err(|_| {
+                    DBErrors::TupleAttributeParsingError {
+                        error: "Invalid signature bytes".into(),
+                        attribute: "signature".into(),
+                    }
+                })?;
             let current_bead_id = row.get::<i32, _>("id");
 
             let tx_rows = sqlx::query("SELECT txid as txid FROM Transactions WHERE bead_id = ?")
@@ -429,10 +450,18 @@ pub async fn fetch_beads_in_batch(
                     }
                 };
 
-                bead.committed_metadata
-                    .parent_bead_timestamps
-                    .0
-                    .push(MedianTimePast::from_u32(timestamp as u32).unwrap());
+                bead.committed_metadata.parent_bead_timestamps.0.push(
+                    MedianTimePast::from_u32(u32::try_from(timestamp).map_err(|_| {
+                        DBErrors::TupleAttributeParsingError {
+                            error: "Parent timestamp out of u32 range".into(),
+                            attribute: "parent_timestamp".into(),
+                        }
+                    })?)
+                    .map_err(|_| DBErrors::TupleAttributeParsingError {
+                        error: "Invalid parent timestamp (MedianTimePast::from_u32 failed)".into(),
+                        attribute: "parent_timestamp".into(),
+                    })?,
+                );
             }
 
             fetched_beads.push(bead);
@@ -475,21 +504,52 @@ pub async fn fetch_bead_by_bead_hash(
             let nbits = CompactTarget::from_consensus(row.get::<u32, _>("nBits"));
             let nonce = row.get::<u32, _>("nNonce");
             let payout_address = std::str::from_utf8(&row.get::<Vec<u8>, _>("payout_address"))
-                .unwrap()
+                .map_err(|_| DBErrors::TupleAttributeParsingError {
+                    error: "Invalid payout_address UTF-8".into(),
+                    attribute: "payout_address".into(),
+                })?
                 .to_string();
-            let start_timestamp =
-                MedianTimePast::from_u32(row.get::<u32, _>("start_timestamp")).unwrap();
-            let pub_key = PublicKey::from_slice(&row.get::<Vec<u8>, _>("comm_pub_key")).unwrap();
+            let start_timestamp = MedianTimePast::from_u32(row.get::<u32, _>("start_timestamp"))
+                .map_err(|_| DBErrors::TupleAttributeParsingError {
+                    error: "Invalid start_timestamp (MedianTimePast::from_u32 failed)".into(),
+                    attribute: "start_timestamp".into(),
+                })?;
+
+            let pub_key =
+                PublicKey::from_slice(&row.get::<Vec<u8>, _>("comm_pub_key")).map_err(|_| {
+                    DBErrors::TupleAttributeParsingError {
+                        error: "Invalid comm_pub_key".into(),
+                        attribute: "comm_pub_key".into(),
+                    }
+                })?;
             let min_target = CompactTarget::from_consensus(row.get::<u32, _>("min_target"));
             let weak_target = CompactTarget::from_consensus(row.get::<u32, _>("weak_target"));
             let miner_ip = row.get::<String, _>("miner_ip");
-            let extranonce_1 =
-                u32::from_str_radix(&row.get::<String, _>("extranonce1"), 16).unwrap();
-            let extranonce_2 =
-                u32::from_str_radix(&row.get::<String, _>("extranonce2"), 16).unwrap();
-            let broadcast_timestamp =
-                MedianTimePast::from_u32(row.get::<u32, _>("broadcast_timestamp")).unwrap();
-            let signature = Signature::from_slice(&row.get::<Vec<u8>, _>("signature")).unwrap();
+            let extranonce_1 = u32::from_str_radix(&row.get::<String, _>("extranonce1"), 16)
+                .map_err(|_| DBErrors::TupleAttributeParsingError {
+                    error: "Invalid extranonce1".into(),
+                    attribute: "extranonce1".into(),
+                })?;
+            let extranonce_2 = u32::from_str_radix(&row.get::<String, _>("extranonce2"), 16)
+                .map_err(|_| DBErrors::TupleAttributeParsingError {
+                    error: "Invalid extranonce2".into(),
+                    attribute: "extranonce2".into(),
+                })?;
+            let broadcast_timestamp = MedianTimePast::from_u32(
+                row.get::<u32, _>("broadcast_timestamp"),
+            )
+            .map_err(|_| DBErrors::TupleAttributeParsingError {
+                error: "Invalid broadcast_timestamp (MedianTimePast::from_u32 failed)".into(),
+                attribute: "broadcast_timestamp".into(),
+            })?;
+
+            let signature =
+                Signature::from_slice(&row.get::<Vec<u8>, _>("signature")).map_err(|_| {
+                    DBErrors::TupleAttributeParsingError {
+                        error: "Invalid signature bytes".into(),
+                        attribute: "signature".into(),
+                    }
+                })?;
             bead_id = id;
             fetched_bead.block_header.version = version;
             fetched_bead.block_header.bits = nbits;
@@ -583,7 +643,19 @@ pub async fn fetch_bead_by_bead_hash(
             .committed_metadata
             .parent_bead_timestamps
             .0
-            .push(MedianTimePast::from_u32(parent_timestamp as u32).unwrap());
+            .push(
+                MedianTimePast::from_u32(u32::try_from(parent_timestamp).map_err(|_| {
+                    DBErrors::TupleAttributeParsingError {
+                        error: "Parent timestamp out of u32 range".into(),
+                        attribute: "parent_timestamp".into(),
+                    }
+                })?)
+                .map_err(|_| DBErrors::TupleAttributeParsingError {
+                    error: "Invalid parent timestamp (MedianTimePast::from_u32 failed)".into(),
+                    attribute: "parent_timestamp".into(),
+                })?,
+            );
+
         //Extending parent committment by parent hash
         fetched_bead
             .committed_metadata
