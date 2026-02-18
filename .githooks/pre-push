@@ -1,0 +1,259 @@
+#!/bin/bash
+# .githooks/pre-push
+# Blocks push if required AI reviews are missing or have unresolved critical/high findings.
+# Interactively prompts user to resolve findings when blocked.
+#
+# Bypass with: git push --no-verify
+
+# Source common functions
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/../.github/scripts/common.sh"
+
+REVIEWS_DIR=".reviews"
+BRANCH=$(git branch --show-current 2>/dev/null)
+
+# Skip if not on a branch (detached HEAD)
+if [ -z "$BRANCH" ]; then
+    exit 0
+fi
+
+# Sanitize branch name for safe filename matching
+BRANCH_SAFE=$(sanitize_branch "$BRANCH")
+
+# Skip for main/master/dev branches (direct pushes should be rare anyway)
+if [ "$BRANCH" = "main" ] || [ "$BRANCH" = "master" ] || [ "$BRANCH" = "dev" ]; then
+    exit 0
+fi
+
+# Check if .reviews directory exists
+if [ ! -d "$REVIEWS_DIR" ]; then
+    echo "⚠️  Warning: No .reviews/ directory found."
+    echo "   Run AI reviews before pushing. Continuing anyway..."
+    exit 0
+fi
+
+# Find review files for this branch (use sanitized name)
+REVIEW_FILES=$(find "$REVIEWS_DIR" -maxdepth 1 -name "${BRANCH_SAFE}-*.json" 2>/dev/null | sort -r)
+if [ -z "$REVIEW_FILES" ]; then
+    echo "⚠️  Warning: No reviews found for branch '$BRANCH'."
+    echo "   Consider running AI reviews before pushing."
+    exit 0
+fi
+
+# Check if jq is available
+if ! command -v jq &> /dev/null; then
+    echo "⚠️  Warning: jq not installed, skipping review check"
+    exit 0
+fi
+
+# Determine required personas based on changed files
+CHANGED_FILES=$(git diff --name-only origin/dev...HEAD 2>/dev/null || git diff --name-only HEAD~1 2>/dev/null || echo "")
+
+REQUIRED_PERSONAS=""
+
+for file in $CHANGED_FILES; do
+    case "$file" in
+        node/src/network/*|node/src/rpc/*|node/src/ipc/*|node/src/stratum*)
+            REQUIRED_PERSONAS="$REQUIRED_PERSONAS Security"
+            REQUIRED_PERSONAS="$REQUIRED_PERSONAS Rust"
+            ;;
+        node/src/braid/*|node/src/consensus/*|*payout*)
+            REQUIRED_PERSONAS="$REQUIRED_PERSONAS Security"
+            REQUIRED_PERSONAS="$REQUIRED_PERSONAS Cryptographer"
+            REQUIRED_PERSONAS="$REQUIRED_PERSONAS Rust"
+            ;;
+        node/src/db/*|*schema.sql*)
+            REQUIRED_PERSONAS="$REQUIRED_PERSONAS Database"
+            REQUIRED_PERSONAS="$REQUIRED_PERSONAS Rust"
+            ;;
+        node/*.rs)
+            REQUIRED_PERSONAS="$REQUIRED_PERSONAS Rust"
+            ;;
+        dashboard/*)
+            REQUIRED_PERSONAS="$REQUIRED_PERSONAS TypeScript"
+            ;;
+        Cargo.toml|Cargo.lock)
+            REQUIRED_PERSONAS="$REQUIRED_PERSONAS Security"
+            ;;
+    esac
+done
+
+# Deduplicate
+REQUIRED_PERSONAS=$(echo "$REQUIRED_PERSONAS" | tr ' ' '\n' | sort -u | grep -v '^$' || true)
+
+if [ -z "$REQUIRED_PERSONAS" ]; then
+    # No code changes requiring review (docs only, etc.)
+    exit 0
+fi
+
+# Map short names to full persona names for matching
+persona_full_name() {
+    case "$1" in
+        Security) echo "Security Researcher" ;;
+        Cryptographer) echo "Cryptographer" ;;
+        Rust) echo "Senior Rust Developer" ;;
+        TypeScript) echo "Senior TypeScript Developer" ;;
+        Architect) echo "Senior Software Architect" ;;
+        Database) echo "Senior Database Engineer" ;;
+        Performance) echo "Performance Engineer" ;;
+        *) echo "$1" ;;
+    esac
+}
+
+# Check each required persona and collect blocking findings
+MISSING=""
+BLOCKING_REVIEWS=""
+
+for persona_short in $REQUIRED_PERSONAS; do
+    persona_full=$(persona_full_name "$persona_short")
+    
+    # Find most recent review for this persona (sort by timestamp in filename)
+    latest_review=""
+    latest_grade=""
+    
+    for review in $(echo "$REVIEW_FILES" | tr ' ' '\n' | sort -r); do
+        if [ -f "$review" ]; then
+            review_persona=$(jq -r '.persona // empty' "$review" 2>/dev/null)
+            if [ "$review_persona" = "$persona_full" ]; then
+                latest_review="$review"
+                latest_grade=$(jq -r '.grade // empty' "$review" 2>/dev/null)
+                break
+            fi
+        fi
+    done
+    
+    if [ -z "$latest_review" ]; then
+        MISSING="$MISSING $persona_short"
+    elif [ "$latest_grade" = "NEEDS-WORK" ]; then
+        # Check for open critical/high findings
+        open_blockers=$(jq '[.findings[] | select(.severity == "critical" or .severity == "high") | select(.status == "open" or .status == null)] | length' "$latest_review" 2>/dev/null || echo "0")
+        if [ "$open_blockers" -gt 0 ]; then
+            BLOCKING_REVIEWS="$BLOCKING_REVIEWS $latest_review"
+        fi
+    fi
+done
+
+# Handle missing reviews (can't resolve interactively)
+if [ -n "$MISSING" ]; then
+    echo ""
+    echo "🛑 Push blocked by AI review gate"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "❌ Missing required reviews:"
+    for p in $MISSING; do
+        echo "   • $p"
+    done
+    echo ""
+    echo "Run the missing reviews before pushing."
+    echo "Or bypass with: git push --no-verify"
+    echo ""
+    exit 1
+fi
+
+# Handle blocking findings interactively
+if [ -n "$BLOCKING_REVIEWS" ]; then
+    echo ""
+    echo "🛑 Push blocked: Unresolved critical/high findings"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    
+    for review_file in $BLOCKING_REVIEWS; do
+        persona=$(jq -r '.persona' "$review_file")
+        echo ""
+        echo "📋 $persona"
+        echo ""
+        
+        # Get open critical/high findings
+        findings=$(jq -c '[.findings | to_entries[] | select(.value.severity == "critical" or .value.severity == "high") | select(.value.status == "open" or .value.status == null)]' "$review_file")
+        count=$(echo "$findings" | jq 'length')
+        
+        for i in $(seq 0 $((count - 1))); do
+            finding=$(echo "$findings" | jq ".[$i]")
+            idx=$(echo "$finding" | jq '.key')
+            severity=$(echo "$finding" | jq -r '.value.severity')
+            file=$(echo "$finding" | jq -r '.value.file')
+            line=$(echo "$finding" | jq -r '.value.line // "?"')
+            desc=$(echo "$finding" | jq -r '.value.description')
+            
+            if [ "$severity" = "critical" ]; then
+                echo "  🔴 #$idx [$severity] $file:$line"
+            else
+                echo "  🟠 #$idx [$severity] $file:$line"
+            fi
+            echo "     $desc"
+            echo ""
+            
+            # Prompt for action
+            while true; do
+                echo "  Action for finding #$idx:"
+                echo "    [w] wont-fix (with reason)"
+                echo "    [r] resolved (I fixed it)"
+                echo "    [s] skip (abort push, fix later)"
+                echo ""
+                read -rp "  Choice [w/r/s]: " choice </dev/tty
+                
+                case "$choice" in
+                    w|W)
+                        read -rp "  Reason: " reason </dev/tty
+                        if [ -z "$reason" ]; then
+                            echo "  ❌ Reason required for wont-fix"
+                            continue
+                        fi
+                        # Update the JSON file
+                        jq ".findings[$idx].status = \"wont-fix\" | .findings[$idx].resolution = \"$reason\"" "$review_file" > "${review_file}.tmp"
+                        mv "${review_file}.tmp" "$review_file"
+                        echo "  ✅ Marked as wont-fix"
+                        echo ""
+                        break
+                        ;;
+                    r|R)
+                        read -rp "  Resolution note (optional): " resolution </dev/tty
+                        if [ -n "$resolution" ]; then
+                            jq ".findings[$idx].status = \"resolved\" | .findings[$idx].resolution = \"$resolution\"" "$review_file" > "${review_file}.tmp"
+                        else
+                            jq ".findings[$idx].status = \"resolved\"" "$review_file" > "${review_file}.tmp"
+                        fi
+                        mv "${review_file}.tmp" "$review_file"
+                        echo "  ✅ Marked as resolved"
+                        echo ""
+                        break
+                        ;;
+                    s|S)
+                        echo ""
+                        echo "Push aborted. Fix the findings and try again."
+                        exit 1
+                        ;;
+                    *)
+                        echo "  Invalid choice. Enter w, r, or s."
+                        ;;
+                esac
+            done
+        done
+    done
+    
+    echo ""
+    echo "✅ All blocking findings addressed. Continuing push..."
+fi
+
+# All checks passed
+echo ""
+echo "✅ AI review gate passed"
+SHOWN=""
+for review in $(echo "$REVIEW_FILES" | tr ' ' '\n' | sort -r); do
+    if [ -f "$review" ]; then
+        persona=$(jq -r '.persona // empty' "$review" 2>/dev/null)
+        grade=$(jq -r '.grade // empty' "$review" 2>/dev/null)
+        wontfix=$(jq '[.findings[] | select(.status == "wont-fix")] | length' "$review" 2>/dev/null || echo "0")
+        # Only show each persona once (most recent)
+        if ! echo "$SHOWN" | grep -q "|${persona}|"; then
+            if [ "$wontfix" -gt 0 ]; then
+                echo "   • $persona: $grade ($wontfix wont-fix)"
+            else
+                echo "   • $persona: $grade"
+            fi
+            SHOWN="${SHOWN}|${persona}|"
+        fi
+    fi
+done
+echo ""
+
+exit 0

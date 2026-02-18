@@ -38,4 +38,4 @@ anyhow = { workspace = true }
 
 
 [build-dependencies]
-capnpc = "0.21.4"
+capnpc = "0.24.0"

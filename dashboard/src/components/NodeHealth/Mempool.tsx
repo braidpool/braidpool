@@ -5,7 +5,7 @@ export default function MempoolPanel({ mempool }: { mempool: MempoolInfo }) {
   const mempoolUsage = (mempool.usage / mempool.maxmempool) * 100;
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div className="grid grid-cols-1 gap-6 px-4 w-full">
       {/* Stats Card */}
       <div className="bg-[#1e1e1e] border border-gray-700 rounded-lg p-6 backdrop-blur-sm">
         <div className="mb-4">
@@ -29,14 +29,14 @@ export default function MempoolPanel({ mempool }: { mempool: MempoolInfo }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="flex justify-between">
             <div>
               <p className="text-sm font-medium text-gray-300">Transactions</p>
               <p className="text-2xl font-bold text-white">
                 {mempool.size.toLocaleString()}
               </p>
             </div>
-            <div>
+            <div className="text-right">
               <p className="text-sm font-medium text-gray-300">Min Fee Rate</p>
               <p className="font-mono text-white">
                 {mempool.mempoolminfee.toFixed(8)} BTC/kvB

@@ -4,6 +4,32 @@ Contributing to open source is one of the best things you can do. It not only be
 <br/> <br>
 With this responsibility, we also want to put the right efforts into development so everything goes smoothly and in a collaborative way. For this, there are some guidelines designed that will help us to work together so we can read, write and understand each other's code in an efficient way.
 
+## Key Concepts (Quick Reference)
+
+Before diving in, understand these core concepts:
+
+| Term | Definition |
+|------|------------|
+| **Bead** | A share in Braidpool's DAG—like a Bitcoin block but with multiple parents |
+| **Cohort** | A set of beads at the same "height" in the DAG (simultaneous beads) |
+| **DAG** | Directed Acyclic Graph—all beads form this structure, not a linear chain |
+| **HWP** | Highest Work Path—the heaviest chain through the DAG (like Bitcoin's longest chain) |
+
+📖 **For detailed explanations**, see [`docs/CODEBASE_PRIMER.md`](docs/CODEBASE_PRIMER.md)
+
+## Development Tools
+
+Before contributing, ensure you have the following tools installed:
+
+- **Rust & Cargo** - Required to build the node (`cargo build`, `cargo test`)
+- **Node.js & npm** - Required for dashboard development and formatting (`npx prettier --write .`)
+- **jq** - Required for git hooks to parse AI review results
+  - On Ubuntu/Debian: `sudo apt-get install jq`
+  - On macOS: `brew install jq`
+  - On Windows: Download from [jqlang.org](https://jqlang.github.io/jq/)
+
+If `jq` is not installed, the git hooks will skip AI review checks with a warning.
+
 ## Initials
 
 We deeply value each and every contributions made to Braidpool, we take this as a huge step to make Bitcoin safer and sustainable in future. So, new contributors are always needed and appreciated. <br><br>

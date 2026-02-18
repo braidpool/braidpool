@@ -1,0 +1,86 @@
+#!/bin/bash
+# .githooks/prepare-commit-msg
+# Automatically appends AI review trailers to commit messages
+#
+# This hook reads from .reviews/ directory and adds "Reviewed-by:" lines
+# for any completed reviews on the current branch.
+
+# Source common functions
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/../.github/scripts/common.sh"
+
+COMMIT_MSG_FILE=$1
+COMMIT_SOURCE=$2
+
+# Only add trailers for regular commits (not merges, squashes, etc.)
+if [ "$COMMIT_SOURCE" = "merge" ] || [ "$COMMIT_SOURCE" = "squash" ]; then
+    exit 0
+fi
+
+# Get current branch name
+BRANCH=$(git branch --show-current 2>/dev/null)
+if [ -z "$BRANCH" ]; then
+    exit 0
+fi
+
+# Sanitize branch name for safe filename matching
+BRANCH_SAFE=$(sanitize_branch "$BRANCH")
+
+# Check if .reviews directory exists and has files for this branch
+REVIEWS_DIR=".reviews"
+if [ ! -d "$REVIEWS_DIR" ]; then
+    exit 0
+fi
+
+# Find review files for this branch (use find for safer handling)
+REVIEW_FILES=$(find "$REVIEWS_DIR" -maxdepth 1 -name "${BRANCH_SAFE}-*.json" 2>/dev/null | sort -r)
+if [ -z "$REVIEW_FILES" ]; then
+    exit 0
+fi
+
+# Check if jq is available
+if ! command -v jq &> /dev/null; then
+    echo "Warning: jq not found, skipping review trailers" >&2
+    exit 0
+fi
+
+# Add blank line before trailers if commit message doesn't end with one
+if [ -s "$COMMIT_MSG_FILE" ]; then
+    LAST_LINE=$(tail -c 1 "$COMMIT_MSG_FILE")
+    if [ "$LAST_LINE" != "" ]; then
+        echo "" >> "$COMMIT_MSG_FILE"
+    fi
+fi
+
+# Track which personas we've already added (avoid duplicates from multiple dates)
+ADDED_PERSONAS=""
+
+# Process each review file (newest first based on date in filename)
+while IFS= read -r review; do
+    if [ -f "$review" ]; then
+        # Extract fields from JSON
+        PERSONA=$(jq -r '.persona // empty' "$review" 2>/dev/null)
+        MODEL=$(jq -r '.model // empty' "$review" 2>/dev/null)
+        GRADE=$(jq -r '.grade // empty' "$review" 2>/dev/null)
+        
+        # Skip if we couldn't parse or already added this persona
+        if [ -z "$PERSONA" ] || [ -z "$GRADE" ]; then
+            continue
+        fi
+        
+        # Check if we already added this persona (use most recent review only)
+        if echo "$ADDED_PERSONAS" | grep -q "|${PERSONA}|"; then
+            continue
+        fi
+        ADDED_PERSONAS="${ADDED_PERSONAS}|${PERSONA}|"
+        
+        # Append trailer line
+        if [ -n "$MODEL" ]; then
+            echo "Reviewed-by: ${PERSONA} (${MODEL}) [${GRADE}]" >> "$COMMIT_MSG_FILE"
+        else
+            echo "Reviewed-by: ${PERSONA} [${GRADE}]" >> "$COMMIT_MSG_FILE"
+        fi
+    fi
+done <<< "$REVIEW_FILES"
+
+exit 0

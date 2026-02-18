@@ -1,6 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
 import * as d3 from 'd3';
-import '../../App.css';
 import { Loader } from 'lucide-react';
 import { GraphData, GraphNode, NodeIdMapping, Position } from './Types';
 import {
