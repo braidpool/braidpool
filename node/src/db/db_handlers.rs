@@ -218,7 +218,9 @@ pub fn prepare_bead_tuple_data(
     for (idx, b) in beads.iter().enumerate() {
         let mut set = HashSet::new();
         for p in &b.committed_metadata.parents {
-            let parent_idx = *bead_index_mapping.get(p).unwrap();
+            let parent_idx = *bead_index_mapping
+                .get(p)
+                .ok_or_else(|| anyhow::anyhow!("Missing parent index mapping"))?;
             set.insert(parent_idx);
         }
         parent_set.insert(idx, set);
@@ -226,7 +228,7 @@ pub fn prepare_bead_tuple_data(
 
     let bead_id = *bead_index_mapping
         .get(&bead.block_header.block_hash())
-        .unwrap();
+        .ok_or_else(|| anyhow::anyhow!("Missing bead index mapping"))?;
     let current_parents = parent_set.get(&bead_id).cloned().unwrap_or_default();
 
     let mut relatives = Vec::new();
@@ -239,7 +241,7 @@ pub fn prepare_bead_tuple_data(
             .start_timestamp
             .to_u32()
             .to_u64()
-            .expect("An error occurred while casting u32 to u64");
+            .ok_or_else(|| anyhow::anyhow!("Failed to cast start timestamp to u64"))?;
 
         relatives.push((parent as u64, bead_id as u64));
         parent_ts.push((parent as u64, bead_id as u64, ts));
@@ -356,18 +358,43 @@ pub async fn fetch_beads_in_batch(
             bead.committed_metadata.miner_ip = row.get("miner_ip");
 
             bead.committed_metadata.start_timestamp =
-                MedianTimePast::from_u32(row.get::<u32, _>("start_timestamp")).unwrap();
+                MedianTimePast::from_u32(row.get::<u32, _>("start_timestamp")).map_err(|_| {
+                    DBErrors::TupleAttributeParsingError {
+                        error: "Invalid start_timestamp".into(),
+                        attribute: "start_timestamp".into(),
+                    }
+                })?;
 
-            bead.uncommitted_metadata.broadcast_timestamp =
-                MedianTimePast::from_u32(row.get::<u32, _>("broadcast_timestamp")).unwrap();
+            bead.uncommitted_metadata.broadcast_timestamp = MedianTimePast::from_u32(
+                row.get::<u32, _>("broadcast_timestamp"),
+            )
+            .map_err(|_| DBErrors::TupleAttributeParsingError {
+                error: "Invalid broadcast_timestamp".into(),
+                attribute: "broadcast_timestamp".into(),
+            })?;
 
             bead.uncommitted_metadata.extra_nonce_1 =
-                u32::from_str_radix(&row.get::<String, _>("extranonce1"), 16).unwrap();
+                u32::from_str_radix(&row.get::<String, _>("extranonce1"), 16).map_err(|e| {
+                    DBErrors::TupleAttributeParsingError {
+                        error: e.to_string(),
+                        attribute: "extranonce1".into(),
+                    }
+                })?;
             bead.uncommitted_metadata.extra_nonce_2 =
-                u32::from_str_radix(&row.get::<String, _>("extranonce2"), 16).unwrap();
+                u32::from_str_radix(&row.get::<String, _>("extranonce2"), 16).map_err(|e| {
+                    DBErrors::TupleAttributeParsingError {
+                        error: e.to_string(),
+                        attribute: "extranonce2".into(),
+                    }
+                })?;
 
             bead.uncommitted_metadata.signature =
-                Signature::from_slice(&row.get::<Vec<u8>, _>("signature")).unwrap();
+                Signature::from_slice(&row.get::<Vec<u8>, _>("signature")).map_err(|e| {
+                    DBErrors::TupleAttributeParsingError {
+                        error: e.to_string(),
+                        attribute: "signature".into(),
+                    }
+                })?;
 
             let current_bead_id = row.get::<i32, _>("id");
 
@@ -429,10 +456,14 @@ pub async fn fetch_beads_in_batch(
                     }
                 };
 
-                bead.committed_metadata
-                    .parent_bead_timestamps
-                    .0
-                    .push(MedianTimePast::from_u32(timestamp as u32).unwrap());
+                bead.committed_metadata.parent_bead_timestamps.0.push(
+                    MedianTimePast::from_u32(timestamp as u32).map_err(|_| {
+                        DBErrors::TupleAttributeParsingError {
+                            error: "Invalid parent timestamp".to_string(),
+                            attribute: "timestamp".to_string(),
+                        }
+                    })?,
+                );
             }
 
             fetched_beads.push(bead);
@@ -475,21 +506,50 @@ pub async fn fetch_bead_by_bead_hash(
             let nbits = CompactTarget::from_consensus(row.get::<u32, _>("nBits"));
             let nonce = row.get::<u32, _>("nNonce");
             let payout_address = std::str::from_utf8(&row.get::<Vec<u8>, _>("payout_address"))
-                .unwrap()
+                .map_err(|e| DBErrors::TupleAttributeParsingError {
+                    error: e.to_string(),
+                    attribute: "payout_address".to_string(),
+                })?
                 .to_string();
-            let start_timestamp =
-                MedianTimePast::from_u32(row.get::<u32, _>("start_timestamp")).unwrap();
-            let pub_key = PublicKey::from_slice(&row.get::<Vec<u8>, _>("comm_pub_key")).unwrap();
+            let start_timestamp = MedianTimePast::from_u32(row.get::<u32, _>("start_timestamp"))
+                .map_err(|_| DBErrors::TupleAttributeParsingError {
+                    error: "Invalid start_timestamp".to_string(),
+                    attribute: "start_timestamp".to_string(),
+                })?;
+            let pub_key =
+                PublicKey::from_slice(&row.get::<Vec<u8>, _>("comm_pub_key")).map_err(|e| {
+                    DBErrors::TupleAttributeParsingError {
+                        error: e.to_string(),
+                        attribute: "comm_pub_key".to_string(),
+                    }
+                })?;
             let min_target = CompactTarget::from_consensus(row.get::<u32, _>("min_target"));
             let weak_target = CompactTarget::from_consensus(row.get::<u32, _>("weak_target"));
             let miner_ip = row.get::<String, _>("miner_ip");
-            let extranonce_1 =
-                u32::from_str_radix(&row.get::<String, _>("extranonce1"), 16).unwrap();
-            let extranonce_2 =
-                u32::from_str_radix(&row.get::<String, _>("extranonce2"), 16).unwrap();
-            let broadcast_timestamp =
-                MedianTimePast::from_u32(row.get::<u32, _>("broadcast_timestamp")).unwrap();
-            let signature = Signature::from_slice(&row.get::<Vec<u8>, _>("signature")).unwrap();
+            let extranonce_1 = u32::from_str_radix(&row.get::<String, _>("extranonce1"), 16)
+                .map_err(|e| DBErrors::TupleAttributeParsingError {
+                    error: e.to_string(),
+                    attribute: "extranonce1".to_string(),
+                })?;
+            let extranonce_2 = u32::from_str_radix(&row.get::<String, _>("extranonce2"), 16)
+                .map_err(|e| DBErrors::TupleAttributeParsingError {
+                    error: e.to_string(),
+                    attribute: "extranonce2".to_string(),
+                })?;
+            let broadcast_timestamp = MedianTimePast::from_u32(
+                row.get::<u32, _>("broadcast_timestamp"),
+            )
+            .map_err(|_| DBErrors::TupleAttributeParsingError {
+                error: "Invalid broadcast_timestamp".to_string(),
+                attribute: "broadcast_timestamp".to_string(),
+            })?;
+            let signature =
+                Signature::from_slice(&row.get::<Vec<u8>, _>("signature")).map_err(|e| {
+                    DBErrors::TupleAttributeParsingError {
+                        error: e.to_string(),
+                        attribute: "signature".to_string(),
+                    }
+                })?;
             bead_id = id;
             fetched_bead.block_header.version = version;
             fetched_bead.block_header.bits = nbits;
@@ -583,7 +643,14 @@ pub async fn fetch_bead_by_bead_hash(
             .committed_metadata
             .parent_bead_timestamps
             .0
-            .push(MedianTimePast::from_u32(parent_timestamp as u32).unwrap());
+            .push(
+                MedianTimePast::from_u32(parent_timestamp as u32).map_err(|_| {
+                    DBErrors::TupleAttributeParsingError {
+                        error: "Invalid parent timestamp".to_string(),
+                        attribute: "timestamp".to_string(),
+                    }
+                })?,
+            );
         //Extending parent committment by parent hash
         fetched_bead
             .committed_metadata

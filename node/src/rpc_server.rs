@@ -56,20 +56,32 @@ pub async fn parse_arguments(cli_command: RpcCommand, server_addr: SocketAddr) -
     // //initializing a client associated with the current node
     // //for receiving the response from the server
     let target_uri = format!("http://{}", server_addr.to_string());
-    let client_res: HttpClient = HttpClient::builder().build(target_uri).unwrap();
+    let client_res: HttpClient = match HttpClient::builder().build(target_uri) {
+        Ok(client) => client,
+        Err(error) => {
+            error!(error = ?error, "Failed to initialize RPC client");
+            return;
+        }
+    };
 
     let (rpc_method, method_params) = match cli_command {
         RpcCommand::AddBead { bead_data } => {
             let rpc_method = String::from("addbead");
             let mut method_params = ArrayParams::new();
-            method_params.insert(bead_data).unwrap();
+            if let Err(error) = method_params.insert(bead_data) {
+                error!(error = ?error, "Failed to insert addbead params");
+                return;
+            }
 
             (rpc_method, method_params)
         }
         RpcCommand::GetBead { bead_hash } => {
             let rpc_method = "getbead".to_string();
             let mut method_params = ArrayParams::new();
-            method_params.insert(bead_hash).unwrap();
+            if let Err(error) = method_params.insert(bead_hash) {
+                error!(error = ?error, "Failed to insert getbead params");
+                return;
+            }
 
             (rpc_method, method_params)
         }
@@ -181,8 +193,7 @@ impl RpcServer for RpcServerImpl {
         match bead {
             Some(bead) => {
                 let json = serde_json::to_string(&bead)
-                    .map_err(|_| ErrorObjectOwned::owned(2, "Internal error", None::<()>))
-                    .unwrap();
+                    .map_err(|_| ErrorObjectOwned::owned(2, "Internal error", None::<()>))?;
                 Ok(json)
             }
             None => Err(ErrorObjectOwned::owned(3, "Bead not found", None::<()>)),
@@ -288,9 +299,13 @@ pub async fn run_rpc_server(
         .set_rpc_middleware(rpc_middleware)
         .build(bind_address)
         .await
-        .unwrap();
+        .map_err(|error| {
+            error!(error = ?error, bind_address = %bind_address, "Failed to build RPC server");
+        })?;
     //listening address for incoming requests/connection
-    let addr = server.local_addr().unwrap();
+    let addr = server.local_addr().map_err(|error| {
+        error!(error = ?error, "Failed to get RPC server local address");
+    })?;
     //context for the served server
     let rpc_impl = RpcServerImpl::new(braid_shared_pointer);
     let handle = server.start(rpc_impl.into_rpc());
