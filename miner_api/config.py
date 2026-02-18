@@ -8,7 +8,7 @@ class Settings:
     ALLOWED_ORIGINS: List[str] = [
         "http://localhost:3000",
         "http://localhost:3001",
-    ]    
+    ]
     MINER_TIMEOUT: int = 10  # seconds
     LOG_LEVEL: str = "INFO"
 
