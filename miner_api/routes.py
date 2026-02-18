@@ -34,7 +34,7 @@ async def health_check():
 
 @router.get("/miners/live", tags=["miners"])
 async def get_miner_data_live(
-    ip: str = Query(..., description="IP address"),   
+    ip: str = Query(..., description="IP address"),
 ):
     """Query miner directly in real-time."""
     validated_ip = validate_ip_address(ip)
