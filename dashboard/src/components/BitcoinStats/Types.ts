@@ -45,15 +45,14 @@ export interface RBFTransactionRowProps {
   toggleExpanded: (txid: string) => void;
 }
 
-
 // Transaction Types
 export enum TransactionCategory {
-  MEMPOOL = "mempool",
-  COMMITTED = "committed",
-  PROPOSED = "proposed",
-  SCHEDULED = "scheduled",
-  CONFIRMED = "confirmed",
-  REPLACED = "replaced",
+  MEMPOOL = 'mempool',
+  COMMITTED = 'committed',
+  PROPOSED = 'proposed',
+  SCHEDULED = 'scheduled',
+  CONFIRMED = 'confirmed',
+  REPLACED = 'replaced',
 }
 
 export interface TransactionInput {
@@ -100,22 +99,22 @@ export interface BraidPoolTransaction {
 
 export const TRANSACTION_CATEGORY_LABELS: Record<TransactionCategory, string> =
   {
-    [TransactionCategory.MEMPOOL]: "Mempool",
-    [TransactionCategory.COMMITTED]: "Committed",
-    [TransactionCategory.PROPOSED]: "Proposed",
-    [TransactionCategory.SCHEDULED]: "Scheduled",
-    [TransactionCategory.CONFIRMED]: "Confirmed",
-    [TransactionCategory.REPLACED]: "Replaced",
+    [TransactionCategory.MEMPOOL]: 'Mempool',
+    [TransactionCategory.COMMITTED]: 'Committed',
+    [TransactionCategory.PROPOSED]: 'Proposed',
+    [TransactionCategory.SCHEDULED]: 'Scheduled',
+    [TransactionCategory.CONFIRMED]: 'Confirmed',
+    [TransactionCategory.REPLACED]: 'Replaced',
   };
 
 export const TRANSACTION_CATEGORY_DESCRIPTIONS: Record<
   TransactionCategory,
   string
 > = {
-  [TransactionCategory.MEMPOOL]: "Transactions in bitcoind mempool only",
-  [TransactionCategory.COMMITTED]: "Transactions committed to cmempool node",
-  [TransactionCategory.PROPOSED]: "Transactions proposed for next block",
-  [TransactionCategory.SCHEDULED]: "Transactions scheduled for mining",
-  [TransactionCategory.CONFIRMED]: "Transactions confirmed in a block",
-  [TransactionCategory.REPLACED]: "Transactions replaced by RBF",
+  [TransactionCategory.MEMPOOL]: 'Transactions in bitcoind mempool only',
+  [TransactionCategory.COMMITTED]: 'Transactions committed to cmempool node',
+  [TransactionCategory.PROPOSED]: 'Transactions proposed for next block',
+  [TransactionCategory.SCHEDULED]: 'Transactions scheduled for mining',
+  [TransactionCategory.CONFIRMED]: 'Transactions confirmed in a block',
+  [TransactionCategory.REPLACED]: 'Transactions replaced by RBF',
 };

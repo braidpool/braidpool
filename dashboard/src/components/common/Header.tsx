@@ -20,10 +20,10 @@ const NAV_ITEMS = [
     icon: <LayoutDashboard size={18} />,
   },
   {
-    label: 'Transactions', 
-    page: Page.TRANSACTIONS, 
+    label: 'Transactions',
+    page: Page.TRANSACTIONS,
     icon: <Receipt size={18} />,
-  }, 
+  },
   { label: 'Bead', page: Page.MINER_STATS, icon: <MemoryStick size={18} /> },
   {
     label: 'Inventory',

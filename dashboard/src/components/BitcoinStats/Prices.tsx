@@ -47,7 +47,9 @@ const BitcoinPriceTracker: React.FC = () => {
     { price: number; time: string }[]
   >([]);
 
-  const [braidpoolTransactions, setBraidpoolTransactions] = useState<BraidPoolTransaction[]>([]);
+  const [braidpoolTransactions, setBraidpoolTransactions] = useState<
+    BraidPoolTransaction[]
+  >([]);
   const [braidpoolLoading, setBraidpoolLoading] = useState(true);
   const [braidpoolError, setBraidpoolError] = useState<string | null>(null);
 
@@ -59,28 +61,28 @@ const BitcoinPriceTracker: React.FC = () => {
     currencyRef.current = currency;
   }, [currency]);
 
-useEffect(() => {
-  const fetchTransactions = async () => {
-    try {
-      setBraidpoolError(null);
-      const data = await braidpoolApi.fetchRecentTransactions(50);
-      
-      setTransactions(data);
-      setBraidpoolTransactions(data);
-      setBraidpoolLoading(false);
-    } catch (error) {
-      console.error('Error fetching BraidPool transactions:', error);
-      setBraidpoolError('Failed to load BraidPool transactions');
-      setBraidpoolLoading(false);
-    }
-  };
+  useEffect(() => {
+    const fetchTransactions = async () => {
+      try {
+        setBraidpoolError(null);
+        const data = await braidpoolApi.fetchRecentTransactions(50);
 
-  fetchTransactions();
-  
-  const intervalId = setInterval(fetchTransactions, 30000);
-  
-  return () => clearInterval(intervalId);
-}, []);
+        setTransactions(data);
+        setBraidpoolTransactions(data);
+        setBraidpoolLoading(false);
+      } catch (error) {
+        console.error('Error fetching BraidPool transactions:', error);
+        setBraidpoolError('Failed to load BraidPool transactions');
+        setBraidpoolLoading(false);
+      }
+    };
+
+    fetchTransactions();
+
+    const intervalId = setInterval(fetchTransactions, 30000);
+
+    return () => clearInterval(intervalId);
+  }, []);
 
   useEffect(() => {
     const websocket = new WebSocket(WEBSOCKET_URLS.MAIN_WEBSOCKET);

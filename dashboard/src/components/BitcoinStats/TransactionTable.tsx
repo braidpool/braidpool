@@ -2,7 +2,11 @@ import React, { useState, useRef, useEffect } from 'react';
 import TransactionDialog from './TransactionDialog';
 import { shortenAddress } from './Utils';
 import colors from '../../theme/colors';
-import { TransactionTableProps, TransactionCategory, TRANSACTION_CATEGORY_LABELS } from './Types';
+import {
+  TransactionTableProps,
+  TransactionCategory,
+  TRANSACTION_CATEGORY_LABELS,
+} from './Types';
 import {
   formatFee,
   formatFeeRate,
@@ -14,7 +18,9 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
   transactions,
 }) => {
   const [selectedTx, setSelectedTx] = useState<string | null>(null);
-  const [categoryFilter, setCategoryFilter] = useState<TransactionCategory[]>([]);
+  const [categoryFilter, setCategoryFilter] = useState<TransactionCategory[]>(
+    []
+  );
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -31,7 +37,8 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
 
     if (isFilterOpen) {
       document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
+      return () =>
+        document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [isFilterOpen]);
 
@@ -135,7 +142,10 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
       >
         <table className="w-full">
           {transactions.length === 0 ? null : (
-            <thead className="sticky top-0 z-10" style={{ backgroundColor: colors.paper }}>
+            <thead
+              className="sticky top-0 z-10"
+              style={{ backgroundColor: colors.paper }}
+            >
               <tr>
                 <th
                   className="text-left px-4 py-3 font-semibold text-xs uppercase"
@@ -242,21 +252,33 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                       <span className="text-xs text-gray-500">-</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-right font-mono" style={{ color: colors.textPrimary }}>
+                  <td
+                    className="px-4 py-3 text-right font-mono"
+                    style={{ color: colors.textPrimary }}
+                  >
                     {tx.fee ? formatFee(tx.fee) : '-'}
-                    {tx.fee && <span className="text-xs text-gray-500 ml-1">BTC</span>}
+                    {tx.fee && (
+                      <span className="text-xs text-gray-500 ml-1">BTC</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-right font-mono text-yellow-400">
                     {tx.feeRate ? formatFeeRate(tx.feeRate) : '-'}
-                    {tx.feeRate && <span className="text-xs text-gray-500 ml-1">sat/vB</span>}
+                    {tx.feeRate && (
+                      <span className="text-xs text-gray-500 ml-1">sat/vB</span>
+                    )}
                   </td>
-                  <td className="px-4 py-3 text-right font-mono" style={{ color: colors.textPrimary }}>
+                  <td
+                    className="px-4 py-3 text-right font-mono"
+                    style={{ color: colors.textPrimary }}
+                  >
                     {tx.size ? (
                       <>
                         {tx.size.toLocaleString()}
                         <span className="text-xs text-gray-500 ml-1">vB</span>
                       </>
-                    ) : '-'}
+                    ) : (
+                      '-'
+                    )}
                   </td>
                   <td className="px-4 py-3 text-center text-white">
                     {tx.inputs !== undefined && tx.outputs !== undefined ? (
@@ -272,10 +294,11 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                   <td className="px-4 py-3 text-center">
                     {tx.confirmations !== undefined && tx.confirmations > 0 ? (
                       <span
-                        className={`inline-block px-2 py-1 rounded text-xs font-medium border ${tx.confirmations >= 6
-                          ? 'border-green-500/30 bg-green-500/10 text-green-400'
-                          : 'border-yellow-500/30 bg-yellow-500/10 text-yellow-400'
-                          }`}
+                        className={`inline-block px-2 py-1 rounded text-xs font-medium border ${
+                          tx.confirmations >= 6
+                            ? 'border-green-500/30 bg-green-500/10 text-green-400'
+                            : 'border-yellow-500/30 bg-yellow-500/10 text-yellow-400'
+                        }`}
                       >
                         {tx.confirmations}
                       </span>
@@ -304,7 +327,8 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
       {filteredTransactions.length > 0 && (
         <div className="mt-4 pt-4 border-t border-gray-800 flex items-center justify-between text-sm text-gray-400">
           <span>
-            Showing {filteredTransactions.length} of {transactions.length} transactions
+            Showing {filteredTransactions.length} of {transactions.length}{' '}
+            transactions
           </span>
           <span className="flex items-center gap-2">
             <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>

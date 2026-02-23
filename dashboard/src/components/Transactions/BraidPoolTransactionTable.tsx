@@ -1,16 +1,16 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from 'react';
 import {
   TransactionCategory,
   TRANSACTION_CATEGORY_LABELS,
   TransactionTableProps,
-} from "./Types";
+} from './Types';
 import {
   shortenAddress,
   formatFee,
   formatFeeRate,
   formatTime,
   getCategoryColor,
-} from "./Utils";
+} from './Utils';
 
 const BraidPoolTransactionTable: React.FC<TransactionTableProps> = ({
   transactions = [],
@@ -21,7 +21,7 @@ const BraidPoolTransactionTable: React.FC<TransactionTableProps> = ({
   refreshInterval = 30000,
 }) => {
   const [categoryFilter, setCategoryFilter] = useState<TransactionCategory[]>(
-    [],
+    []
   );
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -38,9 +38,9 @@ const BraidPoolTransactionTable: React.FC<TransactionTableProps> = ({
     };
 
     if (isFilterOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener('mousedown', handleClickOutside);
       return () =>
-        document.removeEventListener("mousedown", handleClickOutside);
+        document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [isFilterOpen]);
 
@@ -48,7 +48,7 @@ const BraidPoolTransactionTable: React.FC<TransactionTableProps> = ({
     setCategoryFilter((prev) =>
       prev.includes(category)
         ? prev.filter((c) => c !== category)
-        : [...prev, category],
+        : [...prev, category]
     );
   };
 
@@ -61,7 +61,7 @@ const BraidPoolTransactionTable: React.FC<TransactionTableProps> = ({
   return (
     <div
       className="rounded-2xl border border-white/10 bg-[#1e1e1e] shadow-md p-4 mt-10"
-      style={{ borderColor: "rgba(255, 255, 255, 0.1)" }}
+      style={{ borderColor: 'rgba(255, 255, 255, 0.1)' }}
     >
       {/* Header with Filter */}
       <div className="mb-4 flex items-center justify-between">
@@ -79,7 +79,7 @@ const BraidPoolTransactionTable: React.FC<TransactionTableProps> = ({
             className="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-300 hover:bg-gray-750 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
           >
             {categoryFilter.length === 0
-              ? "Filter by category"
+              ? 'Filter by category'
               : `${categoryFilter.length} selected`}
           </button>
 
@@ -142,14 +142,14 @@ const BraidPoolTransactionTable: React.FC<TransactionTableProps> = ({
         className="overflow-auto rounded-md scrollbar-thin"
         style={{
           maxHeight: `${maxHeight}px`,
-          scrollbarColor: "rgb(59 130 246) rgb(30 30 30)",
-          backgroundColor: "rgb(30 30 30)",
+          scrollbarColor: 'rgb(59 130 246) rgb(30 30 30)',
+          backgroundColor: 'rgb(30 30 30)',
         }}
       >
         <table className="w-full text-sm">
           <thead
             className="sticky top-0 z-10"
-            style={{ backgroundColor: "rgb(30 30 30)" }}
+            style={{ backgroundColor: 'rgb(30 30 30)' }}
           >
             <tr className="border-b border-gray-800">
               <th className="px-4 py-3 text-left font-semibold text-gray-300 text-xs uppercase">
@@ -207,38 +207,36 @@ const BraidPoolTransactionTable: React.FC<TransactionTableProps> = ({
                       className={`inline-block px-2 py-1 rounded text-xs font-medium ${
                         tx.category
                           ? getCategoryColor(tx.category)
-                          : "bg-gray-500/10 text-gray-400"
+                          : 'bg-gray-500/10 text-gray-400'
                       }`}
                     >
                       {tx.category
                         ? TRANSACTION_CATEGORY_LABELS[tx.category]
-                        : "Unknown"}
+                        : 'Unknown'}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right font-mono text-white">
-                    {tx.size ? tx.size.toLocaleString() : "-"}
+                    {tx.size ? tx.size.toLocaleString() : '-'}
                     <span className="text-xs text-gray-500 ml-1">vB</span>
                   </td>
                   <td className="px-4 py-3 text-right font-mono text-orange-400">
-                    {tx.fee ? formatFee(tx.fee) : "-"}
+                    {tx.fee ? formatFee(tx.fee) : '-'}
                   </td>
                   <td className="px-4 py-3 text-right font-mono text-yellow-400">
-                    {tx.feeRate ? formatFeeRate(tx.feeRate) : "-"}
+                    {tx.feeRate ? formatFeeRate(tx.feeRate) : '-'}
                   </td>
                   <td className="px-4 py-3 text-center text-white">
-                    <span className="text-blue-400">{tx.inputs || "?"}</span>
+                    <span className="text-blue-400">{tx.inputs || '?'}</span>
                     <span className="text-gray-600 mx-1">/</span>
-                    <span className="text-green-400">
-                      {tx.outputs || "?"}
-                    </span>
+                    <span className="text-green-400">{tx.outputs || '?'}</span>
                   </td>
                   <td className="px-4 py-3 text-center">
                     {tx.confirmations ? (
                       <span
                         className={`inline-block px-2 py-1 rounded text-xs font-medium border ${
                           tx.confirmations >= 6
-                            ? "border-green-500/30 bg-green-500/10 text-green-400"
-                            : "border-yellow-500/30 bg-yellow-500/10 text-yellow-400"
+                            ? 'border-green-500/30 bg-green-500/10 text-green-400'
+                            : 'border-yellow-500/30 bg-yellow-500/10 text-yellow-400'
                         }`}
                       >
                         {tx.confirmations}
@@ -261,7 +259,7 @@ const BraidPoolTransactionTable: React.FC<TransactionTableProps> = ({
       {!loading && filteredTransactions.length > 0 && (
         <div className="mt-4 pt-4 border-t border-gray-800 flex items-center justify-between text-sm text-gray-400">
           <span>
-            Showing {filteredTransactions.length} of {transactions.length}{" "}
+            Showing {filteredTransactions.length} of {transactions.length}{' '}
             transactions
           </span>
           {autoRefresh && (
