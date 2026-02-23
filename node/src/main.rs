@@ -271,9 +271,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let peer_manager_arc = Arc::new(tokio::sync::RwLock::new(PeerManager::new(8)));
     //For local testing uncomment this keypair peer since it running to process will
     //result in same peerID leading to OutgoingConnectionError
-
     // let keypair = identity::Keypair::generate_ed25519();
-
     //creating a main topic subscribing to the current test topic
     let current_broadcast_topic: floodsub::Topic = floodsub::Topic::new(BRAIDPOOL_TOPIC);
 
@@ -388,12 +386,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create RPC proxy command channel - sender goes to RPC server, receiver goes to IPC handler
     let (rpc_proxy_tx, rpc_proxy_rx) = tokio::sync::mpsc::unbounded_channel::<RpcProxyCommand>();
-
     // peer_manager_arc is created above and shared between swarm and RPC server
-
     //spawning the rpc server
     let rpc_addr = "127.0.0.1:6682"; // TODO: Load from config file
-
     let bitcoin_rpc_config = BitcoinRpcConfig::from_cli_args(&args).unwrap_or_else(|e| {
         eprintln!("Error: {}", e);
         std::process::exit(1);
