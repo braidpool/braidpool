@@ -64,10 +64,7 @@ pub mod test_utility_functions {
         let mut test_braid_vector_bead_mapping: HashMap<BeadHash, usize> = HashMap::new();
         for bead_idx in file_braid.clone().parents {
             let random_test_bead = emit_bead();
-            test_braid_vector_bead_mapping.insert(
-                random_test_bead.clone().bead_hash(),
-                bead_idx.0,
-            );
+            test_braid_vector_bead_mapping.insert(random_test_bead.clone().bead_hash(), bead_idx.0);
             beads_to_idx.insert(bead_idx.0, random_test_bead.clone());
         }
         let mut test_braid_parents_map: HashMap<usize, HashSet<usize>> = HashMap::new();
@@ -76,8 +73,7 @@ pub mod test_utility_functions {
             let mut parent_idx_set: HashSet<usize> = HashSet::new();
             if let Some(current_bead_parents) = file_braid.parents.get(&idx) {
                 for parent_bead_idx in current_bead_parents {
-                    let parent_bead_block_hash =
-                        beads_to_idx[parent_bead_idx].bead_hash();
+                    let parent_bead_block_hash = beads_to_idx[parent_bead_idx].bead_hash();
                     current_bead
                         .committed_metadata
                         .parents

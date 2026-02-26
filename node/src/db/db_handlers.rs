@@ -224,9 +224,7 @@ pub fn prepare_bead_tuple_data(
         parent_set.insert(idx, set);
     }
 
-    let bead_id = *bead_index_mapping
-        .get(&bead.bead_hash())
-        .unwrap();
+    let bead_id = *bead_index_mapping.get(&bead.bead_hash()).unwrap();
     let current_parents = parent_set.get(&bead_id).cloned().unwrap_or_default();
 
     let mut relatives = Vec::new();
@@ -800,17 +798,12 @@ pub mod test {
                     panic!("An error occurred while committing transaction");
                 }
             };
-            let fetched_test_bead = fetch_bead_by_bead_hash(
-                Arc::new(Mutex::new(test_pool.clone())),
-                bead.bead_hash(),
-            )
-            .await
-            .unwrap();
+            let fetched_test_bead =
+                fetch_bead_by_bead_hash(Arc::new(Mutex::new(test_pool.clone())), bead.bead_hash())
+                    .await
+                    .unwrap();
             assert_eq!(
-                fetched_test_bead
-                    .unwrap()
-                    .bead_hash()
-                    .to_string(),
+                fetched_test_bead.unwrap().bead_hash().to_string(),
                 bead.bead_hash().to_string()
             );
         }

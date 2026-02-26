@@ -1,7 +1,7 @@
+use bitcoin::block::HeaderExt;
 use bitcoin::blockdata::block::ValidationError;
 use bitcoin::hashes::{sha256d, HashEngine};
 use bitcoin::{BlockHash, BlockHeader, Target};
-use bitcoin::block::HeaderExt;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -35,9 +35,9 @@ impl BraidpoolNetwork {
             "main" | "mainnet" | "bitcoin" => {
                 Some(BraidpoolNetwork::Bitcoin(bitcoin::Network::Bitcoin))
             }
-            "testnet" | "testnet4" => Some(BraidpoolNetwork::Bitcoin(
-                bitcoin::Network::Testnet(bitcoin::TestnetVersion::V4),
-            )),
+            "testnet" | "testnet4" => Some(BraidpoolNetwork::Bitcoin(bitcoin::Network::Testnet(
+                bitcoin::TestnetVersion::V4,
+            ))),
             "signet" => Some(BraidpoolNetwork::Bitcoin(bitcoin::Network::Signet)),
             "regtest" => Some(BraidpoolNetwork::Bitcoin(bitcoin::Network::Regtest)),
             "cpunet" => Some(BraidpoolNetwork::CPUNet),
@@ -184,15 +184,11 @@ pub fn default_payout_address(network: &BraidpoolNetwork) -> String {
     match network {
         BraidpoolNetwork::CPUNet => CPUNET_DEFAULT_PAYOUT_ADDRESS.to_string(),
         BraidpoolNetwork::Bitcoin(n) => match n {
-            bitcoin::Network::Bitcoin => {
-                "bc1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string()
-            }
+            bitcoin::Network::Bitcoin => "bc1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
             bitcoin::Network::Testnet(_) | bitcoin::Network::Signet => {
                 "tb1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string()
             }
-            bitcoin::Network::Regtest => {
-                "bcrt1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string()
-            }
+            bitcoin::Network::Regtest => "bcrt1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
             _ => "tb1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
         },
     }
@@ -221,7 +217,10 @@ mod tests {
         let header = test_header();
         let standard = header.block_hash();
         let cpunet = cpunet_block_hash(&header);
-        assert_ne!(standard, cpunet, "CPUNet hash must differ from standard hash");
+        assert_ne!(
+            standard, cpunet,
+            "CPUNet hash must differ from standard hash"
+        );
     }
 
     #[test]
@@ -231,7 +230,10 @@ mod tests {
         let cpu = BraidpoolNetwork::CPUNet;
 
         assert_eq!(block_hash_for_network(&header, &btc), header.block_hash());
-        assert_eq!(block_hash_for_network(&header, &cpu), cpunet_block_hash(&header));
+        assert_eq!(
+            block_hash_for_network(&header, &cpu),
+            cpunet_block_hash(&header)
+        );
     }
 
     #[test]

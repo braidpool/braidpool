@@ -99,11 +99,7 @@ impl Braid {
         }
         // Already seen this bead
         let bead_hash = bead.bead_hash();
-        if self
-            .beads
-            .iter()
-            .any(|b| b.bead_hash() == bead_hash)
-        {
+        if self.beads.iter().any(|b| b.bead_hash() == bead_hash) {
             return AddBeadStatus::DagAlreadyContainsBead;
         }
 

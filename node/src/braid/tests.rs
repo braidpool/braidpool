@@ -33,10 +33,7 @@ pub fn test_extend_functionality() {
         orphan_beads: Vec::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
         cohort_tips: vec![HashSet::from([0])],
-        bead_index_mapping: std::collections::HashMap::from([(
-            test_bead_0.bead_hash(),
-            0,
-        )]),
+        bead_index_mapping: std::collections::HashMap::from([(test_bead_0.bead_hash(), 0)]),
     };
     assert_eq!(
         test_braid.cohorts,
@@ -246,10 +243,7 @@ pub fn test_orphan_beads_functinality() {
         orphan_beads: Vec::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
         cohort_tips: vec![HashSet::from([0])],
-        bead_index_mapping: std::collections::HashMap::from([(
-            test_bead_0.bead_hash(),
-            0,
-        )]),
+        bead_index_mapping: std::collections::HashMap::from([(test_bead_0.bead_hash(), 0)]),
     };
     assert_eq!(
         test_braid.cohorts,
@@ -795,8 +789,7 @@ pub fn test_all_ancestors() {
             current_braid_parents.insert(beads.0, current_bead_parents);
         }
         for bead_index in current_braid_parents.clone() {
-            let current_bead_hash = current_file_braid.beads[bead_index.0]
-                .bead_hash();
+            let current_bead_hash = current_file_braid.beads[bead_index.0].bead_hash();
             let mut d1_compute: HashMap<usize, HashSet<usize>> = HashMap::new();
             get_all_ancestors(
                 &current_file_braid,
@@ -1519,10 +1512,7 @@ fn test_get_beads_after() {
     );
 
     // Verify the returned beads contain the expected hashes
-    let returned_hashes: HashSet<_> = returned_beads
-        .iter()
-        .map(|b| b.bead_hash())
-        .collect();
+    let returned_hashes: HashSet<_> = returned_beads.iter().map(|b| b.bead_hash()).collect();
     assert!(returned_hashes.contains(&beads[1].bead_hash()));
     assert!(returned_hashes.contains(&beads[2].bead_hash()));
     assert!(returned_hashes.contains(&beads[3].bead_hash()));
@@ -1533,10 +1523,7 @@ fn test_get_beads_after() {
     assert!(result.is_some());
     let returned_beads = result.unwrap();
 
-    let returned_hashes: HashSet<_> = returned_beads
-        .iter()
-        .map(|b| b.bead_hash())
-        .collect();
+    let returned_hashes: HashSet<_> = returned_beads.iter().map(|b| b.bead_hash()).collect();
     assert!(returned_hashes.contains(&beads[2].bead_hash()));
     assert!(returned_hashes.contains(&beads[3].bead_hash()));
 
@@ -1615,10 +1602,7 @@ fn test_get_beads_after_diamond_structure() {
     let returned_beads = result.unwrap();
 
     // Should include all beads after genesis
-    let returned_hashes: HashSet<_> = returned_beads
-        .iter()
-        .map(|b| b.bead_hash())
-        .collect();
+    let returned_hashes: HashSet<_> = returned_beads.iter().map(|b| b.bead_hash()).collect();
     assert!(returned_hashes.contains(&beads[1].bead_hash()));
     assert!(returned_hashes.contains(&beads[2].bead_hash()));
     assert!(returned_hashes.contains(&beads[3].bead_hash()));
@@ -1630,10 +1614,7 @@ fn test_get_beads_after_diamond_structure() {
     assert!(result.is_some());
     let returned_beads = result.unwrap();
 
-    let returned_hashes: HashSet<_> = returned_beads
-        .iter()
-        .map(|b| b.bead_hash())
-        .collect();
+    let returned_hashes: HashSet<_> = returned_beads.iter().map(|b| b.bead_hash()).collect();
     assert!(returned_hashes.contains(&beads[3].bead_hash()));
 
     println!("Diamond structure tests passed");
@@ -1721,10 +1702,7 @@ fn test_get_beads_after_complex_braid() {
     assert!(result.is_some());
     let returned_beads = result.unwrap();
 
-    let returned_hashes: HashSet<_> = returned_beads
-        .iter()
-        .map(|b| b.bead_hash())
-        .collect();
+    let returned_hashes: HashSet<_> = returned_beads.iter().map(|b| b.bead_hash()).collect();
 
     // Should include beads from the cohort containing B1 onwards
     assert!(
@@ -1741,10 +1719,7 @@ fn test_get_beads_after_complex_braid() {
     assert!(result.is_some());
     let returned_beads = result.unwrap();
 
-    let returned_hashes: HashSet<_> = returned_beads
-        .iter()
-        .map(|b| b.bead_hash())
-        .collect();
+    let returned_hashes: HashSet<_> = returned_beads.iter().map(|b| b.bead_hash()).collect();
     assert!(returned_hashes.contains(&beads[7].bead_hash()));
 
     println!("Complex braid tests passed");
@@ -1802,10 +1777,7 @@ fn test_get_beads_after_edge_cases() {
     let returned_beads = result.unwrap();
 
     // Should still work with valid hash and ignore invalid one
-    let returned_hashes: HashSet<_> = returned_beads
-        .iter()
-        .map(|b| b.bead_hash())
-        .collect();
+    let returned_hashes: HashSet<_> = returned_beads.iter().map(|b| b.bead_hash()).collect();
     assert!(
         returned_hashes.contains(&beads[1].bead_hash())
             || returned_hashes.contains(&beads[2].bead_hash())

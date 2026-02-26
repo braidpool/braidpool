@@ -1,5 +1,4 @@
 use bitcoin::consensus::encode::deserialize;
-use node::cpunet::BraidpoolNetwork;
 use clap::Parser;
 use futures::lock::Mutex;
 use futures::StreamExt;
@@ -14,6 +13,7 @@ use libp2p::{
     swarm::SwarmEvent,
     PeerId,
 };
+use node::cpunet::BraidpoolNetwork;
 use node::db::db_handlers::{fetch_beads_in_batch, prepare_bead_tuple_data};
 use node::ibd_manager::{IBD_TRIGGER_AFTER, MAX_IBD_INCOMING_THRESHOLD, MAX_IBD_RETRIES};
 use node::utils::BeadHash;
