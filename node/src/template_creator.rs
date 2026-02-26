@@ -405,9 +405,11 @@ pub fn build_braidpool_coinbase_from_template(
     let total_available = original_coinbase.output[0].value.to_sat();
 
     // Create the single payout output for the entire available amount.
+    // CPUNet uses regtest-format addresses (bcrt1) so we validate against
+    // the mapped bitcoin::Network.
     let payout_address = Address::from_str(&config.pool_payout_address)
         .map_err(CoinbaseError::AddressError)?
-        .require_network(config.network)
+        .require_network(config.network.bitcoin_network())
         .map_err(|_| CoinbaseError::AddressNetworkMismatch)?;
 
     let reward_payout = TxOut {

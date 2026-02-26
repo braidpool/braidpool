@@ -10,7 +10,7 @@ use tokio::sync::mpsc::Sender;
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
 pub mod client;
-use bitcoin::Network;
+use crate::cpunet::BraidpoolNetwork;
 pub use client::{
     BitcoinNotification, BlockTemplateComponents, CheckBlockResult, RequestPriority,
     SharedBitcoinClient,
@@ -29,7 +29,7 @@ const MAX_BACKOFF: u64 = 300;
 pub async fn ipc_block_listener(
     ipc_socket_path: String,
     block_template_tx: Sender<Arc<client::BlockTemplate>>,
-    network: Network,
+    network: BraidpoolNetwork,
     template_cache: Arc<tokio::sync::Mutex<HashMap<TemplateId, Arc<client::BlockTemplate>>>>,
     mut block_submission_rx: tokio::sync::mpsc::UnboundedReceiver<
         crate::stratum::BlockSubmissionRequest,
@@ -253,7 +253,7 @@ pub async fn ipc_block_listener(
                             header,
                             coinbase_transaction,
                         } = submission;
-                        let block_hash = header.block_hash();
+                        let block_hash = crate::cpunet::block_hash_for_network(&header, &network);
                         let template_opt = template_cache.lock().await.get(&template_id).cloned();
 
                         if let Some(ipc_template) = template_opt {
@@ -399,7 +399,7 @@ async fn get_template(
     priority: RequestPriority,
     context: &str,
     block_height: u32,
-    network: Network,
+    network: BraidpoolNetwork,
 ) -> Result<client::BlockTemplate, Box<dyn std::error::Error>> {
     const MIN_TRANSACTION_COUNT: u64 = 1;
     const NONCE: u32 = 0;

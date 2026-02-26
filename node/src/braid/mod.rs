@@ -44,7 +44,7 @@ impl Braid {
         for (index, bead) in genesis_beads.into_iter().enumerate() {
             beads.push(bead.clone());
             bead_indices.insert(index);
-            bead_index_mapping.insert(bead.block_header.block_hash(), index);
+            bead_index_mapping.insert(bead.bead_hash(), index);
         }
         let mut genesis_cohort: Vec<Cohort> = Vec::new();
         if bead_indices.len() != 0 {
@@ -98,11 +98,11 @@ impl Braid {
             }
         }
         // Already seen this bead
-        let bead_hash = bead.block_header.block_hash();
+        let bead_hash = bead.bead_hash();
         if self
             .beads
             .iter()
-            .any(|b| b.block_header.block_hash() == bead_hash)
+            .any(|b| b.bead_hash() == bead_hash)
         {
             return AddBeadStatus::DagAlreadyContainsBead;
         }
@@ -245,7 +245,7 @@ impl Braid {
 
     pub fn insert_genesis_beads(&mut self, genesis_beads: Vec<Bead>) {
         for bead in genesis_beads {
-            let bead_hash = bead.block_header.block_hash();
+            let bead_hash = bead.bead_hash();
             if !self.bead_index_mapping.contains_key(&bead_hash) {
                 self.beads.push(bead.clone());
                 let new_index = self.beads.len() - 1;
@@ -303,7 +303,7 @@ impl Braid {
             for bead_index in &cohort.0 {
                 let curr_bead = self.beads[*bead_index].clone();
                 //Not including the beads that are already present in old_tips
-                if !old_tips.contains(&curr_bead.block_header.block_hash()) {
+                if !old_tips.contains(&curr_bead.bead_hash()) {
                     response_beads.push(curr_bead);
                 } else {
                     tracing::debug!("This bead is already present in old tips thus skipping");
@@ -378,7 +378,7 @@ pub mod consensus_functions {
         //utilizing the passed arguments as of parents instead of the internal braid one
         let current_beads = &braid_obj.beads;
         for bead in current_beads {
-            let current_bead_index = braid_obj.bead_index_mapping[&bead.block_header.block_hash()];
+            let current_bead_index = braid_obj.bead_index_mapping[&bead.bead_hash()];
             let parents = match parents.get(&current_bead_index) {
                 Some(b) => b,
                 _ => {
@@ -423,7 +423,7 @@ pub mod consensus_functions {
 
         let current_beads = &braid_obj.beads;
         for bead in current_beads {
-            let current_bead_idx = braid_obj.bead_index_mapping[&bead.block_header.block_hash()];
+            let current_bead_idx = braid_obj.bead_index_mapping[&bead.bead_hash()];
             let parents = &parents[&current_bead_idx];
 
             for parent_bead_idx in parents.iter() {
@@ -590,7 +590,7 @@ pub mod consensus_functions {
             ancestors.insert(current_block_idx, value_set);
         }
         for parent_idx in &parents[&current_block_idx] {
-            let current_parent_blockhash = braid_obj.beads[*parent_idx].block_header.block_hash();
+            let current_parent_blockhash = braid_obj.beads[*parent_idx].bead_hash();
             if ancestors.contains_key(&parent_idx) == false {
                 updating_ancestors(&braid_obj, current_parent_blockhash, ancestors, &parents);
             }
@@ -693,7 +693,7 @@ pub mod consensus_functions {
                 oldcohort = cohort.clone();
                 let mut key_set: HashSet<usize> = ancestor.keys().copied().collect();
                 for bead in tail.difference(&key_set) {
-                    let current_bead_blockhash = braid_obj.beads[*bead].block_header.block_hash();
+                    let current_bead_blockhash = braid_obj.beads[*bead].bead_hash();
                     updating_ancestors(braid_obj, current_bead_blockhash, &mut ancestor, parents);
                 }
 
@@ -917,7 +917,7 @@ pub mod consensus_functions {
             let sub_children = get_sub_braid(braid_obj, &curr_cohort, &children);
             let mut sub_descendants: HashMap<usize, HashSet<usize>> = HashMap::new();
             for bead in &curr_cohort {
-                let current_bead_hash = braid_obj.beads[*bead].block_header.block_hash();
+                let current_bead_hash = braid_obj.beads[*bead].bead_hash();
                 get_all_ancestors(
                     braid_obj,
                     current_bead_hash,
@@ -1144,7 +1144,7 @@ pub mod consensus_functions {
         let head = cohort_head(braid_obj, cohort, parents, Some(children));
 
         for bead in cohort {
-            let current_bead_hash = braid_obj.beads[*bead].block_header.block_hash();
+            let current_bead_hash = braid_obj.beads[*bead].bead_hash();
             get_all_ancestors(braid_obj, current_bead_hash, &mut ancestors, parents);
             if let Some(ancestor_beads) = ancestors.get(&bead) {
                 for ancestor_bead in ancestor_beads {

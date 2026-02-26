@@ -88,7 +88,7 @@ impl DBHandler {
             hex::encode(bead.uncommitted_metadata.extra_nonce_1.to_be_bytes());
         let hex_converted_extranonce_2 =
             hex::encode(bead.uncommitted_metadata.extra_nonce_2.to_be_bytes());
-        let block_header_bytes = bead.block_header.block_hash().to_byte_array().to_vec();
+        let block_header_bytes = bead.bead_hash().to_byte_array().to_vec();
         let prev_block_hash_bytes = bead.block_header.prev_blockhash.to_byte_array().to_vec();
         let merkle_root_bytes = bead.block_header.merkle_root.to_byte_array().to_vec();
         let payout_addr_bytes = bead.committed_metadata.payout_address.as_bytes().to_vec();
@@ -174,7 +174,7 @@ impl DBHandler {
                         parent_timestamp_json,
                         bead_id,
                     } => {
-                        let bead_hash = bead_to_insert.block_header.block_hash();
+                        let bead_hash = bead_to_insert.bead_hash();
                         match self
                             .insert_bead(
                                 bead_to_insert,
@@ -225,7 +225,7 @@ pub fn prepare_bead_tuple_data(
     }
 
     let bead_id = *bead_index_mapping
-        .get(&bead.block_header.block_hash())
+        .get(&bead.bead_hash())
         .unwrap();
     let current_parents = parent_set.get(&bead_id).cloned().unwrap_or_default();
 
@@ -675,13 +675,13 @@ pub mod test {
             let mut ancestor_mapping: HashMap<usize, HashSet<usize>> = HashMap::new();
             consensus_functions::updating_ancestors(
                 &current_file_braid,
-                bead.block_header.block_hash(),
+                bead.bead_hash(),
                 &mut ancestor_mapping,
                 &braid_parent_set,
             );
             let bead_id = current_file_braid
                 .bead_index_mapping
-                .get(&bead.block_header.block_hash())
+                .get(&bead.bead_hash())
                 .unwrap();
             let current_bead_parent_set = braid_parent_set.get(&(bead_id)).unwrap();
             let mut relative_tuples: Vec<(u64, u64)> = Vec::new();
@@ -746,7 +746,7 @@ pub mod test {
                 hex::encode(bead.uncommitted_metadata.extra_nonce_1.to_be_bytes());
             let hex_converted_extranonce_2 =
                 hex::encode(bead.uncommitted_metadata.extra_nonce_2.to_be_bytes());
-            let block_header_bytes = bead.block_header.block_hash().to_byte_array().to_vec();
+            let block_header_bytes = bead.bead_hash().to_byte_array().to_vec();
             let prev_block_hash_bytes = bead.block_header.prev_blockhash.to_byte_array().to_vec();
             let merkle_root_bytes = bead.block_header.merkle_root.to_byte_array().to_vec();
             let payout_addr_bytes = bead.committed_metadata.payout_address.as_bytes().to_vec();
@@ -802,17 +802,16 @@ pub mod test {
             };
             let fetched_test_bead = fetch_bead_by_bead_hash(
                 Arc::new(Mutex::new(test_pool.clone())),
-                bead.block_header.block_hash(),
+                bead.bead_hash(),
             )
             .await
             .unwrap();
             assert_eq!(
                 fetched_test_bead
                     .unwrap()
-                    .block_header
-                    .block_hash()
+                    .bead_hash()
                     .to_string(),
-                bead.block_header.block_hash().to_string()
+                bead.bead_hash().to_string()
             );
         }
     }

@@ -978,7 +978,7 @@ impl SharedBitcoinClient {
                 response,
                 ..
             } => {
-                let block_hash = header.block_hash();
+                let block_hash = crate::cpunet::cpunet_block_hash(&header);
                 let version = header.version.to_consensus() as u32;
                 let timestamp = header.time.to_u32();
                 let nonce = header.nonce;

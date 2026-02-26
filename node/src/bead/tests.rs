@@ -331,7 +331,7 @@ fn test_bead_response_codec() {
         BeadResponse::Tips(BeadHashes(vec![test_hash, test_hash2])),
         BeadResponse::Genesis(BeadHashes(vec![test_hash])),
         BeadResponse::GetAllBeads(Beads(vec![test_bead.clone(), test_bead.clone()])),
-        BeadResponse::GetBeadsAfter(BeadHashes(vec![test_bead.block_header.block_hash()])),
+        BeadResponse::GetBeadsAfter(BeadHashes(vec![test_bead.bead_hash()])),
         BeadResponse::Error(BeadSyncError::GenesisMismatch),
         BeadResponse::Error(BeadSyncError::BeadHashNotFound),
     ];

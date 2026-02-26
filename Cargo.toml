@@ -22,7 +22,7 @@ futures = { version = "0.3.28", features = ["thread-pool"]}
 bytes = "1.4.0"
 serde_json = "1.0.140"
 clap = { version = "4.4.2", features = ["derive", "string"] }
-bitcoin = { git = "https://github.com/braidpool/rust-bitcoin.git", branch = "cpunet",features=["serde"]}
+bitcoin = { git = "https://github.com/rust-bitcoin/rust-bitcoin.git", rev = "a419fc9aa689b576e4d605aa00b77a5298d2b185", features = ["serde"] }
 bitcoin_hashes = { version = "0.16" }
 bitcoincore-rpc = { version = "0.19.0"}
 bitcoincore-rpc-json = { version = "0.19.0"}

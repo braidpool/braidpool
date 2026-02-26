@@ -1,7 +1,7 @@
+use crate::cpunet;
 use crate::error::StratumErrors;
 use crate::template_creator::calculate_merkle_root;
 use crate::{SwarmHandler, TemplateId, EXTRANONCE1_SIZE, EXTRANONCE2_SIZE, EXTRANONCE_SEPARATOR};
-use bitcoin::block::HeaderExt;
 use bitcoin::consensus::serialize;
 use bitcoin::io::Cursor;
 use bitcoin::{absolute::Decodable, Transaction};
@@ -659,7 +659,7 @@ impl DownstreamClient {
         );
         debug!(
             connection_id = %connection_id_hex,
-            block_hash = %header.block_hash(),
+            block_hash = %cpunet::cpunet_block_hash(&header),
             "Block hash computed"
         );
 
@@ -720,12 +720,12 @@ impl DownstreamClient {
         let complete_block = bitcoin::Block::new_unchecked(header, block_transactions);
 
         //Checking with PoW of the target whether the block sent by downstream is below that or not
-        match header.validate_pow(target) {
+        match cpunet::cpunet_validate_pow(&header, target) {
             Ok(_) => {
                 debug!(
                     connection_id = %connection_id_hex,
                     target = %target.to_hex(),
-                    hash = %header.block_hash(),
+                    hash = %cpunet::cpunet_block_hash(&header),
                     "Header meets target"
                 );
 

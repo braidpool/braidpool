@@ -44,6 +44,17 @@ pub struct Bead {
 }
 impl_consensus_encoding!(Bead, block_header, committed_metadata, uncommitted_metadata);
 
+impl Bead {
+    /// Returns the CPUNet-aware block hash for this bead.
+    ///
+    /// On CPUNet, block hashes are computed with an additional `"cpunet\0"` suffix
+    /// appended to the SHA256d preimage. This method provides a single point of
+    /// dispatch for all bead identification in the DAG.
+    pub fn bead_hash(&self) -> BlockHash {
+        crate::cpunet::cpunet_block_hash(&self.block_header)
+    }
+}
+
 impl Default for Bead {
     fn default() -> Self {
         let empty_merkle_bytes: [u8; 32] = [0; 32];

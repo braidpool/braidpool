@@ -1,4 +1,4 @@
-use bitcoin::Network;
+use crate::cpunet::BraidpoolNetwork;
 use core::panic;
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -11,7 +11,7 @@ pub struct NetworkConfig {
 }
 #[derive(Serialize, Deserialize, Clone)]
 pub struct BitcoinConfig {
-    pub network: bitcoin::Network,
+    pub network: BraidpoolNetwork,
     pub username: String,
     pub password: String,
     pub port: String,
@@ -68,7 +68,7 @@ impl BraidpoolConfig {
         self
     }
 
-    pub fn with_network(mut self, network: bitcoin::Network) -> Self {
+    pub fn with_network(mut self, network: BraidpoolNetwork) -> Self {
         self.bitcoin_config.network = network;
         self
     }
@@ -106,21 +106,14 @@ impl BraidpoolConfig {
 
 #[derive(Debug, Clone)]
 pub struct CoinbaseConfig {
-    pub network: Network,
+    pub network: BraidpoolNetwork,
     pub pool_payout_address: String,
     pub pool_identifier: String,
 }
 
 impl CoinbaseConfig {
-    pub fn for_network(network: Network) -> Self {
-        let pool_payout_address = match network {
-            Network::Bitcoin => "bc1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
-            Network::Testnet(_) => "tb1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
-            Network::Signet => "tb1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
-            Network::Regtest => "bcrt1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
-            Network::CPUNet => "tc1qu3cdq9unyhdc3d2hw8mvpfgnnhvp6ucckkl6ft".to_string(),
-            _ => "tb1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
-        };
+    pub fn for_network(network: BraidpoolNetwork) -> Self {
+        let pool_payout_address = crate::cpunet::default_payout_address(&network);
 
         Self {
             network,
@@ -134,9 +127,8 @@ impl CoinbaseConfig {
 mod test {
     use std::path::Path;
 
-    use bitcoin::Network;
-
     use crate::config::{BraidRpcConfig, MinerConfig};
+    use crate::cpunet::BraidpoolNetwork;
 
     use super::{BitcoinConfig, BraidDirectoryConfig, BraidpoolConfig, NetworkConfig};
     #[test]
@@ -156,7 +148,7 @@ mod test {
                 ],
             },
             bitcoin_config: BitcoinConfig {
-                network: Network::CPUNet,
+                network: BraidpoolNetwork::CPUNet,
                 username: "username".to_string(),
                 password: "password".to_string(),
                 port: "18443".to_string(),
