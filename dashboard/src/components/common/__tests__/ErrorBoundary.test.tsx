@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import ErrorBoundary from '../ErrorBoundary';
 
@@ -31,6 +31,10 @@ afterAll(() => {
   console.error = originalConsoleError;
 });
 
+// Helper to wait for retry delay (default 2 seconds)
+const waitForRetryDelay = () =>
+  new Promise((resolve) => setTimeout(resolve, 2100));
+
 describe('ErrorBoundary', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -60,6 +64,9 @@ describe('ErrorBoundary', () => {
       // Should show error fallback UI
       expect(screen.getByText(/Something Went Wrong/i)).toBeInTheDocument();
       expect(screen.getByText(/We encountered an error/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Clicking retry will re-attempt to render/i)
+      ).toBeInTheDocument();
       expect(screen.getByRole('alert')).toBeInTheDocument();
     });
 
@@ -94,10 +101,10 @@ describe('ErrorBoundary', () => {
   });
 
   describe('error recovery', () => {
-    it('calls onReset when try again button is clicked', () => {
+    it('calls onReset when try again button is clicked after delay', async () => {
       const onResetMock = jest.fn();
 
-      const { rerender, unmount } = render(
+      render(
         <ErrorBoundary onReset={onResetMock}>
           <ThrowAfterUpdate triggerError={true} />
         </ErrorBoundary>
@@ -106,36 +113,114 @@ describe('ErrorBoundary', () => {
       // Verify error state
       expect(screen.getByText(/Something Went Wrong/i)).toBeInTheDocument();
 
-      // Click try again button (get by visible text)
-      const tryAgainButton = screen.getByText(/Try Again/i);
+      // Wait for the retry delay (2 seconds)
+      await waitForRetryDelay();
+
+      // Click try again button (get by role since text includes countdown)
+      const tryAgainButton = screen.getByRole('button', {
+        name: /Retry rendering this section/i,
+      });
       fireEvent.click(tryAgainButton);
 
-      // onReset should have been called
-      expect(onResetMock).toHaveBeenCalledTimes(1);
-
-      // Unmount and remount with no error to fully reset
-      unmount();
-      render(
-        <ErrorBoundary onReset={onResetMock}>
-          <ThrowAfterUpdate triggerError={false} />
-        </ErrorBoundary>
+      // onReset should have been called after the internal delay (2s retryDelay)
+      await waitFor(
+        () => {
+          expect(onResetMock).toHaveBeenCalledTimes(1);
+        },
+        { timeout: 5000 }
       );
-
-      // Should show normal content
-      expect(screen.getByText('Component rendered')).toBeInTheDocument();
     });
 
-    it('has Go to Dashboard button that navigates', () => {
+    it(
+      'disables try again button after max retries reached',
+      async () => {
+        const onResetMock = jest.fn();
+
+        render(
+          <ErrorBoundary onReset={onResetMock} maxRetries={3}>
+            <ThrowAfterUpdate triggerError={true} />
+          </ErrorBoundary>
+        );
+
+        // First error (retryCount=1): should be able to retry
+        await waitFor(() => {
+          expect(screen.getByText(/Attempt 1 of 3/i)).toBeInTheDocument();
+        });
+
+        // Wait for countdown and click the retry button as soon as it's available
+        const retryBtn1 = await screen.findByRole(
+          'button',
+          { name: /Retry rendering this section/i },
+          { timeout: 5000 }
+        );
+        fireEvent.click(retryBtn1);
+
+        // Wait for reset delay + child re-throw → Attempt 2
+        await waitFor(
+          () => {
+            expect(screen.getByText(/Attempt 2 of 3/i)).toBeInTheDocument();
+          },
+          { timeout: 5000 }
+        );
+
+        // Wait for countdown and click retry again
+        const retryBtn2 = await screen.findByRole(
+          'button',
+          { name: /Retry rendering this section/i },
+          { timeout: 5000 }
+        );
+        fireEvent.click(retryBtn2);
+
+        // Wait for reset delay + child re-throw → Attempt 3 (exceeds max)
+        await waitFor(
+          () => {
+            expect(screen.getByText(/Attempt 3 of 3/i)).toBeInTheDocument();
+          },
+          { timeout: 5000 }
+        );
+
+        // Should show max retries messaging and disabled button
+        expect(
+          screen.getByText(/Maximum retry attempts reached/i)
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText(/connection or server problem/i)
+        ).toBeInTheDocument();
+
+        // Wait for the countdown to finish so the aria-label changes to "Maximum retries reached"
+        await waitFor(
+          () => {
+            expect(
+              screen.getByRole('button', { name: /Maximum retries reached/i })
+            ).toBeDisabled();
+          },
+          { timeout: 5000 }
+        );
+      },
+      30000
+    );
+
+    it('shows retry countdown timer', async () => {
       render(
         <ErrorBoundary>
           <ThrowError shouldThrow={true} />
         </ErrorBoundary>
       );
 
-      // Click go home button (get by visible text)
-      const goHomeButton = screen.getByText(/Go to Dashboard/i);
-      expect(goHomeButton).toBeInTheDocument();
-      expect(goHomeButton.tagName).toBe('BUTTON');
+      // Initially shows countdown
+      expect(screen.getByText(/Retry \(2s\)/i)).toBeInTheDocument();
+
+      // Wait a bit
+      await new Promise((resolve) => setTimeout(resolve, 1100));
+
+      // Should show 1s
+      expect(screen.getByText(/Retry \(1s\)/i)).toBeInTheDocument();
+
+      // Wait more
+      await new Promise((resolve) => setTimeout(resolve, 1100));
+
+      // Should show normal button
+      expect(screen.getByText(/^Retry$/i)).toBeInTheDocument();
     });
   });
 
@@ -162,18 +247,27 @@ describe('ErrorBoundary', () => {
       expect(alert).toHaveAttribute('aria-live', 'assertive');
     });
 
-    it('has accessible button labels', () => {
+    it('has accessible button labels', async () => {
       render(
         <ErrorBoundary>
           <ThrowError shouldThrow={true} />
         </ErrorBoundary>
       );
 
+      // Initially the button shows countdown in aria-label
       expect(
-        screen.getByRole('button', { name: /Try loading the page again/i })
+        screen.getByRole('button', { name: /Retry in \d+ seconds/i })
       ).toBeInTheDocument();
       expect(
         screen.getByRole('button', { name: /Go to dashboard home/i })
+      ).toBeInTheDocument();
+
+      // Wait for countdown to finish
+      await waitForRetryDelay();
+
+      // After countdown, button shows standard label
+      expect(
+        screen.getByRole('button', { name: /Retry rendering this section/i })
       ).toBeInTheDocument();
     });
   });
