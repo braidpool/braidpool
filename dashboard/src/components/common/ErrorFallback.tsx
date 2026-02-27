@@ -1,19 +1,49 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 interface Props {
   error: Error | null;
   onReset: () => void;
+  retryCount: number;
+  maxRetries: number;
+  canRetry: boolean;
 }
+
+const RETRY_DELAY_SECONDS = 2;
 
 /**
  * ErrorFallback component - UI displayed when an error is caught by ErrorBoundary.
- * Provides a friendly error message and recovery options.
+ * Provides a friendly error message and recovery options with retry limits.
  */
-const ErrorFallback: React.FC<Props> = ({ error, onReset }) => {
+const ErrorFallback: React.FC<Props> = ({
+  error,
+  onReset,
+  retryCount,
+  maxRetries,
+  canRetry,
+}) => {
   const isDevelopment = process.env.NODE_ENV === 'development';
+  const [countdown, setCountdown] = useState(RETRY_DELAY_SECONDS);
+  const [isRetrying, setIsRetrying] = useState(false);
+
+  // Countdown timer for retry delay
+  useEffect(() => {
+    if (countdown <= 0) return;
+
+    const timer = setTimeout(() => {
+      setCountdown((prev) => prev - 1);
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [countdown]);
 
   const handleGoHome = (): void => {
     window.location.href = '/';
+  };
+
+  const handleTryAgain = (): void => {
+    if (!canRetry) return;
+    setIsRetrying(true);
+    onReset();
   };
 
   return (
@@ -48,10 +78,33 @@ const ErrorFallback: React.FC<Props> = ({ error, onReset }) => {
           Something Went Wrong
         </h2>
 
-        {/* Description */}
-        <p className="text-gray-400 text-center mb-6">
-          We encountered an error loading this page. Please try again, and contact support if the problem persists.
+        <p className="text-gray-400 text-center mb-4">
+          We encountered an error loading this section. Our team has been
+          notified.
         </p>
+
+        {/* Retry explanation */}
+        <p className="text-gray-500 text-sm text-center mb-6">
+          Clicking retry will re-attempt to render this section. If the issue is
+          caused by a connection problem or server error, retrying may not help.
+        </p>
+
+        {/* Retry Count Indicator */}
+        <div className="text-center mb-4">
+          <span
+            className={`text-sm font-medium ${canRetry ? 'text-blue-400' : 'text-red-400'
+              }`}
+          >
+            Attempt {retryCount} of {maxRetries}
+          </span>
+          {!canRetry && (
+            <p className="text-red-400 text-sm mt-1">
+              Maximum retry attempts reached. Please refresh the page or try
+              again later. If the issue persists, it may be caused by a
+              connection or server problem.
+            </p>
+          )}
+        </div>
 
         {/* Error Details (Development Only) */}
         {isDevelopment && error && (
@@ -75,11 +128,27 @@ const ErrorFallback: React.FC<Props> = ({ error, onReset }) => {
         {/* Action Buttons */}
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <button
-            onClick={onReset}
-            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800"
-            aria-label="Try loading the page again"
+            onClick={handleTryAgain}
+            disabled={!canRetry || countdown > 0 || isRetrying}
+            className={`px-6 py-3 font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 ${canRetry && countdown === 0 && !isRetrying
+                ? 'bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500'
+                : 'bg-gray-600 text-gray-300 cursor-not-allowed focus:ring-gray-500'
+              }`}
+            aria-label={
+              countdown > 0
+                ? `Retry in ${countdown} seconds`
+                : canRetry
+                  ? 'Retry rendering this section'
+                  : 'Maximum retries reached'
+            }
           >
-            Try Again
+            {isRetrying
+              ? 'Retrying...'
+              : countdown > 0
+                ? `Retry (${countdown}s)`
+                : canRetry
+                  ? 'Retry'
+                  : 'Max Retries Reached'}
           </button>
           <button
             onClick={handleGoHome}
