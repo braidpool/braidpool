@@ -31,5 +31,21 @@
       "lan": "192.168.1.100",
       "internal": "10.0.0.1"
     }
+  },
+  "uncommitted_metadata": {
+    "nonces": {
+      "default_nonce_1": 0,
+      "default_nonce_2": 0,
+      "populated_nonce_1": 42,
+      "populated_nonce_2": 99
+    },
+    "timestamps": {
+      "first": 1653195600,
+      "second": 1653195700
+    },
+    "signatures": {
+      "default_hex": "3046022100839c1fbc5304de944f697c9f4b1d01d1faeba32d751c0f7acb21ac8a0f436a72022100e89bd46bb3a5a62adc679f659b7ce876d83ee297c7a5587b2011c4fcc72eab45",
+      "alternate_hex": "304502210097ef30233ead25d10f7bb2bf9eaf571a16f2deb33a75f20819284f0cb8ff3cc102204870ca05940199c113b4dc77866f001702691cde269f6835581e7aea1ead2660"
+    }
   }
 }
