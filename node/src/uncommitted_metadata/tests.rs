@@ -11,6 +11,8 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::OnceLock;
 
+const TEST_DATA_PATH: &str = "../tests/test_data.json";
+
 #[derive(Debug, Deserialize)]
 struct TestData {
     uncommitted_metadata: UnCommittedMetadataTestData,
@@ -47,7 +49,7 @@ fn test_data() -> &'static UnCommittedMetadataTestData {
     static TEST_DATA: OnceLock<TestData> = OnceLock::new();
     &TEST_DATA
         .get_or_init(|| {
-            let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/test_data.json");
+            let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(TEST_DATA_PATH);
             let content = fs::read_to_string(&path)
                 .unwrap_or_else(|e| panic!("failed reading {}: {}", path.display(), e));
             serde_json::from_str(&content)
