@@ -131,74 +131,70 @@ describe('ErrorBoundary', () => {
       );
     });
 
-    it(
-      'disables try again button after max retries reached',
-      async () => {
-        const onResetMock = jest.fn();
+    it('disables try again button after max retries reached', async () => {
+      const onResetMock = jest.fn();
 
-        render(
-          <ErrorBoundary onReset={onResetMock} maxRetries={3}>
-            <ThrowAfterUpdate triggerError={true} />
-          </ErrorBoundary>
-        );
+      render(
+        <ErrorBoundary onReset={onResetMock} maxRetries={3}>
+          <ThrowAfterUpdate triggerError={true} />
+        </ErrorBoundary>
+      );
 
-        // First error (retryCount=1): should be able to retry
-        await waitFor(() => {
-          expect(screen.getByText(/Attempt 1 of 3/i)).toBeInTheDocument();
-        });
+      // First error (retryCount=1): should be able to retry
+      await waitFor(() => {
+        expect(screen.getByText(/Attempt 1 of 3/i)).toBeInTheDocument();
+      });
 
-        // Wait for countdown and click the retry button as soon as it's available
-        const retryBtn1 = await screen.findByRole(
-          'button',
-          { name: /Retry rendering this section/i },
-          { timeout: 5000 }
-        );
-        fireEvent.click(retryBtn1);
+      // Wait for countdown and click the retry button as soon as it's available
+      const retryBtn1 = await screen.findByRole(
+        'button',
+        { name: /Retry rendering this section/i },
+        { timeout: 5000 }
+      );
+      fireEvent.click(retryBtn1);
 
-        // Wait for reset delay + child re-throw → Attempt 2
-        await waitFor(
-          () => {
-            expect(screen.getByText(/Attempt 2 of 3/i)).toBeInTheDocument();
-          },
-          { timeout: 5000 }
-        );
+      // Wait for reset delay + child re-throw → Attempt 2
+      await waitFor(
+        () => {
+          expect(screen.getByText(/Attempt 2 of 3/i)).toBeInTheDocument();
+        },
+        { timeout: 5000 }
+      );
 
-        // Wait for countdown and click retry again
-        const retryBtn2 = await screen.findByRole(
-          'button',
-          { name: /Retry rendering this section/i },
-          { timeout: 5000 }
-        );
-        fireEvent.click(retryBtn2);
+      // Wait for countdown and click retry again
+      const retryBtn2 = await screen.findByRole(
+        'button',
+        { name: /Retry rendering this section/i },
+        { timeout: 5000 }
+      );
+      fireEvent.click(retryBtn2);
 
-        // Wait for reset delay + child re-throw → Attempt 3 (exceeds max)
-        await waitFor(
-          () => {
-            expect(screen.getByText(/Attempt 3 of 3/i)).toBeInTheDocument();
-          },
-          { timeout: 5000 }
-        );
+      // Wait for reset delay + child re-throw → Attempt 3 (exceeds max)
+      await waitFor(
+        () => {
+          expect(screen.getByText(/Attempt 3 of 3/i)).toBeInTheDocument();
+        },
+        { timeout: 5000 }
+      );
 
-        // Should show max retries messaging and disabled button
-        expect(
-          screen.getByText(/Maximum retry attempts reached/i)
-        ).toBeInTheDocument();
-        expect(
-          screen.getByText(/connection or server problem/i)
-        ).toBeInTheDocument();
+      // Should show max retries messaging and disabled button
+      expect(
+        screen.getByText(/Maximum retry attempts reached/i)
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/connection or server problem/i)
+      ).toBeInTheDocument();
 
-        // Wait for the countdown to finish so the aria-label changes to "Maximum retries reached"
-        await waitFor(
-          () => {
-            expect(
-              screen.getByRole('button', { name: /Maximum retries reached/i })
-            ).toBeDisabled();
-          },
-          { timeout: 5000 }
-        );
-      },
-      30000
-    );
+      // Wait for the countdown to finish so the aria-label changes to "Maximum retries reached"
+      await waitFor(
+        () => {
+          expect(
+            screen.getByRole('button', { name: /Maximum retries reached/i })
+          ).toBeDisabled();
+        },
+        { timeout: 5000 }
+      );
+    }, 30000);
 
     it('shows retry countdown timer', async () => {
       render(

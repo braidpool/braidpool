@@ -92,8 +92,9 @@ const ErrorFallback: React.FC<Props> = ({
         {/* Retry Count Indicator */}
         <div className="text-center mb-4">
           <span
-            className={`text-sm font-medium ${canRetry ? 'text-blue-400' : 'text-red-400'
-              }`}
+            className={`text-sm font-medium ${
+              canRetry ? 'text-blue-400' : 'text-red-400'
+            }`}
           >
             Attempt {retryCount} of {maxRetries}
           </span>
@@ -130,10 +131,11 @@ const ErrorFallback: React.FC<Props> = ({
           <button
             onClick={handleTryAgain}
             disabled={!canRetry || countdown > 0 || isRetrying}
-            className={`px-6 py-3 font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 ${canRetry && countdown === 0 && !isRetrying
+            className={`px-6 py-3 font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 ${
+              canRetry && countdown === 0 && !isRetrying
                 ? 'bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500'
                 : 'bg-gray-600 text-gray-300 cursor-not-allowed focus:ring-gray-500'
-              }`}
+            }`}
             aria-label={
               countdown > 0
                 ? `Retry in ${countdown} seconds`
