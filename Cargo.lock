@@ -497,6 +497,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a90bbbfa552b49101a230fb2668f3f9ef968c81e6f83cf577e1d4b80f689e1aa"
 
 [[package]]
+name = "bitcoin-internals"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a30a22d1f112dde8e16be7b45c63645dc165cef254f835b3e1e9553e485cfa64"
+
+[[package]]
 name = "bitcoin-io"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3281,6 +3287,7 @@ dependencies = [
  "async-trait",
  "bincode",
  "bitcoin 0.32.7-pre-cpunet",
+ "bitcoin-internals 0.5.0",
  "bitcoin_hashes 0.16.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "bitcoincore-rpc",
  "bitcoincore-rpc-json",

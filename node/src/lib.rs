@@ -49,6 +49,7 @@ pub mod ibd_manager;
 pub mod ipc;
 pub mod peer_manager;
 pub mod rpc_server;
+pub mod rust_btc_wrapper;
 pub mod stratum;
 pub mod template_creator;
 pub mod uncommitted_metadata;
