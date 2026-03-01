@@ -36,6 +36,7 @@ sqlx = { workspace = true}
 strum = { workspace = true }
 if-addrs = { workspace = true }
 anyhow = { workspace = true }
+bitcoin-internals = "0.5.0"
 reqwest = { workspace = true }
 
 
