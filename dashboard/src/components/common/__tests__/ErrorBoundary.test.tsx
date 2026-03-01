@@ -131,6 +131,58 @@ describe('ErrorBoundary', () => {
       );
     });
 
+    it(
+      'successfully recovers when the error cause is resolved and retry is clicked',
+      async () => {
+        const onResetMock = jest.fn();
+
+        // We'll update triggerError from true -> false to simulate fixing the error
+        const { rerender } = render(
+          <ErrorBoundary onReset={onResetMock}>
+            <ThrowAfterUpdate triggerError={true} />
+          </ErrorBoundary>
+        );
+
+        // Verify it's initially in the error state
+        expect(screen.getByText(/Something Went Wrong/i)).toBeInTheDocument();
+
+        // "Fix" the underlying component so it no longer throws
+        rerender(
+          <ErrorBoundary onReset={onResetMock}>
+            <ThrowAfterUpdate triggerError={false} />
+          </ErrorBoundary>
+        );
+
+        // It still shows the error because ErrorBoundary hasn't been reset yet
+        expect(screen.getByText(/Something Went Wrong/i)).toBeInTheDocument();
+
+        // Wait for countdown and click retry
+        await waitForRetryDelay();
+        const retryBtn = screen.getByRole('button', {
+          name: /Retry rendering this section/i,
+        });
+        fireEvent.click(retryBtn);
+
+        // Wait for the ErrorBoundary's internal reset delay to complete
+        await waitFor(
+          () => {
+            // It should successfully render the child component's content now
+            expect(
+              screen.getByText('Component rendered')
+            ).toBeInTheDocument();
+          },
+          { timeout: 5000 }
+        );
+
+        // The error boundary fallback should be gone
+        expect(
+          screen.queryByText(/Something Went Wrong/i)
+        ).not.toBeInTheDocument();
+        expect(onResetMock).toHaveBeenCalledTimes(1);
+      },
+      10000
+    );
+
     it('disables try again button after max retries reached', async () => {
       const onResetMock = jest.fn();
 
