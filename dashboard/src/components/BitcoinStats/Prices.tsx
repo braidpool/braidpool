@@ -173,9 +173,7 @@ const BitcoinPriceTracker: React.FC = () => {
           {CURRENCIES.map((curr) => (
             <option
               key={curr}
-              className={
-                curr === currency ? 'bg-gray-500 text-gray-400' : 'bg-gray-500'
-              }
+              className="bg-gray-500"
               value={curr}
               disabled={curr === currency}
             >
