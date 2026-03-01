@@ -406,7 +406,7 @@ pub fn build_braidpool_coinbase_from_template(
 
     // Create the single payout output for the entire available amount.
     let payout_address = Address::from_str(&config.pool_payout_address)
-        .map_err(CoinbaseError::AddressError)?
+        .map_err(|e| CoinbaseError::AddressError(e.into()))?
         .require_network(config.network)
         .map_err(|_| CoinbaseError::AddressNetworkMismatch)?;
 
