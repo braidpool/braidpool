@@ -1,8 +1,9 @@
 //All braidpool specific errors are defined here
-use std::{fmt, path::PathBuf};
-
 use crate::stratum::{BlockTemplate, JobDetails};
 use crate::TemplateId;
+use bitcoin::address::ParseError as AddressParseError;
+use bitcoin::bech32;
+use std::{fmt, path::PathBuf};
 use tokio::sync::oneshot;
 
 #[derive(Debug)]
@@ -460,7 +461,7 @@ pub enum CoinbaseError {
     InvalidCommitmentLength,
     OpReturnTooLarge,
     PushBytesError(bitcoin::script::PushBytesError),
-    AddressError(ParseError),
+    AddressError(AddressParseError),
     TemplateMissingOutputs,
 }
 
@@ -487,176 +488,54 @@ impl fmt::Display for CoinbaseError {
         }
     }
 }
-/// Base58 related error.
+impl std::error::Error for CoinbaseError {}
+/// Error type for parsing cpunet from string.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Base58Error {
-    /// Decode error.
-    Decode(String),
-    /// Invalid base58 checksum.
-    InvalidChecksum,
-    /// Invalid base58 character.
-    InvalidCharacter(char),
-    /// Legacy address is too long.
-    LegacyAddressTooLong { length: usize },
-    /// Invalid base58 payload data length for legacy address.
-    InvalidBase58PayloadLength { actual: usize, expected: usize },
-    /// Invalid legacy address prefix in base58 data payload.
-    InvalidLegacyPrefix(InvalidLegacyPrefixError),
+pub struct ParseCpunetError(pub String);
+
+impl fmt::Display for ParseCpunetError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "failed to parse '{}' as cpunet", self.0)
+    }
 }
 
-impl fmt::Display for Base58Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::error::Error for ParseCpunetError {}
+
+/// Error type for cpunet address operations.
+#[derive(Debug, Clone)]
+pub enum CpunetAddressError {
+    /// Bech32 decoding error
+    Bech32(bech32::segwit::DecodeError),
+    /// Wrong network HRP
+    WrongNetwork { expected: String, found: String },
+    /// Invalid witness version
+    InvalidWitnessVersion(u8),
+    /// Invalid witness program
+    InvalidProgram(String),
+}
+
+impl fmt::Display for CpunetAddressError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Decode(e) => write!(f, "base58 decode error: {}", e),
-            Self::InvalidChecksum => write!(f, "invalid base58 checksum"),
-            Self::InvalidCharacter(c) => write!(f, "invalid base58 character: {}", c),
-            Self::LegacyAddressTooLong { length } => {
-                write!(f, "legacy address too long: {} bytes", length)
-            }
-            Self::InvalidBase58PayloadLength { actual, expected } => {
+            Self::Bech32(e) => write!(f, "bech32 decode error: {}", e),
+            Self::WrongNetwork { expected, found } => {
                 write!(
                     f,
-                    "invalid base58 payload length: expected {}, got {}",
-                    expected, actual
+                    "wrong network: expected '{}', found '{}'",
+                    expected, found
                 )
             }
-            Self::InvalidLegacyPrefix(e) => write!(f, "{}", e),
-        }
-    }
-}
-
-impl std::error::Error for Base58Error {}
-
-/// Bech32 SegWit decoding error.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Bech32Error {
-    /// Invalid witness version.
-    InvalidWitnessVersion(u8),
-    /// Invalid witness program length.
-    InvalidWitnessProgramLength(usize),
-    /// Bech32 decoding error.
-    Decode(String),
-    /// Unknown human-readable part.
-    UnknownHrp(String),
-}
-
-impl fmt::Display for Bech32Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
             Self::InvalidWitnessVersion(v) => write!(f, "invalid witness version: {}", v),
-            Self::InvalidWitnessProgramLength(len) => {
-                write!(f, "invalid witness program length: {}", len)
-            }
-            Self::Decode(e) => write!(f, "bech32 decode error: {}", e),
-            Self::UnknownHrp(hrp) => write!(f, "unknown hrp: {}", hrp),
+            Self::InvalidProgram(e) => write!(f, "invalid witness program: {}", e),
         }
     }
 }
 
-impl std::error::Error for Bech32Error {}
-
-impl From<bitcoin::witness_version::TryFromError> for Bech32Error {
-    fn from(e: bitcoin::witness_version::TryFromError) -> Self {
-        // Use Display since the field is private
-        Self::Decode(e.to_string())
-    }
-}
-
-/// Network validation error.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NetworkValidationError {
-    /// The expected network.
-    pub expected: String,
-    /// The actual network found in the address.
-    pub actual: String,
-}
-
-impl fmt::Display for NetworkValidationError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "address's network differs from required one: expected {}, got {}",
-            self.expected, self.actual
-        )
-    }
-}
-
-impl std::error::Error for NetworkValidationError {}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ParseError {
-    /// Base58 legacy decoding error.
-    Base58(Base58Error),
-    /// Bech32 SegWit decoding error.
-    Bech32(Bech32Error),
-    /// Address's network differs from required one.
-    NetworkValidation(NetworkValidationError),
-}
-
-impl fmt::Display for ParseError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::error::Error for CpunetAddressError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::Base58(e) => write!(f, "{}", e),
-            Self::Bech32(e) => write!(f, "{}", e),
-            Self::NetworkValidation(e) => write!(f, "{}", e),
+            Self::Bech32(e) => Some(e),
+            _ => None,
         }
-    }
-}
-
-impl std::error::Error for ParseError {}
-
-impl From<bitcoin::address::ParseError> for ParseError {
-    fn from(e: bitcoin::address::ParseError) -> Self {
-        // Convert bitcoin's ParseError to our custom ParseError
-        Self::Bech32(Bech32Error::Decode(e.to_string()))
-    }
-}
-
-impl std::error::Error for CoinbaseError {}
-#[derive(Debug)]
-pub struct UnknownHrpError(pub String);
-
-impl std::fmt::Display for UnknownHrpError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "unknown hrp: {}", self.0)
-    }
-}
-impl From<UnknownHrpError> for ParseError {
-    fn from(e: UnknownHrpError) -> Self {
-        Self::Bech32(Bech32Error::UnknownHrp(e.0))
-    }
-}
-
-impl From<UnknownHrpError> for Bech32Error {
-    fn from(e: UnknownHrpError) -> Self {
-        Self::UnknownHrp(e.0)
-    }
-}
-impl From<InvalidLegacyPrefixError> for Base58Error {
-    fn from(e: InvalidLegacyPrefixError) -> Self {
-        Self::InvalidLegacyPrefix(e)
-    }
-}
-/// Invalid legacy address prefix in decoded base58 data.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct InvalidLegacyPrefixError {
-    /// The invalid prefix byte.
-    pub invalid: u8,
-}
-
-impl InvalidLegacyPrefixError {
-    /// Returns the invalid prefix.
-    pub fn invalid_legacy_address_prefix(&self) -> u8 {
-        self.invalid
-    }
-}
-
-impl fmt::Display for InvalidLegacyPrefixError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "invalid legacy address prefix in decoded base58 data {}",
-            self.invalid
-        )
     }
 }

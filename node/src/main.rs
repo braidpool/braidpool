@@ -1,5 +1,4 @@
 use bitcoin::consensus::encode::deserialize;
-use bitcoin::Network;
 use clap::Parser;
 use futures::lock::Mutex;
 use futures::StreamExt;
@@ -357,27 +356,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //IPC(inter process communication) based `getblocktemplate` and `notification` to send to the downstream via the `cmempoold` architecture
     info!(socket = %args.ipc_socket, "IPC socket path");
 
-    let network = if let Some(network_name) = &args.network {
-        info!(network = %network_name, "Network selected");
-        match network_name.as_str() {
-            "main" | "mainnet" => Network::Bitcoin,
-            "testnet" | "testnet4" => Network::Testnet(bitcoin::TestnetVersion::V4),
-            "signet" => Network::Signet,
-            "regtest" => Network::Regtest,
-            "cpunet" => Network::CPUNet,
-            _ => {
-                error!(
-                    network = %network_name,
-                    valid_networks = "main, testnet, testnet4, signet, regtest, cpunet",
-                    "Invalid network specified"
-                );
-                info!(fallback = "regtest", "Using fallback network");
-                Network::Regtest
-            }
+    // Parsing the name as passed by user in cli
+    let network_name = args.network.clone().unwrap_or_else(|| "main".to_string());
+    // Validate network name
+    match network_name.as_str() {
+        "main" | "mainnet" | "testnet" | "testnet4" | "signet" | "regtest" | "cpunet" => {
+            info!(network = %network_name,"Network selected");
         }
-    } else {
-        Network::Bitcoin
-    };
+        _ => {
+            error!(
+                network = %network_name,
+                valid_networks = "main, testnet, testnet4, signet, regtest, cpunet",
+                "Invalid network specified"
+            );
+            info!(fallback = "regtest", "Using fallback network");
+        }
+    }
 
     let ipc_socket_path_for_blocking = args.ipc_socket.clone();
     let notification_tx_for_ipc = notification_tx.clone();
@@ -451,13 +445,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         let ipc_socket_path = ipc_socket_path_for_blocking.clone();
                         let ipc_template_tx = ipc_template_tx.clone();
                         let template_cache = template_cache_for_listener.clone();
+                        let network_name = network_name.clone();
                         let rpc_command_rx = rpc_proxy_rx;
 
                         async move {
                             match node::ipc::ipc_block_listener(
                                 ipc_socket_path,
                                 ipc_template_tx,
-                                network,
+                                network_name,
                                 template_cache,
                                 block_submission_rx,
                                 rpc_command_rx,

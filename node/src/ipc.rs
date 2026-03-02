@@ -11,7 +11,6 @@ use tokio::sync::mpsc::Sender;
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
 pub mod client;
-use bitcoin::Network;
 pub use client::{
     BitcoinNotification, BlockTemplateComponents, CheckBlockResult, RequestPriority,
     SharedBitcoinClient,
@@ -31,7 +30,7 @@ const MAX_BACKOFF: u64 = 300;
 pub async fn ipc_block_listener(
     ipc_socket_path: String,
     block_template_tx: Sender<Arc<client::BlockTemplate>>,
-    network: Network,
+    network_name: String,
     template_cache: Arc<tokio::sync::Mutex<HashMap<TemplateId, Arc<client::BlockTemplate>>>>,
     mut block_submission_rx: tokio::sync::mpsc::UnboundedReceiver<
         crate::stratum::BlockSubmissionRequest,
@@ -40,7 +39,7 @@ pub async fn ipc_block_listener(
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!(
         socket = %ipc_socket_path,
-        network = %network,
+        network = %network_name,
         "IPC block listener started"
     );
     let local = tokio::task::LocalSet::new();
@@ -122,7 +121,7 @@ pub async fn ipc_block_listener(
                     RequestPriority::High,
                     "initial template",
                     tip_height,
-                    network,
+                    &network_name,
                 ).await {
                     Ok(template) => {
                         if let Err(e) = block_template_tx.send(Arc::new(template)).await {
@@ -182,7 +181,7 @@ pub async fn ipc_block_listener(
                                                 RequestPriority::High,
                                                 &format!("block {}", height),
                                                 height,
-                                                network,
+                                                &network_name,
                                             ).await {
                                                 Ok(template) => {
                                                     if let Err(e) = block_template_tx.send(Arc::new(template)).await {
@@ -424,24 +423,25 @@ pub async fn ipc_block_listener(
 /// This function:
 /// - Accepts templates smaller than 256 bytes
 /// - Propagates errors to caller
+/// - Uses cpunet module for cpunet-specific configuration when network is CPUNet
 ///
 /// # Arguments
 /// * `client` - The shared Bitcoin client for IPC communication
 /// * `priority` - Request priority affecting queue position
 /// * `context` - Context for logging
 /// * `block_height` - The height of the block for which the template is requested
-/// * `network` - The Bitcoin network (e.g., Mainnet, Testnet, Regtest) for which the
-///   template is generated
+/// * `network_name` - The network name as string slice which will be later converted to either `Cpunet` or `Network` types respectively
 async fn get_template(
     client: &mut SharedBitcoinClient,
     priority: RequestPriority,
     context: &str,
     block_height: u32,
-    network: Network,
+    network_name: &str,
 ) -> Result<client::BlockTemplate, Box<dyn std::error::Error>> {
     const MIN_TRANSACTION_COUNT: u64 = 1;
     const NONCE: u32 = 0;
-    let config = CoinbaseConfig::for_network(network);
+
+    let config = CoinbaseConfig::from_network_name(network_name);
 
     let components = client
         .get_block_template_components(None, Some(priority))
