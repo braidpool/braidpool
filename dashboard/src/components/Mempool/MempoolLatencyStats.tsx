@@ -229,11 +229,16 @@ const MempoolLatencyStats = () => {
             }
             className="px-4 py-2 bg-[#1a1a1a] text-gray-300 rounded-md shadow-md border border-white"
           >
-            {(['btc', 'usd', 'eur', 'jpy', 'all'] as const).map((view) => (
-              <option key={view} value={view} disabled={view === selectedView}>
-                {view.toUpperCase()}
-              </option>
-            ))}
+            <option value={selectedView} style={{ display: 'none' }}>
+              {selectedView.toUpperCase()}
+            </option>
+            {(['btc', 'usd', 'eur', 'jpy', 'all'] as const)
+              .filter((view) => view !== selectedView)
+              .map((view) => (
+                <option key={view} value={view}>
+                  {view.toUpperCase()}
+                </option>
+              ))}
           </select>
         </div>
 

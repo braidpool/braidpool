@@ -170,13 +170,11 @@ const BitcoinPriceTracker: React.FC = () => {
           }}
           className="block py-2 px-4 ml-5 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
         >
-          {CURRENCIES.map((curr) => (
-            <option
-              key={curr}
-              className="bg-gray-500"
-              value={curr}
-              disabled={curr === currency}
-            >
+          <option value={currency} style={{ display: 'none' }}>
+            {currency}
+          </option>
+          {CURRENCIES.filter((curr) => curr !== currency).map((curr) => (
+            <option key={curr} className="bg-gray-500" value={curr}>
               {curr}
             </option>
           ))}
@@ -356,16 +354,16 @@ const BitcoinPriceTracker: React.FC = () => {
                   (dataMin: number) =>
                     Math.floor(
                       dataMin -
-                        (priceData
-                          ? (priceData.high24h - priceData.low24h) * 0.1
-                          : 0)
+                      (priceData
+                        ? (priceData.high24h - priceData.low24h) * 0.1
+                        : 0)
                     ),
                   (dataMax: number) =>
                     Math.ceil(
                       dataMax +
-                        (priceData
-                          ? (priceData.high24h - priceData.low24h) * 0.1
-                          : 0)
+                      (priceData
+                        ? (priceData.high24h - priceData.low24h) * 0.1
+                        : 0)
                     ),
                 ]}
                 tickFormatter={(value) =>
