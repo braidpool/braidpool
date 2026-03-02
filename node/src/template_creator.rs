@@ -1,4 +1,5 @@
 use crate::config::CoinbaseConfig;
+use crate::cpunet::Cpunet;
 use crate::error::CoinbaseError;
 use crate::ipc::client::BlockTemplateComponents;
 use crate::EXTRANONCE_SEPARATOR;
@@ -405,17 +406,27 @@ pub fn build_braidpool_coinbase_from_template(
     let total_available = original_coinbase.output[0].value.to_sat();
 
     // Create the single payout output for the entire available amount.
-    let payout_address = Address::from_str(&config.pool_payout_address)
-        .map_err(|e| CoinbaseError::AddressError(e.into()))?
-        .require_network(config.network)
-        .map_err(|_| CoinbaseError::AddressNetworkMismatch)?;
+    // According to the type of chain/network derive the pubkeyscript
+    let payout_script = if config.is_cpunet {
+        // Use cpunet module for cpunet addresses (tc1... prefix)
+        Cpunet::decode_bech32_address(&config.pool_payout_address)
+            .map_err(|e| CoinbaseError::InvalidBitcoinAddress(e.to_string()))?
+    } else {
+        // Use standard rust-bitcoin address parsing for other networks
+        let network = config.get_network();
+        let payout_address = Address::from_str(&config.pool_payout_address)
+            .map_err(|e| CoinbaseError::AddressError(e.into()))?
+            .require_network(network)
+            .map_err(|_| CoinbaseError::AddressNetworkMismatch)?;
+        payout_address.script_pubkey()
+    };
 
     let reward_payout = TxOut {
         value: Amount::from_sat(total_available).map_err(|e| {
             error!(error = %e, "Amount conversion failed");
             CoinbaseError::InvalidBlockTemplateData
         })?,
-        script_pubkey: payout_address.script_pubkey(),
+        script_pubkey: payout_script,
     };
 
     // Build OP_RETURN output.
