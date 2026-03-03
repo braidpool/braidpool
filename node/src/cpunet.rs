@@ -1,8 +1,11 @@
 //! Cpunet implementation
 //Referenced - https://github.com/braidpool/rust-bitcoin/tree/cpunet
 use bitcoin::{
-    address::script_pubkey::ScriptBufExt, bech32, BlockHeight, BlockHeightInterval, ScriptBuf,
-    Target, WitnessProgram,
+    address::script_pubkey::ScriptBufExt,
+    bech32,
+    block::Header,
+    hashes::{sha256d, HashEngine},
+    BlockHash, BlockHeight, BlockHeightInterval, ScriptBuf, Target, WitnessProgram,
 };
 use core::fmt;
 use std::str::FromStr;
@@ -132,6 +135,19 @@ impl Cpunet {
             .map_err(|e| CpunetAddressError::InvalidProgram(e.to_string()))?;
 
         Ok(ScriptBuf::new_witness_program(&witness_program))
+    }
+    /// Returns the block hash.
+    pub fn block_hash(header: Header) -> BlockHash {
+        let mut engine = sha256d::Hash::engine();
+        engine.input(&header.version.to_consensus().to_le_bytes());
+        engine.input(header.prev_blockhash.as_byte_array());
+        engine.input(header.merkle_root.as_byte_array());
+        engine.input(&header.time.to_u32().to_le_bytes());
+        engine.input(&header.bits.to_consensus().to_le_bytes());
+        engine.input(&header.nonce.to_le_bytes());
+        engine.input("cpunet\0".as_bytes());
+
+        BlockHash::from_byte_array(sha256d::Hash::from_engine(engine).to_byte_array())
     }
 }
 
