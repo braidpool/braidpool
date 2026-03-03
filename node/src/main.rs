@@ -21,6 +21,7 @@ use node::{
     bead::{Bead, BeadHashes, BeadRequest, BeadResponse, BeadSyncError},
     behaviour::{self, BEAD_ANNOUNCE_PROTOCOL, BRAIDPOOL_TOPIC},
     braid, cli,
+    cpunet::Cpunet,
     db::db_handlers::DBHandler,
     ibd_manager::{IBDCommands, IBDManager, IBD_BATCH_SIZE},
     ipc_template_consumer,
@@ -61,6 +62,25 @@ use tokio::sync::{
 async fn main() -> Result<(), Box<dyn Error>> {
     // Initialize tracing with colors and module prefixes
     setup_tracing()?;
+    // Parse CLI arguments
+    let args = cli::Cli::parse();
+    let network_name = args.network.clone().unwrap_or_else(|| "main".to_string());
+
+    // Validate network
+    let is_cpunet = Cpunet::is_cpunet_name(&network_name);
+    match network_name.as_str() {
+        "main" | "mainnet" | "testnet" | "testnet4" | "signet" | "regtest" | "cpunet" => {
+            info!(network = %network_name, is_cpunet = is_cpunet, "Network selected");
+        }
+        _ => {
+            error!(
+                network = %network_name,
+                valid_networks = "main, testnet, testnet4, signet, regtest, cpunet",
+                "Invalid network specified"
+            );
+            info!(fallback = "regtest", "Using fallback network");
+        }
+    }
     let (mut ibd_manager, ibd_command_tx) = IBDManager::new();
     //IBD cache handler
     let _ibd_handler = tokio::spawn(async move {
@@ -169,6 +189,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         stratum_config,
         connection_mapping.clone(),
         Some(block_submission_tx),
+        network_name.clone(),
     );
     //Running the notification service
     tokio::spawn(async move {
@@ -198,7 +219,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         mpsc::channel::<tokio::signal::unix::SignalKind>(32);
     let main_task_token = CancellationToken::new();
     let ipc_task_token = main_task_token.clone();
-    let args = cli::Cli::parse();
     let datadir_str = args.datadir.to_str().ok_or_else(|| {
         std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
@@ -356,27 +376,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //IPC(inter process communication) based `getblocktemplate` and `notification` to send to the downstream via the `cmempoold` architecture
     info!(socket = %args.ipc_socket, "IPC socket path");
 
-    // Parsing the name as passed by user in cli
-    let network_name = args.network.clone().unwrap_or_else(|| "main".to_string());
-    // Validate network name
-    match network_name.as_str() {
-        "main" | "mainnet" | "testnet" | "testnet4" | "signet" | "regtest" | "cpunet" => {
-            info!(network = %network_name,"Network selected");
-        }
-        _ => {
-            error!(
-                network = %network_name,
-                valid_networks = "main, testnet, testnet4, signet, regtest, cpunet",
-                "Invalid network specified"
-            );
-            info!(fallback = "regtest", "Using fallback network");
-        }
-    }
-
     let ipc_socket_path_for_blocking = args.ipc_socket.clone();
     let notification_tx_for_ipc = notification_tx.clone();
     let latest_template_for_ipc = latest_template.clone();
     let latest_template_merkle_branch_for_ipc = latest_template_merkle_branch.clone();
+    let network_name_for_ipc = network_name.clone();
 
     // Create RPC proxy command channel - sender goes to RPC server, receiver goes to IPC handler
     let (rpc_proxy_tx, rpc_proxy_rx) = tokio::sync::mpsc::unbounded_channel::<RpcProxyCommand>();
@@ -445,7 +449,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         let ipc_socket_path = ipc_socket_path_for_blocking.clone();
                         let ipc_template_tx = ipc_template_tx.clone();
                         let template_cache = template_cache_for_listener.clone();
-                        let network_name = network_name.clone();
+                        let network_name = network_name_for_ipc.clone();
                         let rpc_command_rx = rpc_proxy_rx;
 
                         async move {
