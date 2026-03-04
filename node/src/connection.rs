@@ -123,11 +123,31 @@ impl fmt::Display for CookieError {
 
 impl std::error::Error for CookieError {}
 
+/// Returns the platform-specific default Bitcoin Core data directory base.
+///
+/// - macOS: `~/Library/Application Support/Bitcoin`  (Bitcoin Core default)
+/// - Linux and other Unix: `~/.bitcoin`               (Bitcoin Core default)
+fn default_bitcoin_datadir() -> Result<PathBuf, CookieError> {
+    #[cfg(target_os = "macos")]
+    {
+        dirs::data_dir()
+            .map(|d| d.join("Bitcoin"))
+            .ok_or(CookieError::HomeDirUnavailable)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        // Linux and all other Unix: ~/.bitcoin
+        dirs::home_dir()
+            .map(|d| d.join(".bitcoin"))
+            .ok_or(CookieError::HomeDirUnavailable)
+    }
+}
+
 /// Resolve the cookie file path using three-tier precedence with security validation:
 ///
 /// 1. `cli_path` — CLI `--rpccookie` flag (highest priority)
 /// 2. `config_path` — TOML config `cookie_path` field
-/// 3. Network-based auto-detection from `~/.bitcoin/{network}/.cookie`
+/// 3. Network-based auto-detection from the platform Bitcoin Core datadir
 ///
 /// Validates that the resolved path:
 /// - Does not contain symlinks (path traversal attack prevention)
@@ -147,8 +167,7 @@ pub fn resolve_cookie_path(
     } else if let Some(path) = config_path {
         path.to_string()
     } else {
-        let base = shellexpand::tilde("~/.bitcoin");
-        let base_path = PathBuf::from(base.as_ref());
+        let base_path = default_bitcoin_datadir()?;
         let cookie_dir = match network {
             Network::Bitcoin => base_path,
             Network::Testnet(_) => base_path.join("testnet4"),
@@ -187,9 +206,18 @@ pub fn resolve_cookie_path(
     // Validate parent doesn't escape home directory
     let home_dir = dirs::home_dir().ok_or(CookieError::HomeDirUnavailable)?;
 
+    let system_temp = std::env::temp_dir();
+    let runtime_dir = dirs::runtime_dir();
+    let in_temp = canonical_parent.starts_with(&system_temp);
+    let in_runtime = runtime_dir
+        .as_deref()
+        .map(|r| canonical_parent.starts_with(r))
+        .unwrap_or(false);
+
     if !canonical_parent.starts_with(&home_dir)
         && !canonical_parent.starts_with("/root")
-        && !canonical_parent.starts_with("/tmp")
+        && !in_temp
+        && !in_runtime
     {
         return Err(CookieError::PathTraversalDetected {
             path: canonical_parent.join(&file_name),
@@ -199,10 +227,27 @@ pub fn resolve_cookie_path(
     Ok(canonical_parent.join(file_name))
 }
 
+/// Returns the platform-specific directory for runtime Unix sockets.
+///
+/// - Linux: `$XDG_RUNTIME_DIR` (e.g. `/run/user/1000`) if set, else `std::env::temp_dir()`
+/// - macOS and other Unix: `std::env::temp_dir()` (`dirs::runtime_dir()` returns `None` on macOS)
+pub(crate) fn default_ipc_socket_dir() -> PathBuf {
+    #[cfg(target_os = "linux")]
+    {
+        dirs::runtime_dir().unwrap_or_else(std::env::temp_dir)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        std::env::temp_dir()
+    }
+}
+
 /// Resolve the IPC socket path based on an explicit override or network defaults.
 ///
 /// If `explicit` is `Some`, uses that path directly.
-/// Otherwise, returns the default socket path for the given network.
+/// Otherwise, returns the platform default socket path for the given network:
+/// - Linux: `$XDG_RUNTIME_DIR/bitcoin-{network}.sock` (fallback: `/tmp/bitcoin-{network}.sock`)
+/// - macOS: `/tmp/bitcoin-{network}.sock`
 pub fn resolve_ipc_socket(explicit: Option<&str>, network: Network) -> String {
     if let Some(path) = explicit {
         return path.to_string();
@@ -217,7 +262,10 @@ pub fn resolve_ipc_socket(explicit: Option<&str>, network: Network) -> String {
         _ => "main",
     };
 
-    format!("/tmp/bitcoin-{}.sock", suffix)
+    default_ipc_socket_dir()
+        .join(format!("bitcoin-{}.sock", suffix))
+        .to_string_lossy()
+        .into_owned()
 }
 
 /// Validate that a cookie file exists, is readable, and has the expected format.
@@ -336,14 +384,14 @@ mod tests {
     #[test]
     fn resolve_cookie_path_cpunet() {
         let path = resolve_cookie_path(None, None, Network::CPUNet).unwrap();
-        let expected = PathBuf::from(shellexpand::tilde("~/.bitcoin/cpunet/.cookie").as_ref());
+        let expected = default_bitcoin_datadir().unwrap().join("cpunet").join(".cookie");
         assert_eq!(path, expected);
     }
 
     #[test]
     fn resolve_cookie_path_mainnet() {
         let path = resolve_cookie_path(None, None, Network::Bitcoin).unwrap();
-        let expected = PathBuf::from(shellexpand::tilde("~/.bitcoin/.cookie").as_ref());
+        let expected = default_bitcoin_datadir().unwrap().join(".cookie");
         assert_eq!(path, expected);
     }
 
@@ -351,21 +399,21 @@ mod tests {
     fn resolve_cookie_path_testnet() {
         let path =
             resolve_cookie_path(None, None, Network::Testnet(bitcoin::TestnetVersion::V4)).unwrap();
-        let expected = PathBuf::from(shellexpand::tilde("~/.bitcoin/testnet4/.cookie").as_ref());
+        let expected = default_bitcoin_datadir().unwrap().join("testnet4").join(".cookie");
         assert_eq!(path, expected);
     }
 
     #[test]
     fn resolve_cookie_path_signet() {
         let path = resolve_cookie_path(None, None, Network::Signet).unwrap();
-        let expected = PathBuf::from(shellexpand::tilde("~/.bitcoin/signet/.cookie").as_ref());
+        let expected = default_bitcoin_datadir().unwrap().join("signet").join(".cookie");
         assert_eq!(path, expected);
     }
 
     #[test]
     fn resolve_cookie_path_regtest() {
         let path = resolve_cookie_path(None, None, Network::Regtest).unwrap();
-        let expected = PathBuf::from(shellexpand::tilde("~/.bitcoin/regtest/.cookie").as_ref());
+        let expected = default_bitcoin_datadir().unwrap().join("regtest").join(".cookie");
         assert_eq!(path, expected);
     }
 
@@ -438,20 +486,28 @@ mod tests {
     #[test]
     fn resolve_cookie_path_both_none_falls_to_default() {
         let path = resolve_cookie_path(None, None, Network::Signet).unwrap();
-        let expected = PathBuf::from(shellexpand::tilde("~/.bitcoin/signet/.cookie").as_ref());
+        let expected = default_bitcoin_datadir().unwrap().join("signet").join(".cookie");
         assert_eq!(path, expected);
     }
 
     #[test]
     fn resolve_ipc_socket_cpunet() {
         let socket = resolve_ipc_socket(None, Network::CPUNet);
-        assert_eq!(socket, "/tmp/bitcoin-cpunet.sock");
+        let expected = default_ipc_socket_dir()
+            .join("bitcoin-cpunet.sock")
+            .to_string_lossy()
+            .into_owned();
+        assert_eq!(socket, expected);
     }
 
     #[test]
     fn resolve_ipc_socket_mainnet() {
         let socket = resolve_ipc_socket(None, Network::Bitcoin);
-        assert_eq!(socket, "/tmp/bitcoin-main.sock");
+        let expected = default_ipc_socket_dir()
+            .join("bitcoin-main.sock")
+            .to_string_lossy()
+            .into_owned();
+        assert_eq!(socket, expected);
     }
 
     #[test]
