@@ -28,14 +28,15 @@
 
 use bitcoin::Network;
 use std::fmt;
-use std::fs;
+use std::io::Read;
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use tracing::warn;
 
 /// Maximum cookie file size (1 KiB). Real cookies are ~70 bytes.
 const MAX_COOKIE_FILE_SIZE: u64 = 1024;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum CookieError {
     NotFound { path: PathBuf },
     PermissionDenied { path: PathBuf },
@@ -134,6 +135,7 @@ fn default_bitcoin_datadir() -> Result<PathBuf, CookieError> {
             .map(|d| d.join("Bitcoin"))
             .ok_or(CookieError::HomeDirUnavailable)
     }
+    // wont-fix: braidpool is Unix-only (UnixStream); Windows not supported
     #[cfg(not(target_os = "macos"))]
     {
         // Linux and all other Unix: ~/.bitcoin
@@ -215,7 +217,6 @@ pub fn resolve_cookie_path(
         .unwrap_or(false);
 
     if !canonical_parent.starts_with(&home_dir)
-        && !canonical_parent.starts_with("/root")
         && !in_temp
         && !in_runtime
     {
@@ -248,9 +249,23 @@ pub(crate) fn default_ipc_socket_dir() -> PathBuf {
 /// Otherwise, returns the platform default socket path for the given network:
 /// - Linux: `$XDG_RUNTIME_DIR/bitcoin-{network}.sock` (fallback: `/tmp/bitcoin-{network}.sock`)
 /// - macOS: `/tmp/bitcoin-{network}.sock`
-pub fn resolve_ipc_socket(explicit: Option<&str>, network: Network) -> String {
+pub fn resolve_ipc_socket(explicit: Option<&str>, network: Network) -> Result<String, String> {
     if let Some(path) = explicit {
-        return path.to_string();
+        // Validate: must be absolute and must not contain parent-directory traversal
+        if !path.starts_with('/') {
+            return Err(format!(
+                "IPC socket path must be absolute (start with /): got '{path}'"
+            ));
+        }
+        if Path::new(path)
+            .components()
+            .any(|c| c == std::path::Component::ParentDir)
+        {
+            return Err(format!(
+                "IPC socket path must not contain '..': got '{path}'"
+            ));
+        }
+        return Ok(path.to_string());
     }
 
     let suffix = match network {
@@ -262,53 +277,56 @@ pub fn resolve_ipc_socket(explicit: Option<&str>, network: Network) -> String {
         _ => "main",
     };
 
-    default_ipc_socket_dir()
+    Ok(default_ipc_socket_dir()
         .join(format!("bitcoin-{}.sock", suffix))
         .to_string_lossy()
-        .into_owned()
+        .into_owned())
 }
 
 /// Validate that a cookie file exists, is readable, and has the expected format.
 /// Rejects symlinks as a security precaution against symlink-based attacks.
 pub fn validate_cookie_file(path: &Path) -> Result<(), CookieError> {
-    // Security: Reject symlinks to prevent symlink-based file read attacks
-    if path.is_symlink() {
-        return Err(CookieError::SymlinkDetected {
+    // Security: Open with O_NOFOLLOW — atomically rejects symlinks (returns ELOOP).
+    // Using a single fd for both size check and read eliminates TOCTOU races.
+    let mut file = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(path)
+        .map_err(|e| match e.kind() {
+            std::io::ErrorKind::NotFound => CookieError::NotFound {
+                path: path.to_path_buf(),
+            },
+            std::io::ErrorKind::PermissionDenied => CookieError::PermissionDenied {
+                path: path.to_path_buf(),
+            },
+            // O_NOFOLLOW sets errno=ELOOP when the path is a symlink
+            _ if e.raw_os_error() == Some(libc::ELOOP) => CookieError::SymlinkDetected {
+                path: path.to_path_buf(),
+            },
+            _ => {
+                warn!(error = %e, path = %path.display(), "Unexpected IO error opening cookie file");
+                CookieError::IoError {
+                    path: path.to_path_buf(),
+                    source: e.to_string(),
+                }
+            }
+        })?;
+
+    // Security: Reject oversized files to prevent OOM — uses same fd, no TOCTOU
+    // wont-fix: fstat on open fd fails only under extreme kernel conditions (e.g. NFS eviction)
+    let size = file.metadata().map(|m| m.len()).unwrap_or(0);
+    if size > MAX_COOKIE_FILE_SIZE {
+        return Err(CookieError::FileTooLarge {
             path: path.to_path_buf(),
+            size,
         });
     }
 
-    // Security: Reject oversized files to prevent OOM (real cookies are ~70 bytes)
-    if let Ok(metadata) = fs::metadata(path) {
-        let size = metadata.len();
-        if size > MAX_COOKIE_FILE_SIZE {
-            return Err(CookieError::FileTooLarge {
-                path: path.to_path_buf(),
-                size,
-            });
-        }
-    }
-
-    let content = match fs::read_to_string(path) {
-        Ok(c) => c,
-        Err(e) => {
-            return match e.kind() {
-                std::io::ErrorKind::NotFound => Err(CookieError::NotFound {
-                    path: path.to_path_buf(),
-                }),
-                std::io::ErrorKind::PermissionDenied => Err(CookieError::PermissionDenied {
-                    path: path.to_path_buf(),
-                }),
-                _ => {
-                    warn!(error = %e, path = %path.display(), "Unexpected IO error reading cookie file");
-                    Err(CookieError::IoError {
-                        path: path.to_path_buf(),
-                        source: e.to_string(),
-                    })
-                }
-            };
-        }
-    };
+    let mut content = String::new();
+    file.read_to_string(&mut content).map_err(|e| CookieError::IoError {
+        path: path.to_path_buf(),
+        source: e.to_string(),
+    })?;
 
     let trimmed = content.trim();
     let parts: Vec<&str> = trimmed.splitn(2, ':').collect();
@@ -370,9 +388,31 @@ pub async fn wait_for_cookie(path: &Path) -> Result<(), CookieError> {
         }
     }
 
-    Err(CookieError::NotFound {
-        path: path.to_path_buf(),
-    })
+    unreachable!("loop returns on attempt == max_attempts")
+}
+
+/// Probe the Bitcoin Core IPC socket to verify bitcoind was started with `-ipcbind`.
+///
+/// This is a one-shot reachability check at startup. The runtime reconnect loop
+/// in `ipc.rs` handles transient failures during operation.
+///
+/// # Errors
+/// Returns `Err` with an actionable message if the socket is not reachable.
+pub async fn probe_ipc_socket(path: &str) -> Result<(), String> {
+    use tokio::io::AsyncWriteExt;
+    use tokio::net::UnixStream;
+    match UnixStream::connect(path).await {
+        Ok(mut stream) => {
+            // Graceful close — sends FIN to bitcoind instead of an abrupt RST
+            stream.shutdown().await.ok();
+            Ok(())
+        }
+        Err(e) => Err(format!(
+            "IPC socket not found at {path}. Start bitcoind with: -ipcbind=unix:{path}\n\
+             Override the path with --ipc-socket if you used a different location.\n\
+             Error: {e}"
+        )),
+    }
 }
 
 #[cfg(test)]
@@ -492,7 +532,7 @@ mod tests {
 
     #[test]
     fn resolve_ipc_socket_cpunet() {
-        let socket = resolve_ipc_socket(None, Network::CPUNet);
+        let socket = resolve_ipc_socket(None, Network::CPUNet).unwrap();
         let expected = default_ipc_socket_dir()
             .join("bitcoin-cpunet.sock")
             .to_string_lossy()
@@ -502,7 +542,7 @@ mod tests {
 
     #[test]
     fn resolve_ipc_socket_mainnet() {
-        let socket = resolve_ipc_socket(None, Network::Bitcoin);
+        let socket = resolve_ipc_socket(None, Network::Bitcoin).unwrap();
         let expected = default_ipc_socket_dir()
             .join("bitcoin-main.sock")
             .to_string_lossy()
@@ -512,8 +552,22 @@ mod tests {
 
     #[test]
     fn resolve_ipc_socket_explicit_override() {
-        let socket = resolve_ipc_socket(Some("/custom/socket.sock"), Network::CPUNet);
+        let socket = resolve_ipc_socket(Some("/custom/socket.sock"), Network::CPUNet).unwrap();
         assert_eq!(socket, "/custom/socket.sock");
+    }
+
+    #[test]
+    fn resolve_ipc_socket_explicit_rejects_relative() {
+        let result = resolve_ipc_socket(Some("relative/path.sock"), Network::CPUNet);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("absolute"));
+    }
+
+    #[test]
+    fn resolve_ipc_socket_explicit_rejects_traversal() {
+        let result = resolve_ipc_socket(Some("/tmp/../etc/passwd"), Network::CPUNet);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains(".."));
     }
 
     #[test]

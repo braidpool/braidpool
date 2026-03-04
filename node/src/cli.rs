@@ -20,14 +20,18 @@ pub struct Cli {
     pub addnode: Option<Vec<String>>,
 
     /// Which network to use. Valid options are mainnet, testnet4, signet, cpunet (preferred)
+    // wont-fix: None unreachable at runtime (default_value ensures Some) but kept for type consistency
     #[arg(long, default_value = "main")]
     pub network: Option<String>,
 
     /// Full path to bitcoind .cookie file for authentication.
+    /// Auto-detected per OS and network if not specified:
+    ///   Linux:  ~/.bitcoin/{network}/.cookie
+    ///   macOS:  ~/Library/Application Support/Bitcoin/{network}/.cookie
     /// When bitcoind uses a custom -datadir (e.g., -datadir=/data/node1),
     /// the cookie file is at <datadir>/<network>/.cookie.
     /// Example: --rpccookie /data/node1/signet/.cookie
-    /// Precedence: --rpccookie > config file cookie_path > auto-detect from ~/.bitcoin/
+    /// Precedence: --rpccookie > config file cookie_path > auto-detect
     #[arg(long)]
     pub rpccookie: Option<String>,
 
@@ -35,7 +39,17 @@ pub struct Cli {
     #[command(subcommand)]
     pub command: Option<RpcCommand>,
 
-    /// Path to Bitcoin Core IPC socket. Auto-detected per network if not specified.
+    /// Full path to the Bitcoin Core IPC Unix socket.
+    /// This socket is created by bitcoind, not by braidpool.
+    /// Bitcoind must be started with a matching -ipcbind flag:
+    ///   bitcoin-node -ipcbind=unix:/run/user/1000/bitcoin-cpunet.sock
+    /// The path passed to --ipc-socket must match exactly what was given to -ipcbind.
+    /// Auto-detected defaults per network (Linux with systemd, replace {uid} with your UID):
+    ///   cpunet:   /run/user/{uid}/bitcoin-cpunet.sock   (or /tmp/bitcoin-cpunet.sock)
+    ///   mainnet:  /run/user/{uid}/bitcoin-main.sock     (or /tmp/bitcoin-main.sock)
+    ///   testnet4: /run/user/{uid}/bitcoin-testnet4.sock
+    ///   signet:   /run/user/{uid}/bitcoin-signet.sock
+    ///   regtest:  /run/user/{uid}/bitcoin-regtest.sock
     #[arg(long)]
     pub ipc_socket: Option<String>,
 }

@@ -395,7 +395,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     };
 
     // Resolve IPC socket path (auto-detect per network or use explicit override)
-    let ipc_socket_path = resolve_ipc_socket(args.ipc_socket.as_deref(), network);
+    let ipc_socket_path = resolve_ipc_socket(args.ipc_socket.as_deref(), network)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
     info!(socket = %ipc_socket_path, "IPC socket path");
 
     // Load config file for cookie_path (if present in datadir)
@@ -428,7 +429,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
         error!(error = %e, "Failed to validate bitcoind cookie file");
         e
     })?;
-    info!("bitcoind confirmed running (cookie file found)");
+    info!(path = %cookie_path.display(), "Cookie file validated");
+
+    // Probe IPC socket reachability before spawning the background handler.
+    // Without this check the node would start "successfully" while silently
+    // failing to receive block templates if bitcoind was not started with
+    // the matching -ipcbind flag.
+    if let Err(msg) = node::connection::probe_ipc_socket(&ipc_socket_path).await {
+        error!("{}", msg);
+        return Err(msg.into());
+    }
+    info!(socket = %ipc_socket_path, "IPC socket reachable");
 
     let ipc_socket_path_for_blocking = ipc_socket_path.clone();
     let notification_tx_for_ipc = notification_tx.clone();

@@ -12,8 +12,6 @@ pub struct NetworkConfig {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct BitcoinConfig {
     pub network: bitcoin::Network,
-    pub port: String,
-    pub bitcoind_ip: String,
     pub cookie_path: Option<String>,
 }
 #[derive(Serialize, Deserialize, Clone)]
@@ -62,16 +60,6 @@ impl BraidpoolConfig {
 
     pub fn with_network(mut self, network: bitcoin::Network) -> Self {
         self.bitcoin_config.network = network;
-        self
-    }
-
-    pub fn with_port(mut self, port: String) -> Self {
-        self.bitcoin_config.port = port;
-        self
-    }
-
-    pub fn with_bitcoind_ip(mut self, ip: String) -> Self {
-        self.bitcoin_config.bitcoind_ip = ip;
         self
     }
 
@@ -139,8 +127,6 @@ mod test {
             },
             bitcoin_config: BitcoinConfig {
                 network: Network::CPUNet,
-                port: "18443".to_string(),
-                bitcoind_ip: "0.0.0.0".to_string(),
                 cookie_path: None,
             },
             braid_directory: BraidDirectoryConfig {
@@ -162,11 +148,6 @@ mod test {
         assert_eq!(
             from_file.bitcoin_config.network,
             built.bitcoin_config.network
-        );
-        assert_eq!(from_file.bitcoin_config.port, built.bitcoin_config.port);
-        assert_eq!(
-            from_file.bitcoin_config.bitcoind_ip,
-            built.bitcoin_config.bitcoind_ip
         );
         assert_eq!(
             from_file.bitcoin_config.cookie_path,
