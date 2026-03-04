@@ -216,10 +216,7 @@ pub fn resolve_cookie_path(
         .map(|r| canonical_parent.starts_with(r))
         .unwrap_or(false);
 
-    if !canonical_parent.starts_with(&home_dir)
-        && !in_temp
-        && !in_runtime
-    {
+    if !canonical_parent.starts_with(&home_dir) && !in_temp && !in_runtime {
         return Err(CookieError::PathTraversalDetected {
             path: canonical_parent.join(&file_name),
         });
@@ -323,10 +320,11 @@ pub fn validate_cookie_file(path: &Path) -> Result<(), CookieError> {
     }
 
     let mut content = String::new();
-    file.read_to_string(&mut content).map_err(|e| CookieError::IoError {
-        path: path.to_path_buf(),
-        source: e.to_string(),
-    })?;
+    file.read_to_string(&mut content)
+        .map_err(|e| CookieError::IoError {
+            path: path.to_path_buf(),
+            source: e.to_string(),
+        })?;
 
     let trimmed = content.trim();
     let parts: Vec<&str> = trimmed.splitn(2, ':').collect();
@@ -424,7 +422,10 @@ mod tests {
     #[test]
     fn resolve_cookie_path_cpunet() {
         let path = resolve_cookie_path(None, None, Network::CPUNet).unwrap();
-        let expected = default_bitcoin_datadir().unwrap().join("cpunet").join(".cookie");
+        let expected = default_bitcoin_datadir()
+            .unwrap()
+            .join("cpunet")
+            .join(".cookie");
         assert_eq!(path, expected);
     }
 
@@ -439,21 +440,30 @@ mod tests {
     fn resolve_cookie_path_testnet() {
         let path =
             resolve_cookie_path(None, None, Network::Testnet(bitcoin::TestnetVersion::V4)).unwrap();
-        let expected = default_bitcoin_datadir().unwrap().join("testnet4").join(".cookie");
+        let expected = default_bitcoin_datadir()
+            .unwrap()
+            .join("testnet4")
+            .join(".cookie");
         assert_eq!(path, expected);
     }
 
     #[test]
     fn resolve_cookie_path_signet() {
         let path = resolve_cookie_path(None, None, Network::Signet).unwrap();
-        let expected = default_bitcoin_datadir().unwrap().join("signet").join(".cookie");
+        let expected = default_bitcoin_datadir()
+            .unwrap()
+            .join("signet")
+            .join(".cookie");
         assert_eq!(path, expected);
     }
 
     #[test]
     fn resolve_cookie_path_regtest() {
         let path = resolve_cookie_path(None, None, Network::Regtest).unwrap();
-        let expected = default_bitcoin_datadir().unwrap().join("regtest").join(".cookie");
+        let expected = default_bitcoin_datadir()
+            .unwrap()
+            .join("regtest")
+            .join(".cookie");
         assert_eq!(path, expected);
     }
 
@@ -526,7 +536,10 @@ mod tests {
     #[test]
     fn resolve_cookie_path_both_none_falls_to_default() {
         let path = resolve_cookie_path(None, None, Network::Signet).unwrap();
-        let expected = default_bitcoin_datadir().unwrap().join("signet").join(".cookie");
+        let expected = default_bitcoin_datadir()
+            .unwrap()
+            .join("signet")
+            .join(".cookie");
         assert_eq!(path, expected);
     }
 
