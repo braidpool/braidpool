@@ -5,8 +5,8 @@ use crate::{
     utils::{compute_block_hash, BeadHash},
 };
 use bitcoin::{
-    absolute::MedianTimePast, ecdsa::Signature, BlockHash, BlockTime, BlockVersion, CompactTarget,
-    PublicKey, TxMerkleNode, Txid,
+    absolute::Time, block::Version as BlockVersion, ecdsa::Signature, hashes::Hash, BlockHash,
+    CompactTarget, PublicKey, TxMerkleNode, Txid,
 };
 use serde_json::json;
 use sqlx::{Pool, Row, Sqlite};
@@ -678,7 +678,7 @@ pub async fn fetch_bead_by_bead_hash(
                     });
                 }
             };
-            let ntime = BlockTime::from_u32(row.get::<u32, _>("nTime"));
+            let ntime = row.get::<u32, _>("nTime");
             let nbits = CompactTarget::from_consensus(row.get::<u32, _>("nBits"));
             let nonce = row.get::<u32, _>("nNonce");
             let payout_address_bytes = row.get::<Vec<u8>, _>("payout_address");

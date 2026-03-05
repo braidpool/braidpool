@@ -147,7 +147,7 @@ impl CoinbaseConfig {
             let network = Network::from_core_arg(core_arg).unwrap_or(Network::Bitcoin);
             let pool_payout_address = match network {
                 Network::Bitcoin => "bc1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
-                Network::Testnet(_) => "tb1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
+                Network::Testnet => "tb1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
                 Network::Signet => "tb1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
                 Network::Regtest => "bcrt1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
                 _ => "tb1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
@@ -196,7 +196,7 @@ mod test {
                 ],
             },
             bitcoin_config: BitcoinConfig {
-                network: Network::CPUNet,
+                network: Network::Regtest,
                 username: "username".to_string(),
                 password: "password".to_string(),
                 port: "18443".to_string(),

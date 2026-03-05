@@ -1159,7 +1159,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                   size_bytes = %message.data.len(),
                                   "Floodsub message received"
                               );
-                              let result_bead: Result<Bead, bitcoin::consensus::DeserializeError> = deserialize(&message.data);
+                              let result_bead: Result<Bead, bitcoin::consensus::encode::Error> = deserialize(&message.data);
                               match result_bead {
                                   Ok(bead) => {
                                      info!(bead = ?bead, hash = %bead.block_header.block_hash(), "Received bead");
@@ -1169,7 +1169,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                           braid_data.extend(&bead)
                                       };
                                       if ibd_spinlock.load(Ordering::SeqCst){
-                                         let broadcast_ts = bead.uncommitted_metadata.broadcast_timestamp.clone().to_u32();
+                                         let broadcast_ts = bead.uncommitted_metadata.broadcast_timestamp.clone().to_consensus_u32();
                                          let (ts_tx, ts_rx) = tokio::sync::oneshot::channel();
                                          if let Err(e) = ibd_command_tx
                                              .send(IBDCommands::FetchAllTimestamps { sender: ts_tx })
@@ -1612,6 +1612,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                         let status = braid_data.extend(&bead);
                                         let curr_beadhash = braid_data.compute_bead_hash(&bead).to_string();
                                         if let braid::AddBeadStatus::InvalidBead = status {
+                                            warn!("INVALID BEAD RECEIVED FROM PEER");
                                             // update the peer manager about the invalid bead
                                             {
                                                 let mut peer_manager = peer_manager_arc.write().await;

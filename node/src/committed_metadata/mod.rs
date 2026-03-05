@@ -1,10 +1,9 @@
 use crate::utils::BeadHash;
-use bitcoin::absolute::MedianTimePast;
 use bitcoin::absolute::Time;
 use bitcoin::consensus::encode::Decodable;
 use bitcoin::consensus::encode::Encodable;
-use bitcoin::consensus::Error;
-use bitcoin::io::{self, BufRead, Write};
+use bitcoin::consensus::encode::Error;
+use bitcoin::io::{self, Read, Write};
 use bitcoin::CompactTarget;
 use bitcoin::PublicKey;
 use bitcoin::Txid;
@@ -27,7 +26,7 @@ impl Encodable for TimeVec {
 }
 
 impl Decodable for TimeVec {
-    fn consensus_decode<R: BufRead + ?Sized>(r: &mut R) -> Result<Self, Error> {
+    fn consensus_decode<R: Read + ?Sized>(r: &mut R) -> Result<Self, Error> {
         let len = u64::consensus_decode(r)?;
         let mut vec = Vec::with_capacity(len as usize);
         for _ in 0..len {
@@ -51,7 +50,7 @@ impl Encodable for TxIdVec {
     }
 }
 impl Decodable for TxIdVec {
-    fn consensus_decode<R: BufRead + ?Sized>(r: &mut R) -> Result<Self, Error> {
+    fn consensus_decode<R: Read + ?Sized>(r: &mut R) -> Result<Self, Error> {
         let len = u64::consensus_decode(r)?;
         let mut vec = Vec::with_capacity(len as usize);
         for _ in 0..len {
@@ -85,7 +84,7 @@ impl Default for CommittedMetadata {
             parents: Vec::new(),
             parent_bead_timestamps: TimeVec(Vec::new()),
             payout_address: "bc1".to_string(),
-            start_timestamp: MedianTimePast::MIN,
+            start_timestamp: Time::MIN,
             comm_pub_key: PublicKey::from_str(
                 "020202020202020202020202020202020202020202020202020202020202020202",
             )
@@ -107,7 +106,7 @@ impl Encodable for CommittedMetadata {
             .start_timestamp
             .to_consensus_u32()
             .consensus_encode(w)?;
-        let pubkey_bytes = self.comm_pub_key.to_vec();
+        let pubkey_bytes = self.comm_pub_key.to_bytes();
         len += pubkey_bytes.consensus_encode(w)?;
         len += self.min_target.consensus_encode(w)?;
         len += self.weak_target.consensus_encode(w)?;
@@ -117,7 +116,7 @@ impl Encodable for CommittedMetadata {
 }
 
 impl Decodable for CommittedMetadata {
-    fn consensus_decode<R: BufRead + ?Sized>(r: &mut R) -> Result<Self, Error> {
+    fn consensus_decode<R: Read + ?Sized>(r: &mut R) -> Result<Self, Error> {
         let transaction_ids = TxIdVec::consensus_decode(r)?;
         let parents = Vec::<BeadHash>::consensus_decode(r)?;
         let parent_bead_timestamps = TimeVec::consensus_decode(r)?;
