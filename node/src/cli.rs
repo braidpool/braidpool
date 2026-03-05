@@ -42,14 +42,14 @@ pub struct Cli {
     /// Full path to the Bitcoin Core IPC Unix socket.
     /// This socket is created by bitcoind, not by braidpool.
     /// Bitcoind must be started with a matching -ipcbind flag:
-    ///   bitcoin-node -ipcbind=unix:/run/user/1000/bitcoin-cpunet.sock
+    ///   bitcoin-node -ipcbind=unix:./braidpool/bitcoin-cpunet.sock
     /// The path passed to --ipc-socket must match exactly what was given to -ipcbind.
-    /// Auto-detected defaults per network (Linux with systemd, replace {uid} with your UID):
-    ///   cpunet:   /run/user/{uid}/bitcoin-cpunet.sock   (or /tmp/bitcoin-cpunet.sock)
-    ///   mainnet:  /run/user/{uid}/bitcoin-main.sock     (or /tmp/bitcoin-main.sock)
-    ///   testnet4: /run/user/{uid}/bitcoin-testnet4.sock
-    ///   signet:   /run/user/{uid}/bitcoin-signet.sock
-    ///   regtest:  /run/user/{uid}/bitcoin-regtest.sock
+    /// Auto-detected defaults per network:
+    ///   cpunet:   ./braidpool/bitcoin-cpunet.sock
+    ///   mainnet:  ./braidpool/bitcoin-main.sock
+    ///   testnet4: ./braidpool/bitcoin-testnet4.sock
+    ///   signet:   ./braidpool/bitcoin-signet.sock
+    ///   regtest:  ./braidpool/bitcoin-regtest.sock
     #[arg(long)]
     pub ipc_socket: Option<String>,
 }

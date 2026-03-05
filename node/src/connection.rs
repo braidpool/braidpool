@@ -18,13 +18,13 @@
 //!
 //! ## Default paths
 //!
-//! | Network   | Cookie path default             | IPC socket default            |
-//! |-----------|---------------------------------|-------------------------------|
-//! | mainnet   | `~/.bitcoin/.cookie`            | `/tmp/bitcoin-main.sock`      |
-//! | testnet4  | `~/.bitcoin/testnet4/.cookie`   | `/tmp/bitcoin-testnet4.sock`  |
-//! | signet    | `~/.bitcoin/signet/.cookie`     | `/tmp/bitcoin-signet.sock`    |
-//! | regtest   | `~/.bitcoin/regtest/.cookie`    | `/tmp/bitcoin-regtest.sock`   |
-//! | cpunet    | `~/.bitcoin/cpunet/.cookie`     | `/tmp/bitcoin-cpunet.sock`    |
+//! | Network   | Cookie path default             | IPC socket default                      |
+//! |-----------|---------------------------------|-----------------------------------------|
+//! | mainnet   | `~/.bitcoin/.cookie`            | `./braidpool/bitcoin-main.sock`         |
+//! | testnet4  | `~/.bitcoin/testnet4/.cookie`   | `./braidpool/bitcoin-testnet4.sock`     |
+//! | signet    | `~/.bitcoin/signet/.cookie`     | `./braidpool/bitcoin-signet.sock`       |
+//! | regtest   | `~/.bitcoin/regtest/.cookie`    | `./braidpool/bitcoin-regtest.sock`      |
+//! | cpunet    | `~/.bitcoin/cpunet/.cookie`     | `./braidpool/bitcoin-cpunet.sock`       |
 
 use bitcoin::Network;
 use std::fmt;
@@ -225,27 +225,27 @@ pub fn resolve_cookie_path(
     Ok(canonical_parent.join(file_name))
 }
 
-/// Returns the platform-specific directory for runtime Unix sockets.
-///
-/// - Linux: `$XDG_RUNTIME_DIR` (e.g. `/run/user/1000`) if set, else `std::env::temp_dir()`
-/// - macOS and other Unix: `std::env::temp_dir()` (`dirs::runtime_dir()` returns `None` on macOS)
-pub(crate) fn default_ipc_socket_dir() -> PathBuf {
-    #[cfg(target_os = "linux")]
-    {
-        dirs::runtime_dir().unwrap_or_else(std::env::temp_dir)
+fn network_suffix(network: &Network) -> &'static str {
+    match network {
+        Network::Bitcoin => "main",
+        Network::Testnet(_) => "testnet4",
+        Network::Signet => "signet",
+        Network::Regtest => "regtest",
+        Network::CPUNet => "cpunet",
+        _ => "main",
     }
-    #[cfg(not(target_os = "linux"))]
-    {
-        std::env::temp_dir()
-    }
+}
+
+fn default_ipc_socket_path(network: &Network) -> PathBuf {
+    let suffix = network_suffix(network);
+    PathBuf::from("./braidpool").join(format!("bitcoin-{}.sock", suffix))
 }
 
 /// Resolve the IPC socket path based on an explicit override or network defaults.
 ///
-/// If `explicit` is `Some`, uses that path directly.
-/// Otherwise, returns the platform default socket path for the given network:
-/// - Linux: `$XDG_RUNTIME_DIR/bitcoin-{network}.sock` (fallback: `/tmp/bitcoin-{network}.sock`)
-/// - macOS: `/tmp/bitcoin-{network}.sock`
+/// Precedence:
+/// 1. `explicit` — CLI `--ipc-socket` flag (must be an absolute path)
+/// 2. Auto-detect — `./braidpool/bitcoin-{network}.sock` (directory created if missing)
 pub fn resolve_ipc_socket(explicit: Option<&str>, network: Network) -> Result<String, String> {
     if let Some(path) = explicit {
         // Validate: must be absolute and must not contain parent-directory traversal
@@ -265,17 +265,10 @@ pub fn resolve_ipc_socket(explicit: Option<&str>, network: Network) -> Result<St
         return Ok(path.to_string());
     }
 
-    let suffix = match network {
-        Network::Bitcoin => "main",
-        Network::Testnet(_) => "testnet4",
-        Network::Signet => "signet",
-        Network::Regtest => "regtest",
-        Network::CPUNet => "cpunet",
-        _ => "main",
-    };
+    std::fs::create_dir_all("./braidpool")
+        .map_err(|e| format!("Failed to create ./braidpool directory: {e}"))?;
 
-    Ok(default_ipc_socket_dir()
-        .join(format!("bitcoin-{}.sock", suffix))
+    Ok(default_ipc_socket_path(&network)
         .to_string_lossy()
         .into_owned())
 }
@@ -546,21 +539,13 @@ mod tests {
     #[test]
     fn resolve_ipc_socket_cpunet() {
         let socket = resolve_ipc_socket(None, Network::CPUNet).unwrap();
-        let expected = default_ipc_socket_dir()
-            .join("bitcoin-cpunet.sock")
-            .to_string_lossy()
-            .into_owned();
-        assert_eq!(socket, expected);
+        assert_eq!(socket, "./braidpool/bitcoin-cpunet.sock");
     }
 
     #[test]
     fn resolve_ipc_socket_mainnet() {
         let socket = resolve_ipc_socket(None, Network::Bitcoin).unwrap();
-        let expected = default_ipc_socket_dir()
-            .join("bitcoin-main.sock")
-            .to_string_lossy()
-            .into_owned();
-        assert_eq!(socket, expected);
+        assert_eq!(socket, "./braidpool/bitcoin-main.sock");
     }
 
     #[test]
