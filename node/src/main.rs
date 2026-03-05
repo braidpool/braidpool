@@ -15,6 +15,7 @@ use libp2p::{
 };
 use node::db::db_handlers::{fetch_beads_in_batch, prepare_bead_tuple_data};
 use node::ibd_manager::{IBD_TRIGGER_AFTER, MAX_IBD_INCOMING_THRESHOLD, MAX_IBD_RETRIES};
+use node::utils::compute_block_hash;
 use node::utils::BeadHash;
 use node::SwarmHandler;
 use node::{
@@ -91,9 +92,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let ibd_spinlock = Arc::new(ibd_or_not);
     // Initializing the braid object with read write lock
     //for supporting concurrent readers and single writer
-    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(Vec::from([]))));
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(
+        Vec::from([]),
+        network_name.clone(),
+    )));
     //Initializing DB and db command handler
-    let (mut _db_handler, db_tx) = DBHandler::new().await.map_err(|e| {
+    let (mut _db_handler, db_tx) = DBHandler::new(network_name.clone()).await.map_err(|e| {
         std::io::Error::new(
             std::io::ErrorKind::Other,
             format!("Database initialization failed: {:?}", e),
@@ -105,13 +109,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let braid_ref = braid.clone();
     // FIXME instead we should look 144 blocks back from the bitcoin tip (1 day) and load beads
     // starting from that block as genesis
+    let network_ref = network_name.clone();
     let initial_bead_fetch_handle = tokio::spawn(async move {
         let mut guard = braid_ref.write().await;
         let fetched_beads = fetch_beads_in_batch(db_connection_pool_ref, 1000).await?;
         for bead in &fetched_beads {
             let curr_bead_status = guard.extend(&bead);
             debug!(
-                hash = ?bead.block_header.block_hash(),
+                hash = ?compute_block_hash(&bead.block_header,&network_ref),
                 status = ?curr_bead_status,
                 "Bead inserted"
             );
@@ -629,10 +634,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                      //Considering the index of the beads in braid will be same as the (insertion ids-1)
                                         let bead_id = match braid_data
                                             .bead_index_mapping
-                                            .get(&bead.block_header.block_hash()) {
+                                            .get(&braid_data.compute_bead_hash(&bead)) {
                                             Some(id) => id,
                                             None => {
-                                                error!(bead_hash = ?bead.block_header.block_hash(), "Bead ID not found in index mapping");
+                                                error!(bead_hash = ?braid_data.compute_bead_hash(&bead), "Bead ID not found in index mapping");
                                                 continue;
                                             }
                                         };
@@ -640,10 +645,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                             &braid_data.beads,
                                             &braid_data.bead_index_mapping,
                                             &bead,
+                                            &braid_data.network_name,
                                         ){
                                             Ok(received_tuples)=>received_tuples,
                                             Err(error)=>{
-                                                error!("An error occurred while preparing bead tuple data for bead with beadhash - {:?} due to {:?}",bead.block_header.block_hash(),error);
+                                                error!("An error occurred while preparing bead tuple data for bead with beadhash - {:?} due to {:?}",braid_data.compute_bead_hash(&bead),error);
                                                 continue;
                                             }
                                         };
@@ -744,10 +750,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     } else if let braid::AddBeadStatus::BeadAdded = status {
                                         let bead_id = match braid_data
                                             .bead_index_mapping
-                                            .get(&bead.block_header.block_hash()) {
+                                            .get(&braid_data.compute_bead_hash(&bead)) {
                                             Some(id) => id,
                                             None => {
-                                                error!(bead_hash = ?bead.block_header.block_hash(), "Bead ID not found in index mapping (GetAllBeads)");
+                                                error!(bead_hash = ?braid_data.compute_bead_hash(&bead), "Bead ID not found in index mapping (GetAllBeads)");
                                                 continue;
                                             }
                                         };
@@ -755,10 +761,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                             &braid_data.beads,
                                             &braid_data.bead_index_mapping,
                                             &bead,
+                                            &braid_data.network_name,
                                         ){
                                             Ok(received_tuples)=>received_tuples,
                                             Err(error)=>{
-                                                error!("An error occurred while preparing bead tuple data for bead with beadhash - {:?} due to {:?}",bead.block_header.block_hash(),error);
+                                                error!("An error occurred while preparing bead tuple data for bead with beadhash - {:?} due to {:?}",braid_data.compute_bead_hash(&bead),error);
                                                 continue;
                                             }
                                         };
@@ -937,7 +944,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 )) => {
                     info!(
                         peer = %peer,
-                        message = ?message,
                         connection = ?connection_id,
                         "Bead sync message received"
                     );
@@ -975,7 +981,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                                 .iter()
                                                 .filter_map(|index| braid_lock.beads.get(*index))
                                                 .cloned()
-                                                .map(|bead| bead.block_header.block_hash())
+                                                .map(|bead| braid_lock.compute_bead_hash(&bead))
                                                 .collect();
                                         }
                                         swarm.behaviour_mut().respond_with_tips(channel, tips);
@@ -989,7 +995,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                                 .iter()
                                                 .filter_map(|index| braid_lock.beads.get(*index))
                                                 .cloned()
-                                                .map(|bead| bead.block_header.block_hash())
+                                                .map(|bead| braid_lock.compute_bead_hash(&bead))
                                                 .collect();
                                         }
                                         swarm.behaviour_mut().respond_with_genesis(channel, genesis);
@@ -1004,11 +1010,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                         swarm.behaviour_mut().respond_with_beads(channel, all_beads);
                                 }
                                 BeadRequest::GetBeadsAfter(hashes) => {
-                                        let beads = braid.read().await.get_beads_after(hashes.into());
+                                        let braid_lock = braid.read().await;
+                                        let beads = braid_lock.get_beads_after(hashes.into());
                                         if let Some(response_beads) = beads {
                                             let mut computed_beads_hashes:Vec<BeadHash> = Vec::new();
                                             for bead in response_beads.into_iter(){
-                                                computed_beads_hashes.push(bead.block_header.block_hash());
+                                                computed_beads_hashes.push(braid_lock.compute_bead_hash(&bead));
                                             }
                                             //Sending the corresponding bead hashes requested by the new peer for IBD that will
                                             //be after the new peer's `Tips`.
@@ -1071,7 +1078,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     for bead in beads.into_iter() {
                                         let mut braid_data = braid.write().await;
                                         let status = braid_data.extend(&bead);
-                                        let curr_beadhash = bead.block_header.block_hash().to_string();
+                                        let curr_beadhash = braid_data.compute_bead_hash(&bead).to_string();
                                         if let braid::AddBeadStatus::InvalidBead = status {
                                             // update the peer manager about the invalid bead
                                             {
@@ -1081,10 +1088,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                         } else if let braid::AddBeadStatus::BeadAdded = status {
                                             let bead_id = match braid_data
                                                 .bead_index_mapping
-                                                .get(&bead.block_header.block_hash()) {
+                                                .get(&braid_data.compute_bead_hash(&bead)) {
                                                 Some(id) => id,
                                                 None => {
-                                                    error!(bead_hash = ?bead.block_header.block_hash(), "Bead ID not found in index mapping (GetBeadsAfter)");
+                                                    error!(bead_hash = ?braid_data.compute_bead_hash(&bead), "Bead ID not found in index mapping (GetBeadsAfter)");
                                                     continue;
                                                 }
                                             };
@@ -1092,6 +1099,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                                 &braid_data.beads,
                                                 &braid_data.bead_index_mapping,
                                                 &bead,
+                                                &braid_data.network_name,
                                             ){
                                                 Ok(received_tuples)=>received_tuples,
                                                 Err(error)=>{
@@ -1319,7 +1327,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     let bead_hash_set: HashSet<BeadHash> = braid_data
                                     .beads
                                     .iter()
-                                    .map(|b| b.block_header.block_hash())
+                                    .map(|b| braid_data.compute_bead_hash(b))
                                     .collect();
 
                                     let flag = tips.iter().all(|tip_hash| bead_hash_set.contains(tip_hash));
@@ -1349,7 +1357,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     let mut current_tip_hashes = Vec::new();
                                     for curr_bead_idx in braid_data.tips.iter() {
                                         if let Some(current_bead) = braid_data.beads.get(*curr_bead_idx) {
-                                            current_tip_hashes.push(current_bead.block_header.block_hash());
+                                            current_tip_hashes.push(braid_data.compute_bead_hash(current_bead));
                                         } else {
                                             error!(bead_idx = %curr_bead_idx, "Tip bead not found in beads list");
                                         }
