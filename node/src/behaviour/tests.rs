@@ -7,9 +7,10 @@ use crate::utils::test_utils::test_utility_functions::{
 };
 use bitcoin::consensus::encode::deserialize;
 use bitcoin::consensus::serialize;
-use bitcoin::BlockVersion;
+use bitcoin::hashes::Hash;
 use bitcoin::CompactTarget;
-use bitcoin::{BlockHash, BlockHeader, BlockTime, EcdsaSighashType, TxMerkleNode};
+use bitcoin::{block::Header as BlockHeader, block::Version as BlockVersion};
+use bitcoin::{BlockHash, EcdsaSighashType, TxMerkleNode};
 use futures::StreamExt;
 use libp2p::floodsub::Topic;
 use libp2p::swarm::SwarmEvent;
@@ -60,7 +61,7 @@ fn create_test_bead() -> Bead {
         prev_blockhash: BlockHash::from_byte_array(test_bytes),
         bits: CompactTarget::from_consensus(486604799),
         nonce: 1,
-        time: BlockTime::from_u32(8328429),
+        time: 8328429,
         merkle_root: TxMerkleNode::from_byte_array(test_bytes),
     };
     Bead {
@@ -429,7 +430,7 @@ async fn test_floodsub_message_propagation() {
     });
 
     let result = rx.recv().await.unwrap();
-    let received_bead: Result<Bead, bitcoin::consensus::DeserializeError> = deserialize(&result);
+    let received_bead: Result<Bead, bitcoin::consensus::encode::Error> = deserialize(&result);
     assert_eq!(
         compute_block_hash(&received_bead.unwrap().block_header, &"cpunet".to_string()),
         compute_block_hash(&test_bead_ref.clone().block_header, &"cpunet".to_string())

@@ -1,9 +1,9 @@
 use bitcoin::absolute::Time;
 use bitcoin::consensus::encode::Decodable;
 use bitcoin::consensus::encode::Encodable;
-use bitcoin::consensus::Error;
+use bitcoin::consensus::encode::Error;
 use bitcoin::ecdsa::Signature;
-use bitcoin::io::{self, BufRead, Write};
+use bitcoin::io::{self, Read, Write};
 use bitcoin::EcdsaSighashType;
 use core::str::FromStr;
 use serde::Deserialize;
@@ -26,7 +26,7 @@ impl Default for UnCommittedMetadata {
         Self {
             extra_nonce_1: 0,
             extra_nonce_2: 0,
-            broadcast_timestamp: bitcoin::blockdata::locktime::absolute::MedianTimePast::MIN,
+            broadcast_timestamp: Time::MIN,
             signature: default_sig,
         }
     }
@@ -46,7 +46,7 @@ impl Encodable for UnCommittedMetadata {
 }
 
 impl Decodable for UnCommittedMetadata {
-    fn consensus_decode<R: BufRead + ?Sized>(r: &mut R) -> Result<Self, Error> {
+    fn consensus_decode<R: Read + ?Sized>(r: &mut R) -> Result<Self, Error> {
         let extra_nonce_1 = u32::consensus_decode(r)?;
         let extra_nonce_2 = u32::consensus_decode(r)?;
         let broadcast_timestamp = Time::from_consensus(u32::consensus_decode(r).unwrap()).unwrap();

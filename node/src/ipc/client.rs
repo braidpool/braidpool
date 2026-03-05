@@ -3,7 +3,7 @@ use crate::init_capnp::init::Client as InitClient;
 use crate::proxy_capnp::thread::Client as ThreadClient;
 use crate::utils::compute_block_hash;
 use crate::TemplateId;
-use bitcoin::BlockHeader;
+use bitcoin::block::Header as BlockHeader;
 use capnp_rpc::{rpc_twoparty_capnp, twoparty, RpcSystem};
 use futures::FutureExt;
 use std::collections::VecDeque;
@@ -995,7 +995,7 @@ impl SharedBitcoinClient {
             } => {
                 let block_hash = compute_block_hash(&header, &network_type);
                 let version = header.version.to_consensus() as u32;
-                let timestamp = header.time.to_u32();
+                let timestamp = header.time;
                 let nonce = header.nonce;
                 match bitcoin_client
                     .submit_solution(

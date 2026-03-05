@@ -9,9 +9,9 @@ pub use crate::committed_metadata::TimeVec;
 #[cfg(test)]
 use crate::uncommitted_metadata::UnCommittedMetadata;
 #[cfg(test)]
-pub use bitcoin::ecdsa::Signature;
+use bitcoin::block::Header as BlockHeader;
 #[cfg(test)]
-use bitcoin::BlockHeader;
+pub use bitcoin::ecdsa::Signature;
 #[cfg(test)]
 pub use bitcoin::{absolute::Time, p2p::address::AddrV2, PublicKey, Transaction};
 #[cfg(test)]
@@ -24,10 +24,10 @@ pub mod test_utility_functions {
     #[cfg(test)]
     use bitcoin::Txid;
     use bitcoin::{
-        pow::CompactTargetExt, BlockHash, BlockTime, BlockVersion, CompactTarget, EcdsaSighashType,
+        block::Version as BlockVersion, hashes::Hash, BlockHash, CompactTarget, EcdsaSighashType,
         TxMerkleNode,
     };
-    use rand::{rngs::OsRng, thread_rng, RngCore};
+    use rand::{rngs::OsRng, RngCore};
     use secp256k1::{Message, Secp256k1, SecretKey};
     use serde::{Deserialize, Serialize};
 
@@ -313,11 +313,9 @@ pub mod test_utility_functions {
         }
     }
     fn generate_random_public_key_string() -> String {
-        let secp = Secp256k1::new();
-        let mut rng = thread_rng();
-        let secret_key = SecretKey::new(&mut rng);
-        let public_key = PublicKey::new(secret_key.public_key(&secp));
-        public_key.to_string()
+        let secp = &Secp256k1::new();
+        let secret_key = SecretKey::new(&mut rand::thread_rng());
+        hex::encode(secret_key.public_key(secp).serialize())
     }
 
     pub fn emit_bead() -> Bead {
@@ -325,7 +323,7 @@ pub mod test_utility_functions {
 
         let random_public_key = generate_random_public_key_string()
             .parse::<bitcoin::PublicKey>()
-            .unwrap();
+            .expect("An error occurred while generating Secret key rand bytes");
         // Generate a reasonable timestamp (between 2020-01-01 and now)
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -392,7 +390,7 @@ pub mod test_utility_functions {
             prev_blockhash: BlockHash::from_byte_array(bytes),
             bits: CompactTarget::from_consensus(486604799),
             nonce: rand::random::<u32>(),
-            time: BlockTime::from_u32(0),
+            time: 0,
             merkle_root: TxMerkleNode::from_byte_array(bytes),
         };
 

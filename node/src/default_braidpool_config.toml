@@ -14,7 +14,7 @@ miner_pubkey = ""
 
 [bitcoin_config]
 # The network can be "main", "testnet4" or "signet or cpunet(preferred)"
-network = "cpunet"
+network = "regtest"
 #rpcuser
 username = "username"
 #rpc password
