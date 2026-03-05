@@ -3,7 +3,8 @@ use crate::cpunet::Cpunet;
 use crate::error::CoinbaseError;
 use crate::ipc::client::BlockTemplateComponents;
 use crate::EXTRANONCE_SEPARATOR;
-use bitcoin::consensus::encode::{ReadExt, WriteExt};
+use bitcoin::consensus::encode::{deserialize_partial, serialize, VarInt};
+use bitcoin::hashes::Hash;
 use bitcoin::{
     absolute::LockTime,
     blockdata::{
@@ -17,7 +18,6 @@ use bitcoin::{
     Address, Amount, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Txid,
 };
 use std::convert::TryFrom;
-use std::io::Cursor;
 use std::str::FromStr;
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
@@ -105,7 +105,7 @@ impl FinalTemplate {
     pub fn block_transaction_count(&self) -> u64 {
         if self.complete_block_hex.len() >= Self::BLOCK_HEADER_LENGTH {
             let body = &self.complete_block_hex[Self::BLOCK_HEADER_LENGTH..];
-            match decode_varint(body) {
+            match deserialize_partial(body) {
                 Ok((count, _)) => count,
                 Err(_) => 0,
             }
@@ -180,28 +180,6 @@ pub fn parse_coinbase_transaction(coinbase_bytes: &[u8]) -> Result<Transaction, 
 
     let mut cursor = Cursor::new(coinbase_bytes);
     Transaction::consensus_decode(&mut cursor).map_err(|_| CoinbaseError::ConsensusDecodeError)
-}
-
-/// Decode a Bitcoin varint from bytes. Returns (value, bytes_read), where
-/// bytes_read may be < data.len() if additional trailing bytes are present.
-fn decode_varint(data: &[u8]) -> Result<(u64, usize), CoinbaseError> {
-    let mut cursor = Cursor::new(data);
-
-    match cursor.read_compact_size() {
-        Ok(value) => {
-            let bytes_read = cursor.position() as usize;
-            Ok((value, bytes_read))
-        }
-        Err(_) => Err(CoinbaseError::ConsensusDecodeError),
-    }
-}
-
-/// Encode a u64 as Bitcoin varint
-fn encode_varint(value: u64) -> Vec<u8> {
-    let mut buf = Vec::new();
-    buf.emit_compact_size(value)
-        .expect("Vec::write failure is impossible");
-    buf
 }
 
 fn find_transaction_end(tx_data: &[u8]) -> Result<usize, CoinbaseError> {
@@ -286,7 +264,7 @@ fn build_coinbase_input(
     witness.push(vec![0u8; 32]);
 
     Ok(TxIn {
-        previous_output: OutPoint::COINBASE_PREVOUT,
+        previous_output: OutPoint::null(),
         script_sig,
         sequence: Sequence::MAX,
         witness,
@@ -417,10 +395,7 @@ pub fn build_braidpool_coinbase_from_template(
     };
 
     let reward_payout = TxOut {
-        value: Amount::from_sat(total_available).map_err(|e| {
-            error!(error = %e, "Amount conversion failed");
-            CoinbaseError::InvalidBlockTemplateData
-        })?,
+        value: Amount::from_sat(total_available),
         script_pubkey: payout_script,
     };
 
@@ -479,10 +454,11 @@ pub fn build_complete_block(
     if cursor >= original_block_hex.len() {
         return Err(CoinbaseError::InvalidBlockTemplateData);
     }
-    let (tx_count, varint_size) = decode_varint(&original_block_hex[cursor..])?;
+    let (tx_count, varint_size) = deserialize_partial::<VarInt>(&original_block_hex[cursor..])
+        .expect("An error occurred while decoding VarInt representation");
     cursor += varint_size;
 
-    if tx_count == 0 {
+    if tx_count.0 == 0 {
         return Err(CoinbaseError::InvalidBlockTemplateData);
     }
     if cursor >= original_block_hex.len() {
@@ -492,7 +468,7 @@ pub fn build_complete_block(
     cursor += original_coinbase_end;
 
     // Collect remaining transactions (everything after coinbase)
-    let remaining_transactions = if tx_count > 1 && cursor < original_block_hex.len() {
+    let remaining_transactions = if tx_count.0 > 1 && cursor < original_block_hex.len() {
         original_block_hex[cursor..].to_vec()
     } else {
         Vec::new()
@@ -510,7 +486,7 @@ pub fn build_complete_block(
     complete_block.extend_from_slice(&updated_header);
 
     // Add transaction count
-    complete_block.extend_from_slice(&encode_varint(tx_count));
+    complete_block.extend_from_slice(&serialize(&VarInt(tx_count.0)));
 
     // Add new coinbase transaction
     complete_block.extend_from_slice(&new_coinbase_bytes);
@@ -775,42 +751,42 @@ fn coinbase_input_too_big_is_rejected() {
 fn test_varint_comprehensive() {
     // Single-byte encoding (0-252)
     for value in 0u64..=252 {
-        let encoded = encode_varint(value);
+        let encoded = serialize(&VarInt(value));
         assert_eq!(encoded.len(), 1, "Value {} should encode to 1 byte", value);
         assert_eq!(encoded[0], value as u8);
-        let (decoded, bytes_read) = decode_varint(&encoded).unwrap();
-        assert_eq!(decoded, value, "Failed to decode value {}", value);
+        let (decoded, bytes_read) = deserialize_partial::<VarInt>(&encoded).unwrap();
+        assert_eq!(decoded.0, value, "Failed to decode value {}", value);
         assert_eq!(bytes_read, 1);
     }
 
     // Multi-byte: 0xFD (2 bytes), 0xFE (4 bytes), 0xFF (8 bytes)
     let fd_values = [253u64, 254, 255, 256, 1000, 10000, 65535];
     for value in fd_values {
-        let encoded = encode_varint(value);
+        let encoded = serialize(&VarInt(value));
         assert_eq!(encoded.len(), 3, "Value {} should encode to 3 bytes", value);
         assert_eq!(encoded[0], 0xFD);
-        let (decoded, bytes_read) = decode_varint(&encoded).unwrap();
-        assert_eq!(decoded, value);
+        let (decoded, bytes_read) = deserialize_partial::<VarInt>(&encoded).unwrap();
+        assert_eq!(decoded.0, value);
         assert_eq!(bytes_read, 3);
     }
 
     let fe_values = [65536u64, 100000, 1000000, 4294967295];
     for value in fe_values {
-        let encoded = encode_varint(value);
+        let encoded = serialize(&VarInt(value));
         assert_eq!(encoded.len(), 5, "Value {} should encode to 5 bytes", value);
         assert_eq!(encoded[0], 0xFE);
-        let (decoded, bytes_read) = decode_varint(&encoded).unwrap();
-        assert_eq!(decoded, value);
+        let (decoded, bytes_read) = deserialize_partial::<VarInt>(&encoded).unwrap();
+        assert_eq!(decoded.0, value);
         assert_eq!(bytes_read, 5);
     }
 
     let ff_values = [4294967296u64, 1000000000000, u64::MAX];
     for value in ff_values {
-        let encoded = encode_varint(value);
+        let encoded = serialize(&VarInt(value));
         assert_eq!(encoded.len(), 9, "Value {} should encode to 9 bytes", value);
         assert_eq!(encoded[0], 0xFF);
-        let (decoded, bytes_read) = decode_varint(&encoded).unwrap();
-        assert_eq!(decoded, value);
+        let (decoded, bytes_read) = deserialize_partial::<VarInt>(&encoded).unwrap();
+        assert_eq!(decoded.0, value);
         assert_eq!(bytes_read, 9);
     }
 
@@ -836,40 +812,45 @@ fn test_varint_comprehensive() {
         u64::MAX,
     ];
     for &value in &roundtrip_values {
-        let encoded = encode_varint(value);
-        let (decoded, _) = decode_varint(&encoded).unwrap();
+        let encoded = serialize(&VarInt(value));
+        let (decoded, _) = deserialize_partial::<VarInt>(&encoded).unwrap();
         assert_eq!(
-            decoded, value,
+            decoded.0, value,
             "Roundtrip failed for value {}, encoded as {:?}",
             value, encoded
         );
     }
 
     // Error handling for malformed/short input
-    assert!(decode_varint(&[]).is_err());
-    assert!(decode_varint(&[0xFD, 0x01]).is_err());
-    assert!(decode_varint(&[0xFE, 0x01, 0x02, 0x03]).is_err());
-    assert!(decode_varint(&[0xFF, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07]).is_err());
+    assert!(deserialize_partial::<VarInt>(&[]).is_err());
+    assert!(deserialize_partial::<VarInt>(&[0xFD, 0x01]).is_err());
+    assert!(deserialize_partial::<VarInt>(&[0xFE, 0x01, 0x02, 0x03]).is_err());
+    assert!(
+        deserialize_partial::<VarInt>(&[0xFF, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07]).is_err()
+    );
 
     // Protocol compatibility
-    assert_eq!(encode_varint(0), vec![0x00]);
-    assert_eq!(encode_varint(252), vec![0xFC]);
-    assert_eq!(encode_varint(253), vec![0xFD, 0xFD, 0x00]);
-    assert_eq!(encode_varint(65535), vec![0xFD, 0xFF, 0xFF]);
-    assert_eq!(encode_varint(65536), vec![0xFE, 0x00, 0x00, 0x01, 0x00]);
+    assert_eq!(serialize(&VarInt(0)), vec![0x00]);
+    assert_eq!(serialize(&VarInt(252)), vec![0xFC]);
+    assert_eq!(serialize(&VarInt(253)), vec![0xFD, 0xFD, 0x00]);
+    assert_eq!(serialize(&VarInt(65535)), vec![0xFD, 0xFF, 0xFF]);
     assert_eq!(
-        encode_varint(4294967296),
+        serialize(&VarInt(65536)),
+        vec![0xFE, 0x00, 0x00, 0x01, 0x00]
+    );
+    assert_eq!(
+        serialize(&VarInt(4294967296)),
         vec![0xFF, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00]
     );
 
     // Little-endian byte order for multi-byte encodings
-    assert_eq!(encode_varint(0x1234), vec![0xFD, 0x34, 0x12]);
+    assert_eq!(serialize(&VarInt(0x1234)), vec![0xFD, 0x34, 0x12]);
     assert_eq!(
-        encode_varint(0x12345678),
+        serialize(&VarInt(0x12345678)),
         vec![0xFE, 0x78, 0x56, 0x34, 0x12]
     );
     assert_eq!(
-        encode_varint(0x123456789ABCDEF0),
+        serialize(&VarInt(0x123456789ABCDEF0)),
         vec![0xFF, 0xF0, 0xDE, 0xBC, 0x9A, 0x78, 0x56, 0x34, 0x12]
     );
 
@@ -883,7 +864,7 @@ fn test_varint_comprehensive() {
         (4294967296u64, 9), // Min 0xFF
     ];
     for &(value, expected_len) in &boundaries {
-        let encoded = encode_varint(value);
+        let encoded = serialize(&VarInt(value));
         assert_eq!(
             encoded.len(),
             expected_len,
@@ -891,31 +872,31 @@ fn test_varint_comprehensive() {
             value,
             expected_len
         );
-        let (decoded, bytes_read) = decode_varint(&encoded).unwrap();
-        assert_eq!(decoded, value);
+        let (decoded, bytes_read) = deserialize_partial::<VarInt>(&encoded).unwrap();
+        assert_eq!(decoded.0, value);
         assert_eq!(bytes_read, expected_len);
     }
 
     // Only consume required bytes, ignore trailing data
-    let mut data = encode_varint(1000);
+    let mut data = serialize(&VarInt(1000));
     data.extend_from_slice(&[0xFF, 0xFF, 0xFF]);
-    let (decoded, bytes_read) = decode_varint(&data).unwrap();
-    assert_eq!(decoded, 1000);
+    let (decoded, bytes_read) = deserialize_partial::<VarInt>(&data).unwrap();
+    assert_eq!(decoded.0, 1000);
     assert_eq!(bytes_read, 3);
     assert!(bytes_read < data.len());
 
     // Zero and Max value correctness
-    let encoded_zero = encode_varint(0);
+    let encoded_zero = serialize(&VarInt(0));
     assert_eq!(encoded_zero, vec![0x00]);
-    let (decoded_zero, bytes_read_zero) = decode_varint(&encoded_zero).unwrap();
-    assert_eq!(decoded_zero, 0);
+    let (decoded_zero, bytes_read_zero) = deserialize_partial::<VarInt>(&encoded_zero).unwrap();
+    assert_eq!(decoded_zero.0, 0);
     assert_eq!(bytes_read_zero, 1);
 
     let max_value = u64::MAX;
-    let encoded_max = encode_varint(max_value);
+    let encoded_max = serialize(&VarInt(max_value));
     assert_eq!(encoded_max.len(), 9);
     assert_eq!(encoded_max[0], 0xFF);
-    let (decoded_max, bytes_read_max) = decode_varint(&encoded_max).unwrap();
-    assert_eq!(decoded_max, max_value);
+    let (decoded_max, bytes_read_max) = deserialize_partial::<VarInt>(&encoded_max).unwrap();
+    assert_eq!(decoded_max.0, max_value);
     assert_eq!(bytes_read_max, 9);
 }

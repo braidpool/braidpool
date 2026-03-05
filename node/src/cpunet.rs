@@ -1,11 +1,10 @@
 //! Cpunet implementation
 //Referenced - https://github.com/braidpool/rust-bitcoin/tree/cpunet
 use bitcoin::{
-    address::script_pubkey::ScriptBufExt,
     bech32,
     block::Header,
-    hashes::{sha256d, HashEngine},
-    BlockHash, BlockHeight, BlockHeightInterval, ScriptBuf, Target, WitnessProgram,
+    hashes::{sha256d, Hash, HashEngine},
+    BlockHash, ScriptBuf, Target, WitnessProgram,
 };
 use core::fmt;
 use std::str::FromStr;
@@ -24,17 +23,17 @@ pub struct CpunetParams {
     /// BIP16 activation time
     pub bip16_time: u32,
     /// BIP34 activation height
-    pub bip34_height: BlockHeight,
+    pub bip34_height: u32,
     /// BIP65 activation height
-    pub bip65_height: BlockHeight,
+    pub bip65_height: u32,
     /// BIP66 activation height
-    pub bip66_height: BlockHeight,
+    pub bip66_height: u32,
     /// Whether to enforce BIP94 (testnet4 rules)
     pub enforce_bip94: bool,
     /// Threshold for rule change activation (75% = 1512 of 2016)
-    pub rule_change_activation_threshold: BlockHeightInterval,
+    pub rule_change_activation_threshold: u32,
     /// Miner confirmation window for soft forks
-    pub miner_confirmation_window: BlockHeightInterval,
+    pub miner_confirmation_window: u32,
     /// Maximum proof-of-work target (minimum difficulty)
     pub pow_limit: Target,
     /// Maximum attainable target value
@@ -59,12 +58,12 @@ impl CpunetParams {
     pub const fn new() -> Self {
         Self {
             bip16_time: 1333238400, // Apr 1 2012
-            bip34_height: BlockHeight::from_u32(1),
-            bip65_height: BlockHeight::from_u32(1),
-            bip66_height: BlockHeight::from_u32(1),
+            bip34_height: 1,
+            bip65_height: 1,
+            bip66_height: 1,
             enforce_bip94: false,
-            rule_change_activation_threshold: BlockHeightInterval::from_u32(1512), // 75%
-            miner_confirmation_window: BlockHeightInterval::from_u32(2016),
+            rule_change_activation_threshold: 1512, // 75%
+            miner_confirmation_window: 2016,
             pow_limit: Target::MAX_ATTAINABLE_MAINNET,
             max_attainable_target: Target::MAX_ATTAINABLE_MAINNET,
             pow_target_spacing: 10 * 60,            // 10 minutes
@@ -142,7 +141,7 @@ impl Cpunet {
         engine.input(&header.version.to_consensus().to_le_bytes());
         engine.input(header.prev_blockhash.as_byte_array());
         engine.input(header.merkle_root.as_byte_array());
-        engine.input(&header.time.to_u32().to_le_bytes());
+        engine.input(&header.time.to_le_bytes());
         engine.input(&header.bits.to_consensus().to_le_bytes());
         engine.input(&header.nonce.to_le_bytes());
         engine.input("cpunet\0".as_bytes());
@@ -172,7 +171,6 @@ impl FromStr for Cpunet {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bitcoin::script::ScriptExt;
     use bitcoin::WitnessVersion;
 
     #[test]

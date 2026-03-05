@@ -1,8 +1,8 @@
 //These implementations must be defined under lib.rs as they are required for intergration tests
 use crate::db::db_handlers::prepare_bead_tuple_data;
 use bitcoin::{
-    consensus::encode::deserialize, ecdsa::Signature, pow::CompactTargetExt, BlockHash,
-    CompactTarget, EcdsaSighashType, Txid,
+    consensus::encode::deserialize, ecdsa::Signature, BlockHash, CompactTarget, EcdsaSighashType,
+    Txid,
 };
 use num::ToPrimitive;
 use std::{
@@ -177,11 +177,15 @@ pub async fn ipc_template_consumer(
 
             let candidate_block: Result<
                 bitcoin::blockdata::block::Block,
-                bitcoin::consensus::DeserializeError,
+                bitcoin::consensus::encode::Error,
             > = deserialize(&template_bytes);
-
             let merkle_branch_coinbase = ipc_template.components.coinbase_merkle_path.clone();
-            let (template_header, template_transactions) = candidate_block.unwrap().into_parts();
+            let (template_header, template_transactions) = match candidate_block {
+                Ok(template) => (template.header, template.txdata),
+                Err(_error) => {
+                    return Err(IPCtemplateError::TemplateConsumeError);
+                }
+            };
             let _coinbase_transaction = template_transactions.get(0);
 
             debug!(template_id = %template_id, template_header = ?template_header, "New block template");
@@ -285,7 +289,8 @@ impl SwarmHandler {
         //TODO: Will be used as seperate entity after altering `uncommitted_metadata`
         extranonce_1_raw_value: u32,
     ) -> Result<(), StratumErrors> {
-        let (candidate_block_header, candidate_block_transactions) = candidate_block.into_parts();
+        let candidate_block_header = candidate_block.header;
+        let candidate_block_transactions = candidate_block.txdata;
         let ids: Vec<Txid> = candidate_block_transactions
             .iter()
             .map(|tx| tx.compute_txid())
@@ -349,10 +354,7 @@ impl SwarmHandler {
         let unix_timestamp = duration_since_epoch.as_secs().to_u32().unwrap();
 
         let candidate_block_bead_uncommitted_metadata = UnCommittedMetadata {
-            broadcast_timestamp: bitcoin::blockdata::locktime::absolute::MedianTimePast::from_u32(
-                unix_timestamp,
-            )
-            .unwrap(),
+            broadcast_timestamp: bitcoin::absolute::Time::from_consensus(unix_timestamp).unwrap(),
             extra_nonce_1: extranonce_1_raw_value,
             extra_nonce_2: extranonce_2_raw_value,
             signature: sig,

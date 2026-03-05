@@ -7,7 +7,10 @@ use crate::{
 };
 use ::bitcoin::BlockHash;
 use bitcoin::{
-    absolute::MedianTimePast as Time, ecdsa::Signature, BlockHeader, BlockTime, BlockVersion,
+    absolute::Time,
+    block::{Header as BlockHeader, Version as BlockVersion},
+    ecdsa::Signature,
+    hashes::Hash,
     CompactTarget, EcdsaSighashType, TxMerkleNode,
 };
 // Standard Imports
@@ -133,7 +136,7 @@ pub fn create_test_bead(nonce: u32, prev_hash: Option<BlockHash>) -> Bead {
         prev_blockhash: prev_hash.unwrap_or(BlockHash::from_byte_array(test_bytes)),
         bits: CompactTarget::from_consensus(486604799),
         nonce: nonce,
-        time: BlockTime::from_u32(8328429),
+        time: 8328429,
         merkle_root: TxMerkleNode::from_byte_array(test_bytes),
     };
     Bead {

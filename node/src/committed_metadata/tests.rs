@@ -1,7 +1,6 @@
 use super::*;
 use crate::utils::hashset_to_vec_deterministic;
 use crate::utils::test_utils::test_utility_functions::TestCommittedMetadataBuilder;
-use bitcoin::absolute::MedianTimePast;
 use bitcoin::consensus::encode::deserialize;
 use bitcoin::consensus::serialize;
 use bitcoin::BlockHash;
@@ -181,7 +180,6 @@ fn test_committed_metadata_default() {
         metadata.payout_address,
         data.payout_addresses.default.as_str()
     );
-    assert_eq!(metadata.start_timestamp, MedianTimePast::MIN);
     assert_eq!(
         metadata.comm_pub_key,
         parse_public_key(&data.public_keys.default_committed)

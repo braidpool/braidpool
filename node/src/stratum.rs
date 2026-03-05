@@ -3,11 +3,11 @@ use crate::error::StratumErrors;
 use crate::template_creator::calculate_merkle_root;
 use crate::utils::compute_block_hash;
 use crate::{SwarmHandler, TemplateId, EXTRANONCE1_SIZE, EXTRANONCE2_SIZE, EXTRANONCE_SEPARATOR};
-use bitcoin::block::HeaderExt;
-use bitcoin::consensus::serialize;
+use bitcoin::consensus::{serialize, Decodable};
+use bitcoin::hashes::Hash;
 use bitcoin::io::Cursor;
-use bitcoin::{absolute::Decodable, Transaction};
-use bitcoin::{BlockHash, BlockHeader, BlockTime, TxMerkleNode, Txid, Witness};
+use bitcoin::Transaction;
+use bitcoin::{block::Header as BlockHeader, BlockHash, TxMerkleNode, Txid, Witness};
 use futures::{lock::Mutex, FutureExt};
 use num::ToPrimitive;
 use rand::RngCore;
@@ -59,13 +59,13 @@ pub struct BlockTemplate {
     pub coinbasevalue: Option<u64>,
     pub longpollid: Option<String>,
     pub target: bitcoin::Target,
-    pub mintime: Option<bitcoin::time::BlockTime>,
+    pub mintime: Option<u32>,
     pub mutable: Option<Vec<String>>,
     pub noncerange: Option<String>,
     pub sigoplimit: Option<u32>,
     pub sizelimit: Option<usize>,
     pub weightlimit: Option<bitcoin::blockdata::Weight>,
-    pub curtime: bitcoin::time::BlockTime,
+    pub curtime: u32,
     pub bits: bitcoin::CompactTarget,
     pub height: bitcoin::absolute::Height,
     pub default_witness_commitment: Option<Witness>,
@@ -77,7 +77,7 @@ impl Default for BlockTemplate {
             rules: None,
             vbavailable: None,
             vbrequired: None,
-            previousblockhash: BlockHash::GENESIS_PREVIOUS_BLOCK_HASH,
+            previousblockhash: BlockHash::all_zeros(),
             transactions: Vec::new(),
             coinbaseaux: None,
             coinbasevalue: None,
@@ -89,7 +89,7 @@ impl Default for BlockTemplate {
             sigoplimit: None,
             sizelimit: None,
             weightlimit: None,
-            curtime: bitcoin::BlockTime::from_u32(1759998900),
+            curtime: 1759998900,
             bits: bitcoin::CompactTarget::from_consensus(0),
             height: bitcoin::absolute::Height::ZERO,
             default_witness_commitment: None,
@@ -608,7 +608,7 @@ impl DownstreamClient {
             version: bitcoin::blockdata::block::Version::from_consensus(final_masked_version),
             prev_blockhash: submitted_job.blocktemplate.previousblockhash,
             merkle_root: merkle_root,
-            time: BlockTime::from_u32(ntime_u32),
+            time: ntime_u32,
             bits: submitted_job.blocktemplate.bits,
             nonce: nonce_u32,
         };
@@ -616,7 +616,7 @@ impl DownstreamClient {
         let target = bitcoin::Target::from_compact(compact_target);
         debug!(
             connection_id = %connection_id_hex,
-            target = %target.to_hex(),
+            target = %hex::encode(target.to_le_bytes()),
             "Mining target"
         );
         debug!(
@@ -633,7 +633,7 @@ impl DownstreamClient {
         };
         let prevhash_be_hex = hex::encode(header.prev_blockhash.to_byte_array());
         let merkle_root_be_hex = hex::encode(header.merkle_root.to_byte_array());
-        let time_be_hex = hex::encode(header.time.to_u32().to_be_bytes());
+        let time_be_hex = hex::encode(header.time.to_be_bytes());
         let bits_be_hex = hex::encode(header.bits.to_consensus().to_be_bytes());
         let nonce_be_hex = hex::encode(header.nonce.to_be_bytes());
 
@@ -667,7 +667,7 @@ impl DownstreamClient {
                 return Err(StratumErrors::InvalidCoinbase);
             }
         };
-        match coinbase_tx.inputs_mut().get_mut(0) {
+        match coinbase_tx.input.get_mut(0) {
             Some(input) => input.witness.push(witness_bytes),
             None => {
                 error!(connection_id = %connection_id_hex, "Coinbase transaction has no inputs");
@@ -679,8 +679,10 @@ impl DownstreamClient {
         block_transactions.extend(submitted_job.blocktemplate.transactions.clone());
 
         // Construct and log the complete block using rust-bitcoin's Block struct
-        let complete_block = bitcoin::Block::new_unchecked(header, block_transactions);
-
+        let complete_block = bitcoin::Block {
+            header,
+            txdata: block_transactions,
+        };
         // For cpunet, use custom block_hash calculation; otherwise use standard validate_pow
         let is_cpunet = Cpunet::is_cpunet_name(&self.network_name);
         let pow_result = if is_cpunet {
@@ -699,7 +701,7 @@ impl DownstreamClient {
             Ok(block_hash) => {
                 debug!(
                     connection_id = %connection_id_hex,
-                    target = %target.to_hex(),
+                    target = %target,
                     hash = %block_hash,
                     is_cpunet = is_cpunet,
                     "Header meets target"
@@ -743,7 +745,7 @@ impl DownstreamClient {
                 debug!(
                     connection_id = %connection_id_hex,
                     error = %e,
-                    target = %target.to_hex(),
+                    target = %target,
                     "Header does not meet target"
                 );
                 return Ok(StratumResponses::StandardResponse {
@@ -1361,14 +1363,14 @@ impl Notifier {
                 });
             }
         };
-        let coinbase_witness_commitment = match coinbase_transaction.inputs().get(0) {
+        let coinbase_witness_commitment = match coinbase_transaction.input.get(0) {
             Some(input) => input.witness.clone(),
             None => {
                 error!(template_id = %template_id, "Coinbase transaction has no inputs");
                 return Err(StratumErrors::InvalidCoinbase);
             }
         };
-        if let Some(input) = coinbase_transaction.inputs_mut().get_mut(0) {
+        if let Some(input) = coinbase_transaction.input.get_mut(0) {
             input.witness.clear();
         };
         let deserialized_coinbase = serialize::<Transaction>(&coinbase_transaction);
@@ -1421,7 +1423,7 @@ impl Notifier {
         };
         let bitcoin_block_version = notified_template.version.to_consensus();
         let bits = notified_template.bits;
-        let time = notified_template.curtime.to_u32();
+        let time = notified_template.curtime;
         //Adding support for segwit coinbase
         Ok(JobNotification {
             job_id: template_id.to_string(),
@@ -2086,8 +2088,8 @@ mod test {
         stratum::{ConnectionMapping, MiningJobMap, NotifyCmd, Server, StratumServerConfig},
     };
     use bitcoin::{
-        absolute::LockTime, pow::CompactTargetExt, script::ScriptBufExt, Amount, BlockHash,
-        BlockVersion, OutPoint, ScriptBuf, Sequence, TxIn, TxOut,
+        absolute::LockTime, block::Version as BlockVersion, Amount, BlockHash, OutPoint, ScriptBuf,
+        Sequence, TxIn, TxOut,
     };
     use futures::lock::Mutex;
     use tokio::{
@@ -2398,7 +2400,8 @@ mod test {
     //TODO: this test is currently conditional wrt to master branch for our forked rust-bitcoin hence commented out
 
     #[tokio::test]
-    async fn submit_work_version_rolling() {
+    async fn submit_work_no_version_rolling() {
+        use super::Cpunet;
         /*
         Test block taken - 00000020e6ebb395a1e2ba60f17650d790309e21af08062229ad955376ac574300000000e8de27818e402a0d5e6028f363be4b47d809ad348e6bc88ac2f9c2bedf0409e9337edf68ffff001d7aeb8b0601020000000001010000000000000000000000000000000000000000000000000000000000000000ffffffff1602611e089495ac0803000000094272616964706f6f6cffffffff0300f2052a01000000160014e470d0179325db88b55771f6c0a5139dd81d73180000000000000000266a24aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf900000000000000002a6a286272616964706f6f6c5f626561645f6d657461646174615f686173685f33326201020304050607080120000000000000000000000000000000000000000000000000000000000000000000000000
 
@@ -2419,15 +2422,9 @@ mod test {
         //There is a case in prevblockhash too but it can be discussed afterwards
         //Cleaning up connection channels from connection mapping as well as from global map arc of stratum server
         let test_coinbase_transaction: Transaction = Transaction {
-            version: bitcoin::TransactionVersion::TWO,
+            version:bitcoin::blockdata::transaction::Version::TWO,
             input: vec![TxIn {
-                previous_output: OutPoint {
-                    txid: Txid::from_str(
-                        "0000000000000000000000000000000000000000000000000000000000000000",
-                    )
-                    .unwrap(),
-                    vout: OutPoint::COINBASE_PREVOUT.vout,
-                },
+                previous_output: OutPoint::null(),
                 script_sig: ScriptBuf::from_hex(
                     "02611e080101010101010101094272616964706f6f6c",
                 )
@@ -2437,17 +2434,17 @@ mod test {
             }],
             output: vec![
                 TxOut {
-                    value: Amount::FIFTY_BTC,
+                    value: Amount::from_btc(50.0).unwrap(),
                     script_pubkey: ScriptBuf::from_hex("0014e470d0179325db88b55771f6c0a5139dd81d7318")
                         .unwrap(),
                 },
                 TxOut {
-                    value: Amount::from_sat(0).unwrap(),
+                    value: Amount::from_sat(0),
                     script_pubkey: ScriptBuf::from_hex("6a24aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf9")
                         .unwrap(),
                 },
                 TxOut {
-                    value: Amount::from_sat(0).unwrap(),
+                    value: Amount::from_sat(0),
                     script_pubkey: ScriptBuf::from_hex(
                         "6a286272616964706f6f6c5f626561645f6d657461646174615f686173685f3332620102030405060708",
                     )
@@ -2460,7 +2457,7 @@ mod test {
             bits: bitcoin::pow::CompactTarget::from_unprefixed_hex("1d00ffff").unwrap(),
             nonce: 0,
             version: BlockVersion::from_consensus(536870912),
-            time: BlockTime::from_u32(1759477299),
+            time: 1759477299,
             prev_blockhash: BlockHash::from_str(
                 "000000004357ac765395ad29220608af219e3090d75076f160bae2a195b3ebe6",
             )
@@ -2522,6 +2519,7 @@ mod test {
         ]);
         let test_extranonce_1 = hex::decode("9495ac08").unwrap();
         mock_downstream_handler.extranonce1 = test_extranonce_1;
+        mock_downstream_handler.network_name = "cpunet".to_string();
         let configure_response = mock_downstream_handler
             .handle_configure(&configure_test_request, 1)
             .await;
