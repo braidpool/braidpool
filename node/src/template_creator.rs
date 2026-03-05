@@ -85,11 +85,6 @@ impl FinalTemplate {
         }
     }
 
-    /// Returns the block hash as hex string
-    pub fn block_hash_hex(&self) -> String {
-        hex::encode(self.block_hash())
-    }
-
     /// Returns just the block header as bytes
     pub fn block_header(&self) -> Vec<u8> {
         if self.complete_block_hex.len() >= Self::BLOCK_HEADER_LENGTH {
