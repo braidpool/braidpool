@@ -4,6 +4,7 @@ use crate::error::CoinbaseError;
 use crate::error::{classify_error, ErrorKind};
 use crate::rpc_server::RpcProxyCommand;
 use crate::template_creator::{create_block_template, FinalTemplate};
+use crate::utils::compute_block_hash;
 use crate::{TemplateId, MAX_CACHED_TEMPLATES};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -48,7 +49,7 @@ pub async fn ipc_block_listener(
             let mut health_check_interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
             let mut detailed_stats_interval = tokio::time::interval(tokio::time::Duration::from_secs(100));
             let mut backoff_seconds = 1;
-            let mut shared_client = match SharedBitcoinClient::new(&ipc_socket_path).await {
+            let mut shared_client = match SharedBitcoinClient::new(&ipc_socket_path,network_name.clone()).await {
                 Ok(client) => {
                     info!(socket = %ipc_socket_path, "IPC connection established");
                     client
@@ -255,7 +256,7 @@ pub async fn ipc_block_listener(
                             header,
                             coinbase_transaction,
                         } = submission;
-                        let block_hash = header.block_hash();
+                        let block_hash = compute_block_hash(&header, &network_name);
                         let template_opt = template_cache.lock().await.get(&template_id).cloned();
 
                         if let Some(ipc_template) = template_opt {

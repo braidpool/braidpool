@@ -32,7 +32,7 @@ pub mod test_utility_functions {
     use serde::{Deserialize, Serialize};
 
     #[cfg(test)]
-    use crate::braid::Braid;
+    use crate::{braid::Braid, utils::compute_block_hash};
 
     pub use super::*;
     #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -65,7 +65,10 @@ pub mod test_utility_functions {
         for bead_idx in file_braid.clone().parents {
             let random_test_bead = emit_bead();
             test_braid_vector_bead_mapping.insert(
-                random_test_bead.clone().block_header.block_hash(),
+                compute_block_hash(
+                    &random_test_bead.clone().block_header,
+                    &"cpunet".to_string(),
+                ),
                 bead_idx.0,
             );
             beads_to_idx.insert(bead_idx.0, random_test_bead.clone());
@@ -76,8 +79,10 @@ pub mod test_utility_functions {
             let mut parent_idx_set: HashSet<usize> = HashSet::new();
             if let Some(current_bead_parents) = file_braid.parents.get(&idx) {
                 for parent_bead_idx in current_bead_parents {
-                    let parent_bead_block_hash =
-                        beads_to_idx[parent_bead_idx].block_header.block_hash();
+                    let parent_bead_block_hash = compute_block_hash(
+                        &beads_to_idx[parent_bead_idx].block_header,
+                        &"cpunet".to_string(),
+                    );
                     current_bead
                         .committed_metadata
                         .parents
@@ -121,6 +126,7 @@ pub mod test_utility_functions {
                 cohorts: current_bead_cohorots,
                 cohort_tips: vec![HashSet::new()], // Cohorts tips are only used in extend(), so we can skip them here.
                 orphan_beads: Vec::new(),
+                network_name: "cpunet".to_string(),
             },
             file_braid.clone(),
         )

@@ -2,6 +2,7 @@ use crate::{
     bead::Bead,
     db::{init_db::init_db, BeadInsertData, BraidpoolDBTypes, InsertTupleTypes},
     error::DBErrors,
+    utils::{compute_block_hash, BeadHash},
 };
 use bitcoin::{
     absolute::MedianTimePast, ecdsa::Signature, BlockHash, BlockTime, BlockVersion, CompactTarget,
@@ -60,9 +61,11 @@ pub struct DBHandler {
     receiver: Receiver<BraidpoolDBTypes>,
     //Shared across tasks for accessing DB after contention using `Mutex`
     pub db_connection_pool: Pool<Sqlite>,
+    /// Network name for computing block hashes
+    pub network_name: String,
 }
 impl DBHandler {
-    pub async fn new() -> Result<(Self, Sender<BraidpoolDBTypes>), DBErrors> {
+    pub async fn new(network_name: String) -> Result<(Self, Sender<BraidpoolDBTypes>), DBErrors> {
         debug!("Initializing schema for persistent database");
         let db_connection_pool = match init_db().await {
             Ok(conn) => conn,
@@ -78,6 +81,7 @@ impl DBHandler {
             Self {
                 receiver: db_handler_rx,
                 db_connection_pool,
+                network_name,
             },
             db_handler_tx,
         ))

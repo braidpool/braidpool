@@ -1,5 +1,5 @@
 //These implementations must be defined under lib.rs as they are required for intergration tests
-use crate::rpc_server::DashboardEvents;
+use crate::rpc_server::DashboardEvents, utils::compute_block_hash;
 use bitcoin::{
     consensus::encode::deserialize, ecdsa::Signature, pow::CompactTargetExt, BlockHash,
     CompactTarget, EcdsaSighashType, Txid,
@@ -330,7 +330,7 @@ impl SwarmHandler {
             .map(|&idx| {
                 let tip = braid_data.beads.get(idx).unwrap();
                 (
-                    tip.block_header.block_hash(),
+                    braid_data.compute_bead_hash(current_tip_bead),
                     tip.committed_metadata.start_timestamp,
                 )
             })
@@ -401,7 +401,7 @@ impl SwarmHandler {
         match status {
             AddBeadStatus::BeadAdded { promoted_orphans } => {
                 let new_tips: Vec<_> = braid_data.tips.iter().map(|&idx| idx).collect();
-                let bead_hash = weak_share.block_header.block_hash();
+                let bead_hash = compute_block_hash(&weak_share.block_header, &braid_data.network_name);
                 info!(
                     hash = %bead_hash,
                     new_tips = ?new_tips,
@@ -429,7 +429,7 @@ impl SwarmHandler {
                 let res = self
                     .dashboard_notification_sender
                     .new_bead
-                    .send(Some(weak_share));
+                    .send(Some(weak_share.clone()));
                 match res {
                     Ok(_) => {
                         debug!("Passing self mined bead to the dashboard notifier");
@@ -465,7 +465,7 @@ impl SwarmHandler {
                 };
             }
             _ => {
-                warn!(status = ?status, hash = %weak_share.block_header.block_hash(),
+                warn!(status = ?status, hash = %braid_data.compute_bead_hash(&weak_share),
                     "Failed to extend Braid")
             }
         }

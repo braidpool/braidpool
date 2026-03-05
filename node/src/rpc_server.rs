@@ -3,6 +3,11 @@ use crate::braid::consensus_functions;
 use crate::braid::consensus_functions::highest_work_path;
 use crate::braid::AddBeadStatus;
 use crate::braid::Braid;
+use crate::error::BraidRPCError;
+#[cfg(test)]
+use crate::utils::compute_block_hash;
+#[cfg(test)]
+use crate::utils::create_test_bead;
 use crate::db::BraidpoolDBTypes;
 use crate::ipc::client::QueueStats;
 use crate::peer_manager::PeerManager;
@@ -316,7 +321,7 @@ impl RpcServer for RpcServerImpl {
         let bead = braid_data
             .beads
             .iter()
-            .find(|bead| bead.block_header.block_hash() == hash)
+            .find(|bead| braid_data.compute_bead_hash(bead) == hash)
             .cloned();
 
         bead.ok_or_else(|| ErrorObjectOwned::owned(3, "Bead not found", None::<()>))
@@ -326,12 +331,11 @@ impl RpcServer for RpcServerImpl {
         let bead: Bead = serde_json::from_str(&bead_data).map_err(|e| {
             ErrorObjectOwned::owned(1, format!("Invalid bead data: {}", e), None::<()>)
         })?;
-        let bead_hash = bead.block_header.block_hash();
+        let mut braid_data = self.braid_arc.write().await;
         info!(
-            hash = %bead_hash,
+            hash = %braid_data.compute_bead_hash(&bead),
             "Add bead request received"
         );
-        let mut braid_data = self.braid_arc.write().await;
         let success_status = braid_data.extend(&bead);
 
         match success_status {
@@ -371,7 +375,7 @@ impl RpcServer for RpcServerImpl {
         let tips: Vec<BeadHash> = braid_data
             .tips
             .iter()
-            .map(|&index| braid_data.beads[index].block_header.block_hash())
+            .map(|&index| braid_data.compute_bead_hash(&braid_data.beads[index]))
             .collect();
         info!(tip_count = %tips.len(), "Get tips request received");
         let tips_str: Vec<String> = tips.iter().map(|h| h.to_string()).collect();
@@ -1241,7 +1245,10 @@ pub async fn test_extend_rpc() {
     let test_bead1 = create_test_bead(1, None);
     let genesis_beads = vec![test_bead1.clone()];
 
-    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(
+        genesis_beads,
+        "cpunet".to_string(),
+    )));
     let (proxy_tx, _) = mpsc::unbounded_channel();
 
     let (server_addr, _) = run_rpc_server(
@@ -1261,7 +1268,13 @@ pub async fn test_extend_rpc() {
     let target_uri = format!("http://{}", server_addr);
     let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
 
-    let new_bead = create_test_bead(2, Some(test_bead1.block_header.block_hash()));
+    let new_bead = create_test_bead(
+        2,
+        Some(compute_block_hash(
+            &test_bead1.block_header,
+            &"cpunet".to_string(),
+        )),
+    );
     let bead_json_str = serde_json::to_string(&new_bead).expect("Failed to serialize bead");
 
     let mut params = ArrayParams::new();
@@ -1286,7 +1299,10 @@ pub async fn test_same_bead_extend() {
     let test_bead1 = create_test_bead(1, None);
     let genesis_beads = vec![test_bead1.clone()];
 
-    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(
+        genesis_beads,
+        "cpunet".to_string(),
+    )));
     //Initializing the test server
     let rpc_middleware =
         jsonrpsee::server::middleware::rpc::RpcServiceBuilder::new().layer_fn(LoggingMiddleware);
@@ -1313,7 +1329,13 @@ pub async fn test_same_bead_extend() {
     let target_uri = format!("http://{}", server_addr);
     let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
 
-    let new_bead = create_test_bead(2, Some(test_bead1.block_header.block_hash()));
+    let new_bead = create_test_bead(
+        2,
+        Some(compute_block_hash(
+            &test_bead1.block_header,
+            &"cpunet".to_string(),
+        )),
+    );
 
     let bead_json_str = serde_json::to_string(&new_bead).expect("Failed to serialize bead");
 
@@ -1335,13 +1357,34 @@ pub async fn test_same_bead_extend() {
 #[tokio::test]
 pub async fn test_cohort_count_rpc() {
     let test_bead_1 = create_test_bead(1, None);
-    let test_bead_2 = create_test_bead(2, Some(test_bead_1.block_header.block_hash()));
-    let test_bead_3 = create_test_bead(3, Some(test_bead_2.block_header.block_hash()));
-    let test_bead_4 = create_test_bead(2, Some(test_bead_3.block_header.block_hash()));
+    let test_bead_2 = create_test_bead(
+        2,
+        Some(compute_block_hash(
+            &test_bead_1.block_header,
+            &"cpunet".to_string(),
+        )),
+    );
+    let test_bead_3 = create_test_bead(
+        3,
+        Some(compute_block_hash(
+            &test_bead_2.block_header,
+            &"cpunet".to_string(),
+        )),
+    );
+    let test_bead_4 = create_test_bead(
+        2,
+        Some(compute_block_hash(
+            &test_bead_3.block_header,
+            &"cpunet".to_string(),
+        )),
+    );
 
     let genesis_beads = vec![test_bead_1.clone()];
 
-    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(
+        genesis_beads,
+        "cpunet".to_string(),
+    )));
 
     //Initializing the test server
     let rpc_middleware =
