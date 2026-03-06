@@ -2,6 +2,7 @@
 use crate::config::CoinbaseConfig;
 use crate::error::CoinbaseError;
 use crate::error::{classify_error, ErrorKind};
+use crate::rpc_server::RpcProxyCommand;
 use crate::template_creator::{create_block_template, FinalTemplate};
 use crate::{TemplateId, MAX_CACHED_TEMPLATES};
 use std::collections::HashMap;
@@ -15,6 +16,7 @@ pub use client::{
     BitcoinNotification, BlockTemplateComponents, CheckBlockResult, RequestPriority,
     SharedBitcoinClient,
 };
+use hex;
 
 const MAX_BACKOFF: u64 = 300;
 
@@ -34,6 +36,7 @@ pub async fn ipc_block_listener(
     mut block_submission_rx: tokio::sync::mpsc::UnboundedReceiver<
         crate::stratum::BlockSubmissionRequest,
     >,
+    mut rpc_command_rx: tokio::sync::mpsc::UnboundedReceiver<RpcProxyCommand>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!(
         socket = %ipc_socket_path,
@@ -307,6 +310,41 @@ pub async fn ipc_block_listener(
                         }
                     }
                 }
+
+                    rpc_command = rpc_command_rx.recv() => {
+                        if let Some(command) = rpc_command {
+                            match command {
+                                RpcProxyCommand::GetStats { responder } => {
+                                    let stats = shared_client.get_queue_stats();
+                                    if responder.send(Ok(stats)).is_err() {
+                                        warn!("Failed to send stats response - receiver dropped");
+                                    }
+                                }
+
+                                RpcProxyCommand::RemoveTransaction { txid, responder } => {
+                                    // Convert hex string to bytes
+                                    let txid_bytes = match hex::decode(&txid) {
+                                        Ok(bytes) => bytes,
+                                        Err(e) => {
+                                            let _ = responder.send(Err(format!("Invalid txid hex: {}", e)));
+                                            continue;
+                                        }
+                                    };
+
+                                    match shared_client.remove_transaction(&txid_bytes, None).await {
+                                        Ok(removed) => {
+                                            if responder.send(Ok(removed)).is_err() {
+                                                warn!("Failed to send remove_transaction response - receiver dropped");
+                                            }
+                                        }
+                                        Err(e) => {
+                                            let _ = responder.send(Err(format!("IPC error: {}", e)));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
 
                     _ = health_check_interval.tick() => {
                         let stats = shared_client.get_queue_stats();
