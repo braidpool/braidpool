@@ -229,7 +229,7 @@ const MempoolLatencyStats = () => {
             }
             className="px-4 py-2 bg-[#1a1a1a] text-gray-300 rounded-md shadow-md border border-white"
           >
-            <option value={selectedView} style={{ display: 'none' }}>
+            <option value={selectedView} hidden disabled>
               {selectedView.toUpperCase()}
             </option>
             {(['btc', 'usd', 'eur', 'jpy', 'all'] as const)
