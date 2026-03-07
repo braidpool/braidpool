@@ -219,7 +219,7 @@ pub fn prepare_bead_tuple_data(
         let mut set = HashSet::new();
         for p in &b.committed_metadata.parents {
             let parent_idx = *bead_index_mapping.get(p).ok_or_else(|| {
-                anyhow::anyhow!("Parent bead hash missing from bead_index_mapping")
+                anyhow::anyhow!("Parent bead hash {:?} missing from bead_index_mapping", p)
             })?;
             set.insert(parent_idx);
         }
@@ -228,12 +228,17 @@ pub fn prepare_bead_tuple_data(
 
     let bead_id = *bead_index_mapping
         .get(&bead.block_header.block_hash())
-        .ok_or_else(|| anyhow::anyhow!("Bead hash missing from bead_index_mapping"))?;
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "Bead hash {:?} missing from bead_index_mapping",
+                bead.block_header.block_hash()
+            )
+        })?;
 
     let current_parents = parent_set
         .get(&bead_id)
         .cloned()
-        .ok_or_else(|| anyhow::anyhow!("Missing parent set for bead"))?;
+        .ok_or_else(|| anyhow::anyhow!("Missing parent set for bead_id {}", bead_id))?;
 
     let mut relatives = Vec::new();
     let mut parent_ts = Vec::new();
@@ -366,37 +371,41 @@ pub async fn fetch_beads_in_batch(
             bead.committed_metadata.miner_ip = row.get("miner_ip");
 
             bead.committed_metadata.start_timestamp =
-                MedianTimePast::from_u32(row.get::<u32, _>("start_timestamp")).map_err(|_| {
+                MedianTimePast::from_u32(row.get::<u32, _>("start_timestamp")).map_err(|e| {
                     DBErrors::TupleAttributeParsingError {
-                        error: "Invalid start_timestamp (MedianTimePast::from_u32 failed)".into(),
+                        error: format!(
+                            "Invalid start_timestamp (MedianTimePast::from_u32 failed: {e})"
+                        ),
                         attribute: "start_timestamp".into(),
                     }
                 })?;
             bead.uncommitted_metadata.broadcast_timestamp = MedianTimePast::from_u32(
                 row.get::<u32, _>("broadcast_timestamp"),
             )
-            .map_err(|_| DBErrors::TupleAttributeParsingError {
-                error: "Invalid broadcast_timestamp (MedianTimePast::from_u32 failed)".into(),
+            .map_err(|e| DBErrors::TupleAttributeParsingError {
+                error: format!(
+                    "Invalid broadcast_timestamp (MedianTimePast::from_u32 failed: {e})"
+                ),
                 attribute: "broadcast_timestamp".into(),
             })?;
             bead.uncommitted_metadata.extra_nonce_1 =
-                u32::from_str_radix(&row.get::<String, _>("extranonce1"), 16).map_err(|_| {
+                u32::from_str_radix(&row.get::<String, _>("extranonce1"), 16).map_err(|e| {
                     DBErrors::TupleAttributeParsingError {
-                        error: "Invalid extranonce1".into(),
+                        error: format!("Invalid extranonce1 (from_str_radix failed: {e})"),
                         attribute: "extranonce1".into(),
                     }
                 })?;
             bead.uncommitted_metadata.extra_nonce_2 =
-                u32::from_str_radix(&row.get::<String, _>("extranonce2"), 16).map_err(|_| {
+                u32::from_str_radix(&row.get::<String, _>("extranonce2"), 16).map_err(|e| {
                     DBErrors::TupleAttributeParsingError {
-                        error: "Invalid extranonce2".into(),
+                        error: format!("Invalid extranonce2 (from_str_radix failed: {e})"),
                         attribute: "extranonce2".into(),
                     }
                 })?;
             bead.uncommitted_metadata.signature =
-                Signature::from_slice(&row.get::<Vec<u8>, _>("signature")).map_err(|_| {
+                Signature::from_slice(&row.get::<Vec<u8>, _>("signature")).map_err(|e| {
                     DBErrors::TupleAttributeParsingError {
-                        error: "Invalid signature bytes".into(),
+                        error: format!("Invalid signature bytes: {e}"),
                         attribute: "signature".into(),
                     }
                 })?;
@@ -467,10 +476,12 @@ pub async fn fetch_beads_in_batch(
                             attribute: "parent_timestamp".into(),
                         }
                     })?)
-                    .map_err(|_| DBErrors::TupleAttributeParsingError {
-                        error: "Invalid parent timestamp (MedianTimePast::from_u32 failed)".into(),
+                    .map_err(|e| DBErrors::TupleAttributeParsingError {
+                        error: format!(
+                            "Invalid parent timestamp (MedianTimePast::from_u32 failed): {e}"
+                        ),
                         attribute: "parent_timestamp".into(),
-                    })?,
+                    })?
                 );
             }
 
@@ -520,43 +531,57 @@ pub async fn fetch_bead_by_bead_hash(
                 })?
                 .to_string();
             let start_timestamp = MedianTimePast::from_u32(row.get::<u32, _>("start_timestamp"))
-                .map_err(|_| DBErrors::TupleAttributeParsingError {
-                    error: "Invalid start_timestamp (MedianTimePast::from_u32 failed)".into(),
+                .map_err(|e| DBErrors::TupleAttributeParsingError {
+                    error: format!(
+                        "Invalid start_timestamp (MedianTimePast::from_u32 failed): {e}"
+                    ),
                     attribute: "start_timestamp".into(),
                 })?;
 
             let pub_key =
-                PublicKey::from_slice(&row.get::<Vec<u8>, _>("comm_pub_key")).map_err(|_| {
+                PublicKey::from_slice(&row.get::<Vec<u8>, _>("comm_pub_key")).map_err(|e| {
                     DBErrors::TupleAttributeParsingError {
-                        error: "Invalid comm_pub_key".into(),
+                        error: format!("Invalid comm_pub_key: {e}"),
                         attribute: "comm_pub_key".into(),
                     }
                 })?;
             let min_target = CompactTarget::from_consensus(row.get::<u32, _>("min_target"));
             let weak_target = CompactTarget::from_consensus(row.get::<u32, _>("weak_target"));
             let miner_ip = row.get::<String, _>("miner_ip");
-            let extranonce_1 = u32::from_str_radix(&row.get::<String, _>("extranonce1"), 16)
-                .map_err(|_| DBErrors::TupleAttributeParsingError {
-                    error: "Invalid extranonce1".into(),
+            let extranonce1_str = row.get::<String, _>("extranonce1");
+            let extranonce_1 = u32::from_str_radix(&extranonce1_str, 16).map_err(|e| {
+                DBErrors::TupleAttributeParsingError {
+                    error: format!(
+                        "Invalid extranonce1 '{}': {}",
+                        extranonce1_str, e
+                    ),
                     attribute: "extranonce1".into(),
-                })?;
-            let extranonce_2 = u32::from_str_radix(&row.get::<String, _>("extranonce2"), 16)
-                .map_err(|_| DBErrors::TupleAttributeParsingError {
-                    error: "Invalid extranonce2".into(),
+                }
+            })?;
+            let extranonce2_str = row.get::<String, _>("extranonce2");
+            let extranonce_2 = u32::from_str_radix(&extranonce2_str, 16).map_err(|e| {
+                DBErrors::TupleAttributeParsingError {
+                    error: format!(
+                        "Invalid extranonce2 '{}': {}",
+                        extranonce2_str, e
+                    ),
                     attribute: "extranonce2".into(),
-                })?;
+                }
+            })?;
             let broadcast_timestamp = MedianTimePast::from_u32(
                 row.get::<u32, _>("broadcast_timestamp"),
             )
-            .map_err(|_| DBErrors::TupleAttributeParsingError {
-                error: "Invalid broadcast_timestamp (MedianTimePast::from_u32 failed)".into(),
-                attribute: "broadcast_timestamp".into(),
+            .map_err(|e| DBErrors::TupleAttributeParsingError {
+                error: format!(
+                    "Invalid broadcast_timestamp (MedianTimePast::from_u32 failed): {e}"
+                ),
+            attribute: "broadcast_timestamp".into(),
             })?;
 
             let signature =
-                Signature::from_slice(&row.get::<Vec<u8>, _>("signature")).map_err(|_| {
+                Signature::from_slice(&row.get::<Vec<u8>, _>("signature")).map_err(|e| {
                     DBErrors::TupleAttributeParsingError {
-                        error: "Invalid signature bytes".into(),
+                        error: format!("Invalid signature bytes: {e}"),
                         attribute: "signature".into(),
                     }
                 })?;
@@ -660,8 +685,11 @@ pub async fn fetch_bead_by_bead_hash(
                         attribute: "parent_timestamp".into(),
                     }
                 })?)
-                .map_err(|_| DBErrors::TupleAttributeParsingError {
-                    error: "Invalid parent timestamp (MedianTimePast::from_u32 failed)".into(),
+                .map_err(|e| DBErrors::TupleAttributeParsingError {
+                    error: format!(
+                        "Invalid parent timestamp (MedianTimePast::from_u32 failed): {}",
+                        e
+                    ),
                     attribute: "parent_timestamp".into(),
                 })?,
             );
