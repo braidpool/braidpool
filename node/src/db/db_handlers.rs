@@ -481,7 +481,7 @@ pub async fn fetch_beads_in_batch(
                             "Invalid parent timestamp (MedianTimePast::from_u32 failed): {e}"
                         ),
                         attribute: "parent_timestamp".into(),
-                    })?
+                    })?,
                 );
             }
 
@@ -551,20 +551,14 @@ pub async fn fetch_bead_by_bead_hash(
             let extranonce1_str = row.get::<String, _>("extranonce1");
             let extranonce_1 = u32::from_str_radix(&extranonce1_str, 16).map_err(|e| {
                 DBErrors::TupleAttributeParsingError {
-                    error: format!(
-                        "Invalid extranonce1 '{}': {}",
-                        extranonce1_str, e
-                    ),
+                    error: format!("Invalid extranonce1 '{}': {}", extranonce1_str, e),
                     attribute: "extranonce1".into(),
                 }
             })?;
             let extranonce2_str = row.get::<String, _>("extranonce2");
             let extranonce_2 = u32::from_str_radix(&extranonce2_str, 16).map_err(|e| {
                 DBErrors::TupleAttributeParsingError {
-                    error: format!(
-                        "Invalid extranonce2 '{}': {}",
-                        extranonce2_str, e
-                    ),
+                    error: format!("Invalid extranonce2 '{}': {}", extranonce2_str, e),
                     attribute: "extranonce2".into(),
                 }
             })?;
@@ -575,7 +569,7 @@ pub async fn fetch_bead_by_bead_hash(
                 error: format!(
                     "Invalid broadcast_timestamp (MedianTimePast::from_u32 failed): {e}"
                 ),
-            attribute: "broadcast_timestamp".into(),
+                attribute: "broadcast_timestamp".into(),
             })?;
 
             let signature =
