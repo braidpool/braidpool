@@ -18,7 +18,7 @@ Object.defineProperty(mockWebSocketConstructor, 'CLOSED', { value: 3 });
 global.WebSocket = mockWebSocketConstructor as any;
 
 jest.mock('../DashboardHeader', () => {
-  return function MockDashboardHeader({ activeTab, setActiveTab }: any) {
+  return function MockDashboardHeader({  setActiveTab }: any) {
     return (
       <div>
         <div>DashboardHeader</div>
@@ -30,15 +30,6 @@ jest.mock('../DashboardHeader', () => {
   };
 });
 
-jest.mock('../BeadRow', () => {
-  return function MockBeadRow({ bead, isExpanded, onToggle }: any) {
-    return (
-      <div onClick={onToggle} data-testid={`bead-row-${bead.id}`}>
-        BeadRow: {bead.id} {isExpanded ? 'expanded' : 'collapsed'}
-      </div>
-    );
-  };
-});
 
 jest.mock('../Trends/TrendsTab', () => {
   const MockTrendsTab = function MockTrendsTab() {

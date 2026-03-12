@@ -41,16 +41,7 @@ const Dashboard = () => {
             </Card>
           </div>
         );
-      case Page.DAG_VISUALIZATION:
-        return (
-          <div className="p-2">
-            <Card title="Braid Visualization">
-              <div>
-                <GraphVisualization />
-              </div>
-            </Card>
-          </div>
-        );
+      
       case Page.BITCOIN_STATS:
         return (
           <div className="p-2">

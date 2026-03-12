@@ -8,7 +8,13 @@ import {
   animateLinkDirection,
 } from './BraidPoolDAGUtils';
 import { WEBSOCKET_URLS } from '../../URLs';
-import { NODE_RADIUS, PADDING, COLORS } from './Constants';
+import {
+  NODE_RADIUS,
+  PADDING,
+  COLORS,
+  COLUMN_WIDTH,
+  VERTICAL_SPACING,
+} from './Constants';
 
 const GraphVisualization: React.FC = () => {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -18,8 +24,8 @@ const GraphVisualization: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState(true);
   const isPlayingRef = useRef(true);
   const width = window.innerWidth - 100;
-  const margin = { top: 0, right: 0, bottom: 0, left: 50 }; // Changed top from 50 to 100
-  const height = window.innerHeight - margin.top - margin.bottom;
+  const margin = { top: 0, right: 0, bottom: 0, left: 50 };
+  const [svgHeight, setSvgHeight] = useState(600); // Default height, will be updated based on content
   const [nodeIdMap, setNodeIdMap] = useState<NodeIdMapping>({});
   const [selectedCohorts, setSelectedCohorts] = useState<number | 'all'>(5);
   const nodeRadius = NODE_RADIUS;
@@ -312,8 +318,7 @@ const GraphVisualization: React.FC = () => {
     });
   };
 
-  // have not used it YET.. might come in handy in the future
-  const [_svgHeight, setSvgHeight] = useState(height);
+
 
   useEffect(() => {
     if (!svgRef.current || !graphData) return;
@@ -352,7 +357,7 @@ const GraphVisualization: React.FC = () => {
       .call(zoomBehavior.current)
       .call(
         zoomBehavior.current.transform,
-        zoomTransformRef.current ?? d3.zoomIdentity.scale(defaultZoom)
+        zoomTransformRef.current ?? d3.zoomIdentity.translate(0, 50).scale(defaultZoom)
       );
 
     const allNodes = Object.keys(graphData.parents).map((id) => ({
@@ -363,15 +368,24 @@ const GraphVisualization: React.FC = () => {
 
     const hwPath = graphData.highest_work_path;
     const cohorts = graphData.cohorts;
-    const positions = layoutNodes(allNodes, hwPath);
+    const positions = layoutNodes(
+      allNodes,
+      hwPath,
+      {},
+      {},
+      width,
+      margin,
+      COLUMN_WIDTH,
+      VERTICAL_SPACING
+    );
     const hwPathSet = new Set(hwPath);
 
     // Calculate required height based on node positions
     const allY = Object.values(positions).map((pos) => pos.y);
-    // const minY = Math.min(...allY);
-    // const maxY = Math.max(...allY);
-    const padding = PADDING; // Additional padding
-    const dynamicHeight = height / 2 + margin.top + margin.bottom + padding;
+    const minY = Math.min(...allY);
+    const maxY = Math.max(...allY);
+    const padding = PADDING * 2; // Additional padding top and bottom
+    const dynamicHeight = maxY - minY + padding;
     setSvgHeight(dynamicHeight);
 
     // making old nodes invisible
@@ -494,7 +508,7 @@ const GraphVisualization: React.FC = () => {
           ? '#FF8500'
           : '#48CAE4'
       )
-      .attr('stroke-width', 1.5)
+      .attr('stroke-width', 1)
       .attr('marker-end', (d) =>
         hwPathSet.has(d.source) && hwPathSet.has(d.target)
           ? 'url(#arrow-orange)'
@@ -578,7 +592,7 @@ const GraphVisualization: React.FC = () => {
       .attr('text-anchor', 'middle')
       .text((d) => `${d.id.slice(-4)}`)
       .attr('fill', '#fff')
-      .style('font-size', 25)
+      .style('font-size', 40)
       .on('mouseover', function (event: MouseEvent, d: GraphNode) {
         const cohortIndex = cohortMap.get(d.id);
         const isHWP = hwPathSet.has(d.id);
@@ -672,7 +686,7 @@ const GraphVisualization: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen p-2 bg-gray">
+    <div className="h-auto p-2 ">
       <div className="m-2 relative flex gap-2 items-center">
         <select
           value={selectedCohorts}
@@ -717,16 +731,16 @@ const GraphVisualization: React.FC = () => {
         </div>
       </div>
 
-      <div className="m-2 relative">
-        <div className="border border-[#FF8500] rounded-lg bg-gray shadow-lg">
-          <svg ref={svgRef} width={width} height={height} />
+      <div className="m-2 relative   ">
+        <div className="border border-[#FF8500] rounded-lg h-[400px] shadow-lg overflow-hidden ">
+          <svg ref={svgRef} width={width} height={svgHeight} className="block" />
           <div
             ref={tooltipRef}
             className="fixed bg-[#0077B6] text-white border border-[#FF8500] rounded p-2 shadow-lg pointer-events-none z-10 bottom-5 right-5"
           ></div>
         </div>
       </div>
-
+ <div>
       <div className="m-2 border border-[#0077B6] rounded-lg bg-gray shadow-lg p-4">
         <h3 className="text-xl font-semibold text-[#FF8500] mb-4">Metrics</h3>
         <div className="flex flex-col gap-2">
@@ -745,6 +759,7 @@ const GraphVisualization: React.FC = () => {
           <div className="font-medium text-[#0077B6]">
             HWP Length:{' '}
             <span className="font-normal text-[#FF8500]">{hwpLength}</span>
+          </div>
           </div>
         </div>
       </div>
