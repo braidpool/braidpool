@@ -18,7 +18,7 @@ export function layoutNodes(
 ): Record<string, Position> {
   const positions: Record<string, Position> = {};
   const hwPathSet = new Set(hwPath);
-  const centerY = margin.top + 500;
+  const centerY = margin.top + 600;
   const allParents: Record<string, Set<string>> = {};
   const allChildren: Record<string, Set<string>> = {};
   const workValues: Record<string, number> = {};

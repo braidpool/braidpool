@@ -54,6 +54,9 @@ const GraphVisualization: React.FC = () => {
   );
   const zoomTransformRef = useRef<d3.ZoomTransform | null>(null);
 
+  const [consecutiveZoomInCount, setConsecutiveZoomInCount] = useState(0);
+  const [consecutiveZoomOutCount, setConsecutiveZoomOutCount] = useState(0);
+
   useEffect(() => {
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
@@ -300,22 +303,37 @@ const GraphVisualization: React.FC = () => {
     const nextZoom = 0.3;
     setDefaultZoom(nextZoom);
     zoomTransformRef.current = buildZoomTransform(nextZoom);
+  
+    setConsecutiveZoomInCount(0);
+    setConsecutiveZoomOutCount(0);
   };
 
   const handleZoomIn = () => {
+    if (consecutiveZoomInCount >= 3) {
+      return; 
+    }
+    
     setDefaultZoom((prevZoom) => {
-      const nextZoom = Math.min(prevZoom + 0.1, 5);
+      const nextZoom = prevZoom + 0.1;
       zoomTransformRef.current = buildZoomTransform(nextZoom);
       return nextZoom;
     });
+    setConsecutiveZoomInCount(prev => prev + 1);
+    setConsecutiveZoomOutCount(0);
   };
 
   const handleZoomOut = () => {
+    if (consecutiveZoomOutCount >= 3) {
+      return; 
+    }
+    
     setDefaultZoom((prevZoom) => {
-      const nextZoom = Math.max(prevZoom - 0.1, 0.3);
+      const nextZoom = Math.max(prevZoom - 0.1, 0.1); 
       zoomTransformRef.current = buildZoomTransform(nextZoom);
       return nextZoom;
     });
+    setConsecutiveZoomOutCount(prev => prev + 1);
+    setConsecutiveZoomInCount(0);
   };
 
 
@@ -686,8 +704,12 @@ const GraphVisualization: React.FC = () => {
   }
 
   return (
-    <div className="h-auto p-2 ">
-      <div className="m-2 relative flex gap-2 items-center">
+    <div >
+     
+
+      <div  >
+        <div className="border h-[650px] border-blue-400 backdrop-blur overflow-hidden" >
+           <div className="m-2 relative flex gap-2 items-center">
         <select
           value={selectedCohorts}
           onChange={(e) => {
@@ -706,13 +728,25 @@ const GraphVisualization: React.FC = () => {
         <div className="flex gap-1 ml-auto">
           <button
             onClick={handleZoomIn}
-            className="bg-[#0077B6] text-white px-3 py-1 rounded hover:bg-[#005691] transition-colors min-w-[30px]"
+            disabled={consecutiveZoomInCount >= 3}
+            className={`px-3 py-1 rounded transition-colors min-w-[30px] ${
+              consecutiveZoomInCount >= 3
+                ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                : 'bg-[#0077B6] text-white hover:bg-[#005691]'
+            }`}
+            title={consecutiveZoomInCount >= 3 ? 'Zoom out to enable zoom in' : 'Zoom in'}
           >
             +
           </button>
           <button
             onClick={handleZoomOut}
-            className="bg-[#0077B6] text-white px-3 py-1 rounded hover:bg-[#005691] transition-colors min-w-[30px]"
+            disabled={consecutiveZoomOutCount >= 3}
+            className={`px-3 py-1 rounded transition-colors min-w-[30px] ${
+              consecutiveZoomOutCount >= 3
+                ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                : 'bg-[#0077B6] text-white hover:bg-[#005691]'
+            }`}
+            title={consecutiveZoomOutCount >= 3 ? 'Zoom in to enable zoom out' : 'Zoom out'}
           >
             -
           </button>
@@ -730,9 +764,6 @@ const GraphVisualization: React.FC = () => {
           </button>
         </div>
       </div>
-
-      <div className="m-2 relative   ">
-        <div className="border border-[#FF8500] rounded-lg h-[400px] shadow-lg overflow-hidden ">
           <svg ref={svgRef} width={width} height={svgHeight} className="block" />
           <div
             ref={tooltipRef}
