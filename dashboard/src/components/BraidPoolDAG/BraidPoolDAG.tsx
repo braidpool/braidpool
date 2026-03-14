@@ -26,7 +26,7 @@ const GraphVisualization: React.FC = () => {
   const isPlayingRef = useRef(true);
   const width = window.innerWidth - 100;
   const margin = { top: 0, right: 0, bottom: 0, left: 50 };
-  const [svgHeight, setSvgHeight] = useState(600); // Default height, will be updated based on content
+  const [svgHeight, setSvgHeight] = useState(600);
   const [nodeIdMap, setNodeIdMap] = useState<NodeIdMapping>({});
   const [selectedCohorts, setSelectedCohorts] = useState<number | 'all'>(5);
   const nodeRadius = NODE_RADIUS;
@@ -387,7 +387,8 @@ const GraphVisualization: React.FC = () => {
     const filteredCohorts = graphData.cohorts.slice(-selectedCohorts);
     const filteredCohortNodes = new Set(filteredCohorts.flat());
 
-    const tooltip = d3.select(tooltipRef.current);
+    const tooltip = d3.select(tooltipRef.current)
+     .style('visibility', 'hidden')
 
     const svg = d3.select(svgRef.current);
     svg.selectAll('*').remove();

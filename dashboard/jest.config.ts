@@ -11,7 +11,9 @@ const config: JestConfigWithTsJest = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
-  transformIgnorePatterns: ['/node_modules/', 'node_modules/(?!(d3.*)/)'],
+  transformIgnorePatterns: [
+    '/node_modules/(?!(d3|d3-.*|internmap|delaunator|robust-predicates)/)',
+  ],
   setupFilesAfterEnv: ['<rootDir>/setupTests.ts'],
 };
 
