@@ -876,7 +876,6 @@ const GraphVisualization: React.FC = () => {
           ></div>
         </div>
       </div>
-      <div></div>
       {/*  Beads Table */}
       <div className="m-2 border border-gray-600 backdrop-blur-2xl  rounded-lg  shadow-lg ">
         <div className="p-4 ">
