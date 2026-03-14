@@ -20,3 +20,14 @@ export interface Position {
   x: number;
   y: number;
 }
+
+export  interface BeadRecord {
+    hash: string;
+    parentHashes: string[];
+    parentCount: number;
+    childHashes: string[];
+    childCount: number;
+    isHWP: boolean;
+    timestamp: string;
+    cohortIndex: number;
+  }
