@@ -41,7 +41,7 @@ const Dashboard = () => {
             </Card>
           </div>
         );
-      
+
       case Page.BITCOIN_STATS:
         return (
           <div className="p-2">

@@ -24,10 +24,8 @@ const NAV_ITEMS = [
     page: Page.MINING_INVENTORY,
     icon: <Package size={18} />,
   },
-  { label: 'Mempool', 
-    page: Page.MEMPOOL, 
-    icon: <Layers size={18} /> },
-  
+  { label: 'Mempool', page: Page.MEMPOOL, icon: <Layers size={18} /> },
+
   {
     label: 'Bitcoin Statistics',
     page: Page.BITCOIN_STATS,

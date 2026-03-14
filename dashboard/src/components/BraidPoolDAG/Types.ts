@@ -21,13 +21,13 @@ export interface Position {
   y: number;
 }
 
-export  interface BeadRecord {
-    hash: string;
-    parentHashes: string[];
-    parentCount: number;
-    childHashes: string[];
-    childCount: number;
-    isHWP: boolean;
-    timestamp: string;
-    cohortIndex: number;
-  }
+export interface BeadRecord {
+  hash: string;
+  parentHashes: string[];
+  parentCount: number;
+  childHashes: string[];
+  childCount: number;
+  isHWP: boolean;
+  timestamp: string;
+  cohortIndex: number;
+}

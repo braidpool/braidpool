@@ -1,13 +1,12 @@
-import { useState} from 'react';
+import { useState } from 'react';
 import DashboardHeader from './DashboardHeader';
 import { TrendsTab } from './Trends/TrendsTab';
 import { RewardsDashboard } from './Reward/RewardsDashboard';
 import { DEFAULT_TIME_RANGE } from './Constants';
 import { PoolDominance } from './PoolDominance/PoolDominance';
-import  GraphVisualization from '../BraidPoolDAG/BraidPoolDAG'
+import GraphVisualization from '../BraidPoolDAG/BraidPoolDAG';
 
 export default function MinedSharesExplorer() {
-  
   const [activeTab, setActiveTab] = useState('beads');
   const timeRange = DEFAULT_TIME_RANGE;
   return (
@@ -17,8 +16,8 @@ export default function MinedSharesExplorer() {
         <div className="relative">
           {activeTab === 'beads' && (
             <div className="space-y-8">
-              <GraphVisualization />         
-              </div>     
+              <GraphVisualization />
+            </div>
           )}
 
           <div style={{ display: activeTab === 'trends' ? 'block' : 'none' }}>

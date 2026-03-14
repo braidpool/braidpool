@@ -18,7 +18,7 @@ Object.defineProperty(mockWebSocketConstructor, 'CLOSED', { value: 3 });
 global.WebSocket = mockWebSocketConstructor as any;
 
 jest.mock('../DashboardHeader', () => {
-  return function MockDashboardHeader({  setActiveTab }: any) {
+  return function MockDashboardHeader({ setActiveTab }: any) {
     return (
       <div>
         <div>DashboardHeader</div>
@@ -29,7 +29,6 @@ jest.mock('../DashboardHeader', () => {
     );
   };
 });
-
 
 jest.mock('../Trends/TrendsTab', () => {
   const MockTrendsTab = function MockTrendsTab() {
