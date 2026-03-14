@@ -387,8 +387,7 @@ const GraphVisualization: React.FC = () => {
     const filteredCohorts = graphData.cohorts.slice(-selectedCohorts);
     const filteredCohortNodes = new Set(filteredCohorts.flat());
 
-    const tooltip = d3.select(tooltipRef.current)
-     .style('visibility', 'hidden')
+    const tooltip = d3.select(tooltipRef.current).style('visibility', 'hidden');
 
     const svg = d3.select(svgRef.current);
     svg.selectAll('*').remove();
