@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import * as d3 from 'd3';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
@@ -8,6 +8,17 @@ import '../../App.css';
 import Button from '@mui/material/Button';
 import { CircularProgress } from '@mui/material';
 
+type AnimationSpeed = 'slow' | 'normal' | 'fast';
+
+const SPEED_PRESETS: Record<
+  AnimationSpeed,
+  { transitionMs: number; throttleMs: number }
+> = {
+  slow: { transitionMs: 2000, throttleMs: 3000 },
+  normal: { transitionMs: 1000, throttleMs: 1000 },
+  fast: { transitionMs: 300, throttleMs: 500 },
+};
+
 interface GraphNode {
   id: string;
   parents: string[];
@@ -15,7 +26,7 @@ interface GraphNode {
 }
 
 interface NodeIdMapping {
-  [hash: string]: string; // maps hash to sequential ID
+  [hash: string]: string;
 }
 
 var COLORS = [
@@ -47,6 +58,17 @@ const GraphVisualization: React.FC = () => {
 
   const [nodeIdMap, setNodeIdMap] = useState<NodeIdMapping>({});
   const [selectedCohorts, setSelectedCohorts] = useState<number | 'all'>(10);
+  const [animationSpeed, setAnimationSpeed] = useState<AnimationSpeed>('normal');
+  const [paused, setPaused] = useState(false);
+
+  const latestMessageRef = useRef<string | null>(null);
+  const throttleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pausedRef = useRef(paused);
+  const transitionMsRef = useRef(SPEED_PRESETS.normal.transitionMs);
+  const pendingAnimationRef = useRef<{
+    first: string[];
+    last: string[];
+  } | null>(null);
 
   const nodeRadius = 30;
   const margin = { top: 0, right: 0, bottom: 0, left: 50 };
@@ -189,6 +211,95 @@ const GraphVisualization: React.FC = () => {
   );
 
   useEffect(() => {
+    pausedRef.current = paused;
+  }, [paused]);
+
+  useEffect(() => {
+    transitionMsRef.current = SPEED_PRESETS[animationSpeed].transitionMs;
+  }, [animationSpeed]);
+
+  const processMessage = useCallback((rawData: string) => {
+    try {
+      const parsed = JSON.parse(rawData);
+      const parsedData = parsed.data;
+
+      if (!parsedData?.parents || typeof parsedData.parents !== 'object') return;
+
+      const children: Record<string, string[]> = {};
+      Object.entries(parsedData.parents).forEach(([nodeId, parents]) => {
+        (parents as string[]).forEach((parentId) => {
+          if (!children[parentId]) children[parentId] = [];
+          children[parentId].push(nodeId);
+        });
+      });
+
+      const bead_count = Object.keys(parsedData.parents).length;
+
+      const newGraphData: GraphData = {
+        highest_work_path: parsedData.highest_work_path,
+        parents: parsedData.parents,
+        cohorts: parsedData.cohorts,
+        children,
+        bead_count,
+      };
+
+      const firstCohortChanged =
+        parsedData?.cohorts?.[0]?.length &&
+        JSON.stringify(prevFirstCohortRef.current) !==
+          JSON.stringify(parsedData.cohorts[0]);
+
+      const lastCohortChanged =
+        parsedData?.cohorts?.length > 0 &&
+        JSON.stringify(prevLastCohortRef.current) !==
+          JSON.stringify(parsedData.cohorts[parsedData.cohorts.length - 1]);
+
+      if (firstCohortChanged) {
+        const top = COLORS.shift();
+        COLORS.push(top ?? `rgba(${217}, ${95}, ${2}, 1)`);
+        prevFirstCohortRef.current = parsedData.cohorts[0];
+      }
+
+      if (lastCohortChanged) {
+        prevLastCohortRef.current =
+          parsedData.cohorts[parsedData.cohorts.length - 1];
+      }
+
+      const newMapping: NodeIdMapping = {};
+      let nextId = 1;
+      Object.keys(parsedData.parents).forEach((hash) => {
+        if (!newMapping[hash]) {
+          newMapping[hash] = nextId.toString();
+          nextId++;
+        }
+      });
+
+      if (firstCohortChanged || lastCohortChanged) {
+        pendingAnimationRef.current = {
+          first: firstCohortChanged ? parsedData.cohorts[0] : [],
+          last: lastCohortChanged
+            ? parsedData.cohorts[parsedData.cohorts.length - 1]
+            : [],
+        };
+      }
+
+      setNodeIdMap(newMapping);
+      setGraphData(newGraphData);
+      setTotalBeads(bead_count);
+      setTotalCohorts(parsedData.cohorts.length);
+      setMaxCohortSize(
+        Math.max(...parsedData.cohorts.map((c: string | any[]) => c.length))
+      );
+      setHwpLength(parsedData.highest_work_path.length);
+      setLoading(false);
+    } catch (err) {
+      setError('Error processing graph data');
+      console.error('Error processing graph data:', err);
+      setLoading(false);
+    }
+  }, []);
+
+  // WebSocket — buffer messages, don't process directly
+  useEffect(() => {
     const url = 'ws://localhost:65433/';
     const socket = new WebSocket(url);
 
@@ -196,186 +307,83 @@ const GraphVisualization: React.FC = () => {
       console.log('Connected to WebSocket', url);
       setConnectionStatus('Connected');
     };
-
-    socket.onclose = () => {
-      setConnectionStatus('Disconnected');
-    };
-
-    socket.onerror = (err) => {
-      setConnectionStatus(`Error: ${err}`);
-    };
-
+    socket.onclose = () => setConnectionStatus('Disconnected');
+    socket.onerror = (err) => setConnectionStatus(`Error: ${err}`);
     socket.onmessage = (event) => {
-      try {
-        const parsed = JSON.parse(event.data);
-        const parsedData = parsed.data;
-
-        if (!parsedData?.parents || typeof parsedData.parents !== 'object') {
-          console.warn("Invalid 'parents' field in parsedData:", parsedData);
-          return;
-        }
-
-        const children: Record<string, string[]> = {};
-        if (parsedData?.parents && typeof parsedData.parents === 'object') {
-          Object.entries(parsedData.parents).forEach(([nodeId, parents]) => {
-            (parents as string[]).forEach((parentId) => {
-              if (!children[parentId]) {
-                children[parentId] = [];
-              }
-              children[parentId].push(nodeId);
-            });
-          });
-        }
-
-        const bead_count =
-          parsedData?.parents && typeof parsedData.parents === 'object'
-            ? Object.keys(parsedData.parents).length
-            : 0;
-
-        const graphData: GraphData = {
-          highest_work_path: parsedData.highest_work_path,
-          parents: parsedData.parents,
-          cohorts: parsedData.cohorts,
-          children,
-          bead_count,
-        };
-
-        const firstCohortChanged =
-          parsedData?.cohorts?.[0]?.length &&
-          JSON.stringify(prevFirstCohortRef.current) !==
-            JSON.stringify(parsedData.cohorts[0]);
-
-        const lastCohortChanged =
-          parsedData?.cohorts?.length > 0 &&
-          JSON.stringify(prevLastCohortRef.current) !==
-            JSON.stringify(parsedData.cohorts[parsedData.cohorts.length - 1]);
-
-        if (firstCohortChanged) {
-          const top = COLORS.shift();
-          COLORS.push(top ?? `rgba(${217}, ${95}, ${2}, 1)`);
-          prevFirstCohortRef.current = parsedData.cohorts[0];
-        }
-
-        if (lastCohortChanged) {
-          prevLastCohortRef.current =
-            parsedData.cohorts[parsedData.cohorts.length - 1];
-        }
-
-        const newMapping: NodeIdMapping = {};
-        let nextId = 1;
-        Object.keys(parsedData.parents).forEach((hash) => {
-          if (!newMapping[hash]) {
-            newMapping[hash] = nextId.toString();
-            nextId++;
-          }
-        });
-
-        setNodeIdMap(newMapping);
-        setGraphData(graphData);
-        setTotalBeads(bead_count);
-        setTotalCohorts(parsedData.cohorts.length);
-        setMaxCohortSize(
-          Math.max(...parsedData.cohorts.map((c: string | any[]) => c.length))
-        );
-        setHwpLength(parsedData.highest_work_path.length);
-        setLoading(false);
-
-        // Trigger animation if cohorts changed
-        if (firstCohortChanged || lastCohortChanged) {
-          setTimeout(() => {
-            animateCohorts(
-              firstCohortChanged ? parsedData.cohorts[0] : [],
-              lastCohortChanged
-                ? parsedData.cohorts[parsedData.cohorts.length - 1]
-                : []
-            );
-          }, 100);
-        }
-      } catch (err) {
-        setError('Error processing graph data: ');
-        console.error('Error processing graph data:', err);
-        setLoading(false);
-      }
+      latestMessageRef.current = event.data;
     };
 
     return () => socket.close();
   }, []);
 
-  const animateCohorts = (firstCohort: string[], lastCohort: string[]) => {
-    if (!svgRef.current) return;
+  // Throttle: process buffered messages at the configured rate
+  useEffect(() => {
+    if (throttleTimerRef.current) clearInterval(throttleTimerRef.current);
 
-    const svg = d3.select(svgRef.current);
+    const { throttleMs } = SPEED_PRESETS[animationSpeed];
 
-    // Animate first cohort nodes
-    if (firstCohort.length > 0) {
-      svg
-        .selectAll('.node')
-        .filter((d: any) => firstCohort.includes(d.id))
-        .select('circle')
-        .attr('stroke', '#FF8500')
-        .attr('stroke-width', 3)
-        .transition()
-        .duration(1000)
-        .attr('stroke-width', 2)
-        .attr('stroke', '#fff');
-    }
+    throttleTimerRef.current = setInterval(() => {
+      if (pausedRef.current || !latestMessageRef.current) return;
+      processMessage(latestMessageRef.current);
+      latestMessageRef.current = null;
+    }, throttleMs);
 
-    // Animate last cohort nodes
-    if (lastCohort.length > 0) {
-      svg
-        .selectAll('.node')
-        .filter((d: any) => lastCohort.includes(d.id))
-        .select('circle')
-        .attr('stroke', '#FF8500')
-        .attr('stroke-width', 3)
-        .transition()
-        .duration(1000)
-        .attr('stroke-width', 2)
-        .attr('stroke', '#fff');
-    }
+    return () => {
+      if (throttleTimerRef.current) clearInterval(throttleTimerRef.current);
+    };
+  }, [animationSpeed, processMessage]);
 
-    // Animate links connected to first cohort
-    if (firstCohort.length > 0) {
-      svg
-        .selectAll('.link')
-        .filter(
-          (d: any) =>
-            firstCohort.includes(d.source) || firstCohort.includes(d.target)
-        )
-        .attr('stroke-width', 3)
-        .attr('stroke', '#FF8500')
-        .transition()
-        .duration(1000)
-        .attr('stroke-width', 1.5)
-        .attr('stroke', (d: any) =>
-          graphData?.highest_work_path.includes(d.source) &&
-          graphData?.highest_work_path.includes(d.target)
-            ? '#FF8500'
-            : '#48CAE4'
-        );
-    }
+  const animateCohorts = useCallback(
+    (
+      firstCohort: string[],
+      lastCohort: string[],
+      hwp: string[]
+    ) => {
+      if (!svgRef.current) return;
+      const svg = d3.select(svgRef.current);
+      const duration = transitionMsRef.current;
 
-    // Animate links connected to last cohort
-    if (lastCohort.length > 0) {
-      svg
-        .selectAll('.link')
-        .filter(
-          (d: any) =>
-            lastCohort.includes(d.source) || lastCohort.includes(d.target)
-        )
-        .attr('stroke-width', 3)
-        .attr('stroke', '#FF8500')
-        .transition()
-        .duration(1000)
-        .attr('stroke-width', 1.5)
-        .attr('stroke', (d: any) =>
-          graphData?.highest_work_path.includes(d.source) &&
-          graphData?.highest_work_path.includes(d.target)
-            ? '#FF8500'
-            : '#48CAE4'
-        );
-    }
-  };
+      const animateNodes = (cohort: string[]) => {
+        if (cohort.length === 0) return;
+        svg
+          .selectAll('.node')
+          .filter((d: any) => cohort.includes(d.id))
+          .select('circle')
+          .attr('stroke', '#FF8500')
+          .attr('stroke-width', 3)
+          .transition()
+          .duration(duration)
+          .attr('stroke-width', 2)
+          .attr('stroke', '#fff');
+      };
+
+      const animateLinks = (cohort: string[]) => {
+        if (cohort.length === 0) return;
+        svg
+          .selectAll('.link')
+          .filter(
+            (d: any) =>
+              cohort.includes(d.source) || cohort.includes(d.target)
+          )
+          .attr('stroke-width', 3)
+          .attr('stroke', '#FF8500')
+          .transition()
+          .duration(duration)
+          .attr('stroke-width', 1.5)
+          .attr('stroke', (d: any) =>
+            hwp.includes(d.source) && hwp.includes(d.target)
+              ? '#FF8500'
+              : '#48CAE4'
+          );
+      };
+
+      animateNodes(firstCohort);
+      animateNodes(lastCohort);
+      animateLinks(firstCohort);
+      animateLinks(lastCohort);
+    },
+    []
+  );
   const handleResetZoom = () => {
     setDefaultZoom(0.3);
   };
@@ -655,7 +663,14 @@ const GraphVisualization: React.FC = () => {
           ? 'inline'
           : 'none'
       );
-  }, [graphData, defaultZoom, selectedCohorts]);
+
+    // Animate on freshly rendered elements
+    if (pendingAnimationRef.current) {
+      const { first, last } = pendingAnimationRef.current;
+      pendingAnimationRef.current = null;
+      animateCohorts(first, last, hwPath);
+    }
+  }, [graphData, defaultZoom, selectedCohorts, animateCohorts]);
 
   if (loading) {
     return (
@@ -719,7 +734,36 @@ const GraphVisualization: React.FC = () => {
           ))}
         </select>
 
-        {/* Zoom Controls */}
+        <select
+          value={animationSpeed}
+          onChange={(e) =>
+            setAnimationSpeed(e.target.value as AnimationSpeed)
+          }
+          style={{
+            padding: '5px',
+            borderRadius: '4px',
+            border: '1px solid #0077B6',
+            backgroundColor: 'white',
+            color: '#0077B6',
+          }}
+        >
+          <option value="slow">Slow</option>
+          <option value="normal">Normal</option>
+          <option value="fast">Fast</option>
+        </select>
+
+        <Button
+          variant="contained"
+          onClick={() => setPaused((p) => !p)}
+          style={{
+            backgroundColor: paused ? '#FF8500' : '#0077B6',
+            color: 'white',
+            minWidth: '70px',
+          }}
+        >
+          {paused ? 'Play' : 'Pause'}
+        </Button>
+
         <div style={{ display: 'flex', gap: '5px', marginLeft: 'auto' }}>
           <Button
             variant="contained"
