@@ -1,4 +1,5 @@
 use libp2p::PeerId;
+use serde_json::json;
 use std::collections::{HashMap, HashSet};
 use std::net::IpAddr;
 use std::time::{Duration, Instant};
@@ -25,7 +26,7 @@ pub struct PeerInfo {
     /// Whether the peer is currently connected
     pub connected: bool,
     /// The peer's IP address
-    ip_addr: Option<IpAddr>,
+    pub ip_addr: Option<IpAddr>,
 }
 
 impl PeerInfo {
@@ -256,6 +257,57 @@ impl PeerManager {
     /// Get the number of connected peers
     pub fn num_connected_peers(&self) -> usize {
         self.connected_peers.len()
+    }
+
+    /// Get peer information as JSON value for RPC responses
+    pub fn get_peers_json(&self) -> serde_json::Value {
+        let total_peers = self.peers.len();
+        let mut avg_latency_ms = 0.0;
+        let mut latency_count = 0;
+        let mut geo_groups = HashSet::new();
+        let mut inbound_count = 0;
+        let now = Instant::now();
+        let mut peers_json_array: Vec<serde_json::Value> = Vec::new();
+
+        for info in self.peers.values().filter(|p| p.connected) {
+            if info.inbound {
+                inbound_count += 1;
+            }
+            if let Some(latency) = info.latency {
+                avg_latency_ms += latency.as_millis() as f64;
+                latency_count += 1;
+            }
+            if let Some(group) = &info.geo_group {
+                geo_groups.insert(group.clone());
+            }
+
+            let last_seen_secs = now.duration_since(info.last_message_time).as_secs();
+            peers_json_array.push(json!({
+                "peer_id": info.peer_id.to_base58(),
+                "ip": info.ip_addr.map(|ip| ip.to_string()),
+                "inbound": info.inbound,
+                "latency_ms": info.latency.map(|l| l.as_millis() as f64),
+                "score": info.score,
+                "last_seen_secs": last_seen_secs,
+                "geo_group": info.geo_group,
+            }));
+        }
+
+        if latency_count > 0 {
+            avg_latency_ms /= latency_count as f64;
+        }
+
+        let connected = peers_json_array.len();
+
+        json!({
+            "total_peers": total_peers,
+            "connected": connected,
+            "inbound": inbound_count,
+            "outbound": connected - inbound_count,
+            "network_groups": geo_groups.len(),
+            "avg_latency_ms": avg_latency_ms,
+            "peers": peers_json_array,
+        })
     }
 
     /// Get a summary of peer statistics

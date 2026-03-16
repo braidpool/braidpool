@@ -48,7 +48,7 @@ const MinerInventoryDashboard = () => {
   const fetchMinerData = async (ip: string): Promise<Miner | null> => {
     try {
       const response = await fetch(
-        `${API_URLS.MINER_DEVICE_URL}/api/miners?ip=${ip}`,
+        `${API_URLS.MINER_DEVICE_URL}/api/miners/live?ip=${ip}`,
         {
           headers: { Accept: 'application/json' },
         }

@@ -35,7 +35,8 @@ sqlx = { workspace = true}
 strum = { workspace = true }
 if-addrs = { workspace = true }
 anyhow = { workspace = true }
+reqwest = { workspace = true }
 
 
 [build-dependencies]
-capnpc = "0.21.4"
+capnpc = "0.24.0"

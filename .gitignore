@@ -24,3 +24,4 @@ venv
 .aider*
 .reviews/
 .worktrees/
+deny.toml
