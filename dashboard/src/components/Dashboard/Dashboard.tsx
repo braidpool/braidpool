@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
+import { Menu } from 'lucide-react';
 import Card from '../common/Card';
 import Header from '../common/Header';
 import MinerInventoryDashboard from '../MinerInventory/MinerInventoryDashboard';
@@ -14,23 +15,7 @@ import { TABS } from '../BeadsTab/lib/Constants';
 const Dashboard = () => {
   const [currentPage, setCurrentPage] = useState<Page>(Page.DASHBOARD);
   const [activeTab, setActiveTab] = useState('beads');
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsDropdownOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Render the main content based on selected page
   const renderPage = () => {
@@ -86,58 +71,17 @@ const Dashboard = () => {
             <Card
               title="Beads Explorer"
               headerExtra={
-                <div className="relative">
-                  <label htmlFor="beads-explorer-tabs" className="sr-only">
-                    Select a beads view
-                  </label>
-
-                  <div
-                    className="relative block sm:hidden w-full"
-                    ref={dropdownRef}
+                <div className="sm:hidden flex items-center justify-end gap-2">
+                  <span className="text-sm text-gray-400">
+                    {TABS.find((t) => t.id === activeTab)?.label}
+                  </span>
+                  <button
+                    onClick={() => setIsSidebarOpen(true)}
+                    className="p-2 rounded-md border border-gray-700 bg-gray-800/60 text-gray-300 hover:text-white hover:bg-gray-800 transition-colors"
+                    aria-label="Open navigation"
                   >
-                    <button
-                      type="button"
-                      className="flex w-full items-center justify-between rounded-lg border border-gray-700 bg-gray-800 py-2.5 px-4 text-base text-white shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                    >
-                      <span>{TABS.find((t) => t.id === activeTab)?.label}</span>
-                      <svg
-                        className={`ml-2 h-4 w-4 transition-transform ${
-                          isDropdownOpen ? 'rotate-180' : ''
-                        }`}
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M19 9l-7 7-7-7"
-                        />
-                      </svg>
-                    </button>
-
-                    {isDropdownOpen && (
-                      <div className="absolute right-0 top-full mt-2 w-full overflow-hidden rounded-lg border border-gray-700 bg-gray-800 shadow-xl z-50">
-                        {TABS.filter((tab) => tab.id !== activeTab).map(
-                          (tab) => (
-                            <button
-                              key={tab.id}
-                              className="block w-full text-left px-4 py-3 text-base text-white hover:bg-gray-700 transition-colors"
-                              onClick={() => {
-                                setActiveTab(tab.id);
-                                setIsDropdownOpen(false);
-                              }}
-                            >
-                              {tab.label}
-                            </button>
-                          )
-                        )}
-                      </div>
-                    )}
-                  </div>
+                    <Menu size={18} />
+                  </button>
                 </div>
               }
             >
@@ -145,6 +89,8 @@ const Dashboard = () => {
                 <MinedSharesExplorer
                   activeTab={activeTab}
                   setActiveTab={setActiveTab}
+                  isSidebarOpen={isSidebarOpen}
+                  setIsSidebarOpen={setIsSidebarOpen}
                 />
               </div>
             </Card>
