@@ -10,6 +10,14 @@ struct Cli {
     #[arg(long, default_value = "http://127.0.0.1:6682")]
     rpc_url: String,
 
+    /// RPC basic auth username (optional)
+    #[arg(long)]
+    rpc_user: Option<String>,
+
+    /// RPC basic auth password (optional)
+    #[arg(long)]
+    rpc_pass: Option<String>,
+
     #[command(subcommand)]
     commands: Commands,
 }
@@ -219,6 +227,8 @@ impl std::error::Error for RpcCallError {
 async fn call_rpc(
     client: &reqwest::Client,
     rpc_url: &str,
+    rpc_user: Option<&str>,
+    rpc_pass: Option<&str>,
     method: &str,
     params: serde_json::Value,
 ) -> Result<serde_json::Value, RpcCallError> {
@@ -229,9 +239,12 @@ async fn call_rpc(
         id: 1,
     };
 
-    let res = client
-        .post(rpc_url)
-        .json(&rpc_request)
+    let mut request_builder = client.post(rpc_url).json(&rpc_request);
+    if let Some(username) = rpc_user {
+        request_builder = request_builder.basic_auth(username, rpc_pass);
+    }
+
+    let res = request_builder
         .send()
         .await
         .map_err(|e| RpcCallError::HttpError(e.to_string()))?;
@@ -327,7 +340,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    match call_rpc(&client, &cli.rpc_url, method, params).await {
+    match call_rpc(
+        &client,
+        &cli.rpc_url,
+        cli.rpc_user.as_deref(),
+        cli.rpc_pass.as_deref(),
+        method,
+        params,
+    )
+    .await
+    {
         Ok(result) => {
             let pretty_response = serde_json::to_string_pretty(&result).map_err(|e| {
                 Box::new(std::io::Error::new(
