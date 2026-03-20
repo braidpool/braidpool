@@ -8,6 +8,7 @@ use crate::peer_manager::PeerManager;
 use crate::stratum;
 use crate::stratum::BlockTemplate;
 use crate::utils::BeadHash;
+use base64::Engine;
 use bitcoin::block::HeaderExt;
 use bitcoin::Transaction;
 use futures::lock::Mutex;
@@ -23,7 +24,6 @@ use jsonrpsee::server::{HttpBody, HttpRequest, HttpResponse};
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Request;
 use jsonrpsee::ConnectionId;
-use base64::Engine;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use serde_json::Value;
@@ -305,7 +305,8 @@ where
 {
     type Response = S::Response;
     type Error = BoxError;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
+    type Future =
+        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
 
     fn poll_ready(
         &mut self,
@@ -352,7 +353,9 @@ fn unauthorized_http_response() -> HttpResponse<HttpBody> {
     *response.status_mut() = StatusCode::UNAUTHORIZED;
     response.headers_mut().insert(
         "www-authenticate",
-        "Basic realm=\"braidpool-rpc\"".parse().expect("valid authenticate header"),
+        "Basic realm=\"braidpool-rpc\""
+            .parse()
+            .expect("valid authenticate header"),
     );
     response
 }
@@ -1186,10 +1189,11 @@ pub async fn run_rpc_server(
         warn!("RPC auth is disabled. Provide --rpcuser/--rpcpass to enforce Basic Auth.");
     }
 
-    let http_middleware = tower::ServiceBuilder::new().layer_fn(move |service| BasicAuthHttpMiddleware {
-        service,
-        auth: rpc_auth_config.clone(),
-    });
+    let http_middleware =
+        tower::ServiceBuilder::new().layer_fn(move |service| BasicAuthHttpMiddleware {
+            service,
+            auth: rpc_auth_config.clone(),
+        });
 
     let server = jsonrpsee::server::Server::builder()
         .set_rpc_middleware(rpc_middleware)
@@ -1344,7 +1348,8 @@ pub async fn test_extend_rpc() {
 #[tokio::test]
 pub async fn test_rpc_basic_auth_enforced_and_allows_valid_credentials() {
     let test_bead = create_test_bead(1, None);
-    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(vec![test_bead])));
+    let braid: Arc<RwLock<braid::Braid>> =
+        Arc::new(RwLock::new(braid::Braid::new(vec![test_bead])));
     let (proxy_tx, _) = mpsc::unbounded_channel();
 
     let server_addr = "127.0.0.1:9102";
@@ -1368,9 +1373,13 @@ pub async fn test_rpc_basic_auth_enforced_and_allows_valid_credentials() {
 
     let target_uri = format!("http://{}", server_addr);
     let unauth_client: HttpClient = HttpClient::builder().build(target_uri.clone()).unwrap();
-    let unauth_result: Result<u64, jsonrpsee::core::ClientError> =
-        unauth_client.request("getbeadcount", ArrayParams::new()).await;
-    assert!(unauth_result.is_err(), "Unauthenticated request should fail");
+    let unauth_result: Result<u64, jsonrpsee::core::ClientError> = unauth_client
+        .request("getbeadcount", ArrayParams::new())
+        .await;
+    assert!(
+        unauth_result.is_err(),
+        "Unauthenticated request should fail"
+    );
 
     let mut headers = http::HeaderMap::new();
     let auth = format!(
@@ -1386,15 +1395,17 @@ pub async fn test_rpc_basic_auth_enforced_and_allows_valid_credentials() {
         .build(target_uri)
         .unwrap();
 
-    let auth_result: Result<u64, jsonrpsee::core::ClientError> =
-        auth_client.request("getbeadcount", ArrayParams::new()).await;
+    let auth_result: Result<u64, jsonrpsee::core::ClientError> = auth_client
+        .request("getbeadcount", ArrayParams::new())
+        .await;
     assert!(auth_result.is_ok(), "Authenticated request should succeed");
 }
 
 #[tokio::test]
 pub async fn test_dashboard_role_blocks_mutating_methods() {
     let test_bead = create_test_bead(1, None);
-    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(vec![test_bead])));
+    let braid: Arc<RwLock<braid::Braid>> =
+        Arc::new(RwLock::new(braid::Braid::new(vec![test_bead])));
     let (proxy_tx, _) = mpsc::unbounded_channel();
 
     let server_addr = "127.0.0.1:9103";
