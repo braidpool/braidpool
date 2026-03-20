@@ -48,8 +48,8 @@ describe('handleWebSocketConnection', () => {
       JSON.stringify({
         type: 'rpc_call',
         id: 'msg-1',
-        method: 'getblock',
-        params: ['blockHash'],
+        method: 'getbeadcount',
+        params: [],
       })
     );
 
@@ -57,8 +57,9 @@ describe('handleWebSocketConnection', () => {
       url: undefined,
       user: undefined,
       pass: undefined,
-      method: 'getblock',
-      params: ['blockHash'],
+      method: 'getbeadcount',
+      params: [],
+      role: 'dashboard',
     });
 
     expect(mockWs.send).toHaveBeenCalledWith(
@@ -141,7 +142,7 @@ describe('handleWebSocketConnection', () => {
       JSON.stringify({
         type: 'rpc_call',
         id: 'msg-error',
-        method: 'getblock',
+        method: 'getbeadcount',
       })
     );
 
