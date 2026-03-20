@@ -81,6 +81,7 @@ export async function handleWebSocketConnection(ws) {
           pass: process.env.RPC_PASS,
           method: data.method,
           params: data.params || [],
+          role: 'dashboard',
         });
 
         ws.send(JSON.stringify({ type: 'rpc_response', id: data.id, result }));
