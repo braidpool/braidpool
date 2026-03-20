@@ -8,14 +8,20 @@ use crate::peer_manager::PeerManager;
 use crate::stratum;
 use crate::stratum::BlockTemplate;
 use crate::utils::BeadHash;
+use base64::Engine;
 use bitcoin::block::HeaderExt;
 use bitcoin::Transaction;
 use futures::lock::Mutex;
+use http::header::AUTHORIZATION;
+use http::StatusCode;
+use http_body_util::BodyExt;
 use jsonrpsee::core::async_trait;
 use jsonrpsee::core::middleware::Batch;
 use jsonrpsee::core::middleware::Notification;
 use jsonrpsee::core::middleware::RpcServiceT;
+use jsonrpsee::core::BoxError;
 use jsonrpsee::proc_macros::rpc;
+use jsonrpsee::server::{HttpBody, HttpRequest, HttpResponse};
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Request;
 use jsonrpsee::ConnectionId;
@@ -26,14 +32,17 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::future::Future;
 use std::net::SocketAddr;
+use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot, RwLock};
+use tower::Service;
 use tracing::{info, warn};
 
 #[cfg(test)]
 use {
     crate::braid, crate::utils::create_test_bead, jsonrpsee::core::client::ClientT,
     jsonrpsee::core::params::ArrayParams, jsonrpsee::http_client::HttpClient,
+    jsonrpsee::http_client::HttpClientBuilder,
 };
 
 //server side trait to be implemented for the handler
@@ -241,6 +250,234 @@ pub enum RpcProxyCommand {
     GetStats {
         responder: oneshot::Sender<Result<QueueStats, String>>,
     },
+}
+
+#[derive(Debug, Clone)]
+pub struct RpcAuthConfig {
+    pub username: String,
+    pub password: String,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ApiRole {
+    Admin,
+    Dashboard,
+}
+
+const DASHBOARD_ALLOWED_METHODS: &[&str] = &[
+    "getbead",
+    "gettips",
+    "getbeadcount",
+    "getcohortcount",
+    "getcohortbyid",
+    "getgenesis",
+    "getmininginfo",
+    "getminerinfo",
+    "getparents",
+    "getchildren",
+    "gethighestworkpathbycount",
+    "getipcstats",
+    "getbraidinfo",
+    "getnodeinfo",
+    "getpeerinfo",
+    "bitcoinproxy",
+];
+
+const DASHBOARD_BITCOIN_PROXY_ALLOWED_METHODS: &[&str] = &[
+    "getblock",
+    "getblockhash",
+    "getdifficulty",
+    "getnetworkhashps",
+    "getmempoolinfo",
+    "getpeerinfo",
+    "getblockchaininfo",
+];
+
+fn is_method_allowed_for_role(role: ApiRole, method_name: &str) -> bool {
+    match role {
+        ApiRole::Admin => true,
+        ApiRole::Dashboard => DASHBOARD_ALLOWED_METHODS.contains(&method_name),
+    }
+}
+
+fn is_dashboard_allowed_bitcoin_proxy_method(method_name: &str) -> bool {
+    DASHBOARD_BITCOIN_PROXY_ALLOWED_METHODS.contains(&method_name)
+}
+
+fn extract_rpc_method_and_params(value: &Value) -> Option<(&str, &Value)> {
+    let method = value.get("method")?.as_str()?;
+    let params = value.get("params").unwrap_or(&Value::Null);
+    Some((method, params))
+}
+
+fn is_dashboard_request_allowed(body_bytes: &[u8]) -> bool {
+    let Ok(payload) = serde_json::from_slice::<Value>(body_bytes) else {
+        // Let jsonrpsee handle malformed payloads.
+        return true;
+    };
+
+    let check_single = |request_obj: &Value| -> bool {
+        let Some((method, params)) = extract_rpc_method_and_params(request_obj) else {
+            // Let jsonrpsee handle malformed request objects.
+            return true;
+        };
+
+        if !is_method_allowed_for_role(ApiRole::Dashboard, method) {
+            return false;
+        }
+
+        if method == "bitcoinproxy" {
+            let Some(proxy_method) = params
+                .as_array()
+                .and_then(|arr| arr.first())
+                .and_then(|v| v.as_str())
+            else {
+                // Fail closed for dashboard bitcoinproxy calls with unexpected params.
+                return false;
+            };
+            return is_dashboard_allowed_bitcoin_proxy_method(proxy_method);
+        }
+
+        true
+    };
+
+    if let Some(batch) = payload.as_array() {
+        // Empty batches are invalid JSON-RPC, but let jsonrpsee decide.
+        return batch.iter().all(check_single);
+    }
+
+    check_single(&payload)
+}
+
+#[derive(Debug, Clone)]
+struct BasicAuthHttpMiddleware<S> {
+    service: S,
+    auth: Option<RpcAuthConfig>,
+}
+
+impl<S, B> Service<HttpRequest<B>> for BasicAuthHttpMiddleware<S>
+where
+    S: Service<HttpRequest<B>, Response = HttpResponse<HttpBody>>,
+    S::Response: 'static,
+    S::Error: Into<BoxError> + Send + 'static,
+    S::Future: Send + 'static,
+    B: http_body::Body + Send + std::fmt::Debug + 'static,
+    B::Data: Send,
+    B::Error: Into<BoxError>,
+{
+    type Response = S::Response;
+    type Error = BoxError;
+    type Future =
+        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
+
+    fn poll_ready(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        self.service.poll_ready(cx).map_err(Into::into)
+    }
+
+    fn call(&mut self, request: HttpRequest<B>) -> Self::Future {
+        if let Some(auth) = &self.auth {
+            let auth_header = request
+                .headers()
+                .get(AUTHORIZATION)
+                .and_then(|value| value.to_str().ok());
+
+            let is_authorized = auth_header
+                .map(|header| validate_basic_auth(header, auth))
+                .unwrap_or(false);
+
+            if !is_authorized {
+                let response = unauthorized_http_response();
+                return Box::pin(async move { Ok(response) });
+            }
+        }
+
+        let fut = self.service.call(request);
+        Box::pin(async move { fut.await.map_err(Into::into) })
+    }
+}
+
+#[derive(Debug, Clone)]
+struct DashboardMethodFilterMiddleware<S> {
+    service: S,
+}
+
+impl<S> Service<HttpRequest<HttpBody>> for DashboardMethodFilterMiddleware<S>
+where
+    S: Service<HttpRequest<HttpBody>, Response = HttpResponse<HttpBody>> + Clone + Send + 'static,
+    S::Response: 'static,
+    S::Error: Into<BoxError> + Send + 'static,
+    S::Future: Send + 'static,
+{
+    type Response = S::Response;
+    type Error = BoxError;
+    type Future =
+        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
+
+    fn poll_ready(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        self.service.poll_ready(cx).map_err(Into::into)
+    }
+
+    fn call(&mut self, request: HttpRequest<HttpBody>) -> Self::Future {
+        let mut service = self.service.clone();
+        Box::pin(async move {
+            let (mut parts, body) = request.into_parts();
+            let collected = body.collect().await.map_err(Into::<BoxError>::into)?;
+            let body_bytes = collected.to_bytes();
+
+            if !is_dashboard_request_allowed(&body_bytes) {
+                return Ok(forbidden_http_response());
+            }
+
+            parts.extensions.insert(ApiRole::Dashboard);
+            let rebuilt_request =
+                HttpRequest::from_parts(parts, HttpBody::from(body_bytes.to_vec()));
+
+            service.call(rebuilt_request).await.map_err(Into::into)
+        })
+    }
+}
+
+fn unauthorized_http_response() -> HttpResponse<HttpBody> {
+    let mut response = HttpResponse::new(HttpBody::from("Unauthorized"));
+    *response.status_mut() = StatusCode::UNAUTHORIZED;
+    response.headers_mut().insert(
+        "www-authenticate",
+        "Basic realm=\"braidpool-rpc\""
+            .parse()
+            .expect("valid authenticate header"),
+    );
+    response
+}
+
+fn forbidden_http_response() -> HttpResponse<HttpBody> {
+    let mut response = HttpResponse::new(HttpBody::from("Forbidden"));
+    *response.status_mut() = StatusCode::FORBIDDEN;
+    response
+}
+
+fn validate_basic_auth(header: &str, auth: &RpcAuthConfig) -> bool {
+    let Some(encoded) = header.strip_prefix("Basic ") else {
+        return false;
+    };
+
+    let Ok(raw) = base64::engine::general_purpose::STANDARD.decode(encoded.trim()) else {
+        return false;
+    };
+    let Ok(raw_creds) = String::from_utf8(raw) else {
+        return false;
+    };
+
+    let Some((username, password)) = raw_creds.split_once(':') else {
+        return false;
+    };
+
+    username == auth.username && password == auth.password
 }
 
 // RPC Server implementation using channels
@@ -1030,13 +1267,25 @@ pub async fn run_rpc_server(
     latest_block_template: Arc<Mutex<BlockTemplate>>,
     rpc_proxy_tx: mpsc::UnboundedSender<RpcProxyCommand>,
     bitcoin_rpc_config: Option<BitcoinRpcConfig>,
+    rpc_auth_config: Option<RpcAuthConfig>,
 ) -> Result<SocketAddr, ()> {
-    //Initializing the middleware
+    // Initializing the middleware
     let rpc_middleware =
         jsonrpsee::server::middleware::rpc::RpcServiceBuilder::new().layer_fn(LoggingMiddleware);
-    //building the context/server supporting the http transport and ws
+
+    if rpc_auth_config.is_none() {
+        warn!("RPC auth is disabled. Provide --rpcuser/--rpcpass to enforce Basic Auth.");
+    }
+
+    let http_middleware =
+        tower::ServiceBuilder::new().layer_fn(move |service| BasicAuthHttpMiddleware {
+            service,
+            auth: rpc_auth_config.clone(),
+        });
+
     let server = jsonrpsee::server::Server::builder()
         .set_rpc_middleware(rpc_middleware)
+        .set_http_middleware(http_middleware)
         .build(bind_address)
         .await
         .unwrap();
@@ -1069,9 +1318,65 @@ pub async fn run_rpc_server(
     }
 
     tokio::spawn(
-        //handling the stopping of the server
+        // handling the stopping of the server
         handle.stopped(),
     );
+    Ok(addr)
+}
+
+pub async fn run_dashboard_api_server(
+    braid_shared_pointer: Arc<RwLock<Braid>>,
+    bind_address: &str,
+    peer_manager: Arc<tokio::sync::RwLock<PeerManager>>,
+    stratum_connection_mapping: Arc<Mutex<stratum::ConnectionMapping>>,
+    latest_block_template: Arc<Mutex<BlockTemplate>>,
+    rpc_proxy_tx: mpsc::UnboundedSender<RpcProxyCommand>,
+    bitcoin_rpc_config: Option<BitcoinRpcConfig>,
+    rpc_auth_config: Option<RpcAuthConfig>,
+) -> Result<SocketAddr, ()> {
+    let rpc_middleware =
+        jsonrpsee::server::middleware::rpc::RpcServiceBuilder::new().layer_fn(LoggingMiddleware);
+
+    let http_middleware = tower::ServiceBuilder::new()
+        .layer_fn(move |service| BasicAuthHttpMiddleware {
+            service,
+            auth: rpc_auth_config.clone(),
+        })
+        .layer_fn(move |service| DashboardMethodFilterMiddleware { service });
+
+    let server = jsonrpsee::server::Server::builder()
+        .set_rpc_middleware(rpc_middleware)
+        .set_http_middleware(http_middleware)
+        .build(bind_address)
+        .await
+        .unwrap();
+
+    let addr = server.local_addr().unwrap();
+    let rpc_impl = RpcServerImpl::new(
+        braid_shared_pointer,
+        peer_manager,
+        stratum_connection_mapping,
+        latest_block_template,
+        rpc_proxy_tx,
+        bitcoin_rpc_config.clone(),
+    );
+    let handle = server.start(rpc_impl.into_rpc());
+
+    let (bind_host, _port) = bind_address.rsplit_once(':').unwrap_or((bind_address, ""));
+    let endpoints = crate::utils::server_endpoints(bind_host, addr.port(), "http");
+    if endpoints.is_empty() {
+        warn!(
+            host = %bind_host,
+            port = %_port,
+            "Dashboard API server listening but no interfaces discovered"
+        );
+    } else {
+        for endpoint in endpoints {
+            info!(endpoint = %endpoint, "Dashboard API server is listening");
+        }
+    }
+
+    tokio::spawn(handle.stopped());
     Ok(addr)
 }
 
@@ -1153,6 +1458,7 @@ pub async fn test_extend_rpc() {
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
         None,
+        None,
     )
     .await
     .unwrap();
@@ -1181,6 +1487,247 @@ pub async fn test_extend_rpc() {
         client.request("getbeadcount", get_bead_params).await;
 
     assert_eq!(num_beads.unwrap(), 2);
+}
+
+#[tokio::test]
+pub async fn test_rpc_basic_auth_enforced_and_allows_valid_credentials() {
+    let test_bead = create_test_bead(1, None);
+    let braid: Arc<RwLock<braid::Braid>> =
+        Arc::new(RwLock::new(braid::Braid::new(vec![test_bead])));
+    let (proxy_tx, _) = mpsc::unbounded_channel();
+
+    let server_addr = "127.0.0.1:9102";
+    let _ = run_rpc_server(
+        Arc::clone(&braid),
+        server_addr,
+        Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
+        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(Mutex::new(stratum::BlockTemplate::default())),
+        proxy_tx,
+        None,
+        Some(RpcAuthConfig {
+            username: "rpcuser".to_string(),
+            password: "rpcpass".to_string(),
+        }),
+    )
+    .await
+    .unwrap();
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+    let target_uri = format!("http://{}", server_addr);
+    let unauth_client: HttpClient = HttpClient::builder().build(target_uri.clone()).unwrap();
+    let unauth_result: Result<u64, jsonrpsee::core::ClientError> = unauth_client
+        .request("getbeadcount", ArrayParams::new())
+        .await;
+    assert!(
+        unauth_result.is_err(),
+        "Unauthenticated request should fail"
+    );
+
+    let mut headers = http::HeaderMap::new();
+    let auth = format!(
+        "Basic {}",
+        base64::engine::general_purpose::STANDARD.encode("rpcuser:rpcpass")
+    );
+    headers.insert(
+        AUTHORIZATION,
+        http::HeaderValue::from_str(&auth).expect("valid auth header"),
+    );
+    let auth_client: HttpClient = HttpClientBuilder::default()
+        .set_headers(headers)
+        .build(target_uri)
+        .unwrap();
+
+    let auth_result: Result<u64, jsonrpsee::core::ClientError> = auth_client
+        .request("getbeadcount", ArrayParams::new())
+        .await;
+    assert!(auth_result.is_ok(), "Authenticated request should succeed");
+}
+
+#[tokio::test]
+pub async fn test_dashboard_role_blocks_mutating_methods() {
+    let test_bead = create_test_bead(1, None);
+    let braid: Arc<RwLock<braid::Braid>> =
+        Arc::new(RwLock::new(braid::Braid::new(vec![test_bead])));
+    let (proxy_tx, _) = mpsc::unbounded_channel();
+
+    let server_addr = "127.0.0.1:9103";
+    let _ = run_dashboard_api_server(
+        Arc::clone(&braid),
+        server_addr,
+        Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
+        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(Mutex::new(stratum::BlockTemplate::default())),
+        proxy_tx,
+        None,
+        Some(RpcAuthConfig {
+            username: "rpcuser".to_string(),
+            password: "rpcpass".to_string(),
+        }),
+    )
+    .await
+    .unwrap();
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+    let mut headers = http::HeaderMap::new();
+    let auth = format!(
+        "Basic {}",
+        base64::engine::general_purpose::STANDARD.encode("rpcuser:rpcpass")
+    );
+    headers.insert(
+        AUTHORIZATION,
+        http::HeaderValue::from_str(&auth).expect("valid auth header"),
+    );
+
+    let client: HttpClient = HttpClientBuilder::default()
+        .set_headers(headers)
+        .build(format!("http://{}", server_addr))
+        .unwrap();
+
+    let bead_json = serde_json::to_string(&create_test_bead(2, None)).unwrap();
+    let mut params = ArrayParams::new();
+    params.insert(bead_json).unwrap();
+
+    let response: Result<String, jsonrpsee::core::ClientError> =
+        client.request("addbead", params).await;
+    assert!(response.is_err(), "Dashboard API should not call addbead");
+    let err = response.unwrap_err().to_string();
+    assert!(
+        err.contains("403") || err.contains("Forbidden"),
+        "Expected HTTP 403 for forbidden method, got: {}",
+        err
+    );
+}
+
+#[tokio::test]
+pub async fn test_dashboard_api_bitcoinproxy_sub_allowlist() {
+    let test_bead = create_test_bead(1, None);
+    let braid: Arc<RwLock<braid::Braid>> =
+        Arc::new(RwLock::new(braid::Braid::new(vec![test_bead])));
+    let (proxy_tx, _) = mpsc::unbounded_channel();
+
+    let server_addr = "127.0.0.1:9104";
+    let _ = run_dashboard_api_server(
+        Arc::clone(&braid),
+        server_addr,
+        Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
+        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(Mutex::new(stratum::BlockTemplate::default())),
+        proxy_tx,
+        None,
+        Some(RpcAuthConfig {
+            username: "rpcuser".to_string(),
+            password: "rpcpass".to_string(),
+        }),
+    )
+    .await
+    .unwrap();
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+    let mut headers = http::HeaderMap::new();
+    let auth = format!(
+        "Basic {}",
+        base64::engine::general_purpose::STANDARD.encode("rpcuser:rpcpass")
+    );
+    headers.insert(
+        AUTHORIZATION,
+        http::HeaderValue::from_str(&auth).expect("valid auth header"),
+    );
+
+    let client: HttpClient = HttpClientBuilder::default()
+        .set_headers(headers)
+        .build(format!("http://{}", server_addr))
+        .unwrap();
+
+    // Allowed dashboard proxy method reaches RPC handler (will fail because RPC backend config is None).
+    let mut allowed_params = ArrayParams::new();
+    allowed_params.insert("getblockchaininfo").unwrap();
+    allowed_params.insert(serde_json::json!([])).unwrap();
+    let allowed_result: Result<Value, jsonrpsee::core::ClientError> =
+        client.request("bitcoinproxy", allowed_params).await;
+    assert!(
+        allowed_result.is_err(),
+        "Expected error due to missing bitcoin RPC config"
+    );
+    if let jsonrpsee::core::ClientError::Call(error) = allowed_result.unwrap_err() {
+        assert_eq!(error.code(), 5);
+    } else {
+        panic!("Expected JSON-RPC call error for allowed bitcoinproxy method");
+    }
+
+    // Disallowed dashboard proxy method should be blocked by dashboard API filter.
+    let mut blocked_params = ArrayParams::new();
+    blocked_params.insert("sendrawtransaction").unwrap();
+    blocked_params
+        .insert(serde_json::json!(["deadbeef"]))
+        .unwrap();
+    let blocked_result: Result<Value, jsonrpsee::core::ClientError> =
+        client.request("bitcoinproxy", blocked_params).await;
+    assert!(
+        blocked_result.is_err(),
+        "Expected forbidden error for blocked bitcoinproxy method"
+    );
+    let blocked_err = blocked_result.unwrap_err().to_string();
+    assert!(
+        blocked_err.contains("403") || blocked_err.contains("Forbidden"),
+        "Expected HTTP 403 for blocked bitcoinproxy method, got: {}",
+        blocked_err
+    );
+}
+
+#[tokio::test]
+pub async fn test_internal_rpc_server_allows_mutating_methods() {
+    let test_bead = create_test_bead(1, None);
+    let braid: Arc<RwLock<braid::Braid>> =
+        Arc::new(RwLock::new(braid::Braid::new(vec![test_bead.clone()])));
+    let (proxy_tx, _) = mpsc::unbounded_channel();
+
+    let server_addr = "127.0.0.1:9105";
+    let _ = run_rpc_server(
+        Arc::clone(&braid),
+        server_addr,
+        Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
+        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(Mutex::new(stratum::BlockTemplate::default())),
+        proxy_tx,
+        None,
+        Some(RpcAuthConfig {
+            username: "rpcuser".to_string(),
+            password: "rpcpass".to_string(),
+        }),
+    )
+    .await
+    .unwrap();
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+    let mut headers = http::HeaderMap::new();
+    let auth = format!(
+        "Basic {}",
+        base64::engine::general_purpose::STANDARD.encode("rpcuser:rpcpass")
+    );
+    headers.insert(
+        AUTHORIZATION,
+        http::HeaderValue::from_str(&auth).expect("valid auth header"),
+    );
+
+    let client: HttpClient = HttpClientBuilder::default()
+        .set_headers(headers)
+        .build(format!("http://{}", server_addr))
+        .unwrap();
+
+    let new_bead = create_test_bead(2, Some(test_bead.block_header.block_hash()));
+    let bead_json = serde_json::to_string(&new_bead).unwrap();
+    let mut params = ArrayParams::new();
+    params.insert(bead_json).unwrap();
+
+    let response: Result<String, jsonrpsee::core::ClientError> =
+        client.request("addbead", params).await;
+    assert!(response.is_ok(), "Internal RPC server should allow addbead");
+    assert_eq!(response.unwrap(), "Bead added successfully".to_string());
 }
 
 #[tokio::test]
@@ -1330,6 +1877,7 @@ pub async fn test_get_bead_count_cli_flow() {
             tx
         },
         None,
+        None,
     )
     .await
     .unwrap();
@@ -1375,6 +1923,7 @@ pub async fn test_get_tips_cli_flow() {
             tx
         },
         None,
+        None,
     )
     .await
     .unwrap();
@@ -1414,6 +1963,7 @@ pub async fn test_get_bead_rpc() {
         Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
+        None,
         None,
     )
     .await
@@ -1476,6 +2026,7 @@ pub async fn test_get_cohort_rpc() {
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
         None,
+        None,
     )
     .await
     .unwrap();
@@ -1528,6 +2079,7 @@ pub async fn test_get_genesis_rpc() {
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
         None,
+        None,
     )
     .await
     .unwrap();
@@ -1567,6 +2119,7 @@ pub async fn test_get_parents_and_children_rpc() {
         Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
+        None,
         None,
     )
     .await
@@ -1637,6 +2190,7 @@ pub async fn test_get_hwpath_rpc() {
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
         None,
+        None,
     )
     .await
     .unwrap();
@@ -1681,6 +2235,7 @@ pub async fn test_get_braid_info_rpc() {
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
         None,
+        None,
     )
     .await
     .unwrap();
@@ -1719,6 +2274,7 @@ pub async fn test_get_node_info_rpc() {
         Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
+        None,
         None,
     )
     .await
@@ -1881,6 +2437,7 @@ pub async fn test_get_miner_info_rpc() {
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
         None,
+        None,
     )
     .await
     .unwrap();
@@ -2009,6 +2566,7 @@ pub async fn test_get_ipc_stats_rpc() {
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
         None,
+        None,
     )
     .await
     .unwrap();
@@ -2060,6 +2618,7 @@ pub async fn test_get_ipc_stats_rpc_simple() {
         Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
+        None,
         None,
     )
     .await
@@ -2114,6 +2673,7 @@ pub async fn test_unstage_transactions_rpc_simple() {
         Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
+        None,
         None,
     )
     .await
@@ -2175,6 +2735,7 @@ pub async fn test_get_mining_info_rpc() {
         Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
+        None,
         None,
     )
     .await

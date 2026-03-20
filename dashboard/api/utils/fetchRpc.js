@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 export async function callRpc(
-  { url, user, pass, method, params = [] },
+  { url, user, pass, method, params = [], headers = {} },
   retries = 3,
   delay = 2000,
   timeout = 5000
@@ -17,7 +17,10 @@ export async function callRpc(
     try {
       const response = await axios.post(url, payload, {
         auth: { username: user, password: pass },
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...headers,
+        },
         timeout,
       });
 
