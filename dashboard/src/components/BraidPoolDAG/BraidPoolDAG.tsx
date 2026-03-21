@@ -37,7 +37,8 @@ const GraphVisualization: React.FC = () => {
   const height = window.innerHeight - margin.top - margin.bottom;
   const [nodeIdMap, setNodeIdMap] = useState<NodeIdMapping>({});
   const [selectedCohorts, setSelectedCohorts] = useState<number | 'all'>(5);
-  const [animationSpeed, setAnimationSpeed] = useState<AnimationSpeed>('normal');
+  const [animationSpeed, setAnimationSpeed] =
+    useState<AnimationSpeed>('normal');
   const animationSpeedRef = useRef<AnimationSpeed>('normal');
   const nodeRadius = NODE_RADIUS;
   const tooltipRef = useRef<HTMLDivElement>(null);

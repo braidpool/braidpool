@@ -210,7 +210,10 @@ export function getEllipseEdgePoint(
   };
 }
 
-export function animateLinkDirection(selection: any, durationMs: number = 1000) {
+export function animateLinkDirection(
+  selection: any,
+  durationMs: number = 1000
+) {
   selection
     .attr('stroke-dasharray', '5,5') // dashed stroke
     .attr('stroke-dashoffset', 10) // initial offset
