@@ -10,6 +10,21 @@ import {
 import { WEBSOCKET_URLS } from '../../URLs';
 import { NODE_RADIUS, PADDING, COLORS } from './Constants';
 
+type AnimationSpeed = 'slow' | 'normal' | 'fast';
+
+const ANIMATION_SPEED_OPTIONS: {
+  value: AnimationSpeed;
+  label: string;
+  scale: number;
+}[] = [
+  { value: 'slow', label: 'Slow', scale: 1.8 },
+  { value: 'normal', label: 'Normal', scale: 1 },
+  { value: 'fast', label: 'Fast', scale: 0.6 },
+];
+
+const DEFAULT_COHORT_ANIMATION_DURATION_MS = 1000;
+const DEFAULT_COHORT_ANIMATION_DELAY_MS = 100;
+
 const GraphVisualization: React.FC = () => {
   const svgRef = useRef<SVGSVGElement>(null);
   const [graphData, setGraphData] = useState<GraphData | null>(null);
@@ -22,6 +37,8 @@ const GraphVisualization: React.FC = () => {
   const height = window.innerHeight - margin.top - margin.bottom;
   const [nodeIdMap, setNodeIdMap] = useState<NodeIdMapping>({});
   const [selectedCohorts, setSelectedCohorts] = useState<number | 'all'>(5);
+  const [animationSpeed, setAnimationSpeed] = useState<AnimationSpeed>('normal');
+  const animationSpeedRef = useRef<AnimationSpeed>('normal');
   const nodeRadius = NODE_RADIUS;
   const tooltipRef = useRef<HTMLDivElement>(null);
   // var COLUMN_WIDTH = 200;
@@ -51,6 +68,10 @@ const GraphVisualization: React.FC = () => {
   useEffect(() => {
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
+
+  useEffect(() => {
+    animationSpeedRef.current = animationSpeed;
+  }, [animationSpeed]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -198,14 +219,25 @@ const GraphVisualization: React.FC = () => {
           if (!isPlayingRef.current) {
             return;
           }
+          const speedConfig =
+            ANIMATION_SPEED_OPTIONS.find(
+              (option) => option.value === animationSpeedRef.current
+            ) ?? ANIMATION_SPEED_OPTIONS[1];
+          const cohortAnimationDurationMs = Math.round(
+            DEFAULT_COHORT_ANIMATION_DURATION_MS * speedConfig.scale
+          );
+          const cohortAnimationDelayMs = Math.round(
+            DEFAULT_COHORT_ANIMATION_DELAY_MS * speedConfig.scale
+          );
           setTimeout(() => {
             animateCohorts(
               firstCohortChanged ? parsedData.cohorts[0] : [],
               lastCohortChanged
                 ? parsedData.cohorts[parsedData.cohorts.length - 1]
-                : []
+                : [],
+              cohortAnimationDurationMs
             );
-          }, 100);
+          }, cohortAnimationDelayMs);
         }
       } catch (err) {
         setError('Error processing graph data: ');
@@ -222,7 +254,11 @@ const GraphVisualization: React.FC = () => {
     };
   }, []);
 
-  const animateCohorts = (firstCohort: string[], lastCohort: string[]) => {
+  const animateCohorts = (
+    firstCohort: string[],
+    lastCohort: string[],
+    durationMs: number
+  ) => {
     if (!svgRef.current) return;
 
     const svg = d3.select(svgRef.current);
@@ -236,7 +272,7 @@ const GraphVisualization: React.FC = () => {
         .attr('stroke', '#FF8500')
         .attr('stroke-width', 3)
         .transition()
-        .duration(1000)
+        .duration(durationMs)
         .attr('stroke-width', 2)
         .attr('stroke', '#fff');
     }
@@ -250,7 +286,7 @@ const GraphVisualization: React.FC = () => {
         .attr('stroke', '#FF8500')
         .attr('stroke-width', 3)
         .transition()
-        .duration(1000)
+        .duration(durationMs)
         .attr('stroke-width', 2)
         .attr('stroke', '#fff');
     }
@@ -265,7 +301,7 @@ const GraphVisualization: React.FC = () => {
         .attr('stroke-width', 2)
         .attr('stroke', '#FF8500');
 
-      animateLinkDirection(selectedLinks);
+      animateLinkDirection(selectedLinks, durationMs);
     }
 
     // Animate links connected to last cohort
@@ -279,7 +315,7 @@ const GraphVisualization: React.FC = () => {
         .attr('stroke-width', 2)
         .attr('stroke', '#FF8500');
 
-      animateLinkDirection(selectedLinks);
+      animateLinkDirection(selectedLinks, durationMs);
     }
   };
 
@@ -686,6 +722,18 @@ const GraphVisualization: React.FC = () => {
           {[1, 2, 3, 4, 5].map((value) => (
             <option key={value} value={value}>
               Show latest {value} cohorts
+            </option>
+          ))}
+        </select>
+        <label className="text-[#0077B6]">Animation speed:</label>
+        <select
+          value={animationSpeed}
+          onChange={(e) => setAnimationSpeed(e.target.value as AnimationSpeed)}
+          className="px-2 py-1 rounded border border-[#0077B6] bg-gray text-[#0077B6]"
+        >
+          {ANIMATION_SPEED_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
             </option>
           ))}
         </select>
