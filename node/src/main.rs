@@ -74,7 +74,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             format!("Database initialization failed: {:?}", e),
         )
     })?;
-    let (mut _db_handler, db_tx) = DBHandler::new().await.unwrap();
     // Initializing the braid object with read write lock
     //for supporting concurrent readers and single writer
     let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(Vec::from([]))));
@@ -89,7 +88,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let fetched_beads = fetch_beads_in_batch(db_connection_pool_ref, 1000).await?;
         for bead in &fetched_beads {
             let curr_bead_status = guard.extend(&bead);
-            debug!(
+            info!(
                 hash = ?bead.block_header.block_hash(),
                 status = ?curr_bead_status,
                 "Bead inserted"
@@ -563,232 +562,48 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                 let status = {
                                     braid_data.extend(&bead)
                                 };
-                                let bead_index_mapping = braid_data.bead_index_mapping.clone();
-                                let braid_height_after_extend = braid_data.beads.len();
-                                let mut orphan_beads_removed:Vec<Bead> = Vec::new();
-                                if (braid_height_after_extend-previous_braid_height) > 1 {
-                                    //Orphans have also been removed upon successful extension of braid
-                                    let orphans_removed = braid_data.beads[previous_braid_height+1..].to_vec();
-                                    orphan_beads_removed.extend_from_slice(&orphans_removed);
-                                }
-                                 //If the node is under IBD then no need for timestamp check and it will be empty in any case
-                                 if ibd_spinlock.load(Ordering::SeqCst){
-                                    let broadcast_ts = bead.uncommitted_metadata.broadcast_timestamp.clone().to_u32();
-                                    let (ts_tx, ts_rx) = tokio::sync::oneshot::channel();
-                                    if let Err(e) = ibd_command_tx
-                                        .send(IBDCommands::FetchAllTimestamps { sender: ts_tx })
-                                        .await {
-                                        tracing::warn!("Failed to request timestamp map: {:?}", e);
+                                let bead_mapping_ref = braid_data.bead_index_mapping.clone();
+                                if let braid::AddBeadStatus::ParentsNotYetReceived = status {
+                                    warn!("Received bead with missing parents - requesting parents");
+                                    //request the parents using request response protocol
+                                    let peer_id = {
+                                        let peer_manager = peer_manager_arc.read().await;
+                                        peer_manager.get_top_k_peers_for_propagation(1)
+                                    };
+                                    if let Some(peer) = peer_id.first() {
+                                        swarm.behaviour_mut().bead_sync.send_request(
+                                            &peer,
+                                            BeadRequest::GetBeads(
+                                                BeadHashes(
+                                                    bead.committed_metadata
+                                                        .parents
+                                                        .clone()
+                                                        .into_iter()
+                                                        .collect(),
+                                                )
+                                            ),
+                                        );
+                                    } else {
+                                        warn!(parent_count = %bead.committed_metadata.parents.len(), "Insufficient peers for bead sync");
                                     }
-                                    let timestamp_map = match ts_rx.await {
-                                        Ok(map) => map,
-                                        Err(_) => {
-                                            tracing::error!("Failed to receive timestamp map");
+                                } else if let braid::AddBeadStatus::InvalidBead = status {
+                                    // update the peer manager about the invalid bead
+                                    {
+                                        let mut peer_manager = peer_manager_arc.write().await;
+                                        peer_manager.penalize_for_invalid_bead(&message.source);
+                                    }
+                                } else if let braid::AddBeadStatus::BeadAdded = status {
+                                    //If the current bead's extension has further led to removal of orphan beads then
+                                    //We can get the orphan beads that we can persist in DB also
+                                    let bead_id = match braid_data
+                                        .bead_index_mapping
+                                        .get(&bead.block_header.block_hash()) {
+                                        Some(id) => id.0,
+                                        None => {
+                                            error!(bead_hash = ?bead.block_header.block_hash(), "Bead ID not found in index mapping");
                                             continue;
                                         }
                                     };
-                                    if timestamp_map.is_empty(){
-                                        warn!("IBD has not received all the beads wrt to ANY sync peer yet");
-                                    }
-                                      //If the received  bead exceeds the timestamp of ibd completion wrt to a sync node
-                                      if let braid::AddBeadStatus::ParentsNotYetReceived = status {
-                                        //request the parents using request response protocol
-                                        let peer_id = {
-                                            let peer_manager = peer_manager_arc.read().await;
-                                            peer_manager.get_top_k_peers_for_propagation(1)
-                                        };
-                                        if let Some(peer) = peer_id.first() {
-                                            swarm.behaviour_mut().bead_sync.send_request(
-                                                &peer,
-                                                BeadRequest::GetBeads(
-                                                    BeadHashes(
-                                                        bead.committed_metadata
-                                                            .parents
-                                                            .clone()
-                                                            .into_iter()
-                                                            .collect(),
-                                                    )
-                                                ),
-                                            );
-                                        } else {
-                                            warn!(parent_count = %bead.committed_metadata.parents.len(), "Insufficient peers for bead sync");
-                                        }
-                                    } else if let braid::AddBeadStatus::InvalidBead = status {
-                                        // update the peer manager about the invalid bead
-                                        {
-                                            let mut peer_manager = peer_manager_arc.write().await;
-                                            peer_manager.penalize_for_invalid_bead(&message.source);
-                                        }
-                                    } else if let braid::AddBeadStatus::BeadAdded = status {
-                                     //Considering the index of the beads in braid will be same as the (insertion ids-1)
-                                        let bead_id = match braid_data
-                                            .bead_index_mapping
-                                            .get(&bead.block_header.block_hash()) {
-                                            Some(id) => id,
-                                            None => {
-                                                error!(bead_hash = ?bead.block_header.block_hash(), "Bead ID not found in index mapping");
-                                                continue;
-                                            }
-                                        };
-                                        let (txs_json, relative_json, parent_timestamp_json) = match prepare_bead_tuple_data(
-                                            &braid_data.beads,
-                                            &braid_data.bead_index_mapping,
-                                            &bead,
-                                        ){
-                                            Ok(received_tuples)=>received_tuples,
-                                            Err(error)=>{
-                                                error!("An error occurred while preparing bead tuple data for bead with beadhash - {:?} due to {:?}",bead.block_header.block_hash(),error);
-                                                continue;
-                                            }
-                                        };
-                                        // update score of the peer and adding to local db store
-                                        let _query_send_result = match db_tx.send(node::db::BraidpoolDBTypes::InsertTupleTypes { query: node::db::InsertTupleTypes::InsertBeadSequentially { bead_to_insert: bead,curr_beads:curr_beads,bead_index_mapping:bead_index_mapping,removed_orphans:orphan_beads_removed} }).await{
-                                           Ok(_)=>{
-                                               debug!("Insert command sent successfully to db handler after receiving bead from peer");
-
-                                           },
-                                           Err(error)=>{
-                                               error!(
-                                                   source = ?message.source,
-                                                   err = ?error.0,
-                                                   "An error occurred while sending insert bead command received from peer"
-                                               );
-                                           }
-                                        };
-                                        {
-                                            let mut peer_manager = peer_manager_arc.write().await;
-                                            peer_manager.update_score(&message.source, 1.0);
-                                        }
-                                    }
-                                    for (sync_peer, ibd_ts) in timestamp_map.iter() {
-                                        let threshold = *ibd_ts + LATENCY_ALPHA * 10;
-                                        let sync_peer_id = match sync_peer.parse::<PeerId>() {
-                                            Ok(id) => id,
-                                            Err(e) => {
-                                                error!(sync_peer = %sync_peer, error = %e, "Failed to parse sync peer ID");
-                                                continue;
-                                            }
-                                        };
-                                        // broadcast_timestamp < timestamp + alpha * 10
-                                        if broadcast_ts  < threshold as u32 {
-                                            info!("Incoming BEAD received during IBD within threshold limit with broadcast timestamp - {:?} and threshold is - {:?}",broadcast_ts,threshold);
-                                           match status{
-                                            braid::AddBeadStatus::InvalidBead | braid::AddBeadStatus::ParentsNotYetReceived=>{
-                                                //Aborting/evicting the wait_ibd handler corresponding to the sync peer
-                                                match ibd_command_tx.send(IBDCommands::AbortWaitHandle { peer_id:sync_peer_id }).await{
-                                                    Ok(_)=>{
-                                                        warn!("Abort handle and evicting handler corresponding to sync peer sent successfully");
-                                                    },
-                                                    Err(error)=>{
-                                                        error!(error=?error,"An error occurred while sending abort handler wrt sync peer due to -");
-                                                    }
-                                                };
-                                                // If result is invalid then reinitiate IBD
-                                                match swarm_command_sender.send(SwarmCommand::InitiateIBD).await{
-                                                    Ok(_)=>{
-                                                        warn!("Reinitiating IBD command sent to swarm handler");
-                                                    },
-                                                    Err(error)=>{
-                                                        error!(error=?error,"Reinitiating IBD failed in GetAllBeads Response - ");
-                                                    }
-                                                }
-                                                continue;
-                                            },
-                                            braid::AddBeadStatus::BeadAdded | braid::AddBeadStatus::DagAlreadyContainsBead =>{
-                                                ibd_spinlock.store(false,Ordering::SeqCst);
-                                                continue;
-                                            },
-                                           }
-
-                                        }
-                                        else{
-                                            ibd_spinlock.store(false,Ordering::SeqCst);
-                                            continue;
-                                        }
-                                    }
-                                }
-                                else{
-                                    if let braid::AddBeadStatus::ParentsNotYetReceived = status {
-                                        //request the parents using request response protocol
-                                        let peer_id = {
-                                            let peer_manager = peer_manager_arc.read().await;
-                                            peer_manager.get_top_k_peers_for_propagation(1)
-                                        };
-                                        if let Some(peer) = peer_id.first() {
-                                            swarm.behaviour_mut().bead_sync.send_request(
-                                                &peer,
-                                                BeadRequest::GetBeads(
-                                                    BeadHashes(
-                                                        bead.committed_metadata
-                                                            .parents
-                                                            .clone()
-                                                            .into_iter()
-                                                            .collect(),
-                                                    )
-                                                ),
-                                            );
-                                        } else {
-                                            warn!(parent_count = %bead.committed_metadata.parents.len(), "Insufficient peers for bead sync");
-                                        }
-                                    } else if let braid::AddBeadStatus::InvalidBead = status {
-                                        // update the peer manager about the invalid bead
-                                        {
-                                            let mut peer_manager = peer_manager_arc.write().await;
-                                            peer_manager.penalize_for_invalid_bead(&message.source);
-                                        }
-                                    } else if let braid::AddBeadStatus::BeadAdded = status {
-                                        let bead_id = match braid_data
-                                            .bead_index_mapping
-                                            .get(&bead.block_header.block_hash()) {
-                                            Some(id) => id,
-                                            None => {
-                                                error!(bead_hash = ?bead.block_header.block_hash(), "Bead ID not found in index mapping (GetAllBeads)");
-                                                continue;
-                                            }
-                                        };
-                                        let (txs_json, relative_json, parent_timestamp_json) = match prepare_bead_tuple_data(
-                                            &braid_data.beads,
-                                            &braid_data.bead_index_mapping,
-                                            &bead,
-                                        ){
-                                            Ok(received_tuples)=>received_tuples,
-                                            Err(error)=>{
-                                                error!("An error occurred while preparing bead tuple data for bead with beadhash - {:?} due to {:?}",bead.block_header.block_hash(),error);
-                                                continue;
-                                            }
-                                        };
-                                        // update score of the peer and adding to local db store
-                                        let _query_send_result = match db_tx.send(node::db::BraidpoolDBTypes::InsertTupleTypes { query: node::db::InsertTupleTypes::InsertBeadSequentially { bead_to_insert: bead,curr_beads:curr_beads,bead_index_mapping:bead_index_mapping,removed_orphans:orphan_beads_removed} }).await{
-                                            Ok(_)=>{
-                                               debug!("Insert command sent successfully to db handler after receiving bead from peer");
-                                           },
-                                           Err(error)=>{
-                                               error!(
-                                                   source = ?message.source,
-                                                   err = ?error.0,
-                                                   "An error occurred while sending insert bead command received from peer"
-                                               );
-                                           }
-                                        };
-                                        {
-                                            let mut peer_manager = peer_manager_arc.write().await;
-                                            peer_manager.update_score(&message.source, 1.0);
-                                        }
-                                    }
-                                }
-
-                                if let braid::AddBeadStatus::ParentsNotYetReceived = status {
-                                    warn!("Received bead with missing parents - requesting parents");
-                                } else if let braid::AddBeadStatus::InvalidBead = status {
-                                    // update the peer manager about the invalid bead
-                                    peer_manager.penalize_for_invalid_bead(&message.source);
-                                } else if let braid::AddBeadStatus::BeadAdded = status {
-                                    //If the current bead's extension has further led to removal of orphan beads then
-                                    //we can get the orphan beads that we can persist in DB also
-                                    let bead_id = bead_index_mapping
-                                    .get(&bead.block_header.block_hash())
-                                    .unwrap()
-                                    .0;
                                     let mut removed_orphans: Vec<Bead> = Vec::new();
                                     if bead_id + 1 < braid_data.beads.len() {
                                         warn!("Orphan beads removed from the orphan set upon extension of current bead");
@@ -797,7 +612,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                         debug!("No orphan beads to remove upon extension of current bead");
                                     }
                                     // update score of the peer and adding to local db store
-                                    let _query_send_result = match db_tx.send(node::db::BraidpoolDBTypes::InsertTupleTypes { query: node::db::InsertTupleTypes::InsertBeadSequentially { bead_to_insert: bead,removed_orphans:removed_orphans,bead_index_mapping:bead_index_mapping,bead_id:bead_id} }).await{
+                                    let _query_send_result = match db_tx.send(node::db::BraidpoolDBTypes::InsertTupleTypes { query: node::db::InsertTupleTypes::InsertBeadSequentially { bead_to_insert: bead,removed_orphans:removed_orphans,bead_index_mapping:bead_mapping_ref,bead_id:bead_id} }).await{
                                         Ok(_)=>{
                                            debug!("Insert command sent successfully to db handler after receiving bead from peer");
                                        },
@@ -809,7 +624,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                            );
                                        }
                                     };
-                                    peer_manager.update_score(&message.source, 1.0);
+                                    {
+                                        let mut peer_manager = peer_manager_arc.write().await;
+                                        peer_manager.update_score(&message.source, 1.0);
+
+                                    }
                                 }
                              }
                              Err(e) => {
@@ -937,9 +756,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             remote_addr = ?remote_addr,
                             "Connection established to peer"
                         );
-
-                         // Trigger IBD when peer count threshold is reached
-                         if !ibd_initiated && peer_manager.num_connected_peers() >= MIN_PEERS_FOR_IBD {
+                        // Trigger IBD when peer count threshold is reached
+                        {
+                            let  peer_manager = peer_manager_arc.write().await;
+                            if !ibd_initiated && peer_manager.num_connected_peers() >= MIN_PEERS_FOR_IBD {
                              info!(
                                  peer_count = peer_manager.num_connected_peers(),
                                  threshold = MIN_PEERS_FOR_IBD,
@@ -955,7 +775,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                  }
                              }
                          }
-
+                        }
                      }
                      SwarmEvent::ConnectionClosed {
                          peer_id,
@@ -984,7 +804,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 )) => {
                     debug!(
                         peer = %peer,
-                        message = ?message,
                         connection = ?connection_id,
                         "Bead sync message received"
                     );
@@ -1080,7 +899,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                 | BeadResponse::GetAllBeads(beads) => {
                                     let (beads_tx, beads_rx) = tokio::sync::oneshot::channel::<Vec<BeadHash>>();
                                     //Fetching the pruned bead-hashes received during `GetBeadAfter` request
-                                    peer_manager.handle_fetch_ibd_bead_queue(peer, beads_tx);
+                                    {
+                                        let mut peer_manager = peer_manager_arc.write().await;
+                                        peer_manager.handle_fetch_ibd_bead_queue(peer, beads_tx);
+                                    }
                                     let pruned_beads = match beads_rx.await{
                                         Ok(received_beads)=>{
                                             received_beads
@@ -1115,32 +937,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                                 peer_manager.penalize_for_invalid_bead(&peer);
                                             }
                                         } else if let braid::AddBeadStatus::BeadAdded = status {
-                                            let bead_id = match braid_data
-                                                .bead_index_mapping
-                                                .get(&bead.block_header.block_hash()) {
-                                                Some(id) => id,
-                                                None => {
-                                                    error!(bead_hash = ?bead.block_header.block_hash(), "Bead ID not found in index mapping (GetBeadsAfter)");
-                                                    continue;
-                                                }
-                                            };
-                                            let (txs_json, relative_json, parent_timestamp_json) = match prepare_bead_tuple_data(
-                                                &braid_data.beads,
-                                                &braid_data.bead_index_mapping,
-                                                &bead,
-                                            ){
-                                                Ok(received_tuples)=>received_tuples,
-                                                Err(error)=>{
-                                                    error!("An error occurred while preparing bead tuple data for bead with beadhash - {:?} due to {:?}",curr_beadhash,error);
-                                                    continue;
-                                                }
-                                            };
                                             // Update bead index mapping for batch insert
                                             bead_index_mapping = braid_data.bead_index_mapping.clone();
 
                                             //If the current bead's extension has further led to removal of orphan beads then
                                             //we can get the orphan beads that we can persist in DB also
-                                            let mut removed_orphans: Vec<Bead> = Vec::new();
                                             let bead_id = bead_index_mapping
                                                 .get(&curr_beadhash)
                                                 .unwrap()
@@ -1185,7 +986,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     }
                                     //Preparing next batch request to be sent to the sync node
                                     let (batch_tx, batch_rx) = tokio::sync::oneshot::channel::<usize>();
-                                    peer_manager.handle_update_and_fetch_batch_offset(peer, batch_tx,IBD_BATCH_SIZE);
+                                    {
+                                        let mut peer_manager = peer_manager_arc.write().await;
+                                        peer_manager.handle_update_and_fetch_batch_offset(peer, batch_tx,IBD_BATCH_SIZE);
+                                    }
                                     let next_batch_offset = match batch_rx.await{
                                         Ok(next_offset)=>{
                                             debug!(next_offset=?next_offset,"Newer offset for batch request received successfully ");
@@ -1224,7 +1028,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                  BeadResponse::GetBeadsAfter(bead_hashes)=>{
                                     //Getting all the beadhashes after the common oldest in both the peers
                                     let (tips_tx, tips_rx) = tokio::sync::oneshot::channel::<Vec<BeadHash>>();
-                                    peer_manager.handle_fetch_tips(peer, tips_tx);
+                                    {
+                                        let mut peer_manager = peer_manager_arc.write().await;
+                                        peer_manager.handle_fetch_tips(peer, tips_tx);
+                                    }
                                     let received_tips = match tips_rx.await{
                                         Ok(received_tips)=>{
                                             received_tips
@@ -1258,7 +1065,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     }
                                     let pruned_ref = pruned.clone();
                                     // Storing them in cache
+                                {
+                                    let mut peer_manager = peer_manager_arc.write().await;
                                     peer_manager.handle_update_incoming(peer, pruned);
+                                }
                                     // Initiating `GetBead` request cycle
                                     if pruned_ref.len() <= IBD_BATCH_SIZE{
                                         swarm.behaviour_mut().request_beads(peer, &pruned_ref);
@@ -1287,7 +1097,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                         info!("Peer already synced to tip");
                                         continue;
                                     }
-                                    peer_manager.handle_update_ibd_peer_tips(peer, tips.0);
+                                    {
+                                        let mut peer_manager = peer_manager_arc.write().await;
+                                        peer_manager.handle_update_ibd_peer_tips(peer, tips.0);
+                                    }
                                     // After storing tips we will issue `GetBeads` command that will find the oldest
                                     // common bead if any and will send the beadhashes of all the next beads this will either be the current tips or
                                     // the current genesis in all the cases in case of new braid-node this will be genesis otherwise it will always be tips
@@ -1379,7 +1192,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             let mut sync_request_sent = false;
                             for lowest_latency_peer in peer_ids.into_iter(){
                                 let (retry_count_tx,retry_count_rx) = tokio::sync::oneshot::channel();
-                                peer_manager.handle_get_incoming_bead_retry_count(lowest_latency_peer,retry_count_tx);
+                                {
+                                    let mut peer_manager = peer_manager_arc.write().await;
+                                    peer_manager.handle_get_incoming_bead_retry_count(lowest_latency_peer,retry_count_tx);
+                                }
                                 let retry_cnt = match retry_count_rx.await {
                                     Ok(cnt) => cnt,
                                     Err(e) => {
@@ -1400,7 +1216,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                 }
                                 else{
                                     //Case of retry is there
-                                    peer_manager.handle_update_retry_count(lowest_latency_peer);
+                                    {
+                                        let mut peer_manager = peer_manager_arc.write().await;
+                                        peer_manager.handle_update_retry_count(lowest_latency_peer);
+                                    }
                                     //Initiating IBD and sending the request to fetch tips and store them in a centralized mapping owned by main_thread .
                                     let sync_start_request:BeadRequest = BeadRequest::GetTips;
                                     swarm.behaviour_mut().bead_sync.send_request(&lowest_latency_peer, sync_start_request);
