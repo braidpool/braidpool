@@ -223,7 +223,9 @@ impl BitcoinRpcConfig {
                 .bitcoin
                 .clone()
                 .unwrap_or_else(|| "127.0.0.1".to_string()),
-            port: args.rpcport.unwrap_or(crate::config::DEFAULT_BITCOIN_RPC_PORT),
+            port: args
+                .rpcport
+                .unwrap_or(crate::config::DEFAULT_BITCOIN_RPC_PORT),
             username: username.clone(),
             password: password.clone(),
             client,
