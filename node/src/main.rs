@@ -564,28 +564,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                 };
                                 let bead_mapping_ref = braid_data.bead_index_mapping.clone();
                                 if let braid::AddBeadStatus::ParentsNotYetReceived = status {
+                                    // There is no need to rqeuest parents immediately they will be solved upon bead received as per the
+                                    // latency of mesh and the self mined beads and their propagation via `extend` functionality
                                     warn!("Received bead with missing parents - requesting parents");
-                                    //request the parents using request response protocol
-                                    let peer_id = {
-                                        let peer_manager = peer_manager_arc.read().await;
-                                        peer_manager.get_top_k_peers_for_propagation(1)
-                                    };
-                                    if let Some(peer) = peer_id.first() {
-                                        swarm.behaviour_mut().bead_sync.send_request(
-                                            &peer,
-                                            BeadRequest::GetBeads(
-                                                BeadHashes(
-                                                    bead.committed_metadata
-                                                        .parents
-                                                        .clone()
-                                                        .into_iter()
-                                                        .collect(),
-                                                )
-                                            ),
-                                        );
-                                    } else {
-                                        warn!(parent_count = %bead.committed_metadata.parents.len(), "Insufficient peers for bead sync");
-                                    }
                                 } else if let braid::AddBeadStatus::InvalidBead = status {
                                     // update the peer manager about the invalid bead
                                     {
