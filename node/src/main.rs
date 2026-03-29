@@ -13,9 +13,7 @@ use libp2p::{
     swarm::SwarmEvent,
     PeerId,
 };
-use node::config::{
-    BraidpoolConfig, DEFAULT_BIND_ADDRESS, DEFAULT_BITCOIN_RPC_PORT, DEFAULT_P2P_PORT,
-};
+use node::config::{RuntimeConfig, DEFAULT_P2P_PORT};
 use node::db::db_handlers::{fetch_beads_in_batch, prepare_bead_tuple_data};
 use node::ibd_manager::{IBD_TRIGGER_AFTER, MAX_IBD_INCOMING_THRESHOLD, MAX_IBD_RETRIES};
 use node::utils::BeadHash;
@@ -203,135 +201,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let main_task_token = CancellationToken::new();
     let ipc_task_token = main_task_token.clone();
     let args = cli::Cli::parse();
-
-    let config_path = node::config::expand_pathbuf(&args.config);
-    if !config_path.exists() {
-        error!(path = %config_path.display(), "Config file not found");
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            format!("Config file not found at {}", config_path.display()),
-        )
-        .into());
-    }
-    info!(path = %config_path.display(), "Loading braidpool config");
-    let braidpool_config = match BraidpoolConfig::load_from_config_file(
-        config_path
-            .to_str()
-            .expect("Failed to convert config path to string"),
-    ) {
-        Ok(c) => c,
-        Err(e) => {
-            error!(error = %e, path = %config_path.display(), "Invalid configuration file");
-            return Err(e);
-        }
-    };
-
-    let datadir = match args.datadir.as_ref() {
-        Some(path) => node::config::expand_pathbuf(path),
-        None => node::config::expand_path(&braidpool_config.braid_directory.path),
-    };
-
-    let bind_addr = args
-        .bind
-        .clone()
-        .or_else(|| {
-            node::config::socket_from_multiaddr(
-                &braidpool_config.braidnetwork_config.listen_address,
-            )
-        })
-        .unwrap_or_else(|| DEFAULT_BIND_ADDRESS.to_string());
-
-    let mut peer_nodes = braidpool_config.braidnetwork_config.peer_nodes.clone();
-    if let Some(nodes) = args.addnode.clone() {
-        peer_nodes.extend(nodes);
-    }
-
-    let network = match args.network.as_deref() {
-        Some(network_name) => match node::config::parse_network_arg(network_name) {
-            Some(parsed) => parsed,
-            None => {
-                error!(
-                    network = %network_name,
-                    valid_networks = "main, testnet, testnet4, signet, regtest, cpunet",
-                    "Invalid network specified, falling back to config value"
-                );
-                braidpool_config.bitcoin_config.network
-            }
-        },
-        None => braidpool_config.bitcoin_config.network,
-    };
-
-    let ipc_socket = braidpool_config
-        .bitcoin_config
-        .ipc_socket
-        .clone()
-        .unwrap_or(args.ipc_socket.clone());
-
-    let rpc_server_addr = braidpool_config.braid_rpc_config.rpc_server_addr.clone();
-
-    // Parse Bitcoin RPC configuration from args or config
-    let bitcoin_node = args
-        .bitcoin
-        .clone()
-        .unwrap_or_else(|| braidpool_config.bitcoin_config.bitcoind_ip.clone());
-
-    let rpc_port = args
-        .rpcport
-        .or_else(|| {
-            braidpool_config
-                .bitcoin_config
-                .port
-                .parse::<u16>()
-                .map_err(|e| {
-                    error!("Invalid port number in config: {}", e);
-                    e
-                })
-                .ok()
-        })
-        .unwrap_or(DEFAULT_BITCOIN_RPC_PORT);
-
-    let rpc_user = args
-        .rpcuser
-        .clone()
-        .unwrap_or_else(|| braidpool_config.bitcoin_config.username.clone());
-
-    let _rpc_pass = args
-        .rpcpass
-        .clone()
-        .unwrap_or_else(|| braidpool_config.bitcoin_config.password.clone());
-
-    let _rpc_cookie = args
-        .rpccookie
-        .clone()
-        .map(|p| node::config::expand_path(&p))
-        .or_else(|| {
-            Some(node::config::expand_path(
-                &braidpool_config.bitcoin_config.cookie_path,
-            ))
-        });
-
-    info!(
-        bitcoin_node = %bitcoin_node,
-        rpc_port = %rpc_port,
-        rpc_user = %rpc_user,
-        "Bitcoin RPC configuration loaded"
-    );
-
-    match fs::metadata(&datadir) {
-        Ok(m) => {
-            if !m.is_dir() {
-                error!(
-                    datadir = %datadir.display(),
-                    "Data directory exists but is not a directory"
-                );
-            }
-            info!(datadir = %datadir.display(), "Using existing data directory");
-        }
-        Err(_) => {
-            info!(datadir = %datadir.display(), "Creating data directory");
-            fs::create_dir_all(&datadir)?;
-        }
-    }
+    let RuntimeConfig {
+        datadir,
+        bind_addr,
+        peer_nodes,
+        network,
+        ipc_socket,
+        rpc_server_addr,
+    } = node::config::load_runtime_config(&args)?;
 
     let datadir_path = datadir.as_path();
     let keystore_path = datadir_path.join("keystore");
