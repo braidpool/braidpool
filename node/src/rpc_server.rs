@@ -1213,9 +1213,9 @@ pub async fn test_same_bead_extend() {
         },
         None, // No Bitcoin RPC config for tests
     );
+    let addr = server.local_addr().unwrap();
     let _handle = server.start(rpc_impl.into_rpc());
 
-    let addr = server.local_addr().unwrap();
     let target_uri = format!("http://{}", addr);
     let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
 
@@ -1268,9 +1268,9 @@ pub async fn test_cohort_count_rpc() {
         },
         None, // No Bitcoin RPC config for tests
     );
+    let addr = server.local_addr().unwrap();
     let _handle = server.start(rpc_impl.into_rpc());
 
-    let addr = server.local_addr().unwrap();
     let target_uri = format!("http://{}", addr);
     let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
 
