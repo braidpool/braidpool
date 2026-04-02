@@ -247,7 +247,7 @@ impl DBHandler {
             current_parents.push(parent_index);
             relatives.push((*parent_index as u64, bead_id as u64));
             parent_ts.push((*parent_index as u64, bead_id as u64, *parent_timestamp));
-            info!("PARENT FOUND WITH ID - {:?}", parent_index);
+            debug!("Parent found with id - {:?}", parent_index);
         }
         let mut txs = Vec::new();
 
@@ -312,7 +312,7 @@ impl DBHandler {
         let mut all_relatives_json_parts = Vec::new();
         let mut all_parent_ts_json_parts = Vec::new();
         if use_bulk_insert {
-            info!("Using single bulk INSERT query for efficient batch processing");
+            debug!("Using single bulk INSERT query for efficient batch processing");
 
             let all_beads: Vec<&Bead> = beads.iter().chain(orphans.iter()).collect();
 
@@ -580,26 +580,26 @@ impl DBHandler {
                     let original_bead_id = bead_index_mapping
                         .get(&original_bead.block_header.block_hash())
                         .unwrap();
-                    info!("BEAD ID  original {:?}", original_bead_id);
-                    info!(
-                        "JSON BEING INSERTED IN QUERY - {:?} \n",
+                    debug!("Bead id original {:?}", original_bead_id);
+                    debug!(
+                        "Json being interested in query - {:?} \n",
                         all_bead_data.get(original_bead_id.0)
                     );
-                    info!(
-                        "JSON PARENT - {:?} \n",
+                    debug!(
+                        "Json parent - {:?} \n",
                         all_parent_ts_json_parts.get(original_bead_id.0)
                     );
-                    info!(
-                        "JSON RELATIVES - {:?} \n",
+                    debug!(
+                        "Json relatives - {:?} \n",
                         all_relatives_json_parts.get(original_bead_id.0)
                     );
-                    info!(
+                    debug!(
                         "Original bead  -- {:?} \n Fetched bead by its bead hash from DB- {:?}\n",
                         original_bead, bead
                     );
                     for parent_hash in &original_bead.committed_metadata.parents {
                         let id = bead_index_mapping.get(parent_hash).unwrap();
-                        info!("PARENTS ALSO EXIST IN BEAD MAPPING - {:?}", id);
+                        debug!("Parents also exist in bead mapping - {:?}", id);
                     }
                 }
             }
@@ -740,7 +740,7 @@ impl DBHandler {
                             .await
                         {
                             Ok(_) => {
-                                info!("Batch insertion completed successfully");
+                                debug!("Batch insertion completed successfully");
                             }
                             Err(error) => {
                                 error!(
