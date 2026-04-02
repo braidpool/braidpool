@@ -125,7 +125,7 @@ impl PeerManager {
             let current_offset = peer.ibd_batch_offset.clone();
             match offset_sender.send(current_offset) {
                 Ok(_) => {
-                    tracing::info!("Sending newer offset and updating the current offset");
+                    tracing::debug!("Sending newer offset and updating the current offset");
                     peer.ibd_batch_offset = peer.ibd_batch_offset + batch_size;
                 }
                 Err(error) => {
@@ -137,7 +137,7 @@ impl PeerManager {
                 .insert(peer_id.clone(), PeerInfo::new(peer_id.clone(), false, None));
             match offset_sender.send(IBD_BATCH_SIZE) {
                 Ok(_) => {
-                    tracing::info!("Sent newly initialized offset to request channel");
+                    tracing::debug!("Sent newly initialized offset to request channel");
                 }
                 Err(error) => {
                     tracing::error!(error=?error,"Error while initiating batch offset and sending it to request channel");
@@ -170,7 +170,7 @@ impl PeerManager {
         if let Some(peer_info) = self.peers.get_mut(&peer_id) {
             let cached = peer_info.ibd_peer_tips.clone();
             match sender.send(cached.clone()) {
-                Ok(_) => tracing::info!("Cached tips sent successfully to swarm event loop"),
+                Ok(_) => tracing::debug!("Cached tips sent successfully to swarm event loop"),
                 Err(error) => tracing::error!(error=?error,"Tips not sent"),
             }
         } else {
@@ -187,7 +187,7 @@ impl PeerManager {
             let cached = peer_info.ibd_bead_queue.clone();
             match sender.send(cached.clone()) {
                 Ok(_) => {
-                    tracing::info!("Cached get bead hashes sent successfully to swarm event loop")
+                    tracing::debug!("Cached get bead hashes sent successfully to swarm event loop")
                 }
                 Err(error) => tracing::error!(error=?error,"Beadhashes not sent"),
             }
@@ -204,7 +204,7 @@ impl PeerManager {
         if let Some(peer_info) = self.peers.get_mut(&peer_id) {
             let retries = peer_info.retry_count;
             match sender.send(retries) {
-                Ok(_) => tracing::info!("Retry count sent successfully to swarm event loop"),
+                Ok(_) => tracing::debug!("Retry count sent successfully to swarm event loop"),
                 Err(_) => tracing::error!("Retry count not sent"),
             }
         } else {
@@ -215,7 +215,7 @@ impl PeerManager {
     pub fn handle_update_retry_count(&mut self, peer_id: PeerId) {
         if let Some(peer_info) = self.peers.get_mut(&peer_id) {
             peer_info.retry_count += 1;
-            tracing::info!(peer_id=?peer_id,"Incremented retry count to {}",peer_info.retry_count);
+            tracing::debug!(peer_id=?peer_id,"Incremented retry count to {}",peer_info.retry_count);
         } else {
             tracing::error!("PeerInfo not found while updating retry count");
         }

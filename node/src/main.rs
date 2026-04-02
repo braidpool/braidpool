@@ -954,7 +954,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                             }
                                         }).await {
                                             Ok(_) => {
-                                                info!("Batch insert command sent successfully to db handler for IBD beads");
+                                                info!(
+                                                    bead_count = beads.len(),
+                                                    "Batch insert queued for IBD beads"
+                                                );
                                             },
                                             Err(error) => {
                                                 error!(
@@ -990,19 +993,39 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                         }
                                     };
                                     if next_batch_offset < pruned_beads.len() && ((next_batch_offset+IBD_BATCH_SIZE)< pruned_beads.len()){
-                                        info!("Received beads within batch range - [{:?} --- {:?}]",(next_batch_offset-IBD_BATCH_SIZE),next_batch_offset);
+                                        let batch_start = next_batch_offset - IBD_BATCH_SIZE;
+                                        let batch_num = next_batch_offset / IBD_BATCH_SIZE;
+                                        let total_batches = (pruned_beads.len() + IBD_BATCH_SIZE - 1) / IBD_BATCH_SIZE;
+                                        info!(
+                                            batch = %batch_num,
+                                            total = %total_batches,
+                                            range = %format!("{}..{}", batch_start, next_batch_offset),
+                                            "IBD batch {}/{} fetched",
+                                            batch_num,
+                                            total_batches
+                                        );
                                         swarm.behaviour_mut().request_beads(peer, &pruned_beads[next_batch_offset..(next_batch_offset+IBD_BATCH_SIZE)].to_vec());
                                     }
                                     else if next_batch_offset < pruned_beads.len() && ((next_batch_offset+IBD_BATCH_SIZE)>=pruned_beads.len()){
-                                        info!("Received last batch of beads from peer starting from offset - [{:?} --- {:?}]",next_batch_offset,pruned_beads.len());
+                                        let remaining = pruned_beads.len() - next_batch_offset;
+                                        info!(
+                                            offset = %next_batch_offset,
+                                            remaining = %remaining,
+                                            total = %pruned_beads.len(),
+                                            "IBD final batch ({} beads remaining)",
+                                            remaining
+                                        );
                                         swarm.behaviour_mut().request_beads(peer, &pruned_beads[next_batch_offset..].to_vec());
 
                                     }
                                     else{
                                         //IBD completed
+                                        let sync_mode = if next_batch_offset > IBD_BATCH_SIZE { "batches" } else { "single-fetch" };
                                         info!(
                                             peer = %peer,
-                                            "Initial IBD bead fetching has been completed with respect to peer"
+                                            sync_mode = %sync_mode,
+                                            "\u{1F389} IBD completed successfully via {}",
+                                            sync_mode
                                         );
                                     }
                                 }

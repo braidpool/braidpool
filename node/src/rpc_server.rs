@@ -28,7 +28,7 @@ use std::future::Future;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot, RwLock};
-use tracing::{info, warn};
+use tracing::{debug, info, trace, warn};
 
 #[cfg(test)]
 use {
@@ -278,7 +278,7 @@ impl RpcServer for RpcServerImpl {
         let hash = bead_hash
             .parse::<BeadHash>()
             .map_err(|_| ErrorObjectOwned::owned(1, "Invalid bead hash format", None::<()>))?;
-        info!(hash = %hash, "Get bead request received");
+        debug!(hash = %hash, "Get bead request received");
         let braid_data = self.braid_arc.read().await;
         let bead = braid_data
             .beads
@@ -293,7 +293,7 @@ impl RpcServer for RpcServerImpl {
         let bead: Bead = serde_json::from_str(&bead_data).map_err(|e| {
             ErrorObjectOwned::owned(1, format!("Invalid bead data: {}", e), None::<()>)
         })?;
-        info!(
+        debug!(
             hash = %bead.block_header.block_hash(),
             "Add bead request received"
         );
@@ -319,7 +319,7 @@ impl RpcServer for RpcServerImpl {
             .iter()
             .map(|&index| braid_data.beads[index].block_header.block_hash())
             .collect();
-        info!(tip_count = %tips.len(), "Get tips request received");
+        debug!(tip_count = %tips.len(), "Get tips request received");
         let tips_str: Vec<String> = tips.iter().map(|h| h.to_string()).collect();
 
         Ok(tips_str)
@@ -328,20 +328,20 @@ impl RpcServer for RpcServerImpl {
     async fn get_bead_count(&self) -> Result<u64, ErrorObjectOwned> {
         let braid_data = self.braid_arc.read().await;
         let count = braid_data.beads.len();
-        info!(count = %count, "Get bead count request received");
+        debug!(count = %count, "Get bead count request received");
         Ok(count as u64)
     }
 
     async fn get_cohort_count(&self) -> Result<u64, ErrorObjectOwned> {
         let braid_data = self.braid_arc.read().await;
         let count = braid_data.cohorts.len();
-        info!(count = %count, "Get cohort count request received");
+        debug!(count = %count, "Get cohort count request received");
 
         Ok(count as u64)
     }
 
     async fn get_cohort_by_id(&self, cohort_id: u64) -> Result<Vec<String>, ErrorObjectOwned> {
-        info!(id = %cohort_id, "Get cohort by id request received");
+        debug!(id = %cohort_id, "Get cohort by id request received");
 
         let braid_data = self.braid_arc.read().await;
 
@@ -368,7 +368,7 @@ impl RpcServer for RpcServerImpl {
     }
 
     async fn get_genesis(&self) -> Result<String, ErrorObjectOwned> {
-        info!("Get Genesis request received");
+        debug!("Get Genesis request received");
 
         let braid_data = self.braid_arc.read().await;
 
@@ -386,7 +386,7 @@ impl RpcServer for RpcServerImpl {
     }
 
     async fn get_miner_info(&self) -> Result<Vec<String>, ErrorObjectOwned> {
-        info!("Get Miner Info Request Received");
+        debug!("Get Miner Info Request Received");
         let connection_map = self.stratum_connection_mapping.read().await;
         let miner_ips: Vec<String> = connection_map
             .downstream_channel_mapping
@@ -401,7 +401,7 @@ impl RpcServer for RpcServerImpl {
         &self,
         params: Option<serde_json::Value>,
     ) -> Result<Value, ErrorObjectOwned> {
-        info!("Get Mining Info Request Received");
+        debug!("Get Mining Info Request Received");
 
         // Parse and validate parameters - parameters are required
         let filter_params: MiningInfoParams = match params {
@@ -596,7 +596,7 @@ impl RpcServer for RpcServerImpl {
     }
 
     async fn get_parents(&self, bead_hash: String) -> Result<Vec<String>, ErrorObjectOwned> {
-        info!(bead = %bead_hash, "Get parent bead request received");
+        debug!(bead = %bead_hash, "Get parent bead request received");
 
         let hash = bead_hash
             .parse::<BeadHash>()
@@ -626,7 +626,7 @@ impl RpcServer for RpcServerImpl {
     }
 
     async fn get_children(&self, bead_hash: String) -> Result<Vec<String>, ErrorObjectOwned> {
-        info!(bead = %bead_hash, "Get children bead request received");
+        debug!(bead = %bead_hash, "Get children bead request received");
 
         let parent_hash = bead_hash
             .parse::<BeadHash>()
@@ -672,7 +672,7 @@ impl RpcServer for RpcServerImpl {
         &self,
         limit: u8,
     ) -> Result<Vec<String>, ErrorObjectOwned> {
-        info!(limit = %limit, "Get highest work path by count request received");
+        debug!(limit = %limit, "Get highest work path by count request received");
 
         let braid_data = self.braid_arc.read().await;
 
@@ -777,7 +777,7 @@ impl RpcServer for RpcServerImpl {
                         "low": stats.queue_sizes.low,
                     }
                 });
-                info!(
+                debug!(
                     "IPC queue statistics: failed={} avg_ms={} critical={} high={} normal={} low={}",
                     stats.failed_requests,
                     stats.avg_processing_time_ms,
@@ -853,7 +853,7 @@ impl RpcServer for RpcServerImpl {
     }
 
     async fn get_node_info(&self, bead_hash: String) -> Result<Value, ErrorObjectOwned> {
-        info!(bead_hash = %bead_hash, "Get Node Info request received");
+        debug!(bead_hash = %bead_hash, "Get Node Info request received");
 
         let hash = bead_hash
             .parse::<BeadHash>()
@@ -892,7 +892,7 @@ impl RpcServer for RpcServerImpl {
     }
 
     async fn get_peer_info(&self) -> Result<Value, ErrorObjectOwned> {
-        info!("Get Peer Info Request Received");
+        debug!("Get Peer Info Request Received");
 
         // Use read lock for concurrent access (RPC server only reads)
         let peer_manager_guard = self.peer_manager.read().await;
@@ -903,7 +903,7 @@ impl RpcServer for RpcServerImpl {
     /// This is achieved by querying the latest block template managed by the Stratum server,
     /// excluding the coinbase transaction.
     async fn staged_transactions(&self) -> Result<Value, ErrorObjectOwned> {
-        info!("Staged transaction request received");
+        debug!("Staged transaction request received");
 
         let latest_block_template_guard = self.latest_block.lock().await;
 
@@ -931,7 +931,7 @@ impl RpcServer for RpcServerImpl {
     }
 
     async fn unstage_transactions(&self, txid: String) -> Result<bool, ErrorObjectOwned> {
-        info!(txid = %txid, "unstage_transactions request received");
+        debug!(txid = %txid, "unstage_transactions request received");
         let (responder, receiver) = oneshot::channel();
         let command = RpcProxyCommand::RemoveTransaction { txid, responder };
 
@@ -963,7 +963,7 @@ impl RpcServer for RpcServerImpl {
         method: String,
         params: serde_json::Value,
     ) -> Result<serde_json::Value, ErrorObjectOwned> {
-        info!(method = %method, "bitcoin_proxy request received");
+        debug!(method = %method, "bitcoin_proxy request received");
 
         let rpc_config = self.bitcoin_rpc_config.as_ref().ok_or_else(|| {
             ErrorObjectOwned::owned(
@@ -975,7 +975,7 @@ impl RpcServer for RpcServerImpl {
 
         match call_bitcoin_rpc_direct(rpc_config, &method, &params).await {
             Ok(result) => {
-                info!(method = %method, "bitcoin_proxy request completed successfully");
+                debug!(method = %method, "bitcoin_proxy request completed successfully");
                 Ok(result)
             }
             Err(e) => {
@@ -1003,14 +1003,14 @@ where
         &self,
         request: Request<'a>,
     ) -> impl Future<Output = Self::MethodResponse> + Send + 'a {
-        info!(request = ?request, "RPC request received");
+        trace!(request = ?request, "RPC request received");
         assert!(request.extensions().get::<ConnectionId>().is_some());
 
         self.0.call(request)
     }
 
     fn batch<'a>(&self, batch: Batch<'a>) -> impl Future<Output = Self::BatchResponse> + Send + 'a {
-        info!(batch = ?batch, "RPC batch received");
+        trace!(batch = ?batch, "RPC batch received");
         self.0.batch(batch)
     }
 
@@ -1018,7 +1018,7 @@ where
         &self,
         n: Notification<'a>,
     ) -> impl Future<Output = Self::NotificationResponse> + Send + 'a {
-        info!(notification = ?n, "RPC notification received");
+        trace!(notification = ?n, "RPC notification received");
         self.0.notification(n)
     }
 }
