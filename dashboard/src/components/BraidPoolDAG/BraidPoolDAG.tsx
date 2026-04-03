@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import * as d3 from 'd3';
 import { Loader } from 'lucide-react';
 import { GraphData, GraphNode, NodeIdMapping, Position } from './Types';
@@ -9,6 +9,17 @@ import {
 } from './BraidPoolDAGUtils';
 import { WEBSOCKET_URLS } from '../../URLs';
 import { NODE_RADIUS, PADDING, COLORS } from './Constants';
+
+type AnimationSpeed = 'slow' | 'normal' | 'fast';
+
+const SPEED_PRESETS: Record<
+  AnimationSpeed,
+  { transitionMs: number; throttleMs: number }
+> = {
+  slow: { transitionMs: 2000, throttleMs: 3000 },
+  normal: { transitionMs: 1000, throttleMs: 1000 },
+  fast: { transitionMs: 300, throttleMs: 500 },
+};
 
 const GraphVisualization: React.FC = () => {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -22,8 +33,13 @@ const GraphVisualization: React.FC = () => {
   const height = window.innerHeight - margin.top - margin.bottom;
   const [nodeIdMap, setNodeIdMap] = useState<NodeIdMapping>({});
   const [selectedCohorts, setSelectedCohorts] = useState<number | 'all'>(5);
+  const [animationSpeed, setAnimationSpeed] =
+    useState<AnimationSpeed>('normal');
   const nodeRadius = NODE_RADIUS;
   const tooltipRef = useRef<HTMLDivElement>(null);
+  const latestMessageRef = useRef<string | null>(null);
+  const throttleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const transitionMsRef = useRef(SPEED_PRESETS.normal.transitionMs);
   // var COLUMN_WIDTH = 200;
   // const VERTICAL_SPACING = 150;
 
@@ -53,6 +69,116 @@ const GraphVisualization: React.FC = () => {
   }, [isPlaying]);
 
   useEffect(() => {
+    transitionMsRef.current = SPEED_PRESETS[animationSpeed].transitionMs;
+  }, [animationSpeed]);
+
+  const processMessage = useCallback((rawData: string) => {
+    try {
+      const parsed = JSON.parse(rawData);
+      const parsedData = parsed.data;
+
+      if (!parsedData?.parents || typeof parsedData.parents !== 'object')
+        return;
+
+      const children: Record<string, string[]> = {};
+      Object.entries(parsedData.parents).forEach(([nodeId, parents]) => {
+        (parents as string[]).forEach((parentId) => {
+          if (!children[parentId]) children[parentId] = [];
+          children[parentId].push(nodeId);
+        });
+      });
+
+      const bead_count = Object.keys(parsedData.parents).length;
+
+      const newGraphData: GraphData = {
+        highest_work_path: parsedData.highest_work_path,
+        parents: parsedData.parents,
+        cohorts: parsedData.cohorts,
+        children,
+        bead_count,
+      };
+
+      const firstCohortChanged =
+        parsedData?.cohorts?.[0]?.length &&
+        JSON.stringify(prevFirstCohortRef.current) !==
+          JSON.stringify(parsedData.cohorts[0]);
+
+      const lastCohortChanged =
+        parsedData?.cohorts?.length > 0 &&
+        JSON.stringify(prevLastCohortRef.current) !==
+          JSON.stringify(parsedData.cohorts[parsedData.cohorts.length - 1]);
+
+      if (firstCohortChanged) {
+        const top = COLORS.shift();
+        COLORS.push(top ?? `rgba(${217}, ${95}, ${2}, 1)`);
+        prevFirstCohortRef.current = parsedData.cohorts[0];
+      }
+
+      if (lastCohortChanged) {
+        prevLastCohortRef.current =
+          parsedData.cohorts[parsedData.cohorts.length - 1];
+      }
+
+      const newMapping: NodeIdMapping = {};
+      let nextId = 1;
+      Object.keys(parsedData.parents).forEach((hash) => {
+        if (!newMapping[hash]) {
+          newMapping[hash] = nextId.toString();
+          nextId++;
+        }
+      });
+
+      setNodeIdMap(newMapping);
+      setGraphData(newGraphData);
+
+      // Increment the counter and update the highlighted bead hash
+      setGraphUpdateCounter((prevCounter) => {
+        const newCounter = prevCounter + 1;
+        if (newCounter % 100 === 0 && parsedData.highest_work_path.length > 0) {
+          const latestBeadHash =
+            parsedData.highest_work_path[
+              parsedData.highest_work_path.length - 1
+            ];
+          setLatestBeadHashForHighlight(latestBeadHash);
+        }
+        return newCounter;
+      });
+
+      setTotalBeads(bead_count);
+      setTotalCohorts(parsedData.cohorts.length);
+      setMaxCohortSize(
+        Math.max(...parsedData.cohorts.map((c: string | any[]) => c.length))
+      );
+      setHwpLength(parsedData.highest_work_path.length);
+      setLoading(false);
+
+      // Trigger animation if cohorts changed
+      if (firstCohortChanged || lastCohortChanged) {
+        if (!isPlayingRef.current) return;
+        setTimeout(() => {
+          animateCohorts(
+            firstCohortChanged ? parsedData.cohorts[0] : [],
+            lastCohortChanged
+              ? parsedData.cohorts[parsedData.cohorts.length - 1]
+              : []
+          );
+        }, 100);
+      }
+    } catch (err) {
+      setError('Error processing graph data');
+      console.error('Error processing graph data:', err);
+      setLoading(false);
+    }
+  }, []);
+
+  const stepForward = useCallback(() => {
+    if (latestMessageRef.current) {
+      processMessage(latestMessageRef.current);
+      latestMessageRef.current = null;
+    }
+  }, [processMessage]);
+
+  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (
@@ -69,11 +195,25 @@ const GraphVisualization: React.FC = () => {
         event.preventDefault();
         setIsPlaying((prev) => !prev);
       }
+
+      // Speed shortcuts: 1 = slow, 2 = normal, 3 = fast
+      if (event.key === '1') setAnimationSpeed('slow');
+      if (event.key === '2') setAnimationSpeed('normal');
+      if (event.key === '3') setAnimationSpeed('fast');
+
+      // Step forward one frame when paused
+      if (event.key === 'ArrowRight' && !isPlayingRef.current) {
+        event.preventDefault();
+        if (latestMessageRef.current) {
+          processMessage(latestMessageRef.current);
+          latestMessageRef.current = null;
+        }
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [processMessage]);
 
   useEffect(() => {
     const url = WEBSOCKET_URLS.BRAIDPOOL_DAG_WEBSOCKET;
@@ -98,120 +238,7 @@ const GraphVisualization: React.FC = () => {
 
     socket.onmessage = (event) => {
       if (!isMounted) return;
-      try {
-        const parsed = JSON.parse(event.data);
-        const parsedData = parsed.data;
-        console.log('Received data:', parsedData);
-        if (!isPlayingRef.current) {
-          return;
-        }
-        if (!parsedData?.parents || typeof parsedData.parents !== 'object') {
-          return;
-        }
-
-        const children: Record<string, string[]> = {};
-        if (parsedData?.parents && typeof parsedData.parents === 'object') {
-          Object.entries(parsedData.parents).forEach(([nodeId, parents]) => {
-            (parents as string[]).forEach((parentId) => {
-              if (!children[parentId]) {
-                children[parentId] = [];
-              }
-              children[parentId].push(nodeId);
-            });
-          });
-        }
-
-        const bead_count =
-          parsedData?.parents && typeof parsedData.parents === 'object'
-            ? Object.keys(parsedData.parents).length
-            : 0;
-
-        const graphData: GraphData = {
-          highest_work_path: parsedData.highest_work_path,
-          parents: parsedData.parents,
-          cohorts: parsedData.cohorts,
-          children,
-          bead_count,
-        };
-
-        const firstCohortChanged =
-          parsedData?.cohorts?.[0]?.length &&
-          JSON.stringify(prevFirstCohortRef.current) !==
-            JSON.stringify(parsedData.cohorts[0]);
-
-        const lastCohortChanged =
-          parsedData?.cohorts?.length > 0 &&
-          JSON.stringify(prevLastCohortRef.current) !==
-            JSON.stringify(parsedData.cohorts[parsedData.cohorts.length - 1]);
-
-        if (firstCohortChanged) {
-          const top = COLORS.shift();
-          COLORS.push(top ?? `rgba(${217}, ${95}, ${2}, 1)`);
-          prevFirstCohortRef.current = parsedData.cohorts[0];
-        }
-
-        if (lastCohortChanged) {
-          prevLastCohortRef.current =
-            parsedData.cohorts[parsedData.cohorts.length - 1];
-        }
-
-        const newMapping: NodeIdMapping = {};
-        let nextId = 1;
-        Object.keys(parsedData.parents).forEach((hash) => {
-          if (!newMapping[hash]) {
-            newMapping[hash] = nextId.toString();
-            nextId++;
-          }
-        });
-
-        setNodeIdMap(newMapping);
-        setGraphData(graphData);
-
-        // Increment the counter and update the highlighted bead hash
-        setGraphUpdateCounter((prevCounter) => {
-          const newCounter = prevCounter + 1;
-          // If the counter is divisible by 100, set the latest bead's hash
-          if (
-            newCounter % 100 === 0 &&
-            parsedData.highest_work_path.length > 0
-          ) {
-            const latestBeadHash =
-              parsedData.highest_work_path[
-                parsedData.highest_work_path.length - 1
-              ];
-            setLatestBeadHashForHighlight(latestBeadHash);
-          }
-          // The `latestBeadHashForHighlight` will remain set until the next time the condition is met.
-          return newCounter;
-        });
-
-        setTotalBeads(bead_count);
-        setTotalCohorts(parsedData.cohorts.length);
-        setMaxCohortSize(
-          Math.max(...parsedData.cohorts.map((c: string | any[]) => c.length))
-        );
-        setHwpLength(parsedData.highest_work_path.length);
-        setLoading(false);
-
-        // Trigger animation if cohorts changed
-        if (firstCohortChanged || lastCohortChanged) {
-          if (!isPlayingRef.current) {
-            return;
-          }
-          setTimeout(() => {
-            animateCohorts(
-              firstCohortChanged ? parsedData.cohorts[0] : [],
-              lastCohortChanged
-                ? parsedData.cohorts[parsedData.cohorts.length - 1]
-                : []
-            );
-          }, 100);
-        }
-      } catch (err) {
-        setError('Error processing graph data: ');
-        console.error('Error processing graph data:', err);
-        setLoading(false);
-      }
+      latestMessageRef.current = event.data;
     };
 
     return () => {
@@ -222,10 +249,28 @@ const GraphVisualization: React.FC = () => {
     };
   }, []);
 
+  // Throttle: process buffered messages at the configured rate
+  useEffect(() => {
+    if (throttleTimerRef.current) clearInterval(throttleTimerRef.current);
+
+    const { throttleMs } = SPEED_PRESETS[animationSpeed];
+
+    throttleTimerRef.current = setInterval(() => {
+      if (!isPlayingRef.current || !latestMessageRef.current) return;
+      processMessage(latestMessageRef.current);
+      latestMessageRef.current = null;
+    }, throttleMs);
+
+    return () => {
+      if (throttleTimerRef.current) clearInterval(throttleTimerRef.current);
+    };
+  }, [animationSpeed, processMessage]);
+
   const animateCohorts = (firstCohort: string[], lastCohort: string[]) => {
     if (!svgRef.current) return;
 
     const svg = d3.select(svgRef.current);
+    const duration = transitionMsRef.current;
 
     // Animate first cohort nodes
     if (firstCohort.length > 0) {
@@ -236,7 +281,7 @@ const GraphVisualization: React.FC = () => {
         .attr('stroke', '#FF8500')
         .attr('stroke-width', 3)
         .transition()
-        .duration(1000)
+        .duration(duration)
         .attr('stroke-width', 2)
         .attr('stroke', '#fff');
     }
@@ -250,7 +295,7 @@ const GraphVisualization: React.FC = () => {
         .attr('stroke', '#FF8500')
         .attr('stroke-width', 3)
         .transition()
-        .duration(1000)
+        .duration(duration)
         .attr('stroke-width', 2)
         .attr('stroke', '#fff');
     }
@@ -689,6 +734,47 @@ const GraphVisualization: React.FC = () => {
             </option>
           ))}
         </select>
+        <select
+          value={animationSpeed}
+          onChange={(e) => setAnimationSpeed(e.target.value as AnimationSpeed)}
+          className="px-2 py-1 rounded border border-[#0077B6] bg-gray text-[#0077B6]"
+        >
+          <option value="slow">Slow (1)</option>
+          <option value="normal">Normal (2)</option>
+          <option value="fast">Fast (3)</option>
+        </select>
+        <div className="hidden sm:flex items-center gap-2 text-[11px] text-gray-500">
+          <span className="flex items-center gap-1">
+            <kbd className="px-1.5 py-0.5 rounded bg-gray-700 text-gray-300 border border-gray-600 font-mono text-[10px]">
+              Space
+            </kbd>
+            <span>pause</span>
+          </span>
+          <span className="text-gray-600">|</span>
+          <span className="flex items-center gap-1">
+            <kbd className="px-1.5 py-0.5 rounded bg-gray-700 text-gray-300 border border-gray-600 font-mono text-[10px]">
+              1
+            </kbd>
+            <kbd className="px-1.5 py-0.5 rounded bg-gray-700 text-gray-300 border border-gray-600 font-mono text-[10px]">
+              2
+            </kbd>
+            <kbd className="px-1.5 py-0.5 rounded bg-gray-700 text-gray-300 border border-gray-600 font-mono text-[10px]">
+              3
+            </kbd>
+            <span>speed</span>
+          </span>
+          {!isPlaying && (
+            <>
+              <span className="text-gray-600">|</span>
+              <span className="flex items-center gap-1">
+                <kbd className="px-1.5 py-0.5 rounded bg-gray-700 text-gray-300 border border-gray-600 font-mono text-[10px]">
+                  &rarr;
+                </kbd>
+                <span>step</span>
+              </span>
+            </>
+          )}
+        </div>
         <div className="flex gap-1 ml-auto">
           <button
             onClick={handleZoomIn}
@@ -710,10 +796,23 @@ const GraphVisualization: React.FC = () => {
           </button>
           <button
             onClick={() => setIsPlaying((prev) => !prev)}
-            className="bg-[#0077B6] text-white px-3 py-1 rounded hover:bg-[#005691] transition-colors"
+            className={`text-white px-3 py-1 rounded transition-colors ${
+              isPlaying
+                ? 'bg-[#0077B6] hover:bg-[#005691]'
+                : 'bg-[#FF8500] hover:bg-[#cc6a00]'
+            }`}
           >
             {isPlaying ? 'Pause' : 'Resume'}
           </button>
+          {!isPlaying && (
+            <button
+              onClick={stepForward}
+              className="bg-[#FF8500] text-white px-3 py-1 rounded hover:bg-[#cc6a00] transition-colors"
+              title="Step forward one frame (Right Arrow)"
+            >
+              Step &rarr;
+            </button>
+          )}
         </div>
       </div>
 
