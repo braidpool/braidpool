@@ -235,15 +235,18 @@ impl DBHandler {
         bead_index_mapping: &HashMap<BeadHash, (usize, u32)>,
         bead: &Bead,
     ) -> anyhow::Result<(String, String, String)> {
+        let bead_hash = bead.block_header.block_hash();
         let bead_id = bead_index_mapping
-            .get(&bead.block_header.block_hash())
-            .unwrap()
+            .get(&bead_hash)
+            .ok_or_else(|| anyhow::anyhow!("Bead index not found for hash: {}", bead_hash))?
             .0;
         let mut current_parents = Vec::new();
         let mut relatives = Vec::new();
         let mut parent_ts = Vec::new();
         for parent in &bead.committed_metadata.parents {
-            let (parent_index, parent_timestamp) = bead_index_mapping.get(parent).unwrap();
+            let (parent_index, parent_timestamp) = bead_index_mapping
+                .get(parent)
+                .ok_or_else(|| anyhow::anyhow!("Parent bead not found in mapping: {}", parent))?;
             current_parents.push(parent_index);
             relatives.push((*parent_index as u64, bead_id as u64));
             parent_ts.push((*parent_index as u64, bead_id as u64, *parent_timestamp));
@@ -577,29 +580,31 @@ impl DBHandler {
                         original_bead.block_header.block_hash(),
                     )
                     .await;
-                    let original_bead_id = bead_index_mapping
+                    if let Some(original_bead_id) = bead_index_mapping
                         .get(&original_bead.block_header.block_hash())
-                        .unwrap();
-                    debug!("Bead id original {:?}", original_bead_id);
-                    debug!(
-                        "Json being interested in query - {:?} \n",
-                        all_bead_data.get(original_bead_id.0)
-                    );
-                    debug!(
-                        "Json parent - {:?} \n",
-                        all_parent_ts_json_parts.get(original_bead_id.0)
-                    );
-                    debug!(
-                        "Json relatives - {:?} \n",
-                        all_relatives_json_parts.get(original_bead_id.0)
-                    );
-                    debug!(
-                        "Original bead  -- {:?} \n Fetched bead by its bead hash from DB- {:?}\n",
-                        original_bead, bead
-                    );
-                    for parent_hash in &original_bead.committed_metadata.parents {
-                        let id = bead_index_mapping.get(parent_hash).unwrap();
-                        debug!("Parents also exist in bead mapping - {:?}", id);
+                    {
+                        debug!("Bead id original {:?}", original_bead_id);
+                        debug!(
+                            "Json being interested in query - {:?} \n",
+                            all_bead_data.get(original_bead_id.0)
+                        );
+                        debug!(
+                            "Json parent - {:?} \n",
+                            all_parent_ts_json_parts.get(original_bead_id.0)
+                        );
+                        debug!(
+                            "Json relatives - {:?} \n",
+                            all_relatives_json_parts.get(original_bead_id.0)
+                        );
+                        debug!(
+                            "Original bead  -- {:?} \n Fetched bead by its bead hash from DB- {:?}\n",
+                            original_bead, bead
+                        );
+                        for parent_hash in &original_bead.committed_metadata.parents {
+                            if let Some(id) = bead_index_mapping.get(parent_hash) {
+                                debug!("Parents also exist in bead mapping - {:?}", id);
+                            }
+                        }
                     }
                 }
             }
@@ -659,10 +664,19 @@ impl DBHandler {
                                 );
                                 //Inserting the beads removed from orphan set upon the extension of current bead
                                 for orphan in removed_orphans.into_iter() {
-                                    let orphan_bead_id = bead_index_mapping
-                                        .get(&orphan.block_header.block_hash())
-                                        .unwrap()
-                                        .0;
+                                    let orphan_hash = orphan.block_header.block_hash();
+                                    let orphan_bead_id = match bead_index_mapping
+                                        .get(&orphan_hash)
+                                    {
+                                        Some((id, _)) => *id,
+                                        None => {
+                                            error!(
+                                                orphan_hash = %orphan_hash,
+                                                "Orphan bead index not found in mapping, skipping"
+                                            );
+                                            continue;
+                                        }
+                                    };
                                     let (txs_json, relative_json, parent_timestamp_json) =
                                         match self
                                             .prepare_bead_tuple_data(&bead_index_mapping, &orphan)
@@ -838,19 +852,48 @@ pub async fn fetch_beads_in_batch(
                 CompactTarget::from_consensus(row.get::<u32, _>("weak_target"));
             bead.committed_metadata.miner_ip = row.get("miner_ip");
 
+            let start_ts_val = row.get::<u32, _>("start_timestamp");
             bead.committed_metadata.start_timestamp =
-                MedianTimePast::from_u32(row.get::<u32, _>("start_timestamp")).unwrap();
+                MedianTimePast::from_u32(start_ts_val).map_err(|e| {
+                    DBErrors::TupleAttributeParsingError {
+                        error: format!("Invalid timestamp value {}: {}", start_ts_val, e),
+                        attribute: "start_timestamp".into(),
+                    }
+                })?;
 
+            let broadcast_ts_val = row.get::<u32, _>("broadcast_timestamp");
             bead.uncommitted_metadata.broadcast_timestamp =
-                MedianTimePast::from_u32(row.get::<u32, _>("broadcast_timestamp")).unwrap();
+                MedianTimePast::from_u32(broadcast_ts_val).map_err(|e| {
+                    DBErrors::TupleAttributeParsingError {
+                        error: format!("Invalid timestamp value {}: {}", broadcast_ts_val, e),
+                        attribute: "broadcast_timestamp".into(),
+                    }
+                })?;
 
+            let extranonce1_str = row.get::<String, _>("extranonce1");
             bead.uncommitted_metadata.extra_nonce_1 =
-                u32::from_str_radix(&row.get::<String, _>("extranonce1"), 16).unwrap();
+                u32::from_str_radix(&extranonce1_str, 16).map_err(|e| {
+                    DBErrors::TupleAttributeParsingError {
+                        error: format!("Invalid hex value '{}': {}", extranonce1_str, e),
+                        attribute: "extranonce1".into(),
+                    }
+                })?;
+            let extranonce2_str = row.get::<String, _>("extranonce2");
             bead.uncommitted_metadata.extra_nonce_2 =
-                u32::from_str_radix(&row.get::<String, _>("extranonce2"), 16).unwrap();
+                u32::from_str_radix(&extranonce2_str, 16).map_err(|e| {
+                    DBErrors::TupleAttributeParsingError {
+                        error: format!("Invalid hex value '{}': {}", extranonce2_str, e),
+                        attribute: "extranonce2".into(),
+                    }
+                })?;
 
             bead.uncommitted_metadata.signature =
-                Signature::from_slice(&row.get::<Vec<u8>, _>("signature")).unwrap();
+                Signature::from_slice(&row.get::<Vec<u8>, _>("signature")).map_err(|e| {
+                    DBErrors::TupleAttributeParsingError {
+                        error: format!("Invalid signature: {}", e),
+                        attribute: "signature".into(),
+                    }
+                })?;
 
             let current_bead_id = row.get::<i32, _>("id");
 
@@ -912,10 +955,16 @@ pub async fn fetch_beads_in_batch(
                     }
                 };
 
+                let parent_ts = MedianTimePast::from_u32(timestamp as u32).map_err(|e| {
+                    DBErrors::TupleAttributeParsingError {
+                        error: format!("Invalid parent timestamp value {}: {}", timestamp, e),
+                        attribute: "parent_bead_timestamps".into(),
+                    }
+                })?;
                 bead.committed_metadata
                     .parent_bead_timestamps
                     .0
-                    .push(MedianTimePast::from_u32(timestamp as u32).unwrap());
+                    .push(parent_ts);
             }
             debug!(
                 "Fetched bead - {:?} ---- {:?}",
@@ -960,22 +1009,58 @@ pub async fn fetch_bead_by_bead_hash(
             let ntime = BlockTime::from_u32(row.get::<u32, _>("nTime"));
             let nbits = CompactTarget::from_consensus(row.get::<u32, _>("nBits"));
             let nonce = row.get::<u32, _>("nNonce");
-            let payout_address = std::str::from_utf8(&row.get::<Vec<u8>, _>("payout_address"))
-                .unwrap()
+            let payout_address_bytes = row.get::<Vec<u8>, _>("payout_address");
+            let payout_address = std::str::from_utf8(&payout_address_bytes)
+                .map_err(|_| DBErrors::TupleAttributeParsingError {
+                    error: "Invalid UTF-8 in payout_address".to_string(),
+                    attribute: "payout_address".to_string(),
+                })?
                 .to_string();
+            let start_ts_val = row.get::<u32, _>("start_timestamp");
             let start_timestamp =
-                MedianTimePast::from_u32(row.get::<u32, _>("start_timestamp")).unwrap();
-            let pub_key = PublicKey::from_slice(&row.get::<Vec<u8>, _>("comm_pub_key")).unwrap();
+                MedianTimePast::from_u32(start_ts_val).map_err(|e| {
+                    DBErrors::TupleAttributeParsingError {
+                        error: format!("Invalid timestamp value {}: {}", start_ts_val, e),
+                        attribute: "start_timestamp".to_string(),
+                    }
+                })?;
+            let pub_key = PublicKey::from_slice(&row.get::<Vec<u8>, _>("comm_pub_key"))
+                .map_err(|e| DBErrors::TupleAttributeParsingError {
+                    error: format!("Invalid public key: {}", e),
+                    attribute: "comm_pub_key".to_string(),
+                })?;
             let min_target = CompactTarget::from_consensus(row.get::<u32, _>("min_target"));
             let weak_target = CompactTarget::from_consensus(row.get::<u32, _>("weak_target"));
             let miner_ip = row.get::<String, _>("miner_ip");
+            let extranonce1_str = row.get::<String, _>("extranonce1");
             let extranonce_1 =
-                u32::from_str_radix(&row.get::<String, _>("extranonce1"), 16).unwrap();
+                u32::from_str_radix(&extranonce1_str, 16).map_err(|e| {
+                    DBErrors::TupleAttributeParsingError {
+                        error: format!("Invalid hex '{}': {}", extranonce1_str, e),
+                        attribute: "extranonce1".to_string(),
+                    }
+                })?;
+            let extranonce2_str = row.get::<String, _>("extranonce2");
             let extranonce_2 =
-                u32::from_str_radix(&row.get::<String, _>("extranonce2"), 16).unwrap();
+                u32::from_str_radix(&extranonce2_str, 16).map_err(|e| {
+                    DBErrors::TupleAttributeParsingError {
+                        error: format!("Invalid hex '{}': {}", extranonce2_str, e),
+                        attribute: "extranonce2".to_string(),
+                    }
+                })?;
+            let broadcast_ts_val = row.get::<u32, _>("broadcast_timestamp");
             let broadcast_timestamp =
-                MedianTimePast::from_u32(row.get::<u32, _>("broadcast_timestamp")).unwrap();
-            let signature = Signature::from_slice(&row.get::<Vec<u8>, _>("signature")).unwrap();
+                MedianTimePast::from_u32(broadcast_ts_val).map_err(|e| {
+                    DBErrors::TupleAttributeParsingError {
+                        error: format!("Invalid timestamp value {}: {}", broadcast_ts_val, e),
+                        attribute: "broadcast_timestamp".to_string(),
+                    }
+                })?;
+            let signature = Signature::from_slice(&row.get::<Vec<u8>, _>("signature"))
+                .map_err(|e| DBErrors::TupleAttributeParsingError {
+                    error: format!("Invalid signature: {}", e),
+                    attribute: "signature".to_string(),
+                })?;
             bead_id = id;
             fetched_bead.block_header.version = version;
             fetched_bead.block_header.bits = nbits;
@@ -1065,11 +1150,17 @@ pub async fn fetch_bead_by_bead_hash(
             }
         };
         //Extending parent bead timestamp
+        let parent_ts = MedianTimePast::from_u32(parent_timestamp as u32).map_err(|e| {
+            DBErrors::TupleAttributeParsingError {
+                error: format!("Invalid parent timestamp value {}: {}", parent_timestamp, e),
+                attribute: "parent_bead_timestamps".to_string(),
+            }
+        })?;
         fetched_bead
             .committed_metadata
             .parent_bead_timestamps
             .0
-            .push(MedianTimePast::from_u32(parent_timestamp as u32).unwrap());
+            .push(parent_ts);
         //Extending parent committment by parent hash
         fetched_bead
             .committed_metadata

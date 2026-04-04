@@ -1,5 +1,5 @@
 use bitcoin::Network;
-use core::panic;
+use crate::error::ConfigError;
 use serde::{Deserialize, Serialize};
 use std::fs;
 #[derive(Deserialize, Serialize, Clone)]
@@ -48,16 +48,19 @@ impl Default for BraidRpcConfig {
 }
 #[allow(dead_code)]
 impl BraidpoolConfig {
-    pub fn load_from_config_file(path: &str) -> BraidpoolConfig {
-        let contents = match fs::read_to_string(path) {
-            Ok(c) => c,
-            Err(error) => {
-                panic!("An error occurred while reading the file {}", error);
+    pub fn load_from_config_file(path: &str) -> Result<BraidpoolConfig, ConfigError> {
+        let contents = fs::read_to_string(path).map_err(|e| ConfigError::TomlParseError {
+            error: e.to_string(),
+            path: path.to_string(),
+        })?;
+        let config: BraidpoolConfig = toml::from_str(&contents).map_err(|e| {
+            ConfigError::TomlParseError {
+                error: e.to_string(),
+                path: path.to_string(),
             }
-        };
-        let config: BraidpoolConfig = toml::from_str(&contents).unwrap();
+        })?;
 
-        config
+        Ok(config)
     }
     pub fn with_listen_address(mut self, listen_address: String) -> Self {
         self.braidnetwork_config.listen_address = listen_address;
@@ -142,10 +145,13 @@ mod test {
     #[test]
     pub fn config_building() {
         let cwd = std::env::current_dir()
-            .unwrap()
+            .expect("Failed to get current directory")
             .join(Path::new("src/default_braidpool_config.toml"));
 
-        let from_file = BraidpoolConfig::load_from_config_file(cwd.to_str().unwrap());
+        let from_file = BraidpoolConfig::load_from_config_file(
+            cwd.to_str().expect("Failed to convert path to string"),
+        )
+        .expect("Failed to load config file");
 
         let built = BraidpoolConfig {
             braidnetwork_config: NetworkConfig {
