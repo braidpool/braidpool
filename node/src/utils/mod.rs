@@ -84,7 +84,7 @@ pub fn server_endpoints(bind_host: &str, port: u16, protocol: &str) -> Vec<Strin
 pub fn create_test_bead(nonce: u32, prev_hash: Option<BlockHash>) -> Bead {
     let public_key = "020202020202020202020202020202020202020202020202020202020202020202"
         .parse::<bitcoin::PublicKey>()
-        .unwrap();
+        .expect("Valid hardcoded test public key");
     let time_hash_set = TimeVec(Vec::new());
     let mut parent_hash_set: HashSet<BlockHash> = HashSet::new();
     if let Some(hash) = prev_hash {
@@ -92,7 +92,8 @@ pub fn create_test_bead(nonce: u32, prev_hash: Option<BlockHash>) -> Bead {
     }
     let weak_target = CompactTarget::from_consensus(486604799);
     let min_target = CompactTarget::from_consensus(486604799);
-    let time_val = Time::from_consensus(1653195600).unwrap();
+    let time_val = Time::from_consensus(1653195600)
+        .expect("Valid hardcoded test timestamp");
     let test_committed_metadata: CommittedMetadata = CommittedMetadata {
         comm_pub_key: public_key,
         min_target: min_target,
@@ -109,7 +110,8 @@ pub fn create_test_bead(nonce: u32, prev_hash: Option<BlockHash>) -> Bead {
 
     let hex = "3046022100839c1fbc5304de944f697c9f4b1d01d1faeba32d751c0f7acb21ac8a0f436a72022100e89bd46bb3a5a62adc679f659b7ce876d83ee297c7a5587b2011c4fcc72eab45";
     let sig = Signature {
-        signature: secp256k1::ecdsa::Signature::from_str(hex).unwrap(),
+        signature: secp256k1::ecdsa::Signature::from_str(hex)
+            .expect("Valid hardcoded test signature"),
         sighash_type: EcdsaSighashType::All,
     };
     let test_uncommitted_metadata = UnCommittedMetadata {

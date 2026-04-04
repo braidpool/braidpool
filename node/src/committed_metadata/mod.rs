@@ -33,7 +33,12 @@ impl Decodable for TimeVec {
         let mut vec = Vec::with_capacity(len as usize);
         for _ in 0..len {
             let time_u32 = u32::consensus_decode(r)?;
-            let time = Time::from_consensus(time_u32).unwrap();
+            let time = Time::from_consensus(time_u32).map_err(|e| {
+                Error::Io(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("Invalid timestamp value {}: {}", time_u32, e),
+                ))
+            })?;
             vec.push(time);
         }
         Ok(TimeVec(vec))
@@ -90,7 +95,7 @@ impl Default for CommittedMetadata {
             comm_pub_key: PublicKey::from_str(
                 "020202020202020202020202020202020202020202020202020202020202020202",
             )
-            .unwrap(),
+            .expect("Valid hardcoded default public key"),
             min_target: CompactTarget::from_consensus(486604799),
             weak_target: CompactTarget::from_consensus(486604799),
             miner_ip: "127.0.0.1".to_string(),
@@ -123,10 +128,22 @@ impl Decodable for CommittedMetadata {
         let parents = vec_to_hashset(Vec::<BeadHash>::consensus_decode(r)?);
         let parent_bead_timestamps = TimeVec::consensus_decode(r)?;
         let payout_address = String::consensus_decode(r)?;
-        let start_timestamp = Time::from_consensus(u32::consensus_decode(r).unwrap()).unwrap();
-        let comm_pub_key = PublicKey::from_slice(&Vec::<u8>::consensus_decode(r).unwrap()).unwrap();
-        let min_target = CompactTarget::consensus_decode(r).unwrap();
-        let weak_target = CompactTarget::consensus_decode(r).unwrap();
+        let timestamp_u32 = u32::consensus_decode(r)?;
+        let start_timestamp = Time::from_consensus(timestamp_u32).map_err(|e| {
+            Error::Io(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Invalid start_timestamp value {}: {}", timestamp_u32, e),
+            ))
+        })?;
+        let pubkey_bytes = Vec::<u8>::consensus_decode(r)?;
+        let comm_pub_key = PublicKey::from_slice(&pubkey_bytes).map_err(|e| {
+            Error::Io(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Invalid public key: {}", e),
+            ))
+        })?;
+        let min_target = CompactTarget::consensus_decode(r)?;
+        let weak_target = CompactTarget::consensus_decode(r)?;
         let miner_ip = String::consensus_decode(r)?;
         Ok(CommittedMetadata {
             transaction_ids,

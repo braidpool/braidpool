@@ -490,3 +490,147 @@ impl fmt::Display for CoinbaseError {
 }
 
 impl std::error::Error for CoinbaseError {}
+
+/// Errors related to configuration loading and parsing
+#[derive(Debug)]
+pub enum ConfigError {
+    /// Failed to parse TOML configuration file
+    TomlParseError { error: String, path: String },
+    /// Path conversion to string failed
+    PathConversionError { path: std::path::PathBuf },
+}
+
+impl fmt::Display for ConfigError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ConfigError::TomlParseError { error, path } => {
+                write!(
+                    f,
+                    "Failed to parse TOML config at path '{}': {}",
+                    path, error
+                )
+            }
+            ConfigError::PathConversionError { path } => {
+                write!(
+                    f,
+                    "Failed to convert path to string: {:?}",
+                    path
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for ConfigError {}
+
+/// Errors related to Braid data structure operations
+#[derive(Debug, Clone)]
+pub enum BraidDataError {
+    /// Bead index not found in the bead_index_mapping
+    BeadIndexNotFound { bead_hash: String },
+    /// Parent bead not found in the mapping
+    ParentBeadNotFound { parent_hash: String },
+    /// Failed to get item from collection (iterator was empty)
+    EmptyIterator { context: String },
+    /// Failed to compare beads
+    BeadComparisonFailed { context: String },
+}
+
+impl fmt::Display for BraidDataError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BraidDataError::BeadIndexNotFound { bead_hash } => {
+                write!(f, "Bead index not found for hash: {}", bead_hash)
+            }
+            BraidDataError::ParentBeadNotFound { parent_hash } => {
+                write!(f, "Parent bead not found in mapping: {}", parent_hash)
+            }
+            BraidDataError::EmptyIterator { context } => {
+                write!(f, "Empty iterator encountered: {}", context)
+            }
+            BraidDataError::BeadComparisonFailed { context } => {
+                write!(f, "Bead comparison failed: {}", context)
+            }
+        }
+    }
+}
+
+impl std::error::Error for BraidDataError {}
+
+/// Errors related to consensus decoding operations
+#[derive(Debug)]
+pub enum ConsensusDecodingError {
+    /// Failed to decode timestamp
+    TimestampDecodeError { value: u32, error: String },
+    /// Failed to decode public key from bytes
+    PublicKeyDecodeError { error: String },
+    /// Failed to decode signature from string
+    SignatureDecodeError { error: String },
+    /// Failed to decode CompactTarget
+    CompactTargetDecodeError { error: String },
+    /// Failed to decode u32 value
+    U32DecodeError { error: String },
+    /// Failed to decode block from bytes
+    BlockDecodeError { error: String },
+    /// Generic consensus decode error
+    GenericDecodeError { context: String, error: String },
+}
+
+impl fmt::Display for ConsensusDecodingError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ConsensusDecodingError::TimestampDecodeError { value, error } => {
+                write!(f, "Failed to decode timestamp from value {}: {}", value, error)
+            }
+            ConsensusDecodingError::PublicKeyDecodeError { error } => {
+                write!(f, "Failed to decode public key: {}", error)
+            }
+            ConsensusDecodingError::SignatureDecodeError { error } => {
+                write!(f, "Failed to decode signature: {}", error)
+            }
+            ConsensusDecodingError::CompactTargetDecodeError { error } => {
+                write!(f, "Failed to decode CompactTarget: {}", error)
+            }
+            ConsensusDecodingError::U32DecodeError { error } => {
+                write!(f, "Failed to decode u32: {}", error)
+            }
+            ConsensusDecodingError::BlockDecodeError { error } => {
+                write!(f, "Failed to decode block: {}", error)
+            }
+            ConsensusDecodingError::GenericDecodeError { context, error } => {
+                write!(f, "Consensus decode error in {}: {}", context, error)
+            }
+        }
+    }
+}
+
+impl std::error::Error for ConsensusDecodingError {}
+
+/// Errors related to parsing operations (hex, numbers, etc.)
+#[derive(Debug, Clone)]
+pub enum ParseError {
+    /// Failed to parse hex string to u32
+    HexParseError { value: String, error: String },
+    /// Failed to parse integer
+    IntParseError { value: String, error: String },
+    /// Timestamp conversion failed
+    TimestampParseError { value: u32, error: String },
+}
+
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ParseError::HexParseError { value, error } => {
+                write!(f, "Failed to parse hex '{}': {}", value, error)
+            }
+            ParseError::IntParseError { value, error } => {
+                write!(f, "Failed to parse integer '{}': {}", value, error)
+            }
+            ParseError::TimestampParseError { value, error } => {
+                write!(f, "Failed to parse timestamp {}: {}", value, error)
+            }
+        }
+    }
+}
+
+impl std::error::Error for ParseError {}

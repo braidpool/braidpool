@@ -20,7 +20,8 @@ impl Default for UnCommittedMetadata {
     fn default() -> Self {
         let hex = "3046022100839c1fbc5304de944f697c9f4b1d01d1faeba32d751c0f7acb21ac8a0f436a72022100e89bd46bb3a5a62adc679f659b7ce876d83ee297c7a5587b2011c4fcc72eab45";
         let default_sig = Signature {
-            signature: secp256k1::ecdsa::Signature::from_str(hex).unwrap(),
+            signature: secp256k1::ecdsa::Signature::from_str(hex)
+                .expect("Valid hardcoded default signature"),
             sighash_type: EcdsaSighashType::All,
         };
         Self {
@@ -49,8 +50,20 @@ impl Decodable for UnCommittedMetadata {
     fn consensus_decode<R: BufRead + ?Sized>(r: &mut R) -> Result<Self, Error> {
         let extra_nonce_1 = u32::consensus_decode(r)?;
         let extra_nonce_2 = u32::consensus_decode(r)?;
-        let broadcast_timestamp = Time::from_consensus(u32::consensus_decode(r).unwrap()).unwrap();
-        let signature = Signature::from_str(&String::consensus_decode(r).unwrap()).unwrap();
+        let timestamp_u32 = u32::consensus_decode(r)?;
+        let broadcast_timestamp = Time::from_consensus(timestamp_u32).map_err(|e| {
+            Error::Io(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Invalid broadcast_timestamp value {}: {}", timestamp_u32, e),
+            ))
+        })?;
+        let sig_str = String::consensus_decode(r)?;
+        let signature = Signature::from_str(&sig_str).map_err(|e| {
+            Error::Io(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Invalid signature '{}': {}", sig_str, e),
+            ))
+        })?;
 
         Ok(UnCommittedMetadata {
             extra_nonce_1,

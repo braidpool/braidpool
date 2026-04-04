@@ -923,10 +923,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
                                             //If the current bead's extension has further led to removal of orphan beads then
                                             //we can get the orphan beads that we can persist in DB also
-                                            let bead_id = bead_index_mapping
-                                                .get(&curr_beadhash)
-                                                .unwrap()
-                                                .0;
+                                            let bead_id = match bead_index_mapping.get(&curr_beadhash) {
+                                                Some((id, _)) => *id,
+                                                None => {
+                                                    error!(beadhash = %curr_beadhash, "Bead index not found after add");
+                                                    continue;
+                                                }
+                                            };
 
                                             if bead_id + 1 < braid_data.beads.len() {
                                                 debug!("Orphan beads removed from the orphan set upon extension of current bead");
@@ -1274,16 +1277,28 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         let transaction_ids: Vec<Txid> = Vec::from(ids);
                         debug!("Broadcasting bead via floodsub");
                         //TODO:Currently temprorary placeholder will be replaced in upcoming PRs
-                        let public_key = "020202020202020202020202020202020202020202020202020202020202020202"
+                        let public_key = match "020202020202020202020202020202020202020202020202020202020202020202"
                             .parse::<bitcoin::PublicKey>()
-                            .unwrap();
+                        {
+                            Ok(pk) => pk,
+                            Err(e) => {
+                                error!(error = ?e, "Failed to parse placeholder public key");
+                                continue;
+                            }
+                        };
                         let mut time_hash_set = TimeVec(Vec::new());
                         let mut parent_hash_set: HashSet<BlockHash> = HashSet::new();
                         let mut braid_data = braid.write().await;
                         let tips_index = &braid_data.tips;
                         //Committing parents data in bead
                         for tip_bead in tips_index {
-                            let current_tip_bead = braid_data.beads.get(*tip_bead).unwrap();
+                            let current_tip_bead = match braid_data.beads.get(*tip_bead) {
+                                Some(bead) => bead,
+                                None => {
+                                    error!(tip_index = tip_bead, "Tip bead index out of bounds");
+                                    continue;
+                                }
+                            };
                             parent_hash_set.insert(current_tip_bead.block_header.block_hash());
                             time_hash_set
                                 .0
@@ -1292,13 +1307,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         debug!(tip_indices = ?tips_index, tip_hashes = ?parent_hash_set,
                             "Tips before extending the Braid");
                             //TODO:This will be replaced via the allotted `WeakShareDifficulty` after Difficulty adjustment
-                            let weak_target = CompactTarget::from_unprefixed_hex("1d00ffff").unwrap();
+                            let weak_target = CompactTarget::from_unprefixed_hex("1d00ffff")
+                                .expect("Valid hardcoded weak target hex");
                             //Mindiff
-                            let min_target = CompactTarget::from_unprefixed_hex("1d00ffff").unwrap();
+                            let min_target = CompactTarget::from_unprefixed_hex("1d00ffff")
+                                .expect("Valid hardcoded min target hex");
                         //Job sent time before downstream starts mining
-                        let job_notification_time_val =
+                        let job_notification_time_val = match
                         bitcoin::blockdata::locktime::absolute::Time::from_consensus(job_sent_timestamp)
-                        .unwrap();
+                        {
+                            Ok(time) => time,
+                            Err(e) => {
+                                error!(error = ?e, timestamp = job_sent_timestamp, "Invalid job sent timestamp");
+                                continue;
+                            }
+                        };
                     let candidate_block_bead_committed_metadata = CommittedMetadata {
                         comm_pub_key: public_key,
                         transaction_ids: TxIdVec(transaction_ids),
@@ -1312,9 +1335,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     };
                     //TODO:This will be either be generated via the `Pubkey` from config parameter from `~/.braidpool`
                     let hex = "3046022100839c1fbc5304de944f697c9f4b1d01d1faeba32d751c0f7acb21ac8a0f436a72022100e89bd46bb3a5a62adc679f659b7ce876d83ee297c7a5587b2011c4fcc72eab45";
-                    let sig = Signature {
-                        signature: secp256k1::ecdsa::Signature::from_str(hex).unwrap(),
-                        sighash_type: EcdsaSighashType::All,
+                    let sig = match secp256k1::ecdsa::Signature::from_str(hex) {
+                        Ok(s) => Signature {
+                            signature: s,
+                            sighash_type: EcdsaSighashType::All,
+                        },
+                        Err(e) => {
+                            error!(error = ?e, "Failed to parse placeholder signature");
+                            continue;
+                        }
                     };
                     //Current UNIX timestamp during broadcast of bead
                     let current_system_time = std::time::SystemTime::now();
@@ -1326,13 +1355,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         }
                     };
 
-                    let unix_timestamp = duration_since_epoch.as_secs().to_u32().unwrap();
+                    let unix_timestamp = match duration_since_epoch.as_secs().to_u32() {
+                        Some(ts) => ts,
+                        None => {
+                            error!("Unix timestamp exceeds u32 range");
+                            continue;
+                        }
+                    };
 
+                    let broadcast_timestamp = match bitcoin::blockdata::locktime::absolute::MedianTimePast::from_u32(
+                        unix_timestamp,
+                    ) {
+                        Ok(ts) => ts,
+                        Err(e) => {
+                            error!(timestamp = unix_timestamp, error = ?e, "Invalid broadcast timestamp");
+                            continue;
+                        }
+                    };
                     let candidate_block_bead_uncommitted_metadata = UnCommittedMetadata {
-                        broadcast_timestamp: bitcoin::blockdata::locktime::absolute::MedianTimePast::from_u32(
-                            unix_timestamp,
-                        )
-                        .unwrap(),
+                        broadcast_timestamp,
                         extra_nonce_1: extranonce_1_raw_value,
                         extra_nonce_2: extranonce_2_raw_value,
                         signature: sig,
@@ -1353,10 +1394,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     new_tips = ?new_tips,
                                     "Braid extended successfully"
                                 );
-                                let bead_id = bead_index_mapping
-                                .get(&weak_share.block_header.block_hash())
-                                .unwrap()
-                                .0;
+                                let bead_id = match bead_index_mapping
+                                    .get(&weak_share.block_header.block_hash())
+                                {
+                                    Some((id, _)) => *id,
+                                    None => {
+                                        error!(hash = %curr_bead_hash, "Bead index not found after extension");
+                                        continue;
+                                    }
+                                };
                                 //In case of self-mined bead we won't have any orphan beads removed
                                 let _db_insertion_command = match db_tx.send(node::db::BraidpoolDBTypes::InsertTupleTypes { query: node::db::InsertTupleTypes::InsertBeadSequentially { bead_to_insert: weak_share.clone(),removed_orphans:Vec::new(),bead_index_mapping:bead_index_mapping,bead_id:bead_id} })
                                         .await

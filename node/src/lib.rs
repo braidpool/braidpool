@@ -165,7 +165,13 @@ pub async fn ipc_template_consumer(
             > = deserialize(&template_bytes);
 
             let merkle_branch_coinbase = ipc_template.components.coinbase_merkle_path.clone();
-            let (template_header, template_transactions) = candidate_block.unwrap().into_parts();
+            let (template_header, template_transactions) = match candidate_block {
+                Ok(block) => block.into_parts(),
+                Err(e) => {
+                    error!(error = ?e, "Failed to deserialize candidate block");
+                    continue;
+                }
+            };
             let _coinbase_transaction = template_transactions.get(0);
 
             debug!(template_id = %template_id, template_header = ?template_header, "New block template");
