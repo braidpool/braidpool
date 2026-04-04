@@ -1,23 +1,54 @@
 use sqlx::{sqlite::SqliteConnectOptions, Executor, SqlitePool};
-use std::{env, fs, path::Path, str::FromStr};
+use std::{env, fs, path::Path, path::PathBuf, str::FromStr};
 
 use crate::error::DBErrors;
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
 static SCHEMA_SQL: &str = include_str!("schema.sql");
 
-pub async fn init_db() -> Result<SqlitePool, DBErrors> {
-    //Fetching the home directory
-    let home_dir = match env::var("HOME") {
-        Ok(fetched_var) => fetched_var,
-        Err(error) => {
-            return Err(DBErrors::EnvVariableNotFetched {
+/// Gets the braidpool data directory in a cross-platform manner.
+///
+/// - Linux: `~/.braidpool/`
+/// - macOS: `~/Library/Application Support/braidpool/`
+/// - Windows: `%USERPROFILE%\.braidpool\` or `%APPDATA%\braidpool\`
+fn get_data_dir() -> Result<PathBuf, DBErrors> {
+    #[cfg(target_os = "linux")]
+    {
+        let home = env::var("HOME").map_err(|error| DBErrors::EnvVariableNotFetched {
+            error: error.to_string(),
+            var: "{HOME} Directory".to_string(),
+        })?;
+        Ok(Path::new(&home).join(".braidpool"))
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let home = env::var("HOME").map_err(|error| DBErrors::EnvVariableNotFetched {
+            error: error.to_string(),
+            var: "{HOME} Directory".to_string(),
+        })?;
+        Ok(Path::new(&home)
+            .join("Library")
+            .join("Application Support")
+            .join("braidpool"))
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        // On Windows, prefer USERPROFILE, fallback to APPDATA
+        let base = env::var("USERPROFILE")
+            .or_else(|_| env::var("APPDATA"))
+            .map_err(|error| DBErrors::EnvVariableNotFetched {
                 error: error.to_string(),
-                var: "{HOME} Directory".to_string(),
-            });
-        }
-    };
-    let db_dir = Path::new(&home_dir).join(".braidpool");
+                var: "{USERPROFILE} or {APPDATA} Directory".to_string(),
+            })?;
+        Ok(Path::new(&base).join("braidpool"))
+    }
+}
+
+pub async fn init_db() -> Result<SqlitePool, DBErrors> {
+    //Fetching the data directory
+    let db_dir = get_data_dir()?;
     //Final db directory path
     let db_path = db_dir.join("braidpool.db");
     //Creating db directory if it doesn't exist

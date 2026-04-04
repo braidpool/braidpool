@@ -32,6 +32,7 @@ use node::{
     SwarmCommand, TemplateId,
 };
 use std::collections::HashSet;
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
