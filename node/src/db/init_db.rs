@@ -32,18 +32,6 @@ fn get_data_dir() -> Result<PathBuf, DBErrors> {
             .join("Application Support")
             .join("braidpool"))
     }
-
-    #[cfg(target_os = "windows")]
-    {
-        // On Windows, prefer USERPROFILE, fallback to APPDATA
-        let base = env::var("USERPROFILE")
-            .or_else(|_| env::var("APPDATA"))
-            .map_err(|error| DBErrors::EnvVariableNotFetched {
-                error: error.to_string(),
-                var: "{USERPROFILE} or {APPDATA} Directory".to_string(),
-            })?;
-        Ok(Path::new(&base).join("braidpool"))
-    }
 }
 
 pub async fn init_db() -> Result<SqlitePool, DBErrors> {

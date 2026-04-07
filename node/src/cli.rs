@@ -10,10 +10,6 @@ const DEFAULT_DATADIR: &str = "~/.braidpool/";
 #[cfg(target_os = "macos")]
 const DEFAULT_DATADIR: &str = "~/Library/Application Support/braidpool/";
 
-/// Default data directory path for Windows
-#[cfg(target_os = "windows")]
-const DEFAULT_DATADIR: &str = "%APPDATA%\\braidpool\\";
-
 /// Default Bitcoin RPC cookie path for Linux
 #[cfg(target_os = "linux")]
 const DEFAULT_RPC_COOKIE: &str = "~/.bitcoin/.cookie";
@@ -22,10 +18,6 @@ const DEFAULT_RPC_COOKIE: &str = "~/.bitcoin/.cookie";
 #[cfg(target_os = "macos")]
 const DEFAULT_RPC_COOKIE: &str = "~/Library/Application Support/Bitcoin/.cookie";
 
-/// Default Bitcoin RPC cookie path for Windows
-#[cfg(target_os = "windows")]
-const DEFAULT_RPC_COOKIE: &str = "%APPDATA%\\Bitcoin\\.cookie";
-
 /// Default IPC socket path for Linux (Unix domain socket)
 #[cfg(target_os = "linux")]
 const DEFAULT_IPC_SOCKET: &str = "/tmp/bitcoin-cpunet.sock";
@@ -33,10 +25,6 @@ const DEFAULT_IPC_SOCKET: &str = "/tmp/bitcoin-cpunet.sock";
 /// Default IPC socket path for macOS (Unix domain socket)
 #[cfg(target_os = "macos")]
 const DEFAULT_IPC_SOCKET: &str = "/tmp/bitcoin-cpunet.sock";
-
-/// Default IPC socket path for Windows (named pipe)
-#[cfg(target_os = "windows")]
-const DEFAULT_IPC_SOCKET: &str = "\\\\.\\pipe\\bitcoin-cpunet";
 
 #[derive(Parser, Debug, Clone)]
 #[command(name = "braid", about = "Braidpool Node CLI")]

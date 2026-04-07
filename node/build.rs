@@ -25,7 +25,6 @@ fn main() {
     let target_env = env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
 
     let platform_cfg = match target_os.as_str() {
-        "windows" => "windows",
         "macos" => "macos",
         "linux" => "linux",
         _ => "other",
@@ -48,11 +47,6 @@ fn main() {
 /// linker instructions according to OS and architecture
 fn configure_platform_linking(target_os: &str, target_arch: &str, target_env: &str) {
     match target_os {
-        "windows" => {
-            if target_env == "msvc" {
-                println!("cargo::rustc-link-arg=/DEFAULTLIB:msvcrt");
-            }
-        }
         "macos" => {
             // Homebrew installs differ by CPU architecture on macOS.
             let homebrew_lib = if target_arch == "aarch64" {
@@ -77,12 +71,7 @@ fn capnp_executable() -> PathBuf {
     if let Ok(explicit) = env::var("CAPNP") {
         return PathBuf::from(explicit);
     }
-    // On Windows the binary is `capnp.exe`; the OS appends `.exe` automatically
-    if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
-        PathBuf::from("capnp.exe")
-    } else {
-        PathBuf::from("capnp")
-    }
+    PathBuf::from("capnp")
 }
 
 /// Walk `schema_dir` and compile every `*.capnp` file it contains.
