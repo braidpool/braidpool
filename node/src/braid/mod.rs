@@ -427,8 +427,16 @@ pub mod consensus_functions {
             let parents = &parents[&current_bead_idx];
 
             for parent_bead_idx in parents.iter() {
-                if let Some(children) = bead_children_mapping.get_mut(&parent_bead_idx) {
-                    children.insert(current_bead_idx);
+                match bead_children_mapping.get_mut(&parent_bead_idx) {
+                    Some(children) => {
+                        children.insert(current_bead_idx);
+                    }
+                    None => {
+                        panic!(
+                            "Missing parent mapping while reversing braid edges for parent index {}",
+                            parent_bead_idx
+                        );
+                    }
                 }
             }
         }

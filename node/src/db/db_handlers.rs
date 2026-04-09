@@ -479,110 +479,111 @@ pub async fn fetch_bead_by_bead_hash(
 ) -> Result<Option<Bead>, DBErrors> {
     let mut fetched_bead: Bead = Bead::default();
     let mut bead_id = 0;
-    match sqlx::query("SELECT * FROM bead WHERE hash = ?")
-        .bind(bead_hash.to_byte_array().to_vec())
-        .map(|row: sqlx::sqlite::SqliteRow| {
-            let id = row.get::<i32, _>("id");
-            let version = BlockVersion::from_consensus(row.get::<i32, _>("nVersion"));
-            let prev_block_hash = match row.get::<Vec<u8>, _>("hashPrevBlock").try_into() {
-                Ok(arr) => BlockHash::from_byte_array(arr),
-                Err(_) => {
-                    return Err(DBErrors::TupleAttributeParsingError {
-                        error: "Invalid hash length".to_string(),
-                        attribute: "PrevBlockHashhash".to_string(),
-                    });
-                }
-            };
-            let merkle_hash = match row.get::<Vec<u8>, _>("hashMerkleRoot").try_into() {
-                Ok(arr) => TxMerkleNode::from_byte_array(arr),
-                Err(_) => {
-                    return Err(DBErrors::TupleAttributeParsingError {
-                        error: "Invalid hash length".to_string(),
-                        attribute: "Merkle root".to_string(),
-                    });
-                }
-            };
-            let ntime = BlockTime::from_u32(row.get::<u32, _>("nTime"));
-            let nbits = CompactTarget::from_consensus(row.get::<u32, _>("nBits"));
-            let nonce = row.get::<u32, _>("nNonce");
-            let payout_address = std::str::from_utf8(&row.get::<Vec<u8>, _>("payout_address"))
-                .map_err(|e| DBErrors::TupleAttributeParsingError {
-                    error: e.to_string(),
-                    attribute: "payout_address".to_string(),
-                })?
-                .to_string();
-            let start_timestamp = MedianTimePast::from_u32(row.get::<u32, _>("start_timestamp"))
+    let bead_row_parse_result =
+        sqlx::query("SELECT * FROM bead WHERE hash = ?")
+            .bind(bead_hash.to_byte_array().to_vec())
+            .map(|row: sqlx::sqlite::SqliteRow| {
+                let id = row.get::<i32, _>("id");
+                let version = BlockVersion::from_consensus(row.get::<i32, _>("nVersion"));
+                let prev_block_hash = match row.get::<Vec<u8>, _>("hashPrevBlock").try_into() {
+                    Ok(arr) => BlockHash::from_byte_array(arr),
+                    Err(_) => {
+                        return Err(DBErrors::TupleAttributeParsingError {
+                            error: "Invalid hash length".to_string(),
+                            attribute: "PrevBlockHashhash".to_string(),
+                        });
+                    }
+                };
+                let merkle_hash = match row.get::<Vec<u8>, _>("hashMerkleRoot").try_into() {
+                    Ok(arr) => TxMerkleNode::from_byte_array(arr),
+                    Err(_) => {
+                        return Err(DBErrors::TupleAttributeParsingError {
+                            error: "Invalid hash length".to_string(),
+                            attribute: "Merkle root".to_string(),
+                        });
+                    }
+                };
+                let ntime = BlockTime::from_u32(row.get::<u32, _>("nTime"));
+                let nbits = CompactTarget::from_consensus(row.get::<u32, _>("nBits"));
+                let nonce = row.get::<u32, _>("nNonce");
+                let payout_address = std::str::from_utf8(&row.get::<Vec<u8>, _>("payout_address"))
+                    .map_err(|e| DBErrors::TupleAttributeParsingError {
+                        error: e.to_string(),
+                        attribute: "payout_address".to_string(),
+                    })?
+                    .to_string();
+                let start_timestamp = MedianTimePast::from_u32(
+                    row.get::<u32, _>("start_timestamp"),
+                )
                 .map_err(|_| DBErrors::TupleAttributeParsingError {
                     error: "Invalid start_timestamp".to_string(),
                     attribute: "start_timestamp".to_string(),
                 })?;
-            let pub_key =
-                PublicKey::from_slice(&row.get::<Vec<u8>, _>("comm_pub_key")).map_err(|e| {
-                    DBErrors::TupleAttributeParsingError {
+                let pub_key = PublicKey::from_slice(&row.get::<Vec<u8>, _>("comm_pub_key"))
+                    .map_err(|e| DBErrors::TupleAttributeParsingError {
                         error: e.to_string(),
                         attribute: "comm_pub_key".to_string(),
-                    }
+                    })?;
+                let min_target = CompactTarget::from_consensus(row.get::<u32, _>("min_target"));
+                let weak_target = CompactTarget::from_consensus(row.get::<u32, _>("weak_target"));
+                let miner_ip = row.get::<String, _>("miner_ip");
+                let extranonce_1 = u32::from_str_radix(&row.get::<String, _>("extranonce1"), 16)
+                    .map_err(|e| DBErrors::TupleAttributeParsingError {
+                        error: e.to_string(),
+                        attribute: "extranonce1".to_string(),
+                    })?;
+                let extranonce_2 = u32::from_str_radix(&row.get::<String, _>("extranonce2"), 16)
+                    .map_err(|e| DBErrors::TupleAttributeParsingError {
+                        error: e.to_string(),
+                        attribute: "extranonce2".to_string(),
+                    })?;
+                let broadcast_timestamp = MedianTimePast::from_u32(
+                    row.get::<u32, _>("broadcast_timestamp"),
+                )
+                .map_err(|_| DBErrors::TupleAttributeParsingError {
+                    error: "Invalid broadcast_timestamp".to_string(),
+                    attribute: "broadcast_timestamp".to_string(),
                 })?;
-            let min_target = CompactTarget::from_consensus(row.get::<u32, _>("min_target"));
-            let weak_target = CompactTarget::from_consensus(row.get::<u32, _>("weak_target"));
-            let miner_ip = row.get::<String, _>("miner_ip");
-            let extranonce_1 = u32::from_str_radix(&row.get::<String, _>("extranonce1"), 16)
-                .map_err(|e| DBErrors::TupleAttributeParsingError {
-                    error: e.to_string(),
-                    attribute: "extranonce1".to_string(),
-                })?;
-            let extranonce_2 = u32::from_str_radix(&row.get::<String, _>("extranonce2"), 16)
-                .map_err(|e| DBErrors::TupleAttributeParsingError {
-                    error: e.to_string(),
-                    attribute: "extranonce2".to_string(),
-                })?;
-            let broadcast_timestamp = MedianTimePast::from_u32(
-                row.get::<u32, _>("broadcast_timestamp"),
-            )
-            .map_err(|_| DBErrors::TupleAttributeParsingError {
-                error: "Invalid broadcast_timestamp".to_string(),
-                attribute: "broadcast_timestamp".to_string(),
-            })?;
-            let signature =
-                Signature::from_slice(&row.get::<Vec<u8>, _>("signature")).map_err(|e| {
-                    DBErrors::TupleAttributeParsingError {
+                let signature = Signature::from_slice(&row.get::<Vec<u8>, _>("signature"))
+                    .map_err(|e| DBErrors::TupleAttributeParsingError {
                         error: e.to_string(),
                         attribute: "signature".to_string(),
-                    }
-                })?;
-            bead_id = id;
-            fetched_bead.block_header.version = version;
-            fetched_bead.block_header.bits = nbits;
-            fetched_bead.block_header.time = ntime;
-            fetched_bead.committed_metadata.payout_address = payout_address;
-            fetched_bead.block_header.prev_blockhash = prev_block_hash;
-            fetched_bead.block_header.nonce = nonce;
-            fetched_bead.block_header.merkle_root = merkle_hash;
-            fetched_bead.committed_metadata.comm_pub_key = pub_key;
-            fetched_bead.committed_metadata.miner_ip = miner_ip;
-            fetched_bead.committed_metadata.min_target = min_target;
-            fetched_bead.committed_metadata.start_timestamp = start_timestamp;
-            fetched_bead.committed_metadata.weak_target = weak_target;
-            fetched_bead.uncommitted_metadata.broadcast_timestamp = broadcast_timestamp;
-            fetched_bead.uncommitted_metadata.extra_nonce_1 = extranonce_1;
-            fetched_bead.uncommitted_metadata.extra_nonce_2 = extranonce_2;
-            fetched_bead.uncommitted_metadata.signature = signature;
-            Ok(())
-        })
-        .fetch_optional(&db_connection_arc.lock().await.clone())
-        .await
-    {
-        Ok(_rows) => {
-            if _rows.is_none() == false {
-                trace!(bead_hash = %bead_hash, "Bead fetched successfully");
-            } else {
-                trace!(bead_hash = %bead_hash, "No such bead exists");
-            }
-        }
-        Err(error) => {
-            return Err(DBErrors::TupleNotFetched {
+                    })?;
+                bead_id = id;
+                fetched_bead.block_header.version = version;
+                fetched_bead.block_header.bits = nbits;
+                fetched_bead.block_header.time = ntime;
+                fetched_bead.committed_metadata.payout_address = payout_address;
+                fetched_bead.block_header.prev_blockhash = prev_block_hash;
+                fetched_bead.block_header.nonce = nonce;
+                fetched_bead.block_header.merkle_root = merkle_hash;
+                fetched_bead.committed_metadata.comm_pub_key = pub_key;
+                fetched_bead.committed_metadata.miner_ip = miner_ip;
+                fetched_bead.committed_metadata.min_target = min_target;
+                fetched_bead.committed_metadata.start_timestamp = start_timestamp;
+                fetched_bead.committed_metadata.weak_target = weak_target;
+                fetched_bead.uncommitted_metadata.broadcast_timestamp = broadcast_timestamp;
+                fetched_bead.uncommitted_metadata.extra_nonce_1 = extranonce_1;
+                fetched_bead.uncommitted_metadata.extra_nonce_2 = extranonce_2;
+                fetched_bead.uncommitted_metadata.signature = signature;
+                Ok(())
+            })
+            .fetch_optional(&db_connection_arc.lock().await.clone())
+            .await
+            .map_err(|error| DBErrors::TupleNotFetched {
                 error: error.to_string(),
-            });
+            })?;
+
+    match bead_row_parse_result {
+        Some(Ok(())) => {
+            trace!(bead_hash = %bead_hash, "Bead fetched successfully");
+        }
+        Some(Err(error)) => {
+            return Err(error);
+        }
+        None => {
+            trace!(bead_hash = %bead_hash, "No such bead exists");
+            return Ok(None);
         }
     };
     let rows =

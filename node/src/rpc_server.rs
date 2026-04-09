@@ -109,39 +109,6 @@ pub trait Rpc {
         params: serde_json::Value,
     ) -> Result<serde_json::Value, ErrorObjectOwned>;
 }
-//parsing the inital rpc command line all
-pub async fn parse_arguments(cli_command: RpcCommand, server_addr: SocketAddr) -> () {
-    // //initializing a client associated with the current node
-    // //for receiving the response from the server
-    let target_uri = format!("http://{}", server_addr.to_string());
-    let client_res: HttpClient = match HttpClient::builder().build(target_uri) {
-        Ok(client) => client,
-        Err(error) => {
-            error!(error = ?error, "Failed to initialize RPC client");
-            return;
-        }
-    };
-
-    let (rpc_method, method_params) = match cli_command {
-        RpcCommand::AddBead { bead_data } => {
-            let rpc_method = String::from("addbead");
-            let mut method_params = ArrayParams::new();
-            if let Err(error) = method_params.insert(bead_data) {
-                error!(error = ?error, "Failed to insert addbead params");
-                return;
-            }
-
-            (rpc_method, method_params)
-        }
-        RpcCommand::GetBead { bead_hash } => {
-            let rpc_method = "getbead".to_string();
-            let mut method_params = ArrayParams::new();
-            if let Err(error) = method_params.insert(bead_hash) {
-                error!(error = ?error, "Failed to insert getbead params");
-                return;
-            }
-
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct MiningInfoParams {
     #[serde(default)]
@@ -318,14 +285,6 @@ impl RpcServer for RpcServerImpl {
             .find(|bead| bead.block_header.block_hash() == hash)
             .cloned();
 
-        match bead {
-            Some(bead) => {
-                let json = serde_json::to_string(&bead)
-                    .map_err(|_| ErrorObjectOwned::owned(2, "Internal error", None::<()>))?;
-                Ok(json)
-            }
-            None => Err(ErrorObjectOwned::owned(3, "Bead not found", None::<()>)),
-        }
         bead.ok_or_else(|| ErrorObjectOwned::owned(3, "Bead not found", None::<()>))
     }
 
