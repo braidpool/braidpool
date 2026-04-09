@@ -1775,7 +1775,7 @@ pub struct ConnectionInfo {
 
 #[derive(Debug, Clone)]
 pub struct ConnectionMapping {
-    downstream_channel_mapping: HashMap<String, ConnectionInfo>,
+    pub downstream_channel_mapping: HashMap<String, ConnectionInfo>,
 }
 impl ConnectionMapping {
     pub fn new() -> Self {

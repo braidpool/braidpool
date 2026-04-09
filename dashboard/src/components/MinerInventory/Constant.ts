@@ -1,0 +1,8 @@
+export const HISTORY_POINTS = 20;
+export const THRESHOLDS = {
+  ASIC_TEMP_CRITICAL: 100,
+  VR_TEMP_CRITICAL: 105,
+  VOLTAGE_LOW: 4,
+  FAN_SPEED_LOW: 1000,
+} as const;
+export const REFRESH_INTERVAL = 5;

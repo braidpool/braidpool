@@ -434,36 +434,30 @@ const BitcoinPriceTracker: React.FC = () => {
       </div>
 
       {/* Additional Charts Section */}
-      <div className="w-full flex flex-wrap justify-center items-center gap-4 md:gap-20 p-4 md:p-6 rounded-lg mb-6">
-        <div className="grid sm:grid-cols-1 md:grid-cols-2 gap-4 md:gap-20 p-4">
-          {/* Fear-Greed Meter */}
-          <div className="flex flex-col w-full">
-            <p className="font-semibold text-base">Fear & Greed Index</p>
-            <span className="text-sm text-gray-500 mb-2">
-              Market sentiment indicator
-            </span>
-            <div className="w-full flex justify-center items-center">
-              <div className="w-full sm:w-3/4 md:w-1/2 lg:w-2/5 xl:w-1/3 max-w-sm">
-                <img
-                  src="https://alternative.me/crypto/fear-and-greed-index.png"
-                  alt="Latest Crypto Fear & Greed Index"
-                  className="w-full h-auto"
-                />
-              </div>
-            </div>
-          </div>
+      <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-6 p-4 md:p-6 mb-6">
+        {/* Fear-Greed Meter */}
+        <div className="flex flex-col">
+          <p className="font-semibold text-base">Fear & Greed Index</p>
+          <span className="text-sm text-gray-500 mb-3">
+            Market sentiment indicator
+          </span>
 
-          {/* Placeholder */}
-          <div className="flex flex-col w-full">
-            <p className="font-semibold text-base">Market Trends</p>
-            <span className="text-sm text-gray-500 mb-2">Coming soon...</span>
-            <div className="w-full flex justify-center items-center">
-              <div className="w-full sm:w-3/4 md:w-1/2 lg:w-2/5 xl:w-1/3 max-w-sm h-64 sm:h-72 md:h-80">
-                <div className="w-full h-full flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg">
-                  <p className="text-gray-500">Additional visualization</p>
-                </div>
-              </div>
-            </div>
+          <div className="w-full aspect-[4/3] max-w-lg mx-auto border border-gray-700 rounded-lg flex items-center justify-center">
+            <img
+              src="https://alternative.me/crypto/fear-and-greed-index.png"
+              alt="Latest Crypto Fear & Greed Index"
+              className="w-full h-full object-contain p-4"
+            />
+          </div>
+        </div>
+
+        {/* Market Trends */}
+        <div className="flex flex-col">
+          <p className="font-semibold text-base">Market Trends</p>
+          <span className="text-sm text-gray-500 mb-3">Coming soon...</span>
+
+          <div className="w-full aspect-[4/3] max-w-lg mx-auto border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center">
+            <p className="text-gray-500">Additional visualization</p>
           </div>
         </div>
       </div>
