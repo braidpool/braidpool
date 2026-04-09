@@ -8,7 +8,7 @@ import {
   animateLinkDirection,
 } from './BraidPoolDAGUtils';
 import { WEBSOCKET_URLS } from '../../URLs';
-import { NODE_RADIUS, PADDING, COLORS } from './Constants';
+import { NODE_RADIUS, COLORS } from './Constants';
 
 type AnimationSpeed = 'slow' | 'normal' | 'fast';
 
@@ -18,12 +18,24 @@ const ANIMATION_SPEED_OPTIONS: {
   scale: number;
 }[] = [
   { value: 'slow', label: 'Slow', scale: 1.8 },
-  { value: 'normal', label: 'Normal', scale: 1 },
-  { value: 'fast', label: 'Fast', scale: 0.6 },
+  { value: 'normal', label: 'Normal', scale: 0.75 },
+  { value: 'fast', label: 'Fast', scale: 0.3 },
 ];
 
 const DEFAULT_COHORT_ANIMATION_DURATION_MS = 1000;
 const DEFAULT_COHORT_ANIMATION_DELAY_MS = 100;
+
+const getAnimationTiming = (speed: AnimationSpeed) => {
+  const speedConfig =
+    ANIMATION_SPEED_OPTIONS.find((option) => option.value === speed) ??
+    ANIMATION_SPEED_OPTIONS[1];
+  return {
+    durationMs: Math.round(
+      DEFAULT_COHORT_ANIMATION_DURATION_MS * speedConfig.scale
+    ),
+    delayMs: Math.round(DEFAULT_COHORT_ANIMATION_DELAY_MS * speedConfig.scale),
+  };
+};
 
 const GraphVisualization: React.FC = () => {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -40,6 +52,7 @@ const GraphVisualization: React.FC = () => {
   const [animationSpeed, setAnimationSpeed] =
     useState<AnimationSpeed>('normal');
   const animationSpeedRef = useRef<AnimationSpeed>('normal');
+  const nextAnimationFrameTimeRef = useRef(0);
   const nodeRadius = NODE_RADIUS;
   const tooltipRef = useRef<HTMLDivElement>(null);
   // var COLUMN_WIDTH = 200;
@@ -53,7 +66,6 @@ const GraphVisualization: React.FC = () => {
 
   const prevFirstCohortRef = useRef<string[]>([]);
   const prevLastCohortRef = useRef<string[]>([]);
-  const [_connectionStatus, setConnectionStatus] = useState('Disconnected');
 
   const [totalBeads, setTotalBeads] = useState<number>(0);
   const [totalCohorts, setTotalCohorts] = useState<number>(0);
@@ -105,17 +117,15 @@ const GraphVisualization: React.FC = () => {
     socket.onopen = () => {
       if (!isMounted) return;
       console.log('Connected to WebSocket', url);
-      setConnectionStatus('Connected');
     };
 
     socket.onclose = () => {
       if (!isMounted) return;
-      setConnectionStatus('Disconnected');
     };
 
     socket.onerror = (err) => {
       if (!isMounted) return;
-      setConnectionStatus(`Error: ${err}`);
+      console.error('WebSocket error:', err);
     };
 
     socket.onmessage = (event) => {
@@ -128,6 +138,13 @@ const GraphVisualization: React.FC = () => {
           return;
         }
         if (!parsedData?.parents || typeof parsedData.parents !== 'object') {
+          return;
+        }
+        const { durationMs: cohortAnimationDurationMs, delayMs: cohortAnimationDelayMs } =
+          getAnimationTiming(animationSpeedRef.current);
+
+        const now = Date.now();
+        if (now < nextAnimationFrameTimeRef.current) {
           return;
         }
 
@@ -220,16 +237,10 @@ const GraphVisualization: React.FC = () => {
           if (!isPlayingRef.current) {
             return;
           }
-          const speedConfig =
-            ANIMATION_SPEED_OPTIONS.find(
-              (option) => option.value === animationSpeedRef.current
-            ) ?? ANIMATION_SPEED_OPTIONS[1];
-          const cohortAnimationDurationMs = Math.round(
-            DEFAULT_COHORT_ANIMATION_DURATION_MS * speedConfig.scale
-          );
-          const cohortAnimationDelayMs = Math.round(
-            DEFAULT_COHORT_ANIMATION_DELAY_MS * speedConfig.scale
-          );
+          // Gate subsequent updates so animations can complete and speed differences
+          // are perceptible when live websocket messages arrive rapidly.
+          nextAnimationFrameTimeRef.current =
+            Date.now() + cohortAnimationDelayMs + cohortAnimationDurationMs;
           setTimeout(() => {
             animateCohorts(
               firstCohortChanged ? parsedData.cohorts[0] : [],
@@ -349,9 +360,6 @@ const GraphVisualization: React.FC = () => {
     });
   };
 
-  // have not used it YET.. might come in handy in the future
-  const [_svgHeight, setSvgHeight] = useState(height);
-
   useEffect(() => {
     if (!svgRef.current || !graphData) return;
     const filteredCohorts = graphData.cohorts.slice(-selectedCohorts);
@@ -402,14 +410,6 @@ const GraphVisualization: React.FC = () => {
     const cohorts = graphData.cohorts;
     const positions = layoutNodes(allNodes, hwPath);
     const hwPathSet = new Set(hwPath);
-
-    // Calculate required height based on node positions
-    const allY = Object.values(positions).map((pos) => pos.y);
-    // const minY = Math.min(...allY);
-    // const maxY = Math.max(...allY);
-    const padding = PADDING; // Additional padding
-    const dynamicHeight = height / 2 + margin.top + margin.bottom + padding;
-    setSvgHeight(dynamicHeight);
 
     // making old nodes invisible
     const visibleNodes = allNodes.filter((node) =>
