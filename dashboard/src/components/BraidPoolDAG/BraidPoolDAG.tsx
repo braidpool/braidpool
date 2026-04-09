@@ -140,8 +140,10 @@ const GraphVisualization: React.FC = () => {
         if (!parsedData?.parents || typeof parsedData.parents !== 'object') {
           return;
         }
-        const { durationMs: cohortAnimationDurationMs, delayMs: cohortAnimationDelayMs } =
-          getAnimationTiming(animationSpeedRef.current);
+        const {
+          durationMs: cohortAnimationDurationMs,
+          delayMs: cohortAnimationDelayMs,
+        } = getAnimationTiming(animationSpeedRef.current);
 
         const now = Date.now();
         if (now < nextAnimationFrameTimeRef.current) {
