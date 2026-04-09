@@ -1039,11 +1039,15 @@ pub async fn run_rpc_server(
         .build(bind_address)
         .await
         .map_err(|error| {
-            error!(error = ?error, bind_address = %bind_address, "Failed to build RPC server");
+            tracing::error!(
+                error = ?error,
+                bind_address = %bind_address,
+                "Failed to build RPC server"
+            );
         })?;
     //listening address for incoming requests/connection
     let addr = server.local_addr().map_err(|error| {
-        error!(error = ?error, "Failed to get RPC server local address");
+        tracing::error!(error = ?error, "Failed to get RPC server local address");
     })?;
     //context for the served server
     let rpc_impl = RpcServerImpl::new(

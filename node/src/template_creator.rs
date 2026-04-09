@@ -2,7 +2,7 @@ use crate::config::CoinbaseConfig;
 use crate::error::CoinbaseError;
 use crate::ipc::client::BlockTemplateComponents;
 use crate::EXTRANONCE_SEPARATOR;
-use bitcoin::consensus::encode::{ReadExt, WriteExt};
+use bitcoin::consensus::encode::ReadExt;
 use bitcoin::{
     absolute::LockTime,
     blockdata::{
