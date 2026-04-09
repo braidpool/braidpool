@@ -62,6 +62,13 @@ impl Default for Bead {
     }
 }
 
+impl Bead {
+    /// Returns the hash of this bead's block header
+    pub fn hash(&self) -> BeadHash {
+        self.block_header.block_hash()
+    }
+}
+
 braidpool_protocol! {
     /// Request types for bead synchronization protocol.
     ///

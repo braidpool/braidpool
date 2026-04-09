@@ -48,8 +48,22 @@ After verifying the git context, if the user hasn't specified a task and is in t
 
 ## 2. Workflow Guidelines
 
-### 📥 Reviewing a Pull Request
-If the user selects "Review a pull request":
+### ⚡ MANDATORY: Review Trigger Words
+
+When the user says **"review"**, **"check"**, **"audit"**, or similar, you **MUST** use the persona-based review system. This applies to:
+- Remote PRs (fetched from GitHub)
+- Local uncommitted changes
+- Local commits not yet pushed
+
+**Do NOT** use generic explore agents or ad-hoc reviews. Always:
+1. Determine changed files (see below)
+2. Auto-select personas based on path patterns
+3. Confirm with user: *"I'll run [N] personas: [list]. Proceed?"*
+4. Execute each persona using its instruction file
+5. Save findings to `.reviews/`
+
+### 📥 Reviewing a Pull Request (Remote)
+If the user selects "Review a pull request" and wants to review a **remote PR**:
 1.  **List Open PRs**:
     ```bash
     gh pr list --limit 10
@@ -62,7 +76,29 @@ If the user selects "Review a pull request":
     cd .worktrees/pr-<PR_ID>
     gh pr checkout <PR_ID>
     ```
-3.  **Analyze**: Perform the review within that worktree.
+3.  **Get changed files** and proceed to persona auto-selection:
+    ```bash
+    git diff --name-only origin/dev...HEAD
+    ```
+
+### 📥 Reviewing Local Changes (Uncommitted or Unpushed)
+If the user is **already in a worktree** with local changes, or says they're "working on" something:
+1.  **Detect the review scope**:
+    ```bash
+    # For uncommitted changes
+    git diff --name-only HEAD
+    
+    # For commits ahead of remote (unpushed)
+    git diff --name-only origin/dev...HEAD
+    
+    # For commits ahead of tracking branch
+    git log --oneline @{u}..HEAD 2>/dev/null | wc -l
+    ```
+2.  **If commits exist ahead of tracking branch**, use those as the diff base:
+    ```bash
+    git diff --name-only @{u}...HEAD
+    ```
+3.  **Proceed to persona auto-selection** with the changed file list.
 
 ### 🎭 Review Personas
 Launch personas using the **task** tool with `agent_type="general-purpose"` and the instructions file:

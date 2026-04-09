@@ -10,8 +10,8 @@ use super::CommittedMetadata;
 use super::UnCommittedMetadata;
 use crate::committed_metadata::TimeVec;
 use crate::utils::create_test_bead;
-use crate::utils::test_utils::test_utility_functions::*;
-use bitcoin::absolute::Time;
+use crate::utils::test_utils::*;
+use crate::utils::timestamp::MicrosecondTimestamp;
 use bitcoin::consensus::encode::deserialize;
 use bitcoin::consensus::encode::Decodable;
 use bitcoin::consensus::encode::Encodable;
@@ -40,7 +40,7 @@ fn test_serialized_committed_metadata() {
         .parse::<bitcoin::PublicKey>()
         .unwrap();
     let socket = String::from("127.0.0.1");
-    let time_val = Time::from_consensus(1653195600).unwrap();
+    let time_val = MicrosecondTimestamp::from_secs(1653195600);
     let parent_hash_set: HashSet<BlockHash> = HashSet::new();
     let time_hash_set = TimeVec(Vec::new());
     let weak_target = CompactTarget::from_unprefixed_hex("1d00ffff").unwrap();
@@ -78,7 +78,7 @@ fn test_serialized_uncommitted_metadata() {
         signature: secp256k1::ecdsa::Signature::from_str(hex).unwrap(),
         sighash_type: EcdsaSighashType::All,
     };
-    let time_val = Time::from_consensus(1653195600).unwrap();
+    let time_val = MicrosecondTimestamp::from_secs(1653195600);
     let extra_nonce = 42;
     let test_uncommitted_metadata = TestUnCommittedMetadataBuilder::new()
         .broadcast_timestamp(time_val)
@@ -115,7 +115,7 @@ fn test_serialized_bead() {
         Txid::from_str("8df401c7580ea2491d88d936ed0e16f3e6ea6c3d69eb9d9cf27652696a559e24").unwrap();
     let weak_target = CompactTarget::from_consensus(32);
     let min_target = CompactTarget::from_consensus(1);
-    let time_val = Time::from_consensus(1653195600).unwrap();
+    let time_val = MicrosecondTimestamp::from_secs(1653195600);
     let test_committed_metadata = TestCommittedMetadataBuilder::new()
         .comm_pub_key(public_key)
         .miner_ip(socket)
@@ -185,7 +185,7 @@ fn test_bead_response_serialization() {
     let parent_hash_set: HashSet<BlockHash> = HashSet::new();
     let weak_target = CompactTarget::from_unprefixed_hex("1d00ffff").unwrap();
     let min_target = CompactTarget::from_unprefixed_hex("1d00ffff").unwrap();
-    let time_val = Time::from_consensus(1653195600).unwrap();
+    let time_val = MicrosecondTimestamp::from_secs(1653195600);
     let test_committed_metadata = TestCommittedMetadataBuilder::new()
         .comm_pub_key(public_key)
         .miner_ip(socket)

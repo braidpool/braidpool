@@ -7,12 +7,6 @@ use bitcoin::address::ParseError as AddressParseError;
 use tokio::sync::oneshot;
 
 #[derive(Debug)]
-//Custom error class for handling all the braid consensus errors
-pub enum BraidError {
-    MissingAncestorWork,
-    HighestWorkBeadFetchFailed,
-}
-#[derive(Debug)]
 pub enum BraidRPCError {
     RequestFailed {
         method: String,
@@ -429,16 +423,6 @@ impl fmt::Display for BraidRPCError {
         }
     }
 }
-impl fmt::Display for BraidError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            BraidError::MissingAncestorWork => write!(f, "Missing ancestor work map"),
-            BraidError::HighestWorkBeadFetchFailed => {
-                write!(f, "An error occurred while fetching the highest work bead")
-            }
-        }
-    }
-}
 impl fmt::Display for IPCtemplateError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -448,7 +432,6 @@ impl fmt::Display for IPCtemplateError {
         }
     }
 }
-impl std::error::Error for BraidError {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CoinbaseError {

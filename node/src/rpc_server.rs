@@ -3,6 +3,7 @@ use crate::braid::consensus_functions;
 use crate::braid::consensus_functions::highest_work_path;
 use crate::braid::AddBeadStatus;
 use crate::braid::Braid;
+use crate::error::BraidRPCError;
 use crate::ipc::client::QueueStats;
 use crate::peer_manager::PeerManager;
 use crate::stratum;
@@ -10,6 +11,7 @@ use crate::stratum::BlockTemplate;
 use crate::utils::BeadHash;
 use bitcoin::block::HeaderExt;
 use bitcoin::Transaction;
+use clap::Subcommand;
 use futures::lock::Mutex;
 use jsonrpsee::core::async_trait;
 use jsonrpsee::core::middleware::Batch;
@@ -283,7 +285,7 @@ impl RpcServer for RpcServerImpl {
         let bead = braid_data
             .beads
             .iter()
-            .find(|bead| bead.block_header.block_hash() == hash)
+            .find(|bead| bead.hash() == hash)
             .cloned();
 
         bead.ok_or_else(|| ErrorObjectOwned::owned(3, "Bead not found", None::<()>))
@@ -294,7 +296,7 @@ impl RpcServer for RpcServerImpl {
             ErrorObjectOwned::owned(1, format!("Invalid bead data: {}", e), None::<()>)
         })?;
         info!(
-            hash = %bead.block_header.block_hash(),
+            hash = %bead.hash(),
             "Add bead request received"
         );
         let mut braid_data = self.braid_arc.write().await;
@@ -302,11 +304,13 @@ impl RpcServer for RpcServerImpl {
 
         match success_status {
             AddBeadStatus::BeadAdded => Ok("Bead added successfully".to_string()),
-            AddBeadStatus::DagAlreadyContainsBead => Ok("Bead already exists".to_string()),
+            AddBeadStatus::DuplicateBead | AddBeadStatus::DagAlreadyContainsBead => {
+                Ok("Bead already exists".to_string())
+            }
             AddBeadStatus::InvalidBead => {
                 Err(ErrorObjectOwned::owned(4, "Invalid bead", None::<()>))
             }
-            AddBeadStatus::ParentsNotYetReceived => {
+            AddBeadStatus::ParentsMissing | AddBeadStatus::ParentsNotYetReceived => {
                 Ok("Bead queued, waiting for parents".to_string())
             }
         }
@@ -317,7 +321,7 @@ impl RpcServer for RpcServerImpl {
         let tips: Vec<BeadHash> = braid_data
             .tips
             .iter()
-            .map(|&index| braid_data.beads[index].block_header.block_hash())
+            .map(|&index| braid_data.beads[index].hash())
             .collect();
         info!(tip_count = %tips.len(), "Get tips request received");
         let tips_str: Vec<String> = tips.iter().map(|h| h.to_string()).collect();
@@ -1030,7 +1034,7 @@ pub async fn run_rpc_server(
     latest_block_template: Arc<Mutex<BlockTemplate>>,
     rpc_proxy_tx: mpsc::UnboundedSender<RpcProxyCommand>,
     bitcoin_rpc_config: Option<BitcoinRpcConfig>,
-) -> Result<SocketAddr, ()> {
+) -> Result<SocketAddr, std::io::Error> {
     //Initializing the middleware
     let rpc_middleware =
         jsonrpsee::server::middleware::rpc::RpcServiceBuilder::new().layer_fn(LoggingMiddleware);
@@ -1038,10 +1042,9 @@ pub async fn run_rpc_server(
     let server = jsonrpsee::server::Server::builder()
         .set_rpc_middleware(rpc_middleware)
         .build(bind_address)
-        .await
-        .unwrap();
+        .await?;
     //listening address for incoming requests/connection
-    let addr = server.local_addr().unwrap();
+    let addr = server.local_addr()?;
     //context for the served server
     let rpc_impl = RpcServerImpl::new(
         braid_shared_pointer,
@@ -1163,7 +1166,7 @@ pub async fn test_extend_rpc() {
     let target_uri = format!("http://{}", server_addr);
     let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
 
-    let new_bead = create_test_bead(2, Some(test_bead1.block_header.block_hash()));
+    let new_bead = create_test_bead(2, Some(test_bead1.hash()));
     let bead_json_str = serde_json::to_string(&new_bead).expect("Failed to serialize bead");
 
     let mut params = ArrayParams::new();
@@ -1214,7 +1217,7 @@ pub async fn test_same_bead_extend() {
     let target_uri = format!("http://{}", server_addr);
     let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
 
-    let new_bead = create_test_bead(2, Some(test_bead1.block_header.block_hash()));
+    let new_bead = create_test_bead(2, Some(test_bead1.hash()));
 
     let bead_json_str = serde_json::to_string(&new_bead).expect("Failed to serialize bead");
 
@@ -1236,9 +1239,9 @@ pub async fn test_same_bead_extend() {
 #[tokio::test]
 pub async fn test_cohort_count_rpc() {
     let test_bead_1 = create_test_bead(1, None);
-    let test_bead_2 = create_test_bead(2, Some(test_bead_1.block_header.block_hash()));
-    let test_bead_3 = create_test_bead(3, Some(test_bead_2.block_header.block_hash()));
-    let test_bead_4 = create_test_bead(2, Some(test_bead_3.block_header.block_hash()));
+    let test_bead_2 = create_test_bead(2, Some(test_bead_1.hash()));
+    let test_bead_3 = create_test_bead(3, Some(test_bead_2.hash()));
+    let test_bead_4 = create_test_bead(2, Some(test_bead_3.hash()));
 
     let genesis_beads = vec![test_bead_1.clone()];
 
@@ -1317,9 +1320,41 @@ pub async fn test_get_bead_count_cli_flow() {
 
     let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
 
+    let Some(actual_addr) = spawn_test_server(Arc::clone(&braid)).await else {
+        return;
+    };
+
+    // Give server time to start
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+    // Test: Make HTTP request like CLI would
+    let target_uri = format!("http://{}", actual_addr);
+    let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
+
+    let params = ArrayParams::new();
+    let num_beads: Result<u64, jsonrpsee::core::ClientError> =
+        client.request("getbeadcount", params).await;
+
+    assert!(num_beads.is_ok());
+    assert_eq!(num_beads.unwrap(), 1); // We have 1 genesis bead
+}
+
+#[tokio::test]
+pub async fn test_get_tips_cli_flow() {
+    let test_bead1 = create_test_bead(1, None);
+    let test_bead2 = create_test_bead(2, Some(test_bead1.block_header.block_hash()));
+    let genesis_beads = vec![test_bead1.clone()];
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+
+    // Add second bead
+    {
+        let mut braid_guard = braid.write().await;
+        braid_guard.extend(&test_bead2);
+    }
+
     // Start RPC server
-    let server_addr = "127.0.0.1:9100"; // Different port to avoid conflicts
-    let _server_addr = run_rpc_server(
+    let server_addr = "127.0.0.1:6684";
+    let _ = run_rpc_server(
         Arc::clone(&braid),
         server_addr,
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
@@ -1334,19 +1369,924 @@ pub async fn test_get_bead_count_cli_flow() {
     .await
     .unwrap();
 
-    // Give server time to start
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
 
-    // Test: Make HTTP request like CLI would
+    // Test gettips command
     let target_uri = format!("http://{}", server_addr);
     let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
 
     let params = ArrayParams::new();
-    let num_beads: Result<u64, jsonrpsee::core::ClientError> =
-        client.request("getbeadcount", params).await;
+    let tips: Result<Vec<String>, jsonrpsee::core::ClientError> =
+        client.request("gettips", params).await;
 
-    assert!(num_beads.is_ok());
-    assert_eq!(num_beads.unwrap(), 1); // We have 1 genesis bead
+    assert!(tips.is_ok());
+    let tips_vec = tips.unwrap();
+    assert_eq!(tips_vec.len(), 1); // Should have 1 tip (test_bead2)
+    assert_eq!(
+        tips_vec[0],
+        test_bead2.block_header.block_hash().to_string()
+    );
+}
+
+#[tokio::test]
+pub async fn test_get_bead_rpc() {
+    let test_bead1 = create_test_bead(1, None);
+    let genesis_beads = vec![test_bead1.clone()];
+
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+    let (proxy_tx, _) = mpsc::unbounded_channel();
+
+    let server_addr = "127.0.0.1:9001";
+    let _ = run_rpc_server(
+        Arc::clone(&braid),
+        server_addr,
+        Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
+        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(Mutex::new(stratum::BlockTemplate::default())),
+        proxy_tx,
+        None,
+    )
+    .await
+    .unwrap();
+    let target_uri = format!("http://{}", server_addr);
+    let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
+
+    // Test getbead for existing bead
+    let bead_hash = test_bead1.block_header.block_hash().to_string();
+    let mut params = ArrayParams::new();
+    params.insert(bead_hash.clone()).unwrap();
+
+    let response: Result<Bead, jsonrpsee::core::ClientError> =
+        client.request("getbead", params).await;
+
+    assert!(response.is_ok());
+    let fetched_bead = response.unwrap();
+    assert_eq!(
+        fetched_bead.block_header.block_hash().to_string(),
+        bead_hash
+    );
+
+    // Test getbead for non-existing bead
+    let non_existent_hash =
+        "0000000000000000000000000000000000000000000000000000000000000001".to_string();
+    let mut params = ArrayParams::new();
+    params.insert(non_existent_hash).unwrap();
+    let response: Result<Bead, jsonrpsee::core::ClientError> =
+        client.request("getbead", params).await;
+
+    assert!(response.is_err());
+    if let jsonrpsee::core::ClientError::Call(error) = response.unwrap_err() {
+        assert_eq!(error.code(), 3);
+        assert_eq!(error.message(), "Bead not found");
+    } else {
+        panic!("Expected a Call error");
+    }
+}
+
+#[tokio::test]
+pub async fn test_get_cohort_rpc() {
+    let test_bead_1 = create_test_bead(1, None); // cohort 0
+    let test_bead_2 = create_test_bead(2, Some(test_bead_1.block_header.block_hash())); // cohort 1
+    let genesis_beads = vec![test_bead_1.clone()];
+
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+    {
+        let mut braid_guard = braid.write().await;
+        braid_guard.extend(&test_bead_2);
+    }
+
+    let (proxy_tx, _) = mpsc::unbounded_channel();
+
+    let server_addr = "127.0.0.1:9002";
+    let _ = run_rpc_server(
+        Arc::clone(&braid),
+        server_addr,
+        Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
+        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(Mutex::new(stratum::BlockTemplate::default())),
+        proxy_tx,
+        None,
+    )
+    .await
+    .unwrap();
+    let target_uri = format!("http://{}", server_addr);
+    let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
+
+    // Test getcohortbyid for existing cohort
+    let mut params = ArrayParams::new();
+    params.insert(1 as u64).unwrap(); // Get cohort 1
+    let response: Result<Vec<String>, jsonrpsee::core::ClientError> =
+        client.request("getcohortbyid", params).await;
+
+    assert!(response.is_ok());
+    let cohort_hashes = response.unwrap();
+    assert_eq!(cohort_hashes.len(), 1);
+    assert_eq!(
+        cohort_hashes[0],
+        test_bead_2.block_header.block_hash().to_string()
+    );
+
+    // Test getcohortbyid for non-existing cohort
+    let mut params = ArrayParams::new();
+    params.insert(99 as u64).unwrap();
+    let response: Result<String, jsonrpsee::core::ClientError> =
+        client.request("getcohortbyid", params).await;
+
+    assert!(response.is_err());
+    if let jsonrpsee::core::ClientError::Call(error) = response.unwrap_err() {
+        assert_eq!(error.code(), 3);
+        assert_eq!(error.message(), "Cohort not found for given ID");
+    } else {
+        panic!("Expected a Call error");
+    }
+}
+
+#[tokio::test]
+pub async fn test_get_genesis_rpc() {
+    let test_bead1 = create_test_bead(1, None);
+    let genesis_beads = vec![test_bead1.clone()];
+
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+    let (proxy_tx, _) = mpsc::unbounded_channel();
+
+    let server_addr = "127.0.0.1:9003";
+    let _ = run_rpc_server(
+        Arc::clone(&braid),
+        server_addr,
+        Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
+        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(Mutex::new(stratum::BlockTemplate::default())),
+        proxy_tx,
+        None,
+    )
+    .await
+    .unwrap();
+    let target_uri = format!("http://{}", server_addr);
+    let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
+
+    let response: Result<String, jsonrpsee::core::ClientError> =
+        client.request("getgenesis", ArrayParams::new()).await;
+
+    assert!(response.is_ok());
+    let genesis_hash = response.unwrap();
+    assert_eq!(
+        genesis_hash,
+        test_bead1.block_header.block_hash().to_string()
+    );
+}
+
+#[tokio::test]
+pub async fn test_get_parents_and_children_rpc() {
+    let test_bead1 = create_test_bead(1, None);
+    let test_bead2 = create_test_bead(2, Some(test_bead1.block_header.block_hash()));
+    let genesis_beads = vec![test_bead1.clone()];
+
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+    {
+        let mut braid_guard = braid.write().await;
+        braid_guard.extend(&test_bead2);
+    }
+
+    let (proxy_tx, _) = mpsc::unbounded_channel();
+
+    let server_addr = "127.0.0.1:9004";
+    let _ = run_rpc_server(
+        Arc::clone(&braid),
+        server_addr,
+        Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
+        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(Mutex::new(stratum::BlockTemplate::default())),
+        proxy_tx,
+        None,
+    )
+    .await
+    .unwrap();
+    let target_uri = format!("http://{}", server_addr);
+    let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
+
+    // Test getparents for bead2
+    let bead2_hash = test_bead2.block_header.block_hash().to_string();
+    let mut params = ArrayParams::new();
+    params.insert(bead2_hash.clone()).unwrap();
+    let response: Result<Vec<String>, jsonrpsee::core::ClientError> =
+        client.request("getparents", params).await;
+
+    assert!(response.is_ok());
+    let parent_hashes = response.unwrap();
+    assert_eq!(parent_hashes.len(), 1);
+    assert_eq!(
+        parent_hashes[0],
+        test_bead1.block_header.block_hash().to_string()
+    );
+
+    // Test getchildren for bead1
+    let bead1_hash = test_bead1.block_header.block_hash().to_string();
+    let mut params = ArrayParams::new();
+    params.insert(bead1_hash).unwrap();
+    let response: Result<Vec<String>, jsonrpsee::core::ClientError> =
+        client.request("getchildren", params).await;
+
+    assert!(response.is_ok());
+    let children_hashes = response.unwrap();
+    assert_eq!(children_hashes.len(), 1);
+    assert_eq!(children_hashes[0], bead2_hash);
+
+    // Test getchildren for bead2 (should have no children)
+    let mut params = ArrayParams::new();
+    params.insert(bead2_hash).unwrap();
+    let response: Result<Vec<String>, jsonrpsee::core::ClientError> =
+        client.request("getchildren", params).await;
+
+    assert!(response.is_ok());
+    let children_hashes = response.unwrap();
+    assert!(children_hashes.is_empty());
+}
+
+#[tokio::test]
+pub async fn test_get_hwpath_rpc() {
+    let test_bead1 = create_test_bead(1, None);
+    let test_bead2 = create_test_bead(2, Some(test_bead1.block_header.block_hash()));
+    let test_bead3 = create_test_bead(3, Some(test_bead2.block_header.block_hash()));
+    let genesis_beads = vec![test_bead1.clone()];
+
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+    {
+        let mut braid_guard = braid.write().await;
+        braid_guard.extend(&test_bead2);
+        braid_guard.extend(&test_bead3);
+    }
+
+    let (proxy_tx, _) = mpsc::unbounded_channel();
+
+    let server_addr = "127.0.0.1:9005";
+    let _ = run_rpc_server(
+        Arc::clone(&braid),
+        server_addr,
+        Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
+        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(Mutex::new(stratum::BlockTemplate::default())),
+        proxy_tx,
+        None,
+    )
+    .await
+    .unwrap();
+    let target_uri = format!("http://{}", server_addr);
+    let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
+
+    let mut params = ArrayParams::new();
+    params.insert(10 as u8).unwrap();
+    let response: Result<Vec<String>, jsonrpsee::core::ClientError> =
+        client.request("gethighestworkpathbycount", params).await;
+
+    if let Ok(hw_path) = response {
+        assert!(!hw_path.is_empty());
+    }
+
+    // Test with limit
+    let mut params = ArrayParams::new();
+    params.insert(2 as u8).unwrap();
+    let response: Result<Vec<String>, jsonrpsee::core::ClientError> =
+        client.request("gethighestworkpathbycount", params).await;
+
+    if let Ok(hw_path) = response {
+        assert!(hw_path.len() <= 2);
+    }
+}
+
+#[tokio::test]
+pub async fn test_get_braid_info_rpc() {
+    let test_bead1 = create_test_bead(1, None);
+    let genesis_beads = vec![test_bead1.clone()];
+
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+
+    let (proxy_tx, _) = mpsc::unbounded_channel();
+
+    let server_addr = "127.0.0.1:9006";
+    let _ = run_rpc_server(
+        Arc::clone(&braid),
+        server_addr,
+        Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
+        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(Mutex::new(stratum::BlockTemplate::default())),
+        proxy_tx,
+        None,
+    )
+    .await
+    .unwrap();
+    let target_uri = format!("http://{}", server_addr);
+    let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
+
+    let response: Result<Value, jsonrpsee::core::ClientError> =
+        client.request("getbraidinfo", ArrayParams::new()).await;
+
+    assert!(response.is_ok());
+    let braid_info: BraidInfo = serde_json::from_value(response.unwrap()).unwrap();
+
+    // Check some fields
+    assert_eq!(braid_info.bead_count, 1);
+    assert_eq!(braid_info.tip_count, 1);
+    assert_eq!(
+        braid_info.tips[0],
+        test_bead1.block_header.block_hash().to_string()
+    );
+}
+
+#[tokio::test]
+pub async fn test_get_node_info_rpc() {
+    let test_bead1 = create_test_bead(1, None);
+    let genesis_beads = vec![test_bead1.clone()];
+
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+
+    let (proxy_tx, _) = mpsc::unbounded_channel();
+
+    let server_addr = "127.0.0.1:9007";
+    let _ = run_rpc_server(
+        Arc::clone(&braid),
+        server_addr,
+        Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
+        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(Mutex::new(stratum::BlockTemplate::default())),
+        proxy_tx,
+        None,
+    )
+    .await
+    .unwrap();
+    let target_uri = format!("http://{}", server_addr);
+    let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
+
+    let bead_hash = test_bead1.block_header.block_hash().to_string();
+    let mut params = ArrayParams::new();
+    params.insert(bead_hash).unwrap();
+
+    let response: Result<Value, jsonrpsee::core::ClientError> =
+        client.request("getnodeinfo", params).await;
+
+    assert!(response.is_ok());
+    let node_info: NodeInfo = serde_json::from_value(response.unwrap()).unwrap();
+
+    assert_eq!(
+        node_info.common_pubkey,
+        test_bead1.committed_metadata.comm_pub_key.to_string()
+    );
+    assert_eq!(
+        node_info.payout_address,
+        test_bead1.committed_metadata.payout_address
+    );
+}
+
+#[tokio::test]
+pub async fn test_get_peer_info_rpc() {
+    use libp2p::identity::Keypair;
+    use libp2p::PeerId;
+    use std::net::{IpAddr, Ipv4Addr};
+    use std::time::Duration;
+
+    // Helper to generate a peer id (testing purpose only )
+    fn generate_peer_id() -> PeerId {
+        let keypair = Keypair::generate_ed25519();
+        PeerId::from(keypair.public())
+    }
+
+    let braid: Arc<RwLock<braid::Braid>> =
+        Arc::new(RwLock::new(braid::Braid::new(vec![create_test_bead(
+            1, None,
+        )])));
+    let (proxy_tx, _) = mpsc::unbounded_channel();
+
+    // --- 1. Test with no peers ---
+    let peer_manager_empty = Arc::new(tokio::sync::RwLock::new(PeerManager::new(8)));
+    let server_addr_empty = "127.0.0.1:9008";
+    let server_empty = jsonrpsee::server::Server::builder()
+        .build(server_addr_empty)
+        .await
+        .unwrap();
+    let rpc_impl_empty = RpcServerImpl::new(
+        Arc::clone(&braid),
+        peer_manager_empty,
+        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(Mutex::new(stratum::BlockTemplate::default())),
+        proxy_tx.clone(),
+        None,
+    );
+    let handle_empty = server_empty.start(rpc_impl_empty.into_rpc());
+
+    let client_empty: HttpClient = HttpClient::builder()
+        .build(format!("http://{}", server_addr_empty))
+        .unwrap();
+
+    let response_empty: Result<Value, _> = client_empty
+        .request("getpeerinfo", ArrayParams::new())
+        .await;
+    handle_empty.stop().unwrap(); // Stop the server
+
+    assert!(response_empty.is_ok());
+    let response_value_empty = response_empty.unwrap();
+    println!(
+        "\n--- Response with 0 peers ---\n{}\n---------------------------\n",
+        serde_json::to_string_pretty(&response_value_empty).unwrap()
+    );
+    assert_eq!(response_value_empty["connected"], 0);
+
+    // --- 2. Test with one peer ---
+    let mut peer_manager_with_peers = PeerManager::new(8);
+    let peer_id = generate_peer_id();
+    let peer_id_str = peer_id.to_base58();
+    let peer_ip = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 5));
+    peer_manager_with_peers.add_peer(peer_id, false, Some(peer_ip));
+    peer_manager_with_peers.update_latency(&peer_id, Duration::from_millis(75));
+    peer_manager_with_peers.update_score(&peer_id, 25.0);
+
+    let peer_manager_arc = Arc::new(tokio::sync::RwLock::new(peer_manager_with_peers));
+    let server_addr_with_peers = "127.0.0.1:9018"; // Use a different port
+    let server_with_peers = jsonrpsee::server::Server::builder()
+        .build(server_addr_with_peers)
+        .await
+        .unwrap();
+    let rpc_impl_with_peers = RpcServerImpl::new(
+        Arc::clone(&braid),
+        peer_manager_arc,
+        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(Mutex::new(stratum::BlockTemplate::default())),
+        proxy_tx,
+        None,
+    );
+    let handle_with_peers = server_with_peers.start(rpc_impl_with_peers.into_rpc());
+
+    let client_with_peers: HttpClient = HttpClient::builder()
+        .build(format!("http://{}", server_addr_with_peers))
+        .unwrap();
+
+    let response_with_peers: Result<Value, _> = client_with_peers
+        .request("getpeerinfo", ArrayParams::new())
+        .await;
+    handle_with_peers.stop().unwrap(); // Stop the server
+
+    assert!(response_with_peers.is_ok());
+    let response_value_with_peers = response_with_peers.unwrap();
+    println!(
+        "--- Response with 1 peer ---\n{}\n--------------------------\n",
+        serde_json::to_string_pretty(&response_value_with_peers).unwrap()
+    );
+
+    // Assert that the output contains the peer's info
+    assert_eq!(response_value_with_peers["connected"], 1);
+    let peers_array = response_value_with_peers["peers"].as_array().unwrap();
+    assert_eq!(peers_array.len(), 1);
+    assert_eq!(peers_array[0]["peer_id"], peer_id_str);
+    assert_eq!(peers_array[0]["ip"], "192.168.1.5");
+    assert_eq!(peers_array[0]["latency_ms"], 75.0);
+    assert!(peers_array[0]["score"].as_f64().unwrap() > 0.0);
+}
+
+#[tokio::test]
+pub async fn test_get_miner_info_rpc() {
+    let braid: Arc<RwLock<braid::Braid>> =
+        Arc::new(RwLock::new(braid::Braid::new(vec![create_test_bead(
+            1, None,
+        )])));
+
+    let (proxy_tx, _) = mpsc::unbounded_channel();
+
+    let stratum_map = Arc::new(Mutex::new(stratum::ConnectionMapping::new()));
+    {
+        let mut map = stratum_map.lock().await;
+        let (tx, _) = mpsc::channel(1);
+        map.downstream_channel_mapping.insert(
+            "1.2.3.4:5678".to_string(),
+            stratum::ConnectionInfo {
+                connection_id: 0,
+                sender: tx,
+            },
+        );
+    }
+
+    let server_addr = "127.0.0.1:9009";
+    let _ = run_rpc_server(
+        Arc::clone(&braid),
+        server_addr,
+        Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
+        stratum_map,
+        Arc::new(Mutex::new(stratum::BlockTemplate::default())),
+        proxy_tx,
+        None,
+    )
+    .await
+    .unwrap();
+    let target_uri = format!("http://{}", server_addr);
+    let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
+
+    let response: Result<Vec<String>, jsonrpsee::core::ClientError> =
+        client.request("getminerinfo", ArrayParams::new()).await;
+
+    assert!(response.is_ok());
+    let miner_ips = response.unwrap();
+    assert_eq!(miner_ips, vec!["1.2.3.4:5678".to_string()]);
+}
+
+#[tokio::test]
+pub async fn test_staged_transactions_rpc() {
+    use bitcoin::consensus::deserialize;
+
+    let braid: Arc<RwLock<braid::Braid>> =
+        Arc::new(RwLock::new(braid::Braid::new(vec![create_test_bead(
+            1, None,
+        )])));
+    let (proxy_tx, _) = mpsc::unbounded_channel();
+    let latest_block = Arc::new(Mutex::new(stratum::BlockTemplate::default()));
+
+    let server_addr = "127.0.0.1:9013";
+    let server = jsonrpsee::server::Server::builder()
+        .build(server_addr)
+        .await
+        .unwrap();
+    let rpc_impl = RpcServerImpl::new(
+        braid,
+        Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
+        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::clone(&latest_block),
+        proxy_tx,
+        None,
+    );
+    let handle = server.start(rpc_impl.into_rpc());
+
+    let client: HttpClient = HttpClient::builder()
+        .build(format!("http://{}", server_addr))
+        .unwrap();
+
+    // 1. Test with an empty block template
+    let response_empty: Result<Value, _> = client
+        .request("stagedtransactions", ArrayParams::new())
+        .await;
+
+    assert!(response_empty.is_ok());
+    let returned_txs_empty: Vec<StagedTxEntry> =
+        serde_json::from_value(response_empty.unwrap()).unwrap();
+    assert!(returned_txs_empty.is_empty());
+
+    // 2. Test with only a coinbase transaction
+    let coinbase_tx_hex = "01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0704ffff001d0104ffffffff0100f2052a01000000434104678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5fac00000000";
+    let coinbase_tx: Transaction = deserialize(&hex::decode(coinbase_tx_hex).unwrap()).unwrap();
+
+    {
+        let mut block_template = latest_block.lock().await;
+        block_template.transactions = vec![coinbase_tx.clone()];
+    }
+
+    let response_coinbase_only: Result<Value, _> = client
+        .request("stagedtransactions", ArrayParams::new())
+        .await;
+
+    assert!(response_coinbase_only.is_ok());
+    let returned_txs_coinbase_only: Vec<StagedTxEntry> =
+        serde_json::from_value(response_coinbase_only.unwrap()).unwrap();
+    assert!(
+        returned_txs_coinbase_only.is_empty(),
+        "Should return empty list when only coinbase tx is present"
+    );
+
+    // 3. Test with coinbase and a regular transaction
+    let regular_tx_hex = "0100000001c997a5e56e104102fa209c6a852dd90660a20b2d9c352423edce25857fcd3704000000004847304402204e45e16932b8af514961a1d3a1a25fdf3f4f7732e9d624c6c61548ab5fb8cd410220181522ec8eca07de4860a4acdd12909d831cc56cbbac4622082221a8768d1d0901ffffffff0200ca9a3b000000001976a914e04a251c1cde050eb41328b0f8395020120150b388ac80969800000000001976a914480252b4ac4038bed9588663a43f885e5884483788ac00000000";
+    let regular_tx: Transaction = deserialize(&hex::decode(regular_tx_hex).unwrap()).unwrap();
+
+    {
+        let mut block_template = latest_block.lock().await;
+        block_template.transactions = vec![coinbase_tx.clone(), regular_tx.clone()];
+    }
+
+    let response_with_tx: Result<Value, _> = client
+        .request("stagedtransactions", ArrayParams::new())
+        .await;
+
+    assert!(response_with_tx.is_ok());
+    let returned_txs: Vec<StagedTxEntry> =
+        serde_json::from_value(response_with_tx.unwrap()).unwrap();
+
+    assert_eq!(
+        returned_txs.len(),
+        1,
+        "Should return one regular transaction"
+    );
+    assert_eq!(
+        returned_txs[0].txid,
+        regular_tx.compute_txid().to_string(),
+        "Returned txid should match the regular mock txid"
+    );
+    assert_eq!(
+        returned_txs[0].tx.compute_txid(),
+        regular_tx.compute_txid(),
+        "Returned tx should match the regular mock tx"
+    );
+
+    handle.stop().unwrap();
+}
+
+#[tokio::test]
+pub async fn test_get_ipc_stats_rpc() {
+    let braid: Arc<RwLock<braid::Braid>> =
+        Arc::new(RwLock::new(braid::Braid::new(vec![create_test_bead(
+            1, None,
+        )])));
+    let (proxy_tx, mut proxy_rx) = mpsc::unbounded_channel();
+
+    let server_addr = "127.0.0.1:9012";
+    let _ = run_rpc_server(
+        Arc::clone(&braid),
+        server_addr,
+        Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
+        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(Mutex::new(stratum::BlockTemplate::default())),
+        proxy_tx,
+        None,
+    )
+    .await
+    .unwrap();
+    let target_uri = format!("http://{}", server_addr);
+    let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
+
+    let request_future = client.request("getipcstats", ArrayParams::new());
+
+    let (response, _) = tokio::join!(request_future, async {
+        if let Some(RpcProxyCommand::GetStats { responder }) = proxy_rx.recv().await {
+            let stats = QueueStats {
+                failed_requests: 1,
+                pending_requests: 0,
+                avg_processing_time_ms: 123,
+                queue_sizes: crate::ipc::client::QueueSizeStats {
+                    critical: 1,
+                    high: 2,
+                    normal: 3,
+                    low: 4,
+                },
+            };
+            responder.send(Ok(stats)).unwrap();
+        }
+    });
+
+    assert!(response.is_ok());
+    let stats: Value = response.unwrap();
+    assert_eq!(stats["failed_requests"], 1);
+    assert_eq!(stats["avg_processing_time_ms"], 123);
+    assert_eq!(stats["queue_sizes"]["critical"], 1);
+    assert_eq!(stats["queue_sizes"]["high"], 2);
+    assert_eq!(stats["queue_sizes"]["normal"], 3);
+    assert_eq!(stats["queue_sizes"]["low"], 4);
+}
+
+#[tokio::test]
+pub async fn test_get_ipc_stats_rpc_simple() {
+    let braid: Arc<RwLock<braid::Braid>> =
+        Arc::new(RwLock::new(braid::Braid::new(vec![create_test_bead(
+            1, None,
+        )])));
+    let (proxy_tx, mut proxy_rx) = mpsc::unbounded_channel();
+
+    let server_addr = "127.0.0.1:9020";
+    let _ = run_rpc_server(
+        Arc::clone(&braid),
+        server_addr,
+        Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
+        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(Mutex::new(stratum::BlockTemplate::default())),
+        proxy_tx,
+        None,
+    )
+    .await
+    .unwrap();
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+    let target_uri = format!("http://{}", server_addr);
+    let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
+
+    let request_future = client.request("getipcstats", ArrayParams::new());
+
+    let (response, _) = tokio::join!(request_future, async {
+        if let Some(RpcProxyCommand::GetStats { responder }) = proxy_rx.recv().await {
+            let stats = QueueStats {
+                failed_requests: 0,
+                pending_requests: 0,
+                avg_processing_time_ms: 50,
+                queue_sizes: crate::ipc::client::QueueSizeStats {
+                    critical: 0,
+                    high: 1,
+                    normal: 2,
+                    low: 3,
+                },
+            };
+            responder.send(Ok(stats)).unwrap();
+        }
+    });
+
+    assert!(response.is_ok());
+    let stats: Value = response.unwrap();
+    assert_eq!(stats["failed_requests"], 0);
+    assert_eq!(stats["avg_processing_time_ms"], 50);
+    assert_eq!(stats["queue_sizes"]["high"], 1);
+    assert_eq!(stats["queue_sizes"]["normal"], 2);
+    assert_eq!(stats["queue_sizes"]["low"], 3);
+}
+
+#[tokio::test]
+pub async fn test_unstage_transactions_rpc_simple() {
+    let braid: Arc<RwLock<braid::Braid>> =
+        Arc::new(RwLock::new(braid::Braid::new(vec![create_test_bead(
+            1, None,
+        )])));
+    let (proxy_tx, mut proxy_rx) = mpsc::unbounded_channel();
+
+    let server_addr = "127.0.0.1:9021";
+    let _ = run_rpc_server(
+        Arc::clone(&braid),
+        server_addr,
+        Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
+        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(Mutex::new(stratum::BlockTemplate::default())),
+        proxy_tx,
+        None,
+    )
+    .await
+    .unwrap();
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+    let target_uri = format!("http://{}", server_addr);
+    let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
+
+    let test_txid = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    let mut params = ArrayParams::new();
+    params.insert(test_txid.to_string()).unwrap();
+
+    let request_future: futures::future::BoxFuture<'_, Result<bool, jsonrpsee::core::ClientError>> =
+        Box::pin(client.request("unstagetransactions", params));
+
+    let (response, _) = tokio::join!(request_future, async {
+        if let Some(RpcProxyCommand::RemoveTransaction { txid, responder }) = proxy_rx.recv().await
+        {
+            assert_eq!(txid, test_txid);
+            responder.send(Ok(true)).unwrap();
+        }
+    });
+
+    assert!(response.is_ok());
+    assert_eq!(response.unwrap(), true);
+}
+
+#[tokio::test]
+pub async fn test_get_mining_info_rpc() {
+    use serde_json::json;
+
+    // Create test beads with known public key
+    let test_bead1 = create_test_bead(1, None);
+    let test_bead2 = create_test_bead(2, Some(test_bead1.block_header.block_hash()));
+    let test_bead3 = create_test_bead(3, Some(test_bead2.block_header.block_hash()));
+
+    // Get the public key used in test beads
+    let test_public_key = test_bead1.committed_metadata.comm_pub_key.to_string();
+
+    let genesis_beads = vec![test_bead1.clone()];
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+
+    // Add additional beads to the braid
+    {
+        let mut braid_guard = braid.write().await;
+        braid_guard.extend(&test_bead2);
+        braid_guard.extend(&test_bead3);
+    }
+
+    let (proxy_tx, _) = mpsc::unbounded_channel();
+
+    let server_addr = "127.0.0.1:9089";
+    let _ = run_rpc_server(
+        Arc::clone(&braid),
+        server_addr,
+        Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
+        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(Mutex::new(stratum::BlockTemplate::default())),
+        proxy_tx,
+        None,
+    )
+    .await
+    .unwrap();
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+    let target_uri = format!("http://{}", server_addr);
+    let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
+
+    // Test 1: Filter by public key - should match all 3 beads
+    // jsonrpsee expects Option<Value> - pass object directly, it will be wrapped in Some()
+    let params1_obj = json!({
+        "public_keys": [test_public_key.clone()]
+    });
+    let mut array_params1 = ArrayParams::new();
+    array_params1.insert(params1_obj).unwrap();
+    let response1: Result<Value, _> = client.request("getmininginfo", array_params1).await;
+
+    assert!(response1.is_ok());
+    let mining_info1: serde_json::Value = response1.unwrap();
+    assert_eq!(mining_info1["our_beads_count"], 3);
+    assert_eq!(mining_info1["total_beads_in_braid"], 3);
+    assert!(mining_info1["our_total_work"].as_str().is_some());
+    assert!(mining_info1["total_work_in_braid"].as_str().is_some());
+    assert!(mining_info1["our_work_share_percent"].as_f64().unwrap() > 0.0);
+    assert!(mining_info1["filter_info"].as_str().is_some());
+
+    // Test 2: Filter by non-matching public key - should match 0 beads
+    let params2_obj = json!({
+        "public_keys": ["030303030303030303030303030303030303030303030303030303030303030303"]
+    });
+    let mut array_params2 = ArrayParams::new();
+    array_params2.insert(params2_obj).unwrap();
+    let response2: Result<Value, _> = client.request("getmininginfo", array_params2).await;
+
+    assert!(response2.is_ok());
+    let mining_info2: serde_json::Value = response2.unwrap();
+    assert_eq!(mining_info2["our_beads_count"], 0);
+    assert_eq!(mining_info2["total_beads_in_braid"], 3);
+    assert_eq!(mining_info2["our_total_work"], "0");
+    assert_eq!(mining_info2["our_work_share_percent"], 0.0);
+
+    // Test 3: Filter by miner IP (test beads have empty miner_ip, so this should match 0)
+    let params3_obj = json!({
+        "miner_ips": ["192.168.1.1"]
+    });
+    let mut array_params3 = ArrayParams::new();
+    array_params3.insert(params3_obj).unwrap();
+    let response3: Result<Value, _> = client.request("getmininginfo", array_params3).await;
+
+    assert!(response3.is_ok());
+    let mining_info3: serde_json::Value = response3.unwrap();
+    assert_eq!(mining_info3["our_beads_count"], 0);
+
+    // Test 4: Filter by empty miner IP (test beads have empty string)
+    let params4_obj = json!({
+        "miner_ips": [""]
+    });
+    let mut array_params4 = ArrayParams::new();
+    array_params4.insert(params4_obj).unwrap();
+    let response4: Result<Value, _> = client.request("getmininginfo", array_params4).await;
+
+    assert!(response4.is_ok());
+    let mining_info4: serde_json::Value = response4.unwrap();
+    assert!(mining_info4["our_beads_count"].is_number());
+
+    // Test 5: Multiple public keys (key rotation scenario)
+    let params5_obj = json!({
+        "public_keys": [test_public_key.clone(), "030303030303030303030303030303030303030303030303030303030303030303"]
+    });
+    let mut array_params5 = ArrayParams::new();
+    array_params5.insert(params5_obj).unwrap();
+    let response5: Result<Value, _> = client.request("getmininginfo", array_params5).await;
+
+    assert!(response5.is_ok());
+    let mining_info5: serde_json::Value = response5.unwrap();
+    assert_eq!(mining_info5["our_beads_count"], 3); // Should match via first key
+
+    // Test 6: Combined filters (public_keys AND miner_ips)
+    let params6_obj = json!({
+        "public_keys": [test_public_key.clone()],
+        "miner_ips": [""]
+    });
+    let mut array_params6 = ArrayParams::new();
+    array_params6.insert(params6_obj).unwrap();
+    let response6: Result<Value, _> = client.request("getmininginfo", array_params6).await;
+
+    assert!(response6.is_ok());
+    let mining_info6: serde_json::Value = response6.unwrap();
+    // Should match all beads (matches both criteria)
+    assert_eq!(mining_info6["our_beads_count"], 3);
+
+    // Test 7: Error case - no parameters (empty array)
+    let response7: Result<Value, _> = client.request("getmininginfo", ArrayParams::new()).await;
+
+    assert!(response7.is_err());
+    if let jsonrpsee::core::ClientError::Call(err) = response7.unwrap_err() {
+        assert_eq!(err.code(), 2);
+        assert!(err.message().contains("Parameters required") || err.message().contains("filter"));
+    } else {
+        panic!("Expected Call error");
+    }
+
+    // Test 8: Error case - empty public_keys array
+    let params8_obj = json!({
+        "public_keys": []
+    });
+    let mut array_params8 = ArrayParams::new();
+    array_params8.insert(params8_obj).unwrap();
+    let response8: Result<Value, _> = client.request("getmininginfo", array_params8).await;
+
+    assert!(response8.is_err());
+    if let jsonrpsee::core::ClientError::Call(err) = response8.unwrap_err() {
+        assert_eq!(err.code(), 2);
+        assert!(
+            err.message().contains("non-empty filter") || err.message().contains("At least one")
+        );
+    } else {
+        panic!("Expected Call error");
+    }
+    assert_eq!(response_cohort_cnt.unwrap(), 4);
 }
 
 #[tokio::test]

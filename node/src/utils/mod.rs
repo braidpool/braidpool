@@ -6,36 +6,27 @@ use crate::{
 };
 use ::bitcoin::BlockHash;
 use bitcoin::{
-    absolute::MedianTimePast as Time, ecdsa::Signature, BlockHeader, BlockTime, BlockVersion,
-    CompactTarget, EcdsaSighashType, TxMerkleNode,
+    ecdsa::Signature, BlockHeader, BlockTime, BlockVersion, CompactTarget, EcdsaSighashType,
+    TxMerkleNode,
 };
+
+use crate::utils::timestamp::MicrosecondTimestamp;
+
+// Re-export Time for other modules
+pub use bitcoin::absolute::MedianTimePast as Time;
+
+/// BeadHash is a type alias for BlockHash, representing the hash of a bead.
+pub type BeadHash = BlockHash;
+
 // Standard Imports
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
 
 pub mod test_utils;
-
-// External Type Aliases
-pub type BeadHash = BlockHash;
-pub type Byte = u8;
-pub type Bytes = Vec<Byte>;
-
-// Internal Type Aliases
-#[allow(dead_code)]
-pub(crate) type Relatives = HashSet<BeadHash>;
+pub mod timestamp;
 
 // Error Definitions
 use std::{collections::HashSet, net::IpAddr, str::FromStr};
-
-pub(crate) fn hashset_to_vec_deterministic(hashset: &HashSet<BeadHash>) -> Vec<BeadHash> {
-    let mut vec: Vec<BeadHash> = hashset.iter().cloned().collect();
-    vec.sort();
-    vec
-}
-
-pub(crate) fn vec_to_hashset(vec: Vec<BeadHash>) -> HashSet<BeadHash> {
-    vec.iter().cloned().collect()
-}
 
 /// Get list of actual local IPv4 addresses for servers binding to 0.0.0.0
 ///
@@ -92,7 +83,9 @@ pub fn create_test_bead(nonce: u32, prev_hash: Option<BlockHash>) -> Bead {
     }
     let weak_target = CompactTarget::from_consensus(486604799);
     let min_target = CompactTarget::from_consensus(486604799);
-    let time_val = Time::from_consensus(1653195600).unwrap();
+    // Convert Unix timestamp (seconds) to microseconds since epoch
+    let timestamp_micros = MicrosecondTimestamp::from_secs(1653195600);
+    let time_val = timestamp_micros;
     let test_committed_metadata: CommittedMetadata = CommittedMetadata {
         comm_pub_key: public_key,
         min_target: min_target,

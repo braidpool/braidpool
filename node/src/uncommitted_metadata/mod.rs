@@ -1,4 +1,4 @@
-use bitcoin::absolute::Time;
+use crate::utils::timestamp::MicrosecondTimestamp;
 use bitcoin::consensus::encode::Decodable;
 use bitcoin::consensus::encode::Encodable;
 use bitcoin::consensus::Error;
@@ -13,7 +13,7 @@ use serde::Serialize;
 pub struct UnCommittedMetadata {
     pub extra_nonce_1: u32,
     pub extra_nonce_2: u32,
-    pub broadcast_timestamp: Time,
+    pub broadcast_timestamp: MicrosecondTimestamp,
     pub signature: Signature,
 }
 impl Default for UnCommittedMetadata {
@@ -26,7 +26,7 @@ impl Default for UnCommittedMetadata {
         Self {
             extra_nonce_1: 0,
             extra_nonce_2: 0,
-            broadcast_timestamp: bitcoin::blockdata::locktime::absolute::MedianTimePast::MIN,
+            broadcast_timestamp: MicrosecondTimestamp::default(),
             signature: default_sig,
         }
     }
@@ -36,10 +36,7 @@ impl Encodable for UnCommittedMetadata {
         let mut len = 0;
         len += self.extra_nonce_1.consensus_encode(w)?;
         len += self.extra_nonce_2.consensus_encode(w)?;
-        len += self
-            .broadcast_timestamp
-            .to_consensus_u32()
-            .consensus_encode(w)?;
+        len += self.broadcast_timestamp.consensus_encode(w)?;
         len += self.signature.to_string().consensus_encode(w)?;
         Ok(len)
     }
@@ -49,7 +46,7 @@ impl Decodable for UnCommittedMetadata {
     fn consensus_decode<R: BufRead + ?Sized>(r: &mut R) -> Result<Self, Error> {
         let extra_nonce_1 = u32::consensus_decode(r)?;
         let extra_nonce_2 = u32::consensus_decode(r)?;
-        let broadcast_timestamp = Time::from_consensus(u32::consensus_decode(r).unwrap()).unwrap();
+        let broadcast_timestamp = MicrosecondTimestamp::consensus_decode(r)?;
         let signature = Signature::from_str(&String::consensus_decode(r).unwrap()).unwrap();
 
         Ok(UnCommittedMetadata {
