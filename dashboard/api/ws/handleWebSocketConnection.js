@@ -21,7 +21,6 @@ const ALLOWED_RPC_METHODS = new Set([
   'getbraidinfo',
   'getnodeinfo',
   'getpeerinfo',
-  'stagedtransactions',
 ]);
 
 export async function handleWebSocketConnection(ws) {
@@ -81,7 +80,6 @@ export async function handleWebSocketConnection(ws) {
           pass: process.env.RPC_PASS,
           method: data.method,
           params: data.params || [],
-          role: 'dashboard',
         });
 
         ws.send(JSON.stringify({ type: 'rpc_response', id: data.id, result }));

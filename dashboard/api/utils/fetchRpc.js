@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 export async function callRpc(
-  { url, user, pass, method, params = [], headers = {}, role },
+  { url, user, pass, method, params = [], headers = {} },
   retries = 3,
   delay = 2000,
   timeout = 5000
@@ -19,7 +19,6 @@ export async function callRpc(
         auth: { username: user, password: pass },
         headers: {
           'Content-Type': 'application/json',
-          ...(role ? { 'x-braidpool-role': role } : {}),
           ...headers,
         },
         timeout,

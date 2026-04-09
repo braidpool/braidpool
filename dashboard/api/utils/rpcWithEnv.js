@@ -1,6 +1,6 @@
 import { callRpc } from './fetchRpc.js';
 
-export function rpcWithEnv({ method, params = [], role }) {
+export function rpcWithEnv({ method, params = [] }) {
   const url = process.env.BRAIDPOOL_URL;
   const user = process.env.RPC_USER;
   const pass = process.env.RPC_PASS;
@@ -17,7 +17,6 @@ export function rpcWithEnv({ method, params = [], role }) {
       pass,
       method,
       params,
-      role,
     });
   } catch (error) {
     console.error(`RPC call failed: ${method}`, error);

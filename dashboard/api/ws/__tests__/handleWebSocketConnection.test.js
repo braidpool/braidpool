@@ -59,7 +59,6 @@ describe('handleWebSocketConnection', () => {
       pass: undefined,
       method: 'getbeadcount',
       params: [],
-      role: 'dashboard',
     });
 
     expect(mockWs.send).toHaveBeenCalledWith(
