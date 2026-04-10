@@ -427,11 +427,12 @@ const MinerInventoryDashboard = () => {
                     setStatusFilter((s) => (s === 'online' ? 'all' : 'online'))
                   }
                   className={
-                    'px-4 py-2 rounded-md border transition text-sm  cursor-pointer ' +
+                    'px-4 py-2 rounded-md border text-sm transition cursor-pointer ' +
                     (statusFilter === 'online'
-                      ? 'border-blue-400 text-white bg-gray-700'
-                      : 'border-gray-600 text-gray-400 hover:bg-gray-800')
+                      ? 'border-blue-400 text-white'
+                      : 'border-transparent text-gray-400 hover:opacity-80')
                   }
+                  style={{ backgroundColor: 'rgba(30, 30, 30, 1)' }}
                 >
                   {onlineMiners} Online
                 </button>
@@ -442,11 +443,12 @@ const MinerInventoryDashboard = () => {
                     )
                   }
                   className={
-                    'px-4 py-2 rounded-md border transition text-sm  cursor-pointer ' +
+                    'px-4 py-2 rounded-md border text-sm transition cursor-pointer ' +
                     (statusFilter === 'warning'
-                      ? 'border-yellow-400 text-white bg-gray-700'
-                      : 'border-gray-600 text-gray-400 hover:bg-gray-800')
+                      ? 'border-yellow-400 text-white'
+                      : 'border-transparent text-gray-400 hover:opacity-80')
                   }
+                  style={{ backgroundColor: 'rgba(30, 30, 30, 1)' }}
                 >
                   {warningMiners} Warning
                 </button>
@@ -457,11 +459,12 @@ const MinerInventoryDashboard = () => {
                     )
                   }
                   className={
-                    'px-4 py-2 rounded-md border transition text-sm   cursor-pointer ' +
+                    'px-4 py-2 rounded-md border text-sm transition cursor-pointer ' +
                     (statusFilter === 'offline'
-                      ? 'border-red-400 text-white bg-gray-700'
-                      : 'border-gray-600 text-gray-400 hover:bg-gray-800')
+                      ? 'border-red-400 text-white'
+                      : 'border-transparent text-gray-400 hover:opacity-80')
                   }
+                  style={{ backgroundColor: 'rgba(30, 30, 30, 1)' }}
                 >
                   {offlineMiners} Offline
                 </button>
@@ -475,12 +478,14 @@ const MinerInventoryDashboard = () => {
                     onChange={(e) => setSearchInput(e.target.value)}
                     placeholder="Search by IP or name"
                     aria-label="Search miners"
-                    className="px-3 py-2 text-sm border border-gray-600 bg-gray-800 rounded text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-500"
+                    className="px-3 py-2 text-sm border border-transparent rounded text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-500"
+                    style={{ backgroundColor: 'rgba(30, 30, 30, 1)' }}
                     onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                   />
                   <button
                     onClick={clearSearch}
-                    className="px-3 py-2 text-sm text-gray-300 rounded border border-gray-600 bg-gray-900 hover:bg-gray-800 transition whitespace-nowrap"
+                    className="px-3 py-2 text-sm text-gray-300 rounded border border-transparent hover:opacity-80 transition whitespace-nowrap"
+                    style={{ backgroundColor: 'rgba(30, 30, 30, 1)' }}
                   >
                     Clear
                   </button>
@@ -499,7 +504,8 @@ const MinerInventoryDashboard = () => {
                     )
                   }
                   aria-label="Sort miners"
-                  className="px-3 py-2 text-sm border border-gray-600 bg-gray-800 rounded text-white focus:outline-none focus:ring-1 focus:ring-gray-500"
+                  className="px-3 py-2 text-sm border border-transparent rounded text-white focus:outline-none focus:ring-1 focus:ring-gray-500"
+                  style={{ backgroundColor: 'rgba(30, 30, 30, 1)' }}
                 >
                   <option value="all">Sort By</option>
                   <option value="efficiency">Efficiency (W/TH)</option>
