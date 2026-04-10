@@ -2,7 +2,7 @@ import { TextEncoder, TextDecoder } from 'util';
 Object.assign(global, { TextEncoder, TextDecoder });
 
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import '@testing-library/jest-dom';
 import ErrorBoundary from '../ErrorBoundary';
@@ -36,12 +36,26 @@ afterAll(() => {
 });
 
 // Helper to wait for retry delay (default 2 seconds)
-const waitForRetryDelay = () =>
-  new Promise((resolve) => setTimeout(resolve, 2100));
+const waitForRetryDelay = () => {
+  act(() => {
+    jest.advanceTimersByTime(1000);
+  });
+  act(() => {
+    jest.advanceTimersByTime(1000);
+  });
+  act(() => {
+    jest.advanceTimersByTime(100);
+  });
+};
 
 describe('ErrorBoundary', () => {
   beforeEach(() => {
+    jest.useFakeTimers();
     jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   describe('when there is no error', () => {
@@ -128,13 +142,16 @@ describe('ErrorBoundary', () => {
       expect(screen.getByText(/Something Went Wrong/i)).toBeInTheDocument();
 
       // Wait for the retry delay (2 seconds)
-      await waitForRetryDelay();
+      waitForRetryDelay();
 
       // Click try again button (get by role since text includes countdown)
       const tryAgainButton = screen.getByRole('button', {
         name: /Retry rendering this section/i,
       });
       fireEvent.click(tryAgainButton);
+      
+      // Advance the internal boundary delay
+      waitForRetryDelay();
 
       // onReset should have been called after the internal delay (2s retryDelay)
       await waitFor(
@@ -173,11 +190,14 @@ describe('ErrorBoundary', () => {
       expect(screen.getByText(/Something Went Wrong/i)).toBeInTheDocument();
 
       // Wait for countdown and click retry
-      await waitForRetryDelay();
+      waitForRetryDelay();
       const retryBtn = screen.getByRole('button', {
         name: /Retry rendering this section/i,
       });
       fireEvent.click(retryBtn);
+
+      // Advance the internal boundary delay
+      waitForRetryDelay();
 
       // Wait for the ErrorBoundary's internal reset delay to complete
       await waitFor(
@@ -218,6 +238,7 @@ describe('ErrorBoundary', () => {
         { timeout: 5000 }
       );
       fireEvent.click(retryBtn1);
+      waitForRetryDelay();
 
       // Wait for reset delay + child re-throw → Attempt 2
       await waitFor(
@@ -234,6 +255,7 @@ describe('ErrorBoundary', () => {
         { timeout: 5000 }
       );
       fireEvent.click(retryBtn2);
+      waitForRetryDelay();
 
       // Wait for reset delay + child re-throw → Attempt 3 (exceeds max)
       await waitFor(
@@ -275,13 +297,17 @@ describe('ErrorBoundary', () => {
       expect(screen.getByText(/Retry \(2s\)/i)).toBeInTheDocument();
 
       // Wait a bit
-      await new Promise((resolve) => setTimeout(resolve, 1100));
+      act(() => {
+        jest.advanceTimersByTime(1100);
+      });
 
       // Should show 1s
       expect(screen.getByText(/Retry \(1s\)/i)).toBeInTheDocument();
 
       // Wait more
-      await new Promise((resolve) => setTimeout(resolve, 1100));
+      act(() => {
+        jest.advanceTimersByTime(1100);
+      });
 
       // Should show normal button
       expect(screen.getByText(/^Retry$/i)).toBeInTheDocument();
@@ -333,7 +359,7 @@ describe('ErrorBoundary', () => {
       ).toBeInTheDocument();
 
       // Wait for countdown to finish
-      await waitForRetryDelay();
+      waitForRetryDelay();
 
       // After countdown, button shows standard label
       expect(
