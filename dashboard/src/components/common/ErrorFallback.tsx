@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 interface Props {
   error: Error | null;
   onReset: () => void;
   retryCount: number;
   maxRetries: number;
+  retryDelay?: number;
   canRetry: boolean;
 }
-
-const RETRY_DELAY_SECONDS = 2;
 
 /**
  * ErrorFallback component - UI displayed when an error is caught by ErrorBoundary.
@@ -19,11 +19,14 @@ const ErrorFallback: React.FC<Props> = ({
   onReset,
   retryCount,
   maxRetries,
+  retryDelay,
   canRetry,
 }) => {
   const isDevelopment = process.env.NODE_ENV === 'development';
-  const [countdown, setCountdown] = useState(RETRY_DELAY_SECONDS);
+  const delaySeconds = Math.ceil((retryDelay || 2000) / 1000);
+  const [countdown, setCountdown] = useState(delaySeconds);
   const [isRetrying, setIsRetrying] = useState(false);
+  const navigate = useNavigate();
 
   // Countdown timer for retry delay
   useEffect(() => {
@@ -37,7 +40,7 @@ const ErrorFallback: React.FC<Props> = ({
   }, [countdown]);
 
   const handleGoHome = (): void => {
-    window.location.href = '/';
+    navigate('/');
   };
 
   const handleTryAgain = (): void => {
@@ -82,8 +85,8 @@ const ErrorFallback: React.FC<Props> = ({
         </h2>
 
         <p className="text-gray-400 text-center mb-4">
-          We encountered an error loading this section. Our team has been
-          notified.
+          We encountered an error loading this section. Please try again, and
+          contact support if the problem persists.
         </p>
 
         {/* Retry explanation */}
@@ -99,7 +102,7 @@ const ErrorFallback: React.FC<Props> = ({
               canRetry ? 'text-blue-400' : 'text-red-400'
             }`}
           >
-            Attempt {retryCount} of {maxRetries}
+            Attempt {Math.max(1, retryCount)} of {maxRetries}
           </span>
           {!canRetry && (
             <p className="text-red-400 text-sm mt-1">

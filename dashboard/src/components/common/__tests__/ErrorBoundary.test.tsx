@@ -1,5 +1,9 @@
+import { TextEncoder, TextDecoder } from 'util';
+Object.assign(global, { TextEncoder, TextDecoder });
+
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { BrowserRouter } from 'react-router-dom';
 import '@testing-library/jest-dom';
 import ErrorBoundary from '../ErrorBoundary';
 
@@ -43,9 +47,11 @@ describe('ErrorBoundary', () => {
   describe('when there is no error', () => {
     it('renders children normally', () => {
       render(
-        <ErrorBoundary>
-          <div data-testid="child">Child content</div>
-        </ErrorBoundary>
+        <BrowserRouter>
+          <ErrorBoundary>
+            <div data-testid="child">Child content</div>
+          </ErrorBoundary>
+        </BrowserRouter>
       );
 
       expect(screen.getByTestId('child')).toBeInTheDocument();
@@ -56,9 +62,11 @@ describe('ErrorBoundary', () => {
   describe('when an error is thrown', () => {
     it('catches the error and displays fallback UI', () => {
       render(
-        <ErrorBoundary>
-          <ThrowError shouldThrow={true} />
-        </ErrorBoundary>
+        <BrowserRouter>
+          <ErrorBoundary>
+            <ThrowError shouldThrow={true} />
+          </ErrorBoundary>
+        </BrowserRouter>
       );
 
       // Should show error fallback UI
@@ -72,9 +80,11 @@ describe('ErrorBoundary', () => {
 
     it('does not render children after error', () => {
       render(
-        <ErrorBoundary>
-          <ThrowError shouldThrow={true} />
-        </ErrorBoundary>
+        <BrowserRouter>
+          <ErrorBoundary>
+            <ThrowError shouldThrow={true} />
+          </ErrorBoundary>
+        </BrowserRouter>
       );
 
       // Should not show the normal child content
@@ -83,9 +93,11 @@ describe('ErrorBoundary', () => {
 
     it('logs error to console', () => {
       render(
-        <ErrorBoundary>
-          <ThrowError shouldThrow={true} />
-        </ErrorBoundary>
+        <BrowserRouter>
+          <ErrorBoundary>
+            <ThrowError shouldThrow={true} />
+          </ErrorBoundary>
+        </BrowserRouter>
       );
 
       // Console.error should have been called
@@ -105,9 +117,11 @@ describe('ErrorBoundary', () => {
       const onResetMock = jest.fn();
 
       render(
-        <ErrorBoundary onReset={onResetMock}>
-          <ThrowAfterUpdate triggerError={true} />
-        </ErrorBoundary>
+        <BrowserRouter>
+          <ErrorBoundary onReset={onResetMock}>
+            <ThrowAfterUpdate triggerError={true} />
+          </ErrorBoundary>
+        </BrowserRouter>
       );
 
       // Verify error state
@@ -136,9 +150,11 @@ describe('ErrorBoundary', () => {
 
       // We'll update triggerError from true -> false to simulate fixing the error
       const { rerender } = render(
-        <ErrorBoundary onReset={onResetMock}>
-          <ThrowAfterUpdate triggerError={true} />
-        </ErrorBoundary>
+        <BrowserRouter>
+          <ErrorBoundary onReset={onResetMock}>
+            <ThrowAfterUpdate triggerError={true} />
+          </ErrorBoundary>
+        </BrowserRouter>
       );
 
       // Verify it's initially in the error state
@@ -146,9 +162,11 @@ describe('ErrorBoundary', () => {
 
       // "Fix" the underlying component so it no longer throws
       rerender(
-        <ErrorBoundary onReset={onResetMock}>
-          <ThrowAfterUpdate triggerError={false} />
-        </ErrorBoundary>
+        <BrowserRouter>
+          <ErrorBoundary onReset={onResetMock}>
+            <ThrowAfterUpdate triggerError={false} />
+          </ErrorBoundary>
+        </BrowserRouter>
       );
 
       // It still shows the error because ErrorBoundary hasn't been reset yet
@@ -181,9 +199,11 @@ describe('ErrorBoundary', () => {
       const onResetMock = jest.fn();
 
       render(
-        <ErrorBoundary onReset={onResetMock} maxRetries={3}>
-          <ThrowAfterUpdate triggerError={true} />
-        </ErrorBoundary>
+        <BrowserRouter>
+          <ErrorBoundary onReset={onResetMock} maxRetries={3}>
+            <ThrowAfterUpdate triggerError={true} />
+          </ErrorBoundary>
+        </BrowserRouter>
       );
 
       // First error (retryCount=1): should be able to retry
@@ -244,9 +264,11 @@ describe('ErrorBoundary', () => {
 
     it('shows retry countdown timer', async () => {
       render(
-        <ErrorBoundary>
-          <ThrowError shouldThrow={true} />
-        </ErrorBoundary>
+        <BrowserRouter>
+          <ErrorBoundary>
+            <ThrowError shouldThrow={true} />
+          </ErrorBoundary>
+        </BrowserRouter>
       );
 
       // Initially shows countdown
@@ -269,9 +291,11 @@ describe('ErrorBoundary', () => {
   describe('accessibility', () => {
     it('has role="alert" for screen readers', () => {
       render(
-        <ErrorBoundary>
-          <ThrowError shouldThrow={true} />
-        </ErrorBoundary>
+        <BrowserRouter>
+          <ErrorBoundary>
+            <ThrowError shouldThrow={true} />
+          </ErrorBoundary>
+        </BrowserRouter>
       );
 
       const alert = screen.getByRole('alert');
@@ -280,9 +304,11 @@ describe('ErrorBoundary', () => {
 
     it('has aria-live="assertive" for announcements', () => {
       render(
-        <ErrorBoundary>
-          <ThrowError shouldThrow={true} />
-        </ErrorBoundary>
+        <BrowserRouter>
+          <ErrorBoundary>
+            <ThrowError shouldThrow={true} />
+          </ErrorBoundary>
+        </BrowserRouter>
       );
 
       const alert = screen.getByRole('alert');
@@ -291,9 +317,11 @@ describe('ErrorBoundary', () => {
 
     it('has accessible button labels', async () => {
       render(
-        <ErrorBoundary>
-          <ThrowError shouldThrow={true} />
-        </ErrorBoundary>
+        <BrowserRouter>
+          <ErrorBoundary>
+            <ThrowError shouldThrow={true} />
+          </ErrorBoundary>
+        </BrowserRouter>
       );
 
       // Initially the button shows countdown in aria-label
@@ -321,9 +349,11 @@ describe('ErrorBoundary', () => {
       );
 
       render(
-        <ErrorBoundary fallback={customFallback}>
-          <ThrowError shouldThrow={true} />
-        </ErrorBoundary>
+        <BrowserRouter>
+          <ErrorBoundary fallback={customFallback}>
+            <ThrowError shouldThrow={true} />
+          </ErrorBoundary>
+        </BrowserRouter>
       );
 
       expect(screen.getByTestId('custom-fallback')).toBeInTheDocument();
@@ -336,9 +366,11 @@ describe('ErrorBoundary', () => {
       const onErrorMock = jest.fn();
 
       render(
-        <ErrorBoundary onError={onErrorMock}>
-          <ThrowError shouldThrow={true} />
-        </ErrorBoundary>
+        <BrowserRouter>
+          <ErrorBoundary onError={onErrorMock}>
+            <ThrowError shouldThrow={true} />
+          </ErrorBoundary>
+        </BrowserRouter>
       );
 
       expect(onErrorMock).toHaveBeenCalledTimes(1);

@@ -18,11 +18,26 @@ dotenv.config();
 const PORT = process.env.WS_PORT || 5000;
 
 const app = express();
-app.use(cors());
-app.use(express.json());
+app.use(
+  cors({
+    origin: [
+      'http://localhost:5173',
+      'http://127.0.0.1:5173',
+      'http://localhost:3000',
+    ],
+  })
+);
+app.use(express.json({ limit: '100kb' }));
 
 app.post('/api/report-error', (req, res) => {
   const { error, stack, componentStack, timestamp } = req.body;
+
+  // Basic payload validation to prevent log spam
+  if (!error || typeof error !== 'string' || error.length > 5000) {
+    return res
+      .status(400)
+      .json({ success: false, message: 'Invalid error payload' });
+  }
   console.error('\n=============================================');
   console.error(`[Frontend Error Reported by UI] at ${timestamp}`);
   console.error(`Message: ${error}`);

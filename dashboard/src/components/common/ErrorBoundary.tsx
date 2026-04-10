@@ -1,5 +1,6 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import ErrorFallback from './ErrorFallback';
+import { API_URLS } from '../../URLs';
 
 interface Props {
   children: ReactNode;
@@ -83,7 +84,7 @@ class ErrorBoundary extends Component<Props, State> {
 
     // Notify the backend that an error occurred
     try {
-      fetch('http://localhost:5000/api/report-error', {
+      fetch(`${API_URLS.DASHBOARD_BACKEND_API}/api/report-error`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -148,6 +149,7 @@ class ErrorBoundary extends Component<Props, State> {
           onReset={this.resetErrorBoundary}
           retryCount={retryCount}
           maxRetries={maxRetries}
+          retryDelay={this.props.retryDelay || 2000}
           canRetry={this.canRetry()}
         />
       );
