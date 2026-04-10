@@ -15,6 +15,8 @@ const GraphVisualization: React.FC = () => {
   const [graphData, setGraphData] = useState<GraphData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const isPlayingRef = useRef(true);
   const width = window.innerWidth - 100;
   const margin = { top: 0, right: 0, bottom: 0, left: 50 }; // Changed top from 50 to 100
   const height = window.innerHeight - margin.top - margin.bottom;
@@ -44,6 +46,34 @@ const GraphVisualization: React.FC = () => {
   const zoomBehavior = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(
     null
   );
+  const zoomTransformRef = useRef<d3.ZoomTransform | null>(null);
+
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      if (event.key === ' ' || event.key === 'p' || event.key === 'P') {
+        event.preventDefault();
+        setIsPlaying((prev) => !prev);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   useEffect(() => {
     const url = WEBSOCKET_URLS.BRAIDPOOL_DAG_WEBSOCKET;
@@ -72,6 +102,9 @@ const GraphVisualization: React.FC = () => {
         const parsed = JSON.parse(event.data);
         const parsedData = parsed.data;
         console.log('Received data:', parsedData);
+        if (!isPlayingRef.current) {
+          return;
+        }
         if (!parsedData?.parents || typeof parsedData.parents !== 'object') {
           return;
         }
@@ -162,6 +195,9 @@ const GraphVisualization: React.FC = () => {
 
         // Trigger animation if cohorts changed
         if (firstCohortChanged || lastCohortChanged) {
+          if (!isPlayingRef.current) {
+            return;
+          }
           setTimeout(() => {
             animateCohorts(
               firstCohortChanged ? parsedData.cohorts[0] : [],
@@ -246,16 +282,34 @@ const GraphVisualization: React.FC = () => {
       animateLinkDirection(selectedLinks);
     }
   };
+
+  const buildZoomTransform = (nextZoom: number) => {
+    const currentTransform = zoomTransformRef.current;
+    const currentX = currentTransform ? currentTransform.x : 0;
+    const currentY = currentTransform ? currentTransform.y : 0;
+    return d3.zoomIdentity.translate(currentX, currentY).scale(nextZoom);
+  };
+
   const handleResetZoom = () => {
-    setDefaultZoom(0.3);
+    const nextZoom = 0.3;
+    setDefaultZoom(nextZoom);
+    zoomTransformRef.current = buildZoomTransform(nextZoom);
   };
 
   const handleZoomIn = () => {
-    setDefaultZoom((prevZoom) => Math.min(prevZoom + 0.1, 5));
+    setDefaultZoom((prevZoom) => {
+      const nextZoom = Math.min(prevZoom + 0.1, 5);
+      zoomTransformRef.current = buildZoomTransform(nextZoom);
+      return nextZoom;
+    });
   };
 
   const handleZoomOut = () => {
-    setDefaultZoom((prevZoom) => Math.max(prevZoom - 0.1, 0.3));
+    setDefaultZoom((prevZoom) => {
+      const nextZoom = Math.max(prevZoom - 0.1, 0.3);
+      zoomTransformRef.current = buildZoomTransform(nextZoom);
+      return nextZoom;
+    });
   };
 
   // have not used it YET.. might come in handy in the future
@@ -291,11 +345,15 @@ const GraphVisualization: React.FC = () => {
       .scaleExtent([0.5, 5])
       .on('zoom', (event: d3.D3ZoomEvent<SVGSVGElement, unknown>) => {
         container.attr('transform', event.transform.toString());
+        zoomTransformRef.current = event.transform;
       });
 
     svg
       .call(zoomBehavior.current)
-      .call(zoomBehavior.current.transform, d3.zoomIdentity.scale(defaultZoom));
+      .call(
+        zoomBehavior.current.transform,
+        zoomTransformRef.current ?? d3.zoomIdentity.scale(defaultZoom)
+      );
 
     const allNodes = Object.keys(graphData.parents).map((id) => ({
       id,
@@ -649,6 +707,12 @@ const GraphVisualization: React.FC = () => {
             className="bg-[#0077B6] text-white px-3 py-1 rounded hover:bg-[#005691] transition-colors"
           >
             Reset Zoom
+          </button>
+          <button
+            onClick={() => setIsPlaying((prev) => !prev)}
+            className="bg-[#0077B6] text-white px-3 py-1 rounded hover:bg-[#005691] transition-colors"
+          >
+            {isPlaying ? 'Pause' : 'Resume'}
           </button>
         </div>
       </div>
