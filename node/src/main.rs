@@ -137,7 +137,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //cloning the channel to be sent across different interfaces
     let notification_tx_clone = notification_tx.clone();
     //Connection mapping for all the downstream connection connected to the stratum server
-    let connection_mapping = Arc::new(Mutex::new(ConnectionMapping::new()));
+    let connection_mapping = Arc::new(tokio::sync::RwLock::new(ConnectionMapping::new()));
     // Clone connection_mapping for RPC server before it's used in async move blocks
     let connection_mapping_for_rpc = Arc::clone(&connection_mapping);
     //Mining job map keeping all the jobs provided to the downstream
