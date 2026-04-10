@@ -1489,3 +1489,325 @@ impl UpstreamPoolClient {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::braid::Braid;
+    use bitcoin::BlockHash;
+    use serde_json::json;
+    use std::time::Duration;
+    use tokio::sync::mpsc;
+
+    /// Helper to create a test UpstreamPoolClient with disconnected channels for parsing tests
+    fn create_test_client() -> (
+        UpstreamPoolClient,
+        mpsc::Receiver<JobNotification>,
+        mpsc::Receiver<NotifyCmd>,
+    ) {
+        let config = UpstreamPoolConfig {
+            hostname: "test.pool".to_string(),
+            port: 3333,
+            username: "test".to_string(),
+            password: "pass".to_string(),
+        };
+
+        let (_share_tx, share_rx) = mpsc::channel(10);
+        let (job_tx, job_rx) = mpsc::channel(10);
+        let (notification_tx, notification_rx) = mpsc::channel(10);
+        let (response_tx, _response_rx) = mpsc::channel(10);
+        let (_configure_tx, configure_rx) = mpsc::channel(10);
+        let (audit_log_tx, _audit_log_rx) = mpsc::channel(10);
+
+        let client = UpstreamPoolClient::new(
+            config,
+            Arc::new(tokio::sync::Mutex::new(share_rx)),
+            job_tx,
+            notification_tx,
+            response_tx,
+            None,
+            None,
+            Arc::new(tokio::sync::Mutex::new(configure_rx)),
+            UpstreamCache::new(),
+            Arc::new(tokio::sync::RwLock::new(Braid::new(vec![]))),
+            audit_log_tx,
+        );
+
+        (client, job_rx, notification_rx)
+    }
+
+    #[test]
+    /// Verify that a newly instantiated UpstreamCache has all fields safely initialized to None.
+    fn test_upstream_cache_default() {
+        let cache = UpstreamCache::default();
+        assert!(cache.configure_response.is_none());
+        assert!(cache.subscribe_response.is_none());
+        assert!(cache.current_difficulty.is_none());
+        assert!(cache.latest_job.is_none());
+    }
+
+    #[test]
+    /// Verify that CachedItem correctly tracks its age, resets its timestamp on updates, and properly reports expiration when its TTL elapses.
+    fn test_cached_item_lifecycle() {
+        let mut item = CachedItem::new("value".to_string(), 60);
+
+        assert!(item.is_valid());
+        assert_eq!(item.age_seconds(), 0);
+
+        let time_before = item.cached_at;
+        std::thread::sleep(Duration::from_millis(10));
+        item.update("new_value".to_string());
+
+        assert_eq!(item.value, "new_value");
+        assert!(
+            item.cached_at > time_before,
+            "Timestamp should be newer after update"
+        );
+
+        // Expiry test
+        let expired_item = CachedItem::new("expired", 0);
+        std::thread::sleep(Duration::from_millis(1));
+        assert!(!expired_item.is_valid());
+    }
+
+    #[test]
+    /// Verify that subscribe responses, including the extranonce details and nested subscription arrays, are accurately cached and retrieved.
+    fn test_cache_subscribe_response() {
+        let mut cache = UpstreamCache::default();
+        let subscriptions = vec![
+            ("mining.notify".to_string(), "sub_id_1".to_string()),
+            ("mining.set_difficulty".to_string(), "sub_id_2".to_string()),
+        ];
+
+        cache.set_subscribe("aabbccdd".to_string(), 8, &subscriptions);
+
+        let cached = cache.get_subscribe().unwrap();
+        assert_eq!(cached.extranonce1, "aabbccdd");
+        assert_eq!(cached.extranonce2_size, 8);
+        assert_eq!(cached.subscriptions.len(), 2);
+        assert_eq!(cached.subscriptions[0].0, "mining.notify");
+    }
+
+    #[test]
+    /// Verify that caching a new job with the 'clean_jobs' flag set to true correctly overrides and replaces the previously cached job.
+    fn test_cache_job_clean_jobs() {
+        let mut cache = UpstreamCache::default();
+
+        let mut dummy_job = JobNotification {
+            job_id: "job1".to_string(),
+            prevhash: "000".to_string(),
+            coinbase1: "cb1".to_string(),
+            coinbase2: "cb2".to_string(),
+            merkle_branches: vec![],
+            version: "20000000".to_string(),
+            nbits: "1d00ffff".to_string(),
+            ntime: "507c0000".to_string(),
+            clean_jobs: false,
+            coinbase_witness_commitment: None,
+            parsed_bits: Some(bitcoin::CompactTarget::from_consensus(0x1d00ffff)),
+        };
+
+        cache.set_latest_job(dummy_job.clone());
+        assert_eq!(cache.get_latest_job().unwrap().job_id, "job1");
+
+        // New job with clean_jobs=true should overwrite immediately
+        dummy_job.job_id = "job2".to_string();
+        dummy_job.clean_jobs = true;
+        cache.set_latest_job(dummy_job);
+
+        assert_eq!(cache.get_latest_job().unwrap().job_id, "job2");
+        assert!(cache.get_latest_job().unwrap().clean_jobs);
+    }
+
+    #[test]
+    /// Verify that cache statistics accurately reflect the internal state and that the clear() method completely wipes all stored session data.
+    fn test_cache_clear_and_stats() {
+        let mut cache = UpstreamCache::default();
+
+        cache.set_configure(json!({"test": true}));
+        cache.set_difficulty(1024.0);
+
+        let stats = cache.stats();
+        assert!(stats.configure_valid);
+        assert!(stats.difficulty_valid);
+        assert_eq!(stats.difficulty_value, Some(1024.0));
+
+        cache.clear();
+
+        let empty_stats = cache.stats();
+        assert!(!empty_stats.configure_valid);
+        assert!(!empty_stats.difficulty_valid);
+        assert!(cache.configure_response.is_none());
+        assert!(cache.current_difficulty.is_none());
+    }
+
+    #[test]
+    /// Verify that a standard, well formed Stratum V1 mining.notify parameter array is parsed perfectly into a valid JobNotification struct.
+    fn test_parse_upstream_job_valid() {
+        let (client, _, _) = create_test_client();
+
+        let params = vec![
+            json!("job_id_123"),
+            json!("0000000000000000000000000000000000000000000000000000000000000000"),
+            json!("01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff"),
+            json!("ffffffff00000000"),
+            json!(["hash1", "hash2"]),
+            json!("20000000"),
+            json!("1d00ffff"),
+            json!("507c0000"),
+            json!(true),
+        ];
+
+        let result = client.parse_upstream_job(&params);
+        assert!(result.is_ok(), "Valid job should parse successfully");
+
+        let job = result.unwrap();
+        assert_eq!(job.job_id, "job_id_123");
+        assert_eq!(job.merkle_branches.len(), 2);
+        assert!(job.clean_jobs);
+        assert!(job.parsed_bits.is_some());
+    }
+
+    #[test]
+    /// Verify that the parser correctly throws a ParamNotFound error when mandatory fields like job_id or prevhash are
+    /// completely missing or empty.
+    fn test_parse_upstream_job_missing_params() {
+        let (client, _, _) = create_test_client();
+
+        // Missing job_id
+        let mut params = vec![
+            json!(""),
+            json!("0000000000000000"),
+            json!("cb1"),
+            json!("cb2"),
+            json!([]),
+            json!("20000000"),
+            json!("1d00ffff"),
+            json!("507c0000"),
+        ];
+
+        let result = client.parse_upstream_job(&params);
+        match result {
+            Err(StratumErrors::ParamNotFound { param, .. }) => assert_eq!(param, "job_id"),
+            _ => panic!("Expected ParamNotFound error for job_id"),
+        }
+
+        // Missing prevhash
+        params[0] = json!("job123");
+        params[1] = json!("");
+        let result2 = client.parse_upstream_job(&params);
+        match result2 {
+            Err(StratumErrors::ParamNotFound { param, .. }) => assert_eq!(param, "prevhash"),
+            _ => panic!("Expected ParamNotFound error for prevhash"),
+        }
+    }
+
+    #[test]
+    /// Verify that the parser correctly rejects a job and throws an InvalidMethodParams error if the nbits field contains
+    /// non-hexadecimal characters.
+    fn test_parse_upstream_job_invalid_nbits() {
+        let (client, _, _) = create_test_client();
+
+        let params = vec![
+            json!("job123"),
+            json!("0000000"),
+            json!("cb1"),
+            json!("cb2"),
+            json!([]),
+            json!("20000000"),
+            json!("GGGGGGGG"), // Invalid hex
+            json!("507c0000"),
+        ];
+
+        match client.parse_upstream_job(&params) {
+            Err(StratumErrors::InvalidMethodParams { method }) => {
+                assert!(method.contains("not valid hex"));
+            }
+            _ => panic!("Expected InvalidMethodParams error for bad nbits"),
+        }
+    }
+
+    #[test]
+    /// Verify that the parser explicitly rejects jobs with an nbits value of zero to prevent potential divide-by-zero or
+    /// downstream consensus errors.
+    fn test_parse_upstream_job_zero_nbits() {
+        let (client, _, _) = create_test_client();
+
+        let params = vec![
+            json!("job123"),
+            json!("0000000"),
+            json!("cb1"),
+            json!("cb2"),
+            json!([]),
+            json!("20000000"),
+            json!("00000000"),
+            json!("507c0000"),
+        ];
+
+        match client.parse_upstream_job(&params) {
+            Err(StratumErrors::InvalidMethodParams { method }) => {
+                assert!(method.contains("nbits cannot be zero"));
+            }
+            _ => panic!("Expected InvalidMethodParams error for zero nbits"),
+        }
+    }
+
+    #[test]
+    /// Verify that optional parameters, such as the clean_jobs boolean, properly default to safe values when omitted
+    /// from the upstream message.
+    fn test_parse_upstream_job_defaults() {
+        let (client, _, _) = create_test_client();
+
+        let params = vec![
+            json!("job123"),
+            json!("00000"),
+            json!("cb1"),
+            json!("cb2"),
+            json!([]),
+            json!("20"),
+            json!("1d00ffff"),
+            json!("507c0000"),
+        ];
+
+        let job = client.parse_upstream_job(&params).unwrap();
+        assert!(!job.clean_jobs, "clean_jobs should default to false");
+        assert_eq!(job.merkle_branches.len(), 0);
+    }
+
+    #[tokio::test]
+    /// Verify that the client intercepts and safely rejects outbound shares if the miner's extranonce2 length does not exactly match
+    /// the size required by the upstream pool.
+    async fn test_forward_share_invalid_extranonce2_length() {
+        let (mut client, _, _) = create_test_client();
+
+        client.extranonce1 = Some("b34cf004".to_string());
+        client.extranonce2_size = Some(4);
+
+        let invalid_share = UpstreamShare {
+            worker_name: "test_worker".to_string(),
+            job_id: "job1".to_string(),
+            extranonce2: "001122".to_string(),
+            ntime: "ntime".to_string(),
+            nonce: "nonce".to_string(),
+            version_bits: None,
+            original_request_id: 1,
+            share_id: BlockHash::from_byte_array([0u8; 32]),
+        };
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let stream = tokio::net::TcpStream::connect(addr).await.unwrap();
+        let (_, mut dummy_writer) = stream.into_split();
+
+        // The method should catch the invalid length and return an error before trying to write
+        let result = client.forward_share(&mut dummy_writer, invalid_share).await;
+
+        match result {
+            Err(StratumErrors::InvalidMethodParams { method }) => {
+                assert!(method.contains("wrong length"));
+                assert!(method.contains("expected 8 hex chars"));
+            }
+            _ => panic!("Expected InvalidMethodParams due to wrong extranonce2 length"),
+        }
+    }
+}

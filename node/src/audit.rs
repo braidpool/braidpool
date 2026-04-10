@@ -31,7 +31,7 @@ pub fn compute_audit_bead_hash(bead: &Bead) -> BlockHash {
     BlockHash::from_byte_array(sha256d::Hash::hash(&combined).to_byte_array())
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AuditCommitment {
     pub commitment_bytes: [u8; COMMITMENT_BYTES],
     pub parent_bead_hash: Option<BlockHash>,
@@ -491,4 +491,320 @@ pub struct MinerStats {
     pub current_commitment: Option<String>,
     pub audit_rate: f64,
     pub upstream_acceptance_rate: f64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::bead::Bead;
+    use crate::committed_metadata::CommittedMetadata;
+    use crate::uncommitted_metadata::UnCommittedMetadata;
+    use bitcoin::{absolute::Time, ecdsa::Signature, EcdsaSighashType};
+    use std::str::FromStr;
+
+    fn create_test_bead(parents: Vec<BlockHash>) -> Bead {
+        let block: bitcoin::BlockHeader = bitcoin::consensus::deserialize(&hex::decode(
+            "0100000000000000000000000000000000000000000000000000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a29ab5f49ffff001d1dac2b7c"
+        ).unwrap()).unwrap();
+
+        // Create a valid signature for uncommitted metadata
+        let hex = "3046022100839c1fbc5304de944f697c9f4b1d01d1faeba32d751c0f7acb21ac8a0f436a72022100e89bd46bb3a5a62adc679f659b7ce876d83ee297c7a5587b2011c4fcc72eab45";
+        let sig = Signature {
+            signature: secp256k1::ecdsa::Signature::from_str(hex).unwrap(),
+            sighash_type: EcdsaSighashType::All,
+        };
+
+        Bead {
+            block_header: block,
+            committed_metadata: CommittedMetadata {
+                transaction_ids: crate::committed_metadata::TxIdVec(vec![]),
+                parents: parents.into_iter().collect(),
+                parent_bead_timestamps: crate::committed_metadata::TimeVec(vec![]),
+                payout_address: "bc1qtest".to_string(),
+                start_timestamp: Time::from_consensus(1653195600).unwrap(),
+                comm_pub_key: bitcoin::PublicKey::from_str(
+                    "020202020202020202020202020202020202020202020202020202020202020202",
+                )
+                .unwrap(),
+                min_target: bitcoin::CompactTarget::from_consensus(486604799),
+                weak_target: bitcoin::CompactTarget::from_consensus(486604799),
+                miner_ip: "127.0.0.1".to_string(),
+            },
+            uncommitted_metadata: UnCommittedMetadata {
+                extra_nonce_1: 42,
+                extra_nonce_2: 42,
+                broadcast_timestamp: Time::from_consensus(1653195600).unwrap(),
+                signature: sig,
+            },
+        }
+    }
+
+    /// Helper to construct a strictly valid 11-byte extranonce1 array
+    fn build_extranonce1(upstream: &[u8], prefix: &[u8], commitment: &[u8]) -> Vec<u8> {
+        let mut ext1 = Vec::with_capacity(TOTAL_EXTRANONCE1_BYTES);
+        ext1.extend_from_slice(upstream);
+        ext1.extend_from_slice(prefix);
+        ext1.extend_from_slice(commitment);
+        ext1
+    }
+
+    #[test]
+    /// Verify the conversion of composite hash into commitment
+    fn test_audit_commitment_from_bead_hash() {
+        let hash =
+            BlockHash::from_str("000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f")
+                .unwrap();
+
+        let commitment = AuditCommitment::from_bead_hash(hash);
+        assert_eq!(commitment.commitment_bytes.len(), COMMITMENT_BYTES);
+        assert_eq!(commitment.parent_bead_hash, Some(hash));
+        assert_eq!(
+            &commitment.commitment_bytes,
+            &hash.to_byte_array()[..COMMITMENT_BYTES]
+        );
+    }
+
+    #[test]
+    /// Verify that hash the exact same bead twice, leads to the exact same result.
+    fn test_compute_audit_bead_hash_deterministic() {
+        let bead = create_test_bead(vec![]);
+        let hash1 = compute_audit_bead_hash(&bead);
+        let hash2 = compute_audit_bead_hash(&bead);
+        assert_eq!(hash1, hash2, "Hash should be deterministic");
+    }
+
+    #[test]
+    /// Verify that changing the parents of a bead leads to an entirely new hash.
+    fn test_compute_audit_bead_hash_different_parents() {
+        let parent1 =
+            BlockHash::from_str("000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f")
+                .unwrap();
+        let parent2 =
+            BlockHash::from_str("00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048")
+                .unwrap();
+
+        let bead1 = create_test_bead(vec![parent1]);
+        let bead2 = create_test_bead(vec![parent2]);
+
+        let hash1 = compute_audit_bead_hash(&bead1);
+        let hash2 = compute_audit_bead_hash(&bead2);
+
+        assert_ne!(
+            hash1, hash2,
+            "Different parents should produce different hashes"
+        );
+    }
+
+    #[test]
+    /// Verify that the node accepts the perfectly constructed 11 byte extranonce.
+    fn test_verify_in_extranonce1_valid() {
+        let miner_prefix = vec![0xaa, 0xbb];
+        let commitment = AuditCommitment::from_hash_prefix(&[0x11, 0x22, 0x33, 0x44, 0x55]);
+        let extranonce1 = build_extranonce1(
+            &[0xff; UPSTREAM_EXTRANONCE1_BYTES],
+            &miner_prefix,
+            &commitment.commitment_bytes,
+        );
+
+        assert!(commitment.verify_in_extranonce1(&extranonce1, &miner_prefix));
+    }
+
+    #[test]
+    /// Verify that if an ASIC submits an extranonce with unspecified bytes lenght, the node rejects it.
+    fn test_verify_in_extranonce1_wrong_length() {
+        let commitment = AuditCommitment::genesis();
+        let extranonce1 = vec![0xff; 5]; // Too short
+        let miner_prefix = vec![0xaa, 0xbb];
+
+        assert!(!commitment.verify_in_extranonce1(&extranonce1, &miner_prefix));
+    }
+
+    #[test]
+    /// Verify that if Miner A tries to submit work using Miner B's 2 byte prefix, the node catches the theft and rejects it.
+    fn test_verify_in_extranonce1_wrong_prefix() {
+        let miner_prefix = vec![0xaa, 0xbb];
+        let wrong_prefix = vec![0xcc, 0xdd];
+        let commitment = AuditCommitment::from_hash_prefix(&[0x11, 0x22, 0x33, 0x44, 0x55]);
+        let extranonce1 = build_extranonce1(
+            &[0xff; UPSTREAM_EXTRANONCE1_BYTES],
+            &wrong_prefix,
+            &commitment.commitment_bytes,
+        );
+
+        assert!(!commitment.verify_in_extranonce1(&extranonce1, &miner_prefix));
+    }
+
+    #[test]
+    /// Verify that if the miner submits work for an old or non existed DAG tip, the node rejects it.
+    fn test_verify_in_extranonce1_wrong_commitment() {
+        let miner_prefix = vec![0xaa, 0xbb];
+        let commitment = AuditCommitment::from_hash_prefix(&[0x11, 0x22, 0x33, 0x44, 0x55]);
+        let wrong_commitment = [0x66, 0x77, 0x88, 0x99, 0xaa];
+
+        let extranonce1 = build_extranonce1(
+            &[0xff; UPSTREAM_EXTRANONCE1_BYTES],
+            &miner_prefix,
+            &wrong_commitment,
+        );
+
+        assert!(!commitment.verify_in_extranonce1(&extranonce1, &miner_prefix));
+    }
+
+    #[test]
+    /// Verify that the 2 byte miner prefix is extractable from the 11 bytes of the extranonce1 array.
+    fn test_extract_miner_prefix_valid() {
+        let miner_prefix = vec![0xaa, 0xbb];
+        let extranonce1 = build_extranonce1(
+            &[0xff; UPSTREAM_EXTRANONCE1_BYTES],
+            &miner_prefix,
+            &[0x11, 0x22, 0x33, 0x44, 0x55],
+        );
+
+        let extracted = AuditCommitment::extract_miner_prefix_from_ext1(&extranonce1);
+        assert_eq!(extracted, Some(miner_prefix));
+    }
+
+    #[test]
+    /// Verify that on a new job arrival, the old commitment and the new one update correctly.
+    fn test_miner_audit_state_update_commitment() {
+        let prefix = vec![0xaa, 0xbb];
+        let mut state = MinerAuditState::new(prefix);
+        let bead = create_test_bead(vec![]);
+
+        let old_commitment = state.current_commitment.clone();
+        state.update_commitment_audit(&bead);
+
+        assert_ne!(state.current_commitment.to_hex(), old_commitment.to_hex());
+        assert!(state.commitment_pending);
+        assert_eq!(
+            state.previous_commitment.unwrap().to_hex(),
+            old_commitment.to_hex()
+        );
+    }
+
+    #[test]
+    /// Validate that the incoming share contains the unaltered and valid prefix.
+    fn test_verify_share_prefix_mismatch() {
+        let prefix = vec![0xaa, 0xbb];
+        let state = MinerAuditState::new(prefix);
+
+        let extranonce1 = build_extranonce1(
+            &[0xff; UPSTREAM_EXTRANONCE1_BYTES],
+            &[0xcc, 0xdd],
+            &[0x11, 0x22, 0x33, 0x44, 0x55],
+        );
+        let result = state.verify_share(&extranonce1, "00");
+
+        match result {
+            AuditVerificationResult::Invalid { reason } => {
+                assert!(reason.contains("Miner prefix mismatch"))
+            }
+            _ => panic!("Expected Invalid result"),
+        }
+    }
+
+    #[test]
+    /// Verify that the correct share was successfully accepted and marked as valid.
+    fn test_verify_share_valid() {
+        let prefix = vec![0xaa, 0xbb];
+        let state = MinerAuditState::new(prefix.clone());
+
+        let extranonce1 = build_extranonce1(
+            &[0xff; UPSTREAM_EXTRANONCE1_BYTES],
+            &prefix,
+            &state.current_commitment.commitment_bytes,
+        );
+        let result = state.verify_share(&extranonce1, "42");
+
+        match result {
+            AuditVerificationResult::Valid {
+                commitment,
+                miner_roll,
+            } => {
+                assert_eq!(commitment.to_hex(), state.current_commitment.to_hex());
+                assert_eq!(miner_roll, Some(0x42));
+            }
+            _ => panic!("Expected Valid result"),
+        }
+    }
+
+    #[test]
+    /// Validate the hardware buffer latency edge cases where a job uses the previous commitment.
+    fn test_verify_share_with_fallback_uses_previous() {
+        let prefix = vec![0xaa, 0xbb];
+        let mut state = MinerAuditState::new(prefix.clone());
+
+        let extranonce1 = build_extranonce1(
+            &[0xff; UPSTREAM_EXTRANONCE1_BYTES],
+            &prefix,
+            &state.current_commitment.commitment_bytes,
+        );
+        let bead = create_test_bead(vec![]);
+        state.update_commitment_audit(&bead);
+
+        let result = state.verify_share_with_fallback(
+            &extranonce1,
+            "00",
+            state.previous_commitment.as_ref(),
+        );
+
+        assert!(
+            matches!(result, AuditVerificationResult::Valid { .. }),
+            "Expected Valid result with fallback"
+        );
+    }
+
+    #[test]
+    /// Verify a new connected miner is assigned with a new dedicated memory space
+    fn test_audit_dag_register_miner() {
+        let braid = Arc::new(RwLock::new(Braid::new(vec![])));
+        let mut audit_dag = AuditDAG::new(braid);
+
+        let miner_ip = "192.168.1.100".to_string();
+        let prefix = vec![0xaa, 0xbb];
+
+        audit_dag.register_miner(miner_ip.clone(), prefix.clone());
+        assert_eq!(audit_dag.miner_states[&miner_ip].miner_prefix, prefix);
+    }
+
+    #[test]
+    /// Verify the share acceptance, rejection and stats calculation logic.
+    fn test_miner_stats_calculations() {
+        let braid = Arc::new(RwLock::new(Braid::new(vec![])));
+        let mut audit_dag = AuditDAG::new(braid);
+        let miner_ip = "192.168.1.100".to_string();
+
+        audit_dag.register_miner(miner_ip.clone(), vec![0x00, 0x01]);
+
+        // Insert exactly 10 test records with various states
+        for i in 0..10 {
+            let hash = BlockHash::from_byte_array([i as u8; 32]);
+            let record = AuditRecord {
+                share_id: hash,
+                timestamp: SystemTime::now(),
+                miner_ip: miner_ip.clone(),
+                worker_name: "worker1".to_string(),
+                job_id: format!("job{}", i),
+                extranonce2: "00".to_string(),
+                nonce: "00000000".to_string(),
+                ntime: "00000000".to_string(),
+                audit_verified: i < 8, // 8 verified, 2 failed
+                audit_commitment: None,
+                upstream_accepted: if i < 5 { Some(true) } else { None }, // 5 accepted
+                upstream_eligible: i < 7,                                 // 7 eligible
+                bead_hash: hash,
+            };
+            audit_dag.records.insert(hash, record);
+        }
+
+        let stats = audit_dag.get_miner_stats(&miner_ip);
+
+        assert_eq!(stats.total_beads, 10);
+        assert_eq!(stats.audit_verified_beads, 8);
+        assert_eq!(stats.audit_failed_beads, 2);
+        assert_eq!(stats.upstream_eligible_beads, 7);
+        assert_eq!(stats.upstream_accepted_beads, 5);
+        assert_eq!(stats.audit_rate, 0.8);
+        assert_eq!(stats.upstream_acceptance_rate, 5.0 / 7.0);
+    }
 }
