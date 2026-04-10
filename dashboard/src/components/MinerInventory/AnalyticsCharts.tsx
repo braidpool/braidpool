@@ -45,17 +45,17 @@ const AnalyticsCharts = ({ fleetHistory }: AnalyticsChartsProps) => {
 
   return (
     <div className="min-h-[350px] mt-9 mb-9">
-      <div className="border border-gray-800/50 rounded-xl p-4  backdrop-blur-md overflow-hidden">
+      <div className="border border-border rounded-xl p-4  backdrop-blur-md overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-          <div className="text-sm text-gray-300">{chartConfig.title}</div>
+          <div className="text-sm text-textSecondary">{chartConfig.title}</div>
           <div className="flex items-center gap-2 text-xs">
             <button
               type="button"
               onClick={() => setActiveView('hashrate')}
               className={`px-3 py-1 rounded border transition cursor-pointer ${
                 activeView === 'hashrate'
-                  ? ' text-white bg-gray-800 hover:bg-gray-700'
-                  : 'border-gray-600 text-gray-400'
+                  ? ' text-textPrimary bg-paper hover:bg-paper'
+                  : 'border-border text-textSecondary'
               }`}
             >
               Hashrate
@@ -65,8 +65,8 @@ const AnalyticsCharts = ({ fleetHistory }: AnalyticsChartsProps) => {
               onClick={() => setActiveView('efficiency')}
               className={`px-3 py-1 rounded border transition cursor-pointer ${
                 activeView === 'efficiency'
-                  ? ' text-white bg-gray-800 hover:bg-gray-700 '
-                  : 'border-gray-600 text-gray-400'
+                  ? ' text-textPrimary bg-paper hover:bg-paper '
+                  : 'border-border text-textSecondary'
               }`}
             >
               Efficiency
@@ -76,8 +76,8 @@ const AnalyticsCharts = ({ fleetHistory }: AnalyticsChartsProps) => {
               onClick={() => setActiveView('temperature')}
               className={`px-3 py-1 rounded border transition cursor-pointer ${
                 activeView === 'temperature'
-                  ? ' text-white bg-gray-800 hover:bg-gray-700 '
-                  : 'border-gray-600 text-gray-400'
+                  ? ' text-textPrimary bg-paper hover:bg-paper '
+                  : 'border-border text-textSecondary'
               }`}
             >
               Temps
@@ -86,7 +86,7 @@ const AnalyticsCharts = ({ fleetHistory }: AnalyticsChartsProps) => {
         </div>
 
         {fleetHistory.length === 0 ? (
-          <div className="text-xs text-gray-500">
+          <div className="text-xs text-textSecondary">
             No analytics yet. Add a miner or refresh.
           </div>
         ) : (
@@ -103,8 +103,8 @@ const AnalyticsCharts = ({ fleetHistory }: AnalyticsChartsProps) => {
                 content={({ active, payload, label }) => {
                   if (!active || !payload?.length) return null;
                   return (
-                    <div className="bg-[#1e1e1e] border border-gray-700 rounded-lg px-4 py-3 shadow-lg">
-                      <div className="text-gray-400 text-sm mb-2">
+                    <div className="bg-cardPaper border border-border rounded-lg px-4 py-3 shadow-lg">
+                      <div className="text-textSecondary text-sm mb-2">
                         {new Date(label as number).toLocaleTimeString()}
                       </div>
                       {payload.map((entry) => (
@@ -116,8 +116,8 @@ const AnalyticsCharts = ({ fleetHistory }: AnalyticsChartsProps) => {
                             className="w-2.5 h-2.5 rounded-full"
                             style={{ backgroundColor: entry.color }}
                           />
-                          <span className="text-gray-300">{entry.name}:</span>
-                          <span className="text-white font-medium">
+                          <span className="text-textSecondary">{entry.name}:</span>
+                          <span className="text-textPrimary font-medium">
                             {typeof entry.value === 'number'
                               ? entry.value.toFixed(2)
                               : entry.value}

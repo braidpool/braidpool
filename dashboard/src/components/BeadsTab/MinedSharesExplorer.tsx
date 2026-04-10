@@ -163,7 +163,7 @@ export default function MinedSharesExplorer() {
                 {/* Table header */}
                 <div
                   className="grid max-md:grid-cols-3 md:grid-cols-5 p-4 border-b text-xs sm:text-sm md:text-base
- gap-4 border-gray-800/80 font-medium"
+ gap-4 border-border/80 font-medium"
                 >
                   {[
                     { label: 'Bead Hash' },
@@ -186,16 +186,16 @@ export default function MinedSharesExplorer() {
                     <div className="text-textSecondary mb-4">
                       Connecting to server...
                     </div>
-                    <div className="h-12 bg-paper/50 rounded-md animate-pulse mb-4"></div>
-                    <div className="h-12 bg-paper/50 rounded-md animate-pulse"></div>
+                    <div className="h-12 bg-surfaceHover rounded-md animate-pulse mb-4"></div>
+                    <div className="h-12 bg-surfaceHover rounded-md animate-pulse"></div>
                   </div>
                 ) : paginatedBeads.length === 0 ? (
                   <div className="p-8 text-center">
                     <div className="text-textSecondary mb-4">
                       Waiting for block data...
                     </div>
-                    <div className="h-12 bg-paper/50 rounded-md animate-pulse mb-4"></div>
-                    <div className="h-12 bg-paper/50 rounded-md animate-pulse"></div>
+                    <div className="h-12 bg-surfaceHover rounded-md animate-pulse mb-4"></div>
+                    <div className="h-12 bg-surfaceHover rounded-md animate-pulse"></div>
                   </div>
                 ) : (
                   paginatedBeads.map((bead) => (
@@ -221,7 +221,7 @@ export default function MinedSharesExplorer() {
                       className={`px-3 py-1 rounded-md ${
                         currentPage === 1
                           ? 'bg-paper text-textDisabled cursor-not-allowed'
-                          : 'bg-paper hover:bg-paper/80'
+                          : 'bg-paper hover:bg-surfaceHover'
                       }`}
                     >
                       Previous
@@ -235,7 +235,7 @@ export default function MinedSharesExplorer() {
                       className={`px-3 py-1 rounded-md ${
                         currentPage === totalPages
                           ? 'bg-paper text-textDisabled cursor-not-allowed'
-                          : 'bg-paper hover:bg-paper/80'
+                          : 'bg-paper hover:bg-surfaceHover'
                       }`}
                     >
                       Next
@@ -251,7 +251,7 @@ export default function MinedSharesExplorer() {
           </div>
           <div
             style={{ display: activeTab === 'rewards' ? 'block' : 'none' }}
-            className="border border-gray-800/50 rounded-xl p-6"
+            className="border border-border/50 rounded-xl p-6"
           >
             <RewardsDashboard />
           </div>

@@ -12,7 +12,7 @@ export const StatCard = ({
   blocks?: number;
   timeframe?: string;
 }) => (
-  <div className="bg-paper p-4 rounded-lg border border-gray-600">
+  <div className="bg-paper p-4 rounded-lg border border-border">
     <h3 className="text-textSecondary text-sm font-medium mb-2">{title}</h3>
     <div className="space-y-1">
       <div className="text-textPrimary text-lg font-semibold">

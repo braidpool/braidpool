@@ -164,7 +164,7 @@ const NodeHealth: React.FC = () => {
 
   if (error) {
     return (
-      <div className="min-h-auto bg-[#1e1e1e] text-white flex items-center justify-center">
+      <div className="min-h-auto bg-cardPaper text-textPrimary flex items-center justify-center">
         <div className="text-center">
           <p className="text-red-500 mb-4">{error}</p>
         </div>
@@ -203,9 +203,9 @@ const NodeHealth: React.FC = () => {
   const syncPercentage = ((blocks / headers) * 100).toFixed(2);
 
   return (
-    <div className="min-h-auto bg-[#1e1e1e] px-2 sm:px-4 md:px-6 py-6 md:py-8">
+    <div className="min-h-auto bg-cardPaper px-2 sm:px-4 md:px-6 py-6 md:py-8">
       <div>
-        <p className="text-xs flex justify-end sm:text-sm text-gray-500 mb-4">
+        <p className="text-xs flex justify-end sm:text-sm text-textSecondary mb-4">
           {`Last updated: ${lastUpdated}`}
         </p>
       </div>
@@ -213,42 +213,42 @@ const NodeHealth: React.FC = () => {
       {/* Summary Cards */}
       <div className="grid sm:grid-cols-1  md:grid-cols-4 gap-4 md:gap-6">
         {/* Sync Status */}
-        <div className=" border border-gray-700 rounded-xl px-2 py-2">
-          <h2 className="text-xs sm:text-sm text-gray-500 mb-1">Sync Status</h2>
+        <div className=" border border-border rounded-xl px-2 py-2">
+          <h2 className="text-xs sm:text-sm text-textSecondary mb-1">Sync Status</h2>
           <p
             className={`text-lg sm:text-xl font-bold mb-1 ${headers === blocks ? 'text-green-600' : 'text-yellow-500'}`}
           >
             {headers === blocks ? 'Synced' : 'Syncing'}
           </p>
-          <div className="w-full h-4 rounded bg-gray-200">
+          <div className="w-full h-4 rounded bg-border">
             <div
               className="h-full rounded bg-green-500"
               style={{ width: `${syncPercentage}%` }}
             ></div>
           </div>
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-textSecondary mt-1">
             {syncPercentage}% complete
           </p>
         </div>
 
         {/* Block Height */}
-        <div className=" border border-gray-700 rounded-xl px-2 py-2">
-          <h2 className="text-xs sm:text-sm text-gray-500 mb-1">
+        <div className=" border border-border rounded-xl px-2 py-2">
+          <h2 className="text-xs sm:text-sm text-textSecondary mb-1">
             Block Height
           </h2>
-          <p className="text-lg sm:text-xl text-white font-bold">{blocks}</p>
-          <p className="text-xs text-gray-500">
+          <p className="text-lg sm:text-xl text-textPrimary font-bold">{blocks}</p>
+          <p className="text-xs text-textSecondary">
             {(size_on_disk / 1024 ** 3).toFixed(2)}GB
           </p>
         </div>
 
         {/* Connections */}
-        <div className=" border border-gray-700 rounded-xl px-2 py-2">
-          <h2 className="text-xs sm:text-sm text-gray-500 mb-1">Connections</h2>
-          <p className="text-lg sm:text-xl text-white font-bold">
+        <div className=" border border-border rounded-xl px-2 py-2">
+          <h2 className="text-xs sm:text-sm text-textSecondary mb-1">Connections</h2>
+          <p className="text-lg sm:text-xl text-textPrimary font-bold">
             {networkInfo?.connections ?? '...'}
           </p>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-textSecondary">
             {networkInfo
               ? `${networkInfo.connections_in ?? '?'} inbound, ${networkInfo.connections_out ?? '?'} outbound`
               : ''}
@@ -256,12 +256,12 @@ const NodeHealth: React.FC = () => {
         </div>
 
         {/* Mempool */}
-        <div className="border border-gray-700 rounded-xl px-2 py-2">
-          <h2 className="text-xs sm:text-sm text-gray-500 mb-1">Mempool</h2>
-          <p className="text-lg sm:text-xl text-white font-bold">
+        <div className="border border-border rounded-xl px-2 py-2">
+          <h2 className="text-xs sm:text-sm text-textSecondary mb-1">Mempool</h2>
+          <p className="text-lg sm:text-xl text-textPrimary font-bold">
             {mempoolInfo?.size?.toLocaleString() ?? '...'}
           </p>
-          <div className="w-full h-4 rounded bg-gray-200">
+          <div className="w-full h-4 rounded bg-border">
             <div
               className="h-full rounded bg-green-500"
               style={{
@@ -272,7 +272,7 @@ const NodeHealth: React.FC = () => {
               }}
             ></div>
           </div>
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-textSecondary mt-1">
             {mempoolInfo && mempoolInfo.usage
               ? `${(mempoolInfo.usage / (1024 * 1024)).toFixed(2)} MB`
               : '...'}
@@ -281,12 +281,12 @@ const NodeHealth: React.FC = () => {
       </div>
 
       {/* Tabs */}
-      <div className="mt-8 border border-gray-700 rounded-xl p-3 flex justify-center">
+      <div className="mt-8 border border-border rounded-xl p-3 flex justify-center">
         <nav className="flex max-sm:flex-col gap-4 sm:gap-10 text-xs sm:text-sm font-medium whitespace-nowrap">
           {TABS.map((tab) => (
             <button
               key={tab.value}
-              className={`py-2 border-b-2 ${activeTab === tab.value ? 'text-white border-blue-900' : 'text-gray-500 cursor-pointer border-transparent'}`}
+              className={`py-2 border-b-2 ${activeTab === tab.value ? 'text-textPrimary border-blue-900' : 'text-textSecondary cursor-pointer border-transparent'}`}
               onClick={() => setActiveTab(tab.value)}
             >
               {tab.label}
@@ -299,8 +299,8 @@ const NodeHealth: React.FC = () => {
       <div className="mt-6">
         {activeTab === 'blockchain' && blockchainInfo && (
           <div className="grid grid-cols-1 gap-6 px-3 w-full">
-            <div className="rounded-xl border border-gray-700 p-4">
-              <h3 className="text-base md:text-lg text-white font-semibold text-center mb-4">
+            <div className="rounded-xl border border-border p-4">
+              <h3 className="text-base md:text-lg text-textPrimary font-semibold text-center mb-4">
                 Blockchain Information
               </h3>
               <div className="space-y-2 text-xs sm:text-sm">

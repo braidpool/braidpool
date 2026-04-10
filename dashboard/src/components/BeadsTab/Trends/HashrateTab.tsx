@@ -124,7 +124,7 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
 
   if (isLoading || !isConnected) {
     return (
-      <div className="p-8 text-center text-gray-400">
+      <div className="p-8 text-center text-textSecondary">
         Loading hashrate data...
       </div>
     );
@@ -135,7 +135,7 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
       <div className="flex justify-between items-center">
         <div>
           <h3 className="text-xl font-bold text-blue-300">Pool Hashrate</h3>
-          <p className="text-sm text-gray-400 mt-1">
+          <p className="text-sm text-textSecondary mt-1">
             Live hashrate of the Braidpool
           </p>
         </div>

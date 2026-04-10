@@ -16,11 +16,11 @@ const MinerTable: React.FC<MinerTableProps> = ({
   return (
     <div className="w-full overflow-x-auto">
       <div
-        className="min-w-[800px] rounded-2xl bg-[#1e1e1e] p-4 border border-white/10 shadow-md"
+        className="min-w-[800px] rounded-2xl bg-cardPaper p-4 border border-border shadow-md"
         style={{ borderColor: colors.cardAccentSecondary }}
       >
         <div
-          className={`grid ${hasAlerts ? 'grid-cols-8' : 'grid-cols-7'} gap-4 px-4 py-3 text-xs uppercase tracking-wide text-gray-400 border-b border-gray-800/60`}
+          className={`grid ${hasAlerts ? 'grid-cols-8' : 'grid-cols-7'} gap-4 px-4 py-3 text-xs uppercase tracking-wide text-textSecondary border-b border-border`}
         >
           <div>Model</div>
           <div>Hashrate</div>
@@ -40,9 +40,9 @@ const MinerTable: React.FC<MinerTableProps> = ({
             return (
               <div
                 key={miner.id}
-                className={`grid ${hasAlerts ? 'grid-cols-8' : 'grid-cols-7'} gap-4 px-4 py-3 text-sm text-gray-200 items-center`}
+                className={`grid ${hasAlerts ? 'grid-cols-8' : 'grid-cols-7'} gap-4 px-4 py-3 text-sm text-textSecondary items-center`}
               >
-                <div className="font-medium text-white truncate">
+                <div className="font-medium text-textPrimary truncate">
                   {miner.hostname ||
                     (miner.make || miner.model
                       ? [miner.make, miner.model].filter(Boolean).join(' ')
@@ -75,20 +75,20 @@ const MinerTable: React.FC<MinerTableProps> = ({
                         }))
                       }
                     >
-                      <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-md border text-xs font-medium transition-colors bg-gray-800/60 border-gray-700/40 text-amber-300 hover:bg-gray-800/80">
+                      <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-md border text-xs font-medium transition-colors bg-surfaceHover border-border text-amber-300 hover:bg-surfaceHover">
                         <span>{firstAlert.message}</span>
                         {remainingCount > 0 && (
-                          <span className="px-1.5 py-0.5 rounded bg-gray-700/50 text-gray-400 text-[10px]">
+                          <span className="px-1.5 py-0.5 rounded bg-surfaceHover text-textSecondary text-[10px]">
                             +{remainingCount}
                           </span>
                         )}
-                        <span className="ml-auto text-gray-500 text-[10px]">
+                        <span className="ml-auto text-textSecondary text-[10px]">
                           {isExpanded ? '▲' : '▼'}
                         </span>
                       </div>
                     </div>
                     {isExpanded && alerts.length > 1 && (
-                      <div className="flex flex-col gap-1 pl-2 border-l-2 text-amber-300 border-gray-700/50">
+                      <div className="flex flex-col gap-1 pl-2 border-l-2 text-amber-300 border-border">
                         {alerts.slice(1).map((alert, idx) => (
                           <div key={idx}>{alert.message}</div>
                         ))}
@@ -98,18 +98,18 @@ const MinerTable: React.FC<MinerTableProps> = ({
                 ) : (
                   hasAlerts && <div></div>
                 )}
-                <div className="text-gray-300 whitespace-nowrap">
+                <div className="text-textSecondary whitespace-nowrap">
                   {miner.temperature || 0}°C / {miner.vr_temperature || 0}°C
                 </div>
-                <div className="text-gray-300 whitespace-nowrap">
+                <div className="text-textSecondary whitespace-nowrap">
                   <Link
                     to="#"
                     onClick={(e) => e.preventDefault()}
                     className={`inline-flex px-3 py-1 text-xs rounded border ${
                       minerHistory[miner.id] &&
                       minerHistory[miner.id].length > 1
-                        ? 'border-gray-600 bg-gray-800 hover:bg-gray-700 cursor-pointer'
-                        : 'border-gray-700 bg-gray-900 text-gray-500 cursor-not-allowed'
+                        ? 'border-border bg-paper hover:bg-paper cursor-pointer'
+                        : 'border-border bg-paper text-textSecondary cursor-not-allowed'
                     }`}
                     title={
                       minerHistory[miner.id] &&

@@ -378,7 +378,7 @@ const MinerInventoryDashboard = () => {
     <div className="min-h-screen w-full px-4 py-6 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-white mb-9">
+          <h1 className="text-3xl font-bold text-textPrimary mb-9">
             Mining Dashboard
           </h1>
 
@@ -412,7 +412,7 @@ const MinerInventoryDashboard = () => {
         )}
 
         {miners.length === 0 ? (
-          <div className="text-center py-12 text-gray-400">
+          <div className="text-center py-12 text-textSecondary">
             <p className="text-xl">No miners found</p>
             <p className="text-md mt-2">
               Add your miner by entering its IP address above
@@ -429,8 +429,8 @@ const MinerInventoryDashboard = () => {
                   className={
                     'px-4 py-2 rounded-md border transition text-sm  cursor-pointer ' +
                     (statusFilter === 'online'
-                      ? 'border-blue-400 text-white bg-gray-700'
-                      : 'border-gray-600 text-gray-400 hover:bg-gray-800')
+                      ? 'border-blue-400 text-textPrimary bg-paper'
+                      : 'border-border text-textSecondary hover:bg-paper')
                   }
                 >
                   {onlineMiners} Online
@@ -444,8 +444,8 @@ const MinerInventoryDashboard = () => {
                   className={
                     'px-4 py-2 rounded-md border transition text-sm  cursor-pointer ' +
                     (statusFilter === 'warning'
-                      ? 'border-yellow-400 text-white bg-gray-700'
-                      : 'border-gray-600 text-gray-400 hover:bg-gray-800')
+                      ? 'border-yellow-400 text-textPrimary bg-paper'
+                      : 'border-border text-textSecondary hover:bg-paper')
                   }
                 >
                   {warningMiners} Warning
@@ -459,8 +459,8 @@ const MinerInventoryDashboard = () => {
                   className={
                     'px-4 py-2 rounded-md border transition text-sm   cursor-pointer ' +
                     (statusFilter === 'offline'
-                      ? 'border-red-400 text-white bg-gray-700'
-                      : 'border-gray-600 text-gray-400 hover:bg-gray-800')
+                      ? 'border-red-400 text-textPrimary bg-paper'
+                      : 'border-border text-textSecondary hover:bg-paper')
                   }
                 >
                   {offlineMiners} Offline
@@ -475,12 +475,12 @@ const MinerInventoryDashboard = () => {
                     onChange={(e) => setSearchInput(e.target.value)}
                     placeholder="Search by IP or name"
                     aria-label="Search miners"
-                    className="px-3 py-2 text-sm border border-gray-600 bg-gray-800 rounded text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-500"
+                    className="px-3 py-2 text-sm border border-border bg-paper rounded text-textPrimary placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-500"
                     onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                   />
                   <button
                     onClick={clearSearch}
-                    className="px-3 py-2 text-sm text-gray-300 rounded border border-gray-600 bg-gray-900 hover:bg-gray-800 transition whitespace-nowrap"
+                    className="px-3 py-2 text-sm text-textSecondary rounded border border-border bg-paper hover:bg-paper transition whitespace-nowrap"
                   >
                     Clear
                   </button>
@@ -499,7 +499,7 @@ const MinerInventoryDashboard = () => {
                     )
                   }
                   aria-label="Sort miners"
-                  className="px-3 py-2 text-sm border border-gray-600 bg-gray-800 rounded text-white focus:outline-none focus:ring-1 focus:ring-gray-500"
+                  className="px-3 py-2 text-sm border border-border bg-paper rounded text-textPrimary focus:outline-none focus:ring-1 focus:ring-gray-500"
                 >
                   <option value="all">Sort By</option>
                   <option value="efficiency">Efficiency (W/TH)</option>
@@ -512,7 +512,7 @@ const MinerInventoryDashboard = () => {
 
             {/* Miners Table */}
             {sortedDisplayedMiners.length === 0 ? (
-              <div className="text-center py-12 text-gray-400">
+              <div className="text-center py-12 text-textSecondary">
                 <p className="text-lg">No miners match your search</p>
               </div>
             ) : (

@@ -133,7 +133,7 @@ export default function LatencyTab({ timeRange }: { timeRange: string }) {
   // ✅ Loading UI
   if (isLoading || !isConnected) {
     return (
-      <div className="p-8 text-center text-gray-400">
+      <div className="p-8 text-center text-textSecondary">
         Loading latency data...
       </div>
     );
@@ -145,7 +145,7 @@ export default function LatencyTab({ timeRange }: { timeRange: string }) {
       <div className="flex justify-between items-center">
         <div>
           <h3 className="text-xl font-bold text-blue-300">Network Latency</h3>
-          <p className="text-sm text-gray-400 mt-1">
+          <p className="text-sm text-textSecondary mt-1">
             Real-time latency measurements from peer nodes
           </p>
         </div>

@@ -126,7 +126,7 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
           <h3 className="text-xl font-bold text-blue-300">
             Transaction Activity
           </h3>
-          <p className="text-sm text-gray-400 mt-1">
+          <p className="text-sm text-textSecondary mt-1">
             Real-time transaction statistics
           </p>
           {error && <p className="text-sm text-red-400 mt-1">Error: {error}</p>}
@@ -144,7 +144,7 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
                     ? 'Loading...'
                     : 'No data'}
               </span>
-              <div className="text-gray-400 text-xs mt-1">{getRateLabel()}</div>
+              <div className="text-textSecondary text-xs mt-1">{getRateLabel()}</div>
             </div>
           </div>
         </div>

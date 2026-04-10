@@ -12,7 +12,7 @@ export function TrendsTab({ timeRange }: { timeRange: string }) {
   return (
     <div className="space-y-8">
       {/* Subtabs */}
-      <div className="border-b border-gray-800">
+      <div className="border-b border-border">
         <nav
           className="-mb-px flex flex-wrap justify-center gap-x-10"
           aria-label="Tabs"
@@ -27,7 +27,7 @@ export function TrendsTab({ timeRange }: { timeRange: string }) {
                 ${
                   activeSubTab === tab.id
                     ? 'border-blue-500 text-blue-400'
-                    : 'border-transparent text-white hover:border-gray-300'
+                    : 'border-transparent text-textPrimary hover:border-border'
                 }
               `}
             >
@@ -35,7 +35,7 @@ export function TrendsTab({ timeRange }: { timeRange: string }) {
                 className={`w-4 h-4 transition-colors duration-200 ${
                   activeSubTab === tab.id
                     ? 'text-blue-400'
-                    : 'text-gray-500 group-hover:text-white'
+                    : 'text-textSecondary group-hover:text-textPrimary'
                 }`}
               />
               {tab.label}

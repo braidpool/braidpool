@@ -20,8 +20,8 @@ export default function Peers({ peers }: { peers: PeerInfo[] }) {
   };
 
   return (
-    <div className="bg-paper border border-gray-700 rounded-xl shadow-md">
-      <div className="px-6 py-4 border-b border-gray-700">
+    <div className="bg-paper border border-border rounded-xl shadow-md">
+      <div className="px-6 py-4 border-b border-border">
         <h2 className="text-textPrimary text-xl font-semibold">
           Connected Peers
         </h2>
@@ -34,7 +34,7 @@ export default function Peers({ peers }: { peers: PeerInfo[] }) {
         {paginatedPeers.map((peer) => (
           <div
             key={peer.id}
-            className="flex max-sm:flex-col md:flex-row md:items-start md:justify-between gap-4 p-4 border border-gray-700 rounded-lg bg-background hover:bg-paper transition-colors overflow-x-hidden"
+            className="flex max-sm:flex-col md:flex-row md:items-start md:justify-between gap-4 p-4 border border-border rounded-lg bg-background hover:bg-surfaceHover transition-colors overflow-x-hidden"
           >
             <div className="flex-1 space-y-1 min-w-0">
               <p className="text-textPrimary font-medium">{peer.addr}</p>
@@ -43,7 +43,7 @@ export default function Peers({ peers }: { peers: PeerInfo[] }) {
                 className={`text-sm w-fit px-2 py-0.5 rounded-full font-medium ${
                   peer.inbound
                     ? 'text-textPrimary bg-blue-600'
-                    : 'text-textSecondary bg-gray-600'
+                    : 'text-textPrimary bg-surface'
                 }`}
               >
                 {peer.inbound ? 'Inbound' : 'Outbound'}
@@ -80,14 +80,14 @@ export default function Peers({ peers }: { peers: PeerInfo[] }) {
       </div>
 
       {/* Pagination Controls */}
-      <div className="px-6 py-4 flex justify-between items-center border-t border-gray-700 text-sm text-textSecondary">
+      <div className="px-6 py-4 flex justify-between items-center border-t border-border text-sm text-textSecondary">
         <button
           onClick={handlePrev}
           disabled={currentPage === 1}
           className={`px-3 py-1 rounded ${
             currentPage === 1
               ? 'opacity-50 cursor-not-allowed'
-              : 'hover:bg-paper-accent'
+              : 'hover:bg-surfaceHover'
           }`}
         >
           Previous
@@ -103,7 +103,7 @@ export default function Peers({ peers }: { peers: PeerInfo[] }) {
           className={`px-3 py-1 rounded ${
             currentPage === totalPages
               ? 'opacity-50 cursor-not-allowed'
-              : 'hover:bg-paper-accent'
+              : 'hover:bg-surfaceHover'
           }`}
         >
           Next
