@@ -252,7 +252,7 @@ pub enum RpcProxyCommand {
 pub struct RpcServerImpl {
     braid_arc: Arc<RwLock<Braid>>,
     peer_manager: Arc<tokio::sync::RwLock<PeerManager>>,
-    stratum_connection_mapping: Arc<Mutex<stratum::ConnectionMapping>>,
+    stratum_connection_mapping: Arc<tokio::sync::RwLock<stratum::ConnectionMapping>>,
     latest_block: Arc<Mutex<BlockTemplate>>,
     rpc_proxy_tx: mpsc::UnboundedSender<RpcProxyCommand>,
     bitcoin_rpc_config: Option<BitcoinRpcConfig>,
@@ -262,7 +262,7 @@ impl RpcServerImpl {
     pub fn new(
         braid_shared_pointer: Arc<RwLock<Braid>>,
         peer_manager: Arc<tokio::sync::RwLock<PeerManager>>,
-        stratum_connection_mapping: Arc<Mutex<stratum::ConnectionMapping>>,
+        stratum_connection_mapping: Arc<tokio::sync::RwLock<stratum::ConnectionMapping>>,
         latest_block_template: Arc<Mutex<BlockTemplate>>,
         rpc_proxy_tx: mpsc::UnboundedSender<RpcProxyCommand>,
         bitcoin_rpc_config: Option<BitcoinRpcConfig>,
@@ -392,7 +392,7 @@ impl RpcServer for RpcServerImpl {
 
     async fn get_miner_info(&self) -> Result<Vec<String>, ErrorObjectOwned> {
         info!("Get Miner Info Request Received");
-        let connection_map = self.stratum_connection_mapping.lock().await;
+        let connection_map = self.stratum_connection_mapping.read().await;
         let miner_ips: Vec<String> = connection_map
             .downstream_channel_mapping
             .keys()
@@ -1031,7 +1031,7 @@ pub async fn run_rpc_server(
     braid_shared_pointer: Arc<RwLock<Braid>>,
     bind_address: &str,
     peer_manager: Arc<tokio::sync::RwLock<PeerManager>>,
-    stratum_connection_mapping: Arc<Mutex<stratum::ConnectionMapping>>,
+    stratum_connection_mapping: Arc<tokio::sync::RwLock<stratum::ConnectionMapping>>,
     latest_block_template: Arc<Mutex<BlockTemplate>>,
     rpc_proxy_tx: mpsc::UnboundedSender<RpcProxyCommand>,
     bitcoin_rpc_config: Option<BitcoinRpcConfig>,
@@ -1154,7 +1154,7 @@ pub async fn test_extend_rpc() {
         server_addr,
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
         // Provide a dummy ConnectionMapping for the test
-        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
         None,
@@ -1205,7 +1205,7 @@ pub async fn test_same_bead_extend() {
     let rpc_impl = RpcServerImpl::new(
         braid,
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
-        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         {
             let (tx, _rx) = mpsc::unbounded_channel();
@@ -1260,7 +1260,7 @@ pub async fn test_cohort_count_rpc() {
     let rpc_impl = RpcServerImpl::new(
         braid,
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
-        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         {
             let (tx, _rx) = mpsc::unbounded_channel();
@@ -1328,7 +1328,7 @@ pub async fn test_get_bead_count_cli_flow() {
         Arc::clone(&braid),
         server_addr,
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
-        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         {
             let (tx, _rx) = mpsc::unbounded_channel();
@@ -1373,7 +1373,7 @@ pub async fn test_get_tips_cli_flow() {
         Arc::clone(&braid),
         server_addr,
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
-        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         {
             let (tx, _rx) = mpsc::unbounded_channel();
@@ -1416,7 +1416,7 @@ pub async fn test_get_bead_rpc() {
         Arc::clone(&braid),
         server_addr,
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
-        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
         None,
@@ -1477,7 +1477,7 @@ pub async fn test_get_cohort_rpc() {
         Arc::clone(&braid),
         server_addr,
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
-        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
         None,
@@ -1529,7 +1529,7 @@ pub async fn test_get_genesis_rpc() {
         Arc::clone(&braid),
         server_addr,
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
-        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
         None,
@@ -1569,7 +1569,7 @@ pub async fn test_get_parents_and_children_rpc() {
         Arc::clone(&braid),
         server_addr,
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
-        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
         None,
@@ -1638,7 +1638,7 @@ pub async fn test_get_hwpath_rpc() {
         Arc::clone(&braid),
         server_addr,
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
-        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
         None,
@@ -1682,7 +1682,7 @@ pub async fn test_get_braid_info_rpc() {
         Arc::clone(&braid),
         server_addr,
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
-        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
         None,
@@ -1721,7 +1721,7 @@ pub async fn test_get_node_info_rpc() {
         Arc::clone(&braid),
         server_addr,
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
-        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
         None,
@@ -1780,7 +1780,7 @@ pub async fn test_get_peer_info_rpc() {
     let rpc_impl_empty = RpcServerImpl::new(
         Arc::clone(&braid),
         peer_manager_empty,
-        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx.clone(),
         None,
@@ -1822,7 +1822,7 @@ pub async fn test_get_peer_info_rpc() {
     let rpc_impl_with_peers = RpcServerImpl::new(
         Arc::clone(&braid),
         peer_manager_arc,
-        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
         None,
@@ -1864,9 +1864,9 @@ pub async fn test_get_miner_info_rpc() {
 
     let (proxy_tx, _) = mpsc::unbounded_channel();
 
-    let stratum_map = Arc::new(Mutex::new(stratum::ConnectionMapping::new()));
+    let stratum_map = Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new()));
     {
-        let mut map = stratum_map.lock().await;
+        let mut map = stratum_map.write().await;
         let (tx, _) = mpsc::channel(1);
         map.downstream_channel_mapping.insert(
             "1.2.3.4:5678".to_string(),
@@ -1919,7 +1919,7 @@ pub async fn test_staged_transactions_rpc() {
     let rpc_impl = RpcServerImpl::new(
         braid,
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
-        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::clone(&latest_block),
         proxy_tx,
         None,
@@ -2010,7 +2010,7 @@ pub async fn test_get_ipc_stats_rpc() {
         Arc::clone(&braid),
         server_addr,
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
-        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
         None,
@@ -2062,7 +2062,7 @@ pub async fn test_get_ipc_stats_rpc_simple() {
         Arc::clone(&braid),
         server_addr,
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
-        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
         None,
@@ -2116,7 +2116,7 @@ pub async fn test_unstage_transactions_rpc_simple() {
         Arc::clone(&braid),
         server_addr,
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
-        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
         None,
@@ -2177,7 +2177,7 @@ pub async fn test_get_mining_info_rpc() {
         Arc::clone(&braid),
         server_addr,
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
-        Arc::new(Mutex::new(stratum::ConnectionMapping::new())),
+        Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
         None,
