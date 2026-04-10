@@ -34,7 +34,10 @@ const BandwidthPanel: React.FC<BandwidthPanelProps> = ({
           data={bandwidthHistory}
           margin={{ top: 30, right: 30, left: 0, bottom: 5 }}
         >
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--color-chart-grid)" />
+          <CartesianGrid
+            strokeDasharray="3 3"
+            stroke="var(--color-chart-grid)"
+          />
           <XAxis
             dataKey="timestamp"
             tickFormatter={(ts) => new Date(ts).toLocaleTimeString()}

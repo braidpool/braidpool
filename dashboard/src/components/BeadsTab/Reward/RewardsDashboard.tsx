@@ -140,7 +140,10 @@ export function RewardsDashboard() {
         ) : (
           <ResponsiveContainer width="100%" height="90%">
             <LineChart data={rewardHistory}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-chart-grid)" />
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke="var(--color-chart-grid)"
+              />
               <XAxis
                 dataKey="height"
                 tick={{ fill: 'var(--color-text-secondary)' }}

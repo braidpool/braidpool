@@ -144,7 +144,9 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
                     ? 'Loading...'
                     : 'No data'}
               </span>
-              <div className="text-textSecondary text-xs mt-1">{getRateLabel()}</div>
+              <div className="text-textSecondary text-xs mt-1">
+                {getRateLabel()}
+              </div>
             </div>
           </div>
         </div>

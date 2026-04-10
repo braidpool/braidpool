@@ -214,7 +214,9 @@ const NodeHealth: React.FC = () => {
       <div className="grid sm:grid-cols-1  md:grid-cols-4 gap-4 md:gap-6">
         {/* Sync Status */}
         <div className=" border border-border rounded-xl px-2 py-2">
-          <h2 className="text-xs sm:text-sm text-textSecondary mb-1">Sync Status</h2>
+          <h2 className="text-xs sm:text-sm text-textSecondary mb-1">
+            Sync Status
+          </h2>
           <p
             className={`text-lg sm:text-xl font-bold mb-1 ${headers === blocks ? 'text-green-600' : 'text-yellow-500'}`}
           >
@@ -236,7 +238,9 @@ const NodeHealth: React.FC = () => {
           <h2 className="text-xs sm:text-sm text-textSecondary mb-1">
             Block Height
           </h2>
-          <p className="text-lg sm:text-xl text-textPrimary font-bold">{blocks}</p>
+          <p className="text-lg sm:text-xl text-textPrimary font-bold">
+            {blocks}
+          </p>
           <p className="text-xs text-textSecondary">
             {(size_on_disk / 1024 ** 3).toFixed(2)}GB
           </p>
@@ -244,7 +248,9 @@ const NodeHealth: React.FC = () => {
 
         {/* Connections */}
         <div className=" border border-border rounded-xl px-2 py-2">
-          <h2 className="text-xs sm:text-sm text-textSecondary mb-1">Connections</h2>
+          <h2 className="text-xs sm:text-sm text-textSecondary mb-1">
+            Connections
+          </h2>
           <p className="text-lg sm:text-xl text-textPrimary font-bold">
             {networkInfo?.connections ?? '...'}
           </p>
@@ -257,7 +263,9 @@ const NodeHealth: React.FC = () => {
 
         {/* Mempool */}
         <div className="border border-border rounded-xl px-2 py-2">
-          <h2 className="text-xs sm:text-sm text-textSecondary mb-1">Mempool</h2>
+          <h2 className="text-xs sm:text-sm text-textSecondary mb-1">
+            Mempool
+          </h2>
           <p className="text-lg sm:text-xl text-textPrimary font-bold">
             {mempoolInfo?.size?.toLocaleString() ?? '...'}
           </p>

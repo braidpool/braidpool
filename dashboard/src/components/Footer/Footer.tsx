@@ -127,7 +127,9 @@ const Footer: React.FC = () => {
 
         {/* Newsletter */}
         <div className="flex-col sm:flex-row">
-          <h3 className="text-textPrimary font-bold mb-4 text-lg">Stay Updated</h3>
+          <h3 className="text-textPrimary font-bold mb-4 text-lg">
+            Stay Updated
+          </h3>
           <p className="text-textSecondary mb-4 text-sm">
             Subscribe to our newsletter for the latest updates and insights.
           </p>
@@ -137,9 +139,7 @@ const Footer: React.FC = () => {
               placeholder="Your email"
               className="bg-paper border border-border rounded-t-lg p-2 text-sm flex-grow focus:outline-none focus:border-border text-center text-textPrimary placeholder-textDisabled"
             />
-            <button
-              className="bg-surface hover:bg-surfaceHover text-textPrimary px-3 py-2 rounded-b-lg text-sm transition-colors duration-200 whitespace-nowrap"
-            >
+            <button className="bg-surface hover:bg-surfaceHover text-textPrimary px-3 py-2 rounded-b-lg text-sm transition-colors duration-200 whitespace-nowrap">
               Subscribe
             </button>
           </div>

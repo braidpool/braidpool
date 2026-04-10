@@ -470,7 +470,9 @@ const BitcoinPriceTracker: React.FC = () => {
         {/* Market Trends */}
         <div className="flex flex-col">
           <p className="font-semibold text-base">Market Trends</p>
-          <span className="text-sm text-textSecondary mb-3">Coming soon...</span>
+          <span className="text-sm text-textSecondary mb-3">
+            Coming soon...
+          </span>
 
           <div className="w-full aspect-[4/3] max-w-lg mx-auto border-2 border-dashed border-border rounded-lg flex items-center justify-center">
             <p className="text-textSecondary">Additional visualization</p>

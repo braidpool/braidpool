@@ -116,7 +116,9 @@ const AnalyticsCharts = ({ fleetHistory }: AnalyticsChartsProps) => {
                             className="w-2.5 h-2.5 rounded-full"
                             style={{ backgroundColor: entry.color }}
                           />
-                          <span className="text-textSecondary">{entry.name}:</span>
+                          <span className="text-textSecondary">
+                            {entry.name}:
+                          </span>
                           <span className="text-textPrimary font-medium">
                             {typeof entry.value === 'number'
                               ? entry.value.toFixed(2)

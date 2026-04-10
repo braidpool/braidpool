@@ -31,13 +31,17 @@ export default function MempoolPanel({ mempool }: { mempool: MempoolInfo }) {
 
           <div className="flex justify-between">
             <div>
-              <p className="text-sm font-medium text-textSecondary">Transactions</p>
+              <p className="text-sm font-medium text-textSecondary">
+                Transactions
+              </p>
               <p className="text-2xl font-bold text-textPrimary">
                 {mempool.size.toLocaleString()}
               </p>
             </div>
             <div className="text-right">
-              <p className="text-sm font-medium text-textSecondary">Min Fee Rate</p>
+              <p className="text-sm font-medium text-textSecondary">
+                Min Fee Rate
+              </p>
               <p className="font-mono text-textPrimary">
                 {mempool.mempoolminfee.toFixed(8)} BTC/kvB
               </p>

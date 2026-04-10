@@ -9,7 +9,9 @@ export default function NetworkPanel({ network }: NetworkPanelProps) {
         </h2>
         <div className="grid sm:grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <p className="text-sm font-medium text-textSecondary">Network Active</p>
+            <p className="text-sm font-medium text-textSecondary">
+              Network Active
+            </p>
             <span
               className={`inline-block mt-1 px-3 py-1 text-sm font-medium rounded-full ${
                 network.networkactive
@@ -22,7 +24,9 @@ export default function NetworkPanel({ network }: NetworkPanelProps) {
           </div>
           <div>
             <p className="text-sm font-medium text-textSecondary">Version</p>
-            <p className="font-mono text-textPrimary mt-1">{network.subversion}</p>
+            <p className="font-mono text-textPrimary mt-1">
+              {network.subversion}
+            </p>
           </div>
           <div>
             <p className="text-sm font-medium text-textSecondary">
@@ -34,7 +38,9 @@ export default function NetworkPanel({ network }: NetworkPanelProps) {
           </div>
           <div>
             <p className="text-sm font-medium text-textSecondary">Relay Fee</p>
-            <p className="font-mono text-textPrimary mt-1">{network.relayfee} BTC</p>
+            <p className="font-mono text-textPrimary mt-1">
+              {network.relayfee} BTC
+            </p>
           </div>
         </div>
       </div>
