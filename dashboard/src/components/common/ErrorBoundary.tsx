@@ -80,6 +80,24 @@ class ErrorBoundary extends Component<Props, State> {
     if (this.props.onError) {
       this.props.onError(error, errorInfo);
     }
+
+    // Notify the backend that an error occurred
+    try {
+      fetch('http://localhost:5000/api/report-error', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          error: error.message,
+          stack: error.stack,
+          componentStack: errorInfo.componentStack,
+          timestamp: new Date().toISOString(),
+        }),
+      }).catch((err) => console.error('Failed to notify team:', err));
+    } catch (e) {
+      // Ignore errors in error reporting
+    }
   }
 
   /**

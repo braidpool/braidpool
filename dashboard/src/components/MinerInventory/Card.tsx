@@ -30,7 +30,10 @@ export const DeviceCard = ({ miner }: { miner: Miner }) => {
   const primaryFanSpeed = miner.fan_speeds?.[0] || 0;
 
   return (
-    <div className="relative w-full max-w-[400px] border border-gray-700 rounded-xl p-5 backdrop-blur-sm transition-transform duration-200 hover:-translate-y-1 hover:shadow-xl bg-gray-800/50">
+    <div
+      className="relative w-full max-w-[400px] border border-black/5 rounded-xl p-5 shadow-sm transition-transform duration-200 hover:-translate-y-1 hover:shadow-md"
+      style={{ backgroundColor: 'rgba(30, 30, 30, 1)' }}
+    >
       <div
         className={`absolute top-3 right-3 w-3 h-3 rounded-full ${statusColor}`}
       />

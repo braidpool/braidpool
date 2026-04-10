@@ -48,11 +48,14 @@ const ErrorFallback: React.FC<Props> = ({
 
   return (
     <div
-      className="min-h-[400px] flex items-center justify-center p-4"
+      className="min-h-[400px] flex items-center justify-center p-4 bg-[#121212]"
       role="alert"
       aria-live="assertive"
     >
-      <div className="max-w-lg w-full bg-gray-800 border border-red-500/50 rounded-xl p-8 shadow-2xl">
+      <div
+        className="max-w-lg w-full rounded-xl p-8 shadow-sm border border-gray-800"
+        style={{ backgroundColor: 'rgba(30, 30, 30, 1)' }}
+      >
         {/* Error Icon */}
         <div className="flex justify-center mb-6">
           <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center">

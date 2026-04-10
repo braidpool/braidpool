@@ -1,5 +1,7 @@
 import { WebSocketServer } from 'ws';
 import dotenv from 'dotenv';
+import express from 'express';
+import cors from 'cors';
 import fetchBitcoinPrices from './utils/fetchBitcoinPrices.js';
 import fetchGlobalCryptoData from './utils/fetchGlobalData.js';
 import { fetchHashrateStats } from './utils/fetchHashrate.js';
@@ -14,7 +16,27 @@ import { fetchMempoolStats } from './utils/fetchMempoolStats.js';
 dotenv.config();
 
 const PORT = process.env.WS_PORT || 5000;
-const wss = new WebSocketServer({ port: PORT });
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+app.post('/api/report-error', (req, res) => {
+  const { error, stack, componentStack, timestamp } = req.body;
+  console.error('\n=============================================');
+  console.error(`[Frontend Error Reported by UI] at ${timestamp}`);
+  console.error(`Message: ${error}`);
+  if (stack) console.error(`Stack: ${stack}`);
+  if (componentStack) console.error(`Component Stack: ${componentStack}`);
+  console.error('=============================================\n');
+  res.status(200).json({ success: true, message: 'Team has been notified.' });
+});
+
+const server = app.listen(PORT, () => {
+  console.log(`HTTP and WebSocket server running on port ${PORT}`);
+});
+
+const wss = new WebSocketServer({ server });
 
 const BITCOIN_PRICE_URL = process.env.BITCOIN_PRICE_URL;
 const BITCOIN_PRICE_URL_SUFFIX = process.env.BITCOIN_PRICE_URL_SUFFIX;
@@ -151,5 +173,3 @@ setInterval(() => {
   sendPoolInfo();
   sendMempoolData();
 }, 30000); // 30-second interval
-
-console.log(`WebSocket server running on ws://localhost:${PORT}`);
