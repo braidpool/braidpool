@@ -1,5 +1,8 @@
 import axios from 'axios';
-import { fetchMempoolStats } from '../fetchMempoolStats';
+import {
+  fetchMempoolStats,
+  __resetBlockFeeCurrencyRateCache,
+} from '../fetchMempoolStats';
 
 jest.mock('axios');
 
@@ -7,6 +10,7 @@ const originalEnv = process.env;
 
 beforeEach(() => {
   jest.resetAllMocks();
+  __resetBlockFeeCurrencyRateCache();
 
   process.env = {
     ...originalEnv,
@@ -22,6 +26,8 @@ afterEach(() => {
 });
 
 describe('fetchMempoolStats', () => {
+  const FIAT_CURRENCY_COUNT = 12;
+
   const mockStatsData = {
     count: 5000,
     vsize: 2500000,
@@ -74,10 +80,11 @@ describe('fetchMempoolStats', () => {
       .mockResolvedValueOnce({ data: mockStatsData })
       .mockResolvedValueOnce({ data: mockFeesData })
       .mockResolvedValueOnce({ data: [] }) // Empty array
-      .mockResolvedValueOnce({ data: mockBlockFeesData })
-      .mockResolvedValueOnce(mockCurrencyRates) // USD
-      .mockResolvedValueOnce(mockCurrencyRates) // EUR
-      .mockResolvedValueOnce(mockCurrencyRates); // JPY
+      .mockResolvedValueOnce({ data: mockBlockFeesData });
+
+    for (let i = 0; i < FIAT_CURRENCY_COUNT; i += 1) {
+      axios.get.mockResolvedValueOnce(mockCurrencyRates);
+    }
 
     const result = await fetchMempoolStats();
 
@@ -108,7 +115,7 @@ describe('fetchMempoolStats', () => {
     consoleErrorSpy.mockRestore();
   });
 
-  it('should handle currency rate API failure', async () => {
+  it('should continue when a currency rate API call fails', async () => {
     const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
 
     axios.get
@@ -116,16 +123,49 @@ describe('fetchMempoolStats', () => {
       .mockResolvedValueOnce({ data: mockFeesData })
       .mockResolvedValueOnce({ data: mockOneMinuteBlockData })
       .mockResolvedValueOnce({ data: mockBlockFeesData })
-      .mockRejectedValueOnce(new Error('Currency API Error')); // USD rate fails
+      .mockRejectedValueOnce(new Error('Currency API Error')); // First currency rate fails
+
+    for (let i = 1; i < FIAT_CURRENCY_COUNT; i += 1) {
+      axios.get.mockResolvedValueOnce(mockCurrencyRates);
+    }
 
     const result = await fetchMempoolStats();
 
-    expect(result).toBeNull();
+    expect(result).not.toBeNull();
+    expect(result?.btc_price_usd).toBeUndefined();
+    expect(result?.mempool.total_fee_usd).toBeUndefined();
+    expect(result?.next_block_fees.fee_usd).toBeUndefined();
     expect(consoleErrorSpy).toHaveBeenCalledWith(
-      '[fetchMempoolStats] Failed to fetch:',
-      'Currency API Error'
+      '[getBlockFeeCurrencyRates] Failed to fetch USD; omitting currency: Currency API Error'
     );
 
     consoleErrorSpy.mockRestore();
+  });
+
+  it('should omit currencies with non-finite parsed rates', async () => {
+    const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+    axios.get
+      .mockResolvedValueOnce({ data: mockStatsData })
+      .mockResolvedValueOnce({ data: mockFeesData })
+      .mockResolvedValueOnce({ data: mockOneMinuteBlockData })
+      .mockResolvedValueOnce({ data: mockBlockFeesData })
+      .mockResolvedValueOnce({ data: { data: { amount: 'not-a-number' } } }); // USD
+
+    for (let i = 1; i < FIAT_CURRENCY_COUNT; i += 1) {
+      axios.get.mockResolvedValueOnce(mockCurrencyRates);
+    }
+
+    const result = await fetchMempoolStats();
+
+    expect(result).not.toBeNull();
+    expect(result?.btc_price_usd).toBeUndefined();
+    expect(result?.mempool.total_fee_usd).toBeUndefined();
+    expect(result?.next_block_fees.fee_usd).toBeUndefined();
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      '[getBlockFeeCurrencyRates] Non-finite rate for USD; omitting currency.'
+    );
+
+    consoleWarnSpy.mockRestore();
   });
 });

@@ -1,27 +1,168 @@
 import axios from 'axios';
 
+export let latestMempoolPayload = null;
+
+const FIAT_CURRENCIES = [
+  'USD',
+  'EUR',
+  'JPY',
+  'GBP',
+  'CAD',
+  'AUD',
+  'CHF',
+  'INR',
+  'KRW',
+  'BRL',
+  'HKD',
+  'SGD',
+];
+
+let lastKnownBlockFeeCurrencyRates = {};
+
+function normalizeDecimalString(value) {
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  const match = raw.match(/^([+-]?)(\d+)(?:\.(\d+))?$/);
+  if (!match) return null;
+
+  const sign = match[1] === '-' ? '-' : '';
+  const intPart = match[2].replace(/^0+(?=\d)/, '') || '0';
+  const fracPart = (match[3] || '').replace(/0+$/, '');
+
+  if (fracPart.length === 0) {
+    return `${sign}${intPart}`;
+  }
+
+  return `${sign}${intPart}.${fracPart}`;
+}
+
+function decimalToScaledInt(value) {
+  const normalized = normalizeDecimalString(value);
+  if (!normalized) return null;
+
+  const negative = normalized.startsWith('-');
+  const unsigned = normalized.replace(/^[+-]/, '');
+  const [intPart, fracPart = ''] = unsigned.split('.');
+  const digits = `${intPart}${fracPart}`;
+
+  if (!/^\d+$/.test(digits)) return null;
+
+  let intValue = BigInt(digits || '0');
+  if (negative) intValue = -intValue;
+
+  return { intValue, scale: fracPart.length };
+}
+
+function scaledIntToDecimalString(intValue, scale) {
+  const negative = intValue < 0n;
+  let digits = (negative ? -intValue : intValue).toString();
+
+  if (scale > 0) {
+    if (digits.length <= scale) {
+      digits = digits.padStart(scale + 1, '0');
+    }
+
+    const split = digits.length - scale;
+    const intPart = digits.slice(0, split);
+    const fracPart = digits.slice(split).replace(/0+$/, '');
+    const body = fracPart ? `${intPart}.${fracPart}` : intPart;
+    return negative ? `-${body}` : body;
+  }
+
+  return negative ? `-${digits}` : digits;
+}
+
+function satsToBtcDecimalString(sats) {
+  const satsNum = Number(sats);
+  if (!Number.isFinite(satsNum)) return null;
+
+  const satsInt = BigInt(Math.round(satsNum));
+  return scaledIntToDecimalString(satsInt, 8);
+}
+
+function convertSatsToFiatDecimalString(sats, rateDecimal) {
+  const rateScaled = decimalToScaledInt(rateDecimal);
+  if (!rateScaled) return null;
+
+  const satsNum = Number(sats);
+  if (!Number.isFinite(satsNum)) return null;
+
+  const satsInt = BigInt(Math.round(satsNum));
+  const multiplied = satsInt * rateScaled.intValue;
+
+  return scaledIntToDecimalString(multiplied, 8 + rateScaled.scale);
+}
+
+export function __resetBlockFeeCurrencyRateCache() {
+  lastKnownBlockFeeCurrencyRates = {};
+}
+
 async function getBlockFeeCurrencyRates() {
   try {
-    const [usdRes, eurRes, jpyRes] = await Promise.all([
-      axios.get(
-        `${process.env.BITCOIN_PRICE_URL}USD${process.env.BITCOIN_PRICE_URL_SUFFIX}`
-      ),
-      axios.get(
-        `${process.env.BITCOIN_PRICE_URL}EUR${process.env.BITCOIN_PRICE_URL_SUFFIX}`
-      ),
-      axios.get(
-        `${process.env.BITCOIN_PRICE_URL}JPY${process.env.BITCOIN_PRICE_URL_SUFFIX}`
-      ),
-    ]);
+    const results = await Promise.allSettled(
+      FIAT_CURRENCIES.map((c) =>
+        axios.get(
+          `${process.env.BITCOIN_PRICE_URL}${c}${process.env.BITCOIN_PRICE_URL_SUFFIX}`
+        )
+      )
+    );
 
-    return {
-      USD: parseFloat(usdRes.data.data.amount),
-      EUR: parseFloat(eurRes.data.data.amount),
-      JPY: parseFloat(jpyRes.data.data.amount),
+    const rates = {};
+
+    results.forEach((result, index) => {
+      const currency = FIAT_CURRENCIES[index];
+
+      if (result.status === 'fulfilled') {
+        const rawAmount = result.value?.data?.data?.amount;
+        const normalized = normalizeDecimalString(rawAmount);
+
+        if (normalized !== null) {
+          rates[currency] = normalized;
+          return;
+        }
+
+        if (typeof lastKnownBlockFeeCurrencyRates[currency] === 'string') {
+          rates[currency] = lastKnownBlockFeeCurrencyRates[currency];
+          console.warn(
+            `[getBlockFeeCurrencyRates] Non-finite rate for ${currency}; using last known value.`
+          );
+          return;
+        }
+
+        console.warn(
+          `[getBlockFeeCurrencyRates] Non-finite rate for ${currency}; omitting currency.`
+        );
+        return;
+      }
+
+      const reasonMessage = result.reason?.message || result.reason;
+
+      if (typeof lastKnownBlockFeeCurrencyRates[currency] === 'string') {
+        rates[currency] = lastKnownBlockFeeCurrencyRates[currency];
+        console.warn(
+          `[getBlockFeeCurrencyRates] Failed to fetch ${currency}; using last known value: ${reasonMessage}`
+        );
+        return;
+      }
+
+      console.error(
+        `[getBlockFeeCurrencyRates] Failed to fetch ${currency}; omitting currency: ${reasonMessage}`
+      );
+    });
+
+    lastKnownBlockFeeCurrencyRates = {
+      ...lastKnownBlockFeeCurrencyRates,
+      ...rates,
     };
+
+    return rates;
   } catch (err) {
-    console.error('[getBlockFeeCurrencyRates] Failed:', err.message);
-    throw err;
+    console.error(
+      '[getBlockFeeCurrencyRates] Unexpected failure:',
+      err.message
+    );
+    return { ...lastKnownBlockFeeCurrencyRates };
   }
 }
 
@@ -57,16 +198,20 @@ export async function fetchMempoolStats() {
     const { fastestFee, halfHourFee, hourFee, economyFee, minimumFee } =
       feesRes.data;
 
-    const btcPriceUSD = btcRates['USD'];
-
     const convertFee = (sats) => {
-      const feeBtc = sats / 1e8;
-      const feeUsd = feeBtc * btcPriceUSD;
-      return {
-        sats_per_vbyte: sats,
-        fee_btc: feeBtc,
-        fee_usd: feeUsd,
-      };
+      const feeBtc = satsToBtcDecimalString(sats);
+      if (feeBtc === null) {
+        return { sats_per_vbyte: sats, fee_btc: null };
+      }
+
+      const fee = { sats_per_vbyte: sats, fee_btc: feeBtc };
+      for (const [currency, rate] of Object.entries(btcRates)) {
+        const converted = convertSatsToFiatDecimalString(sats, rate);
+        if (converted !== null) {
+          fee[`fee_${currency.toLowerCase()}`] = converted;
+        }
+      }
+      return fee;
     };
 
     const blockFeesArray = blockfeesRes.data;
@@ -75,28 +220,45 @@ export async function fetchMempoolStats() {
         ? blockFeesArray[blockFeesArray.length - 1]
         : null;
 
-    const blockfeeHistory = latestBlockFeeRaw
-      ? [
-          {
-            height: latestBlockFeeRaw.avgHeight,
-            time: new Date(
-              (latestBlockFeeRaw.timestamp || 0) * 1000
-            ).toLocaleTimeString(),
-            btc: latestBlockFeeRaw.avgFees / 1e8,
-            usd: latestBlockFeeRaw.USD / 100,
-            eur: (latestBlockFeeRaw.avgFees / 1e8) * btcRates.EUR,
-            jpy: (latestBlockFeeRaw.avgFees / 1e8) * btcRates.JPY,
-          },
-        ]
-      : [];
+    const blockfeeHistory = (() => {
+      if (!latestBlockFeeRaw) return [];
+      const feeBtc = satsToBtcDecimalString(latestBlockFeeRaw.avgFees);
+      if (feeBtc === null) return [];
 
-    return {
-      mempool: {
-        count,
-        vsize,
-        total_fee_btc: total_fee / 1e8,
-        total_fee_usd: (total_fee / 1e8) * btcPriceUSD,
-      },
+      const item = {
+        height: latestBlockFeeRaw.avgHeight,
+        time: new Date(
+          (latestBlockFeeRaw.timestamp || 0) * 1000
+        ).toLocaleTimeString(),
+        btc: feeBtc,
+      };
+      for (const [currency, rate] of Object.entries(btcRates)) {
+        const converted = convertSatsToFiatDecimalString(
+          latestBlockFeeRaw.avgFees,
+          rate
+        );
+        if (converted !== null) {
+          item[currency.toLowerCase()] = converted;
+        }
+      }
+      return [item];
+    })();
+
+    const totalFeeBtc = satsToBtcDecimalString(total_fee);
+    if (totalFeeBtc === null) {
+      throw new Error('Invalid total_fee value received from mempool API');
+    }
+
+    const mempool = { count, vsize, total_fee_btc: totalFeeBtc };
+    for (const [currency, rate] of Object.entries(btcRates)) {
+      const converted = convertSatsToFiatDecimalString(total_fee, rate);
+      if (converted !== null) {
+        mempool[`total_fee_${currency.toLowerCase()}`] = converted;
+      }
+    }
+
+    const result = {
+      mempool,
       next_block_fees: convertFee(fastestFee),
       fees: {
         high_priority: convertFee(fastestFee),
@@ -105,10 +267,18 @@ export async function fetchMempoolStats() {
         economy: convertFee(economyFee),
         minimum: convertFee(minimumFee),
       },
-      btc_price_usd: btcPriceUSD,
+      btc_price_usd: btcRates.USD,
       fee_distribution: feeDistribution,
       block_fee_history: blockfeeHistory,
     };
+
+    latestMempoolPayload = {
+      type: 'mempool_update',
+      data: result,
+      time: new Date().toLocaleString(),
+    };
+
+    return result;
   } catch (error) {
     console.error('[fetchMempoolStats] Failed to fetch:', error.message);
     return null;

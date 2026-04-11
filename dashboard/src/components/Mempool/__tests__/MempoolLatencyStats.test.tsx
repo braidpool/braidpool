@@ -213,7 +213,7 @@ const mockedCreateElement = (type: any, props: any, ...children: any[]) => {
 
 import MempoolLatencyStats from '../MempoolLatencyStats';
 
-const mockMempoolData: MempoolData = {
+const mockMempoolData = {
   mempool: {
     vsize: 12345678,
     count: 50000,
@@ -300,9 +300,9 @@ const mockMempoolData: MempoolData = {
       jpy: 2400000,
     },
   ],
-};
+} as unknown as MempoolData;
 
-const mockPartialData: Partial<MempoolData> = {
+const mockPartialData = {
   mempool: {
     vsize: 5000000,
     count: 25000,
@@ -311,7 +311,7 @@ const mockPartialData: Partial<MempoolData> = {
     total_fee_eur: 17250,
     total_fee_jpy: 2000000,
   },
-};
+} as unknown as Partial<MempoolData>;
 
 describe('MempoolLatencyStats', () => {
   let mockWebSocketInstance: MockWebSocket | null;
@@ -510,7 +510,9 @@ describe('MempoolLatencyStats', () => {
 
     test('renders currency select dropdown', async () => {
       await waitFor(() => {
-        const selectElement = screen.getByRole('combobox');
+        const selectElement = screen.getByRole('combobox', {
+          name: 'Block fee chart currency view',
+        });
         expect(selectElement).toBeInTheDocument();
         expect(selectElement).toHaveValue('all');
       });
@@ -518,10 +520,16 @@ describe('MempoolLatencyStats', () => {
 
     test('contains all currency options in dropdown', async () => {
       await waitFor(() => {
-        expect(screen.getByDisplayValue('ALL')).toBeInTheDocument();
+        expect(
+          screen.getByRole('combobox', {
+            name: 'Block fee chart currency view',
+          })
+        ).toBeInTheDocument();
       });
 
-      const selectElement = screen.getByRole('combobox');
+      const selectElement = screen.getByRole('combobox', {
+        name: 'Block fee chart currency view',
+      });
 
       // Check all options exist
       const options = selectElement.querySelectorAll('option');
@@ -538,7 +546,9 @@ describe('MempoolLatencyStats', () => {
 
     test('changes view when selecting different currency', async () => {
       await waitFor(() => {
-        const selectElement = screen.getByRole('combobox');
+        const selectElement = screen.getByRole('combobox', {
+          name: 'Block fee chart currency view',
+        });
         fireEvent.change(selectElement, { target: { value: 'usd' } });
         expect(selectElement).toHaveValue('usd');
       });
@@ -546,9 +556,71 @@ describe('MempoolLatencyStats', () => {
 
     test('defaults to "all" view initially', async () => {
       await waitFor(() => {
-        const selectElement = screen.getByRole('combobox');
+        const selectElement = screen.getByRole('combobox', {
+          name: 'Block fee chart currency view',
+        });
         expect(selectElement).toHaveValue('all');
       });
+    });
+
+    test('shows placeholder when selected total fee currency is missing', async () => {
+      await waitFor(() => {
+        if (mockWebSocketInstance?.onmessage) {
+          const payloadWithoutUsdTotalFee = {
+            ...mockMempoolData,
+            mempool: { ...mockMempoolData.mempool },
+          } as any;
+          delete payloadWithoutUsdTotalFee.mempool.total_fee_usd;
+
+          const messageEvent = new MessageEvent('message', {
+            data: JSON.stringify({
+              type: 'mempool_update',
+              data: payloadWithoutUsdTotalFee,
+            }),
+          });
+          mockWebSocketInstance.onmessage(messageEvent);
+        }
+      });
+
+      const overviewCurrencySelect = screen.getByRole('combobox', {
+        name: 'Overview currency',
+      });
+
+      fireEvent.change(overviewCurrencySelect, { target: { value: 'usd' } });
+
+      const totalFeesLabel = screen.getByText('Total Fees (USD)');
+      const totalFeesValue = totalFeesLabel.parentElement?.querySelector('h3');
+      expect(totalFeesValue).toHaveTextContent('--');
+    });
+
+    test('does not round tiny non-zero BTC values to zero', async () => {
+      await waitFor(() => {
+        if (mockWebSocketInstance?.onmessage) {
+          const payloadWithTinyBtcFee = {
+            ...mockMempoolData,
+            next_block_fees: {
+              ...mockMempoolData.next_block_fees,
+              fee_btc: 0.000000005,
+            },
+          };
+
+          const messageEvent = new MessageEvent('message', {
+            data: JSON.stringify({
+              type: 'mempool_update',
+              data: payloadWithTinyBtcFee,
+            }),
+          });
+          mockWebSocketInstance.onmessage(messageEvent);
+        }
+      });
+
+      const overviewCurrencySelect = screen.getByRole('combobox', {
+        name: 'Overview currency',
+      });
+      fireEvent.change(overviewCurrencySelect, { target: { value: 'btc' } });
+
+      expect(screen.getByText(/0\.000000005 BTC/)).toBeInTheDocument();
+      expect(screen.queryByText(/0\.00000000 BTC/)).not.toBeInTheDocument();
     });
   });
 
