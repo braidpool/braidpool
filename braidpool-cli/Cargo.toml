@@ -1,0 +1,12 @@
+[package]
+name = "braidpool-cli"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+clap = { workspace = true, features = ["derive"] }
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+
