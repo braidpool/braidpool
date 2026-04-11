@@ -15,16 +15,12 @@ miner_pubkey = ""
 [bitcoin_config]
 # The network can be "main", "testnet4" or "signet or cpunet(preferred)"
 network = "cpunet"
-#rpcuser
-username = "username"
-#rpc password
-password = "password"
-#cookie authentication file 
-cookie_path="~/.bitcoin/regtest/.cookie"
-#port specific where to listen for the bitcoind 
-port="18443"
-#ip of the bitcoind node
-bitcoind_ip = "0.0.0.0"
+# Full path to bitcoind .cookie file.
+# Auto-detected per OS if omitted (override only when using a custom -datadir):
+#   Linux default:  ~/.bitcoin/{network}/.cookie
+#   macOS default:  ~/Library/Application Support/Bitcoin/{network}/.cookie
+# The --rpccookie CLI flag takes precedence over this value.
+#cookie_path = "/custom/datadir/cpunet/.cookie"
 
 #rpc server configuration
 [braid_rpc_config]

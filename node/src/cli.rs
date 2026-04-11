@@ -34,14 +34,32 @@ pub struct Cli {
     pub rpcpass: Option<String>,
 
     /// Which network to use. Valid options are mainnet, testnet4, signet, cpunet (preferred)
+    // wont-fix: None unreachable at runtime (default_value ensures Some) but kept for type consistency
     #[arg(long, default_value = "main")]
     pub network: Option<String>,
 
-    /// Use this cookie file for bitcoin RPC
-    #[arg(long, default_value = "~/.bitcoin/.cookie")]
+    /// Full path to bitcoind .cookie file for authentication.
+    /// Auto-detected per OS and network if not specified:
+    ///   Linux:  ~/.bitcoin/{network}/.cookie
+    ///   macOS:  ~/Library/Application Support/Bitcoin/{network}/.cookie
+    /// When bitcoind uses a custom -datadir (e.g., -datadir=/data/node1),
+    /// the cookie file is at <datadir>/<network>/.cookie.
+    /// Example: --rpccookie /data/node1/signet/.cookie
+    /// Precedence: --rpccookie > config file cookie_path > auto-detect
+    #[arg(long)]
     pub rpccookie: Option<String>,
 
-    /// Path to Bitcoin Core IPC socket
-    #[arg(long, default_value = "/tmp/bitcoin-cpunet.sock")]
-    pub ipc_socket: String,
+    /// Full path to the Bitcoin Core IPC Unix socket.
+    /// This socket is created by bitcoind, not by braidpool.
+    /// Bitcoind must be started with a matching -ipcbind flag:
+    ///   bitcoin-node -ipcbind=unix:./braidpool/bitcoin-cpunet.sock
+    /// The path passed to --ipc-socket must match exactly what was given to -ipcbind.
+    /// Auto-detected defaults per network:
+    ///   cpunet:   ./braidpool/bitcoin-cpunet.sock
+    ///   mainnet:  ./braidpool/bitcoin-main.sock
+    ///   testnet4: ./braidpool/bitcoin-testnet4.sock
+    ///   signet:   ./braidpool/bitcoin-signet.sock
+    ///   regtest:  ./braidpool/bitcoin-regtest.sock
+    #[arg(long)]
+    pub ipc_socket: Option<String>,
 }

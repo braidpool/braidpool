@@ -21,7 +21,8 @@ use node::SwarmHandler;
 use node::{
     bead::{Bead, BeadHashes, BeadRequest, BeadResponse, BeadSyncError},
     behaviour::{self, BEAD_ANNOUNCE_PROTOCOL, BRAIDPOOL_TOPIC},
-    braid, cli,
+    braid, cli, config,
+    connection::{resolve_cookie_path, resolve_ipc_socket, wait_for_cookie},
     db::db_handlers::DBHandler,
     ibd_manager::{IBDCommands, IBDManager, IBD_BATCH_SIZE},
     ipc_template_consumer,
@@ -206,12 +207,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             "Invalid datadir path encoding",
         )
     })?;
-    let datadir = shellexpand::full(datadir_str).map_err(|e| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("Shell expansion failed: {}", e),
-        )
-    })?;
+    let datadir = shellexpand::tilde(datadir_str);
     match fs::metadata(&*datadir) {
         Ok(m) => {
             if !m.is_dir() {
@@ -354,9 +350,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     })?;
     swarm.dial(boot_addr)?;
     info!(address = %ADDR_REFRENCE, "Dialed boot node");
-    //IPC(inter process communication) based `getblocktemplate` and `notification` to send to the downstream via the `cmempoold` architecture
-    info!(socket = %args.ipc_socket, "IPC socket path");
-
     let network = if let Some(network_name) = &args.network {
         info!(network = %network_name, "Network selected");
         match network_name.as_str() {
@@ -379,7 +372,54 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Network::Bitcoin
     };
 
-    let ipc_socket_path_for_blocking = args.ipc_socket.clone();
+    // Resolve IPC socket path (auto-detect per network or use explicit override)
+    let ipc_socket_path = resolve_ipc_socket(args.ipc_socket.as_deref(), network)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+    info!(socket = %ipc_socket_path, "IPC socket path");
+
+    // Load config file for cookie_path (if present in datadir)
+    let config_file = datadir_path.join("braidpool_config.toml");
+    let config_cookie_path = config_file
+        .to_str()
+        .and_then(|p| config::BraidpoolConfig::load_from_config_file(p).ok())
+        .and_then(|c| c.bitcoin_config.cookie_path);
+    if config_cookie_path.is_none() {
+        debug!(
+            config = %config_file.display(),
+            "No config file found or no cookie_path set, using auto-detection"
+        );
+    }
+
+    // Validate bitcoind is accessible via cookie file (startup gate)
+    // Security: Path is validated for traversal, symlinks, and canonicalization
+    let cookie_path = resolve_cookie_path(
+        args.rpccookie.as_deref(),
+        config_cookie_path.as_deref(),
+        network,
+    )
+    .map_err(|e| {
+        error!(error = %e, "Failed to resolve cookie file path");
+        e
+    })?;
+
+    info!("Checking bitcoind readiness via cookie validation");
+    wait_for_cookie(&cookie_path).await.map_err(|e| {
+        error!(error = %e, "Failed to validate bitcoind cookie file");
+        e
+    })?;
+    info!(path = %cookie_path.display(), "Cookie file validated");
+
+    // Probe IPC socket reachability before spawning the background handler.
+    // Without this check the node would start "successfully" while silently
+    // failing to receive block templates if bitcoind was not started with
+    // the matching -ipcbind flag.
+    if let Err(msg) = node::connection::probe_ipc_socket(&ipc_socket_path).await {
+        error!("{}", msg);
+        return Err(msg.into());
+    }
+    info!(socket = %ipc_socket_path, "IPC socket reachable");
+
+    let ipc_socket_path_for_blocking = ipc_socket_path.clone();
     let notification_tx_for_ipc = notification_tx.clone();
     let latest_template_for_ipc = latest_template.clone();
     let latest_template_merkle_branch_for_ipc = latest_template_merkle_branch.clone();

@@ -1,6 +1,6 @@
 use bitcoin::Network;
-use core::panic;
 use serde::{Deserialize, Serialize};
+use std::error::Error;
 use std::fs;
 #[derive(Deserialize, Serialize, Clone)]
 pub struct NetworkConfig {
@@ -12,11 +12,7 @@ pub struct NetworkConfig {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct BitcoinConfig {
     pub network: bitcoin::Network,
-    pub username: String,
-    pub password: String,
-    pub port: String,
-    pub bitcoind_ip: String,
-    pub cookie_path: String,
+    pub cookie_path: Option<String>,
 }
 #[derive(Serialize, Deserialize, Clone)]
 pub struct BraidDirectoryConfig {
@@ -48,20 +44,14 @@ impl Default for BraidRpcConfig {
 }
 #[allow(dead_code)]
 impl BraidpoolConfig {
-    pub fn load_from_config_file(path: &str) -> BraidpoolConfig {
-        let contents = match fs::read_to_string(path) {
-            Ok(c) => c,
-            Err(error) => {
-                panic!("An error occurred while reading the file {}", error);
-            }
-        };
-        let config: BraidpoolConfig = toml::from_str(&contents).unwrap();
-
-        config
+    pub fn load_from_config_file(path: &str) -> Result<BraidpoolConfig, Box<dyn Error>> {
+        let contents = fs::read_to_string(path)?;
+        let config: BraidpoolConfig = toml::from_str(&contents)?;
+        Ok(config)
     }
     pub fn with_listen_address(mut self, listen_address: String) -> Self {
         self.braidnetwork_config.listen_address = listen_address;
-        return self;
+        self
     }
     pub fn with_peer_nodes(mut self, peers: Vec<String>) -> Self {
         self.braidnetwork_config.peer_nodes = peers;
@@ -73,27 +63,7 @@ impl BraidpoolConfig {
         self
     }
 
-    pub fn with_username(mut self, username: String) -> Self {
-        self.bitcoin_config.username = username;
-        self
-    }
-
-    pub fn with_password(mut self, password: String) -> Self {
-        self.bitcoin_config.password = password;
-        self
-    }
-
-    pub fn with_port(mut self, port: String) -> Self {
-        self.bitcoin_config.port = port;
-        self
-    }
-
-    pub fn with_bitcoind_ip(mut self, ip: String) -> Self {
-        self.bitcoin_config.bitcoind_ip = ip;
-        self
-    }
-
-    pub fn with_cookie_path(mut self, path: String) -> Self {
+    pub fn with_cookie_path(mut self, path: Option<String>) -> Self {
         self.bitcoin_config.cookie_path = path;
         self
     }
@@ -145,7 +115,7 @@ mod test {
             .unwrap()
             .join(Path::new("src/default_braidpool_config.toml"));
 
-        let from_file = BraidpoolConfig::load_from_config_file(cwd.to_str().unwrap());
+        let from_file = BraidpoolConfig::load_from_config_file(cwd.to_str().unwrap()).unwrap();
 
         let built = BraidpoolConfig {
             braidnetwork_config: NetworkConfig {
@@ -157,11 +127,7 @@ mod test {
             },
             bitcoin_config: BitcoinConfig {
                 network: Network::CPUNet,
-                username: "username".to_string(),
-                password: "password".to_string(),
-                port: "18443".to_string(),
-                bitcoind_ip: "0.0.0.0".to_string(),
-                cookie_path: "~/.bitcoin/regtest/.cookie".to_string(),
+                cookie_path: None,
             },
             braid_directory: BraidDirectoryConfig {
                 path: "~/.braidpool".to_string(),
@@ -182,19 +148,6 @@ mod test {
         assert_eq!(
             from_file.bitcoin_config.network,
             built.bitcoin_config.network
-        );
-        assert_eq!(
-            from_file.bitcoin_config.username,
-            built.bitcoin_config.username
-        );
-        assert_eq!(
-            from_file.bitcoin_config.password,
-            built.bitcoin_config.password
-        );
-        assert_eq!(from_file.bitcoin_config.port, built.bitcoin_config.port);
-        assert_eq!(
-            from_file.bitcoin_config.bitcoind_ip,
-            built.bitcoin_config.bitcoind_ip
         );
         assert_eq!(
             from_file.bitcoin_config.cookie_path,
