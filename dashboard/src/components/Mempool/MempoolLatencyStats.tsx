@@ -20,7 +20,7 @@ import {
   MempoolStats,
   FeeDistributionItem,
 } from './Types';
-import { currencyLabels, currencyColors } from './Constants';
+import { currencyLabels, currencyColors, currencyFullNames } from './Constants';
 import { WEBSOCKET_URLS } from '@/URLs';
 import { Loader } from 'lucide-react';
 
@@ -70,9 +70,6 @@ const TOTAL_FEE_KEY_BY_CURRENCY: Record<Currency, keyof MempoolStats> = {
   hkd: 'total_fee_hkd',
   sgd: 'total_fee_sgd',
 };
-
-// Currencies shown when chart view is set to 'all'
-const CHART_ALL_CURRENCIES: Currency[] = ['btc', 'usd', 'eur', 'jpy'];
 
 const formatAmountPreserveNonZero = (
   value: number,
@@ -128,7 +125,7 @@ const MempoolLatencyStats = () => {
 
   const [mempoolData, setMempoolData] = useState<MempoolData | null>(null);
   const [selectedCurrency, setSelectedCurrency] = useState<Currency>('btc');
-  const [selectedView, setSelectedView] = useState<Currency | 'all'>('all');
+  const [selectedView, setSelectedView] = useState<Currency>('btc');
   const [blockFeeHistory, setBlockFeeHistory] = useState<BlockFeeHistoryItem[]>(
     []
   );
@@ -275,10 +272,11 @@ const MempoolLatencyStats = () => {
             value={selectedCurrency}
             onChange={(e) => setSelectedCurrency(e.target.value as Currency)}
             aria-label="Overview currency"
+            title={`Select overview currency (${currencyFullNames[selectedCurrency]})`}
             className="bg-[#1a1a1a] text-gray-300 px-4 py-2 rounded-md shadow-md border border-white text-sm"
           >
             {CURRENCIES.map((c) => (
-              <option key={c} value={c}>
+              <option key={c} value={c} title={currencyFullNames[c]}>
                 {currencyLabels[c]}
               </option>
             ))}
@@ -365,15 +363,13 @@ const MempoolLatencyStats = () => {
 
           <select
             value={selectedView}
-            onChange={(e) =>
-              setSelectedView(e.target.value as Currency | 'all')
-            }
+            onChange={(e) => setSelectedView(e.target.value as Currency)}
             aria-label="Block fee chart currency view"
+            title={`Select chart currency (${currencyFullNames[selectedView]})`}
             className="bg-[#1a1a1a] text-gray-300 px-4 py-2 rounded-md shadow-md border border-white"
           >
-            <option value="all">ALL</option>
             {CURRENCIES.map((c) => (
-              <option key={c} value={c}>
+              <option key={c} value={c} title={currencyFullNames[c]}>
                 {currencyLabels[c]}
               </option>
             ))}
@@ -412,10 +408,7 @@ const MempoolLatencyStats = () => {
             <Legend />
 
             {CURRENCIES.map((c) => {
-              const show =
-                selectedView === c ||
-                (selectedView === 'all' &&
-                  (CHART_ALL_CURRENCIES as string[]).includes(c));
+              const show = selectedView === c;
               return show ? (
                 <Line
                   key={c}

@@ -523,7 +523,7 @@ describe('MempoolLatencyStats', () => {
           name: 'Block fee chart currency view',
         });
         expect(selectElement).toBeInTheDocument();
-        expect(selectElement).toHaveValue('all');
+        expect(selectElement).toHaveValue('btc');
       });
     });
 
@@ -550,7 +550,7 @@ describe('MempoolLatencyStats', () => {
       expect(optionValues).toContain('usd');
       expect(optionValues).toContain('eur');
       expect(optionValues).toContain('jpy');
-      expect(optionValues).toContain('all');
+      expect(optionValues).not.toContain('all');
     });
 
     test('changes view when selecting different currency', async () => {
@@ -563,12 +563,12 @@ describe('MempoolLatencyStats', () => {
       });
     });
 
-    test('defaults to "all" view initially', async () => {
+    test('defaults to "btc" view initially', async () => {
       await waitFor(() => {
         const selectElement = screen.getByRole('combobox', {
           name: 'Block fee chart currency view',
         });
-        expect(selectElement).toHaveValue('all');
+        expect(selectElement).toHaveValue('btc');
       });
     });
 

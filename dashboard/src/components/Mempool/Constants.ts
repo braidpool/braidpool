@@ -29,3 +29,19 @@ export const currencyLabels: Record<string, string> = {
   hkd: 'HKD',
   sgd: 'SGD',
 };
+
+export const currencyFullNames: Record<string, string> = {
+  btc: 'Bitcoin',
+  usd: 'US Dollar',
+  eur: 'Euro',
+  jpy: 'Japanese Yen',
+  gbp: 'British Pound',
+  cad: 'Canadian Dollar',
+  aud: 'Australian Dollar',
+  chf: 'Swiss Franc',
+  inr: 'Indian Rupee',
+  krw: 'South Korean Won',
+  brl: 'Brazilian Real',
+  hkd: 'Hong Kong Dollar',
+  sgd: 'Singapore Dollar',
+};
