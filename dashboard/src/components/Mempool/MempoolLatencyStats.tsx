@@ -177,7 +177,7 @@ const MempoolLatencyStats = () => {
 
     ws.onclose = () => {
       setWsConnected(false);
-      setWsStatusMessage('Disconnected from live updates. Retrying...');
+      setWsStatusMessage('Disconnected from live updates.');
       console.log('[WebSocket] Disconnected');
     };
 
