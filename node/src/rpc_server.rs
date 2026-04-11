@@ -3,15 +3,12 @@ use crate::braid::consensus_functions;
 use crate::braid::consensus_functions::highest_work_path;
 use crate::braid::AddBeadStatus;
 use crate::braid::Braid;
-use crate::error::BraidRPCError;
-#[cfg(test)]
-use crate::utils::compute_block_hash;
-#[cfg(test)]
-use crate::utils::create_test_bead;
 use crate::ipc::client::QueueStats;
 use crate::peer_manager::PeerManager;
 use crate::stratum;
 use crate::stratum::BlockTemplate;
+#[cfg(test)]
+use crate::utils::compute_block_hash;
 use crate::utils::BeadHash;
 use bitcoin::block::HeaderExt;
 use bitcoin::Transaction;
@@ -1359,7 +1356,10 @@ pub async fn test_get_bead_count_cli_flow() {
     let test_bead1 = create_test_bead(1, None);
     let genesis_beads = vec![test_bead1.clone()];
 
-    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(
+        genesis_beads,
+        "mainnet".to_string(),
+    )));
 
     // Start RPC server
     let server_addr = "127.0.0.1:9100"; // Different port to avoid conflicts
@@ -1398,7 +1398,10 @@ pub async fn test_get_tips_cli_flow() {
     let test_bead1 = create_test_bead(1, None);
     let test_bead2 = create_test_bead(2, Some(test_bead1.block_header.block_hash()));
     let genesis_beads = vec![test_bead1.clone()];
-    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(
+        genesis_beads,
+        "mainnet".to_string(),
+    )));
 
     // Add second bead
     {
@@ -1447,7 +1450,10 @@ pub async fn test_get_bead_rpc() {
     let test_bead1 = create_test_bead(1, None);
     let genesis_beads = vec![test_bead1.clone()];
 
-    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(
+        genesis_beads,
+        "mainnet".to_string(),
+    )));
     let (proxy_tx, _) = mpsc::unbounded_channel();
 
     let server_addr = "127.0.0.1:9001";
@@ -1503,7 +1509,10 @@ pub async fn test_get_cohort_rpc() {
     let test_bead_2 = create_test_bead(2, Some(test_bead_1.block_header.block_hash())); // cohort 1
     let genesis_beads = vec![test_bead_1.clone()];
 
-    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(
+        genesis_beads,
+        "mainnet".to_string(),
+    )));
     {
         let mut braid_guard = braid.write().await;
         braid_guard.extend(&test_bead_2);
@@ -1560,7 +1569,10 @@ pub async fn test_get_genesis_rpc() {
     let test_bead1 = create_test_bead(1, None);
     let genesis_beads = vec![test_bead1.clone()];
 
-    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(
+        genesis_beads,
+        "mainnet".to_string(),
+    )));
     let (proxy_tx, _) = mpsc::unbounded_channel();
 
     let server_addr = "127.0.0.1:9003";
@@ -1595,7 +1607,10 @@ pub async fn test_get_parents_and_children_rpc() {
     let test_bead2 = create_test_bead(2, Some(test_bead1.block_header.block_hash()));
     let genesis_beads = vec![test_bead1.clone()];
 
-    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(
+        genesis_beads,
+        "mainnet".to_string(),
+    )));
     {
         let mut braid_guard = braid.write().await;
         braid_guard.extend(&test_bead2);
@@ -1663,7 +1678,10 @@ pub async fn test_get_hwpath_rpc() {
     let test_bead3 = create_test_bead(3, Some(test_bead2.block_header.block_hash()));
     let genesis_beads = vec![test_bead1.clone()];
 
-    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(
+        genesis_beads,
+        "mainnet".to_string(),
+    )));
     {
         let mut braid_guard = braid.write().await;
         braid_guard.extend(&test_bead2);
@@ -1712,7 +1730,10 @@ pub async fn test_get_braid_info_rpc() {
     let test_bead1 = create_test_bead(1, None);
     let genesis_beads = vec![test_bead1.clone()];
 
-    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(
+        genesis_beads,
+        "mainnet".to_string(),
+    )));
 
     let (proxy_tx, _) = mpsc::unbounded_channel();
 
@@ -1751,7 +1772,10 @@ pub async fn test_get_node_info_rpc() {
     let test_bead1 = create_test_bead(1, None);
     let genesis_beads = vec![test_bead1.clone()];
 
-    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(
+        genesis_beads,
+        "mainnet".to_string(),
+    )));
 
     let (proxy_tx, _) = mpsc::unbounded_channel();
 
@@ -1803,10 +1827,10 @@ pub async fn test_get_peer_info_rpc() {
         PeerId::from(keypair.public())
     }
 
-    let braid: Arc<RwLock<braid::Braid>> =
-        Arc::new(RwLock::new(braid::Braid::new(vec![create_test_bead(
-            1, None,
-        )])));
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(
+        vec![create_test_bead(1, None)],
+        "mainnet".to_string(),
+    )));
     let (proxy_tx, _) = mpsc::unbounded_channel();
 
     // --- 1. Test with no peers ---
@@ -1896,10 +1920,10 @@ pub async fn test_get_peer_info_rpc() {
 
 #[tokio::test]
 pub async fn test_get_miner_info_rpc() {
-    let braid: Arc<RwLock<braid::Braid>> =
-        Arc::new(RwLock::new(braid::Braid::new(vec![create_test_bead(
-            1, None,
-        )])));
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(
+        vec![create_test_bead(1, None)],
+        "mainnet".to_string(),
+    )));
 
     let (proxy_tx, _) = mpsc::unbounded_channel();
 
@@ -1943,10 +1967,10 @@ pub async fn test_get_miner_info_rpc() {
 pub async fn test_staged_transactions_rpc() {
     use bitcoin::consensus::deserialize;
 
-    let braid: Arc<RwLock<braid::Braid>> =
-        Arc::new(RwLock::new(braid::Braid::new(vec![create_test_bead(
-            1, None,
-        )])));
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(
+        vec![create_test_bead(1, None)],
+        "mainnet".to_string(),
+    )));
     let (proxy_tx, _) = mpsc::unbounded_channel();
     let latest_block = Arc::new(Mutex::new(stratum::BlockTemplate::default()));
 
@@ -2038,10 +2062,10 @@ pub async fn test_staged_transactions_rpc() {
 
 #[tokio::test]
 pub async fn test_get_ipc_stats_rpc() {
-    let braid: Arc<RwLock<braid::Braid>> =
-        Arc::new(RwLock::new(braid::Braid::new(vec![create_test_bead(
-            1, None,
-        )])));
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(
+        vec![create_test_bead(1, None)],
+        "mainnet".to_string(),
+    )));
     let (proxy_tx, mut proxy_rx) = mpsc::unbounded_channel();
 
     let server_addr = "127.0.0.1:9012";
@@ -2090,10 +2114,10 @@ pub async fn test_get_ipc_stats_rpc() {
 
 #[tokio::test]
 pub async fn test_get_ipc_stats_rpc_simple() {
-    let braid: Arc<RwLock<braid::Braid>> =
-        Arc::new(RwLock::new(braid::Braid::new(vec![create_test_bead(
-            1, None,
-        )])));
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(
+        vec![create_test_bead(1, None)],
+        "mainnet".to_string(),
+    )));
     let (proxy_tx, mut proxy_rx) = mpsc::unbounded_channel();
 
     let server_addr = "127.0.0.1:9020";
@@ -2144,10 +2168,10 @@ pub async fn test_get_ipc_stats_rpc_simple() {
 
 #[tokio::test]
 pub async fn test_unstage_transactions_rpc_simple() {
-    let braid: Arc<RwLock<braid::Braid>> =
-        Arc::new(RwLock::new(braid::Braid::new(vec![create_test_bead(
-            1, None,
-        )])));
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(
+        vec![create_test_bead(1, None)],
+        "mainnet".to_string(),
+    )));
     let (proxy_tx, mut proxy_rx) = mpsc::unbounded_channel();
 
     let server_addr = "127.0.0.1:9021";
@@ -2200,7 +2224,10 @@ pub async fn test_get_mining_info_rpc() {
     let test_public_key = test_bead1.committed_metadata.comm_pub_key.to_string();
 
     let genesis_beads = vec![test_bead1.clone()];
-    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(
+        genesis_beads,
+        "mainnet".to_string(),
+    )));
 
     // Add additional beads to the braid
     {
