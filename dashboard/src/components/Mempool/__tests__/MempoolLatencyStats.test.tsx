@@ -127,6 +127,21 @@ jest.mock(
       eur: '#3b82f6',
       jpy: '#ef4444',
     },
+    currencyFullNames: {
+      btc: 'Bitcoin',
+      usd: 'US Dollar',
+      eur: 'Euro',
+      jpy: 'Japanese Yen',
+      gbp: 'British Pound',
+      cad: 'Canadian Dollar',
+      aud: 'Australian Dollar',
+      chf: 'Swiss Franc',
+      inr: 'Indian Rupee',
+      krw: 'South Korean Won',
+      brl: 'Brazilian Real',
+      hkd: 'Hong Kong Dollar',
+      sgd: 'Singapore Dollar',
+    },
   }),
   { virtual: true }
 );
