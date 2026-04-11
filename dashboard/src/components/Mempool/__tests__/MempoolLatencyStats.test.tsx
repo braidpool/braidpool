@@ -213,7 +213,7 @@ const mockedCreateElement = (type: any, props: any, ...children: any[]) => {
 
 import MempoolLatencyStats from '../MempoolLatencyStats';
 
-const mockMempoolData = {
+const mockMempoolData: MempoolData = {
   mempool: {
     vsize: 12345678,
     count: 50000,
@@ -270,6 +270,15 @@ const mockMempoolData = {
     USD: 37000,
     EUR: 34500,
     JPY: 4000000,
+    GBP: 29000,
+    CAD: 50000,
+    AUD: 56000,
+    CHF: 39000,
+    INR: 3000000,
+    KRW: 49000000,
+    BRL: 190000,
+    HKD: 288000,
+    SGD: 50000,
   },
   fee_distribution: {
     min: 5,
@@ -300,9 +309,9 @@ const mockMempoolData = {
       jpy: 2400000,
     },
   ],
-} as unknown as MempoolData;
+};
 
-const mockPartialData = {
+const mockPartialData: Partial<MempoolData> = {
   mempool: {
     vsize: 5000000,
     count: 25000,
@@ -311,7 +320,7 @@ const mockPartialData = {
     total_fee_eur: 17250,
     total_fee_jpy: 2000000,
   },
-} as unknown as Partial<MempoolData>;
+};
 
 describe('MempoolLatencyStats', () => {
   let mockWebSocketInstance: MockWebSocket | null;
