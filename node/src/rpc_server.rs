@@ -10,7 +10,6 @@ use crate::stratum::BlockTemplate;
 #[cfg(test)]
 use crate::utils::compute_block_hash;
 use crate::utils::BeadHash;
-use bitcoin::block::HeaderExt;
 use bitcoin::Transaction;
 use futures::lock::Mutex;
 use jsonrpsee::core::async_trait;
