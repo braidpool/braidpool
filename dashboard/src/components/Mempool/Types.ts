@@ -3,18 +3,18 @@ type MoneyValue = number | string | null;
 export interface Fee {
   sats_per_vbyte: number;
   fee_btc: MoneyValue;
-  fee_usd: MoneyValue;
-  fee_eur: MoneyValue;
-  fee_jpy: MoneyValue;
-  fee_gbp: MoneyValue;
-  fee_cad: MoneyValue;
-  fee_aud: MoneyValue;
-  fee_chf: MoneyValue;
-  fee_inr: MoneyValue;
-  fee_krw: MoneyValue;
-  fee_brl: MoneyValue;
-  fee_hkd: MoneyValue;
-  fee_sgd: MoneyValue;
+  fee_usd?: MoneyValue;
+  fee_eur?: MoneyValue;
+  fee_jpy?: MoneyValue;
+  fee_gbp?: MoneyValue;
+  fee_cad?: MoneyValue;
+  fee_aud?: MoneyValue;
+  fee_chf?: MoneyValue;
+  fee_inr?: MoneyValue;
+  fee_krw?: MoneyValue;
+  fee_brl?: MoneyValue;
+  fee_hkd?: MoneyValue;
+  fee_sgd?: MoneyValue;
 }
 
 export interface BlockFeeHistoryItem {
