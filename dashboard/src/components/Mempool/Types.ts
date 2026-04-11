@@ -40,18 +40,18 @@ export interface MempoolStats {
   count: number;
   vsize: number;
   total_fee_btc: MoneyValue;
-  total_fee_usd: MoneyValue;
-  total_fee_eur: MoneyValue;
-  total_fee_jpy: MoneyValue;
-  total_fee_gbp: MoneyValue;
-  total_fee_cad: MoneyValue;
-  total_fee_aud: MoneyValue;
-  total_fee_chf: MoneyValue;
-  total_fee_inr: MoneyValue;
-  total_fee_krw: MoneyValue;
-  total_fee_brl: MoneyValue;
-  total_fee_hkd: MoneyValue;
-  total_fee_sgd: MoneyValue;
+  total_fee_usd?: MoneyValue;
+  total_fee_eur?: MoneyValue;
+  total_fee_jpy?: MoneyValue;
+  total_fee_gbp?: MoneyValue;
+  total_fee_cad?: MoneyValue;
+  total_fee_aud?: MoneyValue;
+  total_fee_chf?: MoneyValue;
+  total_fee_inr?: MoneyValue;
+  total_fee_krw?: MoneyValue;
+  total_fee_brl?: MoneyValue;
+  total_fee_hkd?: MoneyValue;
+  total_fee_sgd?: MoneyValue;
 }
 
 export interface CurrencyRates {
