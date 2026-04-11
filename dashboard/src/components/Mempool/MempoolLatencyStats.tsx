@@ -246,11 +246,12 @@ const MempoolLatencyStats = () => {
       time: item.time || String(item.timestamp || ''),
       ...CURRENCIES.reduce(
         (acc, c) => {
-          const raw = (item as unknown as Record<string, number>)[c];
-          acc[c] = isNaN(Number(raw)) ? 0 : Number(raw);
+          const raw = (item as unknown as Record<string, unknown>)[c];
+          const value = Number(raw);
+          acc[c] = Number.isFinite(value) ? value : null;
           return acc;
         },
-        {} as Record<string, number>
+        {} as Record<string, number | null>
       ),
     })
   );
