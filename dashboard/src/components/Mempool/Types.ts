@@ -22,18 +22,18 @@ export interface BlockFeeHistoryItem {
   time: string;
   timestamp?: number;
   btc: MoneyValue;
-  usd: MoneyValue;
-  eur: MoneyValue;
-  jpy: MoneyValue;
-  gbp: MoneyValue;
-  cad: MoneyValue;
-  aud: MoneyValue;
-  chf: MoneyValue;
-  inr: MoneyValue;
-  krw: MoneyValue;
-  brl: MoneyValue;
-  hkd: MoneyValue;
-  sgd: MoneyValue;
+  usd?: MoneyValue;
+  eur?: MoneyValue;
+  jpy?: MoneyValue;
+  gbp?: MoneyValue;
+  cad?: MoneyValue;
+  aud?: MoneyValue;
+  chf?: MoneyValue;
+  inr?: MoneyValue;
+  krw?: MoneyValue;
+  brl?: MoneyValue;
+  hkd?: MoneyValue;
+  sgd?: MoneyValue;
 }
 
 export interface MempoolStats {
