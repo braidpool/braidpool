@@ -132,7 +132,7 @@ describe('fetchMempoolStats', () => {
     const result = await fetchMempoolStats();
 
     expect(result).not.toBeNull();
-    expect(result?.btc_price_usd).toBeUndefined();
+    expect(result?.btc_price_usd).toBeNull();
     expect(result?.mempool.total_fee_usd).toBeUndefined();
     expect(result?.next_block_fees.fee_usd).toBeUndefined();
     expect(consoleErrorSpy).toHaveBeenCalledWith(
@@ -159,7 +159,7 @@ describe('fetchMempoolStats', () => {
     const result = await fetchMempoolStats();
 
     expect(result).not.toBeNull();
-    expect(result?.btc_price_usd).toBeUndefined();
+    expect(result?.btc_price_usd).toBeNull();
     expect(result?.mempool.total_fee_usd).toBeUndefined();
     expect(result?.next_block_fees.fee_usd).toBeUndefined();
     expect(consoleWarnSpy).toHaveBeenCalledWith(

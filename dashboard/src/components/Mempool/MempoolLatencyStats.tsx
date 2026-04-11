@@ -133,16 +133,21 @@ const MempoolLatencyStats = () => {
     []
   );
   const [wsConnected, setWsConnected] = useState(false);
+  const [wsStatusMessage, setWsStatusMessage] = useState(
+    'Connecting to live mempool feed...'
+  );
 
   useEffect(() => {
     const ws = new WebSocket(WEBSOCKET_URLS.MAIN_WEBSOCKET);
     wsRef.current = ws;
     ws.onopen = () => {
       setWsConnected(true);
+      setWsStatusMessage('');
       console.log('[WebSocket] Connected');
     };
     ws.onerror = (err) => {
       setWsConnected(false);
+      setWsStatusMessage('Live updates unavailable. Retrying connection...');
       console.error('[WebSocket] Error:', err);
     };
     ws.onmessage = (event) => {
@@ -175,6 +180,7 @@ const MempoolLatencyStats = () => {
 
     ws.onclose = () => {
       setWsConnected(false);
+      setWsStatusMessage('Disconnected from live updates. Retrying...');
       console.log('[WebSocket] Disconnected');
     };
 
@@ -195,6 +201,9 @@ const MempoolLatencyStats = () => {
         <div className="flex flex-col items-center">
           <Loader className="h-8 w-8 text-[#0077B6] animate-spin" />
           <p className="mt-4 text-[#0077B6]">Loading Mempool Stats...</p>
+          {!wsConnected && wsStatusMessage ? (
+            <p className="mt-2 text-sm text-gray-400">{wsStatusMessage}</p>
+          ) : null}
         </div>
       </div>
     );
@@ -385,11 +394,20 @@ const MempoolLatencyStats = () => {
                 padding: '15px',
                 fontSize: '14px',
               }}
-              formatter={(value: number, name: string) => [
-                CURRENCY_FORMAT[name as Currency]?.(value) ??
-                  `${Number(value).toFixed(2)}`,
-                currencyLabels[name] || name.toUpperCase(),
-              ]}
+              formatter={(value: unknown, name: string) => {
+                const label = currencyLabels[name] || name.toUpperCase();
+                const numericValue = toFiniteNumber(value);
+
+                if (numericValue === null) {
+                  return ['--', label];
+                }
+
+                return [
+                  CURRENCY_FORMAT[name as Currency]?.(numericValue) ??
+                    `${numericValue.toFixed(2)}`,
+                  label,
+                ];
+              }}
             />
             <Legend />
 

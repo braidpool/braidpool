@@ -267,7 +267,7 @@ export async function fetchMempoolStats() {
         economy: convertFee(economyFee),
         minimum: convertFee(minimumFee),
       },
-      btc_price_usd: btcRates.USD,
+      btc_price_usd: btcRates.USD ?? null,
       fee_distribution: feeDistribution,
       block_fee_history: blockfeeHistory,
     };
