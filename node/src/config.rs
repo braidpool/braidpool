@@ -2,6 +2,8 @@ use bitcoin::Network;
 use core::panic;
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::io;
+use std::path::Path;
 #[derive(Deserialize, Serialize, Clone)]
 pub struct NetworkConfig {
     //Address to which the current braidpool node will bind to
@@ -39,6 +41,9 @@ pub struct BraidpoolConfig {
 pub struct BraidRpcConfig {
     pub rpc_server_addr: String,
 }
+
+pub const DEFAULT_CONFIG_FILENAME: &str = "braidpool-config.toml";
+
 impl Default for BraidRpcConfig {
     fn default() -> Self {
         BraidRpcConfig {
@@ -46,19 +51,45 @@ impl Default for BraidRpcConfig {
         }
     }
 }
+
+impl Default for BraidpoolConfig {
+    fn default() -> Self {
+        toml::from_str(include_str!("default_braidpool_config.toml"))
+            .expect("default braidpool config should be valid")
+    }
+}
+
 #[allow(dead_code)]
 impl BraidpoolConfig {
-    pub fn load_from_config_file(path: &str) -> BraidpoolConfig {
-        let contents = match fs::read_to_string(path) {
-            Ok(c) => c,
-            Err(error) => {
-                panic!("An error occurred while reading the file {}", error);
-            }
-        };
-        let config: BraidpoolConfig = toml::from_str(&contents).unwrap();
-
-        config
+    pub fn load_from_config_path(path: &Path) -> Result<BraidpoolConfig, io::Error> {
+        let contents = fs::read_to_string(path)?;
+        toml::from_str(&contents).map_err(|error| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "Failed to parse braidpool config at {}: {}",
+                    path.display(),
+                    error
+                ),
+            )
+        })
     }
+
+    pub fn load_from_config_file(path: &str) -> BraidpoolConfig {
+        Self::load_from_config_path(Path::new(path)).unwrap_or_else(|error| {
+            panic!("An error occurred while loading the config file {}", error);
+        })
+    }
+
+    pub fn load_from_datadir(datadir: &Path) -> Result<BraidpoolConfig, io::Error> {
+        let config_path = datadir.join(DEFAULT_CONFIG_FILENAME);
+        if !config_path.exists() {
+            return Ok(BraidpoolConfig::default());
+        }
+
+        Self::load_from_config_path(&config_path)
+    }
+
     pub fn with_listen_address(mut self, listen_address: String) -> Self {
         self.braidnetwork_config.listen_address = listen_address;
         return self;
@@ -132,11 +163,13 @@ impl CoinbaseConfig {
 
 #[cfg(test)]
 mod test {
+    use std::fs;
     use std::path::Path;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     use bitcoin::Network;
 
-    use crate::config::{BraidRpcConfig, MinerConfig};
+    use crate::config::{BraidRpcConfig, MinerConfig, DEFAULT_CONFIG_FILENAME};
 
     use super::{BitcoinConfig, BraidDirectoryConfig, BraidpoolConfig, NetworkConfig};
     #[test]
@@ -205,5 +238,64 @@ mod test {
             from_file.braid_rpc_config.rpc_server_addr,
             built.braid_rpc_config.rpc_server_addr
         );
+    }
+
+    #[test]
+    fn load_from_datadir_uses_default_when_config_is_missing() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp_dir = std::env::temp_dir().join(format!("braidpool-config-test-{}", unique));
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let config = BraidpoolConfig::load_from_datadir(&temp_dir).unwrap();
+
+        assert_eq!(
+            config.braid_rpc_config.rpc_server_addr,
+            BraidpoolConfig::default().braid_rpc_config.rpc_server_addr
+        );
+
+        fs::remove_dir_all(temp_dir).unwrap();
+    }
+
+    #[test]
+    fn load_from_datadir_reads_rpc_addr_from_config_file() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp_dir = std::env::temp_dir().join(format!("braidpool-config-test-{}", unique));
+        fs::create_dir_all(&temp_dir).unwrap();
+        let config_path = temp_dir.join(DEFAULT_CONFIG_FILENAME);
+        let config_contents = r#"
+[braidnetwork_config]
+listen_address = "/ip4/127.0.0.1/tcp/6885"
+peer_nodes = []
+
+[braid_directory]
+path = "~/.braidpool"
+
+[miner_config]
+miner_pubkey = ""
+
+[bitcoin_config]
+network = "cpunet"
+username = "username"
+password = "password"
+cookie_path = "~/.bitcoin/regtest/.cookie"
+port = "18443"
+bitcoind_ip = "0.0.0.0"
+
+[braid_rpc_config]
+rpc_server_addr = "127.0.0.1:7777"
+"#;
+        fs::write(&config_path, config_contents).unwrap();
+
+        let config = BraidpoolConfig::load_from_datadir(&temp_dir).unwrap();
+
+        assert_eq!(config.braid_rpc_config.rpc_server_addr, "127.0.0.1:7777");
+
+        fs::remove_dir_all(temp_dir).unwrap();
     }
 }

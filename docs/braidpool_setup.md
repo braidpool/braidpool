@@ -60,6 +60,8 @@ You can find all available command-line arguments in [node/src/cli.rs](https://g
 -   `--ipc-socket <PATH>`: Specifies the path to the UNIX domain socket file (should be the same as bitcoin node).
 -   `--network <NETWORK>`: Sets the network. Valid options are `mainnet`, `testnet4`, `signet`, and `cpunet`. The default is `mainnet`.
 
+If `~/.braidpool/braidpool-config.toml` exists, the node will also load `braid_rpc_config.rpc_server_addr` from that config file when binding the JSON-RPC server.
+
 ## Setting up cpuminer for downstream connection
   - If you don't have a physical miner, you can do tests with CPUMiner.
   - Firstly installation of `cpuminer` for connecting a downstream to the stratum service (can be done by any external ASIC device or cpu based).

@@ -22,6 +22,7 @@ use node::{
     bead::{Bead, BeadHashes, BeadRequest, BeadResponse, BeadSyncError},
     behaviour::{self, BEAD_ANNOUNCE_PROTOCOL, BRAIDPOOL_TOPIC},
     braid, cli,
+    config::BraidpoolConfig,
     db::db_handlers::DBHandler,
     ibd_manager::{IBDCommands, IBDManager, IBD_BATCH_SIZE},
     ipc_template_consumer,
@@ -226,6 +227,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     let datadir_path = Path::new(&*datadir);
+    let node_config = BraidpoolConfig::load_from_datadir(datadir_path).map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("Failed to load node config: {}", e),
+        )
+    })?;
     let keystore_path = datadir_path.join("keystore");
     #[cfg(unix)]
     {
@@ -387,15 +394,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Create RPC proxy command channel - sender goes to RPC server, receiver goes to IPC handler
     let (rpc_proxy_tx, rpc_proxy_rx) = tokio::sync::mpsc::unbounded_channel::<RpcProxyCommand>();
     // peer_manager_arc is created above and shared between swarm and RPC server
-    //spawning the rpc server
-    let rpc_addr = "127.0.0.1:6682"; // TODO: Load from config file
+    // Use the configured RPC bind address when present; otherwise fall back to the default config.
+    let rpc_addr = node_config.braid_rpc_config.rpc_server_addr.clone();
     let bitcoin_rpc_config = BitcoinRpcConfig::from_cli_args(&args).unwrap_or_else(|e| {
         eprintln!("Error: {}", e);
         std::process::exit(1);
     });
     let server_join = tokio::spawn(run_rpc_server(
         Arc::clone(&braid),
-        rpc_addr,
+        &rpc_addr,
         peer_manager_arc.clone(),
         connection_mapping_for_rpc.clone(),
         latest_template.clone(),
