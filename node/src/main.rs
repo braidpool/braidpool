@@ -228,10 +228,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let datadir_path = Path::new(&*datadir);
     let node_config = BraidpoolConfig::load_from_datadir(datadir_path).map_err(|e| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            format!("Failed to load node config: {}", e),
-        )
+        std::io::Error::new(e.kind(), format!("Failed to load node config: {}", e))
     })?;
     let keystore_path = datadir_path.join("keystore");
     #[cfg(unix)]
@@ -400,15 +397,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
         eprintln!("Error: {}", e);
         std::process::exit(1);
     });
-    let server_join = tokio::spawn(run_rpc_server(
-        Arc::clone(&braid),
-        &rpc_addr,
-        peer_manager_arc.clone(),
-        connection_mapping_for_rpc.clone(),
-        latest_template.clone(),
-        rpc_proxy_tx,
-        bitcoin_rpc_config,
-    ));
+    let braid_for_rpc = Arc::clone(&braid);
+    let peer_manager_for_rpc = peer_manager_arc.clone();
+    let connection_mapping_for_rpc_task = connection_mapping_for_rpc.clone();
+    let latest_template_for_rpc = latest_template.clone();
+    let server_join = tokio::spawn(async move {
+        run_rpc_server(
+            braid_for_rpc,
+            &rpc_addr,
+            peer_manager_for_rpc,
+            connection_mapping_for_rpc_task,
+            latest_template_for_rpc,
+            rpc_proxy_tx,
+            bitcoin_rpc_config,
+        )
+        .await
+    });
     match server_join.await {
         Ok(Ok(_addr)) => {}
         Ok(Err(())) => {

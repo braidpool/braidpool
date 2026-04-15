@@ -60,7 +60,7 @@ You can find all available command-line arguments in [node/src/cli.rs](https://g
 -   `--ipc-socket <PATH>`: Specifies the path to the UNIX domain socket file (should be the same as bitcoin node).
 -   `--network <NETWORK>`: Sets the network. Valid options are `mainnet`, `testnet4`, `signet`, and `cpunet`. The default is `mainnet`.
 
-If `~/.braidpool/braidpool-config.toml` exists, the node will also load `braid_rpc_config.rpc_server_addr` from that config file when binding the JSON-RPC server.
+If `<datadir>/braidpool-config.toml` exists, the node will also load `braid_rpc_config.rpc_server_addr` from that config file when binding the JSON-RPC server. Here, `<datadir>` is the directory passed via `--datadir` or the default data directory if `--datadir` is not provided. The file must be a complete, valid `BraidpoolConfig` TOML document, not just a `[braid_rpc_config]` snippet.
 
 ## Setting up cpuminer for downstream connection
   - If you don't have a physical miner, you can do tests with CPUMiner.
