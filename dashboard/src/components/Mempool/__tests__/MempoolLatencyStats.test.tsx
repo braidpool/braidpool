@@ -533,7 +533,7 @@ describe('MempoolLatencyStats', () => {
     });
   });
 
-  describe('View Toggle Functionality', () => {
+  describe('Shared Currency Selector', () => {
     beforeEach(async () => {
       render(<MempoolLatencyStats />);
 
@@ -550,10 +550,10 @@ describe('MempoolLatencyStats', () => {
       });
     });
 
-    test('renders currency select dropdown', async () => {
+    test('renders shared currency select dropdown', async () => {
       await waitFor(() => {
         const selectElement = screen.getByRole('combobox', {
-          name: 'Block fee chart currency view',
+          name: 'Overview currency',
         });
         expect(selectElement).toBeInTheDocument();
         expect(selectElement).toHaveValue('btc');
@@ -564,13 +564,13 @@ describe('MempoolLatencyStats', () => {
       await waitFor(() => {
         expect(
           screen.getByRole('combobox', {
-            name: 'Block fee chart currency view',
+            name: 'Overview currency',
           })
         ).toBeInTheDocument();
       });
 
       const selectElement = screen.getByRole('combobox', {
-        name: 'Block fee chart currency view',
+        name: 'Overview currency',
       });
 
       // Check all options exist
@@ -586,23 +586,30 @@ describe('MempoolLatencyStats', () => {
       expect(optionValues).not.toContain('all');
     });
 
-    test('changes view when selecting different currency', async () => {
+    test('changes block fee chart currency when selecting different currency', async () => {
       await waitFor(() => {
         const selectElement = screen.getByRole('combobox', {
-          name: 'Block fee chart currency view',
+          name: 'Overview currency',
         });
         fireEvent.change(selectElement, { target: { value: 'usd' } });
         expect(selectElement).toHaveValue('usd');
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('line-usd')).toBeInTheDocument();
+        expect(screen.queryByTestId('line-btc')).not.toBeInTheDocument();
       });
     });
 
     test('defaults to "btc" view initially', async () => {
       await waitFor(() => {
         const selectElement = screen.getByRole('combobox', {
-          name: 'Block fee chart currency view',
+          name: 'Overview currency',
         });
         expect(selectElement).toHaveValue('btc');
       });
+
+      expect(screen.getByTestId('line-btc')).toBeInTheDocument();
     });
 
     test('shows placeholder when selected total fee currency is missing', async () => {

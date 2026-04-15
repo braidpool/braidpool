@@ -125,7 +125,6 @@ const MempoolLatencyStats = () => {
 
   const [mempoolData, setMempoolData] = useState<MempoolData | null>(null);
   const [selectedCurrency, setSelectedCurrency] = useState<Currency>('btc');
-  const [selectedView, setSelectedView] = useState<Currency>('btc');
   const [blockFeeHistory, setBlockFeeHistory] = useState<BlockFeeHistoryItem[]>(
     []
   );
@@ -327,53 +326,12 @@ const MempoolLatencyStats = () => {
             />
           </div>
         </div>
-
-        {/* --- Fee Rate Distribution --- */}
-        <div className="shadow p-6">
-          <h3 className="text-lg font-semibold text-center mb-4">
-            Live Fee Rate Distribution
-          </h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={feeDistChartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis dataKey="name" stroke="#9ca3af" />
-                <YAxis stroke="#9ca3af" />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#1f2937',
-                    borderRadius: '8px',
-                    border: 'none',
-                    color: '#ffffff',
-                    padding: '10px',
-                    fontSize: '14px',
-                  }}
-                />
-                <Bar dataKey="value" fill={colors.primary} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
       </section>
 
       {/* --- Block Fee Chart --- */}
       <section className="shadow p-6">
-        <div className="flex justify-between items-center mb-4 flex-wrap">
+        <div className="mb-4">
           <h2 className="text-lg font-semibold">Live Block Fees</h2>
-
-          <select
-            value={selectedView}
-            onChange={(e) => setSelectedView(e.target.value as Currency)}
-            aria-label="Block fee chart currency view"
-            title={`Select chart currency (${currencyFullNames[selectedView]})`}
-            className="bg-[#1a1a1a] text-gray-300 px-4 py-2 rounded-md shadow-md border border-white"
-          >
-            {CURRENCIES.map((c) => (
-              <option key={c} value={c} title={currencyFullNames[c]}>
-                {currencyLabels[c]}
-              </option>
-            ))}
-          </select>
         </div>
 
         <ResponsiveContainer width="100%" height={400}>
@@ -408,7 +366,7 @@ const MempoolLatencyStats = () => {
             <Legend />
 
             {CURRENCIES.map((c) => {
-              const show = selectedView === c;
+              const show = selectedCurrency === c;
               return show ? (
                 <Line
                   key={c}
@@ -423,6 +381,33 @@ const MempoolLatencyStats = () => {
             })}
           </LineChart>
         </ResponsiveContainer>
+      </section>
+
+      {/* --- Fee Rate Distribution --- */}
+      <section className="shadow p-6">
+        <h3 className="text-lg font-semibold text-center mb-4">
+          Live Fee Rate Distribution
+        </h3>
+        <div className="h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={feeDistChartData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+              <XAxis dataKey="name" stroke="#9ca3af" />
+              <YAxis stroke="#9ca3af" />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: '#1f2937',
+                  borderRadius: '8px',
+                  border: 'none',
+                  color: '#ffffff',
+                  padding: '10px',
+                  fontSize: '14px',
+                }}
+              />
+              <Bar dataKey="value" fill={colors.primary} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       </section>
     </div>
   );
