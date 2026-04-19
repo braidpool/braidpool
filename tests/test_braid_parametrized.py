@@ -17,13 +17,10 @@ from braid import (
     work_sort_key,
     highest_work_path,
     check_cohort,
-    check_cohort_ancestors,
     load_braid,
     save_braid,
     number_beads,
     layout,
-    FIXED_BEAD_WORK,
-    TEST_CASE_DIR,
 )
 
 

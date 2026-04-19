@@ -1,6 +1,6 @@
 import os
 import pytest
-from braid import load_braid, make_dag, reverse
+from braid import load_braid
 
 # directory containing JSON braid fixture files
 BRAIDS_DIR = os.path.join(os.path.dirname(__file__), "braids")
@@ -15,9 +15,12 @@ def _collect_fixture_files():
 _FIXTURE_FILES = _collect_fixture_files()
 
 
-@pytest.fixture(params=_FIXTURE_FILES, ids=[f.removesuffix(".json") for f in _FIXTURE_FILES])
+@pytest.fixture(params=_FIXTURE_FILES, ids=[os.path.splitext(f)[0] for f in _FIXTURE_FILES], scope="session")
 def braid_fixture(request):
-    """Load a single JSON braid fixture and return (filename, dag dict)."""
+    """
+    Load a single JSON braid fixture and return (filename, dag dict).
+    Scoped to *session* so each JSON file is parsed only once for the entire test suite.
+    """
     filename = request.param
     dag = load_braid(os.path.join(BRAIDS_DIR, filename))
     return filename, dag
