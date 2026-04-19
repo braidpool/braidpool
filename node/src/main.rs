@@ -557,12 +557,30 @@ async fn main() -> Result<(), Box<dyn Error>> {
                          match result_bead {
                              Ok(bead) => {
                                 debug!(bead = ?bead, hash = %bead.block_header.block_hash(), "Received bead");
-                                // Handle the received bead here
-                                let mut braid_data = braid.write().await;
-                                let status = {
-                                    braid_data.extend(&bead)
+                                // Keep the braid write lock scope minimal and do async work after drop.
+                                let (status, bead_mapping_ref, bead_id_opt, removed_orphans) = {
+                                    let mut braid_data = braid.write().await;
+                                    let status = braid_data.extend(&bead);
+                                    let bead_mapping_ref = braid_data.bead_index_mapping.clone();
+                                    let mut bead_id_opt: Option<usize> = None;
+                                    let mut removed_orphans: Vec<Bead> = Vec::new();
+
+                                    if let braid::AddBeadStatus::BeadAdded = status {
+                                        if let Some(id) = braid_data
+                                            .bead_index_mapping
+                                            .get(&bead.block_header.block_hash())
+                                        {
+                                            let bead_id = id.0;
+                                            bead_id_opt = Some(bead_id);
+                                            if bead_id + 1 < braid_data.beads.len() {
+                                                removed_orphans =
+                                                    braid_data.beads[bead_id + 1..].iter().cloned().collect();
+                                            }
+                                        }
+                                    }
+
+                                    (status, bead_mapping_ref, bead_id_opt, removed_orphans)
                                 };
-                                let bead_mapping_ref = braid_data.bead_index_mapping.clone();
                                 if let braid::AddBeadStatus::ParentsNotYetReceived = status {
                                     // There is no need to request parents immediately they will be solved upon bead received as per the
                                     // latency of mesh and the self mined beads and their propagation via `extend` functionality
@@ -576,19 +594,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                 } else if let braid::AddBeadStatus::BeadAdded = status {
                                     //If the current bead's extension has further led to removal of orphan beads then
                                     //We can get the orphan beads that we can persist in DB also
-                                    let bead_id = match braid_data
-                                        .bead_index_mapping
-                                        .get(&bead.block_header.block_hash()) {
-                                        Some(id) => id.0,
+                                    let bead_id = match bead_id_opt {
+                                        Some(id) => id,
                                         None => {
                                             error!(bead_hash = ?bead.block_header.block_hash(), "Bead ID not found in index mapping");
                                             continue;
                                         }
                                     };
-                                    let mut removed_orphans: Vec<Bead> = Vec::new();
-                                    if bead_id + 1 < braid_data.beads.len() {
+                                    if !removed_orphans.is_empty() {
                                         warn!("Orphan beads removed from the orphan set upon extension of current bead");
-                                        removed_orphans = braid_data.beads[bead_id + 1..].iter().cloned().collect();
                                     } else {
                                         debug!("No orphan beads to remove upon extension of current bead");
                                     }
@@ -907,8 +921,29 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     let mut bead_index_mapping = HashMap::new();
 
                                     for bead in beads.iter() {
-                                        let mut braid_data = braid.write().await;
-                                        let status = braid_data.extend(&bead);
+                                        let (status, curr_bead_mapping, removed_orphans) = {
+                                            let mut braid_data = braid.write().await;
+                                            let status = braid_data.extend(&bead);
+                                            let curr_beadhash = bead.block_header.block_hash();
+                                            let mut curr_bead_mapping = HashMap::new();
+                                            let mut removed_orphans: Vec<Bead> = Vec::new();
+
+                                            if let braid::AddBeadStatus::BeadAdded = status {
+                                                curr_bead_mapping = braid_data.bead_index_mapping.clone();
+                                                if let Some((bead_id, _)) = curr_bead_mapping.get(&curr_beadhash)
+                                                {
+                                                    if bead_id + 1 < braid_data.beads.len() {
+                                                        debug!("Orphan beads removed from the orphan set upon extension of current bead");
+                                                        removed_orphans = braid_data.beads[*bead_id + 1..]
+                                                            .iter()
+                                                            .cloned()
+                                                            .collect();
+                                                    }
+                                                }
+                                            }
+
+                                            (status, curr_bead_mapping, removed_orphans)
+                                        };
                                         let curr_beadhash = bead.block_header.block_hash();
 
                                         if let braid::AddBeadStatus::InvalidBead = status {
@@ -919,24 +954,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                             }
                                         } else if let braid::AddBeadStatus::BeadAdded = status {
                                             // Update bead index mapping for batch insert
-                                            bead_index_mapping = braid_data.bead_index_mapping.clone();
-
-                                            //If the current bead's extension has further led to removal of orphan beads then
-                                            //we can get the orphan beads that we can persist in DB also
-                                            let bead_id = match bead_index_mapping.get(&curr_beadhash) {
-                                                Some((id, _)) => *id,
-                                                None => {
-                                                    error!(beadhash = %curr_beadhash, "Bead index not found after add");
-                                                    continue;
-                                                }
-                                            };
-
-                                            if bead_id + 1 < braid_data.beads.len() {
-                                                debug!("Orphan beads removed from the orphan set upon extension of current bead");
-                                                let removed_orphans: Vec<Bead> = braid_data.beads[bead_id + 1..].iter().cloned().collect();
-                                                all_removed_orphans.extend(removed_orphans);
-                                            }
-
+                                            bead_index_mapping = curr_bead_mapping;
+                                            all_removed_orphans.extend(removed_orphans);
                                             // Update score of the peer
                                             {
                                                 let mut peer_manager = peer_manager_arc.write().await;
@@ -1089,15 +1108,28 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     info!(tips = ?tips, tip_count = %tips.len(), "Received braid tips");
                                     //If received tips are already present in the local braid arc then we can stop
                                     //IBD and continue with mining
-                                    let braid_data = braid.read().await;
+                                    let (flag, current_tip_hashes) = {
+                                        let braid_data = braid.read().await;
 
-                                    let bead_hash_set: HashSet<BeadHash> = braid_data
-                                    .beads
-                                    .iter()
-                                    .map(|b| b.block_header.block_hash())
-                                    .collect();
+                                        let bead_hash_set: HashSet<BeadHash> = braid_data
+                                            .beads
+                                            .iter()
+                                            .map(|b| b.block_header.block_hash())
+                                            .collect();
 
-                                    let flag = tips.iter().all(|tip_hash| bead_hash_set.contains(tip_hash));
+                                        let flag = tips.iter().all(|tip_hash| bead_hash_set.contains(tip_hash));
+
+                                        let mut current_tip_hashes = Vec::new();
+                                        for curr_bead_idx in braid_data.tips.iter() {
+                                            if let Some(current_bead) = braid_data.beads.get(*curr_bead_idx) {
+                                                current_tip_hashes.push(current_bead.block_header.block_hash());
+                                            } else {
+                                                error!(bead_idx = %curr_bead_idx, "Tip bead not found in beads list");
+                                            }
+                                        }
+
+                                        (flag, current_tip_hashes)
+                                    };
 
                                     if flag{
                                         //No need to proceed further and continue to next event
@@ -1111,14 +1143,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     // After storing tips we will issue `GetBeads` command that will find the oldest
                                     // common bead if any and will send the beadhashes of all the next beads this will either be the current tips or
                                     // the current genesis in all the cases in case of new braid-node this will be genesis otherwise it will always be tips
-                                    let mut current_tip_hashes = Vec::new();
-                                    for curr_bead_idx in braid_data.tips.iter() {
-                                        if let Some(current_bead) = braid_data.beads.get(*curr_bead_idx) {
-                                            current_tip_hashes.push(current_bead.block_header.block_hash());
-                                        } else {
-                                            error!(bead_idx = %curr_bead_idx, "Tip bead not found in beads list");
-                                        }
-                                    }
                                     // Sending the current bead hashes for the receiving of beads to start in batches
                                     let get_bead_start_request:BeadRequest = BeadRequest::GetBeadsAfter(BeadHashes(current_tip_hashes));
                                     swarm.behaviour_mut().bead_sync.send_request(&peer,get_bead_start_request);

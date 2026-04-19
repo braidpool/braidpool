@@ -471,15 +471,25 @@ impl DownstreamClient {
                 })
             }
         };
-        //Acquiring lock on the mining map and fetching the submitted job from the memory
-        let job_mapping = mining_job_map.lock().await;
-        let submitted_job = job_mapping.get_by_job_id(numeric_job_id).await?;
-        let template_id = job_mapping
-            .template_id_from_job_id(numeric_job_id)
-            .ok_or_else(|| StratumErrors::MiningJobNotFound {
-                job_id: Some(numeric_job_id),
-                template_id: None,
-            })?;
+        // Acquire the job map only long enough to snapshot data needed for validation.
+        let (submitted_job, template_id) = {
+            let job_mapping = mining_job_map.lock().await;
+            let template_id = job_mapping
+                .template_id_from_job_id(numeric_job_id)
+                .ok_or_else(|| StratumErrors::MiningJobNotFound {
+                    job_id: Some(numeric_job_id),
+                    template_id: None,
+                })?;
+            let submitted_job = job_mapping
+                .mining_jobs
+                .get(&template_id)
+                .cloned()
+                .ok_or_else(|| StratumErrors::MiningJobNotFound {
+                    job_id: Some(numeric_job_id),
+                    template_id: Some(template_id),
+                })?;
+            (submitted_job, template_id)
+        };
         //Building the coinbase and then eventually the block and testing for the validation against the
         //mainnet/regtest/cpunet/testnet difficulty or the weakshare local difficulty .
         let extranonce_1_hex = hex::encode(self.extranonce1.clone());
@@ -752,10 +762,11 @@ impl DownstreamClient {
                 });
             }
         };
-        let _swarm_command_sent = match swarm_handler
-            .lock()
-            .await
-            .command_sender
+        let swarm_command_sender = {
+            let handler = swarm_handler.lock().await;
+            handler.command_sender.clone()
+        };
+        let _swarm_command_sent = match swarm_command_sender
             .send(crate::SwarmCommand::PropagateMinedBead {
                 candidate_block: complete_block,
                 extranonce_2_raw_value,
@@ -1460,11 +1471,20 @@ impl Notifier {
                         .await
                         .downstream_channel_mapping
                         .clone();
+                    // Snapshot peer job maps first so outer map lock is not held during async work.
+                    let peer_job_maps: Vec<(String, Arc<Mutex<MiningJobMap>>)> = {
+                        let job_map_guard = self.job_map_arc.lock().await;
+                        job_map_guard
+                            .iter()
+                            .map(|(peer, map)| (peer.clone(), Arc::clone(map)))
+                            .collect()
+                    };
+
                     //We will receive the template from the IPC channel and construct a valid job
                     //from the provided template and pass onto the message_reciver in the handle connection for
                     // downstream communication to take place.
-                    for (peer_adr, mining_job_arc) in self.job_map_arc.lock().await.iter() {
-                        let connection_info = match connection_snapshot.get(peer_adr) {
+                    for (peer_adr, mining_job_arc) in peer_job_maps {
+                        let connection_info = match connection_snapshot.get(&peer_adr) {
                             Some(info) => info,
                             None => {
                                 warn!(
@@ -1479,7 +1499,6 @@ impl Notifier {
                         let mut template_for_job = template.clone();
                         template_for_job.transactions.remove(0);
 
-                        let mut curr_peer_mining_job_map = mining_job_arc.lock().await;
                         // Clean Jobs. If true, miners should abort their current work and immediately use the new job,
                         // even if it degrades hashrate in the short term. If false, they can still use the current job,
                         // but should move to the new one as soon as possible without impacting hashrate.
@@ -1534,9 +1553,12 @@ impl Notifier {
                             job_sent_time: unix_timestamp,
                         };
 
-                        let numeric_job_id = curr_peer_mining_job_map
-                            .insert_mining_job(template_id, job_details)
-                            .await;
+                        let numeric_job_id = {
+                            let mut curr_peer_mining_job_map = mining_job_arc.lock().await;
+                            curr_peer_mining_job_map
+                                .insert_mining_job(template_id, job_details)
+                                .await
+                        };
 
                         let job_notification_response = JobNotificationResponse {
                             method: "mining.notify".to_string(),
@@ -1617,16 +1639,16 @@ impl Notifier {
                         template_id = %current_template_id,
                         "Sending existing latest template to new miner"
                     );
-                    let global_peer_mining_job_map_arc = self.job_map_arc.lock().await;
-                    let current_peer_mining_job_map_arc =
+                    let current_peer_mining_job_map_arc = {
+                        let global_peer_mining_job_map_arc = self.job_map_arc.lock().await;
                         match global_peer_mining_job_map_arc.get(&new_downstream_addr) {
-                            Some(map) => map,
+                            Some(map) => Arc::clone(map),
                             None => {
                                 error!(peer = %new_downstream_addr, "No job map found for peer");
                                 continue;
                             }
-                        };
-                    let mut curr_peer_mining_job_map = current_peer_mining_job_map_arc.lock().await;
+                        }
+                    };
 
                     // Clean Jobs. If true, miners should abort their current work and immediately use the new job, even if it degrades hashrate in the short term.
                     // If false, they can still use the current job, but should move to the new one as soon as possible without impacting hashrate.
@@ -1672,9 +1694,13 @@ impl Notifier {
                                     coinbase_witness_commitment: job.coinbase_witness_commitment,
                                     job_sent_time: unix_timestamp,
                                 };
-                                let numeric_job_id = curr_peer_mining_job_map
-                                    .insert_mining_job(current_template_id, job_details)
-                                    .await;
+                                let numeric_job_id = {
+                                    let mut curr_peer_mining_job_map =
+                                        current_peer_mining_job_map_arc.lock().await;
+                                    curr_peer_mining_job_map
+                                        .insert_mining_job(current_template_id, job_details)
+                                        .await
+                                };
                                 let job_notification_response = JobNotificationResponse {
                                     method: "mining.notify".to_string(),
                                     params: json!([
@@ -1819,16 +1845,13 @@ impl Server {
         loop {
             tokio::select! {
                     event = listener.accept()=>{
-                 //shared ownership across all tasks and spawning a seperate downstream for each new connection
-                 let self_ = Arc::new(Mutex::new(DownstreamClient::default()));
-                        let (connection_id, connection_id_hex) = {
-                            let mut client = self_.lock().await;
-                    if let Some(ref submission_tx) = self.block_submission_tx {
-                         client.block_submission_tx = Some(submission_tx.clone());
-                     }
-                            let id = client.connection_id;
-                            (id, format!("{:x}", id))
-                        };
+                 // Each connection owns its client state; no shared client mutex is needed.
+                 let mut downstream_client = DownstreamClient::default();
+                        if let Some(ref submission_tx) = self.block_submission_tx {
+                             downstream_client.block_submission_tx = Some(submission_tx.clone());
+                         }
+                        let connection_id = downstream_client.connection_id;
+                        let connection_id_hex = format!("{:x}", connection_id);
                  //downstream miner mapping for associated jobs for a specific channel for downstream
                  let self_mining_map = Arc::new(Mutex::new(MiningJobMap::new()));
                  match event{
@@ -1852,7 +1875,7 @@ impl Server {
                                     peer = %peer_addr,
                                     "Miner connected"
                                 );
-                         self_.lock().await.downstream_ip = peer_addr.to_string();
+                         downstream_client.downstream_ip = peer_addr.to_string();
 
                          let connection_mapping_clone = Arc::clone(&self.downstream_connection_mapping);
                          let mining_job_map_clone = Arc::clone(&mining_job_map);
@@ -1860,7 +1883,7 @@ impl Server {
 
                          // catering each new connection as seperate process
                          tokio::spawn(async move{
-                             let _=  Self::handle_connection(self_.clone(),peer_addr,reader,writer,&mut downstream_rx,self_mining_map.clone(),downstream_tx,notification_sender,swarm_handler_arc_ref).await;
+                             let _=  Self::handle_connection(downstream_client,peer_addr,reader,writer,&mut downstream_rx,self_mining_map.clone(),downstream_tx,notification_sender,swarm_handler_arc_ref).await;
                              debug!(
                                         connection_id = %connection_id_hex,
                                         peer = %peer_addr_string,
@@ -1919,7 +1942,7 @@ impl Server {
     /// * `Err(Box<StratumErrors>)` – On stream reading/writing errors or if the request handling fails.
     ///
     pub async fn handle_connection(
-        downstream_client: Arc<Mutex<DownstreamClient>>,
+        mut downstream_client: DownstreamClient,
         peer_addr: SocketAddr,
         stream_reader: OwnedReadHalf,
         mut stream_writer: OwnedWriteHalf,
@@ -1934,10 +1957,7 @@ impl Server {
         let reader = BufReader::new(stream_reader);
         //reading incoming stream frame by frame
         let mut framed = FramedRead::new(reader, LinesCodec::new_with_max_length(MAX_LINE_LENGTH));
-        let connection_id_hex = {
-            let client = downstream_client.lock().await;
-            format!("{:x}", client.connection_id)
-        };
+        let connection_id_hex = format!("{:x}", downstream_client.connection_id);
         debug!(
             connection_id = %connection_id_hex,
             peer = %peer_addr,
@@ -1990,7 +2010,7 @@ impl Server {
                         //stratum or not .
                         match serde_json::from_str::<StandardRequest>(&line) {
                                 Ok(request) => {
-                         let server_request_res:Result<StratumResponses, StratumErrors> = downstream_client.lock().await.handle_client_to_server_request(request,mining_job_map.clone(),downstream_message_sender.clone(),notification_sender.clone(),peer_addr.to_string(),swarm_handler.clone()).await;
+                         let server_request_res:Result<StratumResponses, StratumErrors> = downstream_client.handle_client_to_server_request(request,mining_job_map.clone(),downstream_message_sender.clone(),notification_sender.clone(),peer_addr.to_string(),swarm_handler.clone()).await;
                          match server_request_res{
                             Ok(_)=>{
 
