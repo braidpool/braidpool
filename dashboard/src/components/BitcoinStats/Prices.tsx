@@ -29,7 +29,7 @@ type Currency = (typeof CURRENCIES)[number];
 const BitcoinPriceTracker: React.FC = () => {
   const [currency, setCurrency] = useState<Currency>('USD');
   const [transactions, setTransactions] = useState<any[]>([]);
-  const [rbfTransactions, setRbfTransactions] = useState<any[]>([]);
+  const [rbftransactions, setrbfTransactions] = useState<any[]>([]);
   const [priceData, setPriceData] = useState<PriceData | null>(null);
   const [globalStats, setGlobalStats] = useState<GlobalStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -41,88 +41,111 @@ const BitcoinPriceTracker: React.FC = () => {
   const [priceHistory, setPriceHistory] = useState<
     { price: number; time: string }[]
   >([]);
-  const currencyRef = useRef(currency);
-
+  // MAX_HISTORY_ITEMS is imported from BeadsTab/Constants
   const showSkeletons = loading || !isConnected || (!priceData && !globalStats);
+  const currencyRef = useRef(currency);
 
   useEffect(() => {
     currencyRef.current = currency;
   }, [currency]);
 
   useEffect(() => {
-    const fetch = async () => {
-      setTransactions((await getLatestTransactions()) as any[]);
-      setRbfTransactions((await latestRBFTransactions()) as any[]);
+    const fetchTransactions = async () => {
+      const data = await getLatestTransactions();
+      setTransactions(data as any[]);
     };
-    fetch();
-    const id = setInterval(fetch, 5000);
-    return () => clearInterval(id);
+    fetchTransactions();
+    const fetchRbfTransactions = async () => {
+      const data = await latestRBFTransactions();
+      setrbfTransactions(data as any[]);
+    };
+    fetchRbfTransactions();
+    const intervalId = setInterval(() => {
+      fetchTransactions();
+      fetchRbfTransactions();
+    }, 5000);
+    return () => clearInterval(intervalId);
   }, []);
 
   useEffect(() => {
-    const ws = new WebSocket(WEBSOCKET_URLS.MAIN_WEBSOCKET);
-    let mounted = true;
+    const websocket = new WebSocket(WEBSOCKET_URLS.MAIN_WEBSOCKET);
+    let isMounted = true;
 
-    ws.onopen = () => {
-      if (!mounted) return;
+    websocket.onopen = () => {
+      if (!isMounted) return;
+      console.log('Connected to WebSocket server');
       setIsConnected(true);
       setLoading(false);
     };
-    ws.onclose = () => {
-      if (!mounted) return;
-      setIsConnected(false);
-      setLoading(false);
-    };
-    ws.onmessage = (event) => {
-      if (!mounted) return;
+
+    websocket.onmessage = (event) => {
+      if (!isMounted) return;
       try {
         const data = JSON.parse(event.data);
-        if (data.type !== 'bitcoin_update') return;
-        const c = currencyRef.current;
-        const current = data.data.price?.[c]?.current;
-        const high24h = data.data.price?.[c]?.high24h;
-        const low24h = data.data.price?.[c]?.low24h;
+        if (data.type === 'bitcoin_update') {
+          const selectedCurrency = currencyRef.current;
+          const currentPrice = data.data.price?.[selectedCurrency]?.current;
+          const high24hPrice = data.data.price?.[selectedCurrency]?.high24h;
+          const low24hPrice = data.data.price?.[selectedCurrency]?.low24h;
+          const currencySymbol = getCurrencySymbol(selectedCurrency);
 
-        setPriceData((prev) => {
-          const prevPrice = prev?.current ?? current;
-          if (prevPrice !== current)
-            setPriceDirection(current > prevPrice ? 'up' : 'down');
-          return {
-            current,
-            high24h: Math.max(high24h, current),
-            low24h: Math.min(low24h, current),
-            currencySymbol: getCurrencySymbol(c),
-          };
-        });
+          setPriceData((prev) => {
+            const previousPrice = prev?.current ?? currentPrice;
+            if (previousPrice !== currentPrice) {
+              setPriceDirection(currentPrice > previousPrice ? 'up' : 'down');
+            }
+            return {
+              current: currentPrice,
+              high24h: Math.max(high24hPrice, currentPrice),
+              low24h: Math.min(low24hPrice, currentPrice),
+              currencySymbol,
+            };
+          });
 
-        if (data.data.global_stats) {
-          const g = data.data.global_stats;
-          setGlobalStats({
-            marketCap: formatLargeNumber(g.market_cap),
-            marketCapChange: g.market_cap_change,
-            activeCryptocurrencies: g.active_cryptocurrencies,
-            activeMarkets: g.active_markets,
-            bitcoinDominance: g.bitcoin_dominance * 100,
-            lastUpdated: new Date().toLocaleString(),
+          const now = new Date();
+          const timeString = now.toLocaleTimeString();
+
+          if (data.data.global_stats) {
+            setGlobalStats({
+              marketCap: formatLargeNumber(data.data.global_stats.market_cap),
+              marketCapChange: data.data.global_stats.market_cap_change,
+              activeCryptocurrencies:
+                data.data.global_stats.active_cryptocurrencies,
+              activeMarkets: data.data.global_stats.active_markets,
+              bitcoinDominance: data.data.global_stats.bitcoin_dominance * 100,
+              lastUpdated: now.toLocaleString(),
+            });
+          }
+
+          setPriceHistory((prev) => {
+            if (typeof currentPrice === 'number' && !isNaN(currentPrice)) {
+              const newHistory = [
+                ...prev.slice(-MAX_HISTORY_ITEMS),
+                { price: currentPrice, time: timeString },
+              ];
+              return newHistory.slice(-MAX_HISTORY_ITEMS);
+            }
+            return prev;
           });
         }
-
-        const time = new Date().toLocaleTimeString();
-        setPriceHistory((prev) => {
-          if (typeof current !== 'number' || isNaN(current)) return prev;
-          return [
-            ...prev.slice(-(MAX_HISTORY_ITEMS - 1)),
-            { price: current, time },
-          ];
-        });
-      } catch {
-        setError('Invalid data received');
+      } catch (err) {
+        console.error('Error parsing WebSocket message:', err);
+        setError('Invalid data format received');
       }
     };
 
+    websocket.onclose = () => {
+      if (!isMounted) return;
+      console.log('WebSocket disconnected');
+      setIsConnected(false);
+      setLoading(false);
+    };
+
     return () => {
-      mounted = false;
-      if (ws.readyState === WebSocket.OPEN) ws.close();
+      isMounted = false;
+      if (websocket.readyState === WebSocket.OPEN) {
+        websocket.close();
+      }
     };
   }, []);
 
@@ -432,7 +455,7 @@ const BitcoinPriceTracker: React.FC = () => {
         <p className="text-xs uppercase tracking-widest text-gray-400 mb-4">
           RBF transactions
         </p>
-        <RBFTransactionTable transactions={rbfTransactions} />
+        <RBFTransactionTable transactions={rbftransactions} />
       </div>
     </div>
   );
