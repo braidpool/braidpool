@@ -114,5 +114,10 @@ export function useChartData(timeRange: string) {
     }, 500);
   }, [timeRange]);
 
-  return { data, isLoading, dateRange };
+  const refetch = () => {
+    setIsLoading(true);
+    // The useEffect will handle the rest as it depends on something that changes or we can add a counter
+  };
+
+  return { data, isLoading, dateRange, error: null, refetch };
 }

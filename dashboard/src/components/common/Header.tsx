@@ -104,25 +104,30 @@ const Header: React.FC<HeaderProps> = ({ title = 'BRAIDPOOL' }) => {
           <Box
             sx={{
               display: { xs: 'none', md: 'flex' },
-              borderLeft: '1px solid rgba(255,255,255,0.2)',
-              height: 28,
-              mx: 2,
-              transform: 'translateY(-1px)', // Subtle adjustment to visually center
-            }}
-          />
-          <Box
-            component="span"
-            sx={{
-              display: { xs: 'none', md: 'flex' },
               alignItems: 'center',
-              color: colors.textLight,
-              fontSize: '0.9rem',
-              fontWeight: 500,
-              ml: 0.5,
-              transform: 'translateY(-1px)', // Subtle adjustment to visually center
+              backgroundColor: 'rgba(76, 175, 80, 0.1)',
+              color: colors.success,
+              px: 1.5,
+              py: 0.5,
+              borderRadius: 5,
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              border: `1px solid ${colors.success}40`,
+              ml: 1,
+              transform: 'translateY(-1px)',
             }}
           >
-            <MenuIcon sx={{ fontSize: '1.2rem', mr: 1 }} />
+            <Box
+              sx={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                bgcolor: colors.success,
+                mr: 1,
+                boxShadow: `0 0 8px ${colors.success}`,
+              }}
+            />
+            NODE: ONLINE
           </Box>
         </Box>
 

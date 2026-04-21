@@ -24,7 +24,7 @@ const ActionIconButton: React.FC<ActionIconButtonProps> = ({
         ${className}
       `}
     >
-      {React.cloneElement(icon, {
+      {React.cloneElement(icon as React.ReactElement<any>, {
         className: 'w-[18px] h-[18px] text-inherit',
       })}
     </button>

@@ -66,6 +66,28 @@ const PoolHashrateChart: React.FC<PoolHashrateChartProps> = ({
         .append('g')
         .attr('transform', `translate(${margin.left},${margin.top})`);
 
+      // Define gradient
+      const defs = svg.append('defs');
+      const gradient = defs
+        .append('linearGradient')
+        .attr('id', 'hashrate-gradient')
+        .attr('x1', '0%')
+        .attr('y1', '0%')
+        .attr('x2', '0%')
+        .attr('y2', '100%');
+
+      gradient
+        .append('stop')
+        .attr('offset', '0%')
+        .attr('stop-color', colors.primary)
+        .attr('stop-opacity', 0.4);
+
+      gradient
+        .append('stop')
+        .attr('offset', '100%')
+        .attr('stop-color', colors.primary)
+        .attr('stop-opacity', 0);
+
       // Set up scales
       const x = d3
         .scaleBand()
@@ -115,6 +137,21 @@ const PoolHashrateChart: React.FC<PoolHashrateChartProps> = ({
         .attr('stroke', colors.chartGrid)
         .attr('stroke-dasharray', '3,3');
 
+      // Create area generator
+      const area = d3
+        .area<{ time: string; value: number }>()
+        .x((d) => x(d.time)! + x.bandwidth() / 2)
+        .y0(chartHeight)
+        .y1((d) => y(d.value))
+        .curve(d3.curveMonotoneX);
+
+      // Add the area path
+      svg
+        .append('path')
+        .datum(data)
+        .attr('fill', 'url(#hashrate-gradient)')
+        .attr('d', area);
+
       // Create line generator
       const line = d3
         .line<{ time: string; value: number }>()
@@ -127,8 +164,8 @@ const PoolHashrateChart: React.FC<PoolHashrateChartProps> = ({
         .append('path')
         .datum(data)
         .attr('fill', 'none')
-        .attr('stroke', colors.chartLine)
-        .attr('stroke-width', 2.5)
+        .attr('stroke', colors.primary)
+        .attr('stroke-width', 3)
         .attr('d', line);
 
       // Add data points
@@ -140,9 +177,9 @@ const PoolHashrateChart: React.FC<PoolHashrateChartProps> = ({
         .attr('class', 'dot')
         .attr('cx', (d) => x(d.time)! + x.bandwidth() / 2)
         .attr('cy', (d) => y(d.value))
-        .attr('r', 4)
-        .attr('fill', colors.chartLine)
-        .attr('stroke', colors.chartBackground)
+        .attr('r', 5)
+        .attr('fill', colors.paper)
+        .attr('stroke', colors.primary)
         .attr('stroke-width', 2);
 
       // Add y-axis label
@@ -153,6 +190,7 @@ const PoolHashrateChart: React.FC<PoolHashrateChartProps> = ({
         .attr('x', -chartHeight / 2)
         .attr('text-anchor', 'middle')
         .style('fill', colors.textSecondary)
+        .style('font-weight', '500')
         .text('PH/s');
 
       // Add x-axis label
@@ -162,14 +200,8 @@ const PoolHashrateChart: React.FC<PoolHashrateChartProps> = ({
         .attr('x', width / 2)
         .attr('text-anchor', 'middle')
         .style('fill', colors.textSecondary)
-        .text('Time');
-
-      // Print debug info
-      console.log(
-        '🔄 Pool hashrate chart rendered with',
-        data.length,
-        'data points'
-      );
+        .style('font-weight', '500')
+        .text('Time (Relative)');
     } catch (err) {
       console.error('❌ Error rendering hashrate chart:', err);
       setError('Error rendering hashrate chart');

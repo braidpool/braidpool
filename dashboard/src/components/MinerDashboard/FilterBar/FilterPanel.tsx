@@ -1,10 +1,11 @@
+import React, { RefObject } from 'react';
 import { motion } from 'framer-motion';
 import { BEADS } from '../lib/constants';
 import { ChevronDown, Calendar, Search } from 'lucide-react';
 
 interface FilterPanelProps {
-  startRef: React.RefObject<HTMLInputElement>;
-  endRef: React.RefObject<HTMLInputElement>;
+  startRef: RefObject<HTMLInputElement | null>;
+  endRef: RefObject<HTMLInputElement | null>;
 }
 
 export default function FilterPanel({ startRef, endRef }: FilterPanelProps) {

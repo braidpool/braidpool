@@ -6,7 +6,7 @@ import CardHeader from '@mui/material/CardHeader';
 import CardTitle from '@mui/material/Typography';
 import '../../App.css';
 import Button from '@mui/material/Button';
-import { CircularProgress } from '@mui/material';
+import { CircularProgress, Box, Typography } from '@mui/material';
 
 interface GraphNode {
   id: string;
@@ -174,7 +174,7 @@ const GraphVisualization: React.FC = () => {
     return positions;
   };
 
-  const [_connectionStatus, setConnectionStatus] = useState('Disconnected');
+  const [connectionStatus, setConnectionStatus] = useState('Disconnected');
   const prevFirstCohortRef = useRef<string[]>([]);
   const prevLastCohortRef = useRef<string[]>([]);
 
@@ -397,14 +397,14 @@ const GraphVisualization: React.FC = () => {
       .select(tooltipRef.current)
       .style('position', 'fixed')
       .style('visibility', 'hidden')
-      .style('background', '#0077B6')
+      .style('background', '#1e1e1e')
       .style('color', 'white')
-      .style('border', '1px solid #FF8500')
-      .style('border-radius', '5px')
-      .style('padding', '10px')
-      .style('box-shadow', '2px 2px 5px rgba(0,0,0,0.2)')
+      .style('border', '1px solid rgba(255,255,255,0.1)')
+      .style('border-radius', '8px')
+      .style('padding', '12px')
+      .style('box-shadow', '0 4px 20px rgba(0,0,0,0.4)')
       .style('pointer-events', 'none')
-      .style('z-index', '10')
+      .style('z-index', '100')
       .style('bottom', '20px') // Position from bottom
       .style('right', '20px'); // Position from left
 
@@ -670,19 +670,62 @@ const GraphVisualization: React.FC = () => {
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen">
-        <div className="text-red-500 mb-4">Error: {error}</div>
-        <Button onClick={() => window.location.reload()}>Retry</Button>
-      </div>
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '400px',
+          p: 3,
+          textAlign: 'center',
+        }}
+      >
+        <Typography variant="h6" color="error" gutterBottom>
+          Connection Error
+        </Typography>
+        <Typography variant="body2" color="textSecondary" sx={{ mb: 3 }}>
+          Failed to connect to the Braidpool visualizer API at
+          ws://localhost:65433/. Ensure the simulator or node is running.
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={() => window.location.reload()}
+          >
+            Retry Connection
+          </Button>
+          <Button
+            variant="outlined"
+            onClick={() =>
+              window.open(
+                'https://github.com/braidpool/braidpool#running-the-node',
+                '_blank'
+              )
+            }
+          >
+            Setup Guide
+          </Button>
+        </Box>
+      </Box>
     );
   }
 
   if (!graphData) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen">
-        <div className="text-[#0077B6] mb-4">No graph data available</div>
-        <Button onClick={() => window.location.reload()}>Refresh</Button>
-      </div>
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '400px',
+        }}
+      >
+        <CircularProgress sx={{ mb: 2 }} />
+        <Typography color="textSecondary">Waiting for graph data...</Typography>
+      </Box>
     );
   }
 

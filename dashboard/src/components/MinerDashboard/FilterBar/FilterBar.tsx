@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Filter } from 'lucide-react';
 import DateRangePicker from '../DateRangePicker';
@@ -21,21 +21,8 @@ export function FilterBar({ timeRange, setTimeRange }: FilterBarProps) {
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.6, delay: 0.2, type: 'spring' }}
     >
-      {/* Animated border gradient */}
-      <div className="absolute inset-0 p-[1px] rounded-xl overflow-hidden pointer-events-none">
-        <motion.div
-          className="absolute inset-0 bg-gradient-to-r from-blue-500/30 via-purple-500/30 to-blue-500/30"
-          animate={{
-            backgroundPosition: ['0% 0%', '200% 0%'],
-          }}
-          transition={{
-            duration: 8,
-            repeat: Number.POSITIVE_INFINITY,
-            repeatType: 'loop',
-            ease: 'linear',
-          }}
-        />
-      </div>
+      {/* Subtle border accent */}
+      <div className="absolute top-0 left-0 w-1 h-full bg-[#3986e8]" />
 
       <div className="flex flex-col space-y-4">
         <div className="flex justify-between items-center">
@@ -55,6 +42,7 @@ export function FilterBar({ timeRange, setTimeRange }: FilterBarProps) {
               onClick={() => setShowFilters(!showFilters)}
             >
               <motion.div
+                className="flex items-center justify-center"
                 animate={{ rotate: showFilters ? 180 : 0 }}
                 transition={{ duration: 0.2 }}
               >

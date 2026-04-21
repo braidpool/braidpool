@@ -12,7 +12,7 @@ import { Layers } from 'lucide-react';
 import { TrendsTab } from './Trends/TrendsTab';
 
 export default function MinedSharesExplorer() {
-  const [expandedBeads, setExpandedBeads] = useState({
+  const [expandedBeads, setExpandedBeads] = useState<Record<string, boolean>>({
     bead1: true,
     bead2: false,
   });
@@ -168,9 +168,7 @@ export default function MinedSharesExplorer() {
 
           {!error && activeTab === 'blocks' && (
             <div className=" border border-gray-800/50 rounded-xl p-6 bg-black/30 backdrop-blur-md overflow-hidden">
-              {!error && activeTab === 'blocks' && (
-                <EnhancedBlocksTab timeRange={timeRange} />
-              )}
+              <EnhancedBlocksTab timeRange={timeRange} />
             </div>
           )}
         </div>

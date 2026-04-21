@@ -6,8 +6,10 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Box,
+  Paper,
   Typography,
+  Box,
+  Chip,
 } from '@mui/material';
 import Card from '../common/Card';
 import colors from '../../theme/colors';
@@ -97,6 +99,15 @@ const RecentBlocksTable: React.FC<RecentBlocksTableProps> = ({
                   fontWeight: 'bold',
                 }}
               >
+                Status
+              </TableCell>
+              <TableCell
+                sx={{
+                  backgroundColor: colors.paper,
+                  color: colors.textPrimary,
+                  fontWeight: 'bold',
+                }}
+              >
                 Time
               </TableCell>
             </TableRow>
@@ -111,11 +122,27 @@ const RecentBlocksTable: React.FC<RecentBlocksTableProps> = ({
                   },
                 }}
               >
-                <TableCell sx={{ color: colors.textPrimary }}>
-                  {block.height}
+                <TableCell sx={{ color: colors.textPrimary, fontWeight: 500 }}>
+                  #{block.height}
                 </TableCell>
-                <TableCell sx={{ color: colors.accent }}>
+                <TableCell
+                  sx={{ color: colors.primary, fontFamily: 'monospace' }}
+                >
                   {truncateHash(block.hash)}
+                </TableCell>
+                <TableCell>
+                  <Chip
+                    label="Confirmed"
+                    size="small"
+                    sx={{
+                      backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                      color: colors.success,
+                      fontWeight: 600,
+                      border: `1px solid ${colors.success}30`,
+                      fontSize: '0.7rem',
+                      height: '24px',
+                    }}
+                  />
                 </TableCell>
                 <TableCell sx={{ color: colors.textSecondary }}>
                   {block.time}
