@@ -1,7 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { MinerTableProps } from './Types';
-import colors from '@/theme/colors';
 
 const MinerTable: React.FC<MinerTableProps> = ({
   miners,
@@ -15,12 +14,10 @@ const MinerTable: React.FC<MinerTableProps> = ({
 
   return (
     <div className="w-full overflow-x-auto">
-      <div
-        className="min-w-[800px] rounded-2xl bg-[#1e1e1e] p-4 border border-white/10 shadow-md"
-        style={{ borderColor: colors.cardAccentSecondary }}
-      >
+      <div className="min-w-[800px] rounded-xl border border-gray-800">
+        {/* Header */}
         <div
-          className={`grid ${hasAlerts ? 'grid-cols-8' : 'grid-cols-7'} gap-4 px-4 py-3 text-xs uppercase tracking-wide text-gray-400 border-b border-gray-800/60`}
+          className={`grid ${hasAlerts ? 'grid-cols-8' : 'grid-cols-7'} gap-4 px-4 py-3 text-xs uppercase tracking-widest text-gray-400 border-b border-gray-800`}
         >
           <div>Model</div>
           <div>Hashrate</div>
@@ -31,8 +28,10 @@ const MinerTable: React.FC<MinerTableProps> = ({
           <div>Temp</div>
           <div>Details</div>
         </div>
-        <div className="rounded-2xl   shadow-md p-4">
-          {miners.map((miner) => {
+
+        {/* Rows */}
+        <div>
+          {miners.map((miner, i) => {
             const alerts = getAlerts(miner);
             const isExpanded = expandedAlerts[miner.id] || false;
             const firstAlert = alerts[0];
@@ -40,7 +39,9 @@ const MinerTable: React.FC<MinerTableProps> = ({
             return (
               <div
                 key={miner.id}
-                className={`grid ${hasAlerts ? 'grid-cols-8' : 'grid-cols-7'} gap-4 px-4 py-3 text-sm text-gray-200 items-center`}
+                className={`grid ${hasAlerts ? 'grid-cols-8' : 'grid-cols-7'} gap-4 px-4 py-3 text-sm text-gray-300 items-center ${
+                  i !== miners.length - 1 ? 'border-b border-gray-800/60' : ''
+                }`}
               >
                 <div className="font-medium text-white truncate">
                   {miner.hostname ||
@@ -54,28 +55,22 @@ const MinerTable: React.FC<MinerTableProps> = ({
                 <div className="whitespace-nowrap">
                   {(miner.efficiency || 0).toFixed(1)} W/TH
                 </div>
-                <div className="whitespace-nowrap">
-                  {miner.power_usage || 0} W
-                </div>
+                <div className="whitespace-nowrap">{miner.power_usage || 0} W</div>
                 <div>
-                  <span
-                    className={`px-2 py-0.5 text-xs rounded border whitespace-nowrap ${statusStyles[miner.status]}`}
-                  >
+                  <span className={`px-2 py-0.5 text-xs rounded border whitespace-nowrap ${statusStyles[miner.status]}`}>
                     {miner.status.toUpperCase()}
                   </span>
                 </div>
+
                 {hasAlerts && alerts.length > 0 ? (
                   <div className="flex flex-col gap-1.5">
                     <div
                       className="cursor-pointer select-none"
                       onClick={() =>
-                        setExpandedAlerts((prev) => ({
-                          ...prev,
-                          [miner.id]: !prev[miner.id],
-                        }))
+                        setExpandedAlerts((prev) => ({ ...prev, [miner.id]: !prev[miner.id] }))
                       }
                     >
-                      <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-md border text-xs font-medium transition-colors bg-gray-800/60 border-gray-700/40 text-amber-300 hover:bg-gray-800/80">
+                      <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs font-medium bg-gray-800/60 border-gray-700/40 text-amber-300 hover:bg-gray-800/80 transition-colors">
                         <span>{firstAlert.message}</span>
                         {remainingCount > 0 && (
                           <span className="px-1.5 py-0.5 rounded bg-gray-700/50 text-gray-400 text-[10px]">
@@ -88,7 +83,7 @@ const MinerTable: React.FC<MinerTableProps> = ({
                       </div>
                     </div>
                     {isExpanded && alerts.length > 1 && (
-                      <div className="flex flex-col gap-1 pl-2 border-l-2 text-amber-300 border-gray-700/50">
+                      <div className="flex flex-col gap-1 pl-2 border-l-2 border-gray-700/50 text-amber-300 text-xs">
                         {alerts.slice(1).map((alert, idx) => (
                           <div key={idx}>{alert.message}</div>
                         ))}
@@ -96,26 +91,25 @@ const MinerTable: React.FC<MinerTableProps> = ({
                     )}
                   </div>
                 ) : (
-                  hasAlerts && <div></div>
+                  hasAlerts && <div />
                 )}
-                <div className="text-gray-300 whitespace-nowrap">
+
+                <div className="whitespace-nowrap text-gray-400">
                   {miner.temperature || 0}°C / {miner.vr_temperature || 0}°C
                 </div>
-                <div className="text-gray-300 whitespace-nowrap">
+                <div>
                   <Link
                     to="#"
                     onClick={(e) => e.preventDefault()}
-                    className={`inline-flex px-3 py-1 text-xs rounded border ${
-                      minerHistory[miner.id] &&
-                      minerHistory[miner.id].length > 1
-                        ? 'border-gray-600 bg-gray-800 hover:bg-gray-700 cursor-pointer'
-                        : 'border-gray-700 bg-gray-900 text-gray-500 cursor-not-allowed'
+                    className={`inline-flex px-3 py-1 text-xs rounded-lg border transition-colors ${
+                      minerHistory[miner.id]?.length > 1
+                        ? 'border-gray-700 text-gray-300 hover:bg-gray-800 cursor-pointer'
+                        : 'border-gray-800 text-gray-600 cursor-not-allowed'
                     }`}
                     title={
-                      minerHistory[miner.id] &&
-                      minerHistory[miner.id].length > 1
+                      minerHistory[miner.id]?.length > 1
                         ? 'View detailed analytics'
-                        : 'Collecting data... Please wait'
+                        : 'Collecting data...'
                     }
                   >
                     Details

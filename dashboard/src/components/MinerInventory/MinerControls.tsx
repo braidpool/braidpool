@@ -8,32 +8,28 @@ const MinerControls: React.FC<MinerControlsProps> = ({
   loading,
   lastUpdate,
 }) => (
-  <div className="mt-6 relative flex items-center w-full gap-2 mb-12">
-    <div className="absolute left-1/2 transform -translate-x-1/2 flex gap-2">
+  <div className="flex items-center justify-between gap-4 mb-8">
+    <div className="flex gap-2">
       <input
         type="text"
         value={newMinerIP}
         onChange={(e) => setNewMinerIP(e.target.value)}
-        placeholder="Enter Miner IP"
+        placeholder="Enter miner IP"
         aria-label="Miner IP"
-        className="w-64 px-3 py-2 text-sm text-center border border-gray-600 bg-gray-800 rounded text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-500"
         onKeyDown={(e) => e.key === 'Enter' && addMinerByIP()}
+        className="px-3 py-1.5 text-sm border border-gray-700 bg-transparent rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
       />
       <button
         onClick={addMinerByIP}
         disabled={loading}
-        className="px-4 py-2 text-sm text-white rounded bg-gray-800 cursor-pointer"
+        className="px-4 py-1.5 text-sm font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
       >
         {loading ? 'Adding...' : 'Add Miner'}
       </button>
     </div>
-    <div className="ml-auto flex items-center gap-2 text-sm text-gray-400">
-      <div>
-        {lastUpdate
-          ? `Last update: ${lastUpdate.toLocaleString()}`
-          : 'Never updated'}
-      </div>
-    </div>
+    <p className="text-xs text-gray-500">
+      {lastUpdate ? `Updated ${lastUpdate.toLocaleTimeString()}` : 'Never updated'}
+    </p>
   </div>
 );
 
