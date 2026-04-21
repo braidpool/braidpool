@@ -337,10 +337,7 @@ const MinerInventoryDashboard = () => {
     <div className="min-h-screen w-full px-4 py-6 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="mb-8">
-          <p className="text-xs uppercase tracking-widest text-gray-400 mb-1">
-            Overview
-          </p>
+        <div className="mb-8 text-center">
           <h1 className="text-2xl font-medium text-white">Mining Dashboard</h1>
         </div>
 
