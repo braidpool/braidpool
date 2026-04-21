@@ -1,8 +1,8 @@
 import '@testing-library/jest-dom';
 import React from 'react';
 import { render, screen, waitFor, act } from '@testing-library/react';
-import BitcoinPriceTracker from '../Prices';
 import { getLatestTransactions, latestRBFTransactions } from '../Utils';
+import BitcoinPriceTracker from '../Prices';
 
 // Mock utility functions
 jest.mock('../Utils', () => ({
@@ -41,13 +41,18 @@ jest.mock('recharts', () => ({
   ),
 }));
 
-// Mock transaction table
+// Mock transaction tables
 jest.mock('../TransactionTable', () => () => (
   <div data-testid="transaction-table" />
 ));
 jest.mock('../RBFTransactionTable', () => () => (
   <div data-testid="rbf-transaction-table" />
 ));
+
+// Mock MAX_HISTORY_ITEMS constant
+jest.mock('../Constants', () => ({
+  MAX_HISTORY_ITEMS: 30,
+}));
 
 // Mock WebSocket
 class MockWebSocket {
@@ -105,11 +110,15 @@ describe('BitcoinPriceTracker', () => {
     ]);
   });
 
+  // The loading skeleton uses animate-pulse as a CSS class, not a data-testid.
+  // Query by the skeleton container element instead.
   it('renders loading state initially', () => {
     render(<BitcoinPriceTracker />);
-    expect(screen.getAllByTestId('animate-pulse').length).toBeGreaterThan(0);
+    const skeletons = document.querySelectorAll('.animate-pulse');
+    expect(skeletons.length).toBeGreaterThan(0);
   });
 
+  // Labels in the component are lowercase: "24h low" / "24h high"
   it('connects to WebSocket and displays price data', async () => {
     render(<BitcoinPriceTracker />);
     act(() => {
@@ -123,11 +132,12 @@ describe('BitcoinPriceTracker', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('24h High')).toBeInTheDocument();
-      expect(screen.getByText('24h Low')).toBeInTheDocument();
+      expect(screen.getByText('24h high')).toBeInTheDocument();
+      expect(screen.getByText('24h low')).toBeInTheDocument();
     });
   });
 
+  // Labels match the component: "Market cap", "Active cryptos", "BTC dominance"
   it('displays global stats when data is received', async () => {
     render(<BitcoinPriceTracker />);
     act(() => {
@@ -148,8 +158,11 @@ describe('BitcoinPriceTracker', () => {
     });
 
     await waitFor(() => {
+      // formatLargeNumber mock returns num.toString()
       expect(screen.getByText('1000000000000')).toBeInTheDocument();
-      expect(screen.getByText('Active Cryptocurrencies')).toBeInTheDocument();
+      // Actual label used in the component
+      expect(screen.getByText('Active cryptos')).toBeInTheDocument();
+      // bitcoin_dominance * 100, toFixed(2)
       expect(screen.getByText('45.00%')).toBeInTheDocument();
     });
   });
@@ -216,13 +229,15 @@ describe('BitcoinPriceTracker', () => {
 
   it('cleans up WebSocket on unmount', () => {
     const { unmount } = render(<BitcoinPriceTracker />);
+    act(() => MockWebSocket.mockOpen());
     const instance = MockWebSocket.instances[0];
     const closeSpy = jest.spyOn(instance, 'close');
     unmount();
     expect(closeSpy).toHaveBeenCalled();
   });
 
-  it('shows green arrow when price goes up and red when down', async () => {
+  // Component uses text-emerald-500 for up and text-red-500 for down (not text-green-500)
+  it('shows emerald color when price goes up and red when down', async () => {
     render(<BitcoinPriceTracker />);
     act(() => {
       MockWebSocket.mockOpen();
@@ -244,7 +259,7 @@ describe('BitcoinPriceTracker', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText(/\$51000/)).toHaveClass('text-green-500');
+      expect(screen.getByText(/\$51000/)).toHaveClass('text-emerald-500');
     });
 
     act(() => {
@@ -275,7 +290,9 @@ describe('BitcoinPriceTracker', () => {
     });
   });
 
-  it('limits price history to 30 items', async () => {
+  // MAX_HISTORY_ITEMS is imported from Constants (mocked as 30).
+  // This test verifies the chart renders after receiving many updates.
+  it('limits price history to MAX_HISTORY_ITEMS entries', async () => {
     render(<BitcoinPriceTracker />);
     act(() => {
       MockWebSocket.mockOpen();
