@@ -14,11 +14,10 @@ const MinerDashboardHeader: React.FC<MinerDashboardHeaderProps> = ({
       { label: 'Total power', value: `${totalPower} W` },
       { label: 'Avg efficiency', value: `${avgEfficiency.toFixed(1)} W/TH` },
     ].map(({ label, value }) => (
-      <div
-        key={label}
-        className="border border-gray-700 rounded-xl p-4"
-      >
-        <p className="text-xs uppercase tracking-widest text-gray-400 mb-1">{label}</p>
+      <div key={label} className="border border-gray-700 rounded-xl p-4">
+        <p className="text-xs uppercase tracking-widest text-gray-400 mb-1">
+          {label}
+        </p>
         <p className="text-sm font-medium text-gray-200">{value}</p>
       </div>
     ))}

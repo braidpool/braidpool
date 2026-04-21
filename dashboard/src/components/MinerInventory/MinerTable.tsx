@@ -55,9 +55,13 @@ const MinerTable: React.FC<MinerTableProps> = ({
                 <div className="whitespace-nowrap">
                   {(miner.efficiency || 0).toFixed(1)} W/TH
                 </div>
-                <div className="whitespace-nowrap">{miner.power_usage || 0} W</div>
+                <div className="whitespace-nowrap">
+                  {miner.power_usage || 0} W
+                </div>
                 <div>
-                  <span className={`px-2 py-0.5 text-xs rounded border whitespace-nowrap ${statusStyles[miner.status]}`}>
+                  <span
+                    className={`px-2 py-0.5 text-xs rounded border whitespace-nowrap ${statusStyles[miner.status]}`}
+                  >
                     {miner.status.toUpperCase()}
                   </span>
                 </div>
@@ -67,7 +71,10 @@ const MinerTable: React.FC<MinerTableProps> = ({
                     <div
                       className="cursor-pointer select-none"
                       onClick={() =>
-                        setExpandedAlerts((prev) => ({ ...prev, [miner.id]: !prev[miner.id] }))
+                        setExpandedAlerts((prev) => ({
+                          ...prev,
+                          [miner.id]: !prev[miner.id],
+                        }))
                       }
                     >
                       <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs font-medium bg-gray-800/60 border-gray-700/40 text-amber-300 hover:bg-gray-800/80 transition-colors">

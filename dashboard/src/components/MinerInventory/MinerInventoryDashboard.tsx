@@ -195,18 +195,32 @@ const MinerInventoryDashboard = () => {
     );
     const updatedMiners: Miner[] = results.map((updated, idx) => {
       const orig = currentMiners[idx];
-      if (updated) { updated.id = orig.id; return updated; }
+      if (updated) {
+        updated.id = orig.id;
+        return updated;
+      }
       return {
-        ...orig, status: 'offline' as const, is_mining: false,
-        lastSeen: new Date().toLocaleTimeString(), alerts: 0,
-        hashrate_current: 0, hashrate_avg: 0, expected_hashrate: 0,
-        temperature: 0, temperature_max: 0, vr_temperature: 0,
-        power_usage: 0, efficiency: 0, voltage: 0,
+        ...orig,
+        status: 'offline' as const,
+        is_mining: false,
+        lastSeen: new Date().toLocaleTimeString(),
+        alerts: 0,
+        hashrate_current: 0,
+        hashrate_avg: 0,
+        expected_hashrate: 0,
+        temperature: 0,
+        temperature_max: 0,
+        vr_temperature: 0,
+        power_usage: 0,
+        efficiency: 0,
+        voltage: 0,
       };
     });
     setMiners(updatedMiners);
     setLastUpdate(new Date());
-    if (updatedMiners.some((m) => m.status === 'online' || m.status === 'warning'))
+    if (
+      updatedMiners.some((m) => m.status === 'online' || m.status === 'warning')
+    )
       setLastActiveUpdate(new Date());
     setLoading(false);
   };
@@ -219,14 +233,20 @@ const MinerInventoryDashboard = () => {
   }, [autoRefresh, refreshInterval, miners.length]);
 
   const addMinerByIP = async () => {
-    if (!newMinerIP.trim()) { setError('Please enter a valid IP address'); return; }
+    if (!newMinerIP.trim()) {
+      setError('Please enter a valid IP address');
+      return;
+    }
     setLoading(true);
     setError(null);
     const newMiner = await fetchMinerData(newMinerIP.trim());
     if (newMiner) {
       setMiners((prev) => {
         const exists = prev.find((m) => m.ip === newMiner.ip);
-        if (exists) return prev.map((m) => m.ip === newMiner.ip ? { ...newMiner, id: m.id } : m);
+        if (exists)
+          return prev.map((m) =>
+            m.ip === newMiner.ip ? { ...newMiner, id: m.id } : m
+          );
         return [...prev, newMiner];
       });
       setNewMinerIP('');
@@ -238,22 +258,37 @@ const MinerInventoryDashboard = () => {
   };
 
   const handleSearch = () => setSearchQuery(searchInput.trim());
-  const clearSearch = () => { setSearchInput(''); setSearchQuery(''); };
+  const clearSearch = () => {
+    setSearchInput('');
+    setSearchQuery('');
+  };
 
   const totalMiners = miners.length;
   const onlineMiners = miners.filter((m) => m.status === 'online').length;
   const warningMiners = miners.filter((m) => m.status === 'warning').length;
   const offlineMiners = miners.filter((m) => m.status === 'offline').length;
   const totalHashrate = miners.reduce(
-    (sum, m) => m.status === 'online' || m.status === 'warning' ? sum + (m.hashrate_current || 0) : sum, 0
+    (sum, m) =>
+      m.status === 'online' || m.status === 'warning'
+        ? sum + (m.hashrate_current || 0)
+        : sum,
+    0
   );
   const totalPower = miners.reduce(
-    (sum, m) => m.status === 'online' || m.status === 'warning' ? sum + (m.power_usage || 0) : sum, 0
+    (sum, m) =>
+      m.status === 'online' || m.status === 'warning'
+        ? sum + (m.power_usage || 0)
+        : sum,
+    0
   );
-  const activeMiners = miners.filter((m) => m.status === 'online' || m.status === 'warning');
+  const activeMiners = miners.filter(
+    (m) => m.status === 'online' || m.status === 'warning'
+  );
   const avgEfficiency =
     activeMiners.length > 0
-      ? (activeMiners.reduce((sum, m) => sum + (m.efficiency || 0), 0) / activeMiners.length) * 1000
+      ? (activeMiners.reduce((sum, m) => sum + (m.efficiency || 0), 0) /
+          activeMiners.length) *
+        1000
       : 0;
 
   const displayedMiners =
@@ -261,22 +296,32 @@ const MinerInventoryDashboard = () => {
       ? miners
       : miners.filter((m) => {
           const q = searchQuery.toLowerCase();
-          return (m.ip || '').toLowerCase().includes(q) || (m.hostname || '').toLowerCase().includes(q);
+          return (
+            (m.ip || '').toLowerCase().includes(q) ||
+            (m.hostname || '').toLowerCase().includes(q)
+          );
         });
 
   const filteredByStatus =
-    statusFilter === 'all' ? displayedMiners : displayedMiners.filter((m) => m.status === statusFilter);
+    statusFilter === 'all'
+      ? displayedMiners
+      : displayedMiners.filter((m) => m.status === statusFilter);
 
   const sortedDisplayedMiners = (() => {
     const arr = [...filteredByStatus];
     if (sortBy === 'all') return arr;
     arr.sort((a, b) => {
       switch (sortBy) {
-        case 'efficiency': return (b.efficiency || 0) - (a.efficiency || 0);
-        case 'hashrate': return (b.hashrate_current || 0) - (a.hashrate_current || 0);
-        case 'power': return (b.power_usage || 0) - (a.power_usage || 0);
-        case 'temperature': return (b.temperature || 0) - (a.temperature || 0);
-        default: return 0;
+        case 'efficiency':
+          return (b.efficiency || 0) - (a.efficiency || 0);
+        case 'hashrate':
+          return (b.hashrate_current || 0) - (a.hashrate_current || 0);
+        case 'power':
+          return (b.power_usage || 0) - (a.power_usage || 0);
+        case 'temperature':
+          return (b.temperature || 0) - (a.temperature || 0);
+        default:
+          return 0;
       }
     });
     return arr;
@@ -291,10 +336,11 @@ const MinerInventoryDashboard = () => {
   return (
     <div className="min-h-screen w-full px-4 py-6 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
-
         {/* Header */}
         <div className="mb-8">
-          <p className="text-xs uppercase tracking-widest text-gray-400 mb-1">Overview</p>
+          <p className="text-xs uppercase tracking-widest text-gray-400 mb-1">
+            Overview
+          </p>
           <h1 className="text-2xl font-medium text-white">Mining Dashboard</h1>
         </div>
 
@@ -331,7 +377,9 @@ const MinerInventoryDashboard = () => {
         {miners.length === 0 ? (
           <div className="text-center py-20 text-gray-500">
             <p className="text-sm uppercase tracking-widest mb-2">No miners</p>
-            <p className="text-sm">Add a miner by entering its IP address above</p>
+            <p className="text-sm">
+              Add a miner by entering its IP address above
+            </p>
           </div>
         ) : (
           <>
@@ -339,7 +387,6 @@ const MinerInventoryDashboard = () => {
 
             {/* Filters row */}
             <div className="flex flex-col gap-4 mb-6 sm:flex-row sm:items-center sm:justify-between">
-
               {/* Status pills */}
               <div className="flex border border-gray-700 rounded-full p-1 gap-1 w-fit">
                 {(
@@ -352,7 +399,11 @@ const MinerInventoryDashboard = () => {
                 ).map(({ key, label, count }) => (
                   <button
                     key={key}
-                    onClick={() => setStatusFilter((s) => (s === key && key !== 'all' ? 'all' : key))}
+                    onClick={() =>
+                      setStatusFilter((s) =>
+                        s === key && key !== 'all' ? 'all' : key
+                      )
+                    }
                     className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
                       statusFilter === key
                         ? 'bg-indigo-600 text-white'

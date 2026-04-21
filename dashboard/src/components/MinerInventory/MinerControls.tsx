@@ -28,7 +28,9 @@ const MinerControls: React.FC<MinerControlsProps> = ({
       </button>
     </div>
     <p className="text-xs text-gray-500">
-      {lastUpdate ? `Updated ${lastUpdate.toLocaleTimeString()}` : 'Never updated'}
+      {lastUpdate
+        ? `Updated ${lastUpdate.toLocaleTimeString()}`
+        : 'Never updated'}
     </p>
   </div>
 );
