@@ -24,7 +24,7 @@ const RBFTransactionTable: React.FC<TransactionTableProps> = ({
 
   return (
     <div
-      className="rounded-2xl border mt-10 border-white/10 bg-[#1e1e1e] shadow-md p-4"
+      className="rounded-2xl border mt-3 border-white/10 bg-[#1e1e1e] shadow-md p-4"
       style={{ borderColor: colors.cardAccentSecondary }}
     >
       <div className="mb-2  text-gray-400">Latest RBF Transactions</div>

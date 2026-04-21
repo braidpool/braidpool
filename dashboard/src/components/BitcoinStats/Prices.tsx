@@ -9,6 +9,7 @@ import {
   LineChart,
   Line,
   CartesianGrid,
+  Legend,
 } from 'recharts';
 import { GlobalStats, PriceData } from './Types';
 import {
@@ -41,7 +42,6 @@ const BitcoinPriceTracker: React.FC = () => {
   const [priceHistory, setPriceHistory] = useState<
     { price: number; time: string }[]
   >([]);
-  // MAX_HISTORY_ITEMS is imported from BeadsTab/Constants
   const showSkeletons = loading || !isConnected || (!priceData && !globalStats);
   const currencyRef = useRef(currency);
 
@@ -54,16 +54,20 @@ const BitcoinPriceTracker: React.FC = () => {
       const data = await getLatestTransactions();
       setTransactions(data as any[]);
     };
-    fetchTransactions();
+
     const fetchRbfTransactions = async () => {
       const data = await latestRBFTransactions();
       setrbfTransactions(data as any[]);
     };
+
+    fetchTransactions();
     fetchRbfTransactions();
+
     const intervalId = setInterval(() => {
       fetchTransactions();
       fetchRbfTransactions();
     }, 5000);
+
     return () => clearInterval(intervalId);
   }, []);
 
@@ -80,6 +84,7 @@ const BitcoinPriceTracker: React.FC = () => {
 
     websocket.onmessage = (event) => {
       if (!isMounted) return;
+
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'bitcoin_update') {
@@ -94,6 +99,7 @@ const BitcoinPriceTracker: React.FC = () => {
             if (previousPrice !== currentPrice) {
               setPriceDirection(currentPrice > previousPrice ? 'up' : 'down');
             }
+
             return {
               current: currentPrice,
               high24h: Math.max(high24hPrice, currentPrice),
@@ -152,10 +158,10 @@ const BitcoinPriceTracker: React.FC = () => {
   const sym = priceData?.currencySymbol ?? getCurrencySymbol(currency);
 
   return (
-    <div className="p-4 w-full">
+    <div className="w-full p-4">
       {/* Top bar */}
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex border border-gray-200 dark:border-gray-700 rounded-full p-1 gap-1">
+      <div className="mb-6 flex flex-col items-center gap-3">
+        <div className="flex gap-1 rounded-full border border-gray-200 p-1 dark:border-gray-700">
           {CURRENCIES.map((c) => (
             <button
               key={c}
@@ -165,51 +171,43 @@ const BitcoinPriceTracker: React.FC = () => {
                 setPriceHistory([]);
                 setPriceDirection(null);
               }}
-              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
+              className={`rounded-full px-4 py-1.5 text-sm font-medium transition-all ${
                 currency === c
                   ? 'bg-indigo-600 text-white'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+                  : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
               }`}
             >
               {c}
             </button>
           ))}
         </div>
-
-        <div className="flex items-center gap-2">
-          <span
-            className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-red-400'}`}
-          />
-          <span className="text-xs text-gray-400">
-            {isConnected ? 'Live' : 'Disconnected'}
-          </span>
-        </div>
       </div>
 
       {/* Error */}
       {error && (
-        <div className="mb-6 px-4 py-3 bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400 text-sm rounded-lg border border-red-100 dark:border-red-900">
+        <div className="mb-5 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-900 dark:bg-red-950 dark:text-red-400">
           {error}
         </div>
       )}
 
       {/* Price Display */}
-      <div className="mb-8">
-        <p className="text-xs uppercase tracking-widest text-gray-400 mb-2">
+
+      <div className="mb-6 text-center">
+        <p className="mb-2 text-xs uppercase tracking-widest text-gray-400">
           Bitcoin · {currency}
         </p>
 
         {showSkeletons ? (
-          <div className="flex gap-8 flex-wrap">
-            <div className="animate-pulse bg-gray-200 dark:bg-gray-700 rounded h-9 w-36" />
-            <div className="animate-pulse bg-gray-200 dark:bg-gray-700 rounded h-6 w-20 self-end" />
-            <div className="animate-pulse bg-gray-200 dark:bg-gray-700 rounded h-6 w-20 self-end" />
+          <div className="flex flex-wrap justify-center gap-6">
+            <div className="h-7 w-28 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+            <div className="h-7 w-24 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+            <div className="h-7 w-24 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
           </div>
         ) : priceData ? (
-          <div className="flex items-end gap-8 flex-wrap">
+          <div className="flex flex-wrap items-end justify-center gap-6">
             <div>
               <div
-                className={`text-4xl font-medium tracking-tight ${
+                className={`text-2xl font-medium ${
                   priceDirection === 'up'
                     ? 'text-emerald-500'
                     : priceDirection === 'down'
@@ -227,43 +225,40 @@ const BitcoinPriceTracker: React.FC = () => {
                       : ''}
                 </span>
               </div>
-              <p className="text-xs text-gray-400 mt-1">Current price</p>
+              <p className="mt-1 text-xs text-gray-400">Current price</p>
             </div>
             <div>
-              <div className="text-base text-gray-700 dark:text-gray-300">
+              <div className="text-2xl font-medium text-gray-700 dark:text-gray-300">
                 {sym}
                 {formatPrice(priceData.low24h)}
               </div>
-              <p className="text-xs text-gray-400 mt-1">24h low</p>
+              <p className="mt-1 text-xs text-gray-400">24h low</p>
             </div>
             <div>
-              <div className="text-base text-gray-700 dark:text-gray-300">
+              <div className="text-2xl font-medium text-gray-700 dark:text-gray-300">
                 {sym}
                 {formatPrice(priceData.high24h)}
               </div>
-              <p className="text-xs text-gray-400 mt-1">24h high</p>
+              <p className="mt-1 text-xs text-gray-400">24h high</p>
             </div>
           </div>
         ) : null}
       </div>
-
-      <hr className="border-gray-100 dark:border-gray-800 mb-8" />
-
       {/* Global Stats */}
       {showSkeletons ? (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+        <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
           {[...Array(4)].map((_, i) => (
             <div
               key={i}
-              className="border border-gray-200 dark:border-gray-700 rounded-xl p-4"
+              className="rounded-xl border border-gray-200 p-4 dark:border-gray-700"
             >
-              <div className="animate-pulse bg-gray-200 dark:bg-gray-700 rounded h-3 w-16 mb-2" />
-              <div className="animate-pulse bg-gray-200 dark:bg-gray-700 rounded h-5 w-20" />
+              <div className="mb-2 h-3 w-16 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+              <div className="h-5 w-20 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
             </div>
           ))}
         </div>
       ) : globalStats ? (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+        <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
           {[
             { label: 'Market cap', value: globalStats.marketCap },
             {
@@ -278,9 +273,9 @@ const BitcoinPriceTracker: React.FC = () => {
           ].map(({ label, value }) => (
             <div
               key={label}
-              className="border border-gray-200 dark:border-gray-700 rounded-xl p-4"
+              className="rounded-xl border border-gray-200 p-4 dark:border-gray-700"
             >
-              <p className="text-xs uppercase tracking-widest text-gray-400 mb-1">
+              <p className="mb-1 text-xs uppercase tracking-widest text-gray-400">
                 {label}
               </p>
               <p className="text-sm font-medium text-gray-800 dark:text-gray-200">
@@ -291,70 +286,14 @@ const BitcoinPriceTracker: React.FC = () => {
         </div>
       ) : null}
 
-      <hr className="border-gray-100 dark:border-gray-800 mb-8" />
-
-      {/* Price History Line Chart */}
-      <div className="mb-8">
-        <p className="text-xs uppercase tracking-widest text-gray-400 mb-1">
-          Price history
-        </p>
-        <p className="text-xs text-gray-400 mb-4">Live · {currency}</p>
-        <div className="h-48">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart
-              data={priceHistory}
-              margin={{ left: 10, right: 10, top: 10, bottom: 0 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis
-                dataKey="time"
-                tick={{ fontSize: 10, fill: '#9ca3af' }}
-                tickLine={false}
-                axisLine={false}
-                interval="preserveStartEnd"
-              />
-              <YAxis
-                domain={['auto', 'auto']}
-                tick={{ fontSize: 10, fill: '#9ca3af' }}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={(v) => `${sym}${formatPrice(v)}`}
-                width={60}
-              />
-              <Tooltip
-                contentStyle={{
-                  background: 'var(--tooltip-bg, #fff)',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: 8,
-                  fontSize: 12,
-                }}
-                formatter={(v) => [`${sym}${formatPrice(Number(v))}`, 'Price']}
-                labelFormatter={(l) => `Time: ${l}`}
-              />
-              <Line
-                type="monotone"
-                dataKey="price"
-                stroke="#6366f1"
-                strokeWidth={1.5}
-                dot={false}
-                isAnimationActive={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      <hr className="border-gray-100 dark:border-gray-800 mb-8" />
-
-      {/* 24h Range Bar Chart */}
-      <div className="mb-8">
-        <p className="text-xs uppercase tracking-widest text-gray-400 mb-1">
-          24h range
-        </p>
-        <p className="text-xs text-gray-400 mb-4">
-          Low / current / high in {currency}
-        </p>
-        <div className="h-40">
+      <div className="w-full flex flex-wrap justify-center items-center gap-4 md:gap-20 p-4 mt-4 md:p-6 rounded-lg mb-6">
+        {/* Price Range Bar Chart */}
+        <div className="flex flex-col w-full h-80 -mx-6 sm:mx-0 px-6 sm:px-0">
+          <p className="font-semibold text-base">Bitcoin Price Range (24h)</p>
+          <span className="text-sm text-gray-500 mb-2">
+            Displays the 24-hour low, current, and 24-hour high prices in{' '}
+            {currency}
+          </span>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={[
@@ -362,97 +301,134 @@ const BitcoinPriceTracker: React.FC = () => {
                 { label: 'Current', value: priceData?.current ?? 0 },
                 { label: '24h High', value: priceData?.high24h ?? 0 },
               ]}
-              margin={{ left: 10, right: 10, top: 10, bottom: 0 }}
+              margin={{
+                left: -5,
+                right: -5,
+                top: 20,
+                bottom: 20,
+              }}
             >
-              <XAxis
-                dataKey="label"
-                tick={{ fontSize: 11, fill: '#9ca3af' }}
-                tickLine={false}
-                axisLine={false}
-              />
+              <XAxis dataKey="label" tick={{ fontSize: 12 }} />
               <YAxis
-                tick={{ fontSize: 10, fill: '#9ca3af' }}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={(v) => `${sym}${formatPrice(v)}`}
-                width={60}
+                width={50}
+                tick={{ fontSize: 10 }}
                 domain={[
-                  (min: number) =>
+                  (dataMin: number) =>
                     Math.floor(
-                      min -
+                      dataMin -
                         (priceData
                           ? (priceData.high24h - priceData.low24h) * 0.1
                           : 0)
                     ),
-                  (max: number) =>
+                  (dataMax: number) =>
                     Math.ceil(
-                      max +
+                      dataMax +
                         (priceData
                           ? (priceData.high24h - priceData.low24h) * 0.1
                           : 0)
                     ),
                 ]}
+                tickFormatter={(value) =>
+                  `${getCurrencySymbol(currency)}${formatPrice(value)}`
+                }
               />
               <Tooltip
                 contentStyle={{
-                  background: 'var(--tooltip-bg, #fff)',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: 8,
-                  fontSize: 12,
+                  backgroundColor: 'black',
+                  border: '1px solid #ccc',
+                  fontSize: '12px',
                 }}
-                formatter={(v) => [`${sym}${formatPrice(Number(v))}`, 'Price']}
+                formatter={(value) => [
+                  `${getCurrencySymbol(currency)}${formatPrice(Number(value))}`,
+                  'Price',
+                ]}
               />
-              <Bar dataKey="value" fill="#6366f1" radius={[4, 4, 0, 0]} />
+              <Legend wrapperStyle={{ fontSize: '12px' }} />
+              <Bar dataKey="value" fill="#8884d8" />
             </BarChart>
           </ResponsiveContainer>
         </div>
+
+        {/* Price History Line Chart */}
+        <div className="flex flex-col w-full h-80">
+          <p className="font-semibold text-base">
+            Bitcoin Price History (Live)
+          </p>
+          <span className="text-sm text-gray-500 mb-2">
+            Live updates in {currency}
+          </span>
+          <ResponsiveContainer width="99%" height="100%">
+            <LineChart
+              data={priceHistory}
+              margin={{ left: 60, right: 40, top: 20, bottom: 20 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="time" tick={{ fontSize: 10 }} interval={0} />
+              <YAxis
+                domain={['auto', 'auto']}
+                tickFormatter={(value) =>
+                  `${getCurrencySymbol(currency)}${formatPrice(value)}`
+                }
+              />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: 'black',
+                  border: '1px solid #ccc',
+                }}
+                formatter={(value) => [
+                  `${getCurrencySymbol(currency)}${formatPrice(Number(value))}`,
+                  'Price',
+                ]}
+                labelFormatter={(label) => `Time: ${label}`}
+              />
+              <Line
+                type="monotone"
+                dataKey="price"
+                stroke="#8884d8"
+                dot={false}
+                isAnimationActive={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
       </div>
-
-      <hr className="border-gray-100 dark:border-gray-800 mb-8" />
-
       {/* Additional Charts Section */}
-      <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-6 p-4 md:p-6 mb-6">
-        {/* Fear-Greed Meter */}
+      <div className="mb-5 grid w-full grid-cols-1 gap-4 p-0 md:grid-cols-2">
         <div className="flex flex-col">
-          <p className="font-semibold text-base">Fear & Greed Index</p>
-          <span className="text-sm text-gray-500 mb-3">
+          <p className="text-base font-semibold">Fear & Greed Index</p>
+          <span className="mb-3 text-sm text-gray-500">
             Market sentiment indicator
           </span>
 
-          <div className="w-full aspect-[4/3] max-w-lg mx-auto border border-gray-700 rounded-lg flex items-center justify-center">
+          <div className="flex w-full aspect-[5/3] max-w-lg items-center justify-center rounded-lg border border-gray-700 mx-auto">
             <img
               src="https://alternative.me/crypto/fear-and-greed-index.png"
               alt="Latest Crypto Fear & Greed Index"
-              className="w-full h-full object-contain p-4"
+              className="h-full w-full object-contain p-3"
             />
           </div>
         </div>
 
-        {/* Market Trends */}
         <div className="flex flex-col">
-          <p className="font-semibold text-base">Market Trends</p>
-          <span className="text-sm text-gray-500 mb-3">Coming soon...</span>
+          <p className="text-base font-semibold">Market Trends</p>
+          <span className="mb-3 text-sm text-gray-500">Coming soon...</span>
 
-          <div className="w-full aspect-[4/3] max-w-lg mx-auto border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center">
+          <div className="flex w-full aspect-[5/3] max-w-lg items-center justify-center rounded-lg border-2 border-dashed border-gray-300 mx-auto">
             <p className="text-gray-500">Additional visualization</p>
           </div>
         </div>
       </div>
 
-      <hr className="border-gray-100 dark:border-gray-800 mb-8" />
-
       {/* Transactions */}
-      <div className="mb-8">
-        <p className="text-xs uppercase tracking-widest text-gray-400 mb-4">
+      <div className="mb-3">
+        <p className="mb-2 text-xs uppercase tracking-widest text-gray-400">
           Latest transactions
         </p>
         <TransactionTable transactions={transactions} />
       </div>
 
-      <hr className="border-gray-100 dark:border-gray-800 mb-8" />
-
-      <div>
-        <p className="text-xs uppercase tracking-widest text-gray-400 mb-4">
+      <div className="mt-2">
+        <p className="mb-2 text-xs uppercase tracking-widest text-gray-400">
           RBF transactions
         </p>
         <RBFTransactionTable transactions={rbftransactions} />
