@@ -44,4 +44,8 @@ pub struct Cli {
     /// Path to Bitcoin Core IPC socket
     #[arg(long, default_value = "/tmp/bitcoin-cpunet.sock")]
     pub ipc_socket: String,
+
+    /// Bind to this address for Braidpool RPC server
+    #[arg(long, default_value = "127.0.0.1:6682")]
+    pub rpcbind: String,
 }

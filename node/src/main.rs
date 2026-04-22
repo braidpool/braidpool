@@ -388,7 +388,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (rpc_proxy_tx, rpc_proxy_rx) = tokio::sync::mpsc::unbounded_channel::<RpcProxyCommand>();
     // peer_manager_arc is created above and shared between swarm and RPC server
     //spawning the rpc server
-    let rpc_addr = "127.0.0.1:6682"; // TODO: Load from config file
+    let rpc_addr = &args.rpcbind;
     let bitcoin_rpc_config = BitcoinRpcConfig::from_cli_args(&args).unwrap_or_else(|e| {
         eprintln!("Error: {}", e);
         std::process::exit(1);

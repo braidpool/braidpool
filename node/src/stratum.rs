@@ -11,7 +11,7 @@ use num::ToPrimitive;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::time::UNIX_EPOCH;
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use tokio::{
@@ -26,6 +26,8 @@ use tokio_stream::StreamExt;
 use tokio_util::codec::{FramedRead, LinesCodec};
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
+
+static NEXT_CONNECTION_ID: AtomicU32 = AtomicU32::new(1);
 
 #[derive(Debug, Clone)]
 pub struct BlockSubmissionRequest {
@@ -1128,10 +1130,9 @@ impl Default for DownstreamClient {
         //ExtraNonce1. - Hex-encoded, per-connection unique string which will be used for creating generation transactions later.
         //4 bytes
         let mut extranonce1_bytes = [0; 4];
-        rand::thread_rng().fill_bytes(&mut extranonce1_bytes);
-        let connection_id = rand::thread_rng().next_u32(); // FIXME use a counter here, not an RNG
-                                                           // (will collide with 65k mining devices)
-        let extranonce1_hex = hex::encode(&extranonce1_bytes); // FIXME should be connection_id
+        let connection_id = NEXT_CONNECTION_ID.fetch_add(1, Ordering::SeqCst);
+        extranonce1_bytes.copy_from_slice(&connection_id.to_be_bytes());
+        let extranonce1_hex = hex::encode(&extranonce1_bytes);
         debug!(
             connection_id = %format!("{:x}", connection_id),
             extranonce1 = %extranonce1_hex,
