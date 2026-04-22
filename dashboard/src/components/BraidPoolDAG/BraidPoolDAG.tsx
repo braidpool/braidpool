@@ -59,8 +59,9 @@ const GraphVisualization: React.FC = () => {
   const height = window.innerHeight - margin.top - margin.bottom;
   const [nodeIdMap, setNodeIdMap] = useState<NodeIdMapping>({});
   const [selectedCohorts, setSelectedCohorts] = useState<number | 'all'>(5);
-  const [animationSpeed, setAnimationSpeed] =
-    useState<AnimationSpeed>(DEFAULT_ANIMATION_SPEED);
+  const [animationSpeed, setAnimationSpeed] = useState<AnimationSpeed>(
+    DEFAULT_ANIMATION_SPEED
+  );
   const animationSpeedRef = useRef<AnimationSpeed>(DEFAULT_ANIMATION_SPEED);
   const nextAnimationFrameTimeRef = useRef(0);
   const pendingCohortAnimationRef = useRef<{
@@ -162,7 +163,10 @@ const GraphVisualization: React.FC = () => {
       if (pendingGateFlushTimeoutRef.current !== null) {
         return;
       }
-      const waitMs = Math.max(nextAnimationFrameTimeRef.current - Date.now(), 0);
+      const waitMs = Math.max(
+        nextAnimationFrameTimeRef.current - Date.now(),
+        0
+      );
       pendingGateFlushTimeoutRef.current = window.setTimeout(() => {
         pendingGateFlushTimeoutRef.current = null;
         if (!isMounted) {
@@ -176,10 +180,8 @@ const GraphVisualization: React.FC = () => {
           return;
         }
 
-        const {
-          durationMs: pendingDurationMs,
-          delayMs: pendingDelayMs,
-        } = getAnimationTiming(animationSpeedRef.current);
+        const { durationMs: pendingDurationMs, delayMs: pendingDelayMs } =
+          getAnimationTiming(animationSpeedRef.current);
         nextAnimationFrameTimeRef.current =
           Date.now() + pendingDelayMs + pendingDurationMs;
         setTimeout(() => {
