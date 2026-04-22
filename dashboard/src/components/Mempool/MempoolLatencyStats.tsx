@@ -225,17 +225,20 @@ const MempoolLatencyStats = () => {
           <select
             value={selectedView}
             onChange={(e) =>
-              setSelectedView(
-                e.target.value as 'btc' | 'usd' | 'eur' | 'jpy' | 'all'
-              )
+              setSelectedView(e.target.value as typeof selectedView)
             }
-            className="bg-[#1a1a1a] text-gray-300 px-4 py-2 rounded-md shadow-md border border-white"
+            className="px-4 py-2 bg-[#1a1a1a] text-gray-300 rounded-md shadow-md border border-white"
           >
-            {['btc', 'usd', 'eur', 'jpy', 'all'].map((view) => (
-              <option key={view} value={view}>
-                {view.toUpperCase()}
-              </option>
-            ))}
+            <option value={selectedView} hidden disabled>
+              {selectedView.toUpperCase()}
+            </option>
+            {(['btc', 'usd', 'eur', 'jpy', 'all'] as const)
+              .filter((view) => view !== selectedView)
+              .map((view) => (
+                <option key={view} value={view}>
+                  {view.toUpperCase()}
+                </option>
+              ))}
           </select>
         </div>
 

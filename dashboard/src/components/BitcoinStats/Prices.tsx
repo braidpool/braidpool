@@ -25,6 +25,8 @@ import { useRef } from 'react';
 import { WEBSOCKET_URLS } from '../../URLs';
 import { MAX_HISTORY_ITEMS } from './Constants';
 
+const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY'] as const;
+
 const BitcoinPriceTracker: React.FC = () => {
   const [currency, setCurrency] = useState<'USD' | 'EUR' | 'GBP' | 'JPY'>(
     'USD'
@@ -168,18 +170,14 @@ const BitcoinPriceTracker: React.FC = () => {
           }}
           className="block py-2 px-4 ml-5 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
         >
-          <option className="bg-gray-500" value="USD">
-            USD
+          <option value={currency} hidden disabled>
+            {currency}
           </option>
-          <option className="bg-gray-500" value="EUR">
-            EUR
-          </option>
-          <option className="bg-gray-500" value="GBP">
-            GBP
-          </option>
-          <option className="bg-gray-500" value="JPY">
-            JPY
-          </option>
+          {CURRENCIES.filter((curr) => curr !== currency).map((curr) => (
+            <option key={curr} className="bg-gray-500" value={curr}>
+              {curr}
+            </option>
+          ))}
         </select>
       </div>
 
