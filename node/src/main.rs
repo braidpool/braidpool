@@ -393,13 +393,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
         eprintln!("Error: {}", e);
         std::process::exit(1);
     });
+    let braid_rpc = Arc::clone(&braid);
+    let peer_manager_rpc = Arc::clone(&peer_manager_arc);
     let server_join = tokio::spawn(async move {
         run_rpc_server(
-            Arc::clone(&braid),
+            braid_rpc,
             &rpc_addr,
-            peer_manager_arc.clone(),
-            connection_mapping_for_rpc.clone(),
-            latest_template.clone(),
+            peer_manager_rpc,
+            connection_mapping_for_rpc,
+            latest_template,
             rpc_proxy_tx,
             bitcoin_rpc_config,
         )
