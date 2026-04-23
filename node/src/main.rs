@@ -388,20 +388,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (rpc_proxy_tx, rpc_proxy_rx) = tokio::sync::mpsc::unbounded_channel::<RpcProxyCommand>();
     // peer_manager_arc is created above and shared between swarm and RPC server
     //spawning the rpc server
-    let rpc_addr = &args.rpcbind;
+    let rpc_addr = args.rpcbind.clone();
     let bitcoin_rpc_config = BitcoinRpcConfig::from_cli_args(&args).unwrap_or_else(|e| {
         eprintln!("Error: {}", e);
         std::process::exit(1);
     });
-    let server_join = tokio::spawn(run_rpc_server(
-        Arc::clone(&braid),
-        rpc_addr,
-        peer_manager_arc.clone(),
-        connection_mapping_for_rpc.clone(),
-        latest_template.clone(),
-        rpc_proxy_tx,
-        bitcoin_rpc_config,
-    ));
+    let server_join = tokio::spawn(async move {
+        run_rpc_server(
+            Arc::clone(&braid),
+            &rpc_addr,
+            peer_manager_arc.clone(),
+            connection_mapping_for_rpc.clone(),
+            latest_template.clone(),
+            rpc_proxy_tx,
+            bitcoin_rpc_config,
+        )
+        .await
+    });
     match server_join.await {
         Ok(Ok(_addr)) => {}
         Ok(Err(())) => {

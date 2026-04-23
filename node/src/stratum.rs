@@ -8,7 +8,6 @@ use bitcoin::{absolute::Decodable, Transaction};
 use bitcoin::{BlockHash, BlockHeader, BlockTime, TxMerkleNode, Txid, Witness};
 use futures::{lock::Mutex, FutureExt};
 use num::ToPrimitive;
-use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -1144,7 +1143,7 @@ impl Default for DownstreamClient {
             subscribed: false,
             suggest_difficulty_done: false,
             channel_configured: false,
-            //generating a random u32 client connection id
+            // assign a monotonically increasing connection id for the 4-byte extranonce1 prefix
             connection_id,
             extranonce1: Vec::from(extranonce1_bytes),
             version_rolling_mask: None,
