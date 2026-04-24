@@ -1,30 +1,27 @@
 import React, { useRef, useEffect, useState } from 'react';
 import * as d3 from 'd3';
 import { Loader } from 'lucide-react';
-import { GraphData, GraphNode, NodeIdMapping, Position } from './Types';
+import type {
+  AnimationSpeed,
+  GraphData,
+  GraphNode,
+  NodeIdMapping,
+  Position,
+} from './Types';
 import {
   layoutNodes,
   getEllipseEdgePoint,
   animateLinkDirection,
 } from './BraidPoolDAGUtils';
 import { WEBSOCKET_URLS } from '../../URLs';
-import { NODE_RADIUS, COLORS } from './Constants';
-
-type AnimationSpeed = 'slow' | 'normal' | 'fast';
-const DEFAULT_ANIMATION_SPEED: AnimationSpeed = 'normal';
-
-const ANIMATION_SPEED_OPTIONS: {
-  value: AnimationSpeed;
-  label: string;
-  scale: number;
-}[] = [
-  { value: 'slow', label: 'Slow', scale: 1.8 },
-  { value: 'normal', label: 'Normal', scale: 0.75 },
-  { value: 'fast', label: 'Fast', scale: 0.3 },
-];
-
-const DEFAULT_COHORT_ANIMATION_DURATION_MS = 1000;
-const DEFAULT_COHORT_ANIMATION_DELAY_MS = 100;
+import {
+  ANIMATION_SPEED_OPTIONS,
+  COLORS,
+  DEFAULT_ANIMATION_SPEED,
+  DEFAULT_COHORT_ANIMATION_DELAY_MS,
+  DEFAULT_COHORT_ANIMATION_DURATION_MS,
+  NODE_RADIUS,
+} from './Constants';
 
 const getAnimationTiming = (speed: AnimationSpeed) => {
   const defaultSpeedConfig = ANIMATION_SPEED_OPTIONS.find(

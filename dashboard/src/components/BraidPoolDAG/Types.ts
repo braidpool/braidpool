@@ -20,3 +20,11 @@ export interface Position {
   x: number;
   y: number;
 }
+
+export type AnimationSpeed = 'slow' | 'normal' | 'fast';
+
+export interface AnimationSpeedOption {
+  value: AnimationSpeed;
+  label: string;
+  scale: number;
+}
