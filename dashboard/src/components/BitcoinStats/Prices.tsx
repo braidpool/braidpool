@@ -354,16 +354,16 @@ const BitcoinPriceTracker: React.FC = () => {
                   (dataMin: number) =>
                     Math.floor(
                       dataMin -
-                      (priceData
-                        ? (priceData.high24h - priceData.low24h) * 0.1
-                        : 0)
+                        (priceData
+                          ? (priceData.high24h - priceData.low24h) * 0.1
+                          : 0)
                     ),
                   (dataMax: number) =>
                     Math.ceil(
                       dataMax +
-                      (priceData
-                        ? (priceData.high24h - priceData.low24h) * 0.1
-                        : 0)
+                        (priceData
+                          ? (priceData.high24h - priceData.low24h) * 0.1
+                          : 0)
                     ),
                 ]}
                 tickFormatter={(value) =>
@@ -371,7 +371,7 @@ const BitcoinPriceTracker: React.FC = () => {
                 }
               />
               <Tooltip
-                cursor={{ fill: 'transparent' }}   // ← replaces the white/grey overlay with transparent
+                cursor={{ fill: 'transparent' }} // ← replaces the white/grey overlay with transparent
                 contentStyle={{
                   backgroundColor: 'black',
                   border: '1px solid #ccc',
