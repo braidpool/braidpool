@@ -326,7 +326,7 @@ const BitcoinPriceTracker: React.FC = () => {
       {/* Charts Section */}
       <div className="w-full flex flex-wrap justify-center items-center gap-4 md:gap-20 p-4 mt-4 md:p-6 rounded-lg mb-6">
         {/* Price Range Bar Chart */}
-        <div className="flex flex-col w-full h-80 -mx-6 sm:mx-0 px-6 sm:px-0">
+        <div className="bitcoin-price-range-chart flex flex-col w-full h-80 -mx-6 sm:mx-0 px-6 sm:px-0">
           <p className="font-semibold text-base">Bitcoin Price Range (24h)</p>
           <span className="text-sm text-gray-500 mb-2">
             Displays the 24-hour low, current, and 24-hour high prices in{' '}
@@ -354,16 +354,16 @@ const BitcoinPriceTracker: React.FC = () => {
                   (dataMin: number) =>
                     Math.floor(
                       dataMin -
-                        (priceData
-                          ? (priceData.high24h - priceData.low24h) * 0.1
-                          : 0)
+                      (priceData
+                        ? (priceData.high24h - priceData.low24h) * 0.1
+                        : 0)
                     ),
                   (dataMax: number) =>
                     Math.ceil(
                       dataMax +
-                        (priceData
-                          ? (priceData.high24h - priceData.low24h) * 0.1
-                          : 0)
+                      (priceData
+                        ? (priceData.high24h - priceData.low24h) * 0.1
+                        : 0)
                     ),
                 ]}
                 tickFormatter={(value) =>
@@ -371,6 +371,7 @@ const BitcoinPriceTracker: React.FC = () => {
                 }
               />
               <Tooltip
+                cursor={{ fill: 'transparent' }}   // ← replaces the white/grey overlay with transparent
                 contentStyle={{
                   backgroundColor: 'black',
                   border: '1px solid #ccc',
@@ -382,7 +383,11 @@ const BitcoinPriceTracker: React.FC = () => {
                 ]}
               />
               <Legend wrapperStyle={{ fontSize: '12px' }} />
-              <Bar dataKey="value" fill="#8884d8" />
+              <Bar
+                dataKey="value"
+                fill="#8884d8"
+                activeBar={{ fill: '#8884d8', strokeWidth: 0 }}
+              />
             </BarChart>
           </ResponsiveContainer>
         </div>
