@@ -7,6 +7,8 @@
 * [Bitcoin Hashrate Derivatives Trading](derivatives.md) describes how we can replace FPPS with a
   marketplace of hashrate forwards or options
 * [Roadmap](roadmap.md) is the roadmap for braidpool
+* [Payout Verifier Invariants](payout_verifier_invariants.md) defines the v1alpha invariant scaffold
+  for deterministic RCA/UHPO payout verification
 
 # Works in Progress
 * [Braidpool Consensus](braid_consensus.md) is a draft specification for the consensus rules
