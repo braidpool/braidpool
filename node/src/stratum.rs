@@ -540,79 +540,37 @@ impl DownstreamClient {
             bitcoin::block::Version::to_consensus(submitted_job.blocktemplate.version.clone());
         let mut final_masked_version =
             bitcoin::block::Version::to_consensus(submitted_job.blocktemplate.version);
-        if param_array.len() >= 6 {
-            //rolling the version bits only if they have been supplied during the configuration phase
+
+        if let Some(mask_hex) = self.version_rolling_mask.as_ref() {
             let rolled_version_bits: &str = match param_array.get(5).and_then(|v| v.as_str()) {
                 Some(n) => n,
                 None => {
                     return Err(StratumErrors::ParamNotFound {
-                        param: "rolled_version".to_string(),
+                        param: "rolled_version_bits".to_string(),
                         method: "mining.submit".to_string(),
                     })
                 }
             };
-            // Miner received version
+
             let mut rolled_version = [0u8; 4];
             match hex::decode_to_slice(rolled_version_bits, &mut rolled_version) {
                 Ok(_) => (),
                 Err(e) => {
-                    error!(
-                        connection_id = %connection_id_hex,
-                        error = ?e,
-                        param = "rolled_version_bits",
-                        "Failed to decode version rolling bits"
-                    );
                     return Err(StratumErrors::VersionRollingHexParseError {
                         error: e.to_string(),
-                    });
+                    })
                 }
             }
             let version_bits = i32::from_be_bytes(rolled_version);
 
-            // Mask set during mining.configure
             let mut mask_bytes = [0u8; 4];
-            let version_rolling_mask_str = match self.version_rolling_mask.clone() {
-                Some(mask) => mask,
-                None => {
-                    error!(connection_id = %connection_id_hex, "Version rolling mask not set");
-                    return Err(StratumErrors::ParsingVersionMask {
-                        error: "Version rolling mask not configured".to_string(),
-                    });
+            hex::decode_to_slice(mask_hex, &mut mask_bytes).map_err(|e| {
+                StratumErrors::VersionRollingHexParseError {
+                    error: e.to_string(),
                 }
-            };
-            let version_rolling_mask = match version_rolling_mask_str.parse::<u32>() {
-                Ok(version_mask) => version_mask,
-                Err(error) => {
-                    return Err(StratumErrors::ParsingVersionMask {
-                        error: error.to_string(),
-                    });
-                }
-            };
-
-            let version_rolling_mask_bytes = version_rolling_mask.to_be_bytes();
-            let version_rolling_mask_hex = hex::encode(version_rolling_mask_bytes);
-
-            info!(
-                connection_id = %connection_id_hex,
-                version_mask = ?version_rolling_mask_hex,
-                "Converted version mask"
-            );
-
-            match hex::decode_to_slice(version_rolling_mask_hex, &mut mask_bytes) {
-                Ok(_) => (),
-                Err(e) => {
-                    error!(
-                        connection_id = %connection_id_hex,
-                        error = ?e,
-                        param = "version_rolling_mask_hex",
-                        "Failed to decode version mask hex"
-                    );
-                    return Err(StratumErrors::VersionRollingHexParseError {
-                        error: e.to_string(),
-                    });
-                }
-            }
+            })?;
             let mask_version_bits = i32::from_be_bytes(mask_bytes);
+
             let precondition = version_bits & !mask_version_bits;
             if precondition != 0 {
                 return Err(StratumErrors::MaskNotValid {
@@ -1031,9 +989,8 @@ impl DownstreamClient {
             };
             //Intersecting with the bits provided by the pool and miner's suggested one
             let final_rollable_version_bits = u32::from_be_bytes(mask_bytes) & 0x1FFFE000;
-            // `0x1FFFE000` is a reasonable default as it allows all 16 version bits to be used
-            let hex_str = u32::to_string(&final_rollable_version_bits);
-            self.version_rolling_mask = Some(hex_str);
+            // `0x1FFFE000` is a reasonable default as it allows all 16 version bits to be used in `hex`
+            self.version_rolling_mask = Some(format!("{:08x}", final_rollable_version_bits));
         }
         if let Some(min_bit_count_value) = version_rolling_min_bit_count {
             let mut mask_bytes: [u8; 4] = [0u8; 4];
@@ -2392,7 +2349,7 @@ mod test {
     //TODO: this test is currently conditional wrt to master branch for our forked rust-bitcoin hence commented out
 
     #[tokio::test]
-    async fn submit_work_no_version_rolling() {
+    async fn submit_work_version_rolling() {
         /*
         Test block taken - 00000020e6ebb395a1e2ba60f17650d790309e21af08062229ad955376ac574300000000e8de27818e402a0d5e6028f363be4b47d809ad348e6bc88ac2f9c2bedf0409e9337edf68ffff001d7aeb8b0601020000000001010000000000000000000000000000000000000000000000000000000000000000ffffffff1602611e089495ac0803000000094272616964706f6f6cffffffff0300f2052a01000000160014e470d0179325db88b55771f6c0a5139dd81d73180000000000000000266a24aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf900000000000000002a6a286272616964706f6f6c5f626561645f6d657461646174615f686173685f33326201020304050607080120000000000000000000000000000000000000000000000000000000000000000000000000
 
@@ -2502,6 +2459,7 @@ mod test {
             "03000000",
             "68df7e33",
             "068beb7a",
+            "00000000"
         ]);
         let configure_test_request = json!([
             [
