@@ -1,6 +1,5 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import Dashboard from './components/Dashboard/Dashboard';
-import MinedSharesExplorer from './components/BeadsTab/MinedSharesExplorer';
 import Footer from './components/Footer/Footer';
 
 function App() {
@@ -9,10 +8,11 @@ function App() {
       <BrowserRouter>
         <main className="flex-grow flex flex-col">
           <Routes>
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/:page" element={<Dashboard />} />
             <Route
               path="/minedsharesexplorer"
-              element={<MinedSharesExplorer />}
+              element={<Navigate to="/miner-stats" replace />}
             />
           </Routes>
         </main>
