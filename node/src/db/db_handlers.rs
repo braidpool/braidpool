@@ -363,7 +363,6 @@ impl DBHandler {
                         if let Ok(parent_ts) =
                             serde_json::from_str::<Vec<serde_json::Value>>(&parent_ts_json)
                         {
-                            // warn!("PARENTS JSON STRING - {:?}",parent_ts);
                             all_parent_ts_json_parts.extend(parent_ts);
                         }
                     }
@@ -580,8 +579,8 @@ impl DBHandler {
                         original_bead.block_header.block_hash(),
                     )
                     .await;
-                    if let Some(original_bead_id) = bead_index_mapping
-                        .get(&original_bead.block_header.block_hash())
+                    if let Some(original_bead_id) =
+                        bead_index_mapping.get(&original_bead.block_header.block_hash())
                     {
                         debug!("Bead id original {:?}", original_bead_id);
                         debug!(
@@ -665,8 +664,7 @@ impl DBHandler {
                                 //Inserting the beads removed from orphan set upon the extension of current bead
                                 for orphan in removed_orphans.into_iter() {
                                     let orphan_hash = orphan.block_header.block_hash();
-                                    let orphan_bead_id = match bead_index_mapping
-                                        .get(&orphan_hash)
+                                    let orphan_bead_id = match bead_index_mapping.get(&orphan_hash)
                                     {
                                         Some((id, _)) => *id,
                                         None => {
@@ -853,12 +851,10 @@ pub async fn fetch_beads_in_batch(
             bead.committed_metadata.miner_ip = row.get("miner_ip");
 
             let start_ts_val = row.get::<u32, _>("start_timestamp");
-            bead.committed_metadata.start_timestamp =
-                MedianTimePast::from_u32(start_ts_val).map_err(|e| {
-                    DBErrors::TupleAttributeParsingError {
-                        error: format!("Invalid timestamp value {}: {}", start_ts_val, e),
-                        attribute: "start_timestamp".into(),
-                    }
+            bead.committed_metadata.start_timestamp = MedianTimePast::from_u32(start_ts_val)
+                .map_err(|e| DBErrors::TupleAttributeParsingError {
+                    error: format!("Invalid timestamp value {}: {}", start_ts_val, e),
+                    attribute: "start_timestamp".into(),
                 })?;
 
             let broadcast_ts_val = row.get::<u32, _>("broadcast_timestamp");
@@ -871,20 +867,16 @@ pub async fn fetch_beads_in_batch(
                 })?;
 
             let extranonce1_str = row.get::<String, _>("extranonce1");
-            bead.uncommitted_metadata.extra_nonce_1 =
-                u32::from_str_radix(&extranonce1_str, 16).map_err(|e| {
-                    DBErrors::TupleAttributeParsingError {
-                        error: format!("Invalid hex value '{}': {}", extranonce1_str, e),
-                        attribute: "extranonce1".into(),
-                    }
+            bead.uncommitted_metadata.extra_nonce_1 = u32::from_str_radix(&extranonce1_str, 16)
+                .map_err(|e| DBErrors::TupleAttributeParsingError {
+                    error: format!("Invalid hex value '{}': {}", extranonce1_str, e),
+                    attribute: "extranonce1".into(),
                 })?;
             let extranonce2_str = row.get::<String, _>("extranonce2");
-            bead.uncommitted_metadata.extra_nonce_2 =
-                u32::from_str_radix(&extranonce2_str, 16).map_err(|e| {
-                    DBErrors::TupleAttributeParsingError {
-                        error: format!("Invalid hex value '{}': {}", extranonce2_str, e),
-                        attribute: "extranonce2".into(),
-                    }
+            bead.uncommitted_metadata.extra_nonce_2 = u32::from_str_radix(&extranonce2_str, 16)
+                .map_err(|e| DBErrors::TupleAttributeParsingError {
+                    error: format!("Invalid hex value '{}': {}", extranonce2_str, e),
+                    attribute: "extranonce2".into(),
                 })?;
 
             bead.uncommitted_metadata.signature =
@@ -1017,49 +1009,49 @@ pub async fn fetch_bead_by_bead_hash(
                 })?
                 .to_string();
             let start_ts_val = row.get::<u32, _>("start_timestamp");
-            let start_timestamp =
-                MedianTimePast::from_u32(start_ts_val).map_err(|e| {
+            let start_timestamp = MedianTimePast::from_u32(start_ts_val).map_err(|e| {
+                DBErrors::TupleAttributeParsingError {
+                    error: format!("Invalid timestamp value {}: {}", start_ts_val, e),
+                    attribute: "start_timestamp".to_string(),
+                }
+            })?;
+            let pub_key =
+                PublicKey::from_slice(&row.get::<Vec<u8>, _>("comm_pub_key")).map_err(|e| {
                     DBErrors::TupleAttributeParsingError {
-                        error: format!("Invalid timestamp value {}: {}", start_ts_val, e),
-                        attribute: "start_timestamp".to_string(),
+                        error: format!("Invalid public key: {}", e),
+                        attribute: "comm_pub_key".to_string(),
                     }
-                })?;
-            let pub_key = PublicKey::from_slice(&row.get::<Vec<u8>, _>("comm_pub_key"))
-                .map_err(|e| DBErrors::TupleAttributeParsingError {
-                    error: format!("Invalid public key: {}", e),
-                    attribute: "comm_pub_key".to_string(),
                 })?;
             let min_target = CompactTarget::from_consensus(row.get::<u32, _>("min_target"));
             let weak_target = CompactTarget::from_consensus(row.get::<u32, _>("weak_target"));
             let miner_ip = row.get::<String, _>("miner_ip");
             let extranonce1_str = row.get::<String, _>("extranonce1");
-            let extranonce_1 =
-                u32::from_str_radix(&extranonce1_str, 16).map_err(|e| {
-                    DBErrors::TupleAttributeParsingError {
-                        error: format!("Invalid hex '{}': {}", extranonce1_str, e),
-                        attribute: "extranonce1".to_string(),
-                    }
-                })?;
+            let extranonce_1 = u32::from_str_radix(&extranonce1_str, 16).map_err(|e| {
+                DBErrors::TupleAttributeParsingError {
+                    error: format!("Invalid hex '{}': {}", extranonce1_str, e),
+                    attribute: "extranonce1".to_string(),
+                }
+            })?;
             let extranonce2_str = row.get::<String, _>("extranonce2");
-            let extranonce_2 =
-                u32::from_str_radix(&extranonce2_str, 16).map_err(|e| {
-                    DBErrors::TupleAttributeParsingError {
-                        error: format!("Invalid hex '{}': {}", extranonce2_str, e),
-                        attribute: "extranonce2".to_string(),
-                    }
-                })?;
+            let extranonce_2 = u32::from_str_radix(&extranonce2_str, 16).map_err(|e| {
+                DBErrors::TupleAttributeParsingError {
+                    error: format!("Invalid hex '{}': {}", extranonce2_str, e),
+                    attribute: "extranonce2".to_string(),
+                }
+            })?;
             let broadcast_ts_val = row.get::<u32, _>("broadcast_timestamp");
-            let broadcast_timestamp =
-                MedianTimePast::from_u32(broadcast_ts_val).map_err(|e| {
+            let broadcast_timestamp = MedianTimePast::from_u32(broadcast_ts_val).map_err(|e| {
+                DBErrors::TupleAttributeParsingError {
+                    error: format!("Invalid timestamp value {}: {}", broadcast_ts_val, e),
+                    attribute: "broadcast_timestamp".to_string(),
+                }
+            })?;
+            let signature =
+                Signature::from_slice(&row.get::<Vec<u8>, _>("signature")).map_err(|e| {
                     DBErrors::TupleAttributeParsingError {
-                        error: format!("Invalid timestamp value {}: {}", broadcast_ts_val, e),
-                        attribute: "broadcast_timestamp".to_string(),
+                        error: format!("Invalid signature: {}", e),
+                        attribute: "signature".to_string(),
                     }
-                })?;
-            let signature = Signature::from_slice(&row.get::<Vec<u8>, _>("signature"))
-                .map_err(|e| DBErrors::TupleAttributeParsingError {
-                    error: format!("Invalid signature: {}", e),
-                    attribute: "signature".to_string(),
                 })?;
             bead_id = id;
             fetched_bead.block_header.version = version;

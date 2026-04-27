@@ -511,11 +511,7 @@ impl fmt::Display for ConfigError {
                 )
             }
             ConfigError::PathConversionError { path } => {
-                write!(
-                    f,
-                    "Failed to convert path to string: {:?}",
-                    path
-                )
+                write!(f, "Failed to convert path to string: {:?}", path)
             }
         }
     }
@@ -580,7 +576,11 @@ impl fmt::Display for ConsensusDecodingError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ConsensusDecodingError::TimestampDecodeError { value, error } => {
-                write!(f, "Failed to decode timestamp from value {}: {}", value, error)
+                write!(
+                    f,
+                    "Failed to decode timestamp from value {}: {}",
+                    value, error
+                )
             }
             ConsensusDecodingError::PublicKeyDecodeError { error } => {
                 write!(f, "Failed to decode public key: {}", error)

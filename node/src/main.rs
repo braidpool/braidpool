@@ -564,7 +564,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                 };
                                 let bead_mapping_ref = braid_data.bead_index_mapping.clone();
                                 if let braid::AddBeadStatus::ParentsNotYetReceived = status {
-                                    // There is no need to rqeuest parents immediately they will be solved upon bead received as per the
+                                    // There is no need to request parents immediately they will be solved upon bead received as per the
                                     // latency of mesh and the self mined beads and their propagation via `extend` functionality
                                     warn!("Received bead with missing parents - requesting parents");
                                 } else if let braid::AddBeadStatus::InvalidBead = status {
