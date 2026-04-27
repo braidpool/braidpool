@@ -1,5 +1,5 @@
-use bitcoin::Network;
 use crate::error::ConfigError;
+use bitcoin::Network;
 use serde::{Deserialize, Serialize};
 use std::fs;
 #[derive(Deserialize, Serialize, Clone)]
@@ -53,12 +53,11 @@ impl BraidpoolConfig {
             error: e.to_string(),
             path: path.to_string(),
         })?;
-        let config: BraidpoolConfig = toml::from_str(&contents).map_err(|e| {
-            ConfigError::TomlParseError {
+        let config: BraidpoolConfig =
+            toml::from_str(&contents).map_err(|e| ConfigError::TomlParseError {
                 error: e.to_string(),
                 path: path.to_string(),
-            }
-        })?;
+            })?;
 
         Ok(config)
     }
