@@ -10,7 +10,7 @@ use futures::{lock::Mutex, FutureExt};
 use num::ToPrimitive;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::UNIX_EPOCH;
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use tokio::{
@@ -26,7 +26,7 @@ use tokio_util::codec::{FramedRead, LinesCodec};
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
 
-static NEXT_CONNECTION_ID: AtomicU32 = AtomicU32::new(1);
+static NEXT_CONNECTION_ID: AtomicUsize = AtomicUsize::new(1);
 
 #[derive(Debug, Clone)]
 pub struct BlockSubmissionRequest {
@@ -198,7 +198,7 @@ pub struct DownstreamClient {
     ///Configuration done so that all the phases are tracked and thus template can be supplied to downstream
     pub channel_configured: bool,
     /// The unique identifier assigned to this downstream connection/channel.
-    connection_id: u32,
+    connection_id: usize,
     /// The extranonce1 value assigned to this downstream miner.
     extranonce1: Vec<u8>,
     /// `extranonce1` to be sent to the Downstream in the SV1 `mining.subscribe` message response.
@@ -218,7 +218,7 @@ pub struct DownstreamClient {
 }
 impl DownstreamClient {
     /// A helper function to keep connection_id immutable after assignment
-    pub fn connection_id(&self) -> u32 {
+    pub fn connection_id(&self) -> usize {
         self.connection_id
     }
     /// Handles an incoming Stratum `Client2Server` request from a downstream miner.
@@ -1129,8 +1129,24 @@ impl Default for DownstreamClient {
         //ExtraNonce1. - Hex-encoded, per-connection unique string which will be used for creating generation transactions later.
         //4 bytes
         let mut extranonce1_bytes = [0; 4];
-        let connection_id = NEXT_CONNECTION_ID.fetch_add(1, Ordering::SeqCst);
-        extranonce1_bytes.copy_from_slice(&connection_id.to_be_bytes());
+        let connection_id = loop {
+            let current = NEXT_CONNECTION_ID.load(Ordering::Relaxed);
+            let next = if current == usize::MAX {
+                1
+            } else {
+                current + 1
+            };
+            match NEXT_CONNECTION_ID.compare_exchange_weak(
+                current,
+                next,
+                Ordering::Acquire,
+                Ordering::Relaxed,
+            ) {
+                Ok(_) => break current,
+                Err(_) => continue,
+            };
+        };
+        extranonce1_bytes.copy_from_slice(&(connection_id as u32).to_be_bytes());
         let extranonce1_hex = hex::encode(&extranonce1_bytes);
         debug!(
             connection_id = %format!("{:x}", connection_id),
@@ -1143,7 +1159,7 @@ impl Default for DownstreamClient {
             subscribed: false,
             suggest_difficulty_done: false,
             channel_configured: false,
-            // assign a monotonically increasing connection id for the 4-byte extranonce1 prefix
+            // assign a monotonically increasing connection id for the extranonce1 prefix
             connection_id,
             extranonce1: Vec::from(extranonce1_bytes),
             version_rolling_mask: None,
@@ -1769,7 +1785,7 @@ impl Notifier {
 ///Connection information associated with each downstream peer associated along with the mapped `Sender_channel` for sending downstream responses and communication.
 #[derive(Debug, Clone)]
 pub struct ConnectionInfo {
-    pub connection_id: u32,
+    pub connection_id: usize,
     pub sender: mpsc::Sender<String>,
 }
 
@@ -1787,7 +1803,7 @@ impl ConnectionMapping {
     pub fn new_connection(
         &mut self,
         peer_addr: String,
-        connection_id: u32,
+        connection_id: usize,
         peer_msg_sender: mpsc::Sender<String>,
     ) {
         self.downstream_channel_mapping.insert(
