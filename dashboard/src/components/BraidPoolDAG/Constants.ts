@@ -13,3 +13,4 @@ export const COLORS = [
 // Layout constants - controls spacing between beads
 export const COLUMN_WIDTH = 300; // Horizontal spacing between cohorts
 export const VERTICAL_SPACING = 200; // Vertical spacing between beads in same cohort
+export const MAX_BEADS_RECORDS = 7;

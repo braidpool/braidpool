@@ -3,7 +3,6 @@ import Card from '../common/Card';
 import Header from '../common/Header';
 import MinerInventoryDashboard from '../MinerInventory/MinerInventoryDashboard';
 import MempoolLatencyStats from '../Mempool/MempoolLatencyStats';
-import GraphVisualization from '../BraidPoolDAG/BraidPoolDAG';
 import MinedSharesExplorer from '../BeadsTab/MinedSharesExplorer';
 import NodeHealth from '../NodeHealth/NodeHealth';
 import BitcoinStats from '../BitcoinStats/BitcoinStats';

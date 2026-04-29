@@ -16,6 +16,7 @@ import {
   VERTICAL_SPACING,
 } from './Constants';
 import { ChevronDown, ChevronUp } from 'lucide-react';
+import { MAX_BEADS_RECORDS } from './Constants';
 
 const GraphVisualization: React.FC = () => {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -56,7 +57,6 @@ const GraphVisualization: React.FC = () => {
   const [consecutiveZoomOutCount, setConsecutiveZoomOutCount] = useState(0);
 
   const [beadRecords, setBeadRecords] = useState<BeadRecord[]>([]);
-  const [maxBeadRecords] = useState(7);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const toggleRowExpansion = (hash: string) => {
     setExpandedRows((prev) => {
@@ -217,7 +217,7 @@ const GraphVisualization: React.FC = () => {
           if (newBeads.length > 0) {
             setBeadRecords((prev) => {
               const updated = [...newBeads, ...prev];
-              return updated.slice(0, maxBeadRecords);
+              return updated.slice(0, MAX_BEADS_RECORDS);
             });
           }
         }
