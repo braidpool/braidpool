@@ -76,7 +76,7 @@ const GraphVisualization: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const url = WEBSOCKET_URLS.BRAIDPOOL_DAG_WEBSOCKET;
+    const url = WEBSOCKET_URLS.MAIN_WEBSOCKET;
     const socket = new WebSocket(url);
     let isMounted = true;
 
@@ -100,8 +100,11 @@ const GraphVisualization: React.FC = () => {
       if (!isMounted) return;
       try {
         const parsed = JSON.parse(event.data);
+        if (parsed.type !== 'braidpool_bead_info') {
+          return;
+        }
         const parsedData = parsed.data;
-        console.log('Received data:', parsedData);
+        console.log('Received braidpool data:', parsedData);
         if (!isPlayingRef.current) {
           return;
         }
@@ -127,7 +130,7 @@ const GraphVisualization: React.FC = () => {
             : 0;
 
         const graphData: GraphData = {
-          highest_work_path: parsedData.highest_work_path,
+          highestWorkPath: parsedData.highestWorkPath || [],
           parents: parsedData.parents,
           cohorts: parsedData.cohorts,
           children,
@@ -173,11 +176,11 @@ const GraphVisualization: React.FC = () => {
           // If the counter is divisible by 100, set the latest bead's hash
           if (
             newCounter % 100 === 0 &&
-            parsedData.highest_work_path.length > 0
+            parsedData.highestWorkPath?.length > 0
           ) {
             const latestBeadHash =
-              parsedData.highest_work_path[
-                parsedData.highest_work_path.length - 1
+              parsedData.highestWorkPath[
+                parsedData.highestWorkPath.length - 1
               ];
             setLatestBeadHashForHighlight(latestBeadHash);
           }
@@ -185,12 +188,14 @@ const GraphVisualization: React.FC = () => {
           return newCounter;
         });
 
-        setTotalBeads(bead_count);
-        setTotalCohorts(parsedData.cohorts.length);
+        setTotalBeads(parsedData.braidInfo?.bead_count ?? bead_count);
+        setTotalCohorts(
+          parsedData.braidInfo?.cohort_count ?? parsedData.cohorts.length
+        );
         setMaxCohortSize(
           Math.max(...parsedData.cohorts.map((c: string | any[]) => c.length))
         );
-        setHwpLength(parsedData.highest_work_path.length);
+        setHwpLength(parsedData.highestWorkPath?.length || 0);
         setLoading(false);
 
         // Trigger animation if cohorts changed
@@ -361,7 +366,7 @@ const GraphVisualization: React.FC = () => {
       children: graphData.children[id],
     }));
 
-    const hwPath = graphData.highest_work_path;
+    const hwPath = graphData.highestWorkPath;
     const cohorts = graphData.cohorts;
     const positions = layoutNodes(allNodes, hwPath);
     const hwPathSet = new Set(hwPath);

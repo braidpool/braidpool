@@ -8,9 +8,6 @@ export const WEBSOCKET_URLS = {
   // Main WebSocket for general real-time updates (used in multiple components)
   MAIN_WEBSOCKET: 'ws://localhost:5000',
 
-  // WebSocket for BraidPool DAG visualization (simulator API)
-  BRAIDPOOL_DAG_WEBSOCKET: 'ws://localhost:65433/',
-
   // WebSocket for block viewer updates (mempool)
   BLOCK_VIEWER_WEBSOCKET: 'http://localhost:8080/api/v1/ws',
 } as const;

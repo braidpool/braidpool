@@ -100,11 +100,13 @@ export function layoutNodes(
   // Process non-HW nodes
   allNodes.filter((n) => !hwPathSet.has(n.id)).forEach((n) => setXCoord(n.id));
 
-  // Adjust tail nodes (no children)
-  const maxX = Math.max(...Object.values(proposedX));
   allNodes.forEach((n) => {
     if ((!n.children || n.children.length === 0) && !hwPathSet.has(n.id)) {
-      proposedX[n.id] = maxX;
+      const parents = Array.from(allParents[n.id] || []);
+      if (parents.length > 0) {
+        const maxParentX = Math.max(...parents.map((p) => proposedX[p] ?? 0));
+        proposedX[n.id] = maxParentX + 1;
+      }
     }
   });
 

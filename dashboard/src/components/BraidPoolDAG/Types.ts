@@ -9,7 +9,7 @@ export interface NodeIdMapping {
 }
 
 export interface GraphData {
-  highest_work_path: string[];
+  highestWorkPath: string[];
   parents: Record<string, string[]>;
   children: Record<string, string[]>;
   cohorts: string[][];
