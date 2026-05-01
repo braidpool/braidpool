@@ -15,9 +15,6 @@
 
 services:
 
-  # --------------------------------------------------------------------------
-  # Inventory Agent
-  # --------------------------------------------------------------------------
   inventory-agent:
     build:
       context: ./inventory-agent
@@ -27,7 +24,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      # Set to "warning" in production to reduce log noise
+
       - LOG_LEVEL=info
     healthcheck:
       test: ["CMD", "python", "-c",
@@ -37,9 +34,6 @@ services:
       retries: 3
       start_period: 10s
 
-  # --------------------------------------------------------------------------
-  # Braid Simulator (WebSocket)
-  # --------------------------------------------------------------------------
   braid-simulator:
     build:
       context: ./tests
@@ -56,9 +50,6 @@ services:
       retries: 3
       start_period: 15s
 
-  # --------------------------------------------------------------------------
-  # Dashboard (development build)
-  # --------------------------------------------------------------------------
   dashboard:
     build:
       context: ./dashboard
@@ -68,7 +59,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      # Point the dashboard at the inventory agent and simulator
+
       - VITE_INVENTORY_API_URL=http://localhost:8000
       - VITE_SIMULATOR_WS_URL=ws://localhost:65433
     depends_on:
