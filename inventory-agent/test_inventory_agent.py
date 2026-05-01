@@ -26,25 +26,17 @@ def reset_store():
 client = TestClient(app)
 
 
-# ---------------------------------------------------------------------------
-# Health
-# ---------------------------------------------------------------------------
-
 def test_health():
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 
 
-# ---------------------------------------------------------------------------
-# GET /miners
-# ---------------------------------------------------------------------------
-
 def test_list_miners_returns_all_seeded():
     response = client.get("/miners")
     assert response.status_code == 200
     miners = response.json()
-    # Seed data has 8 ASIC + 1 CPU
+
     assert len(miners) == 9
 
 
@@ -79,9 +71,6 @@ def test_list_miners_filter_by_type_asic():
     assert len(miners) == 8
 
 
-# ---------------------------------------------------------------------------
-# GET /miners/summary
-# ---------------------------------------------------------------------------
 
 def test_summary_totals_add_up():
     response = client.get("/miners/summary")
@@ -96,10 +85,6 @@ def test_summary_total_hashrate_is_positive():
     assert response.json()["total_hashrate_th"] > 0
 
 
-# ---------------------------------------------------------------------------
-# GET /miners/{id}
-# ---------------------------------------------------------------------------
-
 def test_get_existing_miner():
     response = client.get("/miners/miner-001")
     assert response.status_code == 200
@@ -112,10 +97,6 @@ def test_get_nonexistent_miner_returns_404():
     response = client.get("/miners/miner-does-not-exist")
     assert response.status_code == 404
 
-
-# ---------------------------------------------------------------------------
-# POST /miners
-# ---------------------------------------------------------------------------
 
 def test_create_asic_miner():
     payload = {
@@ -153,14 +134,10 @@ def test_create_cpu_miner():
 
 
 def test_create_miner_missing_required_field_returns_422():
-    # `name` is required
+
     response = client.post("/miners", json={"miner_type": "asic"})
     assert response.status_code == 422
 
-
-# ---------------------------------------------------------------------------
-# PATCH /miners/{id}
-# ---------------------------------------------------------------------------
 
 def test_update_miner_status():
     response = client.patch("/miners/miner-001", json={"status": "warning", "alerts": 1})
@@ -182,10 +159,6 @@ def test_update_nonexistent_miner_returns_404():
     response = client.patch("/miners/no-such-miner", json={"status": "offline"})
     assert response.status_code == 404
 
-
-# ---------------------------------------------------------------------------
-# DELETE /miners/{id}
-# ---------------------------------------------------------------------------
 
 def test_delete_miner():
     response = client.delete("/miners/miner-001")
