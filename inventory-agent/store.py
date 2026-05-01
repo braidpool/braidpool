@@ -17,9 +17,6 @@ class MinerStore:
     def __init__(self):
         self._miners: dict[str, Miner] = {}
 
-    # ------------------------------------------------------------------
-    # Seeding
-    # ------------------------------------------------------------------
 
     def seed_defaults(self):
         """
@@ -132,13 +129,13 @@ class MinerStore:
                 last_seen="7 mins ago",
                 alerts=1,
             ),
-            # One CPU miner to exercise that type in the API
+
             MinerCreate(
                 name="cpunet-node-0",
                 miner_type=MinerType.cpu,
                 location="localhost",
                 status=MinerStatus.online,
-                hashrate_th=0.000001,  # CPU hashrate in TH/s is tiny
+                hashrate_th=0.000001, 
                 temp_c=None,
                 efficiency_j_th=None,
                 power_draw_w=None,
@@ -148,14 +145,9 @@ class MinerStore:
             ),
         ]
 
-        # Use sequential IDs that match the dashboard mock (miner-001 … miner-00N)
         for i, payload in enumerate(defaults, start=1):
             miner_id = f"miner-{i:03d}"
             self._miners[miner_id] = Miner(id=miner_id, **payload.model_dump())
-
-    # ------------------------------------------------------------------
-    # CRUD
-    # ------------------------------------------------------------------
 
     def all(self) -> list[Miner]:
         return list(self._miners.values())
