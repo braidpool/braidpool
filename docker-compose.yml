@@ -1,0 +1,78 @@
+# Docker Compose for local Braidpool development
+#
+# Services:
+#   inventory-agent  – FastAPI miner inventory (port 8000)
+#   braid-simulator  – Python WebSocket braid simulator (port 65433)
+#   dashboard        – React/Vite frontend (port 3000)
+#
+# The braidpool Rust node requires a live bitcoind and is therefore NOT included
+# here by default. Run it separately, pointing --bitcoin at your local node.
+#
+# Usage:
+#   docker compose up              # start everything
+#   docker compose up inventory-agent   # start only the inventory agent
+#   docker compose down            # stop and remove containers
+
+services:
+
+  # --------------------------------------------------------------------------
+  # Inventory Agent
+  # --------------------------------------------------------------------------
+  inventory-agent:
+    build:
+      context: ./inventory-agent
+      dockerfile: Dockerfile
+    container_name: braidpool-inventory-agent
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # Set to "warning" in production to reduce log noise
+      - LOG_LEVEL=info
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # --------------------------------------------------------------------------
+  # Braid Simulator (WebSocket)
+  # --------------------------------------------------------------------------
+  braid-simulator:
+    build:
+      context: ./tests
+      dockerfile: Dockerfile.simulator
+    container_name: braidpool-braid-simulator
+    restart: unless-stopped
+    ports:
+      - "65433:65433"
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import socket; s=socket.create_connection(('localhost', 65433), 3); s.close()"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # --------------------------------------------------------------------------
+  # Dashboard (development build)
+  # --------------------------------------------------------------------------
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile.dashboard
+    container_name: braidpool-dashboard
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # Point the dashboard at the inventory agent and simulator
+      - VITE_INVENTORY_API_URL=http://localhost:8000
+      - VITE_SIMULATOR_WS_URL=ws://localhost:65433
+    depends_on:
+      inventory-agent:
+        condition: service_healthy
+      braid-simulator:
+        condition: service_started

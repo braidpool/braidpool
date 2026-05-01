@@ -1,0 +1,32 @@
+# Version control
+.git
+.gitignore
+
+# Rust build artifacts
+target/
+Cargo.lock
+
+# Node
+node_modules/
+dashboard/node_modules/
+dashboard/build/
+dashboard/.vite/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+tests/__pycache__/
+inventory-agent/__pycache__/
+
+# Editor / OS
+.DS_Store
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# Docs build
+site/

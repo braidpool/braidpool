@@ -1,0 +1,16 @@
+# syntax=docker/dockerfile:1
+# Dockerfile for the Braidpool braid simulator WebSocket server.
+# Context: ./tests
+
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+EXPOSE 65433
+
+CMD ["python", "simulator_api.py"]
