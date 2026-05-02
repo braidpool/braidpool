@@ -143,11 +143,11 @@ class TestAllAncestors:
             rec_anc = all_ancestors_recursive(b, dag["parents"], {})
             assert iter_anc == rec_anc, f"Mismatch for bead {b} in {filename}"
 
-    def test_fresh_dict_per_call(self, blockchain_parents):
-        """Ensure calling with a fresh dict doesn't leak state across calls."""
+    def test_explicit_fresh_dicts_are_isolated(self, blockchain_parents):
+        """Separate caller-provided ancestor dicts should not share state."""
         a1 = all_ancestors(2, blockchain_parents, {})
         a2 = all_ancestors(1, blockchain_parents, {})
-        # a2 should only have bead 0, not {0,1}
+        # With distinct explicit dicts, bead 1 should only record bead 0.
         assert a2[1] == {0}
 
 
