@@ -451,20 +451,21 @@ async fn get_template(
     let final_template =
         create_braidpool_template(&components.components, &config, block_height, NONCE)?;
 
-    let template_transaction_count = final_template.block_transaction_count();
-
-    let complete_block_bytes = final_template.complete_block_hex;
+    let complete_block_bytes = final_template.complete_block_hex.clone();
     if complete_block_bytes.is_empty() {
         return Err("Received empty template (0 bytes)".into());
     }
-
-    if template_transaction_count < MIN_TRANSACTION_COUNT {
-        warn!(
-            context = %context,
-            transaction_count = %template_transaction_count,
-            min_transaction_count = %MIN_TRANSACTION_COUNT,
-            "Template tx count smaller than minimum - using anyway"
-        );
+    if let Some(template_transaction_count) = final_template.block_transaction_count() {
+        if template_transaction_count < MIN_TRANSACTION_COUNT {
+            warn!(
+                context = %context,
+                transaction_count = %template_transaction_count,
+                min_transaction_count = %MIN_TRANSACTION_COUNT,
+                "Template tx count smaller than minimum - using anyway"
+            );
+        }
+    } else {
+        return Err("An error occurred due to invalid decode of tx count to varint during template formation".into());
     }
 
     let mut processed_template = (*components).clone();

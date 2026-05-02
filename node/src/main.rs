@@ -1090,7 +1090,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                         let status = braid_data.extend(&bead);
                                         let curr_beadhash = braid_data.compute_bead_hash(&bead).to_string();
                                         if let braid::AddBeadStatus::InvalidBead = status {
-                                            warn!("INVALID BEAD RECEIVED FROM PEER");
+                                            warn!("Invalid bead received from peer");
                                             // update the peer manager about the invalid bead
                                             {
                                                 let mut peer_manager = peer_manager_arc.write().await;
@@ -1126,7 +1126,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                             //persisting the received beads from peer onto DB(disk)
                                             match db_tx.send(node::db::BraidpoolDBTypes::InsertTupleTypes { query: node::db::InsertTupleTypes::InsertBeadSequentially { bead_to_insert: bead,txs_json:txs_json,parent_timestamp_json:parent_timestamp_json,relative_json:relative_json,bead_id:*bead_id } }).await{
                                                 Ok(_)=>{
-                                                    warn!(beadhash=?curr_beadhash,"Bead received in IBD persisted over disk with beadhash and status BeadAdded sanmdfiasnASBNUIYFBNASUIYBNFYUI*ASBNFGYUIASHBNGYUIASHBNGYUIAGHBN");
+                                                    warn!(beadhash=?curr_beadhash,"Bead received in IBD persisted over disk with beadhash and status BeadAdded");
                                                 },
                                                 Err(error)=>{
                                                     tracing::error!(
