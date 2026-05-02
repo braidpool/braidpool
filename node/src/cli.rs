@@ -40,6 +40,7 @@ pub struct Cli {
     #[arg(long, default_value = "~/.bitcoin/.cookie")]
     pub rpccookie: Option<String>,
 
+    /// Use this port for bitcoin ZMQ
     #[arg(long, default_value = "28332")]
     pub zmqhashblockport: u16,
     #[arg(long)]
