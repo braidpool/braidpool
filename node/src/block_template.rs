@@ -57,6 +57,7 @@ pub async fn fetcher(
 
 pub async fn consumer(mut block_template_rx: Receiver<GetBlockTemplateResult>) {
     let mut last_block_template_height = 0;
+     // if block template is from some outdated exponential backoff RPC, ignore it
     while let Some(block_template) = block_template_rx.recv().await {
         if block_template.height > last_block_template_height {
             log::info!(
