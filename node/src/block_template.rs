@@ -55,10 +55,11 @@ pub async fn fetcher(
     }
 }
 
+// dummy placeholder function to consume the received block templates
 pub async fn consumer(mut block_template_rx: Receiver<GetBlockTemplateResult>) {
     let mut last_block_template_height = 0;
     while let Some(block_template) = block_template_rx.recv().await {
-           // if block template is from some outdated exponential backoff RPC, ignore it
+    // if block template is from some outdated exponential backoff RPC, ignore it
         if block_template.height > last_block_template_height {
             log::info!(
                 "Received new block template via `getblocktemplate` RPC: {:?}",
