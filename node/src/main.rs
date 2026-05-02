@@ -1612,7 +1612,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                         let status = braid_data.extend(&bead);
                                         let curr_beadhash = braid_data.compute_bead_hash(&bead).to_string();
                                         if let braid::AddBeadStatus::InvalidBead = status {
-                                            warn!("INVALID BEAD RECEIVED FROM PEER");
+                                            warn!("Invalid bead received from peer");
                                             // update the peer manager about the invalid bead
                                             {
                                                 let mut peer_manager = peer_manager_arc.write().await;
