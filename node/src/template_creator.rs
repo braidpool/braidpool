@@ -102,15 +102,19 @@ impl FinalTemplate {
     /// Returns the number of transactions in the block
     ///
     /// The number of transactions is the first `varint` field after the block header.
-    pub fn block_transaction_count(&self) -> u64 {
+    pub fn block_transaction_count(&self) -> Option<u64> {
         if self.complete_block_hex.len() >= Self::BLOCK_HEADER_LENGTH {
             let body = &self.complete_block_hex[Self::BLOCK_HEADER_LENGTH..];
-            match deserialize_partial(body) {
-                Ok((count, _)) => count,
-                Err(_) => 0,
+            match deserialize_partial::<VarInt>(body) {
+                Ok((count, _)) => Some(count.0),
+                Err(e) => {
+                    error!(error = %e, "failed to decode block tx count varint");
+                    None
+                }
             }
         } else {
-            0
+            error!("The complete block hex is below header length");
+            None
         }
     }
 }
@@ -454,8 +458,14 @@ pub fn build_complete_block(
     if cursor >= original_block_hex.len() {
         return Err(CoinbaseError::InvalidBlockTemplateData);
     }
-    let (tx_count, varint_size) = deserialize_partial::<VarInt>(&original_block_hex[cursor..])
-        .expect("An error occurred while decoding VarInt representation");
+    let (tx_count, varint_size) = match deserialize_partial::<VarInt>(&original_block_hex[cursor..])
+    {
+        Ok(decoded_varint_tuple) => decoded_varint_tuple,
+        Err(error) => {
+            error!("An error occurred while decoding varint during complete block reconstruction - {:#?}",error);
+            return Err(CoinbaseError::ConsensusDecodeError);
+        }
+    };
     cursor += varint_size;
 
     if tx_count.0 == 0 {
