@@ -42,6 +42,8 @@ pub async fn fetcher(
                 }
                 rpc_failure_backoff = u64::checked_pow(BACKOFF_BASE, rpc_failure_counter.clone())
                     .expect("MAX_RPC_FAILURES doesn't allow overflow; qed");
+                
+                // sleep until it's time to try again
                 log::error!("Error on `getblocktemplate` RPC: {}", e);
                 log::error!(
                     "Exponential Backoff: `getblocktemplate` RPC failed {} times, waiting {} \
