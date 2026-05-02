@@ -9,6 +9,7 @@ use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 mod block_template;
 mod braid;
 mod cli;
+mod cmempool;
 mod connection;
 mod protocol;
 mod rpc;

@@ -43,4 +43,11 @@ pub struct Cli {
     /// Use this port for bitcoin ZMQ
     #[arg(long, default_value = "28332")]
     pub zmqhashblockport: u16,
+
+    /// Path to the Unix domain socket used to communicate with cmempoold.
+    /// If not set, committed-mempool features are disabled and the node falls
+    /// back to calling getblocktemplate on bitcoind directly (existing
+    /// behaviour).
+    #[arg(long)]
+    pub cmempool_socket: Option<std::path::PathBuf>,
 }
