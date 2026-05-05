@@ -8,8 +8,8 @@ use crate::utils::test_utils::test_utility_functions::{
 use bitcoin::consensus::encode::deserialize;
 use bitcoin::consensus::serialize;
 use bitcoin::hashes::Hash;
-use bitcoin::CompactTarget;
 use bitcoin::{block::Header as BlockHeader, block::Version as BlockVersion};
+use bitcoin::{secp256k1, CompactTarget};
 use bitcoin::{BlockHash, EcdsaSighashType, TxMerkleNode};
 use futures::StreamExt;
 use libp2p::floodsub::Topic;
