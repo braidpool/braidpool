@@ -11,7 +11,7 @@ use bitcoin::{
     block::{Header as BlockHeader, Version as BlockVersion},
     ecdsa::Signature,
     hashes::Hash,
-    CompactTarget, EcdsaSighashType, TxMerkleNode,
+    secp256k1, CompactTarget, EcdsaSighashType, TxMerkleNode,
 };
 // Standard Imports
 #[allow(unused_imports)]

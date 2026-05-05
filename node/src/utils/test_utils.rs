@@ -21,6 +21,7 @@ pub mod test_utility_functions {
         str::FromStr,
     };
 
+    use bitcoin::secp256k1::{Message, Secp256k1, SecretKey};
     #[cfg(test)]
     use bitcoin::Txid;
     use bitcoin::{
@@ -28,7 +29,6 @@ pub mod test_utility_functions {
         TxMerkleNode,
     };
     use rand::{rngs::OsRng, RngCore};
-    use secp256k1::{Message, Secp256k1, SecretKey};
     use serde::{Deserialize, Serialize};
 
     #[cfg(test)]
@@ -355,7 +355,7 @@ pub mod test_utility_functions {
         let extra_nonce_1 = rand::random::<u64>();
         let extra_nonce_2 = rand::random::<u64>();
 
-        let secp = Secp256k1::new();
+        let secp = bitcoin::secp256k1::Secp256k1::new();
 
         // Generate random secret key
         let mut rng = OsRng::default();
@@ -374,7 +374,7 @@ pub mod test_utility_functions {
         let hex = hex::encode(der_sig);
 
         let sig = Signature {
-            signature: secp256k1::ecdsa::Signature::from_str(&hex).unwrap(),
+            signature: bitcoin::secp256k1::ecdsa::Signature::from_str(&hex).unwrap(),
             sighash_type: EcdsaSighashType::All,
         };
 

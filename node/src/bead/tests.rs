@@ -20,6 +20,7 @@ use bitcoin::consensus::encode::Error as DeserializeError;
 use bitcoin::consensus::serialize;
 use bitcoin::ecdsa::Signature;
 use bitcoin::hashes::Hash;
+use bitcoin::secp256k1;
 use bitcoin::BlockHash;
 use bitcoin::CompactTarget;
 use bitcoin::EcdsaSighashType;
