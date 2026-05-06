@@ -368,7 +368,7 @@ impl SwarmHandler {
         match self
             .payout_cmd_sender
             .send(PayoutCommands::UpdatePayoutHeap {
-                bead_timestamp: weak_share.uncommitted_metadata.broadcast_timestamp.clone(),
+                bead_timestamp: weak_share.uncommitted_metadata.broadcast_timestamp.to_u32() as u64,
                 work: Target::from_compact(weak_share.committed_metadata.weak_target)
                     .to_work()
                     .clone(),

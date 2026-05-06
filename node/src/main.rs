@@ -603,7 +603,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                              Ok(bead) => {
                                  info!(bead = ?bead, hash = %bead.block_header.block_hash(), "Received bead");
                                  match payout_cmd_sender_ref.send(PayoutCommands::UpdatePayoutHeap{
-                                  bead_timestamp :bead.uncommitted_metadata.broadcast_timestamp.clone(),
+                                  bead_timestamp: bead.uncommitted_metadata.broadcast_timestamp.to_u32() as u64,
                                   work:Target::from_compact(bead.committed_metadata.weak_target).to_work().clone(),
                                   payout_address:bead.committed_metadata.payout_address.clone()
 
@@ -1109,7 +1109,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     };
                                     for bead in beads.into_iter() {
                                         match payout_cmd_sender_ref.send(PayoutCommands::UpdatePayoutHeap{
-                                            bead_timestamp :bead.uncommitted_metadata.broadcast_timestamp.clone(),
+                                            bead_timestamp: bead.uncommitted_metadata.broadcast_timestamp.to_u32() as u64,
                                             work:Target::from_compact(bead.committed_metadata.weak_target).to_work().clone(),
                                             payout_address:bead.committed_metadata.payout_address.clone()
 

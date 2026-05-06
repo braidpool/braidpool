@@ -1,7 +1,6 @@
-use bitcoin::absolute::MedianTimePast;
 use bitcoin::{Amount, CompactTarget, Network, Params, Target, Work};
 use core::ops::Add;
-use std::collections::BinaryHeap;
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::error::Error;
 //Containing functionality related to difficulty adjustment for braidpool currently static
@@ -50,7 +49,8 @@ impl DifficultyAdjuster {
 #[derive(Debug)]
 pub enum PayoutCommands {
     UpdatePayoutHeap {
-        bead_timestamp: MedianTimePast,
+        /// Unix timestamp (seconds since epoch) when the bead was created
+        bead_timestamp: u64,
         payout_address: String,
         work: Work,
     },
@@ -62,12 +62,12 @@ pub enum PayoutCommands {
 }
 #[derive(Debug)]
 pub struct Payout {
-    //Intializing mapping heap that will listen for new beads and update accordingly
-    //Sorted mapping of only required information instead of complete `Bead` which will be updated on the arrival of beads
-    payout_heap: BinaryHeap<(MedianTimePast, (Work, String))>,
-    //Payout command receiver
+    /// Shares ordered by timestamp for PPLNS calculation.
+    /// BTreeMap provides deterministic, time-ordered iteration via .iter().rev()
+    shares_by_time: BTreeMap<u64, Vec<(Work, String)>>,
+    /// Payout command receiver
     payout_cmd_receiver: std::sync::mpsc::Receiver<PayoutCommands>,
-    //Configured network wrt which payout is being generated
+    /// Configured network for address validation and difficulty calculation
     configured_network: Network,
 }
 #[derive(Debug, Clone)]
@@ -81,7 +81,7 @@ impl Payout {
         let (payout_cmd_tx, payout_cmd_rx) = std::sync::mpsc::channel::<PayoutCommands>();
         (
             Payout {
-                payout_heap: BinaryHeap::new(),
+                shares_by_time: BTreeMap::new(),
                 payout_cmd_receiver: payout_cmd_rx,
                 configured_network,
             },
@@ -91,13 +91,14 @@ impl Payout {
     //Address::Work for beads belonging to same address
     fn _compute_work_mapping(&self) -> Result<HashMap<String, Work>, Box<dyn Error + Send + Sync>> {
         let mut work_mapping: HashMap<String, Work> = HashMap::new();
-        for (_bead_timestamp, (bead_work, miner_payout_address)) in self.payout_heap.iter() {
-            if work_mapping.contains_key(miner_payout_address) {
-                if let Some(existing_work) = work_mapping.get_mut(miner_payout_address) {
-                    *existing_work = Add::add(*existing_work, *bead_work);
-                }
-            } else {
-                work_mapping.insert(miner_payout_address.clone(), *bead_work);
+        for (_timestamp, shares) in self.shares_by_time.iter() {
+            for (bead_work, miner_payout_address) in shares {
+                work_mapping
+                    .entry(miner_payout_address.clone())
+                    .and_modify(|existing_work| {
+                        *existing_work = Add::add(*existing_work, *bead_work)
+                    })
+                    .or_insert(*bead_work);
             }
         }
         Ok(work_mapping)
@@ -117,16 +118,17 @@ impl Payout {
             Network::Testnet(bitcoin::TestnetVersion::V3) => Params::TESTNET3,
             _ => Params::MAINNET,
         };
-        // Query shares in batches going back in time
-        for (_bead_timestamp, (bead_work, miner_payout_address)) in self.payout_heap.iter() {
-            let curr_bead_difficulty = bead_work
-                .to_target()
-                .difficulty_float(network_params.clone());
-            if running_difficulty < total_difficulty {
+        // Iterate shares from newest to oldest (PPLNS goes back in time)
+        for (_timestamp, shares) in self.shares_by_time.iter().rev() {
+            for (bead_work, miner_payout_address) in shares {
+                if running_difficulty >= total_difficulty {
+                    return Ok(result_values);
+                }
+                let curr_bead_difficulty = bead_work
+                    .to_target()
+                    .difficulty_float(network_params.clone());
                 running_difficulty += curr_bead_difficulty;
                 result_values.push((miner_payout_address.clone(), curr_bead_difficulty));
-            } else {
-                break;
             }
         }
         Ok(result_values)
@@ -170,8 +172,10 @@ impl Payout {
                     payout_address,
                     work,
                 } => {
-                    self.payout_heap
-                        .push((bead_timestamp, (work, payout_address)));
+                    self.shares_by_time
+                        .entry(bead_timestamp)
+                        .or_insert_with(Vec::new)
+                        .push((work, payout_address));
                 }
             }
         }
@@ -190,8 +194,11 @@ impl Payout {
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
         let total_difficulty: f64 = address_difficulty_map.values().sum();
         let mut distributed_amount = bitcoin::Amount::ZERO;
-
-        for (i, (address_str, difficulty)) in address_difficulty_map.iter().enumerate() {
+        let mut sorted_entries: Vec<(&String, &f64)> = address_difficulty_map.iter().collect();
+        sorted_entries.sort_by(|(address_a, _), (address_b, _)| {
+            address_a.to_string().cmp(&address_b.to_string())
+        });
+        for (i, (address_str, difficulty)) in sorted_entries.iter().enumerate() {
             let address = address_str
                 .parse::<bitcoin::Address<_>>()
                 .map_err(|e| format!("Invalid bitcoin address '{address_str}': {e}"))?
@@ -238,7 +245,6 @@ mod tests {
     use std::time::UNIX_EPOCH;
 
     use super::*;
-    use bitcoin::absolute::MedianTimePast;
     use bitcoin::pow::CompactTargetExt;
     use bitcoin::{Amount, Network, Target, Work};
 
@@ -344,7 +350,7 @@ mod tests {
         assert_eq!(sum, 100);
     }
     #[test]
-    fn test_payout_command_update_heap() {
+    fn test_payout_command_update_shares() {
         let (mut payout, tx) = Payout::new(Network::CPUNet);
 
         let handle = std::thread::spawn(move || {
@@ -354,13 +360,10 @@ mod tests {
 
         let compact = bitcoin::CompactTarget::from_hex("0x1d00ffff").unwrap();
         let w = work_from_compact(compact);
-        let now = MedianTimePast::from_u32(
-            std::time::SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs() as u32,
-        )
-        .unwrap();
+        let now = std::time::SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
 
         tx.send(PayoutCommands::UpdatePayoutHeap {
             bead_timestamp: now,
@@ -371,15 +374,16 @@ mod tests {
         //Dropping the channel sender to break infinite loop of runner after updating command is processed forceably
         drop(tx);
         let payout = handle.join().unwrap();
-        assert!(!payout.payout_heap.is_empty());
-        let heap_top = &payout.payout_heap.peek().unwrap().1;
+        assert!(!payout.shares_by_time.is_empty());
+        let shares_at_time = payout.shares_by_time.get(&now).unwrap();
+        assert_eq!(shares_at_time.len(), 1);
         assert_eq!(
-            heap_top.1,
+            shares_at_time[0].1,
             "tc1qkuw7jx4f5m9vd7kdm4cfz0vgdxsrg6vr0xd25z".to_string()
         );
         println!(
             "Work - {}",
-            heap_top.0.to_target().difficulty(Params::CPUNET)
+            shares_at_time[0].0.to_target().difficulty(Params::CPUNET)
         );
     }
 
@@ -470,18 +474,15 @@ mod tests {
 
         let compact = bitcoin::CompactTarget::from_hex("0x1d00ffff").unwrap();
         let w = work_from_compact(compact);
-        let current_system_time = std::time::SystemTime::now();
-        let duration_since_epoch = match current_system_time.duration_since(UNIX_EPOCH) {
-            Ok(duration) => duration,
-            Err(error) => {
-                panic!("{}", error);
-            }
-        };
-        let now = MedianTimePast::from_u32(duration_since_epoch.as_secs() as u32).unwrap();
-        payout.payout_heap.push((
-            now,
-            (w, "tc1q7trhdr48sjm2p3lpcjvyqv49gu3yztuff0pqg9".to_string()),
-        ));
+        let now = std::time::SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        payout
+            .shares_by_time
+            .entry(now)
+            .or_insert_with(Vec::new)
+            .push((w, "tc1q7trhdr48sjm2p3lpcjvyqv49gu3yztuff0pqg9".to_string()));
 
         let shares = payout.get_difficulty_window_shares(0.0000001).unwrap();
         assert!(!shares.is_empty());
@@ -496,17 +497,17 @@ mod tests {
         let compact = bitcoin::CompactTarget::from_hex("0x1d00ffff").unwrap();
         let w = work_from_compact(compact);
         //Current UNIX timestamp during broadcast of bead
-        let current_system_time = std::time::SystemTime::now();
-        let duration_since_epoch = match current_system_time.duration_since(UNIX_EPOCH) {
-            Ok(duration) => duration,
-            Err(error) => {
-                panic!("{}", error);
-            }
-        };
-        let now = MedianTimePast::from_u32(duration_since_epoch.as_secs() as u32).unwrap();
+        let now = std::time::SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
 
         for i in 0..5 {
-            payout.payout_heap.push((now, (w, format!("addr{}", i))));
+            payout
+                .shares_by_time
+                .entry(now)
+                .or_insert_with(Vec::new)
+                .push((w, format!("addr{}", i)));
         }
 
         let shares = payout.get_difficulty_window_shares(0.00000001).unwrap();
