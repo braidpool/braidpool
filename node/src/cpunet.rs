@@ -4,7 +4,7 @@ use bitcoin::{
     bech32,
     block::Header,
     hashes::{sha256d, Hash, HashEngine},
-    BlockHash, ScriptBuf, Target, WitnessProgram,
+    BlockHash, ScriptBuf, WitnessProgram,
 };
 use core::fmt;
 use std::str::FromStr;
@@ -17,86 +17,14 @@ pub const CPUNET_HRP: &str = "tc";
 /// The core-arg name along with that the actual network name as string-slice
 pub const CPUNET_NAME: &str = "cpunet";
 
-/// Cpunet consensus parameters.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CpunetParams {
-    /// BIP16 activation time
-    pub bip16_time: u32,
-    /// BIP34 activation height
-    pub bip34_height: u32,
-    /// BIP65 activation height
-    pub bip65_height: u32,
-    /// BIP66 activation height
-    pub bip66_height: u32,
-    /// Whether to enforce BIP94 (testnet4 rules)
-    pub enforce_bip94: bool,
-    /// Threshold for rule change activation (75% = 1512 of 2016)
-    pub rule_change_activation_threshold: u32,
-    /// Miner confirmation window for soft forks
-    pub miner_confirmation_window: u32,
-    /// Maximum proof-of-work target (minimum difficulty)
-    pub pow_limit: Target,
-    /// Maximum attainable target value
-    pub max_attainable_target: Target,
-    /// Target block spacing in seconds (10 minutes)
-    pub pow_target_spacing: u32,
-    /// Target timespan for difficulty adjustment (2 weeks)
-    pub pow_target_timespan: u32,
-    /// Whether minimum difficulty blocks are allowed
-    pub allow_min_difficulty_blocks: bool,
-    /// Whether PoW retargeting is disabled
-    pub no_pow_retargeting: bool,
-}
-
-impl Default for CpunetParams {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl CpunetParams {
-    pub const fn new() -> Self {
-        Self {
-            bip16_time: 1333238400, // Apr 1 2012
-            bip34_height: 1,
-            bip65_height: 1,
-            bip66_height: 1,
-            enforce_bip94: false,
-            rule_change_activation_threshold: 1512, // 75%
-            miner_confirmation_window: 2016,
-            pow_limit: Target::MAX_ATTAINABLE_MAINNET,
-            max_attainable_target: Target::MAX_ATTAINABLE_MAINNET,
-            pow_target_spacing: 10 * 60,            // 10 minutes
-            pow_target_timespan: 14 * 24 * 60 * 60, // 2 weeks
-            allow_min_difficulty_blocks: false,
-            no_pow_retargeting: false,
-        }
-    }
-
-    /// Calculates the number of blocks between difficulty adjustments.
-    pub const fn difficulty_adjustment_interval(&self) -> u32 {
-        self.pow_target_timespan / self.pow_target_spacing
-    }
-}
-
 /// Implementation of Cpunet specific `Network` and `Address` decoding/encoding functionality.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Cpunet;
 
 impl Cpunet {
     #[inline]
-    pub const fn bech32_hrp() -> &'static str {
-        CPUNET_HRP
-    }
-
-    #[inline]
-    pub const fn name() -> &'static str {
-        CPUNET_NAME
-    }
-
-    #[inline]
     pub fn is_cpunet_name(name: &str) -> bool {
-        matches!(name.to_lowercase().as_str(), "cpunet")
+        name.eq_ignore_ascii_case(CPUNET_NAME)
     }
 
     #[inline]
@@ -106,7 +34,7 @@ impl Cpunet {
 
     /// Encodes a witness program as a cpunet bech32m or bech32 address depending upon `WitnessVersion` for non-taproot and taproot specific addresses.
     pub fn encode_bech32_address(program: &WitnessProgram) -> String {
-        let hrp = bech32::Hrp::parse(CPUNET_HRP).unwrap();
+        let hrp = bech32::Hrp::parse_unchecked(CPUNET_HRP);
         let version = bech32::Fe32::try_from(program.version().to_num())
             .expect("witness version is valid fe32");
         bech32::segwit::encode(hrp, version, program.program().as_bytes())
