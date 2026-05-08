@@ -1,4 +1,5 @@
 use clap::Parser;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 
 #[derive(Parser, Debug, Clone)]
@@ -41,7 +42,36 @@ pub struct Cli {
     #[arg(long, default_value = "~/.bitcoin/.cookie")]
     pub rpccookie: Option<String>,
 
+    /// TCP port for the local Stratum server
+    #[arg(long, default_value_t = 3333)]
+    pub stratum_port: u16,
+
+    /// Bind address for the local node RPC server
+    #[arg(long, default_value = "127.0.0.1:6682")]
+    pub rpc_bind: SocketAddr,
+
     /// Path to Bitcoin Core IPC socket
     #[arg(long, default_value = "/tmp/bitcoin-cpunet.sock")]
     pub ipc_socket: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Cli;
+    use clap::Parser;
+
+    #[test]
+    fn rpc_bind_parses_socket_address() {
+        let cli = Cli::try_parse_from(["braid", "--rpc-bind", "127.0.0.1:1234"]).unwrap();
+
+        assert_eq!(cli.rpc_bind.ip().to_string(), "127.0.0.1");
+        assert_eq!(cli.rpc_bind.port(), 1234);
+    }
+
+    #[test]
+    fn rpc_bind_rejects_address_without_port() {
+        let result = Cli::try_parse_from(["braid", "--rpc-bind", "127.0.0.1"]);
+
+        assert!(result.is_err());
+    }
 }

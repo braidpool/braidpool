@@ -28,7 +28,7 @@ use std::future::Future;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot, RwLock};
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 #[cfg(test)]
 use {
@@ -1039,9 +1039,13 @@ pub async fn run_rpc_server(
         .set_rpc_middleware(rpc_middleware)
         .build(bind_address)
         .await
-        .unwrap();
+        .map_err(|e| {
+            error!(bind_address = %bind_address, error = %e, "Failed to build RPC server");
+        })?;
     //listening address for incoming requests/connection
-    let addr = server.local_addr().unwrap();
+    let addr = server.local_addr().map_err(|e| {
+        error!(bind_address = %bind_address, error = %e, "Failed to get RPC local address");
+    })?;
     //context for the served server
     let rpc_impl = RpcServerImpl::new(
         braid_shared_pointer,
