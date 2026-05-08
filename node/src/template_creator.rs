@@ -1,5 +1,4 @@
 use crate::config::CoinbaseConfig;
-use crate::cpunet::Cpunet;
 use crate::error::CoinbaseError;
 use crate::ipc::client::BlockTemplateComponents;
 use crate::EXTRANONCE_SEPARATOR;
@@ -17,6 +16,7 @@ use bitcoin::{
     hashes::sha256d,
     Address, Amount, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Txid,
 };
+use braidpool_common::cpunet::Cpunet;
 use std::convert::TryFrom;
 use std::str::FromStr;
 #[allow(unused_imports)]

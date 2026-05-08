@@ -33,7 +33,7 @@ if-addrs = { workspace = true }
 anyhow = { workspace = true }
 bitcoin-internals = "0.5.0"
 reqwest = { workspace = true }
-
+braidpool-common = {path = "../braidpool-common"}
 
 [build-dependencies]
 capnpc = "0.24.0"

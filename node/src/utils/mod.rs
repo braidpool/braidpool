@@ -2,7 +2,6 @@
 use crate::{
     bead::Bead,
     committed_metadata::{CommittedMetadata, TimeVec, TxIdVec},
-    cpunet::Cpunet,
     uncommitted_metadata::UnCommittedMetadata,
 };
 use ::bitcoin::BlockHash;
@@ -13,6 +12,7 @@ use bitcoin::{
     hashes::Hash,
     secp256k1, CompactTarget, EcdsaSighashType, TxMerkleNode,
 };
+use braidpool_common::cpunet::Cpunet;
 // Standard Imports
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
