@@ -142,6 +142,10 @@ export interface AdvancedchartProps {
   yLabel: string;
   unit: string;
   lineColor?: string;
+  title?: string;
+  description?: React.ReactNode;
+  headerRight?: React.ReactNode;
+  downloadFileName?: string;
 }
 //Reward section
 

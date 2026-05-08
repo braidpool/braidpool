@@ -3,73 +3,87 @@ on: [push, pull_request]
 name: Rust Node CI
 
 jobs:
-  
   check:
-    name: Check
+    name: Check/ ${{ matrix.toolchain }}
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        toolchain: [stable]
     steps:
       - name: Install Cap'n Proto
         run: |
           export DEBIAN_FRONTEND=noninteractive
           sudo apt-get install -y capnproto libcapnp-dev
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # tag=v6.0.2
+      - name: Install Rust ${{ matrix.toolchain }}
+        uses: dtolnay/rust-toolchain@0b1efabc08b657293548b77fb76cc02d26091c7e
         with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - uses: actions-rs/cargo@v1
+          toolchain: ${{ matrix.toolchain }}
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # tag=v2.9.1
         with:
-          command: check
-          args: --manifest-path Cargo.toml
+          shared-key: node-ci-stable-${{ matrix.toolchain }}
+          cache-on-failure: true
+      - name: Check code
+        run: cargo check --manifest-path Cargo.toml
+
+  msrv:
+    name: MSRV Check / ${{ matrix.toolchain }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        toolchain: ["1.88"]
+    steps:
+      - name: Install Cap'n Proto
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          sudo apt-get install -y capnproto libcapnp-dev
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # tag=v6.0.2
+      - name: Install Rust ${{ matrix.toolchain }}
+        uses: dtolnay/rust-toolchain@0b1efabc08b657293548b77fb76cc02d26091c7e
+        with:
+          toolchain: ${{ matrix.toolchain }}
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # tag=v2.9.1
+        with:
+          shared-key: node-ci-msrv-${{ matrix.toolchain }}
+          cache-on-failure: true
+      - name: Check MSRV
+        run: cargo check --workspace
 
   test:
-    name: Test Suite
+    name: Test Suite / ${{ matrix.toolchain }}
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        toolchain: [stable]
     steps:
       - name: Install Cap'n Proto
         run: |
           export DEBIAN_FRONTEND=noninteractive
           sudo apt-get install -y capnproto libcapnp-dev
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # tag=v6.0.2
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@0b1efabc08b657293548b77fb76cc02d26091c7e
         with:
-          profile: minimal
-          toolchain: stable
-          override: true
+          toolchain: ${{ matrix.toolchain }}
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # tag=v2.9.1
+        with:
+          shared-key: node-ci-${{ matrix.toolchain }}
+          cache-on-failure: true
       - name: Run tests
-        run: |
-          cargo test
+        run: cargo test --workspace
 
   fmt:
     name: Rustfmt
+    strategy:
+      matrix:
+        toolchain: [stable]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # tag=v6.0.2
+      - name: Install Rust ${{ matrix.toolchain }}
+        uses: dtolnay/rust-toolchain@0b1efabc08b657293548b77fb76cc02d26091c7e
         with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - run: rustup component add rustfmt
-      - uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --manifest-path Cargo.toml --all -- --check
-
-
-  # clippy:
-  #   name: Clippy
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v2
-  #     - uses: actions-rs/toolchain@v1
-  #       with:
-  #         profile: minimal
-  #         toolchain: stable
-  #         override: true
-  #     - run: rustup component add clippy
-  #     - uses: actions-rs/cargo@v1
-  #       with:
-  #         command: clippy
-  #         args: -- -D warnings
+          toolchain: ${{ matrix.toolchain }}
+          components: rustfmt
+      - name: Check formatting
+        run: cargo fmt --all -- --check
