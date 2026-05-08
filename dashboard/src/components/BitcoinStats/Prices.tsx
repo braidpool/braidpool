@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   BarChart,
   Bar,
@@ -21,9 +21,10 @@ import {
 } from './Utils';
 import TransactionTable from './TransactionTable';
 import RBFTransactionTable from './RBFTransactionTable';
-import { useRef } from 'react';
 import { WEBSOCKET_URLS } from '../../URLs';
 import { MAX_HISTORY_ITEMS } from './Constants';
+import ActionIconButton from '../common/ActionIconButton';
+import { downloadSvgFromContainer } from '../../utils/downloadSvg';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY'] as const;
 
@@ -47,6 +48,21 @@ const BitcoinPriceTracker: React.FC = () => {
   // MAX_HISTORY_ITEMS is imported from BeadsTab/Constants
   const showSkeletons = loading || !isConnected || (!priceData && !globalStats);
   const currencyRef = useRef(currency);
+  const priceRangeChartRef = useRef<HTMLDivElement | null>(null);
+  const priceHistoryChartRef = useRef<HTMLDivElement | null>(null);
+
+  const handleDownloadPriceRange = () => {
+    if (!priceRangeChartRef.current) return;
+    downloadSvgFromContainer(priceRangeChartRef.current, 'bitcoin-price-range');
+  };
+
+  const handleDownloadPriceHistory = () => {
+    if (!priceHistoryChartRef.current) return;
+    downloadSvgFromContainer(
+      priceHistoryChartRef.current,
+      'bitcoin-price-history'
+    );
+  };
 
   useEffect(() => {
     currencyRef.current = currency;
@@ -326,108 +342,142 @@ const BitcoinPriceTracker: React.FC = () => {
       {/* Charts Section */}
       <div className="w-full flex flex-wrap justify-center items-center gap-4 md:gap-20 p-4 mt-4 md:p-6 rounded-lg mb-6">
         {/* Price Range Bar Chart */}
-        <div className="flex flex-col w-full h-80 -mx-6 sm:mx-0 px-6 sm:px-0">
-          <p className="font-semibold text-base">Bitcoin Price Range (24h)</p>
+        <div className="flex flex-col w-full h-80 -mx-6 sm:mx-0 px-6 sm:px-0 relative">
+          <div className="flex items-center gap-2 mb-2">
+            <p className="font-semibold text-base">Bitcoin Price Range (24h)</p>
+            <ActionIconButton
+              onClick={handleDownloadPriceRange}
+              icon={
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path d="M3 14.5A2.5 2.5 0 0 0 5.5 17h9a2.5 2.5 0 0 0 2.5-2.5V11a.75.75 0 0 0-1.5 0v3.5a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1V11a.75.75 0 0 0-1.5 0v3.5Z" />
+                  <path d="M10 2a.75.75 0 0 0-.75.75v8.19L7.53 9.22a.75.75 0 0 0-1.06 1.06l3 3a.75.75 0 0 0 1.06 0l3-3a.75.75 0 1 0-1.06-1.06L10.75 10.94V2.75A.75.75 0 0 0 10 2Z" />
+                </svg>
+              }
+            />
+          </div>
           <span className="text-sm text-gray-500 mb-2">
             Displays the 24-hour low, current, and 24-hour high prices in{' '}
             {currency}
           </span>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={[
-                { label: '24h Low', value: priceData?.low24h ?? 0 },
-                { label: 'Current', value: priceData?.current ?? 0 },
-                { label: '24h High', value: priceData?.high24h ?? 0 },
-              ]}
-              margin={{
-                left: -5,
-                right: -5,
-                top: 20,
-                bottom: 20,
-              }}
-            >
-              <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-              <YAxis
-                width={50}
-                tick={{ fontSize: 10 }}
-                domain={[
-                  (dataMin: number) =>
-                    Math.floor(
-                      dataMin -
-                        (priceData
-                          ? (priceData.high24h - priceData.low24h) * 0.1
-                          : 0)
-                    ),
-                  (dataMax: number) =>
-                    Math.ceil(
-                      dataMax +
-                        (priceData
-                          ? (priceData.high24h - priceData.low24h) * 0.1
-                          : 0)
-                    ),
+          <div ref={priceRangeChartRef} className="flex-1">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={[
+                  { label: '24h Low', value: priceData?.low24h ?? 0 },
+                  { label: 'Current', value: priceData?.current ?? 0 },
+                  { label: '24h High', value: priceData?.high24h ?? 0 },
                 ]}
-                tickFormatter={(value) =>
-                  `${getCurrencySymbol(currency)}${formatPrice(value)}`
-                }
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'black',
-                  border: '1px solid #ccc',
-                  fontSize: '12px',
+                margin={{
+                  left: -5,
+                  right: -5,
+                  top: 20,
+                  bottom: 20,
                 }}
-                formatter={(value) => [
-                  `${getCurrencySymbol(currency)}${formatPrice(Number(value))}`,
-                  'Price',
-                ]}
-              />
-              <Legend wrapperStyle={{ fontSize: '12px' }} />
-              <Bar dataKey="value" fill="#8884d8" />
-            </BarChart>
-          </ResponsiveContainer>
+              >
+                <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                <YAxis
+                  width={50}
+                  tick={{ fontSize: 10 }}
+                  domain={[
+                    (dataMin: number) =>
+                      Math.floor(
+                        dataMin -
+                          (priceData
+                            ? (priceData.high24h - priceData.low24h) * 0.1
+                            : 0)
+                      ),
+                    (dataMax: number) =>
+                      Math.ceil(
+                        dataMax +
+                          (priceData
+                            ? (priceData.high24h - priceData.low24h) * 0.1
+                            : 0)
+                      ),
+                  ]}
+                  tickFormatter={(value) =>
+                    `${getCurrencySymbol(currency)}${formatPrice(value)}`
+                  }
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'black',
+                    border: '1px solid #ccc',
+                    fontSize: '12px',
+                  }}
+                  formatter={(value) => [
+                    `${getCurrencySymbol(currency)}${formatPrice(Number(value))}`,
+                    'Price',
+                  ]}
+                />
+                <Legend wrapperStyle={{ fontSize: '12px' }} />
+                <Bar dataKey="value" fill="#8884d8" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
 
         {/* Price History Line Chart */}
-        <div className="flex flex-col w-full h-80">
-          <p className="font-semibold text-base">
-            Bitcoin Price History (Live)
-          </p>
+        <div className="flex flex-col w-full h-80 relative">
+          <div className="flex items-center gap-2 mb-2">
+            <p className="font-semibold text-base">
+              Bitcoin Price History (Live)
+            </p>
+            <ActionIconButton
+              onClick={handleDownloadPriceHistory}
+              icon={
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path d="M3 14.5A2.5 2.5 0 0 0 5.5 17h9a2.5 2.5 0 0 0 2.5-2.5V11a.75.75 0 0 0-1.5 0v3.5a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1V11a.75.75 0 0 0-1.5 0v3.5Z" />
+                  <path d="M10 2a.75.75 0 0 0-.75.75v8.19L7.53 9.22a.75.75 0 0 0-1.06 1.06l3 3a.75.75 0 0 0 1.06 0l3-3a.75.75 0 1 0-1.06-1.06L10.75 10.94V2.75A.75.75 0 0 0 10 2Z" />
+                </svg>
+              }
+            />
+          </div>
           <span className="text-sm text-gray-500 mb-2">
             Live updates in {currency}
           </span>
-          <ResponsiveContainer width="99%" height="100%">
-            <LineChart
-              data={priceHistory}
-              margin={{ left: 60, right: 40, top: 20, bottom: 20 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="time" tick={{ fontSize: 10 }} interval={0} />
-              <YAxis
-                domain={['auto', 'auto']}
-                tickFormatter={(value) =>
-                  `${getCurrencySymbol(currency)}${formatPrice(value)}`
-                }
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'black',
-                  border: '1px solid #ccc',
-                }}
-                formatter={(value) => [
-                  `${getCurrencySymbol(currency)}${formatPrice(Number(value))}`,
-                  'Price',
-                ]}
-                labelFormatter={(label) => `Time: ${label}`}
-              />
-              <Line
-                type="monotone"
-                dataKey="price"
-                stroke="#8884d8"
-                dot={false}
-                isAnimationActive={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          <div ref={priceHistoryChartRef} className="flex-1">
+            <ResponsiveContainer width="99%" height="100%">
+              <LineChart
+                data={priceHistory}
+                margin={{ left: 60, right: 40, top: 20, bottom: 20 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="time" tick={{ fontSize: 10 }} interval={0} />
+                <YAxis
+                  domain={['auto', 'auto']}
+                  tickFormatter={(value) =>
+                    `${getCurrencySymbol(currency)}${formatPrice(value)}`
+                  }
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'black',
+                    border: '1px solid #ccc',
+                  }}
+                  formatter={(value) => [
+                    `${getCurrencySymbol(currency)}${formatPrice(Number(value))}`,
+                    'Price',
+                  ]}
+                  labelFormatter={(label) => `Time: ${label}`}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="price"
+                  stroke="#8884d8"
+                  dot={false}
+                  isAnimationActive={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       </div>
 

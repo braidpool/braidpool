@@ -121,43 +121,43 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
 
   return (
     <div className="space-y-4 ">
-      <div className="flex justify-between items-center">
-        <div>
-          <h3 className="text-xl font-bold text-blue-300">
-            Transaction Activity
-          </h3>
-          <p className="text-sm text-gray-400 mt-1">
-            Real-time transaction statistics
-          </p>
-          {error && <p className="text-sm text-red-400 mt-1">Error: {error}</p>}
-          {!isConnected && !error && (
-            <p className="text-sm text-yellow-400 mt-1">Disconnected</p>
-          )}
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="bg-purple-900/30 px-3 py-1 rounded-md">
-            <div className="text-center">
-              <span className="text-purple-300 font-mono text-lg">
-                {getCurrentRate()
-                  ? `${getCurrentRate().toFixed(1)} tx/min`
-                  : isLoading
-                    ? 'Loading...'
-                    : 'No data'}
-              </span>
-              <div className="text-xs text-purple-400 mt-1">
-                {getRateLabel()}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div>
         <AdvancedChart
           data={chartData.slice(-10)}
           yLabel="Transactions per Block"
           unit="tx"
           lineColor="#8884d8"
+          title="Transaction Activity"
+          description={
+            <>
+              Real-time transaction statistics
+              {error && (
+                <div className="text-sm text-red-400 mt-1">Error: {error}</div>
+              )}
+              {!isConnected && !error && (
+                <div className="text-sm text-yellow-400 mt-1">Disconnected</div>
+              )}
+            </>
+          }
+          headerRight={
+            <div className="flex items-center gap-4">
+              <div className="bg-purple-900/30 px-3 py-1 rounded-md">
+                <div className="text-center">
+                  <span className="text-purple-300 font-mono text-lg">
+                    {getCurrentRate()
+                      ? `${getCurrentRate().toFixed(1)} tx/min`
+                      : isLoading
+                        ? 'Loading...'
+                        : 'No data'}
+                  </span>
+                  <div className="text-xs text-purple-400 mt-1">
+                    {getRateLabel()}
+                  </div>
+                </div>
+              </div>
+            </div>
+          }
+          downloadFileName="transaction-activity"
         />
       </div>
 
