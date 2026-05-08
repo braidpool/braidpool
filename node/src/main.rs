@@ -1,4 +1,5 @@
 use bitcoin::consensus::encode::deserialize;
+use braidpool_common::cpunet::Cpunet;
 use clap::Parser;
 use futures::lock::Mutex;
 use futures::StreamExt;
@@ -25,7 +26,6 @@ use node::{
     bead::{Bead, BeadHashes, BeadRequest, BeadResponse, BeadSyncError},
     behaviour::{self, BEAD_ANNOUNCE_PROTOCOL, BRAIDPOOL_TOPIC},
     braid, cli,
-    cpunet::Cpunet,
     db::db_handlers::DBHandler,
     ibd_manager::{IBDCommands, IBDManager, IBD_BATCH_SIZE},
     ipc_template_consumer,

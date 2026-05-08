@@ -1088,6 +1088,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "braidpool-common"
+version = "0.1.0"
+dependencies = [
+ "bitcoin",
+]
+
+[[package]]
 name = "bs58"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3880,6 +3887,7 @@ dependencies = [
  "bincode",
  "bitcoin",
  "bitcoin-internals 0.5.0",
+ "braidpool-common",
  "bytes",
  "capnp",
  "capnp-rpc",

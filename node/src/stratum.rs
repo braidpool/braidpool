@@ -1,4 +1,3 @@
-use crate::cpunet::Cpunet;
 use crate::error::StratumErrors;
 use crate::template_creator::calculate_merkle_root;
 use crate::utils::compute_block_hash;
@@ -8,6 +7,7 @@ use bitcoin::hashes::Hash;
 use bitcoin::io::Cursor;
 use bitcoin::Transaction;
 use bitcoin::{block::Header as BlockHeader, BlockHash, TxMerkleNode, Txid, Witness};
+use braidpool_common::cpunet::Cpunet;
 use futures::{lock::Mutex, FutureExt};
 use num::ToPrimitive;
 use rand::RngCore;

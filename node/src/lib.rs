@@ -39,7 +39,6 @@ pub mod braid;
 pub mod cli;
 pub mod committed_metadata;
 pub mod config;
-pub mod cpunet;
 pub mod db;
 pub mod error;
 pub mod ibd_manager;

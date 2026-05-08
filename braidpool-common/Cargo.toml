@@ -1,0 +1,7 @@
+[package]
+name = "braidpool-common"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+bitcoin = {workspace = true}

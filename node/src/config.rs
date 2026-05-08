@@ -1,5 +1,5 @@
-use crate::cpunet::Cpunet;
 use bitcoin::Network;
+use braidpool_common::cpunet::Cpunet;
 use core::panic;
 use serde::{Deserialize, Serialize};
 use std::fs;
