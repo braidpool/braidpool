@@ -320,15 +320,79 @@ impl DBHandler {
             let all_beads: Vec<&Bead> = beads.iter().chain(orphans.iter()).collect();
 
             for bead in &all_beads {
-                let bead_id = match bead_index_mapping.get(&bead.block_header.block_hash()) {
+                let bead_hash = bead.block_header.block_hash();
+                let bead_id = match bead_index_mapping.get(&bead_hash) {
                     Some(&(id, _)) => id,
                     None => {
-                        warn!(bead_hash = %bead.block_header.block_hash(), "Bead ID not found in index mapping, skipping");
-                        continue;
+                        error!(bead_hash = %bead_hash, "Bead ID not found in index mapping, aborting batch");
+                        local_transaction.rollback().await.ok();
+                        return Err(DBErrors::TupleAttributeParsingError {
+                            error: format!(
+                                "Bead ID not found in index mapping for hash {}",
+                                bead_hash
+                            ),
+                            attribute: "bead_id".to_string(),
+                        });
                     }
                 };
 
-                // Collect bead data for bulk insert
+                // Prepare per-bead tuple data BEFORE buffering the bead row, so that any
+                // failure aborts the batch instead of leaving an orphan Bead row whose
+                // Relatives/ParentTimestamps/Transactions are missing (FK violation on
+                // commit, or silent inconsistency in the DB).
+                let (txs_json, relatives_json, parent_ts_json) = match self
+                    .prepare_bead_tuple_data(bead_index_mapping, bead)
+                {
+                    Ok(data) => data,
+                    Err(e) => {
+                        error!(bead_hash = %bead_hash, error = ?e, "Failed to prepare tuple data, aborting batch");
+                        local_transaction.rollback().await.ok();
+                        return Err(DBErrors::TupleAttributeParsingError {
+                            error: e.to_string(),
+                            attribute: "bead_tuple_data".to_string(),
+                        });
+                    }
+                };
+
+                let txs = match serde_json::from_str::<Vec<serde_json::Value>>(&txs_json) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        error!(bead_hash = %bead_hash, error = ?e, "Failed to parse transactions json, aborting batch");
+                        local_transaction.rollback().await.ok();
+                        return Err(DBErrors::TupleAttributeParsingError {
+                            error: e.to_string(),
+                            attribute: "transactions_json".to_string(),
+                        });
+                    }
+                };
+                let relatives = match serde_json::from_str::<Vec<serde_json::Value>>(
+                    &relatives_json,
+                ) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        error!(bead_hash = %bead_hash, error = ?e, "Failed to parse relatives json, aborting batch");
+                        local_transaction.rollback().await.ok();
+                        return Err(DBErrors::TupleAttributeParsingError {
+                            error: e.to_string(),
+                            attribute: "relatives_json".to_string(),
+                        });
+                    }
+                };
+                let parent_ts = match serde_json::from_str::<Vec<serde_json::Value>>(
+                    &parent_ts_json,
+                ) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        error!(bead_hash = %bead_hash, error = ?e, "Failed to parse parent timestamps json, aborting batch");
+                        local_transaction.rollback().await.ok();
+                        return Err(DBErrors::TupleAttributeParsingError {
+                            error: e.to_string(),
+                            attribute: "parent_timestamps_json".to_string(),
+                        });
+                    }
+                };
+
+                // All dependents validated; commit this bead's rows to the batch buffers.
                 all_bead_data.push(json!({
                     "id": bead_id as i64,
                     "hash": hex::encode(bead.block_header.block_hash().to_byte_array()),
@@ -349,28 +413,9 @@ impl DBHandler {
                     "broadcast_timestamp": bead.uncommitted_metadata.broadcast_timestamp.to_u32(),
                     "signature": hex::encode(bead.uncommitted_metadata.signature.to_vec()),
                 }));
-
-                match self.prepare_bead_tuple_data(bead_index_mapping, bead) {
-                    Ok((txs_json, relatives_json, parent_ts_json)) => {
-                        if let Ok(txs) = serde_json::from_str::<Vec<serde_json::Value>>(&txs_json) {
-                            all_txs_json_parts.extend(txs);
-                        }
-                        if let Ok(relatives) =
-                            serde_json::from_str::<Vec<serde_json::Value>>(&relatives_json)
-                        {
-                            all_relatives_json_parts.extend(relatives);
-                        }
-                        if let Ok(parent_ts) =
-                            serde_json::from_str::<Vec<serde_json::Value>>(&parent_ts_json)
-                        {
-                            all_parent_ts_json_parts.extend(parent_ts);
-                        }
-                    }
-                    Err(e) => {
-                        error!(bead_hash = %bead.block_header.block_hash(), error = ?e, "Failed to prepare tuple data, skipping");
-                        continue;
-                    }
-                }
+                all_txs_json_parts.extend(txs);
+                all_relatives_json_parts.extend(relatives);
+                all_parent_ts_json_parts.extend(parent_ts);
                 inserted_count += 1;
             }
 
@@ -399,7 +444,7 @@ impl DBHandler {
                 }
             })?;
             // Execute each bulk insert separately within the same transaction
-            // (sqlx doesn't reliably execute all statements in compound queries with numbered params)
+            // sqlx doesn't reliably execute all statements in compound queries with numbered params
             if let Err(e) = sqlx::query(BULK_INSERT_BEADS)
                 .bind(&beads_json)
                 .execute(&mut *local_transaction)
@@ -464,14 +509,22 @@ impl DBHandler {
             );
 
             for bead in beads {
-                let bead_id = match bead_index_mapping.get(&bead.block_header.block_hash()) {
+                let bead_hash = bead.block_header.block_hash();
+                let bead_id = match bead_index_mapping.get(&bead_hash) {
                     Some(&(id, _)) => id,
                     None => {
                         error!(
-                            bead_hash = %bead.block_header.block_hash(),
-                            "Bead ID not found in index mapping"
+                            bead_hash = %bead_hash,
+                            "Bead ID not found in index mapping, aborting batch"
                         );
-                        continue;
+                        local_transaction.rollback().await.ok();
+                        return Err(DBErrors::TupleAttributeParsingError {
+                            error: format!(
+                                "Bead ID not found in index mapping for hash {}",
+                                bead_hash
+                            ),
+                            attribute: "bead_id".to_string(),
+                        });
                     }
                 };
 
@@ -482,10 +535,14 @@ impl DBHandler {
                             error!(
                                 error = ?error,
                                 bead_id = bead_id,
-                                bead_hash = %bead.block_header.block_hash(),
-                                "Failed to prepare bead tuple data"
+                                bead_hash = %bead_hash,
+                                "Failed to prepare bead tuple data, aborting batch"
                             );
-                            continue;
+                            local_transaction.rollback().await.ok();
+                            return Err(DBErrors::TupleAttributeParsingError {
+                                error: error.to_string(),
+                                attribute: "bead_tuple_data".to_string(),
+                            });
                         }
                     };
 
@@ -514,15 +571,22 @@ impl DBHandler {
 
             // Insert orphan beads
             for orphan in orphans {
-                let orphan_bead_id = match bead_index_mapping.get(&orphan.block_header.block_hash())
-                {
+                let orphan_hash = orphan.block_header.block_hash();
+                let orphan_bead_id = match bead_index_mapping.get(&orphan_hash) {
                     Some(&(id, _)) => id,
                     None => {
                         error!(
-                            orphan_hash = %orphan.block_header.block_hash(),
-                            "Orphan bead ID not found in index mapping"
+                            orphan_hash = %orphan_hash,
+                            "Orphan bead ID not found in index mapping, aborting batch"
                         );
-                        continue;
+                        local_transaction.rollback().await.ok();
+                        return Err(DBErrors::TupleAttributeParsingError {
+                            error: format!(
+                                "Orphan bead ID not found in index mapping for hash {}",
+                                orphan_hash
+                            ),
+                            attribute: "orphan_bead_id".to_string(),
+                        });
                     }
                 };
 
@@ -533,10 +597,14 @@ impl DBHandler {
                             error!(
                                 error = ?error,
                                 orphan_bead_id = orphan_bead_id,
-                                orphan_hash = %orphan.block_header.block_hash(),
-                                "Failed to prepare orphan bead tuple data"
+                                orphan_hash = %orphan_hash,
+                                "Failed to prepare orphan bead tuple data, aborting batch"
                             );
-                            continue;
+                            local_transaction.rollback().await.ok();
+                            return Err(DBErrors::TupleAttributeParsingError {
+                                error: error.to_string(),
+                                attribute: "orphan_bead_tuple_data".to_string(),
+                            });
                         }
                     };
 
@@ -672,7 +740,7 @@ impl DBHandler {
                                                 orphan_hash = %orphan_hash,
                                                 "Orphan bead index not found in mapping, skipping"
                                             );
-                                            continue;
+                                            break;
                                         }
                                     };
                                     let (txs_json, relative_json, parent_timestamp_json) =

@@ -74,6 +74,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             format!("Database initialization failed: {:?}", e),
         )
     })?;
+    let args = cli::Cli::parse();
     // Initializing the braid object with read write lock
     //for supporting concurrent readers and single writer
     let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(Vec::from([]))));
@@ -1039,6 +1040,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                             "\u{1F389} IBD completed successfully via {}",
                                             sync_mode
                                         );
+                                        {
+                                            let mut peer_manager = peer_manager_arc.write().await;
+                                            peer_manager.reset_ibd_state(&peer);
+                                        }
                                     }
                                 }
                                  BeadResponse::GetBeadsAfter(bead_hashes)=>{
@@ -1225,6 +1230,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                 }
                                 else if retry_cnt == 0{
                                     //First time syncing is being done wrt the provided peer
+                                    {
+                                        let mut peer_manager = peer_manager_arc.write().await;
+                                        peer_manager.reset_ibd_state(&lowest_latency_peer);
+                                    }
                                     let sync_start_request:BeadRequest = BeadRequest::GetTips;
                                     swarm.behaviour_mut().bead_sync.send_request(&lowest_latency_peer, sync_start_request);
                                     sync_request_sent = true;
@@ -1235,6 +1244,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     {
                                         let mut peer_manager = peer_manager_arc.write().await;
                                         peer_manager.handle_update_retry_count(lowest_latency_peer);
+                                        peer_manager.reset_ibd_state(&lowest_latency_peer);
                                     }
                                     //Initiating IBD and sending the request to fetch tips and store them in a centralized mapping owned by main_thread .
                                     let sync_start_request:BeadRequest = BeadRequest::GetTips;

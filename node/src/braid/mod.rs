@@ -1087,10 +1087,8 @@ pub mod consensus_functions {
             //getting the maximum via comparator
             let max_bead = current_bead_children_set
                 .iter()
-                .max_by(|a, b| {
-                    bead_cmp(**a, **b, &descendant_work_braid, &ancestor_work)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                })
+                // Unwrap is infalliable so can be used here
+                .max_by(|a, b| bead_cmp(**a, **b, &descendant_work_braid, &ancestor_work).unwrap())
                 .ok_or(HighestWorkBeadFetchFailed)?;
             highest_work_path.push(*max_bead);
         }

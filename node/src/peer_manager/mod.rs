@@ -148,7 +148,7 @@ impl PeerManager {
 
     pub fn handle_update_incoming(&mut self, peer_id: PeerId, data: Vec<BeadHash>) {
         if let Some(peer_info) = self.peers.get_mut(&peer_id) {
-            peer_info.ibd_bead_queue.extend(data.into_iter());
+            peer_info.ibd_bead_queue = data;
         } else {
             tracing::error!("PeerInfo not found while updating incoming beads");
         }
@@ -156,9 +156,18 @@ impl PeerManager {
 
     pub fn handle_update_ibd_peer_tips(&mut self, peer_id: PeerId, tips: Vec<BeadHash>) {
         if let Some(peer_info) = self.peers.get_mut(&peer_id) {
-            peer_info.ibd_peer_tips.extend(tips.into_iter());
+            peer_info.ibd_peer_tips = tips;
         } else {
             tracing::error!("PeerInfo not found while updating Tips mappping");
+        }
+    }
+
+    /// Reset per-peer IBD state clearing the queue required
+    pub fn reset_ibd_state(&mut self, peer_id: &PeerId) {
+        if let Some(peer_info) = self.peers.get_mut(peer_id) {
+            peer_info.ibd_peer_tips.clear();
+            peer_info.ibd_bead_queue.clear();
+            peer_info.ibd_batch_offset = IBD_BATCH_SIZE;
         }
     }
 
