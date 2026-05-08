@@ -109,7 +109,6 @@ pub trait Rpc {
         params: serde_json::Value,
     ) -> Result<serde_json::Value, ErrorObjectOwned>;
 }
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct MiningInfoParams {
     #[serde(default)]
@@ -1039,9 +1038,17 @@ pub async fn run_rpc_server(
         .set_rpc_middleware(rpc_middleware)
         .build(bind_address)
         .await
-        .unwrap();
+        .map_err(|error| {
+            tracing::error!(
+                error = ?error,
+                bind_address = %bind_address,
+                "Failed to build RPC server"
+            );
+        })?;
     //listening address for incoming requests/connection
-    let addr = server.local_addr().unwrap();
+    let addr = server.local_addr().map_err(|error| {
+        tracing::error!(error = ?error, "Failed to get RPC server local address");
+    })?;
     //context for the served server
     let rpc_impl = RpcServerImpl::new(
         braid_shared_pointer,

@@ -105,9 +105,12 @@ impl BraidPoolBehaviour {
 
     // Respond to a bead request
     pub fn respond_with_beads(&mut self, channel: ResponseChannel<BeadResponse>, beads: Vec<Bead>) {
-        self.bead_sync
+        if let Err(error) = self
+            .bead_sync
             .send_response(channel, BeadResponse::Beads(crate::bead::Beads(beads)))
-            .expect("Failed to send response");
+        {
+            tracing::warn!(error = ?error, "Failed to send bead response");
+        }
     }
     //Respond with `GetBeadsAfter` beadhashes request
     pub fn respond_with_beadhashes(
@@ -115,12 +118,12 @@ impl BraidPoolBehaviour {
         channel: ResponseChannel<BeadResponse>,
         bead_hashes: Vec<BeadHash>,
     ) {
-        self.bead_sync
-            .send_response(
-                channel,
-                BeadResponse::GetBeadsAfter(BeadHashes(bead_hashes)),
-            )
-            .expect("Failed to send response");
+        if let Err(error) = self.bead_sync.send_response(
+            channel,
+            BeadResponse::GetBeadsAfter(BeadHashes(bead_hashes)),
+        ) {
+            tracing::warn!(error = ?error, "Failed to send beadhashes response");
+        }
     }
     // Respond to a tips request
     pub fn respond_with_tips(
@@ -128,9 +131,12 @@ impl BraidPoolBehaviour {
         channel: ResponseChannel<BeadResponse>,
         tips: Vec<BeadHash>,
     ) {
-        self.bead_sync
+        if let Err(error) = self
+            .bead_sync
             .send_response(channel, BeadResponse::Tips(BeadHashes(tips)))
-            .expect("Failed to send response");
+        {
+            tracing::warn!(error = ?error, "Failed to send tips response");
+        }
     }
 
     // Respond to a genesis request
@@ -139,9 +145,12 @@ impl BraidPoolBehaviour {
         channel: ResponseChannel<BeadResponse>,
         genesis: Vec<BeadHash>,
     ) {
-        self.bead_sync
+        if let Err(error) = self
+            .bead_sync
             .send_response(channel, BeadResponse::Genesis(BeadHashes(genesis)))
-            .expect("Failed to send response");
+        {
+            tracing::warn!(error = ?error, "Failed to send genesis response");
+        }
     }
 
     // Respond with an error
@@ -150,9 +159,12 @@ impl BraidPoolBehaviour {
         channel: ResponseChannel<BeadResponse>,
         error: BeadSyncError,
     ) {
-        self.bead_sync
+        if let Err(error) = self
+            .bead_sync
             .send_response(channel, BeadResponse::Error(error))
-            .expect("Failed to send response");
+        {
+            tracing::warn!(error = ?error, "Failed to send error response");
+        }
     }
 }
 

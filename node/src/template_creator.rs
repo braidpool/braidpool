@@ -2,7 +2,7 @@ use crate::config::CoinbaseConfig;
 use crate::error::CoinbaseError;
 use crate::ipc::client::BlockTemplateComponents;
 use crate::EXTRANONCE_SEPARATOR;
-use bitcoin::consensus::encode::{ReadExt, WriteExt};
+use bitcoin::consensus::encode::ReadExt;
 use bitcoin::{
     absolute::LockTime,
     blockdata::{
@@ -202,10 +202,21 @@ fn decode_varint(data: &[u8]) -> Result<(u64, usize), CoinbaseError> {
 
 /// Encode a u64 as Bitcoin varint
 fn encode_varint(value: u64) -> Vec<u8> {
-    let mut buf = Vec::new();
-    buf.emit_compact_size(value)
-        .expect("Vec::write failure is impossible");
-    buf
+    if value <= 0xFC {
+        vec![value as u8]
+    } else if value <= 0xFFFF {
+        let mut out = vec![0xFD];
+        out.extend_from_slice(&(value as u16).to_le_bytes());
+        out
+    } else if value <= 0xFFFF_FFFF {
+        let mut out = vec![0xFE];
+        out.extend_from_slice(&(value as u32).to_le_bytes());
+        out
+    } else {
+        let mut out = vec![0xFF];
+        out.extend_from_slice(&value.to_le_bytes());
+        out
+    }
 }
 
 fn find_transaction_end(tx_data: &[u8]) -> Result<usize, CoinbaseError> {

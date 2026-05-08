@@ -427,10 +427,17 @@ pub mod consensus_functions {
             let parents = &parents[&current_bead_idx];
 
             for parent_bead_idx in parents.iter() {
-                bead_children_mapping
-                    .get_mut(&parent_bead_idx)
-                    .unwrap()
-                    .insert(current_bead_idx);
+                match bead_children_mapping.get_mut(&parent_bead_idx) {
+                    Some(children) => {
+                        children.insert(current_bead_idx);
+                    }
+                    None => {
+                        panic!(
+                            "Missing parent mapping while reversing braid edges for parent index {}",
+                            parent_bead_idx
+                        );
+                    }
+                }
             }
         }
         return bead_children_mapping;
@@ -1042,14 +1049,23 @@ pub mod consensus_functions {
         //work genesis bead to be included inside the highest work path
         let genesis_beads = genesis(braid_obj, parents);
         //getting the maxima out of the genesis beads
-        let max_gensis_bead = genesis_beads
-            .iter()
-            .max_by(|a, b| bead_cmp(**a, **b, &descendant_work_braid, &ancestor_work).unwrap())
-            .ok_or(HighestWorkBeadFetchFailed)
-            .unwrap();
+        let mut genesis_iter = genesis_beads.iter();
+        let first_genesis = *genesis_iter.next().ok_or(HighestWorkBeadFetchFailed)?;
+        let mut max_gensis_bead = first_genesis;
+        for candidate in genesis_iter {
+            if bead_cmp(
+                *candidate,
+                max_gensis_bead,
+                &descendant_work_braid,
+                &ancestor_work,
+            )? == Ordering::Greater
+            {
+                max_gensis_bead = *candidate;
+            }
+        }
         //populating the highest work path with indices representing the beads involved from the
         //entire braid for computation of highest work path
-        let mut highest_work_path: Vec<usize> = vec![*max_gensis_bead];
+        let mut highest_work_path: Vec<usize> = vec![max_gensis_bead];
         //getting the tip beads
         let tips_beads: HashSet<usize> = tips(braid_obj, parents);
         //computing while iterating and processing the previous best nodes and generating all
@@ -1060,12 +1076,17 @@ pub mod consensus_functions {
             //generating the child sets for the previous best bead
             let current_bead_children_set = generation(braid_obj, &beads_indices, Some(children));
             //getting the maximum via comparator
-            let max_bead = current_bead_children_set
-                .iter()
-                .max_by(|a, b| bead_cmp(**a, **b, &descendant_work_braid, &ancestor_work).unwrap())
-                .ok_or(HighestWorkBeadFetchFailed)
-                .unwrap();
-            highest_work_path.push(*max_bead);
+            let mut children_iter = current_bead_children_set.iter();
+            let first_child = *children_iter.next().ok_or(HighestWorkBeadFetchFailed)?;
+            let mut max_bead = first_child;
+            for candidate in children_iter {
+                if bead_cmp(*candidate, max_bead, &descendant_work_braid, &ancestor_work)?
+                    == Ordering::Greater
+                {
+                    max_bead = *candidate;
+                }
+            }
+            highest_work_path.push(max_bead);
         }
 
         return Ok(highest_work_path);
