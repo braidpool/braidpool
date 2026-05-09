@@ -6,6 +6,15 @@ resolver = "3"
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
+license = "AGPL-3.0-only"
+description = "Decentralized mining pool for bitcoin"
+readme = "README.md"
+homepage = "https://github.com/braidpool/braidpool"
+repository = "https://github.com/braidpool/braidpool"
+keywords = ["bitcoin", "mining-pool"]
+categories = ["cryptography::cryptocurrencies"]
+rust-version = "1.88"
+publish = false
 
 [workspace.dependencies]
 hex = "0.4"

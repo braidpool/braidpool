@@ -16,27 +16,7 @@ The goals of the pool are:
 
 # Running the node
 
-Braidpool nodes need to connect to a bitcoin RPC node. The bitcoin node also needs to have the `hashblock` [ZMQ notification](https://github.com/bitcoin/bitcoin/blob/master/doc/zmq.md) enabled.
-
-Let's assume there is a `bitcoind` running on `0.0.0.0:8332` with username `xxxx`, password `yyyy`, and `zmqpubhashblock` enabled on port `28332`:
-
-```
-$ bitcoind -rpcport=8332 -rpcuser=xxxx -rpcpassword=yyyy -zmqpubhashblock=tcp://localhost:28332
-```
-
-For the moment, the braidpool node runs a simple p2p broadcast. To run it you need to do
-the usual cargo things
-
-```
-cd node
-cargo build
-
-# run the first seed node on port 8989
-cargo run -- --bind=localhost:8989 --bitcoin=0.0.0.0 --rpcport=8332 --rpcuser=xxxx --rpcpass=yyyy --zmqhashblockport=28332
-
-# run other nodes pointing to the seeding node and specify their own port as 9899
-cargo run -- --bind=localhost:9899 --addnode=localhost:8989 --bitcoin=0.0.0.0 --rpcport=8332 --rpcuser=xxxx --rpcpass=yyyy --zmqhashblockport=28332
-```
+Kindly refer to our [setup documentation](docs/braidpool_setup.md) for all the setup instructions and dependencies beforehand.
 
 # Running the CPUnet testing node using nix-script
 
@@ -48,7 +28,7 @@ curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix 
 ```
 
 The `.nix` script present in the root directory `/braidpool/cpunet_node.nix` contains the CPUnet patched
-bitcoin-node , can be set up locally as testnet for Braidpool.
+bitcoin-node , can be set up locally as testnet for Braidpool this requires updates kindly setup from the `docs/braidpool_setup.md`.
 
 ```
 # Path to the parent directory
@@ -112,11 +92,11 @@ A list with TODO's:
 - [x] Global simulator for Braids (`tests/simulator.py`)
 - [x] Python braid `cohorts()` implementation and tests
 - [x] Rust braid object handling
-- [ ] Connect braid algorithms to blocks on CPUNet
-- [ ] P2P gossip based broadcast of miner blocks and shares.
+- [x] Connect braid algorithms to blocks on CPUNet
+- [x] P2P gossip based broadcast of miner blocks and shares.
+- [x] Validate received blocks and shares.
 - [ ] Use FROST rust implementation for providing threshold schnorr
       signatures. Use mock clock for identifying rounds.
-- [ ] Validate received blocks and shares.
 - [ ] Single script installer (limited to Linux variants, potentially using
       docker).
 

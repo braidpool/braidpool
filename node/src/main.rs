@@ -62,6 +62,7 @@ use tokio::sync::{
 async fn main() -> Result<(), Box<dyn Error>> {
     // Initialize tracing with colors and module prefixes
     setup_tracing()?;
+    let args = cli::Cli::parse();
     let (mut ibd_manager, ibd_command_tx) = IBDManager::new();
     //IBD cache handler
     let _ibd_handler = tokio::spawn(async move {
@@ -145,7 +146,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //Intializing `notifier` for mining.notify
     let mut notifier: Notifier = Notifier::new(notification_rx, Arc::clone(&mining_job_map));
     //Stratum configuration initialization
-    let stratum_config: StratumServerConfig = StratumServerConfig::default();
+    let stratum_config = StratumServerConfig {
+        port: args.stratum_port,
+        ..StratumServerConfig::default()
+    };
     let (block_submission_tx, block_submission_rx) =
         tokio::sync::mpsc::unbounded_channel::<node::stratum::BlockSubmissionRequest>();
     //IBD notifier task after peer_discovery
@@ -199,7 +203,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         mpsc::channel::<tokio::signal::unix::SignalKind>(32);
     let main_task_token = CancellationToken::new();
     let ipc_task_token = main_task_token.clone();
-    let args = cli::Cli::parse();
     let datadir_str = args.datadir.to_str().ok_or_else(|| {
         std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
@@ -388,20 +391,27 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (rpc_proxy_tx, rpc_proxy_rx) = tokio::sync::mpsc::unbounded_channel::<RpcProxyCommand>();
     // peer_manager_arc is created above and shared between swarm and RPC server
     //spawning the rpc server
-    let rpc_addr = "127.0.0.1:6682"; // TODO: Load from config file
+    let rpc_addr = args.rpc_bind.to_string();
     let bitcoin_rpc_config = BitcoinRpcConfig::from_cli_args(&args).unwrap_or_else(|e| {
         eprintln!("Error: {}", e);
         std::process::exit(1);
     });
-    let server_join = tokio::spawn(run_rpc_server(
-        Arc::clone(&braid),
-        rpc_addr,
-        peer_manager_arc.clone(),
-        connection_mapping_for_rpc.clone(),
-        latest_template.clone(),
-        rpc_proxy_tx,
-        bitcoin_rpc_config,
-    ));
+    let rpc_braid = Arc::clone(&braid);
+    let rpc_peer_manager = peer_manager_arc.clone();
+    let rpc_connection_mapping = connection_mapping_for_rpc.clone();
+    let rpc_latest_template = latest_template.clone();
+    let server_join = tokio::spawn(async move {
+        run_rpc_server(
+            rpc_braid,
+            &rpc_addr,
+            rpc_peer_manager,
+            rpc_connection_mapping,
+            rpc_latest_template,
+            rpc_proxy_tx,
+            bitcoin_rpc_config,
+        )
+        .await
+    });
     match server_join.await {
         Ok(Ok(_addr)) => {}
         Ok(Err(())) => {

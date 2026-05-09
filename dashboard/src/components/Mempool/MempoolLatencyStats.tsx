@@ -22,6 +22,8 @@ import {
 import { currencyLabels, currencyColors } from './Constants';
 import { WEBSOCKET_URLS } from '@/URLs';
 import { Loader } from 'lucide-react';
+import ActionIconButton from '../common/ActionIconButton';
+import { downloadSvgFromContainer } from '../../utils/downloadSvg';
 
 const MempoolLatencyStats = () => {
   const wsRef = useRef<WebSocket | null>(null);
@@ -34,6 +36,21 @@ const MempoolLatencyStats = () => {
     []
   );
   const [wsConnected, setWsConnected] = useState(false);
+  const feeDistChartRef = useRef<HTMLDivElement | null>(null);
+  const blockFeeChartRef = useRef<HTMLDivElement | null>(null);
+
+  const handleDownloadFeeDist = () => {
+    if (!feeDistChartRef.current) return;
+    downloadSvgFromContainer(
+      feeDistChartRef.current,
+      'mempool-fee-distribution'
+    );
+  };
+
+  const handleDownloadBlockFees = () => {
+    if (!blockFeeChartRef.current) return;
+    downloadSvgFromContainer(blockFeeChartRef.current, 'mempool-block-fees');
+  };
 
   useEffect(() => {
     const ws = new WebSocket(WEBSOCKET_URLS.MAIN_WEBSOCKET);
@@ -190,11 +207,26 @@ const MempoolLatencyStats = () => {
         </div>
 
         {/* --- Fee Rate Distribution --- */}
-        <div className="shadow p-6">
+        <div className="shadow p-6 relative">
+          <div className="absolute right-3 top-3 z-10">
+            <ActionIconButton
+              onClick={handleDownloadFeeDist}
+              icon={
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path d="M3 14.5A2.5 2.5 0 0 0 5.5 17h9a2.5 2.5 0 0 0 2.5-2.5V11a.75.75 0 0 0-1.5 0v3.5a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1V11a.75.75 0 0 0-1.5 0v3.5Z" />
+                  <path d="M10 2a.75.75 0 0 0-.75.75v8.19L7.53 9.22a.75.75 0 0 0-1.06 1.06l3 3a.75.75 0 0 0 1.06 0l3-3a.75.75 0 1 0-1.06-1.06L10.75 10.94V2.75A.75.75 0 0 0 10 2Z" />
+                </svg>
+              }
+            />
+          </div>
           <h3 className="text-lg font-semibold text-center mb-4">
             Live Fee Rate Distribution
           </h3>
-          <div className="h-64">
+          <div className="h-64" ref={feeDistChartRef}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={feeDistChartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -218,8 +250,23 @@ const MempoolLatencyStats = () => {
       </section>
 
       {/* --- Block Fee Chart --- */}
-      <section className="shadow p-6">
-        <div className="flex justify-between items-center mb-4 flex-wrap">
+      <section className="shadow p-6 relative">
+        <div className="absolute right-3 top-0 z-10">
+          <ActionIconButton
+            onClick={handleDownloadBlockFees}
+            icon={
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
+                <path d="M3 14.5A2.5 2.5 0 0 0 5.5 17h9a2.5 2.5 0 0 0 2.5-2.5V11a.75.75 0 0 0-1.5 0v3.5a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1V11a.75.75 0 0 0-1.5 0v3.5Z" />
+                <path d="M10 2a.75.75 0 0 0-.75.75v8.19L7.53 9.22a.75.75 0 0 0-1.06 1.06l3 3a.75.75 0 0 0 1.06 0l3-3a.75.75 0 1 0-1.06-1.06L10.75 10.94V2.75A.75.75 0 0 0 10 2Z" />
+              </svg>
+            }
+          />
+        </div>
+        <div className="flex justify-between items-center mb-4 flex-wrap pt-4">
           <h2 className="text-lg font-semibold">Live Block Fees</h2>
 
           <select
@@ -242,77 +289,79 @@ const MempoolLatencyStats = () => {
           </select>
         </div>
 
-        <ResponsiveContainer width="100%" height={400}>
-          <LineChart data={blockFeeChartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-            <XAxis dataKey="time" stroke="#9ca3af" />
-            <YAxis stroke="#9ca3af" />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: '#1f2937',
-                borderRadius: '8px',
-                border: 'none',
-                color: '#ffffff',
-                padding: '15px',
-                fontSize: '14px',
-              }}
-              formatter={(value: number, name: string) => [
-                name === 'btc'
-                  ? `${Number(value).toFixed(6)} BTC`
-                  : name === 'jpy'
-                    ? `¥${Number(value).toFixed(0)}`
-                    : name === 'eur'
-                      ? `€${Number(value).toFixed(2)}`
-                      : name === 'usd'
-                        ? `${Number(value).toFixed(2)}`
-                        : `${Number(value).toFixed(2)}`,
-                currencyLabels[name] || name,
-              ]}
-            />
-            <Legend />
+        <div ref={blockFeeChartRef}>
+          <ResponsiveContainer width="100%" height={400}>
+            <LineChart data={blockFeeChartData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+              <XAxis dataKey="time" stroke="#9ca3af" />
+              <YAxis stroke="#9ca3af" />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: '#1f2937',
+                  borderRadius: '8px',
+                  border: 'none',
+                  color: '#ffffff',
+                  padding: '15px',
+                  fontSize: '14px',
+                }}
+                formatter={(value: number, name: string) => [
+                  name === 'btc'
+                    ? `${Number(value).toFixed(6)} BTC`
+                    : name === 'jpy'
+                      ? `¥${Number(value).toFixed(0)}`
+                      : name === 'eur'
+                        ? `€${Number(value).toFixed(2)}`
+                        : name === 'usd'
+                          ? `${Number(value).toFixed(2)}`
+                          : `${Number(value).toFixed(2)}`,
+                  currencyLabels[name] || name,
+                ]}
+              />
+              <Legend />
 
-            {(selectedView === 'btc' || selectedView === 'all') && (
-              <Line
-                type="monotone"
-                dataKey="btc"
-                stroke={currencyColors.btc}
-                strokeWidth={2}
-                dot={{ r: 4 }}
-                name="BTC"
-              />
-            )}
-            {(selectedView === 'usd' || selectedView === 'all') && (
-              <Line
-                type="monotone"
-                dataKey="usd"
-                stroke={currencyColors.usd}
-                strokeWidth={2}
-                dot={{ r: 4 }}
-                name="USD"
-              />
-            )}
-            {(selectedView === 'eur' || selectedView === 'all') && (
-              <Line
-                type="monotone"
-                dataKey="eur"
-                stroke={currencyColors.eur}
-                strokeWidth={2}
-                dot={{ r: 4 }}
-                name="EUR"
-              />
-            )}
-            {(selectedView === 'jpy' || selectedView === 'all') && (
-              <Line
-                type="monotone"
-                dataKey="jpy"
-                stroke={currencyColors.jpy}
-                strokeWidth={2}
-                dot={{ r: 4 }}
-                name="JPY"
-              />
-            )}
-          </LineChart>
-        </ResponsiveContainer>
+              {(selectedView === 'btc' || selectedView === 'all') && (
+                <Line
+                  type="monotone"
+                  dataKey="btc"
+                  stroke={currencyColors.btc}
+                  strokeWidth={2}
+                  dot={{ r: 4 }}
+                  name="BTC"
+                />
+              )}
+              {(selectedView === 'usd' || selectedView === 'all') && (
+                <Line
+                  type="monotone"
+                  dataKey="usd"
+                  stroke={currencyColors.usd}
+                  strokeWidth={2}
+                  dot={{ r: 4 }}
+                  name="USD"
+                />
+              )}
+              {(selectedView === 'eur' || selectedView === 'all') && (
+                <Line
+                  type="monotone"
+                  dataKey="eur"
+                  stroke={currencyColors.eur}
+                  strokeWidth={2}
+                  dot={{ r: 4 }}
+                  name="EUR"
+                />
+              )}
+              {(selectedView === 'jpy' || selectedView === 'all') && (
+                <Line
+                  type="monotone"
+                  dataKey="jpy"
+                  stroke={currencyColors.jpy}
+                  strokeWidth={2}
+                  dot={{ r: 4 }}
+                  name="JPY"
+                />
+              )}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
       </section>
     </div>
   );
