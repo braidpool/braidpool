@@ -1,14 +1,48 @@
 import React, { useRef, useEffect, useState } from 'react';
 import * as d3 from 'd3';
 import { Loader } from 'lucide-react';
-import { GraphData, GraphNode, NodeIdMapping, Position } from './Types';
+import type {
+  AnimationSpeed,
+  GraphData,
+  GraphNode,
+  NodeIdMapping,
+  Position,
+} from './Types';
 import {
   layoutNodes,
   getEllipseEdgePoint,
   animateLinkDirection,
 } from './BraidPoolDAGUtils';
 import { WEBSOCKET_URLS } from '../../URLs';
-import { NODE_RADIUS, PADDING, COLORS } from './Constants';
+import {
+  ANIMATION_SPEED_OPTIONS,
+  COLORS,
+  DEFAULT_ANIMATION_SPEED,
+  DEFAULT_COHORT_ANIMATION_DELAY_MS,
+  DEFAULT_COHORT_ANIMATION_DURATION_MS,
+  NODE_RADIUS,
+} from './Constants';
+
+const getAnimationTiming = (speed: AnimationSpeed) => {
+  const defaultSpeedConfig = ANIMATION_SPEED_OPTIONS.find(
+    (option) => option.value === DEFAULT_ANIMATION_SPEED
+  );
+  const speedConfig =
+    ANIMATION_SPEED_OPTIONS.find((option) => option.value === speed) ??
+    defaultSpeedConfig;
+  if (!speedConfig) {
+    return {
+      durationMs: DEFAULT_COHORT_ANIMATION_DURATION_MS,
+      delayMs: DEFAULT_COHORT_ANIMATION_DELAY_MS,
+    };
+  }
+  return {
+    durationMs: Math.round(
+      DEFAULT_COHORT_ANIMATION_DURATION_MS * speedConfig.scale
+    ),
+    delayMs: Math.round(DEFAULT_COHORT_ANIMATION_DELAY_MS * speedConfig.scale),
+  };
+};
 
 const GraphVisualization: React.FC = () => {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -18,16 +52,29 @@ const GraphVisualization: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState(true);
   const isPlayingRef = useRef(true);
   const width = window.innerWidth - 100;
-  const margin = { top: 0, right: 0, bottom: 0, left: 50 }; // Changed top from 50 to 100
+  const margin = { top: 0, right: 0, bottom: 0, left: 50 };
   const height = window.innerHeight - margin.top - margin.bottom;
   const [nodeIdMap, setNodeIdMap] = useState<NodeIdMapping>({});
   const [selectedCohorts, setSelectedCohorts] = useState<number | 'all'>(5);
+  const [animationSpeed, setAnimationSpeed] = useState<AnimationSpeed>(
+    DEFAULT_ANIMATION_SPEED
+  );
+  const animationSpeedRef = useRef<AnimationSpeed>(DEFAULT_ANIMATION_SPEED);
+  const nextAnimationFrameTimeRef = useRef(0);
+  const pendingCohortAnimationRef = useRef<{
+    first: string[];
+    last: string[];
+  } | null>(null);
+  const pendingRenderStateRef = useRef<{
+    graphData: GraphData;
+    nodeIdMap: NodeIdMapping;
+    highestWorkPath: string[];
+  } | null>(null);
+  const pendingGateFlushTimeoutRef = useRef<number | null>(null);
+  const renderedUpdateCounterRef = useRef(0);
   const nodeRadius = NODE_RADIUS;
   const tooltipRef = useRef<HTMLDivElement>(null);
-  // var COLUMN_WIDTH = 200;
-  // const VERTICAL_SPACING = 150;
 
-  // New state for the counter and the highlighted bead hash
   const [graphUpdateCounter, setGraphUpdateCounter] = useState(0);
   const [latestBeadHashForHighlight, setLatestBeadHashForHighlight] = useState<
     string | null
@@ -35,7 +82,6 @@ const GraphVisualization: React.FC = () => {
 
   const prevFirstCohortRef = useRef<string[]>([]);
   const prevLastCohortRef = useRef<string[]>([]);
-  const [_connectionStatus, setConnectionStatus] = useState('Disconnected');
 
   const [totalBeads, setTotalBeads] = useState<number>(0);
   const [totalCohorts, setTotalCohorts] = useState<number>(0);
@@ -51,6 +97,10 @@ const GraphVisualization: React.FC = () => {
   useEffect(() => {
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
+
+  useEffect(() => {
+    animationSpeedRef.current = animationSpeed;
+  }, [animationSpeed]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -80,20 +130,78 @@ const GraphVisualization: React.FC = () => {
     const socket = new WebSocket(url);
     let isMounted = true;
 
+    const applyRenderState = (state: {
+      graphData: GraphData;
+      nodeIdMap: NodeIdMapping;
+      highestWorkPath: string[];
+    }) => {
+      setNodeIdMap(state.nodeIdMap);
+      setGraphData(state.graphData);
+      renderedUpdateCounterRef.current += 1;
+      const renderedCount = renderedUpdateCounterRef.current;
+      setGraphUpdateCounter(renderedCount);
+
+      if (renderedCount % 100 === 0 && state.highestWorkPath.length > 0) {
+        const latestBeadHash =
+          state.highestWorkPath[state.highestWorkPath.length - 1];
+        setLatestBeadHashForHighlight(latestBeadHash);
+      }
+    };
+
+    const flushPendingState = () => {
+      const pendingState = pendingRenderStateRef.current;
+      pendingRenderStateRef.current = null;
+      if (pendingState) {
+        applyRenderState(pendingState);
+      }
+    };
+
+    const scheduleGateFlush = () => {
+      if (pendingGateFlushTimeoutRef.current !== null) {
+        return;
+      }
+      const waitMs = Math.max(
+        nextAnimationFrameTimeRef.current - Date.now(),
+        0
+      );
+      pendingGateFlushTimeoutRef.current = window.setTimeout(() => {
+        pendingGateFlushTimeoutRef.current = null;
+        if (!isMounted) {
+          return;
+        }
+        flushPendingState();
+
+        const pendingPayload = pendingCohortAnimationRef.current;
+        pendingCohortAnimationRef.current = null;
+        if (!pendingPayload || !isPlayingRef.current) {
+          return;
+        }
+
+        const { durationMs: pendingDurationMs, delayMs: pendingDelayMs } =
+          getAnimationTiming(animationSpeedRef.current);
+        nextAnimationFrameTimeRef.current =
+          Date.now() + pendingDelayMs + pendingDurationMs;
+        setTimeout(() => {
+          animateCohorts(
+            pendingPayload.first,
+            pendingPayload.last,
+            pendingDurationMs
+          );
+        }, pendingDelayMs);
+      }, waitMs);
+    };
+
     socket.onopen = () => {
       if (!isMounted) return;
-      console.log('Connected to WebSocket', url);
-      setConnectionStatus('Connected');
     };
 
     socket.onclose = () => {
       if (!isMounted) return;
-      setConnectionStatus('Disconnected');
     };
 
     socket.onerror = (err) => {
       if (!isMounted) return;
-      setConnectionStatus(`Error: ${err}`);
+      console.error('WebSocket error:', err);
     };
 
     socket.onmessage = (event) => {
@@ -101,13 +209,19 @@ const GraphVisualization: React.FC = () => {
       try {
         const parsed = JSON.parse(event.data);
         const parsedData = parsed.data;
-        console.log('Received data:', parsedData);
         if (!isPlayingRef.current) {
           return;
         }
         if (!parsedData?.parents || typeof parsedData.parents !== 'object') {
           return;
         }
+        const {
+          durationMs: cohortAnimationDurationMs,
+          delayMs: cohortAnimationDelayMs,
+        } = getAnimationTiming(animationSpeedRef.current);
+
+        const now = Date.now();
+        const shouldAnimateNow = now >= nextAnimationFrameTimeRef.current;
 
         const children: Record<string, string[]> = {};
         if (parsedData?.parents && typeof parsedData.parents === 'object') {
@@ -164,26 +278,18 @@ const GraphVisualization: React.FC = () => {
           }
         });
 
-        setNodeIdMap(newMapping);
-        setGraphData(graphData);
+        const renderState = {
+          graphData,
+          nodeIdMap: newMapping,
+          highestWorkPath: parsedData.highest_work_path as string[],
+        };
 
-        // Increment the counter and update the highlighted bead hash
-        setGraphUpdateCounter((prevCounter) => {
-          const newCounter = prevCounter + 1;
-          // If the counter is divisible by 100, set the latest bead's hash
-          if (
-            newCounter % 100 === 0 &&
-            parsedData.highest_work_path.length > 0
-          ) {
-            const latestBeadHash =
-              parsedData.highest_work_path[
-                parsedData.highest_work_path.length - 1
-              ];
-            setLatestBeadHashForHighlight(latestBeadHash);
-          }
-          // The `latestBeadHashForHighlight` will remain set until the next time the condition is met.
-          return newCounter;
-        });
+        if (shouldAnimateNow) {
+          applyRenderState(renderState);
+        } else {
+          pendingRenderStateRef.current = renderState;
+          scheduleGateFlush();
+        }
 
         setTotalBeads(bead_count);
         setTotalCohorts(parsedData.cohorts.length);
@@ -198,14 +304,30 @@ const GraphVisualization: React.FC = () => {
           if (!isPlayingRef.current) {
             return;
           }
-          setTimeout(() => {
-            animateCohorts(
-              firstCohortChanged ? parsedData.cohorts[0] : [],
-              lastCohortChanged
-                ? parsedData.cohorts[parsedData.cohorts.length - 1]
-                : []
-            );
-          }, 100);
+          const animationPayload = {
+            first: firstCohortChanged ? parsedData.cohorts[0] : [],
+            last: lastCohortChanged
+              ? parsedData.cohorts[parsedData.cohorts.length - 1]
+              : [],
+          };
+
+          if (shouldAnimateNow) {
+            // Gate subsequent animations so speed differences remain perceptible.
+            nextAnimationFrameTimeRef.current =
+              Date.now() + cohortAnimationDelayMs + cohortAnimationDurationMs;
+            setTimeout(() => {
+              animateCohorts(
+                animationPayload.first,
+                animationPayload.last,
+                cohortAnimationDurationMs
+              );
+            }, cohortAnimationDelayMs);
+          } else {
+            // Keep graph/metrics updates flowing, but coalesce to the latest
+            // cohort transition while a previous animation is in flight.
+            pendingCohortAnimationRef.current = animationPayload;
+            scheduleGateFlush();
+          }
         }
       } catch (err) {
         setError('Error processing graph data: ');
@@ -216,13 +338,21 @@ const GraphVisualization: React.FC = () => {
 
     return () => {
       isMounted = false;
+      if (pendingGateFlushTimeoutRef.current !== null) {
+        window.clearTimeout(pendingGateFlushTimeoutRef.current);
+        pendingGateFlushTimeoutRef.current = null;
+      }
       if (socket.readyState === WebSocket.OPEN) {
         socket.close();
       }
     };
   }, []);
 
-  const animateCohorts = (firstCohort: string[], lastCohort: string[]) => {
+  const animateCohorts = (
+    firstCohort: string[],
+    lastCohort: string[],
+    durationMs: number
+  ) => {
     if (!svgRef.current) return;
 
     const svg = d3.select(svgRef.current);
@@ -236,7 +366,7 @@ const GraphVisualization: React.FC = () => {
         .attr('stroke', '#FF8500')
         .attr('stroke-width', 3)
         .transition()
-        .duration(1000)
+        .duration(durationMs)
         .attr('stroke-width', 2)
         .attr('stroke', '#fff');
     }
@@ -250,7 +380,7 @@ const GraphVisualization: React.FC = () => {
         .attr('stroke', '#FF8500')
         .attr('stroke-width', 3)
         .transition()
-        .duration(1000)
+        .duration(durationMs)
         .attr('stroke-width', 2)
         .attr('stroke', '#fff');
     }
@@ -265,7 +395,7 @@ const GraphVisualization: React.FC = () => {
         .attr('stroke-width', 2)
         .attr('stroke', '#FF8500');
 
-      animateLinkDirection(selectedLinks);
+      animateLinkDirection(selectedLinks, durationMs);
     }
 
     // Animate links connected to last cohort
@@ -279,7 +409,7 @@ const GraphVisualization: React.FC = () => {
         .attr('stroke-width', 2)
         .attr('stroke', '#FF8500');
 
-      animateLinkDirection(selectedLinks);
+      animateLinkDirection(selectedLinks, durationMs);
     }
   };
 
@@ -311,9 +441,6 @@ const GraphVisualization: React.FC = () => {
       return nextZoom;
     });
   };
-
-  // have not used it YET.. might come in handy in the future
-  const [_svgHeight, setSvgHeight] = useState(height);
 
   useEffect(() => {
     if (!svgRef.current || !graphData) return;
@@ -365,14 +492,6 @@ const GraphVisualization: React.FC = () => {
     const cohorts = graphData.cohorts;
     const positions = layoutNodes(allNodes, hwPath);
     const hwPathSet = new Set(hwPath);
-
-    // Calculate required height based on node positions
-    const allY = Object.values(positions).map((pos) => pos.y);
-    // const minY = Math.min(...allY);
-    // const maxY = Math.max(...allY);
-    const padding = PADDING; // Additional padding
-    const dynamicHeight = height / 2 + margin.top + margin.bottom + padding;
-    setSvgHeight(dynamicHeight);
 
     // making old nodes invisible
     const visibleNodes = allNodes.filter((node) =>
@@ -686,6 +805,21 @@ const GraphVisualization: React.FC = () => {
           {[1, 2, 3, 4, 5].map((value) => (
             <option key={value} value={value}>
               Show latest {value} cohorts
+            </option>
+          ))}
+        </select>
+        <label htmlFor="animation-speed" className="text-[#0077B6]">
+          Animation speed:
+        </label>
+        <select
+          id="animation-speed"
+          value={animationSpeed}
+          onChange={(e) => setAnimationSpeed(e.target.value as AnimationSpeed)}
+          className="px-2 py-1 rounded border border-[#0077B6] bg-gray text-[#0077B6]"
+        >
+          {ANIMATION_SPEED_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
             </option>
           ))}
         </select>

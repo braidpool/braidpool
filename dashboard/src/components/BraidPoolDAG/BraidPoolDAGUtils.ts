@@ -210,12 +210,15 @@ export function getEllipseEdgePoint(
   };
 }
 
-export function animateLinkDirection(selection: any) {
+export function animateLinkDirection(
+  selection: any,
+  durationMs: number = 1000
+) {
   selection
     .attr('stroke-dasharray', '5,5') // dashed stroke
     .attr('stroke-dashoffset', 10) // initial offset
     .transition()
-    .duration(1000)
+    .duration(durationMs)
     .ease(d3.easeLinear)
     .attr('stroke-dashoffset', 0) // animate offset to 0
     .on('end', function repeat(this: any) {
@@ -224,7 +227,7 @@ export function animateLinkDirection(selection: any) {
         d3.select(this)
           .attr('stroke-dashoffset', 10)
           .transition()
-          .duration(1000)
+          .duration(durationMs)
           .ease(d3.easeLinear)
           .attr('stroke-dashoffset', 0)
           .on('end', repeat);
