@@ -179,9 +179,7 @@ const GraphVisualization: React.FC = () => {
             parsedData.highestWorkPath?.length > 0
           ) {
             const latestBeadHash =
-              parsedData.highestWorkPath[
-                parsedData.highestWorkPath.length - 1
-              ];
+              parsedData.highestWorkPath[parsedData.highestWorkPath.length - 1];
             setLatestBeadHashForHighlight(latestBeadHash);
           }
           // The `latestBeadHashForHighlight` will remain set until the next time the condition is met.
