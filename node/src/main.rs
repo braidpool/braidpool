@@ -415,6 +415,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let rpc_peer_manager = peer_manager_arc.clone();
     let rpc_connection_mapping = connection_mapping_for_rpc.clone();
     let rpc_latest_template = latest_template.clone();
+    let rpc_proxy_tx_for_rpc = rpc_proxy_tx.clone();
+    let bitcoin_rpc_config_for_rpc = bitcoin_rpc_config.clone();
+    let rpc_auth_config_for_rpc = rpc_auth_config.clone();
     let server_join = tokio::spawn(async move {
         run_rpc_server(
             rpc_braid,
@@ -422,9 +425,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
             rpc_peer_manager,
             rpc_connection_mapping,
             rpc_latest_template,
-            rpc_proxy_tx,
-            bitcoin_rpc_config,
-            rpc_auth_config,
+            rpc_proxy_tx_for_rpc,
+            bitcoin_rpc_config_for_rpc,
+            rpc_auth_config_for_rpc,
         )
         .await
     });
