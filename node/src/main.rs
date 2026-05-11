@@ -68,7 +68,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Initialize tracing with colors and module prefixes
     setup_tracing()?;
     //Initializing DB and db command handler
-    let (mut _db_handler, db_tx) = DBHandler::new().await.map_err(|e| {
+    let (mut db_handler, db_tx) = DBHandler::new().await.map_err(|e| {
         std::io::Error::new(
             std::io::ErrorKind::Other,
             format!("Database initialization failed: {:?}", e),
@@ -78,15 +78,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Initializing the braid object with read write lock
     //for supporting concurrent readers and single writer
     let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(Vec::from([]))));
-    let db_connection_pool = _db_handler.db_connection_pool.clone();
     //Reconstructing local braid upon startup
-    let db_connection_pool_ref = _db_handler.db_connection_pool.clone();
+    let connection_pool_ref_fetch_handle = db_handler.db_connection_pool.clone();
+    let connection_pool_ref_shutdown_handle = db_handler.db_connection_pool.clone();
     let braid_ref = braid.clone();
     // FIXME instead we should look 144 blocks back from the bitcoin tip (1 day) and load beads
     // starting from that block as genesis
     let initial_bead_fetch_handle = tokio::spawn(async move {
         let mut guard = braid_ref.write().await;
-        let fetched_beads = fetch_beads_in_batch(db_connection_pool_ref, 1000).await?;
+        let fetched_beads = fetch_beads_in_batch(&connection_pool_ref_fetch_handle, 1000).await?;
         for bead in &fetched_beads {
             let curr_bead_status = guard.extend(&bead);
             info!(
@@ -116,7 +116,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let latest_template_id_for_consumer = latest_template_id.clone();
     //Starting the `query_handler` task
     tokio::spawn(async move {
-        let _res = _db_handler.insert_query_handler().await;
+        let _res = db_handler.insert_query_handler().await;
     });
     //latest available template to be cached for the newest connection until new job is received
     let latest_template = Arc::new(Mutex::new(BlockTemplate::default()));
@@ -576,14 +576,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                 if let braid::AddBeadStatus::ParentsNotYetReceived = status {
                                     // There is no need to request parents immediately they will be solved upon bead received as per the
                                     // latency of mesh and the self mined beads and their propagation via `extend` functionality
-                                    warn!("Received bead with missing parents - requesting parents");
+                                    warn!("Received bead with missing parents");
                                 } else if let braid::AddBeadStatus::InvalidBead = status {
                                     // update the peer manager about the invalid bead
                                     {
                                         let mut peer_manager = peer_manager_arc.write().await;
                                         peer_manager.penalize_for_invalid_bead(&message.source);
                                     }
-                                } else if let braid::AddBeadStatus::BeadAdded = status {
+                                }
+                                else if let braid::AddBeadStatus::DagAlreadyContainsBead = status{
+                                    warn!("Local braid already contains the received bead !");
+                                }
+                                else if let braid::AddBeadStatus::BeadAdded = status {
                                     //If the current bead's extension has further led to removal of orphan beads then
                                     //We can get the orphan beads that we can persist in DB also
                                     let bead_id = match braid_data
@@ -915,7 +919,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     // Collect orphans for batch insertion
                                     let mut all_removed_orphans = Vec::new();
                                     let mut bead_index_mapping = HashMap::new();
-
+                                    let mut non_duplicate_beads = Vec::new();
                                     for bead in beads.iter() {
                                         let mut braid_data = braid.write().await;
                                         let status = braid_data.extend(&bead);
@@ -927,7 +931,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                                 let mut peer_manager = peer_manager_arc.write().await;
                                                 peer_manager.penalize_for_invalid_bead(&peer);
                                             }
-                                        } else if let braid::AddBeadStatus::BeadAdded = status {
+                                        }
+                                        else if let braid::AddBeadStatus::DagAlreadyContainsBead = status{
+                                            warn!("A duplicate bead received during IBD !");
+                                        }
+                                        else if let braid::AddBeadStatus::BeadAdded = status {
                                             // Update bead index mapping for batch insert
                                             bead_index_mapping = braid_data.bead_index_mapping.clone();
 
@@ -954,14 +962,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                             }
 
                                             debug!(beadhash = %curr_beadhash, "Bead added to batch for insertion");
+                                            non_duplicate_beads.push(bead.to_owned());
                                         }
                                     }
 
                                     // Perform batch insertion for all successfully added beads
-                                    if !beads.to_vec().is_empty() {
+                                    if !non_duplicate_beads.to_vec().is_empty() {
                                         match db_tx.send(node::db::BraidpoolDBTypes::InsertTupleTypes {
                                             query: node::db::InsertTupleTypes::InsertBeadsBatch {
-                                                beads_to_insert:beads.to_vec(),
+                                                beads_to_insert:non_duplicate_beads.to_vec(),
                                                 removed_orphans: all_removed_orphans,
                                                 bead_index_mapping: bead_index_mapping,
                                             }
@@ -1460,9 +1469,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     match shutdown_signal {
         Ok(_) => {
             info!(component = "database", "Closing connection pool");
-            let pool = db_connection_pool.lock().await;
             //Closing all the existing connections to pool and committing from .db-wal to .db
-            pool.close().await;
+            // It is underlying cloning of the Arc pointer to the connection pool
+            connection_pool_ref_shutdown_handle.close().await;
             info!(component = "database", "Connections closed");
             info!(component = "swarm", "Shutting down network swarm");
             swarm_handle.abort();

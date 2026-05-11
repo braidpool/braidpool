@@ -987,29 +987,29 @@ pub mod consensus_functions {
         b: usize,
         dwork: &HashMap<usize, BigUint>,
         awork: &HashMap<usize, BigUint>,
-    ) -> Result<Ordering, BraidError> {
+    ) -> Ordering {
         if dwork[&a] < dwork[&b] {
-            return Ok(Ordering::Less);
+            return Ordering::Less;
         }
         if dwork[&a] > dwork[&b] {
-            return Ok(Ordering::Greater);
+            return Ordering::Greater;
         }
 
         if awork[&a] < awork[&b] {
-            return Ok(Ordering::Less);
+            return Ordering::Less;
         }
         if awork[&a] > awork[&b] {
-            return Ok(Ordering::Greater);
+            return Ordering::Greater;
         }
 
         if a > b {
-            return Ok(Ordering::Less);
+            return Ordering::Less;
         }
         if a < b {
-            return Ok(Ordering::Greater);
+            return Ordering::Greater;
         }
 
-        Ok(Ordering::Equal)
+        Ordering::Equal
     }
     /// Computes the **highest-work path** in the Braid DAG.
     ///
@@ -1067,10 +1067,7 @@ pub mod consensus_functions {
         //getting the maxima out of the genesis beads
         let max_gensis_bead = genesis_beads
             .iter()
-            .max_by(|a, b| {
-                bead_cmp(**a, **b, &descendant_work_braid, &ancestor_work)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
+            .max_by(|a, b| bead_cmp(**a, **b, &descendant_work_braid, &ancestor_work))
             .ok_or(HighestWorkBeadFetchFailed)?;
         //populating the highest work path with indices representing the beads involved from the
         //entire braid for computation of highest work path
@@ -1088,7 +1085,7 @@ pub mod consensus_functions {
             let max_bead = current_bead_children_set
                 .iter()
                 // Unwrap is infalliable so can be used here
-                .max_by(|a, b| bead_cmp(**a, **b, &descendant_work_braid, &ancestor_work).unwrap())
+                .max_by(|a, b| bead_cmp(**a, **b, &descendant_work_braid, &ancestor_work))
                 .ok_or(HighestWorkBeadFetchFailed)?;
             highest_work_path.push(*max_bead);
         }
