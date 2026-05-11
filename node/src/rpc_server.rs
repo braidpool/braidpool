@@ -38,7 +38,6 @@ use tokio::sync::{mpsc, oneshot, RwLock};
 use tower::Service;
 use tracing::{error, info, warn};
 
-
 #[cfg(test)]
 use {
     crate::braid, crate::utils::create_test_bead, jsonrpsee::core::client::ClientT,
