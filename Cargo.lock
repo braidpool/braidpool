@@ -3279,6 +3279,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "base64 0.22.1",
  "bincode",
  "bitcoin 0.32.7-pre-cpunet",
  "bitcoin_hashes 0.16.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -3292,6 +3293,9 @@ dependencies = [
  "clap",
  "futures",
  "hex",
+ "http 1.4.0",
+ "http-body 1.0.1",
+ "http-body-util",
  "if-addrs 0.13.4",
  "jsonrpsee",
  "libp2p",
@@ -3308,6 +3312,7 @@ dependencies = [
  "tokio-stream",
  "tokio-util",
  "toml",
+ "tower",
  "tracing",
  "tracing-subscriber",
 ]

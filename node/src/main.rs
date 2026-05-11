@@ -26,7 +26,9 @@ use node::{
     ibd_manager::{IBDCommands, IBDManager, IBD_BATCH_SIZE},
     ipc_template_consumer,
     peer_manager::PeerManager,
-    rpc_server::{run_rpc_server, BitcoinRpcConfig, RpcProxyCommand},
+    rpc_server::{
+        run_dashboard_api_server, run_rpc_server, BitcoinRpcConfig, RpcAuthConfig, RpcProxyCommand,
+    },
     setup_tracing,
     stratum::{BlockTemplate, ConnectionMapping, Notifier, NotifyCmd, Server, StratumServerConfig},
     SwarmCommand, TemplateId,
@@ -396,10 +398,26 @@ async fn main() -> Result<(), Box<dyn Error>> {
         eprintln!("Error: {}", e);
         std::process::exit(1);
     });
+    let rpc_auth_config = match (&args.rpcuser, &args.rpcpass) {
+        (Some(username), Some(password)) => Some(RpcAuthConfig {
+            username: username.clone(),
+            password: password.clone(),
+        }),
+        (None, None) => None,
+        _ => {
+            eprintln!(
+                "Error: both --rpcuser and --rpcpass must be provided together to enable RPC auth"
+            );
+            std::process::exit(1);
+        }
+    };
     let rpc_braid = Arc::clone(&braid);
     let rpc_peer_manager = peer_manager_arc.clone();
     let rpc_connection_mapping = connection_mapping_for_rpc.clone();
     let rpc_latest_template = latest_template.clone();
+    let rpc_proxy_tx_for_rpc = rpc_proxy_tx.clone();
+    let bitcoin_rpc_config_for_rpc = bitcoin_rpc_config.clone();
+    let rpc_auth_config_for_rpc = rpc_auth_config.clone();
     let server_join = tokio::spawn(async move {
         run_rpc_server(
             rpc_braid,
@@ -407,11 +425,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
             rpc_peer_manager,
             rpc_connection_mapping,
             rpc_latest_template,
-            rpc_proxy_tx,
-            bitcoin_rpc_config,
+            rpc_proxy_tx_for_rpc,
+            bitcoin_rpc_config_for_rpc,
+            rpc_auth_config_for_rpc,
         )
         .await
     });
+
     match server_join.await {
         Ok(Ok(_addr)) => {}
         Ok(Err(())) => {
@@ -429,6 +449,33 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .into());
         }
     };
+
+    if !args.disable_api {
+        let dashboard_api_addr = format!("{}:{}", args.api_bind, args.api_port);
+        let dashboard_server_result = run_dashboard_api_server(
+            Arc::clone(&braid),
+            &dashboard_api_addr,
+            peer_manager_arc.clone(),
+            connection_mapping_for_rpc.clone(),
+            latest_template.clone(),
+            rpc_proxy_tx.clone(),
+            bitcoin_rpc_config.clone(),
+            rpc_auth_config.clone(),
+        )
+        .await;
+        match dashboard_server_result {
+            Ok(_addr) => {}
+            Err(()) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Dashboard API server startup failed",
+                )
+                .into());
+            }
+        };
+    } else {
+        info!("Dashboard API server is disabled via --disable-api");
+    }
 
     // Spawn IPC handler
     let _ipc_handler = tokio::task::spawn_blocking(move || {

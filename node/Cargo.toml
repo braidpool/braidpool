@@ -37,6 +37,11 @@ strum = { workspace = true }
 if-addrs = { workspace = true }
 anyhow = { workspace = true }
 reqwest = { workspace = true }
+base64 = "0.22.1"
+tower = "0.5.3"
+http-body = "1.0.1"
+http-body-util = "0.1.3"
+http = "1.4.0"
 
 
 [build-dependencies]

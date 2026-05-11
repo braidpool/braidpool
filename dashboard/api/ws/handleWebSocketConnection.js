@@ -6,13 +6,21 @@ import {
 import { fetchAllNodeData } from '../utils/fetchBlockChainInfo.js';
 
 const ALLOWED_RPC_METHODS = new Set([
-  'getblock',
-  'getblockhash',
-  'getdifficulty',
-  'getnetworkhashps',
-  'getmempoolinfo',
+  'getbead',
+  'gettips',
+  'getbeadcount',
+  'getcohortcount',
+  'getcohortbyid',
+  'getgenesis',
+  'getmininginfo',
+  'getminerinfo',
+  'getparents',
+  'getchildren',
+  'gethighestworkpathbycount',
+  'getipcstats',
+  'getbraidinfo',
+  'getnodeinfo',
   'getpeerinfo',
-  'getblockchaininfo',
 ]);
 
 export async function handleWebSocketConnection(ws) {
