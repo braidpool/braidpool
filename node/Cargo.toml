@@ -2,6 +2,7 @@
 name = "node"
 version.workspace = true
 edition.workspace =  true
+rust-version.workspace = true
 
 [dependencies]
 hex = { workspace = true }
