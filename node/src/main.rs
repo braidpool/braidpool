@@ -41,6 +41,7 @@ use std::collections::HashSet;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::str::FromStr;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::UNIX_EPOCH;
 use std::{collections::HashMap, error::Error};
@@ -152,11 +153,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // IBD will be triggered when peer count threshold is reached
     let mut ibd_initiated = false;
 
+    // Flag to indicate IBD completion - prevents miner connections until synced
+    let ibd_complete = Arc::new(AtomicBool::new(false));
+    let ibd_complete_for_stratum = ibd_complete.clone();
+
     //Initializing stratum server
     let mut stratum_server = Server::new(
         stratum_config,
         connection_mapping.clone(),
         Some(block_submission_tx),
+        ibd_complete_for_stratum,
     );
     //Running the notification service
     tokio::spawn(async move {
@@ -780,15 +786,38 @@ async fn main() -> Result<(), Box<dyn Error>> {
                          cause,
                      } => {
                          info!(peer = %peer_id, connection_id = %connection_id, address = %endpoint.get_remote_address(), established = %num_established, cause = ?cause, "Connection closed");
-                         // Remove the peer from the peer manager
+
+                         // Handle any in-flight IBD request for this peer before removal
+                         let was_ibd_target = {
+                             let mut peer_manager = peer_manager_arc.write().await;
+                             let was_ibd = peer_manager.take_ibd_inflight_for_peer(&peer_id);
+                             if was_ibd {
+                                 peer_manager.handle_update_retry_count(peer_id);
+                                 peer_manager.reset_ibd_state(&peer_id);
+                             }
+                             was_ibd
+                         };
+
+                         // Remove peer from manager irrespective of IBD state
                          {
                              let mut peer_manager = peer_manager_arc.write().await;
                              peer_manager.remove_peer(&peer_id);
                          }
+
+                         // Clean up Kademlia routing table
                          swarm
                              .behaviour_mut()
                              .kademlia
                              .remove_address(&peer_id, endpoint.get_remote_address());
+
+                         // Re-initiate IBD if disconnected peer was our sync target
+                         if was_ibd_target {
+                             warn!(peer = %peer_id, "Sync peer disconnected mid-IBD; reinitiating");
+                             match swarm_command_sender.send(SwarmCommand::InitiateIBD).await {
+                                 Ok(_) => warn!("Reinitiating IBD after sync peer disconnect"),
+                                 Err(error) => error!(error = ?error, "Failed to reinitiate IBD after sync peer disconnect"),
+                             }
+                         }
                      }
                      SwarmEvent::Behaviour(BraidPoolBehaviourEvent::BeadSync(
                     request_response::Event::Message {
@@ -889,6 +918,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             request_id: _,
                             response,
                         } => {
+                            // Response received for an in-flight IBD request to this peer.
+                            {
+                                let mut peer_manager = peer_manager_arc.write().await;
+                                peer_manager.clear_ibd_inflight(&peer);
+                            }
                             match response {
                                 BeadResponse::Beads(beads)
                                 | BeadResponse::GetAllBeads(beads) => {
@@ -1026,7 +1060,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                             batch_num,
                                             total_batches
                                         );
-                                        swarm.behaviour_mut().request_beads(peer, &pruned_beads[next_batch_offset..(next_batch_offset+IBD_BATCH_SIZE)].to_vec());
+                                        let req_id = swarm.behaviour_mut().request_beads(peer, &pruned_beads[next_batch_offset..(next_batch_offset+IBD_BATCH_SIZE)].to_vec());
+                                        peer_manager_arc.write().await.set_ibd_inflight(peer, req_id);
                                     }
                                     else if next_batch_offset < pruned_beads.len() && ((next_batch_offset+IBD_BATCH_SIZE)>=pruned_beads.len()){
                                         let remaining = pruned_beads.len() - next_batch_offset;
@@ -1037,12 +1072,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                             "IBD final batch ({} beads remaining)",
                                             remaining
                                         );
-                                        swarm.behaviour_mut().request_beads(peer, &pruned_beads[next_batch_offset..].to_vec());
+                                        let req_id = swarm.behaviour_mut().request_beads(peer, &pruned_beads[next_batch_offset..].to_vec());
+                                        peer_manager_arc.write().await.set_ibd_inflight(peer, req_id);
 
                                     }
                                     else{
                                         //IBD completed
                                         let sync_mode = if next_batch_offset > IBD_BATCH_SIZE { "batches" } else { "single-fetch" };
+                                        ibd_complete.store(true, Ordering::Release);
                                         info!(
                                             peer = %peer,
                                             sync_mode = %sync_mode,
@@ -1100,12 +1137,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     peer_manager.handle_update_incoming(peer, pruned);
                                 }
                                     // Initiating `GetBead` request cycle
-                                    if pruned_ref.len() <= IBD_BATCH_SIZE{
-                                        swarm.behaviour_mut().request_beads(peer, &pruned_ref);
+                                    let req_id = if pruned_ref.len() <= IBD_BATCH_SIZE{
+                                        swarm.behaviour_mut().request_beads(peer, &pruned_ref)
                                     }
                                     else{
-                                        swarm.behaviour_mut().request_beads(peer, &pruned_ref[0..IBD_BATCH_SIZE].to_vec());
-                                    }
+                                        swarm.behaviour_mut().request_beads(peer, &pruned_ref[0..IBD_BATCH_SIZE].to_vec())
+                                    };
+                                    peer_manager_arc.write().await.set_ibd_inflight(peer, req_id);
 
                                 }
                                 BeadResponse::Tips(tips) => {
@@ -1124,6 +1162,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
                                     if flag{
                                         //No need to proceed further and continue to next event
+                                        ibd_complete.store(true, Ordering::Release);
                                         info!("Peer already synced to tip");
                                         continue;
                                     }
@@ -1144,7 +1183,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     }
                                     // Sending the current bead hashes for the receiving of beads to start in batches
                                     let get_bead_start_request:BeadRequest = BeadRequest::GetBeadsAfter(BeadHashes(current_tip_hashes));
-                                    swarm.behaviour_mut().bead_sync.send_request(&peer,get_bead_start_request);
+                                    let req_id = swarm.behaviour_mut().bead_sync.send_request(&peer,get_bead_start_request);
+                                    peer_manager_arc.write().await.set_ibd_inflight(peer, req_id);
 
                                 }
                                 BeadResponse::Genesis(genesis) => {
@@ -1159,9 +1199,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                         }
                                         braid::GenesisCheckStatus::MissingGenesisBead => {
                                             warn!(peer = %peer, "Missing genesis bead");
-                                            swarm
+                                            let req_id = swarm
                                                 .behaviour_mut()
                                                 .request_beads(peer, &genesis.0);
+                                            peer_manager_arc.write().await.set_ibd_inflight(peer, req_id);
                                         }
                                         braid::GenesisCheckStatus::GenesisBeadsCountMismatch => {
                                             warn!(
@@ -1175,7 +1216,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                 BeadResponse::Error(error) => match error {
                                     BeadSyncError::GenesisMismatch => {
                                         warn!("Genesis mismatch error received");
-                                        swarm.behaviour_mut().request_genesis(peer.clone());
+                                        let req_id = swarm.behaviour_mut().request_genesis(peer.clone());
+                                        peer_manager_arc.write().await.set_ibd_inflight(peer, req_id);
                                     }
                                     BeadSyncError::BeadHashNotFound => {
                                         warn!("Peer requested bead hashes not found in local store");
@@ -1185,6 +1227,41 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         }
                     }
                 }
+                SwarmEvent::Behaviour(BraidPoolBehaviourEvent::BeadSync(
+                    request_response::Event::OutboundFailure { peer, request_id, error, .. },
+                )) => {
+                    // Only re-trigger IBD if the failed request is the one we are
+                    // currently tracking for this peer. Non-matching ids are stale
+                    // or non-IBD requests and can be safely ignored.
+                    let was_active_ibd = {
+                        let mut peer_manager = peer_manager_arc.write().await;
+                        let active = peer_manager.take_ibd_inflight_if_matches(&peer, request_id);
+                        if active {
+                            peer_manager.handle_update_retry_count(peer);
+                            peer_manager.reset_ibd_state(&peer);
+                        }
+                        active
+                    };
+                    if was_active_ibd {
+                        warn!(peer = %peer, ?error, "IBD outbound failure; switching sync peer");
+                        match swarm_command_sender.send(SwarmCommand::InitiateIBD).await {
+                            Ok(_) => warn!("Reinitiating IBD after outbound failure"),
+                            Err(send_err) => {
+                                error!(error = ?send_err, "Failed to reinitiate IBD after outbound failure");
+                            }
+                        }
+                    } else {
+                        debug!(peer = %peer, ?error, ?request_id, "Non-IBD outbound failure");
+                    }
+                }
+                SwarmEvent::Behaviour(BraidPoolBehaviourEvent::BeadSync(
+                    request_response::Event::InboundFailure { peer, error, .. },
+                )) => {
+                    debug!(peer = %peer, ?error, "Inbound bead-sync failure (we were responding)");
+                }
+                SwarmEvent::Behaviour(BraidPoolBehaviourEvent::BeadSync(
+                    request_response::Event::ResponseSent { .. },
+                )) => {}
                      other_event=>{
                              debug!(event = ?other_event, "Other swarm event");
                      }
@@ -1244,7 +1321,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                         peer_manager.reset_ibd_state(&lowest_latency_peer);
                                     }
                                     let sync_start_request:BeadRequest = BeadRequest::GetTips;
-                                    swarm.behaviour_mut().bead_sync.send_request(&lowest_latency_peer, sync_start_request);
+                                    let req_id = swarm.behaviour_mut().bead_sync.send_request(&lowest_latency_peer, sync_start_request);
+                                    peer_manager_arc.write().await.set_ibd_inflight(lowest_latency_peer, req_id);
                                     sync_request_sent = true;
                                     break;
                                 }
@@ -1257,7 +1335,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     }
                                     //Initiating IBD and sending the request to fetch tips and store them in a centralized mapping owned by main_thread .
                                     let sync_start_request:BeadRequest = BeadRequest::GetTips;
-                                    swarm.behaviour_mut().bead_sync.send_request(&lowest_latency_peer, sync_start_request);
+                                    let req_id = swarm.behaviour_mut().bead_sync.send_request(&lowest_latency_peer, sync_start_request);
+                                    peer_manager_arc.write().await.set_ibd_inflight(lowest_latency_peer, req_id);
                                     sync_request_sent = true;
                                     break;
                                 }

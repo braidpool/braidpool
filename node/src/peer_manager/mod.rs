@@ -1,4 +1,5 @@
 use crate::utils::BeadHash;
+use libp2p::request_response::OutboundRequestId;
 use libp2p::PeerId;
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
@@ -47,6 +48,10 @@ pub struct PeerInfo {
     ibd_bead_queue: Vec<BeadHash>,
     ///Retry ibd count wrt each sync peer
     retry_count: u64,
+    /// In-flight outbound IBD request to this peer. `Some(..)` iff this peer is
+    /// the active sync target. Cleared on response, failure, or disconnect.
+    /// Invariant: at most one peer in the manager has this set at any time.
+    ibd_inflight_request: Option<OutboundRequestId>,
 }
 
 impl PeerInfo {
@@ -67,6 +72,7 @@ impl PeerInfo {
             ibd_peer_tips: Vec::new(),
             ibd_bead_queue: Vec::new(),
             retry_count: 0,
+            ibd_inflight_request: None,
         }
     }
 
@@ -168,7 +174,54 @@ impl PeerManager {
             peer_info.ibd_peer_tips.clear();
             peer_info.ibd_bead_queue.clear();
             peer_info.ibd_batch_offset = IBD_BATCH_SIZE;
+            peer_info.ibd_inflight_request = None;
         }
+    }
+
+    /// Record an in-flight IBD request to `peer_id`. Called immediately after
+    /// `bead_sync.send_request(...)` returns its `OutboundRequestId`.
+    pub fn set_ibd_inflight(&mut self, peer_id: PeerId, request_id: OutboundRequestId) {
+        if let Some(peer_info) = self.peers.get_mut(&peer_id) {
+            peer_info.ibd_inflight_request = Some(request_id);
+        } else {
+            tracing::error!(peer_id = ?peer_id, "PeerInfo not found while setting ibd_inflight_request");
+        }
+    }
+
+    /// Clear the in-flight IBD request for `peer_id` (called when its response
+    /// arrives successfully, before issuing the next IBD request).
+    pub fn clear_ibd_inflight(&mut self, peer_id: &PeerId) {
+        if let Some(peer_info) = self.peers.get_mut(peer_id) {
+            peer_info.ibd_inflight_request = None;
+        }
+    }
+
+    /// If `peer_id` has an in-flight IBD request matching `request_id`, clear
+    /// it and return true thus reinitiating IBD in case of request timeout in req/resp
+    pub fn take_ibd_inflight_if_matches(
+        &mut self,
+        peer_id: &PeerId,
+        request_id: OutboundRequestId,
+    ) -> bool {
+        if let Some(peer_info) = self.peers.get_mut(peer_id) {
+            if peer_info.ibd_inflight_request == Some(request_id) {
+                peer_info.ibd_inflight_request = None;
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Returns true and clears the entry if `peer_id` had an in-flight IBD
+    /// in case of ConnectionClosed event wrt to the sync peer
+    pub fn take_ibd_inflight_for_peer(&mut self, peer_id: &PeerId) -> bool {
+        if let Some(peer_info) = self.peers.get_mut(peer_id) {
+            if peer_info.ibd_inflight_request.is_some() {
+                peer_info.ibd_inflight_request = None;
+                return true;
+            }
+        }
+        false
     }
 
     pub fn handle_fetch_tips(
