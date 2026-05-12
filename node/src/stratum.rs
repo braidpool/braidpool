@@ -27,6 +27,28 @@ use tokio_util::codec::{FramedRead, LinesCodec};
 use tracing::{debug, error, info, trace, warn};
 
 static NEXT_CONNECTION_ID: AtomicUsize = AtomicUsize::new(1);
+const MAX_EXTRANONCE1_CONNECTION_ID: usize = u32::MAX as usize;
+
+/// Generates a unique connection ID for the 4-byte extranonce1 prefix.
+fn generate_connection_id() -> usize {
+    loop {
+        let current = NEXT_CONNECTION_ID.load(Ordering::Relaxed);
+        let next = if current >= MAX_EXTRANONCE1_CONNECTION_ID {
+            1
+        } else {
+            current + 1
+        };
+        match NEXT_CONNECTION_ID.compare_exchange_weak(
+            current,
+            next,
+            Ordering::Relaxed,
+            Ordering::Relaxed,
+        ) {
+            Ok(_) => break current,
+            Err(_) => continue,
+        };
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct BlockSubmissionRequest {
@@ -1086,23 +1108,7 @@ impl Default for DownstreamClient {
         //ExtraNonce1. - Hex-encoded, per-connection unique string which will be used for creating generation transactions later.
         //4 bytes
         let mut extranonce1_bytes = [0; 4];
-        let connection_id = loop {
-            let current = NEXT_CONNECTION_ID.load(Ordering::Relaxed);
-            let next = if current == usize::MAX {
-                1
-            } else {
-                current + 1
-            };
-            match NEXT_CONNECTION_ID.compare_exchange_weak(
-                current,
-                next,
-                Ordering::Acquire,
-                Ordering::Relaxed,
-            ) {
-                Ok(_) => break current,
-                Err(_) => continue,
-            };
-        };
+        let connection_id = generate_connection_id();
         extranonce1_bytes.copy_from_slice(&(connection_id as u32).to_be_bytes());
         let extranonce1_hex = hex::encode(&extranonce1_bytes);
         debug!(

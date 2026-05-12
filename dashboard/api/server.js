@@ -10,7 +10,7 @@ import { fetchBlockDetails } from './utils/fetchBlockDetails.js';
 import { fetchAllNodeData } from './utils/fetchBlockChainInfo.js';
 import { fetchPoolInfo } from './utils/fetchPoolInfo.js';
 import { fetchMempoolStats } from './utils/fetchMempoolStats.js';
-
+import { fetchBraidpoolBeadInfo } from './braidpool/utils/fetchbeadinfo.js';
 dotenv.config();
 
 const PORT = process.env.WS_PORT || 5000;
@@ -126,6 +126,39 @@ async function sendMempoolData() {
     console.error('[Server] fetchMempoolStats failed:', err.message);
   }
 }
+async function sendBeadInfo() {
+  try {
+    const braidpoolData = await fetchBraidpoolBeadInfo();
+
+    console.log(
+      '[sendBeadInfo] Received braidpool data:',
+      JSON.stringify(braidpoolData, null, 2)
+    );
+
+    if (braidpoolData?.braidInfo) {
+      const payload = {
+        type: 'braidpool_bead_info',
+        data: {
+          braidInfo: braidpoolData.braidInfo,
+          peerInfo: braidpoolData.peerInfo,
+          highestWorkPath: braidpoolData.highestWorkPath,
+          cohorts: braidpoolData.cohorts,
+          parents: braidpoolData.parents,
+          children: braidpoolData.children,
+        },
+        time: new Date().toLocaleString(),
+      };
+
+      wss.clients.forEach((client) => {
+        if (client.readyState === client.OPEN) {
+          client.send(JSON.stringify(payload));
+        }
+      });
+    }
+  } catch (err) {
+    console.error('[Server] fetchBraidpoolBeadInfo failed:', err.message);
+  }
+}
 
 setInterval(() => {
   sendDataToClients().catch((err) =>
@@ -150,6 +183,7 @@ setInterval(() => {
   );
   sendPoolInfo();
   sendMempoolData();
+  sendBeadInfo();
 }, 30000); // 30-second interval
 
 console.log(`WebSocket server running on ws://localhost:${PORT}`);
