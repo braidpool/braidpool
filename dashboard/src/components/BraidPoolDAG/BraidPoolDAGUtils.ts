@@ -102,10 +102,10 @@ export function layoutNodes(
 
   allNodes.forEach((n) => {
     if ((!n.children || n.children.length === 0) && !hwPathSet.has(n.id)) {
-      const parents = Array.from(allParents[n.id] || []);
-      if (parents.length > 0) {
-        const maxParentX = Math.max(...parents.map((p) => proposedX[p] ?? 0));
-        proposedX[n.id] = maxParentX + 1;
+      let maxParentX = 0;
+      for (const p of allParents[n.id] || []) {
+        const x = proposedX[p] ?? 0;
+        if (x > maxParentX) maxParentX = x;
       }
     }
   });

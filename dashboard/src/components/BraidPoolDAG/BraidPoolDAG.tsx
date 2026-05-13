@@ -82,7 +82,6 @@ const GraphVisualization: React.FC = () => {
 
     socket.onopen = () => {
       if (!isMounted) return;
-      console.log('Connected to WebSocket', url);
       setConnectionStatus('Connected');
     };
 
@@ -104,7 +103,6 @@ const GraphVisualization: React.FC = () => {
           return;
         }
         const parsedData = parsed.data;
-        console.log('Received braidpool data:', parsedData);
         if (!isPlayingRef.current) {
           return;
         }
