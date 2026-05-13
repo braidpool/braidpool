@@ -17,6 +17,7 @@ use libp2p::{
 use node::db::db_handlers::{fetch_beads_in_batch, prepare_bead_tuple_data};
 use node::ibd_manager::{IBD_TRIGGER_AFTER, MAX_IBD_INCOMING_THRESHOLD, MAX_IBD_RETRIES};
 use node::utils::compute_block_hash;
+use node::utils::is_routable_multiaddr;
 use node::utils::BeadHash;
 use node::SwarmHandler;
 use node::{
@@ -47,13 +48,8 @@ use tracing::{debug, error, info, trace, warn};
 use behaviour::{BraidPoolBehaviour, BraidPoolBehaviourEvent};
 
 const LATENCY_ALPHA: u64 = 10; // seconds
-                               //boot nodes peerIds
-const BOOTNODES: [&str; 1] = ["12D3KooWG9z8TziaNuYyEcc9FeUC3FTtrEf2XSnSdDpLvx4Jh2w3"];
-//dns NS
-const SEED_DNS: &str = "/dnsaddr/french.braidpool.net";
-//combined addr for dns resolution and dialing of boot for peer discovery
-const ADDR_REFRENCE: &str =
-    "/dnsaddr/french.braidpool.net/p2p/12D3KooWG9z8TziaNuYyEcc9FeUC3FTtrEf2XSnSdDpLvx4Jh2w3";
+                               //dns NS
+const SEED_DNS: [&str; 1] = ["/dnsaddr/french.braidpool.net"];
 use tokio::sync::{
     mpsc::{self},
     RwLock,
@@ -77,7 +73,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 valid_networks = "main, testnet, testnet4, signet, regtest, cpunet",
                 "Invalid network specified"
             );
-            info!(fallback = "regtest", "Using fallback network");
+            info!(fallback = "regtest", "Using fallback network instead");
             network_name = "regtest".to_string();
         }
     }
@@ -379,35 +375,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     //adding the boot nodes for peer discovery
     swarm.listen_on(multi_addr.clone())?;
-    for boot_peer in BOOTNODES {
-        let peer_id = match boot_peer.parse::<PeerId>() {
-            Ok(id) => id,
-            Err(e) => {
-                error!(boot_peer = %boot_peer, error = %e, "Failed to parse boot peer ID, skipping");
-                continue;
-            }
-        };
-        let seed_addr = match SEED_DNS.parse::<Multiaddr>() {
-            Ok(addr) => addr,
-            Err(e) => {
-                error!(seed_dns = %SEED_DNS, error = %e, "Failed to parse seed DNS, skipping");
-                continue;
-            }
-        };
-        swarm
-            .behaviour_mut()
-            .kademlia
-            .add_address(&peer_id, seed_addr);
+    for boot_peer in SEED_DNS {
+        let boot_addr: Multiaddr = boot_peer.parse().map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Failed to parse boot address: {}", e),
+            )
+        })?;
+        swarm.dial(boot_addr)?;
+        info!(address = %boot_peer, "Dialed boot node");
     }
-    info!(boot_node_count = %BOOTNODES.len(), "Boot nodes added to DHT");
-    let boot_addr: Multiaddr = ADDR_REFRENCE.parse().map_err(|e| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("Failed to parse boot address: {}", e),
-        )
-    })?;
-    swarm.dial(boot_addr)?;
-    info!(address = %ADDR_REFRENCE, "Dialed boot node");
     //IPC(inter process communication) based `getblocktemplate` and `notification` to send to the downstream via the `cmempoold` architecture
     info!(socket = %args.ipc_socket, "IPC socket path");
 
@@ -569,6 +546,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let network_name = swarm_network_name;
         let local_kad_protocol = kad_protocol(&network_name);
         let local_bead_sync_protocol = bead_sync_protocol(&network_name);
+        // Connection metadata captured at ConnectionEstablished to be stored in `PeerManager` upon
+        // protocol settlement
+        let mut pending_peers: HashMap<PeerId, (Multiaddr, bool)> = HashMap::new();
         loop {
             tokio::select! {
              swarm_event = swarm.select_next_some()=>{
@@ -852,30 +832,58 @@ async fn main() -> Result<(), Box<dyn Error>> {
                              address_count = %info.listen_addrs.len(),
                              "Received listen addresses"
                          );
-                         // Defense-in-depth: multistream-select already refuses
-                         // substream negotiation with peers that don't speak our
-                         // network-scoped protocols, but the underlying QUIC
-                         // connection can stay open idle. Drop it explicitly so
-                         // cross-network peers don't accumulate.
-                         let speaks_our_bead_sync = info
+                         let local_bead_sync_or_not = info
                              .protocols
                              .iter()
                              .any(|p| p == &local_bead_sync_protocol);
-                         if !speaks_our_bead_sync {
+                         let local_kad_or_not = info
+                             .protocols
+                             .iter()
+                             .any(|p| p == &local_kad_protocol);
+                         if !local_bead_sync_or_not {
                              warn!(
                                  peer = %peer_id,
                                  peer_protocols = ?info.protocols,
                                  expected = %local_bead_sync_protocol,
                                  network = %network_name,
-                                 "Peer does not speak our network's bead-sync protocol; disconnecting"
+                                 "Peer protocol negotiation failed - beadsync, closing the connection stream"
                              );
+                             pending_peers.remove(&peer_id);
                              let _ = swarm.disconnect_peer_id(peer_id);
-                         } else if info.protocols.iter().any(|p| p == &local_kad_protocol) {
-                             for addr in &info.listen_addrs {
-                                 info!(address = %addr, "Received address via identify");
-                             }
                          } else {
-                             info!(peer = ?peer_id, "Peer speaks bead-sync but not our Kademlia variant");
+                             if local_kad_or_not {
+                                 for addr in &info.listen_addrs {
+                                     if is_routable_multiaddr(addr) {
+                                         info!(peer = %peer_id, address = %addr, "Adding peer address to DHT via identify");
+                                         swarm
+                                             .behaviour_mut()
+                                             .kademlia
+                                             .add_address(&peer_id, addr.clone());
+                                     } else {
+                                         trace!(peer = %peer_id, address = %addr, "Skipping non-routable listen address");
+                                     }
+                                 }
+                             } else {
+                                 info!(peer = ?peer_id, "Peer kademlia protocol negotiation failed.");
+                             }
+                             swarm
+                                 .behaviour_mut()
+                                 .bead_announce
+                                 .add_node_to_partial_view(peer_id);
+                             info!(peer = %peer_id, "Peer added to floodsub mesh");
+                             if let Some((remote_addr, is_dialer)) = pending_peers.remove(&peer_id) {
+                                 let ip = remote_addr.iter().find_map(|p| match p {
+                                     libp2p::core::multiaddr::Protocol::Ip4(ip) => {
+                                         Some(std::net::IpAddr::V4(ip))
+                                     }
+                                     libp2p::core::multiaddr::Protocol::Ip6(ip) => {
+                                         Some(std::net::IpAddr::V6(ip))
+                                     }
+                                     _ => None,
+                                 });
+                                 let mut peer_manager = peer_manager_arc.write().await;
+                                 peer_manager.add_peer(peer_id, !is_dialer, ip);
+                             }
                          }
                          debug!(info = ?info, "Received peer info");
                      }
@@ -933,35 +941,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
                      SwarmEvent::ConnectionEstablished {
                          peer_id, endpoint, ..
                      } => {
-
-                         // Add the peer to the peer manager
-                         let remote_addr = endpoint.get_remote_address();
-                         swarm.behaviour_mut().kademlia.add_address(&peer_id,remote_addr.clone());
-                         info!(address = ?remote_addr, "DHT updated with peer address");
-                         swarm.behaviour_mut()
-                         .bead_announce
-                         .add_node_to_partial_view(peer_id);
-
-                         info!(peer = %peer_id, "Peer added to floodsub mesh");
-                         let ip = remote_addr.iter().find_map(|p| match p {
-                             libp2p::core::multiaddr::Protocol::Ip4(ip) => {
-                                 Some(std::net::IpAddr::V4(ip))
-                             }
-                             libp2p::core::multiaddr::Protocol::Ip6(ip) => {
-                                 Some(std::net::IpAddr::V6(ip))
-                             }
-                             _ => None,
-                         });
-                         {
-                             let mut peer_manager = peer_manager_arc.write().await;
-                             peer_manager.add_peer(peer_id, !endpoint.is_dialer(), ip);
-                         }
+                         let remote_addr = endpoint.get_remote_address().clone();
+                         let is_dialer = endpoint.is_dialer();
+                         pending_peers.insert(peer_id, (remote_addr.clone(), is_dialer));
                          info!(
                             peer_id = ?peer_id,
                             remote_addr = ?remote_addr,
-                            "Connection established to peer"
+                            "Connection established to peer protocol negotiation pending"
                         );
-
                      }
                      SwarmEvent::ConnectionClosed {
                          peer_id,
@@ -971,15 +958,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
                          cause,
                      } => {
                          info!(peer = %peer_id, connection_id = %connection_id, address = %endpoint.get_remote_address(), established = %num_established, cause = ?cause, "Connection closed");
+                         // Drop any pending entry that never got verified.
+                         pending_peers.remove(&peer_id);
                          // Remove the peer from the peer manager
                          {
                              let mut peer_manager = peer_manager_arc.write().await;
                              peer_manager.remove_peer(&peer_id);
                          }
-                         swarm
-                             .behaviour_mut()
-                             .kademlia
-                             .remove_address(&peer_id, endpoint.get_remote_address());
                      }
                      SwarmEvent::Behaviour(BraidPoolBehaviourEvent::BeadSync(
                     request_response::Event::Message {

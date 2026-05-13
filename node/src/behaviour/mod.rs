@@ -12,11 +12,8 @@ use libp2p::{
 };
 use std::{error::Error, time::Duration};
 
-// Protocol-name builders. Each is scoped by the active Bitcoin network so that
-// peers operating on different networks (cpunet, regtest, signet, ...) cannot
-// negotiate substreams with each other. This prevents the silent bead/hash
-// divergence that occurred when a single protocol name was shared across
-// networks.
+// Protocol IDs or names to be negotiated during the connection establishment
+// for network specific communication to be established
 pub fn kad_protocol(network: &str) -> StreamProtocol {
     StreamProtocol::try_from_owned(format!("/braidpool/{network}/kad/1.0.0"))
         .expect("network name produces invalid StreamProtocol")

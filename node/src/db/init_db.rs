@@ -7,14 +7,7 @@ use tracing::{debug, error, info, trace, warn};
 static SCHEMA_SQL: &str = include_str!("schema.sql");
 
 /// Initialize the sqlite pool for a given network-scoped data directory.
-///
-/// The DB lives at `<network_datadir>/braidpool.db`. The caller is expected to
-/// pass the per-network subdirectory (e.g. `~/.braidpool/cpunet`) so that the
-/// same binary running against different networks never shares state.
 pub async fn init_db(network_datadir: PathBuf, network: &str) -> Result<SqlitePool, DBErrors> {
-    // One-time courtesy warning for the pre-network layout. If an operator
-    // upgrades from the old hardcoded layout, point them at the new location
-    // and leave the old file alone (clean-break, no auto-migration).
     if let Ok(home_dir) = env::var("HOME") {
         let legacy_path = Path::new(&home_dir).join(".braidpool").join("braidpool.db");
         let new_path = network_datadir.join("braidpool.db");

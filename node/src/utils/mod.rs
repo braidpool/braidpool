@@ -13,6 +13,8 @@ use bitcoin::{
     secp256k1, CompactTarget, EcdsaSighashType, TxMerkleNode,
 };
 use braidpool_common::cpunet::Cpunet;
+use libp2p::core::multiaddr::Protocol;
+use libp2p::Multiaddr;
 // Standard Imports
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
@@ -92,6 +94,41 @@ pub fn server_endpoints(bind_host: &str, port: u16, protocol: &str) -> Vec<Strin
     }
 }
 
+/// Basic filtering of IPs returns true if a multiaddr is reachable from peers on the
+/// public internet otherwise it would lead to unroutable `FIND_NODE` hops
+pub fn is_routable_multiaddr(addr: &Multiaddr) -> bool {
+    for proto in addr.iter() {
+        match proto {
+            Protocol::Ip4(ip) => {
+                let octets = ip.octets();
+                // Basic check for `CGNAT` being (100.64.x.x) to avoid addition
+                // to local DHT
+                let is_cgnat = octets[0] == 100 && (octets[1] & 0xC0) == 64;
+                return !(ip.is_loopback()
+                    || ip.is_private()
+                    || ip.is_link_local()
+                    || ip.is_unspecified()
+                    || ip.is_multicast()
+                    || ip.is_broadcast()
+                    || is_cgnat);
+            }
+            Protocol::Ip6(ip) => {
+                let seg = ip.segments();
+                let is_link_local = (seg[0] & 0xffc0) == 0xfe80;
+                return !(ip.is_loopback()
+                    || ip.is_unspecified()
+                    || ip.is_multicast()
+                    || is_link_local);
+            }
+            Protocol::Dns(_) | Protocol::Dns4(_) | Protocol::Dns6(_) | Protocol::Dnsaddr(_) => {
+                return true;
+            }
+            _ => continue,
+        }
+    }
+    false
+}
+
 // Helper function to create test beads
 pub fn create_test_bead(nonce: u32, prev_hash: Option<BlockHash>) -> Bead {
     let public_key = "020202020202020202020202020202020202020202020202020202020202020202"
@@ -149,6 +186,111 @@ pub fn create_test_bead(nonce: u32, prev_hash: Option<BlockHash>) -> Bead {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn parse_test_multiaddress(s: &str) -> Multiaddr {
+        s.parse().expect("valid multiaddr literal")
+    }
+    // Basic tests for IP address filtering during DHT insertion
+    #[test]
+    fn routable_filter_rejects_loopback_v4() {
+        assert!(!is_routable_multiaddr(&parse_test_multiaddress(
+            "/ip4/127.0.0.1/udp/6680/quic-v1"
+        )));
+    }
+
+    #[test]
+    fn routable_filter_rejects_rfc1918() {
+        assert!(!is_routable_multiaddr(&parse_test_multiaddress(
+            "/ip4/10.0.0.5/udp/6680/quic-v1"
+        )));
+        assert!(!is_routable_multiaddr(&parse_test_multiaddress(
+            "/ip4/172.16.5.1/udp/6680/quic-v1"
+        )));
+        assert!(!is_routable_multiaddr(&parse_test_multiaddress(
+            "/ip4/192.168.1.8/udp/6680/quic-v1"
+        )));
+    }
+
+    #[test]
+    fn routable_filter_rejects_link_local_v4() {
+        assert!(!is_routable_multiaddr(&parse_test_multiaddress(
+            "/ip4/169.254.0.1/udp/6680/quic-v1"
+        )));
+    }
+
+    #[test]
+    fn routable_filter_rejects_unspecified_v4() {
+        assert!(!is_routable_multiaddr(&parse_test_multiaddress(
+            "/ip4/0.0.0.0/udp/6680/quic-v1"
+        )));
+    }
+
+    #[test]
+    fn routable_filter_rejects_cgnat() {
+        assert!(!is_routable_multiaddr(&parse_test_multiaddress(
+            "/ip4/100.64.0.1/udp/6680/quic-v1"
+        )));
+        assert!(!is_routable_multiaddr(&parse_test_multiaddress(
+            "/ip4/100.127.255.254/udp/6680/quic-v1"
+        )));
+        assert!(is_routable_multiaddr(&parse_test_multiaddress(
+            "/ip4/100.128.0.1/udp/6680/quic-v1"
+        )));
+    }
+
+    #[test]
+    fn routable_filter_rejects_loopback_v6() {
+        assert!(!is_routable_multiaddr(&parse_test_multiaddress(
+            "/ip6/::1/udp/6680/quic-v1"
+        )));
+    }
+
+    #[test]
+    fn routable_filter_rejects_link_local_v6() {
+        assert!(!is_routable_multiaddr(&parse_test_multiaddress(
+            "/ip6/fe80::1/udp/6680/quic-v1"
+        )));
+    }
+
+    #[test]
+    fn routable_filter_accepts_public_v4() {
+        assert!(is_routable_multiaddr(&parse_test_multiaddress(
+            "/ip4/8.8.8.8/udp/6680/quic-v1"
+        )));
+        assert!(is_routable_multiaddr(&parse_test_multiaddress(
+            "/ip4/74.50.123.158/udp/6680/quic-v1"
+        )));
+    }
+
+    #[test]
+    fn routable_filter_accepts_public_v6() {
+        assert!(is_routable_multiaddr(&parse_test_multiaddress(
+            "/ip6/2001:4860:4860::8888/udp/6680/quic-v1"
+        )));
+    }
+
+    #[test]
+    fn routable_filter_accepts_dns_variants() {
+        assert!(is_routable_multiaddr(&parse_test_multiaddress(
+            "/dns/example.com/udp/6680/quic-v1"
+        )));
+        assert!(is_routable_multiaddr(&parse_test_multiaddress(
+            "/dns4/example.com/udp/6680/quic-v1"
+        )));
+        assert!(is_routable_multiaddr(&parse_test_multiaddress(
+            "/dns6/example.com/udp/6680/quic-v1"
+        )));
+        assert!(is_routable_multiaddr(&parse_test_multiaddress(
+            "/dnsaddr/braidpool.net"
+        )));
+    }
+
+    #[test]
+    fn routable_filter_rejects_addr_without_ip_or_dns() {
+        assert!(!is_routable_multiaddr(&parse_test_multiaddress(
+            "/p2p/12D3KooWG9z8TziaNuYyEcc9FeUC3FTtrEf2XSnSdDpLvx4Jh2w3"
+        )));
+    }
+
     #[test]
     fn server_endpoints_returns_single_endpoint_for_specific_host() {
         let result = server_endpoints("127.0.0.1", 8080, "http");
