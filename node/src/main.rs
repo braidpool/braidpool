@@ -21,7 +21,7 @@ use node::utils::BeadHash;
 use node::SwarmHandler;
 use node::{
     bead::{Bead, BeadHashes, BeadRequest, BeadResponse, BeadSyncError},
-    behaviour::{self, BEAD_ANNOUNCE_PROTOCOL, BRAIDPOOL_TOPIC},
+    behaviour::{self, bead_sync_protocol, braidpool_topic, kad_protocol},
     braid, cli,
     db::db_handlers::DBHandler,
     ibd_manager::{IBDCommands, IBDManager, IBD_BATCH_SIZE},
@@ -46,7 +46,6 @@ use tracing::{debug, error, info, trace, warn};
 
 use behaviour::{BraidPoolBehaviour, BraidPoolBehaviourEvent};
 
-use crate::behaviour::KADPROTOCOLNAME;
 const LATENCY_ALPHA: u64 = 10; // seconds
                                //boot nodes peerIds
 const BOOTNODES: [&str; 1] = ["12D3KooWG9z8TziaNuYyEcc9FeUC3FTtrEf2XSnSdDpLvx4Jh2w3"];
@@ -90,6 +89,54 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //False if not under ibd otherwise true at start will be in IBD by default
     let ibd_or_not: AtomicBool = AtomicBool::new(true);
     let ibd_spinlock = Arc::new(ibd_or_not);
+    // Resolve the datadir up front so the DB, keystore, and any future
+    // per-network artifacts all share the same network-scoped subdirectory.
+    let datadir_str = args.datadir.to_str().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Invalid datadir path encoding",
+        )
+    })?;
+    let datadir = shellexpand::full(datadir_str).map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("Shell expansion failed: {}", e),
+        )
+    })?;
+    let datadir_path: std::path::PathBuf = Path::new(&*datadir).to_path_buf();
+    match fs::metadata(&datadir_path) {
+        Ok(m) => {
+            if !m.is_dir() {
+                error!(datadir = %datadir_path.display(), "Data directory exists but is not a directory");
+            }
+            info!(datadir = %datadir_path.display(), "Using existing data directory");
+        }
+        Err(_) => {
+            info!(datadir = %datadir_path.display(), "Creating data directory");
+            fs::create_dir_all(&datadir_path)?;
+        }
+    }
+    let network_datadir = datadir_path.join(&network_name);
+    match fs::metadata(&network_datadir) {
+        Ok(m) => {
+            if !m.is_dir() {
+                error!(path = %network_datadir.display(), "Network data path exists but is not a directory");
+            }
+            info!(
+                path = %network_datadir.display(),
+                network = %network_name,
+                "Using existing network-scoped data subdirectory"
+            );
+        }
+        Err(_) => {
+            info!(
+                path = %network_datadir.display(),
+                network = %network_name,
+                "Creating network-scoped data subdirectory"
+            );
+            fs::create_dir_all(&network_datadir)?;
+        }
+    }
     // Initializing the braid object with read write lock
     //for supporting concurrent readers and single writer
     let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(
@@ -97,12 +144,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
         network_name.clone(),
     )));
     //Initializing DB and db command handler
-    let (mut _db_handler, db_tx) = DBHandler::new(network_name.clone()).await.map_err(|e| {
-        std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("Database initialization failed: {:?}", e),
-        )
-    })?;
+    let (mut _db_handler, db_tx) = DBHandler::new(network_datadir.clone(), network_name.clone())
+        .await
+        .map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Database initialization failed: {:?}", e),
+            )
+        })?;
     let db_connection_pool = _db_handler.db_connection_pool.clone();
     //Reconstructing local braid upon startup
     let db_connection_pool_ref = _db_handler.db_connection_pool.clone();
@@ -227,33 +276,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         mpsc::channel::<tokio::signal::unix::SignalKind>(32);
     let main_task_token = CancellationToken::new();
     let ipc_task_token = main_task_token.clone();
-    let datadir_str = args.datadir.to_str().ok_or_else(|| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "Invalid datadir path encoding",
-        )
-    })?;
-    let datadir = shellexpand::full(datadir_str).map_err(|e| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("Shell expansion failed: {}", e),
-        )
-    })?;
-    match fs::metadata(&*datadir) {
-        Ok(m) => {
-            if !m.is_dir() {
-                error!(datadir = %datadir, "Data directory exists but is not a directory");
-            }
-            info!(datadir = %datadir, "Using existing data directory");
-        }
-        Err(_) => {
-            info!(datadir = %datadir, "Creating data directory");
-            fs::create_dir_all(&*datadir)?;
-        }
-    }
-
-    let datadir_path = Path::new(&*datadir);
-    let keystore_path = datadir_path.join("keystore");
+    // Keystore lives under the per-network subdir so distinct networks get
+    // distinct PeerIDs and can be run side-by-side from the same --datadir.
+    let keystore_path = network_datadir.join("keystore");
     #[cfg(unix)]
     {
         if keystore_path.exists() {
@@ -300,7 +325,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //result in same peerID leading to OutgoingConnectionError
     // let keypair = identity::Keypair::generate_ed25519();
     //creating a main topic subscribing to the current test topic
-    let current_broadcast_topic: floodsub::Topic = floodsub::Topic::new(BRAIDPOOL_TOPIC);
+    let current_broadcast_topic: floodsub::Topic =
+        floodsub::Topic::new(braidpool_topic(&network_name));
 
     let swarm_builder = libp2p::SwarmBuilder::with_existing_identity(keypair)
         .with_tokio()
@@ -313,9 +339,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             )
         })?;
     // Note: with_behaviour closure must return behaviour directly (not Result), using expect for clear error message
+    let behaviour_network = network_name.clone();
     let mut swarm = swarm_builder
-        .with_behaviour(|local_key| {
-            BraidPoolBehaviour::new(local_key).expect(
+        .with_behaviour(move |local_key| {
+            BraidPoolBehaviour::new(local_key, &behaviour_network).expect(
                 "Failed to create BraidPoolBehaviour - check keypair and network configuration",
             )
         })?
@@ -535,9 +562,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     };
     let peer_manager_arc_for_swarm = peer_manager_arc.clone();
+    let swarm_network_name = network_name.clone();
     let swarm_handle = tokio::spawn(async move {
         let braid = std::sync::Arc::clone(&braid);
         let peer_manager_arc = peer_manager_arc_for_swarm;
+        let network_name = swarm_network_name;
+        let local_kad_protocol = kad_protocol(&network_name);
+        let local_bead_sync_protocol = bead_sync_protocol(&network_name);
         loop {
             tokio::select! {
              swarm_event = swarm.select_next_some()=>{
@@ -816,32 +847,37 @@ async fn main() -> Result<(), Box<dyn Error>> {
                      SwarmEvent::Behaviour(BraidPoolBehaviourEvent::Identify(
                          identify::Event::Received { peer_id, info,  .. },
                      )) => {
-                         let info_reference = info.clone();
                          info!(
                              peer = ?peer_id,
-                             address_count = %info_reference.listen_addrs.len(),
+                             address_count = %info.listen_addrs.len(),
                              "Received listen addresses"
                          );
-                         if info.protocols.iter().any(|p| *p == KADPROTOCOLNAME) {
-                             for addr in info.listen_addrs {
+                         // Defense-in-depth: multistream-select already refuses
+                         // substream negotiation with peers that don't speak our
+                         // network-scoped protocols, but the underlying QUIC
+                         // connection can stay open idle. Drop it explicitly so
+                         // cross-network peers don't accumulate.
+                         let speaks_our_bead_sync = info
+                             .protocols
+                             .iter()
+                             .any(|p| p == &local_bead_sync_protocol);
+                         if !speaks_our_bead_sync {
+                             warn!(
+                                 peer = %peer_id,
+                                 peer_protocols = ?info.protocols,
+                                 expected = %local_bead_sync_protocol,
+                                 network = %network_name,
+                                 "Peer does not speak our network's bead-sync protocol; disconnecting"
+                             );
+                             let _ = swarm.disconnect_peer_id(peer_id);
+                         } else if info.protocols.iter().any(|p| p == &local_kad_protocol) {
+                             for addr in &info.listen_addrs {
                                  info!(address = %addr, "Received address via identify");
                              }
                          } else {
-                             info!(peer = ?peer_id, "Peer does not support Kademlia");
+                             info!(peer = ?peer_id, "Peer speaks bead-sync but not our Kademlia variant");
                          }
-                         if info_reference
-                             .clone()
-                             .protocols
-                             .iter()
-                             .any(|p| *p != BEAD_ANNOUNCE_PROTOCOL)
-                         {
-
-                             info!(
-                                 peer_address = ?info_reference.observed_addr,
-                                 "Peer does not support floodsub"
-                             );
-                         }
-                         debug!(info = ?info_reference, "Received peer info");
+                         debug!(info = ?info, "Received peer info");
                      }
                      SwarmEvent::Behaviour(BraidPoolBehaviourEvent::Kademlia(
                          kad::Event::OutboundQueryProgressed { result, .. },

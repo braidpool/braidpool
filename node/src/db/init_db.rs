@@ -1,31 +1,42 @@
 use sqlx::{sqlite::SqliteConnectOptions, Executor, SqlitePool};
-use std::{env, fs, path::Path, str::FromStr};
+use std::{env, fs, path::Path, path::PathBuf, str::FromStr};
 
 use crate::error::DBErrors;
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
 static SCHEMA_SQL: &str = include_str!("schema.sql");
 
-pub async fn init_db() -> Result<SqlitePool, DBErrors> {
-    //Fetching the home directory
-    let home_dir = match env::var("HOME") {
-        Ok(fetched_var) => fetched_var,
-        Err(error) => {
-            return Err(DBErrors::EnvVariableNotFetched {
-                error: error.to_string(),
-                var: "{HOME} Directory".to_string(),
-            });
+/// Initialize the sqlite pool for a given network-scoped data directory.
+///
+/// The DB lives at `<network_datadir>/braidpool.db`. The caller is expected to
+/// pass the per-network subdirectory (e.g. `~/.braidpool/cpunet`) so that the
+/// same binary running against different networks never shares state.
+pub async fn init_db(network_datadir: PathBuf, network: &str) -> Result<SqlitePool, DBErrors> {
+    // One-time courtesy warning for the pre-network layout. If an operator
+    // upgrades from the old hardcoded layout, point them at the new location
+    // and leave the old file alone (clean-break, no auto-migration).
+    if let Ok(home_dir) = env::var("HOME") {
+        let legacy_path = Path::new(&home_dir).join(".braidpool").join("braidpool.db");
+        let new_path = network_datadir.join("braidpool.db");
+        if legacy_path.exists() && legacy_path != new_path && !new_path.exists() {
+            warn!(
+                legacy = %legacy_path.display(),
+                new = %new_path.display(),
+                network = %network,
+                "Legacy braidpool DB found outside the network-scoped data directory. \
+                 It is no longer used; move or delete it to silence this warning."
+            );
         }
-    };
-    let db_dir = Path::new(&home_dir).join(".braidpool");
+    }
+
     //Final db directory path
-    let db_path = db_dir.join("braidpool.db");
+    let db_path = network_datadir.join("braidpool.db");
     //Creating db directory if it doesn't exist
-    let dir_exists = db_dir.exists();
-    match fs::create_dir_all(&db_dir) {
+    let dir_exists = network_datadir.exists();
+    match fs::create_dir_all(&network_datadir) {
         Ok(_) => {
             if !dir_exists {
-                info!("DB directory created successfully");
+                info!(path = %network_datadir.display(), "DB directory created successfully");
             }
         }
         Err(error) => {

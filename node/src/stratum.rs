@@ -2110,7 +2110,12 @@ mod test {
         let connection_mapping = Arc::new(RwLock::new(ConnectionMapping::new()));
         let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
-        let (_test_db_handler, test_db_tx) = DBHandler::new("cpunet".to_string()).await.unwrap();
+        let (_test_db_handler, test_db_tx) = DBHandler::new(
+            std::env::temp_dir().join("braidpool-tests-cpunet"),
+            "cpunet".to_string(),
+        )
+        .await
+        .unwrap();
         let (swarm_handler, mut swarm_command_receiver) =
             SwarmHandler::new(Arc::clone(&test_braid), test_db_tx);
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
@@ -2181,7 +2186,12 @@ mod test {
             "cpunet".to_string(),
         )));
         let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
-        let (_test_db_handler, test_db_tx) = DBHandler::new("cpunet".to_string()).await.unwrap();
+        let (_test_db_handler, test_db_tx) = DBHandler::new(
+            std::env::temp_dir().join("braidpool-tests-cpunet"),
+            "cpunet".to_string(),
+        )
+        .await
+        .unwrap();
         let (swarm_handler, mut swarm_command_receiver) =
             SwarmHandler::new(Arc::clone(&test_braid), test_db_tx);
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
@@ -2239,7 +2249,12 @@ mod test {
         )));
         let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
-        let (_test_db_handler, test_db_tx) = DBHandler::new("cpunet".to_string()).await.unwrap();
+        let (_test_db_handler, test_db_tx) = DBHandler::new(
+            std::env::temp_dir().join("braidpool-tests-cpunet"),
+            "cpunet".to_string(),
+        )
+        .await
+        .unwrap();
         let (swarm_handler, mut swarm_command_receiver) =
             SwarmHandler::new(Arc::clone(&test_braid), test_db_tx);
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
@@ -2290,7 +2305,12 @@ mod test {
             genesis_beads,
             "cpunet".to_string(),
         )));
-        let (_test_db_handler, test_db_tx) = DBHandler::new("cpunet".to_string()).await.unwrap();
+        let (_test_db_handler, test_db_tx) = DBHandler::new(
+            std::env::temp_dir().join("braidpool-tests-cpunet"),
+            "cpunet".to_string(),
+        )
+        .await
+        .unwrap();
         let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
         let (swarm_handler, mut swarm_command_receiver) =
@@ -2335,7 +2355,12 @@ mod test {
             genesis_beads,
             "cpunet".to_string(),
         )));
-        let (_test_db_handler, test_db_tx) = DBHandler::new("cpunet".to_string()).await.unwrap();
+        let (_test_db_handler, test_db_tx) = DBHandler::new(
+            std::env::temp_dir().join("braidpool-tests-cpunet"),
+            "cpunet".to_string(),
+        )
+        .await
+        .unwrap();
         let mining_job_map: Arc<Mutex<HashMap<String, Arc<Mutex<MiningJobMap>>>>> =
             Arc::new(Mutex::new(HashMap::new()));
         let (notify_tx, _notify_rx) = mpsc::channel::<NotifyCmd>(32);
@@ -2411,7 +2436,12 @@ mod test {
             genesis_beads,
             "cpunet".to_string(),
         )));
-        let (_test_db_handler, test_db_tx) = DBHandler::new("cpunet".to_string()).await.unwrap();
+        let (_test_db_handler, test_db_tx) = DBHandler::new(
+            std::env::temp_dir().join("braidpool-tests-cpunet"),
+            "cpunet".to_string(),
+        )
+        .await
+        .unwrap();
         let (swarm_handler, mut swarm_command_receiver) =
             SwarmHandler::new(Arc::clone(&test_braid), test_db_tx);
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));

@@ -19,6 +19,34 @@ use std::collections::HashSet;
 use std::str::FromStr;
 use tokio::time::timeout;
 
+#[test]
+fn network_scoped_protocol_names_are_distinct_per_network() {
+    // The whole point of network scoping is that cpunet and regtest peers
+    // cannot negotiate any substream with each other. Lock that in.
+    assert_ne!(
+        super::bead_sync_protocol("cpunet"),
+        super::bead_sync_protocol("regtest"),
+    );
+    assert_ne!(super::kad_protocol("cpunet"), super::kad_protocol("signet"),);
+    assert_ne!(
+        super::identify_protocol("cpunet"),
+        super::identify_protocol("main"),
+    );
+    assert_ne!(
+        super::braidpool_topic("cpunet"),
+        super::braidpool_topic("regtest"),
+    );
+    // Same network -> stable name (idempotent).
+    assert_eq!(
+        super::bead_sync_protocol("cpunet"),
+        super::bead_sync_protocol("cpunet"),
+    );
+    // Sanity check: the network name actually appears in the protocol id.
+    assert!(super::bead_sync_protocol("cpunet")
+        .as_ref()
+        .contains("cpunet"));
+}
+
 // Helper function to create a test bead
 fn create_test_bead() -> Bead {
     let _address = String::from("127.0.0.1:8888");
@@ -78,7 +106,7 @@ fn build_swarm() -> (Swarm<BraidPoolBehaviour>, PeerId) {
         .with_quic()
         .with_dns()
         .unwrap()
-        .with_behaviour(|local_key| BraidPoolBehaviour::new(local_key).unwrap())
+        .with_behaviour(|local_key| BraidPoolBehaviour::new(local_key, "cpunet").unwrap())
         .unwrap()
         .build();
     (swarm, peer_id)
