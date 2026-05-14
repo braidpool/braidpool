@@ -15,10 +15,13 @@ use jsonrpsee::core::async_trait;
 use jsonrpsee::core::middleware::Batch;
 use jsonrpsee::core::middleware::Notification;
 use jsonrpsee::core::middleware::RpcServiceT;
+use jsonrpsee::core::to_json_raw_value;
+use jsonrpsee::core::SubscriptionResult;
 use jsonrpsee::proc_macros::rpc;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Request;
 use jsonrpsee::ConnectionId;
+use jsonrpsee::PendingSubscriptionSink;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use serde_json::Value;
@@ -27,7 +30,7 @@ use std::collections::HashSet;
 use std::future::Future;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::sync::{mpsc, oneshot, RwLock};
+use tokio::sync::{mpsc, oneshot, watch, RwLock};
 use tracing::{error, info, warn};
 
 #[cfg(test)]
@@ -108,6 +111,10 @@ pub trait Rpc {
         method: String,
         params: serde_json::Value,
     ) -> Result<serde_json::Value, ErrorObjectOwned>;
+
+    /// Push notifications: emits the hex hash of every newly added bead.
+    #[subscription(name = "subscribebead", item = String)]
+    async fn subscribe_bead(&self) -> SubscriptionResult;
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -243,6 +250,33 @@ pub enum RpcProxyCommand {
     },
 }
 
+/// Push-notification channels delivered to dashboard subscribers over WebSocket.
+///
+/// Each topic uses a [`tokio::sync::watch`] channel: only the latest value is
+/// retained, so slow subscribers cannot lag and cannot pressure the producer.
+/// The frontend treats every notification as a "something changed, refetch
+/// authoritative state via the regular RPC methods" trigger.
+pub struct DashboardEvents {
+    /// Emits the hash of the most recently added bead. `None` is the initial
+    /// state before any bead has been pushed; subscribers skip it via
+    /// `mark_unchanged()` so they only see post-subscribe events.
+    pub new_bead: watch::Sender<Option<String>>,
+}
+
+impl DashboardEvents {
+    pub fn new() -> Arc<Self> {
+        let (new_bead, _) = watch::channel(None);
+        Arc::new(Self { new_bead })
+    }
+}
+
+impl Default for DashboardEvents {
+    fn default() -> Self {
+        let (new_bead, _) = watch::channel(None);
+        Self { new_bead }
+    }
+}
+
 // RPC Server implementation using channels
 pub struct RpcServerImpl {
     braid_arc: Arc<RwLock<Braid>>,
@@ -251,6 +285,7 @@ pub struct RpcServerImpl {
     latest_block: Arc<Mutex<BlockTemplate>>,
     rpc_proxy_tx: mpsc::UnboundedSender<RpcProxyCommand>,
     bitcoin_rpc_config: Option<BitcoinRpcConfig>,
+    dashboard_events: Arc<DashboardEvents>,
 }
 
 impl RpcServerImpl {
@@ -269,7 +304,13 @@ impl RpcServerImpl {
             latest_block: latest_block_template,
             rpc_proxy_tx,
             bitcoin_rpc_config,
+            dashboard_events: DashboardEvents::new(),
         }
+    }
+
+    /// Returns a handle to the push-notification channels so external producers.
+    pub fn dashboard_events(&self) -> Arc<DashboardEvents> {
+        Arc::clone(&self.dashboard_events)
     }
 }
 #[async_trait]
@@ -293,15 +334,25 @@ impl RpcServer for RpcServerImpl {
         let bead: Bead = serde_json::from_str(&bead_data).map_err(|e| {
             ErrorObjectOwned::owned(1, format!("Invalid bead data: {}", e), None::<()>)
         })?;
+        let bead_hash = bead.block_header.block_hash();
         info!(
-            hash = %bead.block_header.block_hash(),
+            hash = %bead_hash,
             "Add bead request received"
         );
         let mut braid_data = self.braid_arc.write().await;
         let success_status = braid_data.extend(&bead);
+        drop(braid_data);
 
         match success_status {
-            AddBeadStatus::BeadAdded => Ok("Bead added successfully".to_string()),
+            AddBeadStatus::BeadAdded => {
+                // `send` ignores receiver-count and always notifies; an Err
+                // only means no current subscribers, which is fine.
+                let _ = self
+                    .dashboard_events
+                    .new_bead
+                    .send(Some(bead_hash.to_string()));
+                Ok("Bead added successfully".to_string())
+            }
             AddBeadStatus::DagAlreadyContainsBead => Ok("Bead already exists".to_string()),
             AddBeadStatus::InvalidBead => {
                 Err(ErrorObjectOwned::owned(4, "Invalid bead", None::<()>))
@@ -985,6 +1036,36 @@ impl RpcServer for RpcServerImpl {
                 ))
             }
         }
+    }
+
+    async fn subscribe_bead(&self, pending: PendingSubscriptionSink) -> SubscriptionResult {
+        let sink = pending.accept().await?;
+        let mut rx = self.dashboard_events.new_bead.subscribe();
+        // Skip the initial `None` so subscribers only see events that happen
+        // after they connect, not the stale "current" value.
+        rx.mark_unchanged();
+        info!("New bead subscription accepted");
+
+        loop {
+            if rx.changed().await.is_err() {
+                // Sender dropped — server shutting down.
+                break;
+            }
+            let hash = rx.borrow().clone();
+            let Some(hash) = hash else { continue };
+            let msg = match to_json_raw_value(&hash) {
+                Ok(m) => m,
+                Err(e) => {
+                    error!(error = %e, "Failed to serialize new-bead notification");
+                    continue;
+                }
+            };
+            if sink.send(msg).await.is_err() {
+                // Subscriber disconnected.
+                break;
+            }
+        }
+        Ok(())
     }
 }
 struct LoggingMiddleware<S>(S);
