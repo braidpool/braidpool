@@ -1,5 +1,9 @@
 //These implementations must be defined under lib.rs as they are required for intergration tests
 use crate::rpc_server::DashboardEvents, utils::compute_block_hash;
+use crate::{
+    db::db_handlers::prepare_bead_tuple_data, rpc_server::DashboardEvents,
+    utils::compute_block_hash,
+};
 use bitcoin::{
     consensus::encode::deserialize, ecdsa::Signature, BlockHash, CompactTarget, EcdsaSighashType,
     Txid,
@@ -402,7 +406,8 @@ impl SwarmHandler {
         match status {
             AddBeadStatus::BeadAdded { promoted_orphans } => {
                 let new_tips: Vec<_> = braid_data.tips.iter().map(|&idx| idx).collect();
-                let bead_hash = compute_block_hash(&weak_share.block_header, &braid_data.network_name);
+                let bead_hash =
+                    compute_block_hash(&weak_share.block_header, &braid_data.network_name);
                 info!(
                     hash = %bead_hash,
                     new_tips = ?new_tips,

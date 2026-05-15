@@ -69,8 +69,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     setup_tracing()?;
     // Parse CLI arguments
     let args = cli::Cli::parse();
-    let network_name = args.network.clone().unwrap_or_else(|| "main".to_string());
-
+    let mut network_name = args.network.clone().unwrap_or_else(|| "main".to_string());
     // Validate network
     let is_cpunet = Cpunet::is_cpunet_name(&network_name);
     match network_name.as_str() {
@@ -84,6 +83,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 "Invalid network specified"
             );
             info!(fallback = "regtest", "Using fallback network");
+            network_name = "regtest".to_string();
         }
     }
     let (mut ibd_manager, ibd_command_tx) = IBDManager::new();
@@ -189,7 +189,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let latest_template_for_ipc = latest_template.clone();
     let latest_template_merkle_branch_for_ipc = latest_template_merkle_branch.clone();
     let network_name_for_ipc = network_name.clone();
-    
+
     //Connection mapping for all the downstream connection connected to the stratum server
     let connection_mapping = Arc::new(tokio::sync::RwLock::new(ConnectionMapping::new()));
     // Clone connection_mapping for RPC server before it's used in async move blocks
@@ -1163,9 +1163,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
                               match result_bead {
                                   Ok(bead) => {
                                      info!(bead = ?bead, hash = %bead.block_header.block_hash(), "Received bead");
-                                     // Handle the received bead here
-                                     let mut braid_data = braid.write().await;
-                                     let status = {
+                                      // Handle the received bead here
+                                      let mut braid_data = braid.write().await;
+                                      let bead_hash = braid_data.compute_bead_hash(&bead);
+                                 info!(bead = ?bead, hash = %bead_hash, "Received bead");
+                                let status = {
                                           braid_data.extend(&bead)
                                       };
                                       if ibd_spinlock.load(Ordering::SeqCst){
@@ -1609,8 +1611,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     };
                                     for bead in beads.into_iter() {
                                         let mut braid_data = braid.write().await;
+                                        let bead_hash = braid_data.compute_bead_hash(&bead);
                                         let status = braid_data.extend(&bead);
-                                        let curr_beadhash = braid_data.compute_bead_hash(&bead).to_string();
+                                        let curr_beadhash = bead_hash.to_string();
                                         if let braid::AddBeadStatus::InvalidBead = status {
                                             warn!("Invalid bead received from peer");
                                             // update the peer manager about the invalid bead

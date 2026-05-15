@@ -99,7 +99,7 @@ impl FromStr for Cpunet {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bitcoin::WitnessVersion;
+    use bitcoin::{absolute::Time, constants::genesis_block, params::Params, WitnessVersion};
 
     #[test]
     fn cpunet_hrp_check() {
@@ -138,5 +138,20 @@ mod tests {
             result,
             Err(CpunetAddressError::WrongNetwork { .. })
         ));
+    }
+    #[test]
+    fn compute_genesis_hash_cpunet() {
+        let mut cpunet_genesis_block = genesis_block(Params::TESTNET4);
+        cpunet_genesis_block.header.time =
+            Time::from_consensus(1723652721).unwrap().to_consensus_u32();
+        cpunet_genesis_block.header.nonce = 961348305;
+        let header_hash_bytes: &[u8; 32] = &[
+            155, 244, 9, 169, 207, 188, 132, 171, 5, 153, 89, 228, 109, 99, 3, 243, 57, 98, 248, 5,
+            188, 141, 147, 51, 119, 165, 255, 187, 0, 0, 0, 0,
+        ];
+        assert_eq!(
+            Cpunet::block_hash(cpunet_genesis_block.header).as_byte_array(),
+            header_hash_bytes
+        );
     }
 }
