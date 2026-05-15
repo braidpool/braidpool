@@ -121,26 +121,84 @@ async fn main() -> Result<(), Box<dyn Error>> {
     tokio::spawn(async move {
         let _res = _db_handler.insert_query_handler().await;
     });
+    // Initializing the peer manager (shared between swarm and RPC server)
+    // Using RwLock to allow concurrent reads (RPC server) while swarm handler can write
+    let peer_manager_arc = Arc::new(tokio::sync::RwLock::new(PeerManager::new(8)));
+
+    //One will go into the IPC and the other will go to the `notifier`
+    let (notification_tx, notification_rx) = mpsc::channel::<NotifyCmd>(1024);
     //latest available template to be cached for the newest connection until new job is received
     let latest_template = Arc::new(Mutex::new(BlockTemplate::default()));
+
     //latest available template merkle branch
     let latest_template_merkle_branch = Arc::new(Mutex::new(Vec::new()));
     let mut latest_template_ref = latest_template.clone();
     let mut latest_template_merkle_branch_ref = latest_template_merkle_branch.clone();
-    //One will go into the IPC and the other will go to the `notifier`
-    let (notification_tx, notification_rx) = mpsc::channel::<NotifyCmd>(1024);
+    let ipc_socket_path_for_blocking = args.ipc_socket.clone();
+
+    let notification_tx_for_ipc = notification_tx.clone();
+    let latest_template_for_ipc = latest_template.clone();
+    let latest_template_merkle_branch_for_ipc = latest_template_merkle_branch.clone();
+
+    //Connection mapping for all the downstream connection connected to the stratum server
+    let connection_mapping = Arc::new(tokio::sync::RwLock::new(ConnectionMapping::new()));
+    // Clone connection_mapping for RPC server before it's used in async move blocks
+    let connection_mapping_for_rpc = Arc::clone(&connection_mapping);
+    // Create RPC proxy command channel - sender goes to RPC server, receiver goes to IPC handler
+    let (rpc_proxy_tx, rpc_proxy_rx) = tokio::sync::mpsc::unbounded_channel::<RpcProxyCommand>();
+    // peer_manager_arc is created above and shared between swarm and RPC server
+    //spawning the rpc server
+    let rpc_addr = args.rpc_bind.to_string();
+    let bitcoin_rpc_config = BitcoinRpcConfig::from_cli_args(&args).unwrap_or_else(|e| {
+        eprintln!("Error: {}", e);
+        std::process::exit(1);
+    });
+
+    let rpc_braid = Arc::clone(&braid);
+    let rpc_peer_manager = peer_manager_arc.clone();
+    let rpc_connection_mapping = connection_mapping_for_rpc.clone();
+    let rpc_latest_template = latest_template.clone();
+    let server_join = tokio::spawn(async move {
+        run_rpc_server(
+            rpc_braid,
+            &rpc_addr,
+            rpc_peer_manager,
+            rpc_connection_mapping,
+            rpc_latest_template,
+            rpc_proxy_tx,
+            bitcoin_rpc_config,
+        )
+        .await
+    });
+    let (_rpc_addr, dashboard_notifer) = match server_join.await {
+        Ok(Ok(tuple)) => tuple,
+        Ok(Err(())) => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "RPC server startup failed",
+            )
+            .into());
+        }
+        Err(e) => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("RPC server task failed: {}", e),
+            )
+            .into());
+        }
+    };
     //Communication bridge between stratum and network swarm and swarm commands also, for communicating share population and propogating them further
-    let (swarm_handler, mut swarm_command_receiver) =
-        SwarmHandler::new(Arc::clone(&braid), db_tx.clone());
+    let (swarm_handler, mut swarm_command_receiver) = SwarmHandler::new(
+        Arc::clone(&braid),
+        db_tx.clone(),
+        Arc::clone(&dashboard_notifer),
+    );
+
     //Swarm command sender
     let swarm_command_sender = swarm_handler.command_sender.clone();
     let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
     //cloning the channel to be sent across different interfaces
     let notification_tx_clone = notification_tx.clone();
-    //Connection mapping for all the downstream connection connected to the stratum server
-    let connection_mapping = Arc::new(tokio::sync::RwLock::new(ConnectionMapping::new()));
-    // Clone connection_mapping for RPC server before it's used in async move blocks
-    let connection_mapping_for_rpc = Arc::clone(&connection_mapping);
     //Mining job map keeping all the jobs provided to the downstream
     let mining_job_map = Arc::new(Mutex::new(HashMap::new()));
     //Intializing `notifier` for mining.notify
@@ -382,54 +440,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Network::Bitcoin
     };
 
-    let ipc_socket_path_for_blocking = args.ipc_socket.clone();
-    let notification_tx_for_ipc = notification_tx.clone();
-    let latest_template_for_ipc = latest_template.clone();
-    let latest_template_merkle_branch_for_ipc = latest_template_merkle_branch.clone();
-
-    // Create RPC proxy command channel - sender goes to RPC server, receiver goes to IPC handler
-    let (rpc_proxy_tx, rpc_proxy_rx) = tokio::sync::mpsc::unbounded_channel::<RpcProxyCommand>();
-    // peer_manager_arc is created above and shared between swarm and RPC server
-    //spawning the rpc server
-    let rpc_addr = args.rpc_bind.to_string();
-    let bitcoin_rpc_config = BitcoinRpcConfig::from_cli_args(&args).unwrap_or_else(|e| {
-        eprintln!("Error: {}", e);
-        std::process::exit(1);
-    });
-    let rpc_braid = Arc::clone(&braid);
-    let rpc_peer_manager = peer_manager_arc.clone();
-    let rpc_connection_mapping = connection_mapping_for_rpc.clone();
-    let rpc_latest_template = latest_template.clone();
-    let server_join = tokio::spawn(async move {
-        run_rpc_server(
-            rpc_braid,
-            &rpc_addr,
-            rpc_peer_manager,
-            rpc_connection_mapping,
-            rpc_latest_template,
-            rpc_proxy_tx,
-            bitcoin_rpc_config,
-        )
-        .await
-    });
-    match server_join.await {
-        Ok(Ok(_addr)) => {}
-        Ok(Err(())) => {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "RPC server startup failed",
-            )
-            .into());
-        }
-        Err(e) => {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("RPC server task failed: {}", e),
-            )
-            .into());
-        }
-    };
-
     // Spawn IPC handler
     let _ipc_handler = tokio::task::spawn_blocking(move || {
         let rt = match tokio::runtime::Builder::new_current_thread()
@@ -587,6 +597,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
                          match result_bead {
                              Ok(bead) => {
                                 info!(bead = ?bead, hash = %bead.block_header.block_hash(), "Received bead");
+                               let res =  dashboard_notifer.new_bead.send(Some(bead.clone()));
+                                match res {
+                                    Ok(_) => {
+                                        debug!("Notification sent to dashboard notification sender from peer");
+                                    }
+                                    Err(error) => {
+                                        error!("An error occurred while sending dashboard notification - {error}");
+                                    }
+                                }
                                 // Handle the received bead here
                                 let mut braid_data = braid.write().await;
                                 let status = {
@@ -1082,7 +1101,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     for bead in beads.into_iter() {
                                         let mut braid_data = braid.write().await;
                                         let status = braid_data.extend(&bead);
-                                        let curr_beadhash = bead.block_header.block_hash().to_string();
+                                        let curr_beadhash = bead.block_header.block_hash();
                                         if let braid::AddBeadStatus::InvalidBead = status {
                                             // update the peer manager about the invalid bead
                                             {
@@ -1090,12 +1109,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                                 peer_manager.penalize_for_invalid_bead(&peer);
                                             }
                                         } else if let braid::AddBeadStatus::BeadAdded = status {
+
                                             let bead_id = match braid_data
                                                 .bead_index_mapping
-                                                .get(&bead.block_header.block_hash()) {
+                                                .get(&curr_beadhash) {
                                                 Some(id) => id,
                                                 None => {
-                                                    error!(bead_hash = ?bead.block_header.block_hash(), "Bead ID not found in index mapping (GetBeadsAfter)");
+                                                    error!(bead_hash = ?curr_beadhash, "Bead ID not found in index mapping (GetBeadsAfter)");
                                                     continue;
                                                 }
                                             };
@@ -1116,6 +1136,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                                 peer_manager.update_score(&peer, 1.0);
                                             }
                                             //persisting the received beads from peer onto DB(disk)
+                                            let res =  dashboard_notifer.new_bead.send(Some(bead.clone()));
+                                            match res {
+                                                Ok(_) => {
+                                                    debug!("Notification sent to dashboard notification sender from IBD");
+                                                }
+                                                Err(error) => {
+                                                    error!("An error occurred while sending dashboard notification - {error}");
+                                                }
+                                            }
                                             match db_tx.send(node::db::BraidpoolDBTypes::InsertTupleTypes { query: node::db::InsertTupleTypes::InsertBeadSequentially { bead_to_insert: bead,txs_json:txs_json,parent_timestamp_json:parent_timestamp_json,relative_json:relative_json,bead_id:*bead_id } }).await{
                                                 Ok(_)=>{
                                                     debug!(beadhash=?curr_beadhash,"Bead received in IBD persisted over disk with beadhash and status BeadAdded");

@@ -1,5 +1,5 @@
 //These implementations must be defined under lib.rs as they are required for intergration tests
-use crate::db::db_handlers::prepare_bead_tuple_data;
+use crate::{db::db_handlers::prepare_bead_tuple_data, rpc_server::DashboardEvents};
 use bitcoin::{
     consensus::encode::deserialize, ecdsa::Signature, pow::CompactTargetExt, BlockHash,
     CompactTarget, EcdsaSighashType, Txid,
@@ -257,11 +257,13 @@ pub struct SwarmHandler {
     pub command_sender: Sender<SwarmCommand>,
     braid_arc: Arc<tokio::sync::RwLock<Braid>>,
     db_command_sender: tokio::sync::mpsc::Sender<BraidpoolDBTypes>,
+    dashboard_notification_sender: Arc<DashboardEvents>,
 }
 impl SwarmHandler {
     pub fn new(
         braid_arc: Arc<tokio::sync::RwLock<Braid>>,
         db_command_sender: tokio::sync::mpsc::Sender<BraidpoolDBTypes>,
+        dashboard_notification_sender: Arc<DashboardEvents>,
     ) -> (Self, Receiver<SwarmCommand>) {
         let (swarm_stratum_bridge_tx, swarm_stratum_bridge_rx) =
             mpsc::channel::<SwarmCommand>(1024);
@@ -270,6 +272,7 @@ impl SwarmHandler {
                 command_sender: swarm_stratum_bridge_tx,
                 braid_arc: Arc::clone(&braid_arc),
                 db_command_sender,
+                dashboard_notification_sender,
             },
             swarm_stratum_bridge_rx,
         )
@@ -365,16 +368,14 @@ impl SwarmHandler {
         match status {
             AddBeadStatus::BeadAdded => {
                 let new_tips: Vec<_> = braid_data.tips.iter().map(|&idx| idx).collect();
+                let bead_hash = weak_share.block_header.block_hash();
                 info!(
-                    hash = %weak_share.block_header.block_hash(),
+                    hash = %bead_hash,
                     new_tips = ?new_tips,
                     "Braid extended successfully"
                 );
                 //Considering the index of the beads in braid will be same as the (insertion ids-1)
-                let bead_id = braid_data
-                    .bead_index_mapping
-                    .get(&weak_share.block_header.block_hash())
-                    .unwrap();
+                let bead_id = braid_data.bead_index_mapping.get(&bead_hash).unwrap();
                 let (txs_json, relative_json, parent_timestamp_json) = prepare_bead_tuple_data(
                     &braid_data.beads,
                     &braid_data.bead_index_mapping,
@@ -396,7 +397,7 @@ impl SwarmHandler {
                 {
                     Ok(_) => {
                         debug!(
-                            hash = %weak_share.block_header.block_hash(),
+                            hash = %bead_hash,
                             "InsertBeadSequentially sent to DB thread"
                         );
                     }
@@ -405,6 +406,18 @@ impl SwarmHandler {
                     }
                 };
                 let serialized_weak_share_bytes = bitcoin::consensus::serialize(&weak_share);
+                let res = self
+                    .dashboard_notification_sender
+                    .new_bead
+                    .send(Some(weak_share));
+                match res {
+                    Ok(_) => {
+                        debug!("Passing self mined bead to the dashboard notifier");
+                    }
+                    Err(error) => {
+                        error!("An error occurred while sending dashboard notification - {error}");
+                    }
+                }
                 //After validation of the candidate block constructed by the downstream node sending it to swarm for further propogation
                 match self
                     .command_sender
@@ -415,13 +428,13 @@ impl SwarmHandler {
                 {
                     Ok(_) => {
                         info!(
-                            hash = %weak_share.block_header.block_hash(),
+                            hash = %bead_hash,
                             "Bead sent to swarm"
                         );
                     }
                     Err(e) => {
                         error!(
-                            hash = %weak_share.block_header.block_hash(),
+                            hash = %bead_hash,
                             error = %e,
                             "Failed to send candidate block to swarm"
                         );
