@@ -65,8 +65,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     setup_tracing()?;
     // Parse CLI arguments
     let args = cli::Cli::parse();
-    let network_name = args.network.clone().unwrap_or_else(|| "main".to_string());
-
+    let mut network_name = args.network.clone().unwrap_or_else(|| "main".to_string());
     // Validate network
     let is_cpunet = Cpunet::is_cpunet_name(&network_name);
     match network_name.as_str() {
@@ -80,6 +79,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 "Invalid network specified"
             );
             info!(fallback = "regtest", "Using fallback network");
+            network_name = "regtest".to_string();
         }
     }
     let (mut ibd_manager, ibd_command_tx) = IBDManager::new();
@@ -590,9 +590,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                          let result_bead: Result<Bead, bitcoin::consensus::encode::Error> = deserialize(&message.data);
                          match result_bead {
                              Ok(bead) => {
-                                info!(bead = ?bead, hash = %bead.block_header.block_hash(), "Received bead");
-                                // Handle the received bead here
-                                let mut braid_data = braid.write().await;
+                                 // Handle the received bead here
+                                 let mut braid_data = braid.write().await;
+                                 info!(bead = ?bead, hash = %braid_data.compute_bead_hash(&bead), "Received bead");
                                 let status = {
                                      braid_data.extend(&bead)
                                  };
