@@ -20,10 +20,7 @@ bytes = { workspace = true }
 serde_json = { workspace = true }
 clap = { workspace = true }
 bitcoin = { workspace = true }
-bitcoin_hashes = { workspace = true }
-bitcoincore-rpc = { workspace = true }
-bitcoincore-rpc-json = { workspace = true }
-bitcoincore-zmq = { workspace = true }
+bitcoin_hashes = { workspace = true }       
 shellexpand = { workspace = true }
 num = { workspace = true }
 rand = { workspace = true }
