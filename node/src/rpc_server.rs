@@ -114,7 +114,7 @@ pub trait Rpc {
         params: serde_json::Value,
     ) -> Result<serde_json::Value, ErrorObjectOwned>;
 
-    /// Push notifications: emits the hex hash of every newly added bead.
+    /// Push notifications: emits the most recent bead.
     #[subscription(name = "subscribebead", item = Bead)]
     async fn subscribe_bead(&self) -> SubscriptionResult;
 }
@@ -265,13 +265,6 @@ impl DashboardEvents {
     }
 }
 
-impl Default for DashboardEvents {
-    fn default() -> Self {
-        let (new_bead, _) = watch::channel(None);
-        Self { new_bead }
-    }
-}
-
 // RPC Server implementation using channels
 pub struct RpcServerImpl {
     braid_arc: Arc<RwLock<Braid>>,
@@ -303,7 +296,7 @@ impl RpcServerImpl {
         }
     }
 
-    /// Returns a handle to the push-notification channels so external producers.
+    /// Returns a handle to the push-notification channels for external producers.
     pub fn dashboard_events(&self) -> Arc<DashboardEvents> {
         Arc::clone(&self.dashboard_events)
     }
