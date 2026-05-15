@@ -24,7 +24,7 @@ const ActionIconButton: React.FC<ActionIconButtonProps> = ({
         shadow-md hover:shadow-lg hover:w-[48px] hover:h-[48px] hover:bg-buttonBackgroundHover
         transition-all duration-200 ease-in-out
         hover:scale-105 active:scale-95
-        focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1
+        focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1
         ${className}
       `}
     >
