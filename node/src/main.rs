@@ -170,7 +170,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         )
         .await
     });
-    let (_rpc_addr, dashboard_notifer) = match server_join.await {
+    let (_rpc_addr, dashboard_notifier) = match server_join.await {
         Ok(Ok(tuple)) => tuple,
         Ok(Err(())) => {
             return Err(std::io::Error::new(
@@ -191,7 +191,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (swarm_handler, mut swarm_command_receiver) = SwarmHandler::new(
         Arc::clone(&braid),
         db_tx.clone(),
-        Arc::clone(&dashboard_notifer),
+        Arc::clone(&dashboard_notifier),
     );
 
     //Swarm command sender
@@ -596,16 +596,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                          let result_bead: Result<Bead, bitcoin::consensus::DeserializeError> = deserialize(&message.data);
                          match result_bead {
                              Ok(bead) => {
-                                info!(bead = ?bead, hash = %bead.block_header.block_hash(), "Received bead");
-                               let res =  dashboard_notifer.new_bead.send(Some(bead.clone()));
-                                match res {
-                                    Ok(_) => {
-                                        debug!("Notification sent to dashboard notification sender from peer");
-                                    }
-                                    Err(error) => {
-                                        error!("An error occurred while sending dashboard notification - {error}");
-                                    }
-                                }
                                 // Handle the received bead here
                                 let mut braid_data = braid.write().await;
                                 let status = {
@@ -656,6 +646,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                             peer_manager.penalize_for_invalid_bead(&message.source);
                                         }
                                     } else if let braid::AddBeadStatus::BeadAdded = status {
+
                                      //Considering the index of the beads in braid will be same as the (insertion ids-1)
                                         let bead_id = match braid_data
                                             .bead_index_mapping
@@ -666,6 +657,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                                 continue;
                                             }
                                         };
+                                        let bead_hash = bead.block_header.block_hash();
                                         let (txs_json, relative_json, parent_timestamp_json) = match prepare_bead_tuple_data(
                                             &braid_data.beads,
                                             &braid_data.bead_index_mapping,
@@ -673,12 +665,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                         ){
                                             Ok(received_tuples)=>received_tuples,
                                             Err(error)=>{
-                                                error!("An error occurred while preparing bead tuple data for bead with beadhash - {:?} due to {:?}",bead.block_header.block_hash(),error);
+                                                error!("An error occurred while preparing bead tuple data for bead with beadhash - {:?} due to {:?}",bead_hash,error);
                                                 continue;
                                             }
                                         };
                                         // update score of the peer and adding to local db store
-                                        let _query_send_result = match db_tx.send(node::db::BraidpoolDBTypes::InsertTupleTypes { query: node::db::InsertTupleTypes::InsertBeadSequentially { bead_to_insert: bead,txs_json:txs_json,relative_json:relative_json,parent_timestamp_json:parent_timestamp_json,bead_id:*bead_id } }).await{
+                                        let _query_send_result = match db_tx.send(node::db::BraidpoolDBTypes::InsertTupleTypes { query: node::db::InsertTupleTypes::InsertBeadSequentially { bead_to_insert: bead.clone(),txs_json:txs_json,relative_json:relative_json,parent_timestamp_json:parent_timestamp_json,bead_id:*bead_id } }).await{
                                            Ok(_)=>{
                                                debug!("Insert command sent successfully to db handler after receiving bead from peer");
                                            },
@@ -694,6 +686,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                             let mut peer_manager = peer_manager_arc.write().await;
                                             peer_manager.update_score(&message.source, 1.0);
                                         }
+                                        let res =  dashboard_notifier.new_bead.send(Some(bead));
+                                            match res {
+                                                Ok(_) => {
+                                                    debug!("Notification sent to dashboard notification sender from peer");
+                                                }
+                                                Err(error) => {
+                                                    error!("An error occurred while sending dashboard notification - {error}");
+                                            }
+                                }
                                     }
                                     for (sync_peer, ibd_ts) in timestamp_map.iter() {
                                         let threshold = *ibd_ts + LATENCY_ALPHA * 10;
@@ -1136,7 +1137,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                                 peer_manager.update_score(&peer, 1.0);
                                             }
                                             //persisting the received beads from peer onto DB(disk)
-                                            let res =  dashboard_notifer.new_bead.send(Some(bead.clone()));
+                                            let res =  dashboard_notifier.new_bead.send(Some(bead.clone()));
                                             match res {
                                                 Ok(_) => {
                                                     debug!("Notification sent to dashboard notification sender from IBD");
