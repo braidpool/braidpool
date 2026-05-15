@@ -36,7 +36,9 @@ use tracing::{error, info, warn};
 #[cfg(test)]
 use {
     crate::braid, crate::utils::create_test_bead, jsonrpsee::core::client::ClientT,
-    jsonrpsee::core::params::ArrayParams, jsonrpsee::http_client::HttpClient,
+    jsonrpsee::core::client::SubscriptionClientT, jsonrpsee::core::params::ArrayParams,
+    jsonrpsee::http_client::HttpClient, jsonrpsee::rpc_params,
+    jsonrpsee::ws_client::WsClientBuilder,
 };
 
 //server side trait to be implemented for the handler
@@ -113,7 +115,7 @@ pub trait Rpc {
     ) -> Result<serde_json::Value, ErrorObjectOwned>;
 
     /// Push notifications: emits the hex hash of every newly added bead.
-    #[subscription(name = "subscribebead", item = String)]
+    #[subscription(name = "subscribebead", item = Bead)]
     async fn subscribe_bead(&self) -> SubscriptionResult;
 }
 
@@ -251,16 +253,9 @@ pub enum RpcProxyCommand {
 }
 
 /// Push-notification channels delivered to dashboard subscribers over WebSocket.
-///
-/// Each topic uses a [`tokio::sync::watch`] channel: only the latest value is
-/// retained, so slow subscribers cannot lag and cannot pressure the producer.
-/// The frontend treats every notification as a "something changed, refetch
-/// authoritative state via the regular RPC methods" trigger.
 pub struct DashboardEvents {
-    /// Emits the hash of the most recently added bead. `None` is the initial
-    /// state before any bead has been pushed; subscribers skip it via
-    /// `mark_unchanged()` so they only see post-subscribe events.
-    pub new_bead: watch::Sender<Option<String>>,
+    /// Emits the `Bead` of the most recently added bead.
+    pub new_bead: watch::Sender<Option<Bead>>,
 }
 
 impl DashboardEvents {
@@ -345,12 +340,7 @@ impl RpcServer for RpcServerImpl {
 
         match success_status {
             AddBeadStatus::BeadAdded => {
-                // `send` ignores receiver-count and always notifies; an Err
-                // only means no current subscribers, which is fine.
-                let _ = self
-                    .dashboard_events
-                    .new_bead
-                    .send(Some(bead_hash.to_string()));
+                let _ = self.dashboard_events.new_bead.send(Some(bead));
                 Ok("Bead added successfully".to_string())
             }
             AddBeadStatus::DagAlreadyContainsBead => Ok("Bead already exists".to_string()),
@@ -1041,19 +1031,20 @@ impl RpcServer for RpcServerImpl {
     async fn subscribe_bead(&self, pending: PendingSubscriptionSink) -> SubscriptionResult {
         let sink = pending.accept().await?;
         let mut rx = self.dashboard_events.new_bead.subscribe();
-        // Skip the initial `None` so subscribers only see events that happen
-        // after they connect, not the stale "current" value.
+        // Skip the initial `None` and marking it as seen so that
+        // the receiver will see only the values after first
+        // concrete value has been seen .
         rx.mark_unchanged();
         info!("New bead subscription accepted");
-
         loop {
+            // If all the senders have been dropped and the last value has been seen by
+            // the subscriber.
             if rx.changed().await.is_err() {
-                // Sender dropped — server shutting down.
                 break;
             }
-            let hash = rx.borrow().clone();
-            let Some(hash) = hash else { continue };
-            let msg = match to_json_raw_value(&hash) {
+            let bead = rx.borrow().clone();
+            let Some(bead) = bead else { continue };
+            let msg = match to_json_raw_value(&bead) {
                 Ok(m) => m,
                 Err(e) => {
                     error!(error = %e, "Failed to serialize new-bead notification");
@@ -1111,7 +1102,7 @@ pub async fn run_rpc_server(
     latest_block_template: Arc<Mutex<BlockTemplate>>,
     rpc_proxy_tx: mpsc::UnboundedSender<RpcProxyCommand>,
     bitcoin_rpc_config: Option<BitcoinRpcConfig>,
-) -> Result<SocketAddr, ()> {
+) -> Result<(SocketAddr, Arc<DashboardEvents>), ()> {
     //Initializing the middleware
     let rpc_middleware =
         jsonrpsee::server::middleware::rpc::RpcServiceBuilder::new().layer_fn(LoggingMiddleware);
@@ -1136,6 +1127,7 @@ pub async fn run_rpc_server(
         rpc_proxy_tx,
         bitcoin_rpc_config.clone(),
     );
+    let dashboard_notification_ref = rpc_impl.dashboard_events();
     let handle = server.start(rpc_impl.into_rpc());
 
     // Parse host from bind_address
@@ -1157,7 +1149,7 @@ pub async fn run_rpc_server(
         //handling the stopping of the server
         handle.stopped(),
     );
-    Ok(addr)
+    Ok((addr, dashboard_notification_ref))
 }
 
 /// Call Bitcoin RPC method directly using HTTP JSON-RPC
@@ -2380,5 +2372,57 @@ pub async fn test_get_mining_info_rpc() {
         );
     } else {
         panic!("Expected Call error");
+    }
+}
+
+#[tokio::test]
+pub async fn test_subscribe_bead_rpc() {
+    let test_genesis_bead = create_test_bead(1, None);
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(vec![
+        test_genesis_bead.clone(),
+    ])));
+    let (proxy_tx, _) = mpsc::unbounded_channel();
+
+    let server_addr = "127.0.0.1:9050";
+    let (_addr, dashboard_events) = run_rpc_server(
+        Arc::clone(&braid),
+        server_addr,
+        Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
+        Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
+        Arc::new(Mutex::new(stratum::BlockTemplate::default())),
+        proxy_tx,
+        None,
+    )
+    .await
+    .unwrap();
+
+    let test_ws_client = WsClientBuilder::default()
+        .build(format!("ws://{}", server_addr))
+        .await
+        .unwrap();
+
+    let mut subscription = test_ws_client
+        .subscribe::<Bead, _>("subscribebead", rpc_params![], "unsubscribebead")
+        .await
+        .expect("subscription should be accepted");
+    println!("Subscription id received - {:?}", subscription.kind());
+    let new_bead = create_test_bead(2, Some(test_genesis_bead.block_header.block_hash()));
+    dashboard_events
+        .new_bead
+        .send(Some(new_bead.clone()))
+        .expect("send should succeed while subscriber is alive");
+
+    let received = subscription.next().await;
+    match received {
+        Some(result) => {
+            if let Err(error) = result {
+                panic!("An error occurred while reading the notification - {error}");
+            } else if let Ok(received_bead) = result {
+                assert_eq!(received_bead, new_bead);
+            }
+        }
+        None => {
+            panic!("Notification not received !");
+        }
     }
 }
