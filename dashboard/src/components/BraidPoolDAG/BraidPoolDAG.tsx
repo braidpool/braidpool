@@ -12,11 +12,12 @@ import {
   NODE_RADIUS,
   PADDING,
   COLORS,
-  COLUMN_WIDTH,
-  VERTICAL_SPACING,
+  MAX_BEADS_RECORDS,
+  LINK_STROKE_WIDTH,
+  ARROW_WIDTH,
+  ARROW_HEIGHT,
 } from './Constants';
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import { MAX_BEADS_RECORDS } from './Constants';
 
 const GraphVisualization: React.FC = () => {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -422,11 +423,7 @@ const GraphVisualization: React.FC = () => {
       allNodes,
       hwPath,
       {},
-      {},
-      width,
-      margin,
-      COLUMN_WIDTH,
-      VERTICAL_SPACING
+      {},   
     );
     const hwPathSet = new Set(hwPath);
 
@@ -558,7 +555,7 @@ const GraphVisualization: React.FC = () => {
           ? '#FF8500'
           : '#48CAE4'
       )
-      .attr('stroke-width', 1)
+      .attr('stroke-width', LINK_STROKE_WIDTH)
       .attr('marker-end', (d) =>
         hwPathSet.has(d.source) && hwPathSet.has(d.target)
           ? 'url(#arrow-orange)'
@@ -622,7 +619,7 @@ const GraphVisualization: React.FC = () => {
 
     nodes
       .append('text')
-      .attr('dy', 5)
+      .attr('dy', '0.35em')
       .attr('text-anchor', 'middle')
       .text((d) => `${d.id.slice(-4)}`)
       .attr('fill', '#fff')
@@ -716,8 +713,8 @@ const GraphVisualization: React.FC = () => {
       .attr('viewBox', '0 -5 10 10')
       .attr('refX', 10)
       .attr('refY', 0)
-      .attr('markerWidth', 15)
-      .attr('markerHeight', 12)
+      .attr('markerWidth', ARROW_WIDTH)
+      .attr('markerHeight', ARROW_HEIGHT)
       .attr('orient', 'auto')
       .append('path')
       .attr('d', 'M0,-5L10,0L0,5')
