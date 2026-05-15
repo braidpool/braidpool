@@ -5,12 +5,12 @@
 
 cd node
 cargo build
-cargo run -- --bind=127.0.0.1:8000 &
+cargo run -- --bind=127.0.0.1:8000 --stratum-port=3333 --rpc-bind=127.0.0.1:6682 &
 sleep 1
-cargo run -- --addnode=/ip4/127.0.0.1/udp/8000/quic-v1 --bind=127.0.0.1:9000 &
+cargo run -- --addnode=/ip4/127.0.0.1/udp/8000/quic-v1 --bind=127.0.0.1:9000 --stratum-port=3334 --rpc-bind=127.0.0.1:6683 &
 sleep 1
 echo
-echo ">>> Press any key to exit"
-read
+echo ">>> Press Enter to exit"
+read -r _
 
 killall node

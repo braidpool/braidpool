@@ -13,10 +13,18 @@ import { calculateRewardAnalytics } from '../lib/Utils';
 import { RewardPoint } from '../lib/Types';
 import { StatCard } from './RewardStats';
 import { WEBSOCKET_URLS } from '@/URLs';
+import ActionIconButton from '../../common/ActionIconButton';
+import { downloadSvgFromContainer } from '../../../utils/downloadSvg';
 
 export function RewardsDashboard() {
   const [rewardHistory, setRewardHistory] = useState<RewardPoint[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
+  const rewardsChartRef = useRef<HTMLDivElement | null>(null);
+
+  const handleDownloadRewardsChart = () => {
+    if (!rewardsChartRef.current) return;
+    downloadSvgFromContainer(rewardsChartRef.current, 'block-rewards-chart');
+  };
 
   useEffect(() => {
     const ws = new WebSocket(WEBSOCKET_URLS.MAIN_WEBSOCKET);
@@ -123,13 +131,29 @@ export function RewardsDashboard() {
         )}
       </div>
 
-      {/* Block Rewards Chart */}
-      <div className="w-full h-[400px] bg-paper p-6 rounded-xl border border-border">
+      {/* Chart */}
+      <div className="w-full h-[400px] p-6 rounded-xl border border-border bg-paper relative">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-textPrimary text-lg font-semibold">
-            Block Rewards
-          </h2>
-          <span className="text-sm text-textSecondary">
+          <div className="flex items-center gap-2">
+            <h2 className="text-textPrimary text-lg font-semibold">
+              Block Rewards
+            </h2>
+            <ActionIconButton
+              onClick={handleDownloadRewardsChart}
+              icon={
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path d="M3 14.5A2.5 2.5 0 0 0 5.5 17h9a2.5 2.5 0 0 0 2.5-2.5V11a.75.75 0 0 0-1.5 0v3.5a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1V11a.75.75 0 0 0-1.5 0v3.5Z" />
+                  <path d="M10 2a.75.75 0 0 0-.75.75v8.19L7.53 9.22a.75.75 0 0 0-1.06 1.06l3 3a.75.75 0 0 0 1.06 0l3-3a.75.75 0 1 0-1.06-1.06L10.75 10.94V2.75A.75.75 0 0 0 10 2Z" />
+                </svg>
+              }
+            />
+          </div>
+          <span className="text-gray-400 pt-2 text-sm">
+            {' '}
             ({rewardHistory.length} blocks)
           </span>
         </div>
@@ -138,78 +162,75 @@ export function RewardsDashboard() {
             <div className="text-textSecondary">Waiting for block data...</div>
           </div>
         ) : (
-          <ResponsiveContainer width="100%" height="90%">
-            <LineChart data={rewardHistory}>
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="var(--color-chart-grid)"
-              />
-              <XAxis
-                dataKey="height"
-                tick={{ fill: 'var(--color-text-secondary)' }}
-                stroke="var(--color-border)"
-              />
-              <YAxis
-                yAxisId="left"
-                stroke="#fbbf24"
-                domain={['auto', 'auto']}
-                tick={{ fill: 'var(--color-text-secondary)' }}
-              />
-              <YAxis
-                yAxisId="right"
-                orientation="right"
-                stroke="#60a5fa"
-                domain={['auto', 'auto']}
-                tick={{ fill: 'var(--color-text-secondary)' }}
-              />
-              <Tooltip
-                content={({ active, payload, label }) => {
-                  if (active && payload && payload.length) {
-                    const timestamp = payload[0]?.payload?.timestamp;
-                    const formattedTime = timestamp
-                      ? new Date(timestamp).toLocaleTimeString()
-                      : 'N/A';
+          <div ref={rewardsChartRef} className="w-full h-[90%]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={rewardHistory}>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="var(--color-chart-grid)"
+                />
+                <XAxis dataKey="height" stroke="var(--color-text-secondary)" />
+                <YAxis
+                  yAxisId="left"
+                  stroke="#fbbf24"
+                  domain={['auto', 'auto']}
+                />
+                <YAxis
+                  yAxisId="right"
+                  orientation="right"
+                  stroke="#60a5fa"
+                  domain={['auto', 'auto']}
+                />
+                <Tooltip
+                  content={({ active, payload, label }) => {
+                    if (active && payload && payload.length) {
+                      const timestamp = payload[0]?.payload?.timestamp;
+                      const formattedTime = timestamp
+                        ? new Date(timestamp).toLocaleTimeString()
+                        : 'N/A';
 
-                    return (
-                      <div className="bg-paper text-textPrimary border border-border p-2 rounded-sm shadow-lg">
-                        <p>Height: {label}</p>
-                        <p>Time: {formattedTime}</p>
-                        {payload.map((item, index) => {
-                          const value =
-                            typeof item.value === 'number'
-                              ? item.value.toFixed(2)
-                              : item.value;
-                          return (
-                            <p key={index}>
-                              {item.name}: {value}
-                            </p>
-                          );
-                        })}
-                      </div>
-                    );
-                  }
-                  return null;
-                }}
-              />
-              <Legend wrapperStyle={{ color: 'var(--color-text-primary)' }} />
-              <Line
-                yAxisId="left"
-                type="monotone"
-                dataKey="rewardBTC"
-                stroke="#fbbf24"
-                name="BTC Reward"
-                dot={false}
-              />
-              <Line
-                yAxisId="right"
-                type="monotone"
-                dataKey="rewardUSD"
-                stroke="#60a5fa"
-                name="USD Reward"
-                dot={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+                      return (
+                        <div className=" bg-[#1a1a1a] text-gray-400 sm:text-xs md:text-base border border-xl border-gray-500 p-2 rounded-sm">
+                          <p>Height: {label}</p>
+                          <p>Time: {formattedTime}</p>
+                          {payload.map((item, index) => {
+                            const value =
+                              typeof item.value === 'number'
+                                ? item.value.toFixed(2)
+                                : item.value;
+                            return (
+                              <p key={index}>
+                                {item.name}: {value}
+                              </p>
+                            );
+                          })}
+                        </div>
+                      );
+                    }
+                    return null;
+                  }}
+                />
+
+                <Legend />
+                <Line
+                  yAxisId="left"
+                  type="monotone"
+                  dataKey="rewardBTC"
+                  stroke="#fbbf24"
+                  name="BTC Reward"
+                  dot={false}
+                />
+                <Line
+                  yAxisId="right"
+                  type="monotone"
+                  dataKey="rewardUSD"
+                  stroke="#60a5fa"
+                  name="USD Reward"
+                  dot={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         )}
       </div>
     </div>

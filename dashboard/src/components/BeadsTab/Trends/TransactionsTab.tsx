@@ -158,6 +158,37 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
           yLabel="Transactions per Block"
           unit="tx"
           lineColor="#8884d8"
+          title="Transaction Activity"
+          description={
+            <>
+              Real-time transaction statistics
+              {error && (
+                <div className="text-sm text-red-400 mt-1">Error: {error}</div>
+              )}
+              {!isConnected && !error && (
+                <div className="text-sm text-yellow-400 mt-1">Disconnected</div>
+              )}
+            </>
+          }
+          headerRight={
+            <div className="flex items-center gap-4">
+              <div className="bg-purple-900/30 px-3 py-1 rounded-md">
+                <div className="text-center">
+                  <span className="text-purple-300 font-mono text-lg">
+                    {getCurrentRate()
+                      ? `${getCurrentRate().toFixed(1)} tx/min`
+                      : isLoading
+                        ? 'Loading...'
+                        : 'No data'}
+                  </span>
+                  <div className="text-xs text-purple-400 mt-1">
+                    {getRateLabel()}
+                  </div>
+                </div>
+              </div>
+            </div>
+          }
+          downloadFileName="transaction-activity"
         />
       </div>
 

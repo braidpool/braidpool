@@ -1,5 +1,10 @@
+import os
 import unittest
+from pathlib import Path
 from braid import *
+
+# Keep fixture lookup stable regardless of where tests are launched from.
+TEST_CASE_DIR = str(Path(__file__).resolve().parent / "braids") + os.sep
 
 class TestCohortMethods(unittest.TestCase):
     """ Test harness for unittest. """

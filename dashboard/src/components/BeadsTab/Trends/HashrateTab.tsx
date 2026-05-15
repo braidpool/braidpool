@@ -152,6 +152,16 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
           yLabel="Hashrate"
           unit="EH/s"
           lineColor="#8884d8"
+          title="Pool Hashrate"
+          description="Live hashrate of the Braidpool"
+          headerRight={
+            <div className="bg-purple-900/30 px-3 py-1 rounded-md">
+              <span className="text-purple-300 font-mono">
+                {hashrateData.current}
+              </span>
+            </div>
+          }
+          downloadFileName="pool-hashrate"
         />
       </div>
 

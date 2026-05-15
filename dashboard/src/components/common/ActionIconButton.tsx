@@ -4,15 +4,19 @@ interface ActionIconButtonProps {
   icon: React.ReactElement<any>;
   onClick?: () => void;
   className?: string;
+  ariaLabel: string;
 }
 const ActionIconButton: React.FC<ActionIconButtonProps> = ({
   icon,
   onClick,
   className = '',
+  ariaLabel,
 }) => {
   return (
     <button
+      type="button"
       onClick={onClick}
+      aria-label={ariaLabel}
       className={`
         flex items-center justify-center
         w-[34px] h-[34px] sm:w-[34px] sm:h-[34px] xs:w-[28px] xs:h-[28px]

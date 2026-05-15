@@ -163,6 +163,17 @@ export default function LatencyTab({ timeRange }: { timeRange: string }) {
           yLabel="Latency"
           unit="ms"
           lineColor="#8884d8"
+          title="Network Latency"
+          description="Real-time latency measurements from peer nodes"
+          headerRight={
+            <div className="bg-purple-900/30 px-3 py-1 rounded-md">
+              <span className="text-purple-300 font-mono">
+                Avg: {latencyData.averageLatency} | {latencyData.validPings}/
+                {latencyData.peerCount} peers
+              </span>
+            </div>
+          }
+          downloadFileName="network-latency"
         />
       </div>
 

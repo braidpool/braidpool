@@ -2,9 +2,26 @@ import { render, screen, act, cleanup } from '@testing-library/react';
 import TransactionsTab from '../TransactionsTab';
 import '@testing-library/jest-dom';
 
-jest.mock('../../AdvancedChart', () => () => (
-  <div data-testid="advanced-chart">Chart</div>
-));
+jest.mock(
+  '../../AdvancedChart',
+  () =>
+    ({
+      title,
+      description,
+      headerRight,
+    }: {
+      title?: string;
+      description?: React.ReactNode;
+      headerRight?: React.ReactNode;
+    }) => (
+      <div data-testid="advanced-chart">
+        {title && <h3>{title}</h3>}
+        {description && <div>{description}</div>}
+        {headerRight && <div>{headerRight}</div>}
+        Chart
+      </div>
+    )
+);
 jest.mock('../../AnimatedStatCard', () => ({ title, value }: any) => (
   <div data-testid="animated-stat">{`${title}: ${value}`}</div>
 ));
