@@ -62,6 +62,5 @@ if [ -n "${BRAIDPOOL_EXTRA_ARGS}" ]; then
     ARGS="${ARGS} ${BRAIDPOOL_EXTRA_ARGS}"
 fi
 
-echo "Starting node with arguments: ${ARGS}"
 
 exec /app/node ${ARGS} "$@"
