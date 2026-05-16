@@ -356,7 +356,7 @@ const BitcoinPriceTracker: React.FC = () => {
         <div className="flex flex-col w-full h-80 -mx-6 sm:mx-0 px-6 sm:px-0 relative">
           <div className="flex items-center gap-2 mb-2">
             <p className="font-semibold text-base">Bitcoin Price Range (24h)</p>
-            <ActionIconButton
+            <ActionIconButton ariaLabel="Download chart"
               onClick={handleDownloadPriceRange}
               icon={
                 <svg
@@ -439,7 +439,7 @@ const BitcoinPriceTracker: React.FC = () => {
             <p className="font-semibold text-base">
               Bitcoin Price History (Live)
             </p>
-            <ActionIconButton
+            <ActionIconButton ariaLabel="Download chart"
               onClick={handleDownloadPriceHistory}
               icon={
                 <svg

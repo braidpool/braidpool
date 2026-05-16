@@ -132,20 +132,6 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
 
   return (
     <div className="space-y-4  ">
-      <div className="flex justify-between items-center">
-        <div>
-          <h3 className="text-xl font-bold text-blue-300">Pool Hashrate</h3>
-          <p className="text-sm text-textSecondary mt-1">
-            Live hashrate of the Braidpool
-          </p>
-        </div>
-        <div className="bg-purple-900/30 px-3 py-1 rounded-md">
-          <span className="text-purple-300 font-mono">
-            {hashrateData.current}
-          </span>
-        </div>
-      </div>
-
       <div>
         <AdvancedChart
           data={chartData}
@@ -155,8 +141,8 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
           title="Pool Hashrate"
           description="Live hashrate of the Braidpool"
           headerRight={
-            <div className="bg-purple-900/30 px-3 py-1 rounded-md">
-              <span className="text-purple-300 font-mono">
+            <div className="bg-primary/10 px-3 py-1 rounded-md">
+              <span className="text-primary font-mono">
                 {hashrateData.current}
               </span>
             </div>

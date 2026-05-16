@@ -142,21 +142,6 @@ export default function LatencyTab({ timeRange }: { timeRange: string }) {
   // ✅ Render UI
   return (
     <div className="space-y-4 ">
-      <div className="flex justify-between items-center">
-        <div>
-          <h3 className="text-xl font-bold text-blue-300">Network Latency</h3>
-          <p className="text-sm text-textSecondary mt-1">
-            Real-time latency measurements from peer nodes
-          </p>
-        </div>
-        <div className="bg-purple-900/30 px-3 py-1 rounded-md">
-          <span className="text-purple-300 font-mono">
-            Avg: {latencyData.averageLatency} | {latencyData.validPings}/
-            {latencyData.peerCount} peers
-          </span>
-        </div>
-      </div>
-
       <div>
         <AdvancedChart
           data={chartData}
@@ -166,8 +151,8 @@ export default function LatencyTab({ timeRange }: { timeRange: string }) {
           title="Network Latency"
           description="Real-time latency measurements from peer nodes"
           headerRight={
-            <div className="bg-purple-900/30 px-3 py-1 rounded-md">
-              <span className="text-purple-300 font-mono">
+            <div className="bg-primary/10 px-3 py-1 rounded-md">
+              <span className="text-primary font-mono">
                 Avg: {latencyData.averageLatency} | {latencyData.validPings}/
                 {latencyData.peerCount} peers
               </span>

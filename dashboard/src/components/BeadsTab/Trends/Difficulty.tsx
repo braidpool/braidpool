@@ -75,8 +75,8 @@ export const Difficulty = () => {
           title="Network Difficulty"
           description="Bitcoin network difficulty over time (in Trillions)"
           headerRight={
-            <div className="bg-purple-900/30 px-3 py-1 rounded-md">
-              <span className="text-purple-300 font-mono">
+            <div className="bg-primary/10 px-3 py-1 rounded-md">
+              <span className="text-primary font-mono">
                 Current Difficulty :{' '}
                 {chartData.length > 0
                   ? `${chartData[chartData.length - 1].value} T`
