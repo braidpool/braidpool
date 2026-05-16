@@ -138,7 +138,8 @@ export function RewardsDashboard() {
             <h2 className="text-textPrimary text-lg font-semibold">
               Block Rewards
             </h2>
-            <ActionIconButton ariaLabel="Download chart"
+            <ActionIconButton
+              ariaLabel="Download chart"
               onClick={handleDownloadRewardsChart}
               icon={
                 <svg
