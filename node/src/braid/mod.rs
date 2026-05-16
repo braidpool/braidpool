@@ -238,7 +238,10 @@ impl Braid {
                         continue;
                     }
                     AddBeadStatus::ParentsNotYetReceived => {
-                        self.orphan_beads.push(orphan_bead);
+                        // extend() already re-queued the bead into self.orphan_beads
+                        // on its own ParentsNotYetReceived path; pushing again would
+                        // duplicate the entry.
+                        continue;
                     }
                 }
             }
@@ -322,8 +325,12 @@ impl Braid {
         );
         while smallest_cohort_index < self.cohorts.len() {
             let cohort = &self.cohorts[smallest_cohort_index];
-            for bead_index in &cohort.0 {
-                let curr_bead = self.beads[*bead_index].clone();
+            // HashSet iteration order is non-deterministic; sort by bead-index so
+            // the wire response is reproducible across runs and peers.
+            let mut sorted_indices: Vec<usize> = cohort.0.iter().copied().collect();
+            sorted_indices.sort();
+            for bead_index in sorted_indices {
+                let curr_bead = self.beads[bead_index].clone();
                 //Not including the beads that are already present in old_tips
                 if !old_tips.contains(&curr_bead.block_header.block_hash()) {
                     response_beads.push(curr_bead);

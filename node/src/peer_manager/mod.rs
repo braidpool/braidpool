@@ -12,8 +12,6 @@ pub const MAX_IBD_RETRIES: u64 = 10;
 pub const MIN_PEERS_FOR_IBD: usize = 1;
 /// Duration to wait before retrying IBD if no peers are available or all retries exhausted
 pub const IBD_RETRY_DELAY: u64 = 20;
-/// We wait for incoming beads with the range [current_timestamp,current_timestamp + MAX_IBD_INCOMING_THRESHOLD]
-pub const MAX_IBD_INCOMING_THRESHOLD: u64 = 20;
 /// Information about a peer in the network
 #[derive(Debug, Clone)]
 pub struct PeerInfo {
@@ -121,34 +119,17 @@ impl PeerManager {
             latency_bonus_factor: 10.0,
         }
     }
-    pub fn handle_update_and_fetch_batch_offset(
-        &mut self,
-        peer_id: PeerId,
-        offset_sender: tokio::sync::oneshot::Sender<usize>,
-        batch_size: usize,
-    ) {
+    /// Return the current IBD batch offset for `peer_id` and advance it by `batch_size`.
+    /// If the peer is unknown, a fresh `PeerInfo` is inserted and `IBD_BATCH_SIZE` is returned.
+    pub fn next_batch_offset(&mut self, peer_id: PeerId, batch_size: usize) -> usize {
         if let Some(peer) = self.peers.get_mut(&peer_id) {
-            let current_offset = peer.ibd_batch_offset.clone();
-            match offset_sender.send(current_offset) {
-                Ok(_) => {
-                    tracing::debug!("Sending newer offset and updating the current offset");
-                    peer.ibd_batch_offset = peer.ibd_batch_offset + batch_size;
-                }
-                Err(error) => {
-                    tracing::error!(error=?error, "Error while updating and sending it to request channel");
-                }
-            }
+            let current_offset = peer.ibd_batch_offset;
+            peer.ibd_batch_offset += batch_size;
+            current_offset
         } else {
             self.peers
-                .insert(peer_id.clone(), PeerInfo::new(peer_id.clone(), false, None));
-            match offset_sender.send(IBD_BATCH_SIZE) {
-                Ok(_) => {
-                    tracing::debug!("Sent newly initialized offset to request channel");
-                }
-                Err(error) => {
-                    tracing::error!(error=?error,"Error while initiating batch offset and sending it to request channel");
-                }
-            }
+                .insert(peer_id, PeerInfo::new(peer_id, false, None));
+            IBD_BATCH_SIZE
         }
     }
 
@@ -224,54 +205,19 @@ impl PeerManager {
         false
     }
 
-    pub fn handle_fetch_tips(
-        &mut self,
-        peer_id: PeerId,
-        sender: tokio::sync::oneshot::Sender<Vec<BeadHash>>,
-    ) {
-        if let Some(peer_info) = self.peers.get_mut(&peer_id) {
-            let cached = peer_info.ibd_peer_tips.clone();
-            match sender.send(cached.clone()) {
-                Ok(_) => tracing::debug!("Cached tips sent successfully to swarm event loop"),
-                Err(error) => tracing::error!(error=?error,"Tips not sent"),
-            }
-        } else {
-            tracing::error!("PeerInfo not found while sending Tips mappping");
-        }
+    /// Snapshot the cached IBD tips for `peer_id`, or `None` if the peer is unknown.
+    pub fn fetch_ibd_peer_tips(&self, peer_id: &PeerId) -> Option<Vec<BeadHash>> {
+        self.peers.get(peer_id).map(|p| p.ibd_peer_tips.clone())
     }
 
-    pub fn handle_fetch_ibd_bead_queue(
-        &mut self,
-        peer_id: PeerId,
-        sender: tokio::sync::oneshot::Sender<Vec<BeadHash>>,
-    ) {
-        if let Some(peer_info) = self.peers.get_mut(&peer_id) {
-            let cached = peer_info.ibd_bead_queue.clone();
-            match sender.send(cached.clone()) {
-                Ok(_) => {
-                    tracing::debug!("Cached get bead hashes sent successfully to swarm event loop")
-                }
-                Err(error) => tracing::error!(error=?error,"Beadhashes not sent"),
-            }
-        } else {
-            tracing::error!("PeerInfo not found while fetching GetBead mappping");
-        }
+    /// Snapshot the cached IBD bead-hash queue for `peer_id`, or `None` if the peer is unknown.
+    pub fn fetch_ibd_bead_queue(&self, peer_id: &PeerId) -> Option<Vec<BeadHash>> {
+        self.peers.get(peer_id).map(|p| p.ibd_bead_queue.clone())
     }
 
-    pub fn handle_get_incoming_bead_retry_count(
-        &mut self,
-        peer_id: PeerId,
-        sender: tokio::sync::oneshot::Sender<u64>,
-    ) {
-        if let Some(peer_info) = self.peers.get_mut(&peer_id) {
-            let retries = peer_info.retry_count;
-            match sender.send(retries) {
-                Ok(_) => tracing::debug!("Retry count sent successfully to swarm event loop"),
-                Err(_) => tracing::error!("Retry count not sent"),
-            }
-        } else {
-            tracing::error!("PeerInfo not found while fetching retry count");
-        }
+    /// Current IBD retry count for `peer_id`, or `None` if the peer is unknown.
+    pub fn get_retry_count(&self, peer_id: &PeerId) -> Option<u64> {
+        self.peers.get(peer_id).map(|p| p.retry_count)
     }
 
     pub fn handle_update_retry_count(&mut self, peer_id: PeerId) {

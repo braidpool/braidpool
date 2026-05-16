@@ -2085,8 +2085,8 @@ mod test {
         let connection_mapping = Arc::new(RwLock::new(ConnectionMapping::new()));
         let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
-        let (_test_db_handler, test_db_tx) = DBHandler::new().await.unwrap();
-        let (swarm_handler, mut swarm_command_receiver) = SwarmHandler::new(test_db_tx);
+        let (_test_db_handler, _) = DBHandler::new().await.unwrap();
+        let (swarm_handler, mut swarm_command_receiver) = SwarmHandler::new();
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let config = StratumServerConfig {
             hostname: "127.0.0.1".to_string(),
@@ -2147,8 +2147,8 @@ mod test {
         let test_braid: Arc<RwLock<braid::Braid>> =
             Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
         let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
-        let (_test_db_handler, test_db_tx) = DBHandler::new().await.unwrap();
-        let (swarm_handler, mut swarm_command_receiver) = SwarmHandler::new(test_db_tx);
+        let (_test_db_handler, _) = DBHandler::new().await.unwrap();
+        let (swarm_handler, mut swarm_command_receiver) = SwarmHandler::new();
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
 
@@ -2195,8 +2195,8 @@ mod test {
             Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
         let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
-        let (_test_db_handler, test_db_tx) = DBHandler::new().await.unwrap();
-        let (swarm_handler, mut swarm_command_receiver) = SwarmHandler::new(test_db_tx);
+        let (_test_db_handler, _) = DBHandler::new().await.unwrap();
+        let (swarm_handler, mut swarm_command_receiver) = SwarmHandler::new();
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let config = StratumServerConfig {
             hostname: "127.0.0.1".to_string(),
@@ -2242,10 +2242,10 @@ mod test {
         let genesis_beads = Vec::from([]);
         let test_braid: Arc<RwLock<braid::Braid>> =
             Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
-        let (_test_db_handler, test_db_tx) = DBHandler::new().await.unwrap();
+        let (_test_db_handler, _) = DBHandler::new().await.unwrap();
         let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
-        let (swarm_handler, mut swarm_command_receiver) = SwarmHandler::new(test_db_tx);
+        let (swarm_handler, mut swarm_command_receiver) = SwarmHandler::new();
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let config = StratumServerConfig {
             hostname: "127.0.0.1".to_string(),
@@ -2283,11 +2283,11 @@ mod test {
         let genesis_beads = Vec::from([]);
         let test_braid: Arc<RwLock<braid::Braid>> =
             Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
-        let (_test_db_handler, test_db_tx) = DBHandler::new().await.unwrap();
+        let (_test_db_handler, _) = DBHandler::new().await.unwrap();
         let mining_job_map: Arc<Mutex<HashMap<String, Arc<Mutex<MiningJobMap>>>>> =
             Arc::new(Mutex::new(HashMap::new()));
         let (notify_tx, _notify_rx) = mpsc::channel::<NotifyCmd>(32);
-        let (swarm_handler, mut swarm_command_receiver) = SwarmHandler::new(test_db_tx);
+        let (swarm_handler, mut swarm_command_receiver) = SwarmHandler::new();
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let config = StratumServerConfig {
             hostname: "127.0.0.1".to_string(),
@@ -2351,8 +2351,8 @@ mod test {
         let genesis_beads = Vec::from([]);
         let test_braid: Arc<RwLock<braid::Braid>> =
             Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
-        let (_test_db_handler, test_db_tx) = DBHandler::new().await.unwrap();
-        let (swarm_handler, mut swarm_command_receiver) = SwarmHandler::new(test_db_tx);
+        let (_test_db_handler, _) = DBHandler::new().await.unwrap();
+        let (swarm_handler, mut swarm_command_receiver) = SwarmHandler::new();
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let test_merkle_bytes: [u8; 32] = [0u8; 32];
         let mut test_witness = Witness::new();

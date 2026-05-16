@@ -16,7 +16,6 @@ use tracing::{debug, error, info, trace, warn};
 pub const MAX_CACHED_TEMPLATES: usize = 90;
 
 use crate::{
-    db::BraidpoolDBTypes,
     error::IPCtemplateError,
     stratum::{BlockTemplate, NotifyCmd},
 };
@@ -254,18 +253,14 @@ pub enum SwarmCommand {
 }
 pub struct SwarmHandler {
     pub command_sender: Sender<SwarmCommand>,
-    _db_command_sender: tokio::sync::mpsc::Sender<BraidpoolDBTypes>,
 }
 impl SwarmHandler {
-    pub fn new(
-        db_command_sender: tokio::sync::mpsc::Sender<BraidpoolDBTypes>,
-    ) -> (Self, Receiver<SwarmCommand>) {
+    pub fn new() -> (Self, Receiver<SwarmCommand>) {
         let (swarm_stratum_bridge_tx, swarm_stratum_bridge_rx) =
             mpsc::channel::<SwarmCommand>(1024);
         (
             Self {
                 command_sender: swarm_stratum_bridge_tx,
-                _db_command_sender: db_command_sender,
             },
             swarm_stratum_bridge_rx,
         )
