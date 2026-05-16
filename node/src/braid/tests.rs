@@ -1644,7 +1644,7 @@ fn test_get_beads_after() {
 
     // Test 1: Get beads after genesis (should return beads 1, 2, 3)
     let genesis_hash = beads[0].block_header.block_hash();
-    let result = test_braid.get_beads_after(vec![genesis_hash]);
+    let result = test_braid.get_beads_after(vec![genesis_hash], usize::MAX);
     assert!(result.is_some());
     let returned_beads = result.unwrap();
 
@@ -1666,7 +1666,7 @@ fn test_get_beads_after() {
 
     // Test 2: Get beads after bead1 (should return beads 2, 3)
     let bead1_hash = beads[1].block_header.block_hash();
-    let result = test_braid.get_beads_after(vec![bead1_hash]);
+    let result = test_braid.get_beads_after(vec![bead1_hash], usize::MAX);
     assert!(result.is_some());
     let returned_beads = result.unwrap();
 
@@ -1679,7 +1679,7 @@ fn test_get_beads_after() {
 
     // Test 3: Get beads after the last bead (should return empty or just that bead)
     let last_hash = beads[3].block_header.block_hash();
-    let result = test_braid.get_beads_after(vec![last_hash]);
+    let result = test_braid.get_beads_after(vec![last_hash], usize::MAX);
     assert!(result.is_none());
 
     println!("Linear chain tests passed");
@@ -1750,7 +1750,7 @@ fn test_get_beads_after_diamond_structure() {
 
     // Test 1: Get beads after genesis
     let genesis_hash = beads[0].block_header.block_hash();
-    let result = test_braid.get_beads_after(vec![genesis_hash]);
+    let result = test_braid.get_beads_after(vec![genesis_hash], usize::MAX);
     assert!(result.is_some());
     let returned_beads = result.unwrap();
 
@@ -1766,7 +1766,7 @@ fn test_get_beads_after_diamond_structure() {
     // Test 2: Get beads after both middle beads (should return bead3)
     let bead1_hash = beads[1].block_header.block_hash();
     let bead2_hash = beads[2].block_header.block_hash();
-    let result = test_braid.get_beads_after(vec![bead1_hash, bead2_hash]);
+    let result = test_braid.get_beads_after(vec![bead1_hash, bead2_hash], usize::MAX);
     assert!(result.is_some());
     let returned_beads = result.unwrap();
 
@@ -1850,7 +1850,7 @@ fn test_get_beads_after_complex_braid() {
 
     // Test 1: Get beads after genesis (should return all other beads)
     let genesis_hash = beads[0].block_header.block_hash();
-    let result = test_braid.get_beads_after(vec![genesis_hash]);
+    let result = test_braid.get_beads_after(vec![genesis_hash], usize::MAX);
     assert!(result.is_some());
     let returned_beads = result.unwrap();
     assert!(
@@ -1860,7 +1860,7 @@ fn test_get_beads_after_complex_braid() {
 
     // Test 2: Get beads after first cohort (B1, B2, B3)
     let b1_hash = beads[1].block_header.block_hash();
-    let result = test_braid.get_beads_after(vec![b1_hash]);
+    let result = test_braid.get_beads_after(vec![b1_hash], usize::MAX);
     assert!(result.is_some());
     let returned_beads = result.unwrap();
 
@@ -1880,7 +1880,7 @@ fn test_get_beads_after_complex_braid() {
     // Test 3: Get beads after multiple tips from second level
     let b4_hash = beads[4].block_header.block_hash();
     let b5_hash = beads[5].block_header.block_hash();
-    let result = test_braid.get_beads_after(vec![b4_hash, b5_hash]);
+    let result = test_braid.get_beads_after(vec![b4_hash, b5_hash], usize::MAX);
     assert!(result.is_some());
     let returned_beads = result.unwrap();
 
@@ -1931,19 +1931,19 @@ fn test_get_beads_after_edge_cases() {
     test_braid.extend(&beads[2]);
 
     // Test 1: Empty input vector
-    let _result = test_braid.get_beads_after(vec![]);
+    let _result = test_braid.get_beads_after(vec![], usize::MAX);
     // Function should handle empty input gracefully
 
     // Test 2: Non-existent hash
     let fake_hash =
         BeadHash::from_str("0000000000000000000000000000000000000000000000000000000000000001")
             .unwrap();
-    let _result = test_braid.get_beads_after(vec![fake_hash]);
+    let _result = test_braid.get_beads_after(vec![fake_hash], usize::MAX);
     // Should handle non-existent hash gracefully
 
     // Test 3: Mix of valid and invalid hashes
     let genesis_hash = beads[0].block_header.block_hash();
-    let result = test_braid.get_beads_after(vec![genesis_hash, fake_hash]);
+    let result = test_braid.get_beads_after(vec![genesis_hash, fake_hash], usize::MAX);
     assert!(result.is_some());
     let returned_beads = result.unwrap();
 
@@ -1959,7 +1959,7 @@ fn test_get_beads_after_edge_cases() {
 
     // Test 4: Get beads after the tip (last bead)
     let tip_hash = beads[2].block_header.block_hash();
-    let result = test_braid.get_beads_after(vec![tip_hash]);
+    let result = test_braid.get_beads_after(vec![tip_hash], usize::MAX);
     assert!(result.is_none());
     // Should return at least the tip bead itself or beads from its cohort
 }
@@ -2034,7 +2034,7 @@ fn test_get_beads_after_multiple_tips() {
     let b3_hash = beads[3].block_header.block_hash(); // Index 3
     let b5_hash = beads[5].block_header.block_hash(); // Index 5
 
-    let result = test_braid.get_beads_after(vec![b3_hash, b5_hash]);
+    let result = test_braid.get_beads_after(vec![b3_hash, b5_hash], usize::MAX);
     assert!(result.is_some());
     let returned_beads = result.unwrap();
 
@@ -2043,7 +2043,7 @@ fn test_get_beads_after_multiple_tips() {
     assert!(!returned_beads.is_empty(), "Should return some beads");
 
     // Test with tips in reverse order (larger index first)
-    let result2 = test_braid.get_beads_after(vec![b5_hash, b3_hash]);
+    let result2 = test_braid.get_beads_after(vec![b5_hash, b3_hash], usize::MAX);
     assert!(result2.is_some());
     let returned_beads2 = result2.unwrap();
 

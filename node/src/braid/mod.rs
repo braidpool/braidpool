@@ -279,15 +279,16 @@ impl Braid {
             }
         }
     }
-    /// utility function for GetBeadsAfter request
-    pub fn get_beads_after(&self, old_tips: Vec<BeadHash>) -> Option<Vec<Bead>> {
+    /// utility function for GetBeadsAfter request and returning only limit for pagination
+    /// sent of the given beadhash
+    pub fn get_beads_after(&self, old_tips: Vec<BeadHash>, limit: usize) -> Option<Vec<Bead>> {
         let old_tips: HashSet<BeadHash> = old_tips.into_iter().collect();
         tracing::warn!(
             old_tips=?old_tips,"Tips received from the peer for which beads are requested for during IBD"
         );
         //In case no tips are present i.e. the new braid-node has been initialized
         if old_tips.len() == 0 {
-            return Some(self.beads.clone());
+            return Some(self.beads.iter().take(limit).cloned().collect());
         }
         let mut response_beads = Vec::new();
         let mut smallest_index = usize::MAX;
@@ -301,7 +302,7 @@ impl Braid {
         }
         //If somehow no bead matched that can be due to possible latency/fork so send all the beads instead as fallback
         if smallest_index == usize::MAX {
-            return Some(self.beads.clone());
+            return Some(self.beads.iter().take(limit).cloned().collect());
         }
 
         tracing::debug!(
@@ -318,12 +319,12 @@ impl Braid {
             }
         }
         if smallest_cohort_index == usize::MAX {
-            return Some(self.beads.clone());
+            return Some(self.beads.iter().take(limit).cloned().collect());
         }
         tracing::debug!(
             smallest_index=?smallest_index,"Smallest possible cohort index for which the given smallest index is a part of",
         );
-        while smallest_cohort_index < self.cohorts.len() {
+        'cohort_walk: while smallest_cohort_index < self.cohorts.len() {
             let cohort = &self.cohorts[smallest_cohort_index];
             // HashSet iteration order is non-deterministic; sort by bead-index so
             // the wire response is reproducible across runs and peers.
@@ -334,6 +335,9 @@ impl Braid {
                 //Not including the beads that are already present in old_tips
                 if !old_tips.contains(&curr_bead.block_header.block_hash()) {
                     response_beads.push(curr_bead);
+                    if response_beads.len() >= limit {
+                        break 'cohort_walk;
+                    }
                 } else {
                     tracing::debug!("This bead is already present in old tips thus skipping");
                 }

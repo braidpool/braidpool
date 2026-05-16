@@ -294,6 +294,7 @@ impl DBHandler {
         let mut all_parent_ts_json_parts = Vec::new();
 
         for bead in chunk {
+            // For each chunk constructing the query placeholders
             let bead_hash = bead.block_header.block_hash();
             let bead_id = match bead_index_mapping.get(&bead_hash) {
                 Some(&(id, _)) => id,
@@ -422,8 +423,7 @@ impl DBHandler {
         Ok(())
     }
 
-    /// Inserts a batch of beads (and orphans) using bulk INSERTs. Batches
-    /// larger than BATCH_INSERT_THRESHOLD are split into bulk chunks of that size
+    /// Inserts a batch of beads, batches that are larger than BATCH_INSERT_THRESHOLD are split into bulk chunks of that size .
     async fn insert_beads_batch(
         &self,
         beads: Vec<Bead>,
@@ -431,6 +431,7 @@ impl DBHandler {
         bead_index_mapping: &HashMap<BeadHash, (usize, u32)>,
     ) -> Result<(), DBErrors> {
         let total_count = beads.len() + orphans.len();
+        // Dividing into number of chunks
         let chunk_count = total_count.div_ceil(BATCH_INSERT_THRESHOLD).max(1);
 
         debug!(
@@ -454,7 +455,7 @@ impl DBHandler {
 
         let all_beads: Vec<&Bead> = beads.iter().chain(orphans.iter()).collect();
         let mut inserted_count = 0u32;
-
+        // Iterating through each chunk and inserting the corrsponding chunk
         for chunk in all_beads.chunks(BATCH_INSERT_THRESHOLD) {
             if let Err(e) = self
                 .bulk_insert_chunk(&mut local_transaction, chunk, bead_index_mapping)
@@ -1255,6 +1256,55 @@ pub mod test {
                     .block_hash()
                     .to_string(),
                 bead.block_header.block_hash().to_string()
+            );
+            // Adding complete assertions for each braid test file
+            let bead_id_i64 = bead_id as i64;
+
+            let txs_count: i64 = sqlx::query("SELECT COUNT(*) FROM Transactions WHERE bead_id = ?")
+                .bind(bead_id_i64)
+                .fetch_one(&test_pool)
+                .await
+                .unwrap()
+                .get(0);
+            assert_eq!(
+                txs_count as usize,
+                transaction_tuples.len(),
+                "Transactions rows missing for bead_id={}: expected {}, found {}",
+                bead_id,
+                transaction_tuples.len(),
+                txs_count
+            );
+
+            let relatives_count: i64 =
+                sqlx::query("SELECT COUNT(*) FROM Relatives WHERE child = ?")
+                    .bind(bead_id_i64)
+                    .fetch_one(&test_pool)
+                    .await
+                    .unwrap()
+                    .get(0);
+            assert_eq!(
+                relatives_count as usize,
+                relative_tuples.len(),
+                "Relatives rows missing for child bead_id={}: expected {}, found {}",
+                bead_id,
+                relative_tuples.len(),
+                relatives_count
+            );
+
+            let parent_ts_count: i64 =
+                sqlx::query("SELECT COUNT(*) FROM ParentTimestamps WHERE child = ?")
+                    .bind(bead_id_i64)
+                    .fetch_one(&test_pool)
+                    .await
+                    .unwrap()
+                    .get(0);
+            assert_eq!(
+                parent_ts_count as usize,
+                parent_timestamp_tuples.len(),
+                "ParentTimestamps rows missing for child bead_id={}: expected {}, found {}",
+                bead_id,
+                parent_timestamp_tuples.len(),
+                parent_ts_count
             );
         }
     }

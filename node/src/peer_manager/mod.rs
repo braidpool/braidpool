@@ -12,6 +12,9 @@ pub const MAX_IBD_RETRIES: u64 = 10;
 pub const MIN_PEERS_FOR_IBD: usize = 1;
 /// Duration to wait before retrying IBD if no peers are available or all retries exhausted
 pub const IBD_RETRY_DELAY: u64 = 20;
+/// Maximum number of bead hashes a peer is allowed to advertise in a single
+/// `GetBeadsAfter` response thus limiting the batch size during IBD.
+pub const IBD_HASH_PAGE_MAX: usize = 5_000;
 /// Information about a peer in the network
 #[derive(Debug, Clone)]
 pub struct PeerInfo {
@@ -119,23 +122,19 @@ impl PeerManager {
             latency_bonus_factor: 10.0,
         }
     }
-    /// Return the current IBD batch offset for `peer_id` and advance it by `batch_size`.
-    /// If the peer is unknown, a fresh `PeerInfo` is inserted and `IBD_BATCH_SIZE` is returned.
-    pub fn next_batch_offset(&mut self, peer_id: PeerId, batch_size: usize) -> usize {
-        if let Some(peer) = self.peers.get_mut(&peer_id) {
-            let current_offset = peer.ibd_batch_offset;
-            peer.ibd_batch_offset += batch_size;
-            current_offset
-        } else {
-            self.peers
-                .insert(peer_id, PeerInfo::new(peer_id, false, None));
-            IBD_BATCH_SIZE
-        }
+    /// Return the current IBD batch offset for `peer_id` and advance it by `batch_size` in case of a non-existent peer will return `None`.
+    pub fn next_batch_offset(&mut self, peer_id: PeerId, batch_size: usize) -> Option<usize> {
+        let peer = self.peers.get_mut(&peer_id)?;
+        let current_offset = peer.ibd_batch_offset;
+        peer.ibd_batch_offset += batch_size;
+        Some(current_offset)
     }
 
+    /// Store a new page of IBD bead hashes for `peer_id` and resetting the batch_size to initial.
     pub fn handle_update_incoming(&mut self, peer_id: PeerId, data: Vec<BeadHash>) {
         if let Some(peer_info) = self.peers.get_mut(&peer_id) {
             peer_info.ibd_bead_queue = data;
+            peer_info.ibd_batch_offset = IBD_BATCH_SIZE;
         } else {
             tracing::error!("PeerInfo not found while updating incoming beads");
         }
@@ -228,10 +227,9 @@ impl PeerManager {
             tracing::error!("PeerInfo not found while updating retry count");
         }
     }
-    /// Add a new peer or update an existing one
+    /// Add a new peer or update an existing one and evicting one if maximum outbound connections is reached.
     pub fn add_peer(&mut self, peer_id: PeerId, inbound: bool, ip: Option<IpAddr>) {
         if let Some(peer) = self.peers.get_mut(&peer_id) {
-            // Update existing peer
             peer.connected = true;
             peer.inbound = inbound;
             if let Some(ip_addr) = ip {
@@ -239,11 +237,39 @@ impl PeerManager {
                 peer.geo_group = Some(PeerInfo::calculate_geo_group(ip_addr));
             }
             peer.last_message_time = Instant::now();
-        } else {
-            // Add new peer
-            let peer_info = PeerInfo::new(peer_id, inbound, ip);
-            self.peers.insert(peer_id, peer_info);
+            self.connected_peers.insert(peer_id);
+            return;
         }
+
+        if self.connected_peers.len() >= self.max_peers {
+            //Evicting a suitable peer having minimum score if any in case of maximum outbound connections .
+            let victim = self.get_eviction_candidates().into_iter().next();
+            if let Some(v) = victim {
+                let was_connected = self.peers.get(&v).map(|p| p.connected).unwrap_or(false);
+                self.peers.remove(&v);
+                if was_connected {
+                    self.connected_peers.remove(&v);
+                }
+                tracing::warn!(
+                    evicted = ?v,
+                    incoming = ?peer_id,
+                    connected_after = self.connected_peers.len(),
+                    max = self.max_peers,
+                    "max_peers reached, evicted lowest-scoring peer to admit new one"
+                );
+            } else {
+                tracing::warn!(
+                    peer_id = ?peer_id,
+                    connected = self.connected_peers.len(),
+                    max = self.max_peers,
+                    "max_peers reached and no eviction victim found, rejecting new peer"
+                );
+                return;
+            }
+        }
+
+        self.peers
+            .insert(peer_id, PeerInfo::new(peer_id, inbound, ip));
         self.connected_peers.insert(peer_id);
     }
 

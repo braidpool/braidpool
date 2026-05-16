@@ -121,6 +121,17 @@ braidpool_protocol! {
     }
 }
 
+/// Maximum size in bytes of a single bead-sync request or response frame.
+///
+/// A remote peer that sends more than this on a single request/response
+/// substream has its frame rejected before deserialization. Without this
+/// cap, `read_to_end` would allocate without bound and a malicious peer
+/// could OOM us during IBD.
+///
+/// Sized to comfortably hold one `IBD_HASH_PAGE_MAX`-sized hash list plus
+/// one `IBD_BATCH_SIZE` worth of beads at realistic per-bead sizes.
+pub const MAX_BEAD_SYNC_FRAME: usize = 4 * 1024 * 1024;
+
 /// Codec for encoding/decoding bead sync messages over libp2p.
 ///
 /// Implements the `libp2p::request_response::Codec` trait to handle serialization
@@ -138,8 +149,18 @@ impl Codec for BeadCodec {
     where
         T: AsyncRead + Unpin + Send,
     {
+        // `take(MAX + 1)` lets us distinguish "exactly at the cap" (valid)
+        // from "exceeded the cap" (reject) without an extra read.
         let mut buf = Vec::new();
-        io.read_to_end(&mut buf).await?;
+        io.take(MAX_BEAD_SYNC_FRAME as u64 + 1)
+            .read_to_end(&mut buf)
+            .await?;
+        if buf.len() > MAX_BEAD_SYNC_FRAME {
+            return Err(IoError::new(
+                ErrorKind::InvalidData,
+                "bead-sync request frame exceeds MAX_BEAD_SYNC_FRAME",
+            ));
+        }
         BeadRequest::consensus_decode(&mut buf.as_slice())
             .map_err(|e| IoError::new(ErrorKind::InvalidData, e))
     }
@@ -149,7 +170,15 @@ impl Codec for BeadCodec {
         T: AsyncRead + Unpin + Send,
     {
         let mut buf = Vec::new();
-        io.read_to_end(&mut buf).await?;
+        io.take(MAX_BEAD_SYNC_FRAME as u64 + 1)
+            .read_to_end(&mut buf)
+            .await?;
+        if buf.len() > MAX_BEAD_SYNC_FRAME {
+            return Err(IoError::new(
+                ErrorKind::InvalidData,
+                "bead-sync response frame exceeds MAX_BEAD_SYNC_FRAME",
+            ));
+        }
         BeadResponse::consensus_decode(&mut buf.as_slice())
             .map_err(|e| IoError::new(ErrorKind::InvalidData, e))
     }
