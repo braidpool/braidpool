@@ -1,6 +1,5 @@
 .git
 .gitignore
-.gitattributes
 .github
 
 target/
@@ -39,10 +38,7 @@ yarn-error.log
 .env
 .env.*
 *.env
-
-*.tmp
-*.temp
-*.log
+.reviews/
 
 .DS_Store
 Thumbs.db
@@ -50,6 +46,4 @@ Thumbs.db
 k8s/
 
 # Ignore docker compose files but keep entrypoint scripts
-docker/*.yml
 docker/README.md
-docker/**/Dockerfile

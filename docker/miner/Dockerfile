@@ -8,8 +8,12 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /build
 
-# Clone the rust_cpunet_miner repository
-RUN git clone https://github.com/braidpool/rust_cpunet_miner.git .
+# Clone the rust_cpunet_miner repository pinned to a specific commit
+ARG MINER_COMMIT=3015dcfadcef2df7f3cd91317ee185b22b8ff590
+RUN git init && \
+    git remote add origin https://github.com/braidpool/rust_cpunet_miner.git && \
+    git fetch --depth 1 origin ${MINER_COMMIT} && \
+    git checkout FETCH_HEAD
 
 # Build the miner in release mode
 RUN cargo build --release

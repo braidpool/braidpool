@@ -30,42 +30,28 @@ RUN cmake -B build \
         -DBUILD_GUI=OFF \
         -DWITH_WALLET=OFF \
         -DWITH_BDB=OFF 
+
 RUN cd build && make -j$(nproc)
-RUN ls -la /build/build/bin/bitcoin-node && \
-    ldd /build/build/bin/bitcoin-node | grep capnp
-RUN ls -la /build/build/bin
-RUN ldd /build/build/bin/bitcoin-node
+
 FROM debian:bookworm-slim AS runtime
 
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     libevent-2.1-7 \
+    libevent-core-2.1-7 \
+    libevent-extra-2.1-7 \
+    libevent-pthreads-2.1-7 \
     libboost-filesystem1.81.0 \
     libboost-thread1.81.0 \
+    libcapnp-0.9.2 \
+    libsqlite3-0 \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd -r bitcoin && \
     useradd -r -g bitcoin -d /data -m bitcoin
 
-
-RUN ls -la
-
 COPY --from=builder /build/build/bin/bitcoin-node /usr/local/bin/bitcoin-node
 COPY --from=builder /build/build/bin/bitcoin-cli  /usr/local/bin/bitcoin-cli
-COPY --from=builder /usr/lib/x86_64-linux-gnu/libcapnp*.so* /usr/lib/x86_64-linux-gnu/
-COPY --from=builder /usr/lib/x86_64-linux-gnu/libkj*.so*    /usr/lib/x86_64-linux-gnu/
-COPY --from=builder /lib/x86_64-linux-gnu/libevent_core-2.1.so.7     /lib/x86_64-linux-gnu/
-COPY --from=builder /lib/x86_64-linux-gnu/libevent_extra-2.1.so.7    /lib/x86_64-linux-gnu/
-COPY --from=builder /lib/x86_64-linux-gnu/libevent_pthreads-2.1.so.7 /lib/x86_64-linux-gnu/
-COPY --from=builder /lib/x86_64-linux-gnu/libcapnp-rpc-0.9.2.so      /lib/x86_64-linux-gnu/
-COPY --from=builder /lib/x86_64-linux-gnu/libcapnp-0.9.2.so          /lib/x86_64-linux-gnu/
-COPY --from=builder /lib/x86_64-linux-gnu/libkj-async-0.9.2.so       /lib/x86_64-linux-gnu/
-COPY --from=builder /lib/x86_64-linux-gnu/libkj-0.9.2.so             /lib/x86_64-linux-gnu/
-COPY --from=builder /lib/x86_64-linux-gnu/libsqlite3.so.0             /lib/x86_64-linux-gnu/
-COPY --from=builder /lib/x86_64-linux-gnu/libstdc++.so.6              /lib/x86_64-linux-gnu/
-COPY --from=builder /lib/x86_64-linux-gnu/libgcc_s.so.1               /lib/x86_64-linux-gnu/
-
-RUN ldconfig
 
 RUN mkdir -p /data/.bitcoin/cpunet /tmp/bitcoin-ipc && \
     chown -R bitcoin:bitcoin /data /tmp/bitcoin-ipc
