@@ -15,6 +15,18 @@ export interface Fee {
   fee_brl?: MoneyValue;
   fee_hkd?: MoneyValue;
   fee_sgd?: MoneyValue;
+  rate_usd_per_vbyte?: MoneyValue;
+  rate_eur_per_vbyte?: MoneyValue;
+  rate_jpy_per_vbyte?: MoneyValue;
+  rate_gbp_per_vbyte?: MoneyValue;
+  rate_cad_per_vbyte?: MoneyValue;
+  rate_aud_per_vbyte?: MoneyValue;
+  rate_chf_per_vbyte?: MoneyValue;
+  rate_inr_per_vbyte?: MoneyValue;
+  rate_krw_per_vbyte?: MoneyValue;
+  rate_brl_per_vbyte?: MoneyValue;
+  rate_hkd_per_vbyte?: MoneyValue;
+  rate_sgd_per_vbyte?: MoneyValue;
 }
 
 export interface BlockFeeHistoryItem {

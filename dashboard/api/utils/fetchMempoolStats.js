@@ -20,8 +20,14 @@ const FIAT_CURRENCIES = [
 let lastKnownBlockFeeCurrencyRates = {};
 
 function normalizeDecimalString(value) {
-  const raw = String(value).trim();
+  let raw = String(value).trim();
   if (!raw) return null;
+
+  if (raw.startsWith('.')) {
+    raw = '0' + raw;
+  } else if (raw.startsWith('-.') || raw.startsWith('+.')) {
+    raw = raw[0] + '0.' + raw.slice(2);
+  }
 
   const match = raw.match(/^([+-]?)(\d+)(?:\.(\d+))?$/);
   if (!match) return null;
@@ -78,7 +84,18 @@ function satsToBtcDecimalString(sats) {
   if (!Number.isFinite(satsNum)) return null;
 
   const satsInt = BigInt(Math.round(satsNum));
-  return scaledIntToDecimalString(satsInt, 8);
+  let str = scaledIntToDecimalString(satsInt, 8);
+  
+  if (!str.includes('.')) {
+    str += '.00000000';
+  } else {
+    const [, frac] = str.split('.');
+    if (frac.length < 8) {
+      str += '0'.repeat(8 - frac.length);
+    }
+  }
+  
+  return str;
 }
 
 function convertSatsToFiatDecimalString(sats, rateDecimal) {
@@ -208,9 +225,18 @@ export async function fetchMempoolStats() {
 
       const fee = { sats_per_vbyte: sats, fee_btc: feeBtc };
       for (const [currency, rate] of Object.entries(btcRates)) {
-        const converted = convertSatsToFiatDecimalString(totalSats, rate);
-        if (converted !== null) {
-          fee[`fee_${currency.toLowerCase()}`] = converted;
+        const lowerCurr = currency.toLowerCase();
+        
+        // Total Tx Fee
+        const convertedTotal = convertSatsToFiatDecimalString(totalSats, rate);
+        if (convertedTotal !== null) {
+          fee[`fee_${lowerCurr}`] = convertedTotal;
+        }
+
+        // Per vByte Rate Fee
+        const convertedRate = convertSatsToFiatDecimalString(sats, rate);
+        if (convertedRate !== null) {
+          fee[`rate_${lowerCurr}_per_vbyte`] = convertedRate;
         }
       }
       return fee;
