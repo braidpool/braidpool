@@ -199,14 +199,16 @@ export async function fetchMempoolStats() {
       feesRes.data;
 
     const convertFee = (sats) => {
-      const feeBtc = satsToBtcDecimalString(sats);
+      const txVBytes = 140; // Typical transaction size in vBytes
+      const totalSats = sats * txVBytes;
+      const feeBtc = satsToBtcDecimalString(totalSats);
       if (feeBtc === null) {
         return { sats_per_vbyte: sats, fee_btc: null };
       }
 
       const fee = { sats_per_vbyte: sats, fee_btc: feeBtc };
       for (const [currency, rate] of Object.entries(btcRates)) {
-        const converted = convertSatsToFiatDecimalString(sats, rate);
+        const converted = convertSatsToFiatDecimalString(totalSats, rate);
         if (converted !== null) {
           fee[`fee_${currency.toLowerCase()}`] = converted;
         }
