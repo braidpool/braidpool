@@ -458,8 +458,6 @@ const MempoolLatencyStats = () => {
           </ResponsiveContainer>
         </div>
       </section>
-
-
     </div>
   );
 };
