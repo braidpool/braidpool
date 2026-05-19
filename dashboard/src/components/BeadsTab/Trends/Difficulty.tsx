@@ -66,28 +66,25 @@ export const Difficulty = () => {
 
   return (
     <div className="space-y-6 ">
-      <div className="flex justify-between items-center">
-        <div>
-          <h3 className="text-xl font-bold text-blue-300">
-            Network Difficulty
-          </h3>
-        </div>
-        <div className="bg-purple-900/30 px-3 py-1 rounded-md">
-          <span className="text-purple-300 font-mono">
-            Current Difficulty :{' '}
-            {chartData.length > 0
-              ? `${chartData[chartData.length - 1].value} T`
-              : 'Loading...'}
-          </span>
-        </div>
-      </div>
-
       <div>
         <AdvancedChart
           data={chartData}
           yLabel="Difficulty"
           unit="T"
           lineColor="#8884d8"
+          title="Network Difficulty"
+          description="Bitcoin network difficulty over time (in Trillions)"
+          headerRight={
+            <div className="bg-purple-900/30 px-3 py-1 rounded-md">
+              <span className="text-purple-300 font-mono">
+                Current Difficulty :{' '}
+                {chartData.length > 0
+                  ? `${chartData[chartData.length - 1].value} T`
+                  : 'Loading...'}
+              </span>
+            </div>
+          }
+          downloadFileName="network-difficulty"
         />
       </div>
     </div>

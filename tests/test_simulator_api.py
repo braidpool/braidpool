@@ -6,6 +6,8 @@ import websockets
 import time
 import subprocess
 import signal
+import sys
+from pathlib import Path
 
 class TestSimulatorAPI(unittest.TestCase):
     """Test the Simulator API websocket connection and message handling."""
@@ -13,10 +15,13 @@ class TestSimulatorAPI(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Start the simulator API server for testing."""
+        tests_dir = Path(__file__).resolve().parent
+        simulator_api_path = tests_dir / "simulator_api.py"
         cls.server_process = subprocess.Popen(
-            ["python", "simulator_api.py"],
+            [sys.executable, str(simulator_api_path)],
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
+            stderr=subprocess.PIPE,
+            cwd=str(tests_dir)
         )
         # Give the server time to start
         time.sleep(1)

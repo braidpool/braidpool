@@ -23,6 +23,8 @@ import {
 import { currencyLabels, currencyColors, currencyFullNames } from './Constants';
 import { WEBSOCKET_URLS } from '@/URLs';
 import { Loader } from 'lucide-react';
+import ActionIconButton from '../common/ActionIconButton';
+import { downloadSvgFromContainer } from '../../utils/downloadSvg';
 
 type Currency =
   | 'btc'
@@ -132,6 +134,21 @@ const MempoolLatencyStats = () => {
   const [wsStatusMessage, setWsStatusMessage] = useState(
     'Connecting to live mempool feed...'
   );
+  const feeDistChartRef = useRef<HTMLDivElement | null>(null);
+  const blockFeeChartRef = useRef<HTMLDivElement | null>(null);
+
+  const handleDownloadFeeDist = () => {
+    if (!feeDistChartRef.current) return;
+    downloadSvgFromContainer(
+      feeDistChartRef.current,
+      'mempool-fee-distribution'
+    );
+  };
+
+  const handleDownloadBlockFees = () => {
+    if (!blockFeeChartRef.current) return;
+    downloadSvgFromContainer(blockFeeChartRef.current, 'mempool-block-fees');
+  };
 
   useEffect(() => {
     const ws = new WebSocket(WEBSOCKET_URLS.MAIN_WEBSOCKET);
@@ -326,73 +343,76 @@ const MempoolLatencyStats = () => {
             />
           </div>
         </div>
+
+        {/* --- Fee Rate Distribution --- */}
+        <div className="shadow p-6 relative">
+          <div className="absolute right-3 top-3 z-10">
+            <ActionIconButton
+              onClick={handleDownloadFeeDist}
+              icon={
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path d="M3 14.5A2.5 2.5 0 0 0 5.5 17h9a2.5 2.5 0 0 0 2.5-2.5V11a.75.75 0 0 0-1.5 0v3.5a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1V11a.75.75 0 0 0-1.5 0v3.5Z" />
+                  <path d="M10 2a.75.75 0 0 0-.75.75v8.19L7.53 9.22a.75.75 0 0 0-1.06 1.06l3 3a.75.75 0 0 0 1.06 0l3-3a.75.75 0 1 0-1.06-1.06L10.75 10.94V2.75A.75.75 0 0 0 10 2Z" />
+                </svg>
+              }
+            />
+          </div>
+          <h3 className="text-lg font-semibold text-center mb-4">
+            Live Fee Rate Distribution
+          </h3>
+          <div className="h-64" ref={feeDistChartRef}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={feeDistChartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                <XAxis dataKey="name" stroke="#9ca3af" />
+                <YAxis stroke="#9ca3af" />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#1f2937',
+                    borderRadius: '8px',
+                    border: 'none',
+                    color: '#ffffff',
+                    padding: '10px',
+                    fontSize: '14px',
+                  }}
+                />
+                <Bar dataKey="value" fill={colors.primary} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
       </section>
 
       {/* --- Block Fee Chart --- */}
-      <section className="shadow p-6">
-        <div className="mb-4">
+      <section className="shadow p-6 relative">
+        <div className="absolute right-3 top-0 z-10">
+          <ActionIconButton
+            onClick={handleDownloadBlockFees}
+            icon={
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
+                <path d="M3 14.5A2.5 2.5 0 0 0 5.5 17h9a2.5 2.5 0 0 0 2.5-2.5V11a.75.75 0 0 0-1.5 0v3.5a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1V11a.75.75 0 0 0-1.5 0v3.5Z" />
+                <path d="M10 2a.75.75 0 0 0-.75.75v8.19L7.53 9.22a.75.75 0 0 0-1.06 1.06l3 3a.75.75 0 0 0 1.06 0l3-3a.75.75 0 1 0-1.06-1.06L10.75 10.94V2.75A.75.75 0 0 0 10 2Z" />
+              </svg>
+            }
+          />
+        </div>
+        <div className="flex justify-between items-center mb-4 flex-wrap pt-4">
           <h2 className="text-lg font-semibold">Live Block Fees</h2>
         </div>
 
-        <ResponsiveContainer width="100%" height={400}>
-          <LineChart data={blockFeeChartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-            <XAxis dataKey="time" stroke="#9ca3af" />
-            <YAxis stroke="#9ca3af" />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: '#1f2937',
-                borderRadius: '8px',
-                border: 'none',
-                color: '#ffffff',
-                padding: '15px',
-                fontSize: '14px',
-              }}
-              formatter={(value: unknown, name: string) => {
-                const label = currencyLabels[name] || name.toUpperCase();
-                const numericValue = toFiniteNumber(value);
-
-                if (numericValue === null) {
-                  return ['--', label];
-                }
-
-                return [
-                  CURRENCY_FORMAT[name as Currency]?.(numericValue) ??
-                    `${numericValue.toFixed(2)}`,
-                  label,
-                ];
-              }}
-            />
-            <Legend />
-
-            {CURRENCIES.map((c) => {
-              const show = selectedCurrency === c;
-              return show ? (
-                <Line
-                  key={c}
-                  type="monotone"
-                  dataKey={c}
-                  stroke={currencyColors[c]}
-                  strokeWidth={2}
-                  dot={{ r: 4 }}
-                  name={c}
-                />
-              ) : null;
-            })}
-          </LineChart>
-        </ResponsiveContainer>
-      </section>
-
-      {/* --- Fee Rate Distribution --- */}
-      <section className="shadow p-6">
-        <h3 className="text-lg font-semibold text-center mb-4">
-          Live Fee Rate Distribution
-        </h3>
-        <div className="h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={feeDistChartData}>
+        <div ref={blockFeeChartRef}>
+          <ResponsiveContainer width="100%" height={400}>
+            <LineChart data={blockFeeChartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis dataKey="name" stroke="#9ca3af" />
+              <XAxis dataKey="time" stroke="#9ca3af" />
               <YAxis stroke="#9ca3af" />
               <Tooltip
                 contentStyle={{
@@ -400,15 +420,46 @@ const MempoolLatencyStats = () => {
                   borderRadius: '8px',
                   border: 'none',
                   color: '#ffffff',
-                  padding: '10px',
+                  padding: '15px',
                   fontSize: '14px',
                 }}
+                formatter={(value: unknown, name: string) => {
+                  const label = currencyLabels[name] || name.toUpperCase();
+                  const numericValue = toFiniteNumber(value);
+
+                  if (numericValue === null) {
+                    return ['--', label];
+                  }
+
+                  return [
+                    CURRENCY_FORMAT[name as Currency]?.(numericValue) ??
+                      `${numericValue.toFixed(2)}`,
+                    label,
+                  ];
+                }}
               />
-              <Bar dataKey="value" fill={colors.primary} />
-            </BarChart>
+              <Legend />
+
+              {CURRENCIES.map((c) => {
+                const show = selectedCurrency === c;
+                return show ? (
+                  <Line
+                    key={c}
+                    type="monotone"
+                    dataKey={c}
+                    stroke={currencyColors[c]}
+                    strokeWidth={2}
+                    dot={{ r: 4 }}
+                    name={c}
+                  />
+                ) : null;
+              })}
+            </LineChart>
           </ResponsiveContainer>
         </div>
       </section>
+
+
     </div>
   );
 };
