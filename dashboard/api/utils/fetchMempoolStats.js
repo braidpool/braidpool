@@ -85,7 +85,7 @@ function satsToBtcDecimalString(sats) {
 
   const satsInt = BigInt(Math.round(satsNum));
   let str = scaledIntToDecimalString(satsInt, 8);
-  
+
   if (!str.includes('.')) {
     str += '.00000000';
   } else {
@@ -94,7 +94,7 @@ function satsToBtcDecimalString(sats) {
       str += '0'.repeat(8 - frac.length);
     }
   }
-  
+
   return str;
 }
 
@@ -226,7 +226,7 @@ export async function fetchMempoolStats() {
       const fee = { sats_per_vbyte: sats, fee_btc: feeBtc };
       for (const [currency, rate] of Object.entries(btcRates)) {
         const lowerCurr = currency.toLowerCase();
-        
+
         // Total Tx Fee
         const convertedTotal = convertSatsToFiatDecimalString(totalSats, rate);
         if (convertedTotal !== null) {
