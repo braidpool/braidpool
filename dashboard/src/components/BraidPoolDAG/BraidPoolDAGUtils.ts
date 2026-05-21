@@ -12,7 +12,7 @@ export function layoutNodes(
     right: 0,
     bottom: 0,
     left: 50,
-  },
+  }
 ): Record<string, Position> {
   const positions: Record<string, Position> = {};
   const hwPathSet = new Set(hwPath);
