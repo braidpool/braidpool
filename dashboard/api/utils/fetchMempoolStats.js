@@ -117,56 +117,95 @@ export function __resetBlockFeeCurrencyRateCache() {
 
 async function getBlockFeeCurrencyRates() {
   try {
-    const results = await Promise.allSettled(
-      FIAT_CURRENCIES.map((c) =>
-        axios.get(
-          `${process.env.BITCOIN_PRICE_URL}${c}${process.env.BITCOIN_PRICE_URL_SUFFIX}`
-        )
-      )
-    );
-
     const rates = {};
+    let unifiedSuccess = false;
 
-    results.forEach((result, index) => {
-      const currency = FIAT_CURRENCIES[index];
+    const unifiedUrl =
+      process.env.BITCOIN_EXCHANGE_RATES_URL ||
+      'https://api.coinbase.com/v2/exchange-rates?currency=BTC';
 
-      if (result.status === 'fulfilled') {
-        const rawAmount = result.value?.data?.data?.amount;
-        const normalized = normalizeDecimalString(rawAmount);
+    try {
+      const unifiedRes = await axios.get(unifiedUrl);
+      const allRates = unifiedRes.data?.data?.rates;
 
-        if (normalized !== null) {
-          rates[currency] = normalized;
-          return;
+      if (allRates) {
+        for (const currency of FIAT_CURRENCIES) {
+          const rawAmount = allRates[currency];
+          const normalized = normalizeDecimalString(rawAmount);
+
+          if (normalized !== null) {
+            rates[currency] = normalized;
+          } else {
+            if (typeof lastKnownBlockFeeCurrencyRates[currency] === 'string') {
+              rates[currency] = lastKnownBlockFeeCurrencyRates[currency];
+              console.warn(
+                `[getBlockFeeCurrencyRates] Non-finite unified rate for ${currency}; using last known value.`
+              );
+            } else {
+              console.warn(
+                `[getBlockFeeCurrencyRates] Non-finite unified rate for ${currency}; omitting currency.`
+              );
+            }
+          }
         }
+        unifiedSuccess = true;
+      }
+    } catch (unifiedErr) {
+      console.warn(
+        `[getBlockFeeCurrencyRates] Unified rates API failed, falling back to individual requests: ${unifiedErr.message}`
+      );
+    }
 
-        if (typeof lastKnownBlockFeeCurrencyRates[currency] === 'string') {
-          rates[currency] = lastKnownBlockFeeCurrencyRates[currency];
+    if (!unifiedSuccess) {
+      const results = await Promise.allSettled(
+        FIAT_CURRENCIES.map((c) =>
+          axios.get(
+            `${process.env.BITCOIN_PRICE_URL}${c}${process.env.BITCOIN_PRICE_URL_SUFFIX}`
+          )
+        )
+      );
+
+      results.forEach((result, index) => {
+        const currency = FIAT_CURRENCIES[index];
+
+        if (result.status === 'fulfilled') {
+          const rawAmount = result.value?.data?.data?.amount;
+          const normalized = normalizeDecimalString(rawAmount);
+
+          if (normalized !== null) {
+            rates[currency] = normalized;
+            return;
+          }
+
+          if (typeof lastKnownBlockFeeCurrencyRates[currency] === 'string') {
+            rates[currency] = lastKnownBlockFeeCurrencyRates[currency];
+            console.warn(
+              `[getBlockFeeCurrencyRates] Non-finite rate for ${currency}; using last known value.`
+            );
+            return;
+          }
+
           console.warn(
-            `[getBlockFeeCurrencyRates] Non-finite rate for ${currency}; using last known value.`
+            `[getBlockFeeCurrencyRates] Non-finite rate for ${currency}; omitting currency.`
           );
           return;
         }
 
-        console.warn(
-          `[getBlockFeeCurrencyRates] Non-finite rate for ${currency}; omitting currency.`
+        const reasonMessage = result.reason?.message || result.reason;
+
+        if (typeof lastKnownBlockFeeCurrencyRates[currency] === 'string') {
+          rates[currency] = lastKnownBlockFeeCurrencyRates[currency];
+          console.warn(
+            `[getBlockFeeCurrencyRates] Failed to fetch ${currency}; using last known value: ${reasonMessage}`
+          );
+          return;
+        }
+
+        console.error(
+          `[getBlockFeeCurrencyRates] Failed to fetch ${currency}; omitting currency: ${reasonMessage}`
         );
-        return;
-      }
-
-      const reasonMessage = result.reason?.message || result.reason;
-
-      if (typeof lastKnownBlockFeeCurrencyRates[currency] === 'string') {
-        rates[currency] = lastKnownBlockFeeCurrencyRates[currency];
-        console.warn(
-          `[getBlockFeeCurrencyRates] Failed to fetch ${currency}; using last known value: ${reasonMessage}`
-        );
-        return;
-      }
-
-      console.error(
-        `[getBlockFeeCurrencyRates] Failed to fetch ${currency}; omitting currency: ${reasonMessage}`
-      );
-    });
+      });
+    }
 
     lastKnownBlockFeeCurrencyRates = {
       ...lastKnownBlockFeeCurrencyRates,
