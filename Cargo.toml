@@ -1,6 +1,6 @@
 #Virtual workspace not creating a root package along with workspace as not needed .
 [workspace]
-members = ["node", "braidpool-cli"]
+members = ["node","benchmarks","braidpool-cli"]
 resolver = "3"
 
 [workspace.package]

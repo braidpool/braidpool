@@ -1,0 +1,16 @@
+[package]
+name = "braidpool-benchmarks"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+node = { path = "../node" }
+criterion = { version = "0.5", features = ["html_reports"] }
+rand = "0.8"
+bitcoin = { workspace = true }
+rayon = "1.10"
+
+[[bench]]
+name = "cohorts_performance"
+harness = false
+path = "benches/cohorts_performance.rs"
