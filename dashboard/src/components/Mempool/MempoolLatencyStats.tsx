@@ -211,6 +211,7 @@ const MempoolLatencyStats = () => {
           <div className="absolute right-3 top-3 z-10">
             <ActionIconButton
               onClick={handleDownloadFeeDist}
+              ariaLabel="Download Fee Distribution"
               icon={
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -254,6 +255,7 @@ const MempoolLatencyStats = () => {
         <div className="absolute right-3 top-0 z-10">
           <ActionIconButton
             onClick={handleDownloadBlockFees}
+            ariaLabel="Download Block Fees"
             icon={
               <svg
                 xmlns="http://www.w3.org/2000/svg"

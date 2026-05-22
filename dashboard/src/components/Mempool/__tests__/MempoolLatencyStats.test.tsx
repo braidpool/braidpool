@@ -140,7 +140,7 @@ interface MockWebSocketEventHandlers {
 
 class MockWebSocket implements WebSocket, MockWebSocketEventHandlers {
   readonly url: string;
-  readyState: number;
+  readyState: WebSocket['readyState'] = 1;
   onopen: ((event: Event) => void) | null = null;
   onclose: ((event: CloseEvent) => void) | null = null;
   onerror: ((event: Event) => void) | null = null;
