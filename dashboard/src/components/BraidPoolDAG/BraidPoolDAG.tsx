@@ -645,7 +645,7 @@ const GraphVisualization: React.FC = () => {
                           .map(
                             (p) => `
                           <div style="margin: 2px 0; font-size: 10px;">
-                            <span style="color: #FF8500;">→
+                            <span style="color: #FF8500;">→</span>
                             <span style="font-family: monospace; color: #48CAE4;">${p.slice(0, 12)}...${p.slice(-8)}</span>
                           </div>
                         `
