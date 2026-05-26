@@ -419,7 +419,7 @@ const GraphVisualization: React.FC = () => {
 
     const hwPath = graphData.highest_work_path;
     const cohorts = graphData.cohorts;
-    const positions = layoutNodes(allNodes, hwPath, {}, {});
+    const positions = layoutNodes(allNodes, hwPath, {}, svgHeight, {}, margin);
     const hwPathSet = new Set(hwPath);
 
     // Calculate required height based on node positions

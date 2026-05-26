@@ -6,6 +6,7 @@ export function layoutNodes(
   allNodes: GraphNode[],
   hwPath: string[],
   beadWork: Record<string, number> = {},
+  svgHeight:number,
   previousCohortTips: Record<string, Position> = {},
   margin: { top: number; right: number; bottom: number; left: number } = {
     top: 0,
@@ -16,7 +17,7 @@ export function layoutNodes(
 ): Record<string, Position> {
   const positions: Record<string, Position> = {};
   const hwPathSet = new Set(hwPath);
-  const centerY = margin.top + 600;
+  const centerY = margin.top + svgHeight / 2;
   const allParents: Record<string, Set<string>> = {};
   const allChildren: Record<string, Set<string>> = {};
   const workValues: Record<string, number> = {};
