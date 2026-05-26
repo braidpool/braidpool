@@ -361,7 +361,7 @@ const GraphVisualization: React.FC = () => {
     }
 
     setDefaultZoom((prevZoom) => {
-      const nextZoom = prevZoom + 0.1;
+      const nextZoom = Math.min(prevZoom + 0.1, 5);
       zoomTransformRef.current = buildZoomTransform(nextZoom);
       return nextZoom;
     });
@@ -864,7 +864,7 @@ const GraphVisualization: React.FC = () => {
           />
           <div
             ref={tooltipRef}
-            className="fixed  text-white border  rounded p-2 shadow-lg pointer-events-none z-10 bottom-5 right-5 mb-[200px]  border-gray-600 backdrop-blur-lg  "
+            className="fixed bg-gray-800 text-white border rounded p-2 shadow-lg pointer-events-none z-10 bottom-5 right-5 mb-[200px] border-gray-600 backdrop-blur-lg"
           ></div>
         </div>
       </div>
@@ -937,15 +937,10 @@ const GraphVisualization: React.FC = () => {
                       </td>
                       <td className="px-3 py-3 text-center">
                         <span className="inline-block px-2 py-1  bg-opacity-20  rounded text-xs font-semibold">
-                          {(() => {
-                            const currentIndex = graphData?.cohorts.findIndex(
-                              (c: string[]) => c.includes(bead.hash)
-                            );
-                            return currentIndex !== undefined &&
-                              currentIndex !== -1
-                              ? currentIndex
-                              : 'N/A';
-                          })()}
+                          {bead.cohortIndex !== undefined &&
+                          bead.cohortIndex !== -1
+                            ? bead.cohortIndex
+                            : 'N/A'}
                         </span>
                       </td>
                       <td className="px-3 py-3 text-center">
