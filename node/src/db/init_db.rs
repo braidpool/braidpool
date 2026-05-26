@@ -7,10 +7,6 @@ use tracing::{debug, error, info, trace, warn};
 static SCHEMA_SQL: &str = include_str!("schema.sql");
 
 /// Gets the braidpool data directory in a cross-platform manner.
-///
-/// - Linux: `~/.braidpool/`
-/// - macOS: `~/Library/Application Support/braidpool/`
-/// - Windows: `%USERPROFILE%\.braidpool\` or `%APPDATA%\braidpool\`
 fn get_data_dir() -> Result<PathBuf, DBErrors> {
     #[cfg(target_os = "linux")]
     {

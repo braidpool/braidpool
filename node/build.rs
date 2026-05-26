@@ -22,7 +22,6 @@ fn main() {
     //  Reading architecture and OS
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
-    let target_env = env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
 
     let platform_cfg = match target_os.as_str() {
         "macos" => "macos",
@@ -39,13 +38,13 @@ fn main() {
     };
     println!("cargo::rustc-cfg=target_cpu_arch=\"{arch_cfg}\"");
 
-    configure_platform_linking(&target_os, &target_arch, &target_env);
+    configure_platform_linking(&target_os, &target_arch);
 
     compile_schemas(&schema_dir);
 }
 
 /// linker instructions according to OS and architecture
-fn configure_platform_linking(target_os: &str, target_arch: &str, target_env: &str) {
+fn configure_platform_linking(target_os: &str, target_arch: &str) {
     match target_os {
         "macos" => {
             // Homebrew installs differ by CPU architecture on macOS.

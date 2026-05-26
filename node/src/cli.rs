@@ -74,11 +74,9 @@ pub struct Cli {
     #[arg(long, default_value = "127.0.0.1:6682")]
     pub rpc_bind: SocketAddr,
 
-
-    /// Path to Bitcoin Core IPC socket (Unix domain socket on Linux/macOS, named pipe on Windows)
+    /// Path to Bitcoin Core IPC socket (Unix domain socket on Linux/macOS)
     #[arg(long, default_value = DEFAULT_IPC_SOCKET)]
     pub ipc_socket: String,
-
 }
 
 #[cfg(test)]
