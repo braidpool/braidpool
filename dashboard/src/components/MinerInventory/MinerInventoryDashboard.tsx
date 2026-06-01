@@ -19,7 +19,6 @@ const MinerInventoryDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [newMinerIP, setNewMinerIP] = useState('');
-  const [autoRefresh, setAutoRefresh] = useState(true);
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<
@@ -38,7 +37,72 @@ const MinerInventoryDashboard = () => {
   const [expandedAlerts, setExpandedAlerts] = useState<Record<string, boolean>>(
     {}
   );
-  const [lastActiveUpdate, setLastActiveUpdate] = useState<Date | null>(null);
+
+  const determineStatus = (data: any): 'online' | 'warning' | 'offline' => {
+    if (data.is_online === false) return 'offline';
+    if (!data.is_mining || (data.hashrate_current || 0) === 0) return 'offline';
+    if (
+      (data.temperature || 0) > THRESHOLDS.ASIC_TEMP_CRITICAL ||
+      (data.vr_temperature || 0) > THRESHOLDS.VR_TEMP_CRITICAL ||
+      data.errors?.length > 0
+    )
+      return 'warning';
+    return 'online';
+  };
+
+  const mapApiToMiner = (m: any, lastSeenFallback = 'Never'): Miner => ({
+    id: m.id,
+    ip: m.ip,
+    hostname: m.hostname || 'Unknown',
+    mac: m.mac || 'Unknown',
+    make: m.make || 'Unknown',
+    model: m.model || 'Unknown',
+    firmware: m.firmware || 'Unknown',
+    status: determineStatus(m),
+    is_mining: m.is_mining || false,
+    uptime: m.uptime || 0,
+    errors: m.errors || [],
+    alerts: 0,
+    lastSeen: m.last_seen
+      ? new Date(m.last_seen).toLocaleTimeString()
+      : lastSeenFallback,
+    hashrate_current: m.hashrate_current || 0,
+    hashrate_avg: m.hashrate_avg || 0,
+    expected_hashrate: m.expected_hashrate || 0,
+    temperature: m.temperature || 0,
+    temperature_max: m.temperature_max || 0,
+    vr_temperature: m.vr_temperature || 0,
+    power_usage: m.power_usage || 0,
+    power_limit: m.power_limit || 0,
+    efficiency: m.efficiency || 0,
+    voltage: m.voltage || 0,
+    fan_speeds: m.fan_speeds || [],
+    chip_count: m.chip_count || 0,
+    primary_pool: m.primary_pool || 'No Pool',
+    pools: m.pools || [],
+  });
+
+  useEffect(() => {
+    const loadMinersFromDB = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch(`${API_URLS.MINER_DEVICE_URL}/api/miners`);
+        const data = await response.json();
+        if (data.success && data.miners) {
+          setMiners(data.miners.map((m: any) => mapApiToMiner(m)));
+          if (data.miners.length > 0) {
+            setLastUpdate(new Date());
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load miners from database:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadMinersFromDB();
+  }, []);
+
   useEffect(() => {
     minersRef.current = miners;
   }, [miners]);
@@ -115,17 +179,6 @@ const MinerInventoryDashboard = () => {
   }, [miners]);
 
   // Helper functions
-  const determineStatus = (data: any): 'online' | 'warning' | 'offline' => {
-    if (!data.is_mining || (data.hashrate_current || 0) === 0) return 'offline';
-    if (
-      (data.temperature || 0) > THRESHOLDS.ASIC_TEMP_CRITICAL ||
-      (data.vr_temperature || 0) > THRESHOLDS.VR_TEMP_CRITICAL ||
-      data.errors?.length > 0
-    )
-      return 'warning';
-    return 'online';
-  };
-
   const getAlerts = (miner: Miner): Alert[] => {
     if (miner.status === 'offline') return [];
     const alerts: Alert[] = [];
@@ -147,120 +200,43 @@ const MinerInventoryDashboard = () => {
     return alerts;
   };
 
-  const fetchMinerData = async (ip: string): Promise<Miner | null> => {
-    try {
-      const response = await fetch(
-        `${API_URLS.MINER_DEVICE_URL}/api/miners/live?ip=${ip}`,
-        {
-          headers: { Accept: 'application/json' },
-        }
-      );
-
-      const responseData = await response.json();
-
-      if (!response.ok || !responseData.success) {
-        console.error(`Failed to fetch data for ${ip}:`, responseData.error);
-        return null;
-      }
-
-      const data = responseData.data;
-
-      const miner: Miner = {
-        id: data.mac || ip + '_' + Date.now(),
-        ip: data.ip || ip,
-        hostname: data.hostname || 'Unknown',
-        mac: data.mac || 'Unknown',
-        make: data.make || 'Unknown',
-        model: data.model || 'Unknown',
-        firmware: data.firmware || 'Unknown',
-
-        status: determineStatus(data),
-        is_mining: data.is_mining || false,
-        uptime: data.uptime || 0,
-        errors: data.errors || [],
-        alerts: 0,
-        lastSeen: new Date().toLocaleTimeString(),
-
-        hashrate_current: data.hashrate_current || 0,
-        hashrate_avg: data.hashrate_avg || 0,
-        expected_hashrate: data.expected_hashrate || 0,
-
-        temperature: data.temperature || 0,
-        temperature_max: data.temperature_max || 0,
-        vr_temperature: data.vr_temperature || 0,
-
-        power_usage: data.power_usage || 0,
-        power_limit: data.power_limit || 0,
-        efficiency: data.efficiency || 0,
-        voltage: data.voltage || 0,
-
-        fan_speeds: data.fan_speeds || [],
-        chip_count: data.chip_count || 0,
-
-        primary_pool: data.primary_pool || 'No Pool',
-        pools: data.pools || [],
-      };
-
-      return miner;
-    } catch (err) {
-      console.error(`Error fetching data for ${ip}:`, err);
-      return null;
-    }
-  };
-
   const refreshAllMiners = async () => {
     const currentMiners = minersRef.current;
     if (currentMiners.length === 0) return;
 
     setLoading(true);
 
-    const results = await Promise.all(
-      currentMiners.map((m) => fetchMinerData(m.ip).catch(() => null))
-    );
+    try {
+      const response = await fetch(
+        `${API_URLS.MINER_DEVICE_URL}/api/miners/refresh/all`,
+        {
+          method: 'POST',
+        }
+      );
 
-    const updatedMiners: Miner[] = results.map((updated, idx) => {
-      const orig = currentMiners[idx];
-      if (updated) {
-        updated.id = orig.id;
-        return updated;
+      const result = await response.json();
+
+      if (result.miners) {
+        const updatedMiners: Miner[] = result.miners.map((m: any) =>
+          mapApiToMiner(m.miner || m, new Date().toLocaleTimeString())
+        );
+        setMiners(updatedMiners);
+        setLastUpdate(new Date());
       }
-      return {
-        ...orig,
-        status: 'offline' as const,
-        is_mining: false,
-        lastSeen: new Date().toLocaleTimeString(),
-        alerts: 0,
-        hashrate_current: 0,
-        hashrate_avg: 0,
-        expected_hashrate: 0,
-        temperature: 0,
-        temperature_max: 0,
-        vr_temperature: 0,
-        power_usage: 0,
-        efficiency: 0,
-        voltage: 0,
-      };
-    });
-
-    setMiners(updatedMiners);
-    setLastUpdate(new Date());
-
-    if (
-      updatedMiners.some(
-        (miner) => miner.status === 'online' || miner.status === 'warning'
-      )
-    ) {
-      setLastActiveUpdate(new Date());
+    } catch (err) {
+      console.error('Error refreshing miners:', err);
     }
+
     setLoading(false);
   };
+
   const refreshInterval = REFRESH_INTERVAL;
   useEffect(() => {
-    if (!autoRefresh || miners.length === 0) return;
+    if (miners.length === 0) return;
 
     const interval = setInterval(refreshAllMiners, refreshInterval * 1000);
     return () => clearInterval(interval);
-  }, [autoRefresh, refreshInterval, miners.length]);
+  }, [refreshInterval, miners.length]);
 
   const addMinerByIP = async () => {
     if (!newMinerIP.trim()) {
@@ -271,26 +247,63 @@ const MinerInventoryDashboard = () => {
     setLoading(true);
     setError(null);
 
-    const newMiner = await fetchMinerData(newMinerIP.trim());
-
-    if (newMiner) {
-      setMiners((prev) => {
-        const exists = prev.find((m) => m.ip === newMiner.ip);
-        if (exists) {
-          return prev.map((m) =>
-            m.ip === newMiner.ip ? { ...newMiner, id: m.id } : m
-          );
-        }
-        return [...prev, newMiner];
+    try {
+      const response = await fetch(`${API_URLS.MINER_DEVICE_URL}/api/miners`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ip: newMinerIP.trim() }),
       });
-      setNewMinerIP('');
-      setLastUpdate(new Date());
-    } else {
-      const errorMsg = `Could not connect to miner at ${newMinerIP.trim()}`;
-      setError(errorMsg);
+
+      const result = await response.json();
+
+      if (result.success && result.miner) {
+        const newMiner = mapApiToMiner(result.miner, 'Now');
+
+        setMiners((prev) => {
+          const exists = prev.find((existing) => existing.ip === newMiner.ip);
+          if (exists) {
+            return prev.map((existing) =>
+              existing.ip === newMiner.ip ? newMiner : existing
+            );
+          }
+          return [...prev, newMiner];
+        });
+        setNewMinerIP('');
+        setLastUpdate(new Date());
+
+        if (result.warning) {
+          setError(result.warning);
+        }
+      } else {
+        setError(result.error || 'Failed to add miner');
+      }
+    } catch (err) {
+      console.error('Error adding miner:', err);
+      setError(`Could not connect to miner at ${newMinerIP.trim()}`);
     }
 
     setLoading(false);
+  };
+
+  const deleteMiner = async (minerId: string) => {
+    try {
+      const response = await fetch(
+        `${API_URLS.MINER_DEVICE_URL}/api/miners/${minerId}`,
+        {
+          method: 'DELETE',
+        }
+      );
+
+      const result = await response.json();
+      if (result.success) {
+        setMiners((prev) => prev.filter((m) => m.id !== minerId));
+      } else {
+        setError(result.error || 'Failed to delete miner');
+      }
+    } catch (err) {
+      console.error('Error deleting miner:', err);
+      setError('Failed to delete miner');
+    }
   };
 
   const handleSearch = () => setSearchQuery(searchInput.trim());
@@ -523,6 +536,7 @@ const MinerInventoryDashboard = () => {
                 expandedAlerts={expandedAlerts}
                 setExpandedAlerts={setExpandedAlerts}
                 statusStyles={statusStyles}
+                onDelete={deleteMiner}
               />
             )}
           </>
