@@ -2554,8 +2554,17 @@ mod test {
         assert_eq!(client3.extranonce1.len(), EXTRANONCE1_SIZE);
 
         // extranonce1 must match the big-endian encoding of connection_id
-        assert_eq!(client1.extranonce1, client1.connection_id().to_be_bytes().to_vec());
-        assert_eq!(client2.extranonce1, client2.connection_id().to_be_bytes().to_vec());
-        assert_eq!(client3.extranonce1, client3.connection_id().to_be_bytes().to_vec());
+        assert_eq!(
+            client1.extranonce1,
+            client1.connection_id().to_be_bytes().to_vec()
+        );
+        assert_eq!(
+            client2.extranonce1,
+            client2.connection_id().to_be_bytes().to_vec()
+        );
+        assert_eq!(
+            client3.extranonce1,
+            client3.connection_id().to_be_bytes().to_vec()
+        );
     }
 }
