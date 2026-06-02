@@ -13,13 +13,10 @@ uvicorn miner_api.main:app --host 0.0.0.0 --port 5001
 ### Health
 - `GET /api/health` - Health check
 
-### Live Miner Query (No Storage)
-- `GET /api/miners/live?ip=xxx.xxx.x.xxx` - Query miner directly without storing
-
 ### Stored Miners (Database-backed)
 - `POST /api/miners` - Add a miner device to database
   ```json
-  {"ip": "192.168.1.100", "name": "Miner 1"}
+  {"ip": "xxx.xxx.x.xxx", "name": "Miner 1"}
   ```
 - `GET /api/miners` - Get all stored miners with cached data
 - `GET /api/miners/{id}` - Get a specific miner by ID
@@ -32,8 +29,6 @@ uvicorn miner_api.main:app --host 0.0.0.0 --port 5001
 - `POST /api/miners/refresh/all` - Manually refresh all miners' data
 
 
-
 ## Interactive Docs
-
 - Swagger UI: http://localhost:5001/docs
 - ReDoc: http://localhost:5001/redoc

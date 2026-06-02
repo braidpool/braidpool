@@ -119,8 +119,13 @@ async def update_miner(
     """Update miner details (e.g., name)."""
     result = await MinerDBService.update_miner(db, miner_id, request.name)
     if not result.get("success"):
+        if result.get("not_found"):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=result
+            )
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=result
         )
     return result
@@ -131,8 +136,13 @@ async def delete_miner(miner_id: str, db: AsyncSession = Depends(get_db)):
     """Remove a miner device from the database."""
     result = await MinerDBService.delete_miner(db, miner_id)
     if not result.get("success"):
+        if result.get("not_found"):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=result
+            )
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=result
         )
     return result

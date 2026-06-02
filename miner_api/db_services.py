@@ -82,10 +82,9 @@ class MinerDBService:
     
     @staticmethod
     async def update_miner(db: AsyncSession, miner_id: str, name: Optional[str] = None) -> dict:
-        """Update miner details (currently only name)."""
         miner = await MinerDBService.get_miner_by_id(db, miner_id)
         if not miner:
-            return {"success": False, "error": "Miner not found"}
+            return {"success": False, "error": "Miner not found", "not_found": True}
         
         if name is not None:
             miner.name = name
@@ -97,20 +96,24 @@ class MinerDBService:
         except Exception as e:
             await db.rollback()
             logger.error(f"Database error updating miner {miner_id}: {e}")
-            return {"success": False, "error": "Database error"}
+            return {"success": False, "error": "Database error", "db_error": True}
         
         return {"success": True, "miner": miner.to_dict()}
     
     @staticmethod
     async def delete_miner(db: AsyncSession, miner_id: str) -> dict:
-        """Delete a miner from the database."""
         miner = await MinerDBService.get_miner_by_id(db, miner_id)
         if not miner:
-            return {"success": False, "error": "Miner not found"}
+            return {"success": False, "error": "Miner not found", "not_found": True}
         
         ip = miner.ip
-        await db.delete(miner)
-        await db.commit()  # Commit immediately to persist deletion
+        try:
+            await db.delete(miner)
+            await db.commit()
+        except Exception as e:
+            await db.rollback()
+            logger.error(f"Database error deleting miner {miner_id}: {e}")
+            return {"success": False, "error": "Database error", "db_error": True}
         
         logger.info(f"Deleted miner device: {ip}")
         
@@ -127,7 +130,6 @@ class MinerDBService:
     
     @staticmethod
     async def _update_miner_data(db: AsyncSession, miner: MinerDevice) -> dict:
-        """Internal method to fetch and update miner data from device."""
         result = await MinerService.get_miner_data(miner.ip)
         
         if not result.get("success"):
@@ -192,29 +194,100 @@ class MinerDBService:
         }
     
     @staticmethod
+    async def _apply_device_data(db: AsyncSession, miner: MinerDevice, device_result: dict) -> dict:
+        if not device_result.get("success"):
+            miner.is_online = False
+            miner.last_error = device_result.get("error", "Failed to connect")
+            db.add(miner)
+            return {
+                "success": False,
+                "ip": miner.ip,
+                "error": device_result.get("error"),
+                "miner": miner.to_dict()
+            }
+        
+        # Update all fields from fresh data
+        data = device_result["data"]
+        miner.hostname = data.get("hostname")
+        miner.mac = data.get("mac")
+        miner.make = data.get("make")
+        miner.model = data.get("model")
+        miner.firmware = data.get("firmware")
+        miner.hashrate_current = data.get("hashrate_current")
+        miner.hashrate_avg = data.get("hashrate_avg")
+        miner.expected_hashrate = data.get("expected_hashrate")
+        miner.temperature = data.get("temperature")
+        miner.temperature_max = data.get("temperature_max")
+        miner.vr_temperature = data.get("vr_temperature")
+        miner.power_usage = data.get("power_usage")
+        miner.power_limit = data.get("power_limit")
+        miner.efficiency = data.get("efficiency")
+        miner.voltage = data.get("voltage")
+        miner.fan_speeds = data.get("fan_speeds", [])
+        miner.chip_count = data.get("chip_count")
+        miner.is_mining = data.get("is_mining")
+        miner.errors = data.get("errors", [])
+        miner.uptime = data.get("uptime")
+        
+        # Handle pools
+        pools_data = []
+        for pool in data.get("pools", []):
+            if isinstance(pool, dict):
+                pools_data.append(pool)
+            else:
+                pools_data.append(pool.model_dump() if hasattr(pool, 'model_dump') else dict(pool))
+        miner.pools = pools_data
+        miner.primary_pool = data.get("primary_pool", "No Pool")
+        
+        miner.api_version = data.get("api_version")
+        miner.is_online = True
+        miner.last_error = None
+        miner.last_seen = datetime.now(timezone.utc)
+        
+        db.add(miner)
+        
+        return {
+            "success": True,
+            "ip": miner.ip,
+            "miner": miner.to_dict()
+        }
+    
+    @staticmethod
     async def refresh_all_miners(db: AsyncSession) -> dict:
-        """Refresh data for all stored miners in parallel."""
         miners = await MinerDBService.get_all_miners(db)
         
         if not miners:
             return {"total": 0, "success": 0, "failed": 0, "miners": []}
         
-        # Parallel refresh for better performance
-        tasks = [MinerDBService._update_miner_data(db, miner) for miner in miners]
-        results_list = await asyncio.gather(*tasks, return_exceptions=True)
+        # Fetch device data in parallel (no DB involvement)
+        async def fetch_device_data(miner: MinerDevice) -> tuple[MinerDevice, dict]:
+            """Fetch data from device without touching DB."""
+            try:
+                result = await MinerService.get_miner_data(miner.ip)
+                return (miner, result)
+            except Exception as e:
+                return (miner, {"success": False, "error": str(e)})
+        
+        tasks = [fetch_device_data(miner) for miner in miners]
+        fetch_results = await asyncio.gather(*tasks, return_exceptions=True)
         
         results = {"total": len(miners), "success": 0, "failed": 0, "miners": []}
         
-        for result in results_list:
-            if isinstance(result, Exception):
+        for fetch_result in fetch_results:
+            if isinstance(fetch_result, Exception):
                 results["failed"] += 1
-                results["miners"].append({"success": False, "error": str(result)})
-            elif result.get("success"):
+                results["miners"].append({"success": False, "error": str(fetch_result)})
+                continue
+            
+            miner, device_result = fetch_result
+            update_result = await MinerDBService._apply_device_data(db, miner, device_result)
+            
+            if update_result.get("success"):
                 results["success"] += 1
-                results["miners"].append(result)
             else:
                 results["failed"] += 1
-                results["miners"].append(result)
+            results["miners"].append(update_result)
+        await db.commit()
         
         logger.info(f"Refreshed {results['success']}/{results['total']} miners successfully")
         

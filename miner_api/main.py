@@ -32,7 +32,6 @@ async def periodic_miner_refresh():
             async with async_session_factory() as db:
                 try:
                     result = await MinerDBService.refresh_all_miners(db)
-                    await db.commit()
                     logger.debug(
                         f"Periodic refresh: {result['success']}/{result['total']} miners updated"
                     )
