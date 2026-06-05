@@ -1960,11 +1960,13 @@ pub async fn test_get_miner_info_rpc() {
     {
         let mut map = stratum_map.write().await;
         let (tx, _) = mpsc::channel(1);
+        let (control_tx, _) = mpsc::channel(1);
         map.downstream_channel_mapping.insert(
             "1.2.3.4:5678".to_string(),
             stratum::ConnectionInfo {
                 connection_id: 0,
                 sender: tx,
+                control_tx,
             },
         );
     }

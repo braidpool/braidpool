@@ -13,7 +13,6 @@ use futures::StreamExt;
 use libp2p::floodsub::Topic;
 use libp2p::swarm::SwarmEvent;
 use libp2p::{Multiaddr, Swarm, SwarmBuilder};
-use std::collections::HashSet;
 use std::str::FromStr;
 use tokio::time::timeout;
 
@@ -25,7 +24,7 @@ fn create_test_bead() -> Bead {
         .unwrap();
     let socket = String::from("127.0.0.1");
     let time_hash_set = TimeVec(Vec::new());
-    let parent_hash_set: HashSet<BlockHash> = HashSet::new();
+    let parent_hash_set: Vec<BlockHash> = Vec::new();
     let weak_target = CompactTarget::from_consensus(486604799);
     let min_target = CompactTarget::from_consensus(486604799);
     let time_val = Time::from_consensus(1653195600).unwrap();

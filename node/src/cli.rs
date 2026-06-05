@@ -95,8 +95,8 @@ pub struct Cli {
     pub upstream_password: String,
 
     /// Weak difficulty for the miner in audit mode
-    #[arg(long, default_value = "100.0")]
-    pub miner_difficulty: f64,
+    #[arg(long)]
+    pub miner_difficulty: Option<f64>,
 }
 
 #[cfg(test)]

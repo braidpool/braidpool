@@ -81,7 +81,7 @@ pub mod test_utility_functions {
                     current_bead
                         .committed_metadata
                         .parents
-                        .insert(parent_bead_block_hash);
+                        .push(parent_bead_block_hash);
 
                     parent_idx_set.insert(*parent_bead_idx);
                 }
@@ -174,7 +174,7 @@ pub mod test_utility_functions {
     #[cfg(test)]
     pub struct TestCommittedMetadataBuilder {
         transaction_ids: Vec<Txid>,
-        parents: std::collections::HashSet<BeadHash>,
+        parents: Vec<BeadHash>,
         parent_bead_timestamps: Option<TimeVec>,
         payout_address: Option<String>,
         start_timestamp: Option<Time>,
@@ -189,7 +189,7 @@ pub mod test_utility_functions {
         pub fn new() -> Self {
             Self {
                 transaction_ids: Vec::new(),
-                parents: HashSet::new(),
+                parents: Vec::new(),
                 parent_bead_timestamps: None,
                 payout_address: None,
                 start_timestamp: None,
@@ -205,7 +205,7 @@ pub mod test_utility_functions {
             self
         }
 
-        pub fn parents(mut self, parents: HashSet<BeadHash>) -> Self {
+        pub fn parents(mut self, parents: Vec<BeadHash>) -> Self {
             self.parents = parents;
             self
         }
@@ -331,7 +331,7 @@ pub mod test_utility_functions {
         let public_key = random_public_key;
         let socket: String = String::from("127.0.0.1");
         let time_hash_set = TimeVec(Vec::new());
-        let parent_hash_set: HashSet<BlockHash> = HashSet::new();
+        let parent_hash_set: Vec<BlockHash> = Vec::new();
         let weak_target = CompactTarget::from_unprefixed_hex("1d00ffff").unwrap();
         let min_target = CompactTarget::from_unprefixed_hex("1d00ffff").unwrap();
         let time_val = current_time;

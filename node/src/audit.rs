@@ -1,9 +1,14 @@
 use crate::bead::Bead;
 use crate::braid::{AddBeadStatus, Braid};
+use crate::committed_metadata::CommittedMetadata;
+use crate::db::audit_db_handlers::AuditDBHandler;
+use crate::uncommitted_metadata::UnCommittedMetadata;
+use crate::{TimeVec, TxIdVec};
 use bitcoin::consensus::serialize;
 use bitcoin::hashes::sha256d;
-use bitcoin::BlockHash;
+use bitcoin::{BlockHash, BlockHeader, CompactTarget, TxMerkleNode};
 use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -19,8 +24,78 @@ pub const TOTAL_EXTRANONCE1_BYTES: usize =
 
 pub type ShareId = BlockHash;
 
-/// Compute composite hash for audit mode: hash(block_header || committed_metadata)
-/// This is ONLY used in audit mode where we cannot use OP_RETURN commitments, which
+/// Create a genesis bead for audit mode with empty parents
+fn create_genesis_bead_for_audit() -> Result<Bead, String> {
+    let genesis_time = bitcoin::absolute::Time::from_consensus(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|e| format!("System time error: {}", e))?
+            .as_secs() as u32,
+    )
+    .map_err(|_| "Invalid genesis timestamp")?;
+
+    // Create genesis block header
+    let block_header = BlockHeader {
+        version: bitcoin::block::Version::ONE,
+        prev_blockhash: BlockHash::from_byte_array([0u8; 32]),
+        merkle_root: TxMerkleNode::from_byte_array([0u8; 32]),
+        time: bitcoin::BlockTime::from_u32(genesis_time.to_consensus_u32()),
+        bits: CompactTarget::from_consensus(0x1d00ffff),
+        nonce: 0,
+    };
+
+    let public_key = "020202020202020202020202020202020202020202020202020202020202020202"
+        .parse::<bitcoin::PublicKey>()
+        .unwrap();
+
+    // Create committed metadata with no parents
+    let committed_metadata = CommittedMetadata {
+        transaction_ids: TxIdVec(Vec::new()),
+        parents: Vec::new(),
+        parent_bead_timestamps: TimeVec(Vec::new()),
+        payout_address: "bc1qgdjqv0av3q56jvd82tkdjpy7gdp9ut8tlqmgrpmv24sq90ecnvqqjwvw97"
+            .to_string(),
+        start_timestamp: genesis_time,
+        comm_pub_key: public_key,
+        min_target: CompactTarget::from_consensus(0x1d00ffff),
+        weak_target: CompactTarget::from_consensus(0x1d00ffff),
+        miner_ip: "system".to_string(),
+    };
+
+    let default_sig_hex = "3046022100839c1fbc5304de944f697c9f4b1d01d1faeba32d751c0f7acb21ac8a0f436a72022100e89bd46bb3a5a62adc679f659b7ce876d83ee297c7a5587b2011c4fcc72eab45";
+    let default_sig_bytes =
+        hex::decode(default_sig_hex).map_err(|e| format!("Invalid signature hex: {}", e))?;
+    let default_sig = bitcoin::ecdsa::Signature {
+        signature: bitcoin::secp256k1::ecdsa::Signature::from_der(&default_sig_bytes)
+            .map_err(|e| format!("Invalid signature DER: {}", e))?,
+        sighash_type: bitcoin::sighash::EcdsaSighashType::All,
+    };
+
+    // Create uncommitted metadata
+    let uncommitted_metadata = UnCommittedMetadata {
+        extra_nonce_1: 0,
+        extra_nonce_2: 0,
+        broadcast_timestamp: genesis_time,
+        signature: default_sig,
+    };
+
+    let genesis_bead = Bead {
+        block_header,
+        committed_metadata,
+        uncommitted_metadata,
+    };
+
+    info!(
+        block_hash = %genesis_bead.block_header.block_hash(),
+        composite_hash = %compute_audit_bead_hash(&genesis_bead),
+        "Genesis bead created"
+    );
+
+    Ok(genesis_bead)
+}
+
+/// Compute composite hash for audit mode, hash(block_header || committed_metadata)
+/// This is only used in audit mode where we cannot use OP_RETURN commitments, which
 /// we will use as an extranonce commitment.
 pub fn compute_audit_bead_hash(bead: &Bead) -> BlockHash {
     let header_bytes = serialize(&bead.block_header);
@@ -29,6 +104,48 @@ pub fn compute_audit_bead_hash(bead: &Bead) -> BlockHash {
     combined.extend_from_slice(&header_bytes);
     combined.extend_from_slice(&metadata_bytes);
     BlockHash::from_byte_array(sha256d::Hash::hash(&combined).to_byte_array())
+}
+
+/// Defined rule for comparing two 32-byte hashes.
+fn compare_hash(a: &BlockHash, b: &BlockHash) -> Ordering {
+    let a_bytes = a.as_byte_array();
+    let b_bytes = b.as_byte_array();
+
+    // Compare byte-by-byte from left to right
+    for i in 0..32 {
+        if a_bytes[i] < b_bytes[i] {
+            return Ordering::Less;
+        } else if a_bytes[i] > b_bytes[i] {
+            return Ordering::Greater;
+        }
+    }
+    error!("A very rare event has occurred, the chances of this are fewer than the atoms in the observable universe.");
+    Ordering::Equal
+}
+
+/// Computes a deterministic generation hash by concatenating all current DAG tips using compare_hash function.
+/// This is used for calculating the current commitment by combining the composite hash of the current briad tips,
+/// by doing this we are commiting to the entire set of tips in a variable interval. Now future beads will
+/// point/contain this commitment.
+pub fn compute_generation_hash(
+    tips: &[(BlockHash, bitcoin::absolute::Time)],
+) -> Result<BlockHash, &'static str> {
+    if tips.is_empty() {
+        return Err("Cannot compute generation hash, tips array is empty. Genesis bead must be loaded first.");
+    }
+
+    let mut consensus_tips: Vec<BlockHash> = tips.iter().map(|(hash, _)| *hash).collect();
+    consensus_tips.sort_unstable_by(compare_hash);
+
+    // Concatenate all the sorted composite hashes together
+    let mut combined_bytes = Vec::with_capacity(consensus_tips.len() * 32);
+    for tip_hash in consensus_tips {
+        combined_bytes.extend_from_slice(tip_hash.as_byte_array());
+    }
+
+    let generation_hash = sha256d::Hash::hash(&combined_bytes);
+
+    Ok(BlockHash::from_byte_array(generation_hash.to_byte_array()))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -222,13 +339,10 @@ impl MinerAuditState {
                     warn!(
                         old = %prev_commitment.to_hex(),
                         current = %self.current_commitment.to_hex(),
-                        "Share used previous commitment, accepting it as valid under conditions"
+                        "Share used previous commitment, rejecting and not adding to DAG"
                     );
-                    return AuditVerificationResult::Valid {
-                        commitment: prev_commitment.clone(),
-                        miner_roll: hex::decode(extranonce2_hex)
-                            .ok()
-                            .and_then(|bytes| bytes.first().copied()),
+                    return AuditVerificationResult::Invalid {
+                        reason: "Stale commitment: share used previous bead commitment".to_string(),
                     };
                 }
             }
@@ -280,6 +394,14 @@ pub struct AuditDAG {
     pub miner_states: HashMap<String, MinerAuditState>,
     /// Mapping from composite bead hash to share ID that created it
     bead_to_share: HashMap<BlockHash, ShareId>,
+    /// Database handler
+    db_handler: Option<Arc<AuditDBHandler>>,
+    /// The set of parents that all shares in the current job must point to.
+    pub active_parents: Vec<(BlockHash, BlockHash, bitcoin::absolute::Time)>,
+    /// The accumulating set of valid shares mined during the current job.
+    pub current_siblings: Vec<(BlockHash, BlockHash, bitcoin::absolute::Time)>,
+    // total beads in DB
+    db_bead_count: usize,
 }
 
 impl AuditDAG {
@@ -289,7 +411,188 @@ impl AuditDAG {
             records: HashMap::new(),
             miner_states: HashMap::new(),
             bead_to_share: HashMap::new(),
+            db_handler: None,
+            active_parents: Vec::new(),
+            current_siblings: Vec::new(),
+            db_bead_count: 0,
         }
+    }
+
+    pub async fn new_with_db(braid: Arc<RwLock<Braid>>) -> Result<Self, String> {
+        let db_handler = AuditDBHandler::new()
+            .await
+            .map_err(|e| format!("Failed to initialize audit database: {}", e))?;
+
+        Ok(Self {
+            braid,
+            records: HashMap::new(),
+            miner_states: HashMap::new(),
+            bead_to_share: HashMap::new(),
+            db_handler: Some(Arc::new(db_handler)),
+            active_parents: Vec::new(),
+            current_siblings: Vec::new(),
+            db_bead_count: 0,
+        })
+    }
+    pub async fn load_from_db(&mut self) -> Result<Option<BlockHash>, String> {
+        if self.db_handler.is_none() {
+            info!("No database handler available, starting from genesis");
+            return Ok(None);
+        }
+
+        let db_handler = self.db_handler.as_ref().unwrap();
+
+        // Load the latest bead from the database to get its commitment
+        match db_handler.get_tips().await {
+            Ok(beads) => {
+                if beads.is_empty() {
+                    info!("No beads found in audit database, creating and persisting genesis bead");
+
+                    // Create genesis bead in memory
+                    let genesis_bead = create_genesis_bead_for_audit()?;
+                    let genesis_block_hash = genesis_bead.block_header.block_hash();
+                    let genesis_composite_hash = compute_audit_bead_hash(&genesis_bead);
+                    let genesis_timestamp = genesis_bead.committed_metadata.start_timestamp;
+
+                    info!(
+                        genesis_block_hash = %genesis_block_hash,
+                        genesis_composite_hash = %genesis_composite_hash,
+                        "Created genesis bead for audit DAG"
+                    );
+
+                    // Persist genesis bead to database
+                    if let Some(ref db_handler) = self.db_handler {
+                        match db_handler
+                            .insert_bead(
+                                &genesis_bead,
+                                genesis_composite_hash,
+                                "system".to_string(),
+                            )
+                            .await
+                        {
+                            Ok(bead_id) => {
+                                info!(
+                                    bead_id = %bead_id,
+                                    composite_hash = %genesis_composite_hash,
+                                    "Genesis bead persisted to audit database"
+                                );
+                            }
+                            Err(e) => {
+                                error!(
+                                    error = %e,
+                                    "Failed to persist genesis bead to database"
+                                );
+                                return Err(format!("Genesis bead persistence failed: {}", e));
+                            }
+                        }
+                    }
+
+                    {
+                        let mut braid = self.braid.write().await;
+                        *braid = crate::braid::Braid::new(vec![genesis_bead.clone()]);
+                    }
+
+                    self.active_parents = vec![(
+                        genesis_composite_hash,
+                        genesis_block_hash,
+                        genesis_timestamp,
+                    )];
+
+                    let generation_hash =
+                        compute_generation_hash(&[(genesis_composite_hash, genesis_timestamp)])?;
+
+                    info!(
+                        generation_hash = %generation_hash,
+                        "Initialized DAG with genesis bead"
+                    );
+
+                    Ok(Some(generation_hash))
+                } else {
+                    let sibling_count = beads.len();
+                    {
+                        // This allows us to start with the last mined bead tip retrieved from the database
+                        // instead of the genesis, this creates a valid in-memory DAG which correctly
+                        // refers to the past history (commitment), but if the database doesn't contain any
+                        // entry of a bead, possibly running the node for the first time or after flushing
+                        // the database then the in-memory bead will start from the genesis.
+                        let mut braid = self.braid.write().await;
+                        let only_beads: Vec<Bead> = beads.iter().map(|(b, _)| b.clone()).collect();
+                        *braid = crate::braid::Braid::new(only_beads);
+                    }
+
+                    self.active_parents = beads
+                        .into_iter()
+                        .map(|(bead, hash)| {
+                            (
+                                hash,
+                                bead.block_header.block_hash(),
+                                bead.committed_metadata.start_timestamp,
+                            )
+                        })
+                        .collect();
+
+                    let generation_inputs: Vec<_> = self
+                        .active_parents
+                        .iter()
+                        .map(|(comp, _, time)| (*comp, *time))
+                        .collect();
+
+                    let generation_hash = crate::audit::compute_generation_hash(&generation_inputs)
+                        .expect("No generation hash generated");
+
+                    info!(tip_count = sibling_count, "Restored DAG tips from database");
+
+                    if let Some(ref db_handler) = self.db_handler {
+                        match db_handler.get_bead_count().await {
+                            Ok(count) => {
+                                self.db_bead_count = count as usize;
+                                info!(
+                                    db_bead_count = self.db_bead_count,
+                                    "Loaded total bead count from database"
+                                );
+                            }
+                            Err(e) => warn!(error = %e, "Failed to get bead count from DB"),
+                        }
+                    }
+
+                    Ok(Some(generation_hash))
+                }
+            }
+            Err(e) => {
+                error!(
+                    error = %e,
+                    "Critical database failure while loading DAG tips. Aborting startup to prevent state corruption."
+                );
+                return Err(format!(
+                    "Database read failure during state snapshotting: {}",
+                    e
+                ));
+            }
+        }
+    }
+
+    pub fn advance_generation(&mut self) -> Result<BlockHash, &'static str> {
+        // Shift siblings to become the new parents only if we found shares
+        if !self.current_siblings.is_empty() {
+            self.active_parents = self.current_siblings.clone();
+            self.current_siblings.clear();
+        }
+
+        // Compute the deterministic generation hash
+        let generation_inputs: Vec<_> = self
+            .active_parents
+            .iter()
+            .map(|(comp, _, time)| (*comp, *time))
+            .collect();
+        let generation_hash = compute_generation_hash(&generation_inputs)?;
+
+        info!(
+            parent_count = self.active_parents.len(),
+            generation_hash = %generation_hash,
+            "Advanced DAG generation on new upstream job"
+        );
+
+        Ok(generation_hash)
     }
 
     pub async fn add_and_record_bead(
@@ -349,12 +652,35 @@ impl AuditDAG {
             let mut braid = self.braid.write().await;
             let status = braid.extend(&bead);
             match status {
-                AddBeadStatus::BeadAdded => {
+                AddBeadStatus::BeadAdded { .. } => {
                     bead_added = true;
+
+                    if let Some(ref db_handler) = self.db_handler {
+                        match db_handler
+                            .insert_bead(&bead, composite_hash, miner_ip.clone())
+                            .await
+                        {
+                            Ok(_bead_id) => {}
+                            Err(e) => {
+                                error!(
+                                    composite_hash = %composite_hash,
+                                    error = %e,
+                                    "Failed to persist bead to audit database"
+                                );
+                            }
+                        }
+                    }
+                    let start_time = bead.committed_metadata.start_timestamp;
+                    let block_hash = bead.block_header.block_hash();
+                    self.current_siblings
+                        .push((composite_hash, block_hash, start_time));
+
                     info!(
                         block_hash = %bead.block_header.block_hash(),
                         composite_hash = %composite_hash,
                         parents = ?bead.committed_metadata.parents,
+                        sibling_count = self.current_siblings.len(),
+                        total_beads = self.db_bead_count + self.records.len() + 1,
                         miner = %miner_ip,
                         "Bead added to braid"
                     );
@@ -386,10 +712,7 @@ impl AuditDAG {
         }
         self.records.insert(share_id.clone(), record);
         self.bead_to_share.insert(composite_hash, share_id.clone());
-        info!(
-            composite_hash = %composite_hash,
-            block_hash = %bead.block_header.block_hash(),
-            share_id = %share_id,
+        debug!(
             miner = %miner_ip,
             total_beads = %self.records.len(),
             "Bead recorded successfully"
@@ -729,7 +1052,8 @@ mod tests {
     }
 
     #[test]
-    /// Validate the hardware buffer latency edge cases where a job uses the previous commitment.
+    /// Validate the hardware buffer latency edge cases where a job uses the previous commitment. And
+    /// verify that a share built on the previous commitment is explicitly rejected as stale.
     fn test_verify_share_with_fallback_uses_previous() {
         let prefix = vec![0xaa, 0xbb];
         let mut state = MinerAuditState::new(prefix.clone());
@@ -748,10 +1072,16 @@ mod tests {
             state.previous_commitment.as_ref(),
         );
 
-        assert!(
-            matches!(result, AuditVerificationResult::Valid { .. }),
-            "Expected Valid result with fallback"
-        );
+        match result {
+            AuditVerificationResult::Invalid { reason } => {
+                assert!(
+                    reason.contains("Stale commitment"),
+                    "Expected stale commitment rejection, got: {}",
+                    reason
+                );
+            }
+            _ => panic!("Expected Invalid result for stale commitment share"),
+        }
     }
 
     #[test]
