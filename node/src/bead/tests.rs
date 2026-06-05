@@ -29,7 +29,6 @@ use bitcoin::TxMerkleNode;
 use bitcoin::Txid;
 use futures::executor::block_on;
 use libp2p::request_response::Codec;
-use std::collections::HashSet;
 use std::io::Cursor;
 use std::str::FromStr;
 #[test]
@@ -41,7 +40,7 @@ fn test_serialized_committed_metadata() {
         .unwrap();
     let socket = String::from("127.0.0.1");
     let time_val = Time::from_consensus(1653195600).unwrap();
-    let parent_hash_set: HashSet<BlockHash> = HashSet::new();
+    let parent_hash_set: Vec<BlockHash> = Vec::new();
     let time_hash_set = TimeVec(Vec::new());
     let weak_target = CompactTarget::from_unprefixed_hex("1d00ffff").unwrap();
     let min_target = CompactTarget::from_unprefixed_hex("1d00ffff").unwrap();
@@ -109,7 +108,7 @@ fn test_serialized_bead() {
         .unwrap();
     let socket = String::from("127.0.0.1");
     let time_hash_set = TimeVec(Vec::new());
-    let parent_hash_set: HashSet<BlockHash> = HashSet::new();
+    let parent_hash_set: Vec<BlockHash> = Vec::new();
     //Adding test txid
     let test_txid =
         Txid::from_str("8df401c7580ea2491d88d936ed0e16f3e6ea6c3d69eb9d9cf27652696a559e24").unwrap();
@@ -182,7 +181,7 @@ fn test_bead_response_serialization() {
         .unwrap();
     let socket = String::from("127.0.0.1");
     let time_hash_set = TimeVec(Vec::new());
-    let parent_hash_set: HashSet<BlockHash> = HashSet::new();
+    let parent_hash_set: Vec<BlockHash> = Vec::new();
     let weak_target = CompactTarget::from_unprefixed_hex("1d00ffff").unwrap();
     let min_target = CompactTarget::from_unprefixed_hex("1d00ffff").unwrap();
     let time_val = Time::from_consensus(1653195600).unwrap();

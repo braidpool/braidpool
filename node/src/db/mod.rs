@@ -2,6 +2,7 @@
 use crate::bead::Bead;
 use crate::braid::Braid;
 use crate::error::BraidError;
+pub mod audit_db_handlers;
 pub mod db_handlers;
 pub mod init_db;
 #[derive(Debug, Clone)]

@@ -1,12 +1,10 @@
 use super::*;
-use crate::utils::hashset_to_vec_deterministic;
 use crate::utils::test_utils::test_utility_functions::TestCommittedMetadataBuilder;
 use bitcoin::absolute::MedianTimePast;
 use bitcoin::consensus::encode::deserialize;
 use bitcoin::consensus::serialize;
 use bitcoin::BlockHash;
 use serde::Deserialize;
-use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 use std::str::FromStr;
@@ -214,9 +212,8 @@ fn test_committed_metadata_roundtrip_populated() {
 
     let parent1 = parse_block_hash(&data.block_hashes.parent1);
     let parent2 = parse_block_hash(&data.block_hashes.parent2);
-    let mut parents = HashSet::new();
-    parents.insert(parent1);
-    parents.insert(parent2);
+    let mut parents = vec![parent1, parent2];
+    parents.sort();
 
     let timestamps = TimeVec(vec![
         parse_time(data.timestamps.first),
@@ -254,10 +251,8 @@ fn test_committed_metadata_deterministic_parent_encoding() {
     // because hashset_to_vec_deterministic sorts the parents.
     let mut encodings = Vec::new();
     for _ in 0..5 {
-        let mut parents = HashSet::new();
-        parents.insert(parent1);
-        parents.insert(parent2);
-        parents.insert(parent3);
+        let mut parents = vec![parent1, parent2, parent3];
+        parents.sort();
 
         let metadata = TestCommittedMetadataBuilder::new()
             .transactions(vec![])
@@ -291,9 +286,7 @@ fn test_committed_metadata_serde_json_roundtrip() {
     let txid = parse_txid(&data.txids.genesis);
 
     let parent = parse_block_hash(&data.block_hashes.parent1);
-    let mut parents = HashSet::new();
-    parents.insert(parent);
-
+    let parents = vec![parent];
     let original = TestCommittedMetadataBuilder::new()
         .transactions(vec![txid])
         .parents(parents)
@@ -320,10 +313,12 @@ fn test_committed_metadata_consensus_field_order_decode() {
         parse_txid(&data.txids.second),
     ];
 
-    let mut parents = HashSet::new();
-    parents.insert(parse_block_hash(&data.block_hashes.parent2));
-    parents.insert(parse_block_hash(&data.block_hashes.parent1));
-    parents.insert(parse_block_hash(&data.block_hashes.parent3));
+    let mut parents = vec![
+        parse_block_hash(&data.block_hashes.parent2),
+        parse_block_hash(&data.block_hashes.parent1),
+        parse_block_hash(&data.block_hashes.parent3),
+    ];
+    parents.sort();
 
     let metadata = TestCommittedMetadataBuilder::new()
         .transactions(txids.clone())
@@ -357,7 +352,7 @@ fn test_committed_metadata_consensus_field_order_decode() {
     let decoded_miner_ip = String::consensus_decode(&mut reader).unwrap();
 
     assert_eq!(decoded_txids, TxIdVec(txids));
-    assert_eq!(decoded_parents, hashset_to_vec_deterministic(&parents));
+    assert_eq!(decoded_parents, parents);
     assert_eq!(
         decoded_parent_times,
         TimeVec(vec![
@@ -387,10 +382,8 @@ fn test_committed_metadata_consensus_parents_are_canonical() {
     let parent2 = parse_block_hash(&data.block_hashes.parent2);
     let parent3 = parse_block_hash(&data.block_hashes.parent3);
 
-    let mut parents = HashSet::new();
-    parents.insert(parent3);
-    parents.insert(parent1);
-    parents.insert(parent2);
+    let mut parents = vec![parent3, parent1, parent2];
+    parents.sort();
 
     let metadata = TestCommittedMetadataBuilder::new()
         .transactions(vec![])
@@ -409,7 +402,7 @@ fn test_committed_metadata_consensus_parents_are_canonical() {
     let _ = TxIdVec::consensus_decode(&mut reader).unwrap();
     let decoded_parents = Vec::<BeadHash>::consensus_decode(&mut reader).unwrap();
 
-    assert_eq!(decoded_parents, hashset_to_vec_deterministic(&parents));
+    assert_eq!(decoded_parents, parents);
 }
 
 #[test]
@@ -419,8 +412,7 @@ fn test_committed_metadata_consensus_txid_order_is_significant() {
     let txid_a = parse_txid(&data.txids.genesis);
     let txid_b = parse_txid(&data.txids.second);
 
-    let mut parents = HashSet::new();
-    parents.insert(parse_block_hash(&data.block_hashes.parent1));
+    let parents = vec![parse_block_hash(&data.block_hashes.parent1)];
 
     let metadata_ab = TestCommittedMetadataBuilder::new()
         .transactions(vec![txid_a, txid_b])

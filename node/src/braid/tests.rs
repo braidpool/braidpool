@@ -51,7 +51,7 @@ pub fn test_extend_functionality() {
     test_bead_1
         .committed_metadata
         .parents
-        .insert(test_bead_0.block_header.block_hash());
+        .push(test_bead_0.block_header.block_hash());
 
     test_braid.extend(&test_bead_1);
     // After adding a new bead that extends the zeroth one, we should have two cohorts
@@ -65,7 +65,7 @@ pub fn test_extend_functionality() {
     test_bead_2
         .committed_metadata
         .parents
-        .insert(test_bead_1.block_header.block_hash());
+        .push(test_bead_1.block_header.block_hash());
     test_braid.extend(&test_bead_2);
 
     // After adding the second bead, we should have three cohorts
@@ -97,7 +97,7 @@ pub fn test_extend_functionality() {
     test_bead_3
         .committed_metadata
         .parents
-        .insert(test_bead_2.block_header.block_hash());
+        .push(test_bead_2.block_header.block_hash());
     test_braid.extend(&test_bead_3);
 
     // Create bead 4 with parent 2
@@ -105,7 +105,7 @@ pub fn test_extend_functionality() {
     test_bead_4
         .committed_metadata
         .parents
-        .insert(test_bead_2.block_header.block_hash());
+        .push(test_bead_2.block_header.block_hash());
     test_braid.extend(&test_bead_4);
 
     // Create bead 5 with parent 2
@@ -113,7 +113,7 @@ pub fn test_extend_functionality() {
     test_bead_5
         .committed_metadata
         .parents
-        .insert(test_bead_2.block_header.block_hash());
+        .push(test_bead_2.block_header.block_hash());
     test_braid.extend(&test_bead_5);
 
     assert_eq!(
@@ -132,21 +132,21 @@ pub fn test_extend_functionality() {
     test_bead_6
         .committed_metadata
         .parents
-        .insert(test_bead_4.block_header.block_hash());
+        .push(test_bead_4.block_header.block_hash());
     test_braid.extend(&test_bead_6);
 
     let mut test_bead_7 = emit_bead();
     test_bead_7
         .committed_metadata
         .parents
-        .insert(test_bead_6.block_header.block_hash());
+        .push(test_bead_6.block_header.block_hash());
     test_braid.extend(&test_bead_7);
 
     let mut test_bead_8 = emit_bead();
     test_bead_8
         .committed_metadata
         .parents
-        .insert(test_bead_7.block_header.block_hash());
+        .push(test_bead_7.block_header.block_hash());
     test_braid.extend(&test_bead_8);
 
     assert_eq!(
@@ -164,21 +164,21 @@ pub fn test_extend_functionality() {
     test_bead_9
         .committed_metadata
         .parents
-        .insert(test_bead_5.block_header.block_hash());
+        .push(test_bead_5.block_header.block_hash());
     test_braid.extend(&test_bead_9);
 
     let mut test_bead_10 = emit_bead();
     test_bead_10
         .committed_metadata
         .parents
-        .insert(test_bead_9.block_header.block_hash());
+        .push(test_bead_9.block_header.block_hash());
     test_braid.extend(&test_bead_10);
 
     let mut test_bead_11 = emit_bead();
     test_bead_11
         .committed_metadata
         .parents
-        .insert(test_bead_10.block_header.block_hash());
+        .push(test_bead_10.block_header.block_hash());
     test_braid.extend(&test_bead_11);
 
     assert_eq!(
@@ -195,15 +195,15 @@ pub fn test_extend_functionality() {
     test_bead_12
         .committed_metadata
         .parents
-        .insert(test_bead_8.block_header.block_hash());
+        .push(test_bead_8.block_header.block_hash());
     test_bead_12
         .committed_metadata
         .parents
-        .insert(test_bead_11.block_header.block_hash());
+        .push(test_bead_11.block_header.block_hash());
     test_bead_12
         .committed_metadata
         .parents
-        .insert(test_bead_3.block_header.block_hash());
+        .push(test_bead_3.block_header.block_hash());
     test_braid.extend(&test_bead_12);
 
     assert_eq!(
@@ -221,7 +221,7 @@ pub fn test_extend_functionality() {
     test_bead_13
         .committed_metadata
         .parents
-        .insert(test_bead_12.block_header.block_hash());
+        .push(test_bead_12.block_header.block_hash());
     test_braid.extend(&test_bead_13);
     assert_eq!(
         test_braid.cohorts,
@@ -264,7 +264,7 @@ pub fn test_orphan_beads_functinality() {
     test_bead_1
         .committed_metadata
         .parents
-        .insert(test_bead_2.block_header.block_hash());
+        .push(test_bead_2.block_header.block_hash());
 
     test_braid.extend(&test_bead_1);
     assert_eq!(
@@ -276,7 +276,7 @@ pub fn test_orphan_beads_functinality() {
     test_bead_2
         .committed_metadata
         .parents
-        .insert(test_bead_0.block_header.block_hash());
+        .push(test_bead_0.block_header.block_hash());
     test_braid.extend(&test_bead_2);
 
     // After adding the second bead, we should have three cohorts
@@ -303,16 +303,16 @@ pub fn test_genesis1() {
     test_bead_1
         .committed_metadata
         .parents
-        .insert(test_bead_0.block_header.block_hash());
+        .push(test_bead_0.block_header.block_hash());
     test_bead_2
         .committed_metadata
         .parents
-        .insert(test_bead_1.block_header.block_hash());
+        .push(test_bead_1.block_header.block_hash());
 
     test_bead_3
         .committed_metadata
         .parents
-        .insert(test_bead_2.block_header.block_hash());
+        .push(test_bead_2.block_header.block_hash());
 
     let test_braid = Braid {
         beads: vec![
@@ -359,11 +359,11 @@ pub fn test_genesis2() {
     test_bead_2
         .committed_metadata
         .parents
-        .insert(test_bead_1.block_header.prev_blockhash);
+        .push(test_bead_1.block_header.prev_blockhash);
     test_bead_3
         .committed_metadata
         .parents
-        .insert(test_bead_1.block_header.prev_blockhash);
+        .push(test_bead_1.block_header.prev_blockhash);
     let test_braid = Braid {
         beads: vec![
             test_bead_0.clone(),
@@ -409,11 +409,11 @@ pub fn test_genesis3() {
     test_bead_3
         .committed_metadata
         .parents
-        .insert(test_bead_1.block_header.block_hash());
+        .push(test_bead_1.block_header.block_hash());
     test_bead_4
         .committed_metadata
         .parents
-        .insert(test_bead_0.block_header.block_hash());
+        .push(test_bead_0.block_header.block_hash());
 
     let test_braid = Braid {
         beads: vec![
@@ -493,16 +493,16 @@ pub fn test_tips1() {
     test_bead_1
         .committed_metadata
         .parents
-        .insert(test_bead_0.block_header.block_hash());
+        .push(test_bead_0.block_header.block_hash());
     test_bead_2
         .committed_metadata
         .parents
-        .insert(test_bead_1.block_header.block_hash());
+        .push(test_bead_1.block_header.block_hash());
 
     test_bead_3
         .committed_metadata
         .parents
-        .insert(test_bead_2.block_header.block_hash());
+        .push(test_bead_2.block_header.block_hash());
 
     let test_braid = Braid {
         beads: vec![
@@ -549,16 +549,16 @@ pub fn test_tips2() {
     test_bead_1
         .committed_metadata
         .parents
-        .insert(test_bead_0.block_header.block_hash());
+        .push(test_bead_0.block_header.block_hash());
     test_bead_2
         .committed_metadata
         .parents
-        .insert(test_bead_1.block_header.block_hash());
+        .push(test_bead_1.block_header.block_hash());
 
     test_bead_3
         .committed_metadata
         .parents
-        .insert(test_bead_1.block_header.block_hash());
+        .push(test_bead_1.block_header.block_hash());
 
     let test_braid = Braid {
         beads: vec![
@@ -609,39 +609,39 @@ pub fn test_tips3() {
     test_bead_3
         .committed_metadata
         .parents
-        .insert(test_bead_0.block_header.block_hash());
+        .push(test_bead_0.block_header.block_hash());
     test_bead_3
         .committed_metadata
         .parents
-        .insert(test_bead_1.block_header.block_hash());
+        .push(test_bead_1.block_header.block_hash());
     test_bead_3
         .committed_metadata
         .parents
-        .insert(test_bead_2.block_header.block_hash());
+        .push(test_bead_2.block_header.block_hash());
     test_bead_4
         .committed_metadata
         .parents
-        .insert(test_bead_0.block_header.block_hash());
+        .push(test_bead_0.block_header.block_hash());
     test_bead_4
         .committed_metadata
         .parents
-        .insert(test_bead_1.block_header.block_hash());
+        .push(test_bead_1.block_header.block_hash());
     test_bead_4
         .committed_metadata
         .parents
-        .insert(test_bead_2.block_header.block_hash());
+        .push(test_bead_2.block_header.block_hash());
     test_bead_5
         .committed_metadata
         .parents
-        .insert(test_bead_0.block_header.block_hash());
+        .push(test_bead_0.block_header.block_hash());
     test_bead_5
         .committed_metadata
         .parents
-        .insert(test_bead_1.block_header.block_hash());
+        .push(test_bead_1.block_header.block_hash());
     test_bead_5
         .committed_metadata
         .parents
-        .insert(test_bead_2.block_header.block_hash());
+        .push(test_bead_2.block_header.block_hash());
     let test_braid = Braid {
         beads: vec![
             test_bead_0.clone(),
@@ -697,39 +697,39 @@ pub fn test_reverse() {
     test_bead_3
         .committed_metadata
         .parents
-        .insert(test_bead_0.block_header.block_hash());
+        .push(test_bead_0.block_header.block_hash());
     test_bead_3
         .committed_metadata
         .parents
-        .insert(test_bead_1.block_header.block_hash());
+        .push(test_bead_1.block_header.block_hash());
     test_bead_3
         .committed_metadata
         .parents
-        .insert(test_bead_2.block_header.block_hash());
+        .push(test_bead_2.block_header.block_hash());
     test_bead_4
         .committed_metadata
         .parents
-        .insert(test_bead_0.block_header.block_hash());
+        .push(test_bead_0.block_header.block_hash());
     test_bead_4
         .committed_metadata
         .parents
-        .insert(test_bead_1.block_header.block_hash());
+        .push(test_bead_1.block_header.block_hash());
     test_bead_4
         .committed_metadata
         .parents
-        .insert(test_bead_2.block_header.block_hash());
+        .push(test_bead_2.block_header.block_hash());
     test_bead_5
         .committed_metadata
         .parents
-        .insert(test_bead_0.block_header.block_hash());
+        .push(test_bead_0.block_header.block_hash());
     test_bead_5
         .committed_metadata
         .parents
-        .insert(test_bead_1.block_header.block_hash());
+        .push(test_bead_1.block_header.block_hash());
     test_bead_5
         .committed_metadata
         .parents
-        .insert(test_bead_2.block_header.block_hash());
+        .push(test_bead_2.block_header.block_hash());
     let test_braid = Braid {
         beads: vec![
             test_bead_0.clone(),
@@ -831,16 +831,16 @@ pub fn test_cohorts_parents_1() {
     test_bead_1
         .committed_metadata
         .parents
-        .insert(test_bead_0.block_header.block_hash());
+        .push(test_bead_0.block_header.block_hash());
     test_bead_2
         .committed_metadata
         .parents
-        .insert(test_bead_1.block_header.block_hash());
+        .push(test_bead_1.block_header.block_hash());
 
     test_bead_3
         .committed_metadata
         .parents
-        .insert(test_bead_2.block_header.block_hash());
+        .push(test_bead_2.block_header.block_hash());
 
     let test_braid = Braid {
         beads: vec![
@@ -975,16 +975,16 @@ pub fn test_highest_work_path_1() {
     test_bead_1
         .committed_metadata
         .parents
-        .insert(test_bead_0.block_header.block_hash());
+        .push(test_bead_0.block_header.block_hash());
     test_bead_2
         .committed_metadata
         .parents
-        .insert(test_bead_1.block_header.block_hash());
+        .push(test_bead_1.block_header.block_hash());
 
     test_bead_3
         .committed_metadata
         .parents
-        .insert(test_bead_2.block_header.block_hash());
+        .push(test_bead_2.block_header.block_hash());
 
     let test_braid = Braid {
         beads: vec![
@@ -1034,23 +1034,23 @@ pub fn test_diamond_path_highest_work() {
     test_bead_1
         .committed_metadata
         .parents
-        .insert(test_bead_0.block_header.block_hash());
+        .push(test_bead_0.block_header.block_hash());
     test_bead_2
         .committed_metadata
         .parents
-        .insert(test_bead_0.block_header.block_hash());
+        .push(test_bead_0.block_header.block_hash());
     test_bead_3
         .committed_metadata
         .parents
-        .insert(test_bead_1.block_header.block_hash());
+        .push(test_bead_1.block_header.block_hash());
     test_bead_3
         .committed_metadata
         .parents
-        .insert(test_bead_2.block_header.block_hash());
+        .push(test_bead_2.block_header.block_hash());
     test_bead_4
         .committed_metadata
         .parents
-        .insert(test_bead_3.block_header.block_hash());
+        .push(test_bead_3.block_header.block_hash());
 
     let test_braid = Braid {
         beads: vec![
@@ -1387,7 +1387,7 @@ fn test_extend_function() {
         for (index, hashes) in parent_hashes {
             if let Some(bead) = index_to_bead.get_mut(&index) {
                 for hash in hashes {
-                    bead.committed_metadata.parents.insert(hash);
+                    bead.committed_metadata.parents.push(hash);
                 }
             }
         }
@@ -1492,7 +1492,7 @@ fn test_get_beads_after() {
     // Update parent hashes in committed metadata
     for (index, hashes) in parent_hashes {
         for hash in hashes {
-            beads[index].committed_metadata.parents.insert(hash);
+            beads[index].committed_metadata.parents.push(hash);
         }
     }
 
@@ -1595,7 +1595,7 @@ fn test_get_beads_after_diamond_structure() {
     // Update parent hashes in committed metadata
     for (index, hashes) in parent_hashes {
         for hash in hashes {
-            beads[index].committed_metadata.parents.insert(hash);
+            beads[index].committed_metadata.parents.push(hash);
         }
     }
 
@@ -1692,7 +1692,7 @@ fn test_get_beads_after_complex_braid() {
     // Update parent hashes in committed metadata
     for (index, hashes) in parent_hashes {
         for hash in hashes {
-            beads[index].committed_metadata.parents.insert(hash);
+            beads[index].committed_metadata.parents.push(hash);
         }
     }
 
@@ -1775,8 +1775,8 @@ fn test_get_beads_after_edge_cases() {
     // Collect parent hashes first to avoid borrowing issues
     let parent0_hash = beads[0].block_header.block_hash();
     let parent1_hash = beads[1].block_header.block_hash();
-    beads[1].committed_metadata.parents.insert(parent0_hash);
-    beads[2].committed_metadata.parents.insert(parent1_hash);
+    beads[1].committed_metadata.parents.push(parent0_hash);
+    beads[2].committed_metadata.parents.push(parent1_hash);
 
     let genesis_set = HashSet::from([0]);
     let mut bead_index_mapping = HashMap::new();
@@ -1869,7 +1869,7 @@ fn test_get_beads_after_multiple_tips() {
     // Update parent hashes in committed metadata
     for (index, hashes) in parent_hashes {
         for hash in hashes {
-            beads[index].committed_metadata.parents.insert(hash);
+            beads[index].committed_metadata.parents.push(hash);
         }
     }
 
@@ -1928,7 +1928,7 @@ fn test_extend_without_orphans_promotes_nothing() {
     child
         .committed_metadata
         .parents
-        .insert(genesis.block_header.block_hash());
+        .push(genesis.block_header.block_hash());
 
     match braid.extend(&child) {
         AddBeadStatus::BeadAdded { promoted_orphans } => {
@@ -1952,13 +1952,13 @@ fn test_extend_reports_promoted_orphan() {
     child
         .committed_metadata
         .parents
-        .insert(genesis.block_header.block_hash());
+        .push(genesis.block_header.block_hash());
 
     let mut grandchild = emit_bead();
     grandchild
         .committed_metadata
         .parents
-        .insert(child.block_header.block_hash());
+        .push(child.block_header.block_hash());
 
     // Grandchild arrives before its parent `child` -> parked as an orphan.
     assert!(
@@ -1997,15 +1997,15 @@ fn test_extend_promotes_transitive_orphan_chain() {
     let mut a = emit_bead();
     a.committed_metadata
         .parents
-        .insert(genesis.block_header.block_hash());
+        .push(genesis.block_header.block_hash());
     let mut b = emit_bead();
     b.committed_metadata
         .parents
-        .insert(a.block_header.block_hash());
+        .push(a.block_header.block_hash());
     let mut c = emit_bead();
     c.committed_metadata
         .parents
-        .insert(b.block_header.block_hash());
+        .push(b.block_header.block_hash());
 
     // `c` and `b` arrive before `a`; both are parked.
     assert!(matches!(

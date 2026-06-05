@@ -492,7 +492,7 @@ pub async fn fetch_beads_in_batch(
             let bead = &mut batch[idx];
             bead.committed_metadata
                 .parents
-                .insert(BlockHash::from_byte_array(arr));
+                .push(BlockHash::from_byte_array(arr));
             bead.committed_metadata
                 .parent_bead_timestamps
                 .0
@@ -741,6 +741,8 @@ pub async fn fetch_bead_by_bead_hash(
                 });
             }
         };
+
+    let mut parent_pairs_single: Vec<(BlockHash, MedianTimePast)> = Vec::new();
     for parent_beads in parent_timestamp_rows {
         let parent_timestamp = parent_beads.get::<u32, _>("timestamp");
         let parent_bead_id = parent_beads.get::<i64, _>("parent");
@@ -767,24 +769,27 @@ pub async fn fetch_bead_by_bead_hash(
                 });
             }
         };
-        //Extending parent bead timestamp
-        let parent_ts = MedianTimePast::from_u32(parent_timestamp).map_err(|e| {
-            DBErrors::TupleAttributeParsingError {
-                error: format!("Invalid parent timestamp value {}: {}", parent_timestamp, e),
-                attribute: "parent_bead_timestamps".to_string(),
-            }
-        })?;
+        parent_pairs_single.push((
+            parent_blockhash,
+            MedianTimePast::from_u32(parent_timestamp).map_err(|e| {
+                DBErrors::TupleAttributeParsingError {
+                    error: format!("Invalid timestamp {}: {}", parent_timestamp, e),
+                    attribute: "parent_timestamp".into(),
+                }
+            })?,
+        ));
+    }
+
+    parent_pairs_single.sort_by_key(|(hash, _)| *hash);
+    for (hash, time) in parent_pairs_single {
+        fetched_bead.committed_metadata.parents.push(hash);
         fetched_bead
             .committed_metadata
             .parent_bead_timestamps
             .0
-            .push(parent_ts);
-        //Extending parent committment by parent hash
-        fetched_bead
-            .committed_metadata
-            .parents
-            .insert(parent_blockhash);
+            .push(time);
     }
+
     for tx_row in rows {
         let _txid = tx_row.get::<Vec<u8>, _>("txid");
         let raw_tx_id = match _txid.clone().try_into() {

@@ -5,12 +5,7 @@ use bitcoin::{
     CompactTarget, EcdsaSighashType, Txid,
 };
 use num::ToPrimitive;
-use std::{
-    collections::{HashMap, HashSet},
-    str::FromStr,
-    sync::Arc,
-    time::UNIX_EPOCH,
-};
+use std::{collections::HashMap, str::FromStr, sync::Arc, time::UNIX_EPOCH};
 
 use futures::lock::Mutex;
 use tokio::sync::mpsc::{self, Receiver, Sender};
@@ -327,19 +322,27 @@ impl SwarmHandler {
         let public_key = "020202020202020202020202020202020202020202020202020202020202020202"
             .parse::<bitcoin::PublicKey>()
             .unwrap();
-        let mut time_hash_set = TimeVec(Vec::new());
-        let mut parent_hash_set: HashSet<BlockHash> = HashSet::new();
         let mut braid_data = self.braid_arc.write().await;
-        let tips_index = &braid_data.tips;
-        //Committing parents data in bead
-        for tip_bead in tips_index {
-            let current_tip_bead = braid_data.beads.get(*tip_bead).unwrap();
-            parent_hash_set.insert(current_tip_bead.block_header.block_hash());
-            time_hash_set
-                .0
-                .push(current_tip_bead.committed_metadata.start_timestamp);
+        let mut pairs: Vec<(BlockHash, bitcoin::absolute::Time)> = braid_data
+            .tips
+            .iter()
+            .map(|&idx| {
+                let tip = braid_data.beads.get(idx).unwrap();
+                (
+                    tip.block_header.block_hash(),
+                    tip.committed_metadata.start_timestamp,
+                )
+            })
+            .collect();
+        pairs.sort_by_key(|(hash, _)| *hash);
+
+        let mut time_hash_set = TimeVec(Vec::new());
+        let mut parent_hash_set: Vec<BlockHash> = Vec::new();
+        for (hash, time) in pairs {
+            parent_hash_set.push(hash);
+            time_hash_set.0.push(time);
         }
-        debug!(tip_indices = ?tips_index, tip_hashes = ?parent_hash_set,
+        debug!(tip_indices = ?braid_data.tips, tip_hashes = ?parent_hash_set,
             "Tips before extending the Braid");
         //TODO:This will be replaced via the allotted `WeakShareDifficulty` after Difficulty adjustment
         let weak_target = CompactTarget::from_unprefixed_hex("1d00ffff").unwrap();

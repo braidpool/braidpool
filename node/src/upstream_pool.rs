@@ -22,13 +22,10 @@ const WRITE_TIMEOUT: Duration = Duration::from_secs(5);
 pub struct UpstreamCache {
     /// Cached mining.configure response (version rolling mask, etc.)
     pub configure_response: Option<CachedItem<Value>>,
-
     /// Cached mining.subscribe response (extranonce1, extranonce2_size)
     pub subscribe_response: Option<CachedItem<UpstreamSubscribeResponse>>,
-
     /// Current difficulty from upstream
     pub current_difficulty: Option<CachedItem<f64>>,
-
     /// Most recent job notification
     pub latest_job: Option<CachedItem<JobNotification>>,
 }
@@ -38,10 +35,8 @@ pub struct UpstreamCache {
 pub struct CachedItem<T> {
     /// The cached value
     pub value: T,
-
     /// When this item was cached
     pub cached_at: std::time::SystemTime,
-
     /// TTL in seconds, how long this item stays valid
     pub ttl_seconds: u64,
 }
@@ -178,7 +173,7 @@ impl UpstreamCache {
 
         self.latest_job = Some(CachedItem::new(job.clone(), 3600)); // 1 hour
 
-        info!(
+        debug!(
             job_id = %job.job_id,
             clean_jobs = %job.clean_jobs,
             "Cached upstream job"
@@ -306,14 +301,14 @@ pub struct UpstreamPoolClient {
     configure_rx: Arc<tokio::sync::Mutex<mpsc::Receiver<(Value, u64, mpsc::Sender<Value>)>>>,
     /// Shared cache for upstream responses and state
     upstream_cache: Arc<RwLock<UpstreamCache>>,
-    /// Shared reference to the Braid structure for bead/audit operations
-    braid_arc: Arc<tokio::sync::RwLock<crate::braid::Braid>>,
     /// Channel for sending upstream share responses and events with ShareId to the audit log
     audit_log_tx: mpsc::Sender<(crate::audit::ShareId, Value)>,
     // Track subscribe handshake request ID
     subscribe_req_id: Option<u64>,
     // Track authorize handshake requet ID
     authorize_req_id: Option<u64>,
+    /// Audit DAG for tracking commitment chain in audit mode
+    pub audit_dag_arc: Arc<futures::lock::Mutex<crate::audit::AuditDAG>>,
 }
 
 impl UpstreamPoolClient {
@@ -327,8 +322,8 @@ impl UpstreamPoolClient {
         difficulty_tx: Option<mpsc::Sender<f64>>,
         configure_rx: Arc<tokio::sync::Mutex<mpsc::Receiver<(Value, u64, mpsc::Sender<Value>)>>>,
         upstream_cache: Arc<RwLock<UpstreamCache>>,
-        braid_arc: Arc<tokio::sync::RwLock<crate::braid::Braid>>,
         audit_log_tx: mpsc::Sender<(crate::audit::ShareId, Value)>,
+        audit_dag_arc: Arc<futures::lock::Mutex<crate::audit::AuditDAG>>,
     ) -> Self {
         Self {
             config,
@@ -346,10 +341,10 @@ impl UpstreamPoolClient {
             difficulty_tx,
             configure_rx,
             upstream_cache,
-            braid_arc,
             audit_log_tx,
             subscribe_req_id: None,
             authorize_req_id: None,
+            audit_dag_arc,
         }
     }
 
@@ -1033,34 +1028,43 @@ impl UpstreamPoolClient {
                     );
                     debug!("Upstream parsed job: {:?}", job);
 
-                    let bead_hash = {
-                        let braid = self.braid_arc.read().await;
-
-                        if let Some(&latest_tip_idx) = braid.tips.iter().next() {
-                            if let Some(bead) = braid.beads.get(latest_tip_idx) {
-                                crate::audit::compute_audit_bead_hash(bead)
-                            } else {
-                                bitcoin::BlockHash::from_byte_array([0u8; 32])
+                    let commitment_hash = {
+                        let mut dag = self.audit_dag_arc.lock().await;
+                        match dag.advance_generation() {
+                            Ok(hash) => {
+                                info!(
+                                    job_id = %job.job_id,
+                                    generation_hash = %hash,
+                                    "Upstream job received, DAG generation shifted"
+                                );
+                                hash
                             }
-                        } else {
-                            bitcoin::BlockHash::from_byte_array([0u8; 32])
+                            Err(e) => {
+                                error!("Critical failure advancing DAG generation: {}", e);
+                                return Err(StratumErrors::InvalidMethodParams {
+                                    method: format!(
+                                        "mining.notify: DAG generation shift failed - {}",
+                                        e
+                                    ),
+                                });
+                            }
                         }
                     };
                     if let Err(e) = self
                         .notification_tx
                         .send(NotifyCmd::UpdateExtranonce {
-                            new_bead_hash: bead_hash,
+                            new_bead_hash: commitment_hash,
                         })
                         .await
                     {
                         error!(
-                            bead_hash = %bead_hash,
+                            bead_hash = %commitment_hash,
                             error = %e,
                             "Failed to send extranonce update command to notifier"
                         );
                     } else {
                         debug!(
-                            bead_hash = %bead_hash,
+                            bead_hash = %commitment_hash,
                             "Sent extranonce update command to notifier"
                         );
                     }
@@ -1518,7 +1522,10 @@ mod tests {
         let (response_tx, _response_rx) = mpsc::channel(10);
         let (_configure_tx, configure_rx) = mpsc::channel(10);
         let (audit_log_tx, _audit_log_rx) = mpsc::channel(10);
-
+        let braid_arc = Arc::new(tokio::sync::RwLock::new(Braid::new(vec![])));
+        let audit_dag_arc = Arc::new(futures::lock::Mutex::new(crate::audit::AuditDAG::new(
+            braid_arc,
+        )));
         let client = UpstreamPoolClient::new(
             config,
             Arc::new(tokio::sync::Mutex::new(share_rx)),
@@ -1529,8 +1536,8 @@ mod tests {
             None,
             Arc::new(tokio::sync::Mutex::new(configure_rx)),
             UpstreamCache::new(),
-            Arc::new(tokio::sync::RwLock::new(Braid::new(vec![]))),
             audit_log_tx,
+            audit_dag_arc,
         );
 
         (client, job_rx, notification_rx)

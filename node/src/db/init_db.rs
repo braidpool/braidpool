@@ -5,6 +5,7 @@ use crate::error::DBErrors;
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
 static SCHEMA_SQL: &str = include_str!("schema.sql");
+static AUDIT_SCHEMA_SQL: &str = include_str!("audit_schema.sql");
 
 /// Gets the braidpool data directory in a cross-platform manner.
 fn get_data_dir() -> Result<PathBuf, DBErrors> {
@@ -39,29 +40,32 @@ fn get_data_dir() -> Result<PathBuf, DBErrors> {
 }
 
 pub async fn init_db() -> Result<SqlitePool, DBErrors> {
-    //Fetching the data directory
+    setup_sqlite_db("braidpool.db", SCHEMA_SQL).await
+}
+
+pub async fn init_audit_db() -> Result<SqlitePool, DBErrors> {
+    setup_sqlite_db("audit.db", AUDIT_SCHEMA_SQL).await
+}
+
+async fn setup_sqlite_db(db_name: &str, schema_sql: &str) -> Result<SqlitePool, DBErrors> {
+    // Fetching the data directory
     let db_dir = get_data_dir()?;
-    //Final db directory path
-    let db_path = db_dir.join("braidpool.db");
-    //Creating db directory if it doesn't exist
+    let db_path = db_dir.join(db_name);
     let dir_exists = db_dir.exists();
-    match fs::create_dir_all(&db_dir) {
-        Ok(_) => {
-            if !dir_exists {
-                info!("DB directory created successfully");
-            }
-        }
-        Err(error) => {
-            return Err(DBErrors::DBDirectoryNotCreated {
-                error: error.to_string(),
-                path: db_path,
-            });
-        }
-    };
-    //sqlite db url
-    let db_url = format!("sqlite://{}", db_path.to_string_lossy());
+
+    // Create db directory if it doesn't exist
+    if let Err(error) = fs::create_dir_all(&db_dir) {
+        return Err(DBErrors::DBDirectoryNotCreated {
+            error: error.to_string(),
+            path: db_path,
+        });
+    } else if !dir_exists {
+        info!("DB directory created successfully");
+    }
+
     let db_exists = db_path.exists();
-    //SQl connection configurations
+    let db_url = format!("sqlite://{}", db_path.to_string_lossy());
+    // SQl connection configurations
     let db_config = match SqliteConnectOptions::from_str(&db_url) {
         Ok(config) => config,
         Err(error) => {
@@ -74,45 +78,41 @@ pub async fn init_db() -> Result<SqlitePool, DBErrors> {
     let sql_lite_connections = db_config
         .foreign_keys(true)
         .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal);
-    //Initializing connection to existing DB
-    let conn = if db_exists {
-        info!(
-            db_path = %db_path.display(),
-            "Using existing database"
-        );
-        let pool = match SqlitePool::connect_with(sql_lite_connections).await {
-            Ok(initialized_pool) => initialized_pool,
-            Err(error) => {
-                return Err(DBErrors::ConnectionToSQlitePoolFailed {
-                    error: error.to_string(),
-                });
-            }
-        };
-        pool
+
+    let pool = if db_exists {
+        info!(db_path = %db_path.display(), "Using existing database");
+        SqlitePool::connect_with(sql_lite_connections)
+            .await
+            .map_err(|error| DBErrors::ConnectionToSQlitePoolFailed {
+                error: error.to_string(),
+            })?
     } else {
-        let _file = std::fs::File::create_new(db_path.clone());
-        let pool = match SqlitePool::connect_with(sql_lite_connections).await {
-            Ok(initialized_pool) => initialized_pool,
-            Err(error) => {
-                return Err(DBErrors::ConnectionToSQlitePoolFailed {
-                    error: error.to_string(),
-                });
-            }
-        };
-        let _query_result = match pool.execute(SCHEMA_SQL).await {
-            Ok(_res) => {
-                info!(
-                    db_path = %db_path.display(),
-                    "Database schema initialized"
-                );
-            }
-            Err(error) => {
-                return Err(DBErrors::SchemaNotInitialized {
-                    error: error.to_string(),
-                    db_path: db_path,
-                })
-            }
-        };
+        info!(db_path = %db_path.display(), "Creating new database");
+        if let Err(e) = std::fs::File::create_new(&db_path) {
+            error!(
+                db_path = %db_path.display(),
+                error = %e,
+                "Failed to create database file"
+            );
+            return Err(DBErrors::DBDirectoryNotCreated {
+                error: e.to_string(),
+                path: db_path.clone(),
+            });
+        }
+
+        let pool = SqlitePool::connect_with(sql_lite_connections)
+            .await
+            .map_err(|error| DBErrors::ConnectionToSQlitePoolFailed {
+                error: error.to_string(),
+            })?;
+
+        pool.execute(schema_sql)
+            .await
+            .map_err(|error| DBErrors::SchemaNotInitialized {
+                error: error.to_string(),
+                db_path: db_path.clone(),
+            })?;
+        info!(db_path = %db_path.display(), "Database schema initialized");
 
         // Force WAL checkpoint to flush schema changes to disk
         match sqlx::query("PRAGMA wal_checkpoint(FULL)")
@@ -129,5 +129,5 @@ pub async fn init_db() -> Result<SqlitePool, DBErrors> {
         pool
     };
 
-    Ok(conn)
+    Ok(pool)
 }

@@ -27,16 +27,6 @@ pub(crate) type Relatives = HashSet<BeadHash>;
 // Error Definitions
 use std::{collections::HashSet, net::IpAddr, str::FromStr};
 
-pub(crate) fn hashset_to_vec_deterministic(hashset: &HashSet<BeadHash>) -> Vec<BeadHash> {
-    let mut vec: Vec<BeadHash> = hashset.iter().cloned().collect();
-    vec.sort();
-    vec
-}
-
-pub(crate) fn vec_to_hashset(vec: Vec<BeadHash>) -> HashSet<BeadHash> {
-    vec.iter().cloned().collect()
-}
-
 /// Get list of actual local IPv4 addresses for servers binding to 0.0.0.0
 ///
 /// Returns all IPv4 addresses found on network interfaces.
@@ -86,9 +76,9 @@ pub fn create_test_bead(nonce: u32, prev_hash: Option<BlockHash>) -> Bead {
         .parse::<bitcoin::PublicKey>()
         .unwrap();
     let time_hash_set = TimeVec(Vec::new());
-    let mut parent_hash_set: HashSet<BlockHash> = HashSet::new();
+    let mut parent_hash_set: Vec<BlockHash> = Vec::new();
     if let Some(hash) = prev_hash {
-        parent_hash_set.insert(hash);
+        parent_hash_set.push(hash);
     }
     let weak_target = CompactTarget::from_consensus(486604799);
     let min_target = CompactTarget::from_consensus(486604799);
