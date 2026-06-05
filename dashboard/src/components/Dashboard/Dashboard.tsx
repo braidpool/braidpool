@@ -3,7 +3,6 @@ import Card from '../common/Card';
 import Header from '../common/Header';
 import MinerInventoryDashboard from '../MinerInventory/MinerInventoryDashboard';
 import MempoolLatencyStats from '../Mempool/MempoolLatencyStats';
-import GraphVisualization from '../BraidPoolDAG/BraidPoolDAG';
 import MinedSharesExplorer from '../BeadsTab/MinedSharesExplorer';
 import NodeHealth from '../NodeHealth/NodeHealth';
 import BitcoinStats from '../BitcoinStats/BitcoinStats';
@@ -41,16 +40,7 @@ const Dashboard = () => {
             </Card>
           </div>
         );
-      case Page.DAG_VISUALIZATION:
-        return (
-          <div className="p-2">
-            <Card title="Braid Visualization">
-              <div>
-                <GraphVisualization />
-              </div>
-            </Card>
-          </div>
-        );
+
       case Page.BITCOIN_STATS:
         return (
           <div className="p-2">

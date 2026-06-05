@@ -15,10 +15,13 @@ use jsonrpsee::core::async_trait;
 use jsonrpsee::core::middleware::Batch;
 use jsonrpsee::core::middleware::Notification;
 use jsonrpsee::core::middleware::RpcServiceT;
+use jsonrpsee::core::to_json_raw_value;
+use jsonrpsee::core::SubscriptionResult;
 use jsonrpsee::proc_macros::rpc;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Request;
 use jsonrpsee::ConnectionId;
+use jsonrpsee::PendingSubscriptionSink;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use serde_json::Value;
@@ -27,13 +30,15 @@ use std::collections::HashSet;
 use std::future::Future;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::sync::{mpsc, oneshot, RwLock};
+use tokio::sync::{mpsc, oneshot, watch, RwLock};
 use tracing::{error, info, warn};
 
 #[cfg(test)]
 use {
     crate::braid, crate::utils::create_test_bead, jsonrpsee::core::client::ClientT,
-    jsonrpsee::core::params::ArrayParams, jsonrpsee::http_client::HttpClient,
+    jsonrpsee::core::client::SubscriptionClientT, jsonrpsee::core::params::ArrayParams,
+    jsonrpsee::http_client::HttpClient, jsonrpsee::rpc_params,
+    jsonrpsee::ws_client::WsClientBuilder,
 };
 
 //server side trait to be implemented for the handler
@@ -108,6 +113,10 @@ pub trait Rpc {
         method: String,
         params: serde_json::Value,
     ) -> Result<serde_json::Value, ErrorObjectOwned>;
+
+    /// Push notifications: emits the most recent bead.
+    #[subscription(name = "subscribebead", item = Bead)]
+    async fn subscribe_bead(&self) -> SubscriptionResult;
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -243,6 +252,19 @@ pub enum RpcProxyCommand {
     },
 }
 
+/// Push-notification channels delivered to dashboard subscribers over WebSocket.
+pub struct DashboardEvents {
+    /// Emits the `Bead` of the most recently added bead.
+    pub new_bead: watch::Sender<Option<Bead>>,
+}
+
+impl DashboardEvents {
+    pub fn new() -> Arc<Self> {
+        let (new_bead, _) = watch::channel(None);
+        Arc::new(Self { new_bead })
+    }
+}
+
 // RPC Server implementation using channels
 pub struct RpcServerImpl {
     braid_arc: Arc<RwLock<Braid>>,
@@ -251,6 +273,7 @@ pub struct RpcServerImpl {
     latest_block: Arc<Mutex<BlockTemplate>>,
     rpc_proxy_tx: mpsc::UnboundedSender<RpcProxyCommand>,
     bitcoin_rpc_config: Option<BitcoinRpcConfig>,
+    dashboard_events: Arc<DashboardEvents>,
 }
 
 impl RpcServerImpl {
@@ -269,7 +292,13 @@ impl RpcServerImpl {
             latest_block: latest_block_template,
             rpc_proxy_tx,
             bitcoin_rpc_config,
+            dashboard_events: DashboardEvents::new(),
         }
+    }
+
+    /// Returns a handle to the push-notification channels for external producers.
+    pub fn dashboard_events(&self) -> Arc<DashboardEvents> {
+        Arc::clone(&self.dashboard_events)
     }
 }
 #[async_trait]
@@ -293,15 +322,20 @@ impl RpcServer for RpcServerImpl {
         let bead: Bead = serde_json::from_str(&bead_data).map_err(|e| {
             ErrorObjectOwned::owned(1, format!("Invalid bead data: {}", e), None::<()>)
         })?;
+        let bead_hash = bead.block_header.block_hash();
         info!(
-            hash = %bead.block_header.block_hash(),
+            hash = %bead_hash,
             "Add bead request received"
         );
         let mut braid_data = self.braid_arc.write().await;
         let success_status = braid_data.extend(&bead);
+        drop(braid_data);
 
         match success_status {
-            AddBeadStatus::BeadAdded => Ok("Bead added successfully".to_string()),
+            AddBeadStatus::BeadAdded => {
+                let _ = self.dashboard_events.new_bead.send(Some(bead));
+                Ok("Bead added successfully".to_string())
+            }
             AddBeadStatus::DagAlreadyContainsBead => Ok("Bead already exists".to_string()),
             AddBeadStatus::InvalidBead => {
                 Err(ErrorObjectOwned::owned(4, "Invalid bead", None::<()>))
@@ -986,6 +1020,37 @@ impl RpcServer for RpcServerImpl {
             }
         }
     }
+
+    async fn subscribe_bead(&self, pending: PendingSubscriptionSink) -> SubscriptionResult {
+        let sink = pending.accept().await?;
+        let mut rx = self.dashboard_events.new_bead.subscribe();
+        // Skip the initial `None` and marking it as seen so that
+        // the receiver will see only the values after first
+        // concrete value has been seen .
+        rx.mark_unchanged();
+        info!("New bead subscription accepted");
+        loop {
+            // If all the senders have been dropped and the last value has been seen by
+            // the subscriber.
+            if rx.changed().await.is_err() {
+                break;
+            }
+            let bead = rx.borrow().clone();
+            let Some(bead) = bead else { continue };
+            let msg = match to_json_raw_value(&bead) {
+                Ok(m) => m,
+                Err(e) => {
+                    error!(error = %e, "Failed to serialize new-bead notification");
+                    continue;
+                }
+            };
+            if sink.send(msg).await.is_err() {
+                // Subscriber disconnected.
+                break;
+            }
+        }
+        Ok(())
+    }
 }
 struct LoggingMiddleware<S>(S);
 
@@ -1030,7 +1095,7 @@ pub async fn run_rpc_server(
     latest_block_template: Arc<Mutex<BlockTemplate>>,
     rpc_proxy_tx: mpsc::UnboundedSender<RpcProxyCommand>,
     bitcoin_rpc_config: Option<BitcoinRpcConfig>,
-) -> Result<SocketAddr, ()> {
+) -> Result<(SocketAddr, Arc<DashboardEvents>), ()> {
     //Initializing the middleware
     let rpc_middleware =
         jsonrpsee::server::middleware::rpc::RpcServiceBuilder::new().layer_fn(LoggingMiddleware);
@@ -1055,6 +1120,7 @@ pub async fn run_rpc_server(
         rpc_proxy_tx,
         bitcoin_rpc_config.clone(),
     );
+    let dashboard_notification_ref = rpc_impl.dashboard_events();
     let handle = server.start(rpc_impl.into_rpc());
 
     // Parse host from bind_address
@@ -1076,7 +1142,7 @@ pub async fn run_rpc_server(
         //handling the stopping of the server
         handle.stopped(),
     );
-    Ok(addr)
+    Ok((addr, dashboard_notification_ref))
 }
 
 /// Call Bitcoin RPC method directly using HTTP JSON-RPC
@@ -2299,5 +2365,57 @@ pub async fn test_get_mining_info_rpc() {
         );
     } else {
         panic!("Expected Call error");
+    }
+}
+
+#[tokio::test]
+pub async fn test_subscribe_bead_rpc() {
+    let test_genesis_bead = create_test_bead(1, None);
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(vec![
+        test_genesis_bead.clone(),
+    ])));
+    let (proxy_tx, _) = mpsc::unbounded_channel();
+
+    let server_addr = "127.0.0.1:9050";
+    let (_addr, dashboard_events) = run_rpc_server(
+        Arc::clone(&braid),
+        server_addr,
+        Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
+        Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
+        Arc::new(Mutex::new(stratum::BlockTemplate::default())),
+        proxy_tx,
+        None,
+    )
+    .await
+    .unwrap();
+
+    let test_ws_client = WsClientBuilder::default()
+        .build(format!("ws://{}", server_addr))
+        .await
+        .unwrap();
+
+    let mut subscription = test_ws_client
+        .subscribe::<Bead, _>("subscribebead", rpc_params![], "unsubscribebead")
+        .await
+        .expect("subscription should be accepted");
+    println!("Subscription id received - {:?}", subscription.kind());
+    let new_bead = create_test_bead(2, Some(test_genesis_bead.block_header.block_hash()));
+    dashboard_events
+        .new_bead
+        .send(Some(new_bead.clone()))
+        .expect("send should succeed while subscriber is alive");
+
+    let received = subscription.next().await;
+    match received {
+        Some(result) => {
+            if let Err(error) = result {
+                panic!("An error occurred while reading the notification - {error}");
+            } else if let Ok(received_bead) = result {
+                assert_eq!(received_bead, new_bead);
+            }
+        }
+        None => {
+            panic!("Notification not received !");
+        }
     }
 }

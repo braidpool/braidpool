@@ -8,10 +8,9 @@ use bitcoin::{absolute::Decodable, Transaction};
 use bitcoin::{BlockHash, BlockHeader, BlockTime, TxMerkleNode, Txid, Witness};
 use futures::{lock::Mutex, FutureExt};
 use num::ToPrimitive;
-use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::time::UNIX_EPOCH;
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use tokio::{
@@ -1080,15 +1079,13 @@ impl DownstreamClient {
     }
 }
 
+static NEXT_CONNECTION_ID: AtomicU32 = AtomicU32::new(0);
+
 impl Default for DownstreamClient {
     fn default() -> Self {
-        //ExtraNonce1. - Hex-encoded, per-connection unique string which will be used for creating generation transactions later.
-        //4 bytes
-        let mut extranonce1_bytes = [0; 4];
-        rand::thread_rng().fill_bytes(&mut extranonce1_bytes);
-        let connection_id = rand::thread_rng().next_u32(); // FIXME use a counter here, not an RNG
-                                                           // (will collide with 65k mining devices)
-        let extranonce1_hex = hex::encode(&extranonce1_bytes); // FIXME should be connection_id
+        let connection_id = NEXT_CONNECTION_ID.fetch_add(1, Ordering::SeqCst);
+        let extranonce1_bytes = connection_id.to_be_bytes();
+        let extranonce1_hex = hex::encode(extranonce1_bytes);
         debug!(
             connection_id = %format!("{:x}", connection_id),
             extranonce1 = %extranonce1_hex,
@@ -1100,7 +1097,6 @@ impl Default for DownstreamClient {
             subscribed: false,
             suggest_difficulty_done: false,
             channel_configured: false,
-            //generating a random u32 client connection id
             connection_id,
             extranonce1: Vec::from(extranonce1_bytes),
             version_rolling_mask: None,
@@ -2059,6 +2055,7 @@ mod test {
     use crate::{
         braid,
         db::db_handlers::DBHandler,
+        rpc_server::DashboardEvents,
         stratum::{ConnectionMapping, MiningJobMap, NotifyCmd, Server, StratumServerConfig},
     };
     use bitcoin::{
@@ -2084,7 +2081,7 @@ mod test {
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
         let (_test_db_handler, test_db_tx) = DBHandler::new().await.unwrap();
         let (swarm_handler, mut swarm_command_receiver) =
-            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx);
+            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx, DashboardEvents::new());
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let config = StratumServerConfig {
             hostname: "127.0.0.1".to_string(),
@@ -2148,7 +2145,7 @@ mod test {
         let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let (_test_db_handler, test_db_tx) = DBHandler::new().await.unwrap();
         let (swarm_handler, mut swarm_command_receiver) =
-            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx);
+            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx, DashboardEvents::new());
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
 
@@ -2199,7 +2196,7 @@ mod test {
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
         let (_test_db_handler, test_db_tx) = DBHandler::new().await.unwrap();
         let (swarm_handler, mut swarm_command_receiver) =
-            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx);
+            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx, DashboardEvents::new());
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let config = StratumServerConfig {
             hostname: "127.0.0.1".to_string(),
@@ -2250,7 +2247,7 @@ mod test {
         let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
         let (swarm_handler, mut swarm_command_receiver) =
-            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx);
+            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx, DashboardEvents::new());
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let config = StratumServerConfig {
             hostname: "127.0.0.1".to_string(),
@@ -2294,7 +2291,7 @@ mod test {
             Arc::new(Mutex::new(HashMap::new()));
         let (notify_tx, _notify_rx) = mpsc::channel::<NotifyCmd>(32);
         let (swarm_handler, mut swarm_command_receiver) =
-            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx);
+            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx, DashboardEvents::new());
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let config = StratumServerConfig {
             hostname: "127.0.0.1".to_string(),
@@ -2359,7 +2356,7 @@ mod test {
             Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
         let (_test_db_handler, test_db_tx) = DBHandler::new().await.unwrap();
         let (swarm_handler, mut swarm_command_receiver) =
-            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx);
+            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx, DashboardEvents::new());
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let test_merkle_bytes: [u8; 32] = [0u8; 32];
         let mut test_witness = Witness::new();
@@ -2534,6 +2531,41 @@ mod test {
         assert_eq!(
             mr.to_string(),
             "690699e45d09d84d81cb58a4f8ba734e7fc90856d8b24524797f9a54ff57b1a1".to_string()
+        );
+    }
+
+    #[test]
+    fn test_unique_extranonce1_per_connection() {
+        let client1 = DownstreamClient::default();
+        let client2 = DownstreamClient::default();
+        let client3 = DownstreamClient::default();
+
+        // connection_ids must be strictly increasing
+        assert!(client2.connection_id() > client1.connection_id());
+        assert!(client3.connection_id() > client2.connection_id());
+
+        // extranonce1 must be unique across all three connections
+        assert_ne!(client1.extranonce1, client2.extranonce1);
+        assert_ne!(client2.extranonce1, client3.extranonce1);
+        assert_ne!(client1.extranonce1, client3.extranonce1);
+
+        // extranonce1 must be exactly EXTRANONCE1_SIZE bytes
+        assert_eq!(client1.extranonce1.len(), EXTRANONCE1_SIZE);
+        assert_eq!(client2.extranonce1.len(), EXTRANONCE1_SIZE);
+        assert_eq!(client3.extranonce1.len(), EXTRANONCE1_SIZE);
+
+        // extranonce1 must match the big-endian encoding of connection_id
+        assert_eq!(
+            client1.extranonce1,
+            client1.connection_id().to_be_bytes().to_vec()
+        );
+        assert_eq!(
+            client2.extranonce1,
+            client2.connection_id().to_be_bytes().to_vec()
+        );
+        assert_eq!(
+            client3.extranonce1,
+            client3.connection_id().to_be_bytes().to_vec()
         );
     }
 }

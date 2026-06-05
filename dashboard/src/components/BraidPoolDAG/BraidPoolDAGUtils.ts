@@ -1,24 +1,23 @@
 import * as d3 from 'd3';
 import { GraphNode, Position } from './Types';
+import { COLUMN_WIDTH, VERTICAL_SPACING } from './Constants';
 
 export function layoutNodes(
   allNodes: GraphNode[],
   hwPath: string[],
   beadWork: Record<string, number> = {},
+  svgHeight: number,
   previousCohortTips: Record<string, Position> = {},
-  width: number = 1200,
   margin: { top: number; right: number; bottom: number; left: number } = {
     top: 0,
     right: 0,
     bottom: 0,
     left: 50,
-  },
-  COLUMN_WIDTH: number = 200,
-  VERTICAL_SPACING: number = 150
+  }
 ): Record<string, Position> {
   const positions: Record<string, Position> = {};
   const hwPathSet = new Set(hwPath);
-  const centerY = (width - margin.top) / 2 + margin.top + 500;
+  const centerY = margin.top + svgHeight / 2;
   const allParents: Record<string, Set<string>> = {};
   const allChildren: Record<string, Set<string>> = {};
   const workValues: Record<string, number> = {};
