@@ -77,6 +77,10 @@ impl Braid {
     pub fn extend(&mut self, bead: &Bead) -> AddBeadStatus {
         // If the braid is empty and bead has no parents, treat as genesis bead
         if self.beads.is_empty() && bead.committed_metadata.parents.is_empty() {
+            tracing::info!(
+                "I AM A GENESIS BEAD ! - {:?}",
+                bead.block_header.block_hash()
+            );
             *self = Braid::new(vec![bead.clone()]);
             return AddBeadStatus::BeadAdded;
         }
