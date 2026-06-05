@@ -404,9 +404,9 @@ pub async fn fetch_beads_in_batch(
                     MedianTimePast::from_u32(row.get::<u32, _>("broadcast_timestamp")).unwrap();
 
                 bead.uncommitted_metadata.extra_nonce_1 =
-                    u32::from_str_radix(&row.get::<String, _>("extranonce1"), 16).unwrap();
+                    u64::from_str_radix(&row.get::<String, _>("extranonce1"), 16).unwrap();
                 bead.uncommitted_metadata.extra_nonce_2 =
-                    u32::from_str_radix(&row.get::<String, _>("extranonce2"), 16).unwrap();
+                    u64::from_str_radix(&row.get::<String, _>("extranonce2"), 16).unwrap();
 
                 bead.uncommitted_metadata.signature =
                     Signature::from_slice(&row.get::<Vec<u8>, _>("signature")).unwrap();
@@ -493,10 +493,16 @@ pub async fn fetch_bead_by_bead_hash(
             let min_target = CompactTarget::from_consensus(row.get::<u32, _>("min_target"));
             let weak_target = CompactTarget::from_consensus(row.get::<u32, _>("weak_target"));
             let miner_ip = row.get::<String, _>("miner_ip");
-            let extranonce_1 =
-                u32::from_str_radix(&row.get::<String, _>("extranonce1"), 16).unwrap();
-            let extranonce_2 =
-                u32::from_str_radix(&row.get::<String, _>("extranonce2"), 16).unwrap();
+            let extranonce_1 = u64::from_str_radix(&row.get::<String, _>("extranonce1"), 16)
+                .map_err(|e| DBErrors::TupleAttributeParsingError {
+                    error: e.to_string(),
+                    attribute: "extranonce1".to_string(),
+                })?;
+            let extranonce_2 = u64::from_str_radix(&row.get::<String, _>("extranonce2"), 16)
+                .map_err(|e| DBErrors::TupleAttributeParsingError {
+                    error: e.to_string(),
+                    attribute: "extranonce2".to_string(),
+                })?;
             let broadcast_timestamp =
                 MedianTimePast::from_u32(row.get::<u32, _>("broadcast_timestamp")).unwrap();
             let signature = Signature::from_slice(&row.get::<Vec<u8>, _>("signature")).unwrap();

@@ -127,8 +127,8 @@ pub mod test_utility_functions {
     }
 
     pub struct TestUnCommittedMetadataBuilder {
-        extra_nonce_1: u32,
-        extra_nonce_2: u32,
+        extra_nonce_1: u64,
+        extra_nonce_2: u64,
         broadcast_timestamp: Option<Time>,
         signature: Option<Signature>,
     }
@@ -144,7 +144,7 @@ pub mod test_utility_functions {
             }
         }
 
-        pub fn extra_nonce(mut self, nonce_1: u32, nonce_2: u32) -> Self {
+        pub fn extra_nonce(mut self, nonce_1: u64, nonce_2: u64) -> Self {
             self.extra_nonce_1 = nonce_1;
             self.extra_nonce_2 = nonce_2;
             self
@@ -348,8 +348,8 @@ pub mod test_utility_functions {
             .transactions(vec![])
             .build();
 
-        let extra_nonce_1 = rand::random::<u32>();
-        let extra_nonce_2 = rand::random::<u32>();
+        let extra_nonce_1 = rand::random::<u64>();
+        let extra_nonce_2 = rand::random::<u64>();
 
         let secp = Secp256k1::new();
 
