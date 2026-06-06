@@ -50,6 +50,7 @@ pub mod ipc;
 pub mod peer_manager;
 pub mod rpc_server;
 pub mod stratum;
+pub mod swarm;
 pub mod template_creator;
 pub mod uncommitted_metadata;
 pub mod utils;
