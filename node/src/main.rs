@@ -37,139 +37,8 @@ use std::os::unix::fs::PermissionsExt;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    // Initialize tracing
     setup_tracing()?;
-    //Parsing args
     let args = cli::Cli::parse();
-    //IBD manager for ibd handling
-    let (mut ibd_manager, ibd_command_tx) = IBDManager::new();
-    let _ibd_handler = tokio::spawn(async move {
-        ibd_manager.run_ibd_handler().await;
-    });
-
-    // IBD flag - true at start (will be in IBD by default)
-    let ibd_spinlock = Arc::new(AtomicBool::new(true));
-    //Local braid instance being shared across different tasks
-    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(Vec::from([]))));
-    //DB task handler for persistant of beads onto disk
-    let (mut _db_handler, db_tx) = DBHandler::new().await.map_err(|e| {
-        std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("Database initialization failed: {:?}", e),
-        )
-    })?;
-    let db_connection_pool = _db_handler.db_connection_pool.clone();
-
-    // Load beads from database
-    let db_connection_pool_ref = _db_handler.db_connection_pool.clone();
-    let braid_ref = braid.clone();
-    //Fetching beads from disk before initializing other tasks to pre-shutdown state
-    let initial_bead_fetch_handle = tokio::spawn(async move {
-        let mut guard = braid_ref.write().await;
-        let fetched_beads = fetch_beads_in_batch(db_connection_pool_ref, 50).await?;
-        info!(beads = fetched_beads.len(), "Beads loaded from DB");
-        for bead in &fetched_beads {
-            let status = guard.extend(bead);
-            debug!(hash = ?bead.block_header.block_hash(), status = ?status, "Bead inserted");
-        }
-        Ok::<(), node::error::DBErrors>(())
-    });
-
-    match initial_bead_fetch_handle.await {
-        Ok(Ok(())) => info!("Initial bead fetch completed"),
-        Ok(Err(e)) => {
-            error!(error = ?e, "Failed to fetch beads from DB");
-            return Err(format!("Database bead fetch failed: {:?}", e).into());
-        }
-        Err(e) => {
-            error!(error = ?e, "Initial bead fetch task panicked");
-            return Err(format!("Initial bead fetch task panicked: {}", e).into());
-        }
-    }
-
-    // Start DB query handler
-    tokio::spawn(async move {
-        let _res = _db_handler.insert_query_handler().await;
-    });
-
-    let latest_template_id = Arc::new(Mutex::new(TemplateId::default()));
-    let latest_template_id_for_notifier = latest_template_id.clone();
-    let latest_template_id_for_consumer = latest_template_id.clone();
-    //Initial template being shared across the notification task and swarm_handler task
-    let latest_template = Arc::new(Mutex::new(BlockTemplate::default()));
-    let latest_template_merkle_branch = Arc::new(Mutex::new(Vec::new()));
-    let mut latest_template_ref = latest_template.clone();
-    let mut latest_template_merkle_branch_ref = latest_template_merkle_branch.clone();
-
-    let (notification_tx, notification_rx) = mpsc::channel::<NotifyCmd>(1024);
-    //Swarm handler for additional event other than p2p events related to swarm
-    let (swarm_handler, swarm_command_receiver) =
-        SwarmHandler::new(Arc::clone(&braid), db_tx.clone());
-    let swarm_command_sender = swarm_handler.command_sender.clone();
-    let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
-
-    let notification_tx_clone = notification_tx.clone();
-    //Global connection mapping for each downstream connected to stratum server along with their respective sender channels
-    let connection_mapping = Arc::new(tokio::sync::RwLock::new(ConnectionMapping::new()));
-    // Clone connection_mapping for RPC server before it's used in async move blocks
-    let connection_mapping_for_rpc = Arc::clone(&connection_mapping);
-    //Global mining mapping mapping peer to its jobs provided by upstream uptill now
-    let mining_job_map = Arc::new(Mutex::new(HashMap::new()));
-    //Notifier task for providing jobs to downstream
-    let mut notifier = Notifier::new(notification_rx, Arc::clone(&mining_job_map));
-    let stratum_config = StratumServerConfig::default();
-    //Block submission channel after validation of PoW to bitcoin-node
-    let (block_submission_tx, block_submission_rx) =
-        tokio::sync::mpsc::unbounded_channel::<node::stratum::BlockSubmissionRequest>();
-
-    // IBD trigger task
-    let swarm_cmd_for_ibd = swarm_command_sender.clone();
-    let _ibd_trigger_handler = tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_secs(IBD_TRIGGER_AFTER)).await;
-        if let Err(e) = swarm_cmd_for_ibd.send(SwarmCommand::InitiateIBD).await {
-            error!(error = ?e, "Failed to initiate IBD");
-        } else {
-            info!("IBD trigger sent");
-        }
-    });
-
-    // Start stratum server
-    let mut stratum_server = Server::new(
-        stratum_config,
-        connection_mapping.clone(),
-        Some(block_submission_tx),
-    );
-
-    // Run notifier
-    tokio::spawn(async move {
-        let _res = notifier
-            .run_notifier(
-                connection_mapping.clone(),
-                &mut latest_template_ref,
-                &mut latest_template_merkle_branch_ref,
-                latest_template_id_for_notifier,
-            )
-            .await;
-    });
-
-    // Run stratum service
-    let ibd_flag_for_stratum = ibd_spinlock.clone();
-    tokio::spawn(async move {
-        let _res = stratum_server
-            .run_stratum_service(
-                mining_job_map,
-                notification_tx_clone,
-                swarm_handler_arc.clone(),
-                ibd_flag_for_stratum,
-            )
-            .await;
-    });
-
-    let (main_shutdown_tx, _main_shutdown_rx) =
-        mpsc::channel::<tokio::signal::unix::SignalKind>(32);
-    let main_task_token = CancellationToken::new();
-    let ipc_task_token = main_task_token.clone();
-
 
     let datadir_str = args.datadir.to_str().ok_or_else(|| {
         std::io::Error::new(
@@ -242,9 +111,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             keypair
         }
     };
-    // Initializing the peer manager (shared between swarm and RPC server)
-    // Using RwLock to allow concurrent reads (RPC server) while swarm handler can write
-    let peer_manager_arc = Arc::new(tokio::sync::RwLock::new(PeerManager::new(8)));
     //For local testing uncomment this keypair peer since it running to process will
     //result in same peerID leading to OutgoingConnectionError
     // let keypair = identity::Keypair::generate_ed25519();
@@ -266,16 +132,95 @@ async fn main() -> Result<(), Box<dyn Error>> {
     } else {
         Network::Bitcoin
     };
-    //IPC node initializer including our capnp client
-    let ipc_socket_path = args.ipc_socket.clone();
-    let notification_tx_for_ipc = notification_tx.clone();
-    let latest_template_for_ipc = latest_template.clone();
-    let latest_template_merkle_branch_for_ipc = latest_template_merkle_branch.clone();
 
-    // Create RPC proxy command channel - sender goes to RPC server, receiver goes to IPC handler
+    // IBD flag
+    let ibd_spinlock = Arc::new(AtomicBool::new(true));
+    //Local braid instance being shared across different tasks
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(Vec::from([]))));
+
+    //Latest template id shared across the notifier and IPC consumer tasks
+    let latest_template_id = Arc::new(Mutex::new(TemplateId::default()));
+    let latest_template_id_for_notifier = latest_template_id.clone();
+    let latest_template_id_for_consumer = latest_template_id.clone();
+    //Initial template being shared across the notification task and swarm_handler task
+    let latest_template = Arc::new(Mutex::new(BlockTemplate::default()));
+    let latest_template_merkle_branch = Arc::new(Mutex::new(Vec::new()));
+    let mut latest_template_ref = latest_template.clone();
+    let mut latest_template_merkle_branch_ref = latest_template_merkle_branch.clone();
+
+    //Global connection mapping for each downstream connected to stratum server along with their respective sender channels
+    let connection_mapping = Arc::new(tokio::sync::RwLock::new(ConnectionMapping::new()));
+    // Clone connection_mapping for RPC server before it's used in async move blocks
+    let connection_mapping_for_rpc = Arc::clone(&connection_mapping);
+    //Global mining mapping mapping peer to its jobs provided by upstream uptill now
+    let mining_job_map = Arc::new(Mutex::new(HashMap::new()));
+    // Peer manager shared between swarm and RPC server.
+    // RwLock allows concurrent reads (RPC server) while the swarm handler writes.
+    let peer_manager_arc = Arc::new(tokio::sync::RwLock::new(PeerManager::new(8)));
+
+    //IBD manager for ibd handling (sender goes to swarm context)
+    let (mut ibd_manager, ibd_command_tx) = IBDManager::new();
+    //Notification channel feeding the notifier; cloned for stratum and IPC
+    let (notification_tx, notification_rx) = mpsc::channel::<NotifyCmd>(1024);
+    let notification_tx_clone = notification_tx.clone();
+    //Block submission channel after validation of PoW to bitcoin-node
+    let (block_submission_tx, block_submission_rx) =
+        tokio::sync::mpsc::unbounded_channel::<node::stratum::BlockSubmissionRequest>();
+    // RPC proxy command channel - sender goes to RPC server, receiver goes to IPC handler
     let (rpc_proxy_tx, rpc_proxy_rx) = tokio::sync::mpsc::unbounded_channel::<RpcProxyCommand>();
-    // peer_manager_arc is created above and shared between swarm and RPC server
-    //spawning the rpc server
+    //Graceful shutdown wiring shared with the IPC handler
+    let (main_shutdown_tx, _main_shutdown_rx) =
+        mpsc::channel::<tokio::signal::unix::SignalKind>(32);
+    let main_task_token = CancellationToken::new();
+    let ipc_task_token = main_task_token.clone();
+
+    //DB task handler for persistant of beads onto disk
+    let (mut _db_handler, db_tx) = DBHandler::new().await.map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Database initialization failed: {:?}", e),
+        )
+    })?;
+    let db_connection_pool = _db_handler.db_connection_pool.clone();
+
+    // Load beads from database
+    let db_connection_pool_ref = _db_handler.db_connection_pool.clone();
+    let braid_ref = braid.clone();
+    //Fetching beads from disk before initializing other tasks to pre-shutdown state
+    let initial_bead_fetch_handle = tokio::spawn(async move {
+        let mut guard = braid_ref.write().await;
+        let fetched_beads = fetch_beads_in_batch(db_connection_pool_ref, 50).await?;
+        info!(beads = fetched_beads.len(), "Beads loaded from DB");
+        for bead in &fetched_beads {
+            let status = guard.extend(bead);
+            debug!(hash = ?bead.block_header.block_hash(), status = ?status, "Bead inserted");
+        }
+        Ok::<(), node::error::DBErrors>(())
+    });
+
+    match initial_bead_fetch_handle.await {
+        Ok(Ok(())) => info!("Initial bead fetch completed"),
+        Ok(Err(e)) => {
+            error!(error = ?e, "Failed to fetch beads from DB");
+            return Err(format!("Database bead fetch failed: {:?}", e).into());
+        }
+        Err(e) => {
+            error!(error = ?e, "Initial bead fetch task panicked");
+            return Err(format!("Initial bead fetch task panicked: {}", e).into());
+        }
+    }
+
+    // Start DB query handler
+    tokio::spawn(async move {
+        let _res = _db_handler.insert_query_handler().await;
+    });
+
+    // IBD manager loop
+    let _ibd_handler = tokio::spawn(async move {
+        ibd_manager.run_ibd_handler().await;
+    });
+
+    //spawning the rpc server (await readiness to obtain the dashboard notifier)
     let rpc_addr = "127.0.0.1:6682"; // TODO: Load from config file
     let bitcoin_rpc_config = BitcoinRpcConfig::from_cli_args(&args).unwrap_or_else(|e| {
         eprintln!("Error: {}", e);
@@ -290,8 +235,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         rpc_proxy_tx,
         bitcoin_rpc_config,
     ));
-    match server_join.await {
-        Ok(Ok(_addr)) => {}
+    let (_rpc_addr, dashboard_notifier) = match server_join.await {
+        Ok(Ok(tuple)) => tuple,
         Ok(Err(())) => {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
@@ -307,6 +252,61 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .into());
         }
     };
+    //Swarm handler for additional event other than p2p events related to swarm
+    let (swarm_handler, swarm_command_receiver) =
+        SwarmHandler::new(Arc::clone(&braid), db_tx.clone(), dashboard_notifier);
+    let swarm_command_sender = swarm_handler.command_sender.clone();
+    let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
+    // IBD trigger task
+    let swarm_cmd_for_ibd = swarm_command_sender.clone();
+    let _ibd_trigger_handler = tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(IBD_TRIGGER_AFTER)).await;
+        if let Err(e) = swarm_cmd_for_ibd.send(SwarmCommand::InitiateIBD).await {
+            error!(error = ?e, "Failed to initiate IBD");
+        } else {
+            info!("IBD trigger sent");
+        }
+    });
+
+    // Start stratum server (created before the notifier consumes `connection_mapping`)
+    let stratum_config = StratumServerConfig::default();
+    let mut stratum_server = Server::new(
+        stratum_config,
+        connection_mapping.clone(),
+        Some(block_submission_tx),
+    );
+
+    // Run notifier
+    let mut notifier = Notifier::new(notification_rx, Arc::clone(&mining_job_map));
+    tokio::spawn(async move {
+        let _res = notifier
+            .run_notifier(
+                connection_mapping.clone(),
+                &mut latest_template_ref,
+                &mut latest_template_merkle_branch_ref,
+                latest_template_id_for_notifier,
+            )
+            .await;
+    });
+
+    // Run stratum service
+    let ibd_flag_for_stratum = ibd_spinlock.clone();
+    tokio::spawn(async move {
+        let _res = stratum_server
+            .run_stratum_service(
+                mining_job_map,
+                notification_tx_clone,
+                swarm_handler_arc.clone(),
+                ibd_flag_for_stratum,
+            )
+            .await;
+    });
+
+    //IPC node initializer including our capnp client
+    let ipc_socket_path = args.ipc_socket.clone();
+    let notification_tx_for_ipc = notification_tx.clone();
+    let latest_template_for_ipc = latest_template.clone();
+    let latest_template_merkle_branch_for_ipc = latest_template_merkle_branch.clone();
 
     info!(socket = %ipc_socket_path, "IPC socket path");
 
