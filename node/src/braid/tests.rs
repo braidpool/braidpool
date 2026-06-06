@@ -1,3 +1,4 @@
+use super::AddBeadStatus;
 use super::Bead;
 use super::Braid;
 use crate::braid::consensus_functions::check_cohort;
@@ -1904,5 +1905,130 @@ fn test_get_beads_after_multiple_tips() {
         returned_beads.len(),
         returned_beads2.len(),
         "Order of input tips should not affect result"
+    );
+}
+
+/// A bead added with no parked orphans depending on it should report an empty
+/// `promoted_orphans` set.
+#[test]
+fn test_extend_without_orphans_promotes_nothing() {
+    let genesis = emit_bead();
+    let mut braid = Braid::new(vec![genesis.clone()]);
+
+    let mut child = emit_bead();
+    child
+        .committed_metadata
+        .parents
+        .insert(genesis.block_header.block_hash());
+
+    match braid.extend(&child) {
+        AddBeadStatus::BeadAdded { promoted_orphans } => {
+            assert!(
+                promoted_orphans.is_empty(),
+                "no orphans were waiting, so none should be promoted"
+            );
+        }
+        other => panic!("expected BeadAdded, got {:?}", other),
+    }
+}
+
+/// An orphan that arrives before its parent is parked; when the parent arrives
+/// the orphan is promoted and reported back through `BeadAdded`.
+#[test]
+fn test_extend_reports_promoted_orphan() {
+    let genesis = emit_bead();
+    let mut braid = Braid::new(vec![genesis.clone()]);
+
+    let mut child = emit_bead();
+    child
+        .committed_metadata
+        .parents
+        .insert(genesis.block_header.block_hash());
+
+    let mut grandchild = emit_bead();
+    grandchild
+        .committed_metadata
+        .parents
+        .insert(child.block_header.block_hash());
+
+    // Grandchild arrives before its parent `child` -> parked as an orphan.
+    assert!(
+        matches!(
+            braid.extend(&grandchild),
+            AddBeadStatus::ParentsNotYetReceived
+        ),
+        "grandchild should be parked while its parent is missing"
+    );
+    assert_eq!(braid.orphan_beads.len(), 1);
+
+    // The parent arrives: `child` is added and `grandchild` becomes connectable.
+    match braid.extend(&child) {
+        AddBeadStatus::BeadAdded { promoted_orphans } => {
+            assert_eq!(promoted_orphans.len(), 1, "grandchild should be promoted");
+            assert_eq!(
+                promoted_orphans[0].block_header.block_hash(),
+                grandchild.block_header.block_hash()
+            );
+        }
+        other => panic!("expected BeadAdded, got {:?}", other),
+    }
+    assert!(
+        braid.orphan_beads.is_empty(),
+        "the orphan set should be drained once the parent arrives"
+    );
+}
+
+/// A chain of orphans (each depending on the previous) that arrive before their
+/// common ancestor should all be promoted transitively in a single `extend`.
+#[test]
+fn test_extend_promotes_transitive_orphan_chain() {
+    let genesis = emit_bead();
+    let mut braid = Braid::new(vec![genesis.clone()]);
+
+    let mut a = emit_bead();
+    a.committed_metadata
+        .parents
+        .insert(genesis.block_header.block_hash());
+    let mut b = emit_bead();
+    b.committed_metadata
+        .parents
+        .insert(a.block_header.block_hash());
+    let mut c = emit_bead();
+    c.committed_metadata
+        .parents
+        .insert(b.block_header.block_hash());
+
+    // `c` and `b` arrive before `a`; both are parked.
+    assert!(matches!(
+        braid.extend(&c),
+        AddBeadStatus::ParentsNotYetReceived
+    ));
+    assert!(matches!(
+        braid.extend(&b),
+        AddBeadStatus::ParentsNotYetReceived
+    ));
+    assert_eq!(braid.orphan_beads.len(), 2);
+
+    // `a` connects the whole chain: `b` then `c` are promoted transitively.
+    match braid.extend(&a) {
+        AddBeadStatus::BeadAdded { promoted_orphans } => {
+            assert_eq!(
+                promoted_orphans.len(),
+                2,
+                "both b and c should be promoted, got {:?}",
+                promoted_orphans.len()
+            );
+            let promoted_hashes: HashSet<_> = promoted_orphans
+                .iter()
+                .map(|bead| bead.block_header.block_hash())
+                .collect();
+            assert!(promoted_hashes.contains(&b.block_header.block_hash()));
+            assert!(promoted_hashes.contains(&c.block_header.block_hash()));
+        }
+        other => panic!("expected BeadAdded, got {:?}", other),
+    }
+    assert!(
+        braid.orphan_beads.is_empty(),
+        "all transitively-connectable orphans should be drained"
     );
 }

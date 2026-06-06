@@ -11,7 +11,9 @@ pub struct Cohort(pub HashSet<usize>);
 pub enum AddBeadStatus {
     DagAlreadyContainsBead,
     InvalidBead,
-    BeadAdded,
+    // Returning any promoted orphan beads whose parents have
+    // been extended currently .
+    BeadAdded { promoted_orphans: Vec<Bead> },
     ParentsNotYetReceived,
 }
 #[derive(Debug, Clone)]
@@ -82,7 +84,11 @@ impl Braid {
                 bead.block_header.block_hash()
             );
             *self = Braid::new(vec![bead.clone()]);
-            return AddBeadStatus::BeadAdded;
+            // Genesis resets the braid, so there is never an existing orphan set
+            // to promote here.
+            return AddBeadStatus::BeadAdded {
+                promoted_orphans: Vec::new(),
+            };
         }
         // No parents: bad block i.e. the extend will add beads after the genesis
         //bead is done and the extension of genesis beads to Braid shall be done via Braid::new
@@ -181,15 +187,16 @@ impl Braid {
             self.cohort_tips.push(self.tips.clone());
         }
 
-        self.process_orphan_beads();
+        // Adding this bead may have supplied the missing parent for one or more
+        // parked orphans; promote whichever became connectable and surface them
+        // to the caller.
+        let promoted_orphans = self.process_orphan_beads();
 
-        AddBeadStatus::BeadAdded
+        AddBeadStatus::BeadAdded { promoted_orphans }
     }
 
-    /// Process orphan beads to see if any can now be added to the braid
-    /// This method checks if all parents of orphan beads are now available
-    /// and recursively extends the braid with those beads
-    fn process_orphan_beads(&mut self) {
+    fn process_orphan_beads(&mut self) -> Vec<Bead> {
+        let mut promoted = Vec::new();
         // Process orphans in reverse order to maintain proper indexing
         let mut i = self.orphan_beads.len();
         while i > 0 {
@@ -210,11 +217,15 @@ impl Braid {
 
                 // Now extend with the orphan bead
                 match self.extend(&orphan_bead) {
-                    AddBeadStatus::BeadAdded => {
+                    AddBeadStatus::BeadAdded { promoted_orphans } => {
+                        // This orphan is now connected: record it, along with any
+                        // beads its own addition promoted.
+                        promoted.push(orphan_bead);
+                        promoted.extend(promoted_orphans);
                         // Recursively process remaining orphans as this addition
-                        // might enable more orphans to be processed
-                        self.process_orphan_beads();
-                        return; // Exit current processing as recursion will handle the rest
+                        // might enable more orphans to be processed.
+                        promoted.extend(self.process_orphan_beads());
+                        return promoted; // Exit current processing as recursion will handle the rest
                     }
                     AddBeadStatus::DagAlreadyContainsBead => {
                         continue;
@@ -228,6 +239,7 @@ impl Braid {
                 }
             }
         }
+        promoted
     }
 
     pub fn check_genesis_beads(&self, genesis_beads: &Vec<BeadHash>) -> GenesisCheckStatus {
