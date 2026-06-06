@@ -366,7 +366,7 @@ impl SwarmHandler {
         };
         let status = braid_data.extend(&weak_share);
         match status {
-            AddBeadStatus::BeadAdded => {
+            AddBeadStatus::BeadAdded { .. } => {
                 let new_tips: Vec<_> = braid_data.tips.iter().map(|&idx| idx).collect();
                 let bead_hash = weak_share.block_header.block_hash();
                 info!(

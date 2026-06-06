@@ -332,7 +332,7 @@ impl RpcServer for RpcServerImpl {
         drop(braid_data);
 
         match success_status {
-            AddBeadStatus::BeadAdded => {
+            AddBeadStatus::BeadAdded { .. } => {
                 let _ = self.dashboard_events.new_bead.send(Some(bead));
                 Ok("Bead added successfully".to_string())
             }

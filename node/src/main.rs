@@ -647,7 +647,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                             let mut peer_manager = peer_manager_arc.write().await;
                                             peer_manager.penalize_for_invalid_bead(&message.source);
                                         }
-                                    } else if let braid::AddBeadStatus::BeadAdded = status {
+                                    } else if let braid::AddBeadStatus::BeadAdded { .. } = status {
 
                                      //Considering the index of the beads in braid will be same as the (insertion ids-1)
                                         let bead_id = match braid_data
@@ -732,7 +732,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                                 }
                                                 continue;
                                             },
-                                            braid::AddBeadStatus::BeadAdded | braid::AddBeadStatus::DagAlreadyContainsBead =>{
+                                            braid::AddBeadStatus::BeadAdded { .. } | braid::AddBeadStatus::DagAlreadyContainsBead =>{
                                                 ibd_spinlock.store(false,Ordering::SeqCst);
                                                 continue;
                                             },
@@ -774,7 +774,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                             let mut peer_manager = peer_manager_arc.write().await;
                                             peer_manager.penalize_for_invalid_bead(&message.source);
                                         }
-                                    } else if let braid::AddBeadStatus::BeadAdded = status {
+                                    } else if let braid::AddBeadStatus::BeadAdded { .. } = status {
                                         let bead_id = match braid_data
                                             .bead_index_mapping
                                             .get(&bead.block_header.block_hash()) {
@@ -1111,7 +1111,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                                 let mut peer_manager = peer_manager_arc.write().await;
                                                 peer_manager.penalize_for_invalid_bead(&peer);
                                             }
-                                        } else if let braid::AddBeadStatus::BeadAdded = status {
+                                        } else if let braid::AddBeadStatus::BeadAdded { .. } = status {
 
                                             let bead_id = match braid_data
                                                 .bead_index_mapping
