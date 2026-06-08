@@ -12,7 +12,7 @@ fn get_data_dir() -> Result<PathBuf, DBErrors> {
     {
         let home = env::var("HOME").map_err(|error| DBErrors::EnvVariableNotFetched {
             error: error.to_string(),
-            var: "{HOME} Directory".to_string(),
+            var: "HOME".to_string(),
         })?;
         Ok(Path::new(&home).join(".braidpool"))
     }
@@ -21,12 +21,20 @@ fn get_data_dir() -> Result<PathBuf, DBErrors> {
     {
         let home = env::var("HOME").map_err(|error| DBErrors::EnvVariableNotFetched {
             error: error.to_string(),
-            var: "{HOME} Directory".to_string(),
+            var: "HOME".to_string(),
         })?;
         Ok(Path::new(&home)
             .join("Library")
             .join("Application Support")
             .join("braidpool"))
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        Err(DBErrors::EnvVariableNotFetched {
+            error: "this platform is not supported yet".to_string(),
+            var: std::env::consts::OS.to_string(),
+        })
     }
 }
 

@@ -19,24 +19,9 @@ fn main() {
     println!("cargo::rerun-if-env-changed=HOST");
     println!("cargo::rerun-if-env-changed=CAPNP");
 
-    //  Reading architecture and OS
+    //  Reading architecture and OS for platform-specific linker configuration
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
-
-    let platform_cfg = match target_os.as_str() {
-        "macos" => "macos",
-        "linux" => "linux",
-        _ => "other",
-    };
-
-    println!("cargo::rustc-cfg=target_platform=\"{platform_cfg}\"");
-    let arch_cfg = match target_arch.as_str() {
-        "x86_64" => "x86_64",
-        "aarch64" => "aarch64",
-        "x86" => "x86",
-        _ => "other",
-    };
-    println!("cargo::rustc-cfg=target_cpu_arch=\"{arch_cfg}\"");
 
     configure_platform_linking(&target_os, &target_arch);
 
@@ -84,8 +69,6 @@ fn compile_schemas(schema_dir: &Path) {
                 if path.extension().and_then(|e| e.to_str()) != Some("capnp") {
                     continue;
                 }
-
-                println!("cargo::warning=Compiling schema file: {}", path.display());
 
                 let mut cmd = capnpc::CompilerCommand::new();
 

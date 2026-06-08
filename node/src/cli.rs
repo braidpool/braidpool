@@ -18,12 +18,8 @@ const DEFAULT_RPC_COOKIE: &str = "~/.bitcoin/.cookie";
 #[cfg(target_os = "macos")]
 const DEFAULT_RPC_COOKIE: &str = "~/Library/Application Support/Bitcoin/.cookie";
 
-/// Default IPC socket path for Linux (Unix domain socket)
-#[cfg(target_os = "linux")]
-const DEFAULT_IPC_SOCKET: &str = "/tmp/bitcoin-cpunet.sock";
-
-/// Default IPC socket path for macOS (Unix domain socket)
-#[cfg(target_os = "macos")]
+/// Default IPC socket path for Unix platforms (Linux/macOS) — Unix domain socket
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 const DEFAULT_IPC_SOCKET: &str = "/tmp/bitcoin-cpunet.sock";
 
 #[derive(Parser, Debug, Clone)]
