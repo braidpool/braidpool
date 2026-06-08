@@ -254,6 +254,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 notification_tx_clone,
                 swarm_handler_arc.clone(),
                 spin_lock_ref,
+                None,
             )
             .await;
     });

@@ -19,7 +19,7 @@ use tokio::{
         tcp::{OwnedReadHalf, OwnedWriteHalf},
         TcpListener,
     },
-    sync::{mpsc, RwLock},
+    sync::{mpsc, oneshot, RwLock},
 };
 use tokio_stream::StreamExt;
 use tokio_util::codec::{FramedRead, LinesCodec};
@@ -1783,6 +1783,7 @@ impl Server {
         notification_sender: mpsc::Sender<NotifyCmd>,
         swarm_handler: Arc<Mutex<SwarmHandler>>,
         ibd_or_not: Arc<AtomicBool>,
+        bound_addr_tx: Option<oneshot::Sender<SocketAddr>>,
     ) -> Result<(), Box<std::io::Error>> {
         debug!("Starting stratum server");
         let bind_address = format!(
@@ -1796,6 +1797,9 @@ impl Server {
                 return Err(Box::new(e));
             }
         };
+        if let Some(tx) = bound_addr_tx {
+            let _ = tx.send(listener.local_addr()?);
+        }
 
         let endpoints = crate::utils::server_endpoints(
             &self.stratum_config.hostname,
@@ -2066,7 +2070,7 @@ mod test {
     use tokio::{
         io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
         net::TcpStream,
-        sync::{mpsc, RwLock},
+        sync::{mpsc, oneshot, RwLock},
     };
 
     #[tokio::test]
@@ -2085,11 +2089,12 @@ mod test {
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let config = StratumServerConfig {
             hostname: "127.0.0.1".to_string(),
-            port: 3353,
+            port: 0,
             ..Default::default()
         };
 
         let mut server = Server::new(config.clone(), connection_mapping.clone(), None);
+        let (addr_tx, addr_rx) = oneshot::channel();
 
         let server_task = tokio::spawn(async move {
             let _ = server
@@ -2098,13 +2103,13 @@ mod test {
                     notify_tx,
                     swarm_handler_arc,
                     test_ibd_spinlock.clone(),
+                    Some(addr_tx),
                 )
                 .await;
         });
 
-        tokio::time::sleep(Duration::from_millis(300)).await;
-
-        let addr = format!("{}:{}", config.hostname, config.port);
+        let bound_addr = addr_rx.await.unwrap();
+        let addr = bound_addr.to_string();
         let mut mock_connection_handles = Vec::new();
         for i in 0..3 {
             let addr_clone = addr.clone();
@@ -2151,11 +2156,12 @@ mod test {
 
         let config = StratumServerConfig {
             hostname: "127.0.0.1".to_string(),
-            port: 3356,
+            port: 0,
             ..Default::default()
         };
 
         let mut server = Server::new(config.clone(), connection_mapping.clone(), None);
+        let (addr_tx, addr_rx) = oneshot::channel();
 
         let server_task = tokio::spawn(async move {
             let _ = server
@@ -2164,14 +2170,13 @@ mod test {
                     notify_tx,
                     swarm_handler_arc,
                     test_ibd_spinlock,
+                    Some(addr_tx),
                 )
                 .await;
         });
 
-        tokio::time::sleep(Duration::from_millis(300)).await;
-
-        let addr = format!("{}:{}", config.hostname, config.port);
-        let mut stream = TcpStream::connect(&addr).await.unwrap();
+        let bound_addr = addr_rx.await.unwrap();
+        let mut stream = TcpStream::connect(bound_addr).await.unwrap();
 
         let msg = r#"{"id":1,"method":"mining.subscribe","params":[]}"#;
         stream.write_all(msg.as_bytes()).await.unwrap();
@@ -2200,12 +2205,12 @@ mod test {
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let config = StratumServerConfig {
             hostname: "127.0.0.1".to_string(),
-            port: 3357,
+            port: 0,
             ..Default::default()
         };
 
-        let port = config.port;
         let mut server = Server::new(config, connection_mapping, None);
+        let (addr_tx, addr_rx) = oneshot::channel();
         tokio::spawn(async move {
             let _ = server
                 .run_stratum_service(
@@ -2213,14 +2218,13 @@ mod test {
                     notify_tx,
                     swarm_handler_arc,
                     ibd_spinlock.clone(),
+                    Some(addr_tx),
                 )
                 .await;
         });
 
-        tokio::time::sleep(Duration::from_millis(300)).await;
-
-        let addr = format!("127.0.0.1:{}", port);
-        let mut stream = TcpStream::connect(&addr).await.unwrap();
+        let bound_addr = addr_rx.await.unwrap();
+        let mut stream = TcpStream::connect(bound_addr).await.unwrap();
 
         let request = r#"{"id":2,"method":"mining.authorize","params":["satoshi","braidpool"]}"#;
         stream.write_all(request.as_bytes()).await.unwrap();
@@ -2251,11 +2255,11 @@ mod test {
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let config = StratumServerConfig {
             hostname: "127.0.0.1".to_string(),
-            port: 3358,
+            port: 0,
             ..Default::default()
         };
-        let port = config.port;
         let mut server = Server::new(config, connection_mapping, None);
+        let (addr_tx, addr_rx) = oneshot::channel();
         tokio::spawn(async move {
             let _ = server
                 .run_stratum_service(
@@ -2263,12 +2267,12 @@ mod test {
                     notify_tx,
                     swarm_handler_arc,
                     ibd_spinlock.clone(),
+                    Some(addr_tx),
                 )
                 .await;
         });
-        tokio::time::sleep(Duration::from_millis(300)).await;
-        let addr = format!("127.0.0.1:{}", port);
-        let mut stream = TcpStream::connect(&addr).await.unwrap();
+        let bound_addr = addr_rx.await.unwrap();
+        let mut stream = TcpStream::connect(bound_addr).await.unwrap();
         let request = r#"{"id":3,"method":"mining.suggest_difficulty","params":[1000]}"#;
         stream.write_all(request.as_bytes()).await.unwrap();
         stream.write_all(b"\n").await.unwrap();
@@ -2295,28 +2299,28 @@ mod test {
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let config = StratumServerConfig {
             hostname: "127.0.0.1".to_string(),
-            port: 5050,
+            port: 0,
             ..Default::default()
         };
 
         let mut server = Server::new(config, connection_mapping.clone(), None);
         let mining_job_map_clone = mining_job_map.clone();
         let notify_tx_clone = notify_tx.clone();
+        let (addr_tx, addr_rx) = oneshot::channel();
         tokio::spawn(async move {
-            server
+            let _ = server
                 .run_stratum_service(
                     mining_job_map_clone,
                     notify_tx_clone,
                     swarm_handler_arc,
                     ibd_spinlock,
+                    Some(addr_tx),
                 )
-                .await
-                .unwrap();
+                .await;
         });
 
-        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-        let mut stream = TcpStream::connect("127.0.0.1:5050").await.unwrap();
+        let bound_addr = addr_rx.await.unwrap();
+        let mut stream = TcpStream::connect(bound_addr).await.unwrap();
 
         stream
             .write_all(b"{\"method\":\"mining.subscribe\", \"params\": [\"test\", 1]\n")
