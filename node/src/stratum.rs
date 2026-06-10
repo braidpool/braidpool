@@ -1797,19 +1797,20 @@ impl Server {
                 return Err(Box::new(e));
             }
         };
+        let bound_addr = listener.local_addr()?;
         if let Some(tx) = bound_addr_tx {
-            let _ = tx.send(listener.local_addr()?);
+            let _ = tx.send(bound_addr);
         }
 
         let endpoints = crate::utils::server_endpoints(
             &self.stratum_config.hostname,
-            self.stratum_config.port,
+            bound_addr.port(),
             "stratum+tcp",
         );
         if endpoints.is_empty() {
             warn!(
                 host = %self.stratum_config.hostname,
-                port = %self.stratum_config.port,
+                port = %bound_addr.port(),
                 "Server listening but no interfaces were discovered"
             );
         } else {
