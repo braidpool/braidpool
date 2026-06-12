@@ -3,7 +3,7 @@ use crate::{
     bead::Bead,
     db::{init_db::init_db, BeadInsertData, BraidpoolDBTypes, InsertTupleTypes},
     error::DBErrors,
-    utils::compute_block_hash,
+    utils::{timestamp::MicrosecondTimestamp, compute_block_hash},
 };
 use bitcoin::{
     absolute::Time, block::Version as BlockVersion, ecdsa::Signature, hashes::Hash, BlockHash,
@@ -620,19 +620,11 @@ fn build_bead_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<Bead, DBErrors> 
         CompactTarget::from_consensus(row.get::<u32, _>("weak_target"));
     bead.committed_metadata.miner_ip = row.get("miner_ip");
 
-    let start_ts = row.get::<u32, _>("start_timestamp");
-    bead.committed_metadata.start_timestamp =
-        Time::from_consensus(start_ts).map_err(|e| DBErrors::TupleAttributeParsingError {
-            error: format!("Invalid start_timestamp value {}: {}", start_ts, e),
-            attribute: "start_timestamp".into(),
-        })?;
+            bead.committed_metadata.start_timestamp =
+                MicrosecondTimestamp::from_secs(row.get::<u32, _>("start_timestamp"));
 
-    let broadcast_ts = row.get::<u32, _>("broadcast_timestamp");
-    bead.uncommitted_metadata.broadcast_timestamp =
-        Time::from_consensus(broadcast_ts).map_err(|e| DBErrors::TupleAttributeParsingError {
-            error: format!("Invalid broadcast_timestamp value {}: {}", broadcast_ts, e),
-            attribute: "broadcast_timestamp".into(),
-        })?;
+            bead.uncommitted_metadata.broadcast_timestamp =
+                MicrosecondTimestamp::from_secs(row.get::<u32, _>("broadcast_timestamp"));
 
     bead.uncommitted_metadata.extra_nonce_1 =
         u64::from_str_radix(&row.get::<String, _>("extranonce1"), 16).map_err(|e| {
@@ -699,14 +691,9 @@ pub async fn fetch_bead_by_bead_hash(
                     attribute: "payout_address".to_string(),
                 })?
                 .to_string();
-            let start_ts_val = row.get::<u32, _>("start_timestamp");
-            let start_timestamp = Time::from_consensus(start_ts_val).map_err(|e| {
-                DBErrors::TupleAttributeParsingError {
-                    error: format!("Invalid timestamp value {}: {}", start_ts_val, e),
-                    attribute: "start_timestamp".to_string(),
-                }
-            })?;
-            let pub_key =
+            let start_timestamp =
+                MicrosecondTimestamp::from_secs(row.get::<u32, _>("start_timestamp"));
+                       let pub_key =
                 PublicKey::from_slice(&row.get::<Vec<u8>, _>("comm_pub_key")).map_err(|e| {
                     DBErrors::TupleAttributeParsingError {
                         error: format!("Invalid public key: {}", e),
@@ -727,13 +714,8 @@ pub async fn fetch_bead_by_bead_hash(
                     attribute: "extranonce2".to_string(),
                 })?;
             let broadcast_timestamp =
-                Time::from_consensus(row.get::<u32, _>("broadcast_timestamp")).map_err(|e| {
-                    DBErrors::TupleAttributeParsingError {
-                        error: e.to_string(),
-                        attribute: "broadcast_timestamp".to_string(),
-                    }
-                })?;
-            let signature =
+                MicrosecondTimestamp::from_secs(row.get::<u32, _>("broadcast_timestamp"));
+                       let signature =
                 Signature::from_slice(&row.get::<Vec<u8>, _>("signature")).map_err(|e| {
                     DBErrors::TupleAttributeParsingError {
                         error: e.to_string(),
@@ -848,7 +830,12 @@ pub async fn fetch_bead_by_bead_hash(
             .committed_metadata
             .parent_bead_timestamps
             .0
-            .push(time);
+            .push(MicrosecondTimestamp::from_secs(parent_timestamp as u32));
+        //Extending parent committment by parent hash
+        fetched_bead
+            .committed_metadata
+            .parents
+            .insert(parent_blockhash);
     }
 
     for tx_row in rows {
