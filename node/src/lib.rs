@@ -1,5 +1,5 @@
 //These implementations must be defined under lib.rs as they are required for intergration tests
-use crate::{db::db_handlers::prepare_bead_tuple_data, rpc_server::DashboardEvents};
+use crate::rpc_server::DashboardEvents;
 use bitcoin::{
     consensus::encode::deserialize, ecdsa::Signature, pow::CompactTargetExt, BlockHash,
     CompactTarget, EcdsaSighashType, Txid,
@@ -366,7 +366,7 @@ impl SwarmHandler {
         };
         let status = braid_data.extend(&weak_share);
         match status {
-            AddBeadStatus::BeadAdded { .. } => {
+            AddBeadStatus::BeadAdded { promoted_orphans } => {
                 let new_tips: Vec<_> = braid_data.tips.iter().map(|&idx| idx).collect();
                 let bead_hash = weak_share.block_header.block_hash();
                 info!(
@@ -374,37 +374,36 @@ impl SwarmHandler {
                     new_tips = ?new_tips,
                     "Braid extended successfully"
                 );
-                //Considering the index of the beads in braid will be same as the (insertion ids-1)
-                let bead_id = braid_data.bead_index_mapping.get(&bead_hash).unwrap();
-                let (txs_json, relative_json, parent_timestamp_json) = prepare_bead_tuple_data(
-                    &braid_data.beads,
-                    &braid_data.bead_index_mapping,
-                    &weak_share,
-                )
-                .unwrap();
-                let _db_insertion_command = match self
-                    .db_command_sender
-                    .send(BraidpoolDBTypes::InsertTupleTypes {
-                        query: db::InsertTupleTypes::InsertBeadSequentially {
-                            bead_to_insert: weak_share.clone(),
-                            txs_json: txs_json,
-                            relative_json: relative_json,
-                            parent_timestamp_json: parent_timestamp_json,
-                            bead_id: *bead_id,
-                        },
-                    })
-                    .await
-                {
-                    Ok(_) => {
-                        debug!(
-                            hash = %bead_hash,
-                            "InsertBeadSequentially sent to DB thread"
-                        );
+                // Resolve parent ids/timestamps
+                match db::BeadInsertData::resolve(&braid_data, &weak_share) {
+                    Some(bead) => {
+                        let removed_orphans =
+                            db::BeadInsertData::resolve_many(&braid_data, promoted_orphans.iter());
+                        match self
+                            .db_command_sender
+                            .send(BraidpoolDBTypes::InsertTupleTypes {
+                                query: db::InsertTupleTypes::InsertBeadsBatch {
+                                    beads: vec![bead],
+                                    removed_orphans,
+                                },
+                            })
+                            .await
+                        {
+                            Ok(_) => {
+                                debug!(
+                                    hash = %bead_hash,
+                                    "InsertBeadsBatch sent to DB thread"
+                                );
+                            }
+                            Err(error) => {
+                                error!(error = ?error, "Database insertion command failed");
+                            }
+                        }
                     }
-                    Err(error) => {
-                        error!(error = ?error, "Database insertion command failed");
+                    None => {
+                        error!(hash = %bead_hash, "Bead ID not found in index mapping");
                     }
-                };
+                }
                 let serialized_weak_share_bytes = bitcoin::consensus::serialize(&weak_share);
                 let res = self
                     .dashboard_notification_sender

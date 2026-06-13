@@ -242,6 +242,26 @@ impl Braid {
         promoted
     }
 
+    pub fn resolve_parents(&self, bead: &Bead) -> Vec<(u64, u32)> {
+        bead.committed_metadata
+            .parents
+            .iter()
+            .filter_map(|parent_hash| {
+                self.bead_index_mapping
+                    .get(parent_hash)
+                    .map(|&parent_index| {
+                        (
+                            parent_index as u64,
+                            self.beads[parent_index]
+                                .committed_metadata
+                                .start_timestamp
+                                .to_u32(),
+                        )
+                    })
+            })
+            .collect()
+    }
+
     pub fn check_genesis_beads(&self, genesis_beads: &Vec<BeadHash>) -> GenesisCheckStatus {
         if (genesis_beads.len() != self.genesis_beads.len()) {
             return GenesisCheckStatus::GenesisBeadsCountMismatch;
@@ -249,7 +269,7 @@ impl Braid {
         for bead_hash in genesis_beads {
             let index = self.bead_index_mapping.get(bead_hash);
             let bead_exists = match index {
-                Some(idx) => self.genesis_beads.contains(idx),
+                Some(&idx) => self.genesis_beads.contains(&idx),
                 None => false,
             };
             if !bead_exists {

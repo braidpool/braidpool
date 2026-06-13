@@ -669,7 +669,7 @@ impl RpcServer for RpcServerImpl {
         let braid_data = self.braid_arc.read().await;
 
         let parent_index = match braid_data.bead_index_mapping.get(&parent_hash) {
-            Some(index) => *index,
+            Some(&index) => index,
             None => return Err(ErrorObjectOwned::owned(3, "Bead not found", None::<()>)),
         };
 
