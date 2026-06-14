@@ -84,8 +84,9 @@ impl DBHandler {
             db_handler_tx,
         ))
     }
+    /// Builds the `(transactions, relatives, parent_timestamps)` JSON value tuples for a single
+    /// bead.
     fn prepare_bead_tuple_values(
-        &self,
         data: &BeadInsertData,
     ) -> (
         Vec<serde_json::Value>,
@@ -131,7 +132,7 @@ impl DBHandler {
             let bead = &data.bead;
             let bead_id = data.bead_id;
 
-            let (txs, relatives, parent_ts) = self.prepare_bead_tuple_values(data);
+            let (txs, relatives, parent_ts) = Self::prepare_bead_tuple_values(data);
 
             all_bead_data.push(json!({
                 "id": bead_id as i64,
@@ -275,7 +276,12 @@ impl DBHandler {
                     inserted_count = inserted_count,
                     "Bulk insert chunk failed, rolling back"
                 );
-                local_transaction.rollback().await.ok();
+                if let Err(rollback_err) = local_transaction.rollback().await {
+                    error!(
+                        error = ?rollback_err,
+                        "Failed to roll back batch transaction after chunk insert failure"
+                    );
+                }
                 return Err(e);
             }
             inserted_count += chunk.len() as u32;
@@ -758,162 +764,86 @@ pub mod test {
         let (current_file_braid, _file_braid) =
             loading_braid_from_file(file_path.to_str().unwrap());
 
-        let mut all_bead_data = Vec::new();
-        let mut all_txs_json_parts = Vec::new();
-        let mut all_relatives_json_parts = Vec::new();
-        let mut all_parent_ts_json_parts = Vec::new();
+        let mut bead_insert_data =
+            BeadInsertData::resolve_many(&current_file_braid, current_file_braid.beads.iter())
+                .expect("resolve_many failed: a bead or parent was missing from the braid index");
+        assert_eq!(
+            bead_insert_data.len(),
+            current_file_braid.beads.len(),
+            "resolve_many dropped beads"
+        );
+        // Splitting a dummy orphan bead from all the beads in the existing braid test file
+        // for testing the orphan insertions as well .
+        let split_at = bead_insert_data.len().saturating_sub(1);
+        let orphans = bead_insert_data.split_off(split_at);
+        println!("{orphans:?}");
+        let beads = bead_insert_data;
 
-        for bead in current_file_braid.beads.iter() {
-            let bead_id = *current_file_braid
-                .bead_index_mapping
-                .get(&bead.block_header.block_hash())
-                .unwrap();
-
-            all_bead_data.push(json!({
-                "id": bead_id as i64,
-                "hash": hex::encode(bead.block_header.block_hash().to_byte_array()),
-                "nVersion": bead.block_header.version.to_consensus(),
-                "hashPrevBlock": hex::encode(bead.block_header.prev_blockhash.to_byte_array()),
-                "hashMerkleRoot": hex::encode(bead.block_header.merkle_root.to_byte_array()),
-                "nTime": bead.block_header.time.to_u32(),
-                "nBits": bead.block_header.bits.to_consensus(),
-                "nNonce": bead.block_header.nonce,
-                "payout_address": hex::encode(bead.committed_metadata.payout_address.as_bytes()),
-                "start_timestamp": bead.committed_metadata.start_timestamp.to_u32(),
-                "comm_pub_key": hex::encode(bead.committed_metadata.comm_pub_key.to_bytes()),
-                "min_target": bead.committed_metadata.min_target.to_consensus(),
-                "weak_target": bead.committed_metadata.weak_target.to_consensus(),
-                "miner_ip": bead.committed_metadata.miner_ip.clone(),
-                "extranonce1": hex::encode(bead.uncommitted_metadata.extra_nonce_1.to_be_bytes()),
-                "extranonce2": hex::encode(bead.uncommitted_metadata.extra_nonce_2.to_be_bytes()),
-                "broadcast_timestamp": bead.uncommitted_metadata.broadcast_timestamp.to_u32(),
-                "signature": hex::encode(bead.uncommitted_metadata.signature.to_vec()),
-            }));
-
-            for bead_tx in bead.committed_metadata.transaction_ids.0.iter() {
-                all_txs_json_parts.push(json!({
-                    "txid": hex::encode(bead_tx.to_byte_array()),
-                    "bead_id": bead_id as u64
-                }));
-            }
-            // Add dummy tx for testing
-            all_txs_json_parts.push(json!({
-                "txid": "b1a6cecc2e40e89e9e943c3c010c1f6ca6dd1530361ead7289254d929ee4eb2a",
-                "bead_id": bead_id as u64
-            }));
-
-            for parent_hash in &bead.committed_metadata.parents {
-                let parent_index = *current_file_braid
-                    .bead_index_mapping
-                    .get(parent_hash)
-                    .unwrap();
-                let parent_timestamp = current_file_braid.beads[parent_index]
-                    .committed_metadata
-                    .start_timestamp
-                    .to_u32();
-
-                all_relatives_json_parts.push(json!({
-                    "parent": parent_index as u64,
-                    "child": bead_id as u64
-                }));
-
-                all_parent_ts_json_parts.push(json!({
-                    "parent": parent_index as u64,
-                    "child": bead_id as u64,
-                    "timestamp": parent_timestamp
-                }));
-            }
-        }
-
-        let beads_json = serde_json::to_string(&all_bead_data).unwrap();
-        let txs_json = serde_json::to_string(&all_txs_json_parts).unwrap();
-        let relatives_json = serde_json::to_string(&all_relatives_json_parts).unwrap();
-        let parent_ts_json = serde_json::to_string(&all_parent_ts_json_parts).unwrap();
-
-        // Execute bulk inserts separately (as the fix does)
-        let mut test_insertion_tx = test_pool.begin().await.unwrap();
-
-        if let Err(e) = sqlx::query(BULK_INSERT_BEADS)
-            .bind(&beads_json)
-            .execute(&mut *test_insertion_tx)
+        // Drive the real batched-insert code path over the in-memory test pool.
+        let (_db_tx, db_rx) = tokio::sync::mpsc::channel::<BraidpoolDBTypes>(DB_CHANNEL_CAPACITY);
+        let handler = DBHandler {
+            receiver: db_rx,
+            db_connection_pool: test_pool.clone(),
+        };
+        handler
+            .insert_beads_batch(beads, orphans)
             .await
-        {
-            panic!("Bulk insert beads failed: {:?}", e);
-        }
+            .expect("Batch insertion via production path failed");
 
-        if let Err(e) = sqlx::query(BULK_INSERT_TRANSACTIONS)
-            .bind(&txs_json)
-            .execute(&mut *test_insertion_tx)
-            .await
-        {
-            panic!("Bulk insert transactions failed: {:?}", e);
-        }
+        // Expected row counts derived directly from the braid.
+        let expected_beads = current_file_braid.beads.len();
+        let expected_txs: usize = current_file_braid
+            .beads
+            .iter()
+            .map(|b| b.committed_metadata.transaction_ids.0.len())
+            .sum();
+        // Relatives and ParentTimestamps are both produced from `resolve_parents`,
+        // so they share the same expected cardinality.
+        let expected_relatives: usize = current_file_braid
+            .beads
+            .iter()
+            .map(|b| current_file_braid.resolve_parents(b).unwrap().len())
+            .sum();
 
-        if let Err(e) = sqlx::query(BULK_INSERT_RELATIVES)
-            .bind(&relatives_json)
-            .execute(&mut *test_insertion_tx)
-            .await
-        {
-            panic!("Bulk insert relatives failed: {:?}", e);
-        }
-
-        if let Err(e) = sqlx::query(BULK_INSERT_PARENT_TIMESTAMPS)
-            .bind(&parent_ts_json)
-            .execute(&mut *test_insertion_tx)
-            .await
-        {
-            panic!("Bulk insert parent timestamps failed: {:?}", e);
-        }
-
-        test_insertion_tx.commit().await.unwrap();
-
-        // Verify bead table has correct count
         let bead_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM bead")
             .fetch_one(&test_pool)
             .await
             .unwrap();
-        assert_eq!(
-            bead_count as usize,
-            current_file_braid.beads.len(),
-            "Bead count mismatch"
-        );
+        assert_eq!(bead_count as usize, expected_beads, "Bead count mismatch");
 
         let tx_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM Transactions")
             .fetch_one(&test_pool)
             .await
             .unwrap();
+        assert_eq!(
+            tx_count as usize, expected_txs,
+            "Transactions count mismatch"
+        );
 
         let relatives_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM Relatives")
             .fetch_one(&test_pool)
             .await
             .unwrap();
+        assert_eq!(
+            relatives_count as usize, expected_relatives,
+            "Relatives count mismatch"
+        );
 
         let parent_ts_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ParentTimestamps")
             .fetch_one(&test_pool)
             .await
             .unwrap();
-        let expected_parent_ts = all_parent_ts_json_parts.len();
-
-        if expected_parent_ts > 0 {
-            assert_eq!(
-                parent_ts_count as usize, expected_parent_ts,
-                "ParentTimestamps count mismatch"
-            );
-        }
+        assert_eq!(
+            parent_ts_count as usize, expected_relatives,
+            "ParentTimestamps count mismatch"
+        );
 
         for bead in current_file_braid.beads.iter() {
-            let fetched_test_bead =
-                fetch_bead_by_bead_hash(&test_pool, bead.block_header.block_hash())
-                    .await
-                    .unwrap();
+            let fetched = fetch_bead_by_bead_hash(&test_pool, bead.block_header.block_hash())
+                .await
+                .unwrap()
+                .unwrap_or_else(|| panic!("Bead not found: {}", bead.block_header.block_hash()));
 
-            assert!(
-                fetched_test_bead.is_some(),
-                "Bead not found: {}",
-                bead.block_header.block_hash()
-            );
-
-            let fetched = fetched_test_bead.unwrap();
             assert_eq!(
                 fetched.block_header.block_hash().to_string(),
                 bead.block_header.block_hash().to_string()

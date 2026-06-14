@@ -374,34 +374,39 @@ impl SwarmHandler {
                     new_tips = ?new_tips,
                     "Braid extended successfully"
                 );
-                // Resolve parent ids/timestamps
                 match db::BeadInsertData::resolve(&braid_data, &weak_share) {
-                    Some(bead) => {
-                        let removed_orphans =
-                            db::BeadInsertData::resolve_many(&braid_data, promoted_orphans.iter());
-                        match self
-                            .db_command_sender
-                            .send(BraidpoolDBTypes::InsertTupleTypes {
-                                query: db::InsertTupleTypes::InsertBeadsBatch {
-                                    beads: vec![bead],
-                                    removed_orphans,
-                                },
-                            })
-                            .await
+                    Ok(bead) => {
+                        match db::BeadInsertData::resolve_many(&braid_data, promoted_orphans.iter())
                         {
-                            Ok(_) => {
-                                debug!(
-                                    hash = %bead_hash,
-                                    "InsertBeadsBatch sent to DB thread"
-                                );
+                            Ok(removed_orphans) => {
+                                match self
+                                    .db_command_sender
+                                    .send(BraidpoolDBTypes::InsertTupleTypes {
+                                        query: db::InsertTupleTypes::InsertBeadsBatch {
+                                            beads: vec![bead],
+                                            removed_orphans,
+                                        },
+                                    })
+                                    .await
+                                {
+                                    Ok(_) => {
+                                        debug!(
+                                            hash = %bead_hash,
+                                            "InsertBeadsBatch sent to DB thread"
+                                        );
+                                    }
+                                    Err(error) => {
+                                        error!(error = ?error, "Database insertion command failed");
+                                    }
+                                }
                             }
                             Err(error) => {
-                                error!(error = ?error, "Database insertion command failed");
+                                error!(error = %error, hash = %bead_hash, "Failed to resolve promoted orphans for persistence");
                             }
                         }
                     }
-                    None => {
-                        error!(hash = %bead_hash, "Bead ID not found in index mapping");
+                    Err(error) => {
+                        error!(error = %error, hash = %bead_hash, "Failed to resolve bead for persistence");
                     }
                 }
                 let serialized_weak_share_bytes = bitcoin::consensus::serialize(&weak_share);

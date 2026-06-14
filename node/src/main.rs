@@ -648,13 +648,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                         }
                                     } else if let braid::AddBeadStatus::BeadAdded { promoted_orphans } = &status {
                                         let bead_data = match node::db::BeadInsertData::resolve(&braid_data, &bead) {
-                                            Some(data) => data,
-                                            None => {
-                                                error!(bead_hash = ?bead.block_header.block_hash(), "Bead ID not found in index mapping");
+                                            Ok(data) => data,
+                                            Err(error) => {
+                                                error!(error = %error, bead_hash = ?bead.block_header.block_hash(), "Failed to resolve bead for persistence");
                                                 continue;
                                             }
                                         };
-                                        let removed_orphans = node::db::BeadInsertData::resolve_many(&braid_data, promoted_orphans.iter());
+                                        let removed_orphans = match node::db::BeadInsertData::resolve_many(&braid_data, promoted_orphans.iter()) {
+                                            Ok(orphans) => orphans,
+                                            Err(error) => {
+                                                error!(error = %error, "Failed to resolve promoted orphans for persistence");
+                                                continue;
+                                            }
+                                        };
                                         let _query_send_result = match db_tx.send(node::db::BraidpoolDBTypes::InsertTupleTypes { query: node::db::InsertTupleTypes::InsertBeadsBatch { beads: vec![bead_data], removed_orphans } }).await{
                                            Ok(_)=>{
                                                debug!("Insert command sent successfully to db handler after receiving bead from peer");
@@ -759,13 +765,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                         }
                                     } else if let braid::AddBeadStatus::BeadAdded { promoted_orphans } = &status {
                                         let bead_data = match node::db::BeadInsertData::resolve(&braid_data, &bead) {
-                                            Some(data) => data,
-                                            None => {
-                                                error!(bead_hash = ?bead.block_header.block_hash(), "Bead ID not found in index mapping (GetAllBeads)");
+                                            Ok(data) => data,
+                                            Err(error) => {
+                                                error!(error = %error, bead_hash = ?bead.block_header.block_hash(), "Failed to resolve bead for persistence (GetAllBeads)");
                                                 continue;
                                             }
                                         };
-                                        let removed_orphans = node::db::BeadInsertData::resolve_many(&braid_data, promoted_orphans.iter());
+                                        let removed_orphans = match node::db::BeadInsertData::resolve_many(&braid_data, promoted_orphans.iter()) {
+                                            Ok(orphans) => orphans,
+                                            Err(error) => {
+                                                error!(error = %error, "Failed to resolve promoted orphans for persistence (GetAllBeads)");
+                                                continue;
+                                            }
+                                        };
                                         // update score of the peer and adding to local db store
                                         let _query_send_result = match db_tx.send(node::db::BraidpoolDBTypes::InsertTupleTypes { query: node::db::InsertTupleTypes::InsertBeadsBatch { beads: vec![bead_data], removed_orphans } }).await{
                                             Ok(_)=>{
@@ -1085,13 +1097,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                         } else if let braid::AddBeadStatus::BeadAdded { promoted_orphans } = &status {
 
                                             let bead_data = match node::db::BeadInsertData::resolve(&braid_data, &bead) {
-                                                Some(data) => data,
-                                                None => {
-                                                    error!(bead_hash = ?curr_beadhash, "Bead ID not found in index mapping (GetBeadsAfter)");
+                                                Ok(data) => data,
+                                                Err(error) => {
+                                                    error!(error = %error, bead_hash = ?curr_beadhash, "Failed to resolve bead for persistence (GetBeadsAfter)");
                                                     continue;
                                                 }
                                             };
-                                            let removed_orphans = node::db::BeadInsertData::resolve_many(&braid_data, promoted_orphans.iter());
+                                            let removed_orphans = match node::db::BeadInsertData::resolve_many(&braid_data, promoted_orphans.iter()) {
+                                                Ok(orphans) => orphans,
+                                                Err(error) => {
+                                                    error!(error = %error, bead_hash = ?curr_beadhash, "Failed to resolve promoted orphans for persistence (GetBeadsAfter)");
+                                                    continue;
+                                                }
+                                            };
                                             // update score of the peer
                                             {
                                                 let mut peer_manager = peer_manager_arc.write().await;

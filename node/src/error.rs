@@ -2,6 +2,7 @@
 use std::{fmt, path::PathBuf};
 
 use crate::stratum::{BlockTemplate, JobDetails};
+use crate::utils::BeadHash;
 use crate::TemplateId;
 use bitcoin::address::ParseError as AddressParseError;
 use tokio::sync::oneshot;
@@ -11,6 +12,18 @@ use tokio::sync::oneshot;
 pub enum BraidError {
     MissingAncestorWork,
     HighestWorkBeadFetchFailed,
+    /// A bead's committed parent hash is not present in the braid index. This is
+    /// a consensus/DAG invariant violation: a connected bead must have all of
+    /// its parents resolvable.
+    MissingParent {
+        bead: BeadHash,
+        parent: BeadHash,
+    },
+    /// A bead is not present in the braid index when persistence was attempted,
+    /// despite the braid reporting it as added. Indicates a consensus/logic bug.
+    BeadNotIndexed {
+        bead: BeadHash,
+    },
 }
 #[derive(Debug)]
 pub enum BraidRPCError {
@@ -435,6 +448,16 @@ impl fmt::Display for BraidError {
             BraidError::MissingAncestorWork => write!(f, "Missing ancestor work map"),
             BraidError::HighestWorkBeadFetchFailed => {
                 write!(f, "An error occurred while fetching the highest work bead")
+            }
+            BraidError::MissingParent { bead, parent } => {
+                write!(
+                    f,
+                    "Parent {} of bead {} not found in braid index",
+                    parent, bead
+                )
+            }
+            BraidError::BeadNotIndexed { bead } => {
+                write!(f, "Bead {} not found in braid index", bead)
             }
         }
     }
