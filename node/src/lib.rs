@@ -100,8 +100,8 @@ pub const EXTRANONCE2_SIZE: usize = 8;
 /// **Separator between `EXTRANONCE1` and `EXTRANONCE2`.**
 ///
 /// This is an array of bytes used to clearly delimit the two extranonce parts.
-/// In this testing configuration, the separator length equals
-/// `EXTRANONCE1_SIZE + EXTRANONCE2_SIZE` (8 bytes total),
+/// The separator length equals
+/// `EXTRANONCE1_SIZE + EXTRANONCE2_SIZE` (16 bytes total),
 /// and is filled with the byte value `1u8` for simplicity.
 /// can be changed accordingly as per discussion .
 pub const EXTRANONCE_SEPARATOR: [u8; EXTRANONCE1_SIZE + EXTRANONCE2_SIZE] =

@@ -8,6 +8,7 @@ use bitcoin::{absolute::Decodable, Transaction};
 use bitcoin::{BlockHash, BlockHeader, BlockTime, TxMerkleNode, Txid, Witness};
 use futures::{lock::Mutex, FutureExt};
 use num::ToPrimitive;
+use rand::random;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -1084,7 +1085,7 @@ static NEXT_CONNECTION_ID: AtomicU32 = AtomicU32::new(0);
 impl Default for DownstreamClient {
     fn default() -> Self {
         let connection_id = NEXT_CONNECTION_ID.fetch_add(1, Ordering::SeqCst);
-        let extranonce1_bytes = (connection_id as u64).to_be_bytes();
+        let extranonce1_bytes = random::<u64>().to_be_bytes();
         let extranonce1_hex = hex::encode(extranonce1_bytes);
         debug!(
             connection_id = %format!("{:x}", connection_id),
@@ -2455,14 +2456,6 @@ mod test {
             .await
             .insert_mining_job(1, job_details.clone())
             .await;
-        let test_submit_request_params = json!([
-            "bitaxe",
-            numeric_job_id.to_string(),
-            "0000000003000000",
-            "68df7e33",
-            "068beb7a",
-            "00000000"
-        ]);
         let configure_test_request = json!([
             [
                 "version-rolling"
@@ -2476,6 +2469,56 @@ mod test {
         let configure_response = mock_downstream_handler
             .handle_configure(&configure_test_request, 1)
             .await;
+
+        // Grind a valid nonce for 207fffff difficulty by replicating handle_submit's
+        // coinbase construction to get the real merkle root.
+        // extranonce1 must be set first (above) so the coinbase matches exactly.
+        let extranonce1_hex_for_grind = hex::encode(&mock_downstream_handler.extranonce1);
+        let extranonce2_for_grind = "0000000003000000";
+        let coinbase_hex_for_grind = format!(
+            "{}{}{}{}",
+            constructed_test_notification_ref.coinbase1,
+            extranonce1_hex_for_grind,
+            extranonce2_for_grind,
+            constructed_test_notification_ref.coinbase2,
+        );
+        let coinbase_bytes_for_grind = hex::decode(&coinbase_hex_for_grind).unwrap();
+        let mut grind_cursor = Cursor::new(coinbase_bytes_for_grind);
+        let coinbase_tx_for_grind =
+            bitcoin::Transaction::consensus_decode(&mut grind_cursor).unwrap();
+        let merkle_root_bytes_for_grind =
+            calculate_merkle_root(coinbase_tx_for_grind.compute_txid(), &[]);
+        let merkle_root_for_grind = TxMerkleNode::from_byte_array(merkle_root_bytes_for_grind);
+        // BIP310: miner mask ffffffff & pool limit 0x1FFFE000 = 0x1FFFE000 stored mask.
+        // version_bits=0 => final_version = (0x20000000 & !0x1FFFE000) | 0 = 0x20000000
+        let grind_bits = bitcoin::pow::CompactTarget::from_unprefixed_hex("207fffff").unwrap();
+        let grind_target = bitcoin::Target::from_compact(grind_bits);
+        let grind_ntime = u32::from_str_radix("68df7e33", 16).unwrap();
+        let mut valid_nonce: u32 = 0;
+        for nonce in 0u32..=u32::MAX {
+            let grind_header = BlockHeader {
+                version: BlockVersion::from_consensus(536870912),
+                prev_blockhash: test_template_header.prev_blockhash,
+                merkle_root: merkle_root_for_grind,
+                time: BlockTime::from_u32(grind_ntime),
+                bits: grind_bits,
+                nonce,
+            };
+            if grind_target.is_met_by(grind_header.block_hash()) {
+                valid_nonce = nonce;
+                break;
+            }
+        }
+        let valid_nonce_hex = format!("{:08x}", valid_nonce);
+
+        let test_submit_request_params = json!([
+            "bitaxe",
+            numeric_job_id.to_string(),
+            "0000000003000000",
+            "68df7e33",
+            valid_nonce_hex,
+            "00000000"
+        ]);
         let submit_response: StratumResponses = mock_downstream_handler
             .handle_submit(
                 &test_submit_request_params,
@@ -2485,20 +2528,11 @@ mod test {
             )
             .await
             .unwrap();
-        // Assert the submission was processed without a parse or structure error.
-        // This test verifies version rolling logic (BIP310) — not PoW validity.
-        // PoW depends on a specific block hash which changes with extranonce size;
-        // that belongs in integration tests against a live CPUNet node.
         match submit_response {
             StratumResponses::StandardResponse { std_response } => {
-                assert!(
-                    std_response.result.is_some(),
-                    "Expected a result in response"
-                );
-                assert!(
-                    std_response.error.is_none(),
-                    "Expected no error in response"
-                );
+                let resp = std_response.result.unwrap();
+                let json_response = resp.as_bool().unwrap();
+                assert_eq!(json_response, true);
             }
             _ => {
                 panic!("Expected StandardResponse, got a different response type");
@@ -2567,19 +2601,5 @@ mod test {
         assert_eq!(client1.extranonce1.len(), EXTRANONCE1_SIZE);
         assert_eq!(client2.extranonce1.len(), EXTRANONCE1_SIZE);
         assert_eq!(client3.extranonce1.len(), EXTRANONCE1_SIZE);
-
-        // extranonce1 must match the big-endian encoding of connection_id
-        assert_eq!(
-            client1.extranonce1,
-            (client1.connection_id() as u64).to_be_bytes().to_vec()
-        );
-        assert_eq!(
-            client2.extranonce1,
-            (client2.connection_id() as u64).to_be_bytes().to_vec()
-        );
-        assert_eq!(
-            client3.extranonce1,
-            (client3.connection_id() as u64).to_be_bytes().to_vec()
-        );
     }
 }
