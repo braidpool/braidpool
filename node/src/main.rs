@@ -205,10 +205,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //Intializing `notifier` for mining.notify
     let mut notifier: Notifier = Notifier::new(notification_rx, Arc::clone(&mining_job_map));
     //Stratum configuration initialization
-    let stratum_config = StratumServerConfig {
-        port: args.stratum_port,
-        ..StratumServerConfig::default()
-    };
+    let stratum_config = StratumServerConfig::default();
+    let stratum_bind_address = format!("{}:{}", stratum_config.hostname, args.stratum_port);
+    let stratum_listener = tokio::net::TcpListener::bind(&stratum_bind_address).await?;
     let (block_submission_tx, block_submission_rx) =
         tokio::sync::mpsc::unbounded_channel::<node::stratum::BlockSubmissionRequest>();
     //IBD notifier task after peer_discovery
@@ -250,11 +249,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     tokio::spawn(async move {
         let _res = stratum_server
             .run_stratum_service(
+                stratum_listener,
                 mining_job_map,
                 notification_tx_clone,
                 swarm_handler_arc.clone(),
                 spin_lock_ref,
-                None,
             )
             .await;
     });
