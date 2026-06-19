@@ -37,16 +37,29 @@ const MinerInventoryDashboard = () => {
     const loadMinersFromDB = async () => {
       try {
         setLoading(true);
+        setError(null);
         const response = await fetch(`${API_URLS.MINER_DEVICE_URL}/api/miners`);
+        if (!response.ok) {
+          throw new Error(
+            `Failed to load miners: ${response.status} ${response.statusText}`
+          );
+        }
         const data = await response.json();
         if (data.success && data.miners) {
           setMiners(data.miners.map((m: any) => mapApiToMiner(m)));
           if (data.miners.length > 0) {
             setLastUpdate(new Date());
           }
+        } else if (!data.success) {
+          throw new Error(data.error || 'Failed to load miners from database');
         }
       } catch (err) {
+        const message =
+          err instanceof Error
+            ? err.message
+            : 'Failed to load miners from database';
         console.error('Failed to load miners from database:', err);
+        setError(message);
       } finally {
         setLoading(false);
       }

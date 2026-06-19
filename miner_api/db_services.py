@@ -2,6 +2,7 @@
 import asyncio
 from typing import Optional, List
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timezone
 import logging
@@ -10,6 +11,44 @@ from .db_models import MinerDevice
 from .services import MinerService
 
 logger = logging.getLogger("miner_api")
+
+
+def _apply_device_fields(miner: MinerDevice, data: dict) -> None:
+    miner.hostname = data.get("hostname")
+    miner.mac = data.get("mac")
+    miner.make = data.get("make")
+    miner.model = data.get("model")
+    miner.firmware = data.get("firmware")
+    miner.hashrate_current = data.get("hashrate_current")
+    miner.hashrate_avg = data.get("hashrate_avg")
+    miner.expected_hashrate = data.get("expected_hashrate")
+    miner.temperature = data.get("temperature")
+    miner.temperature_max = data.get("temperature_max")
+    miner.vr_temperature = data.get("vr_temperature")
+    miner.power_usage = data.get("power_usage")
+    miner.power_limit = data.get("power_limit")
+    miner.efficiency = data.get("efficiency")
+    miner.voltage = data.get("voltage")
+    miner.fan_speeds = data.get("fan_speeds", [])
+    miner.chip_count = data.get("chip_count")
+    miner.is_mining = data.get("is_mining")
+    miner.errors = data.get("errors", [])
+    miner.uptime = data.get("uptime")
+    
+    # pools info 
+    pools_data = []
+    for pool in data.get("pools", []):
+        if isinstance(pool, dict):
+            pools_data.append(pool)
+        else:
+            pools_data.append(pool.model_dump() if hasattr(pool, 'model_dump') else dict(pool))
+    miner.pools = pools_data
+    miner.primary_pool = data.get("primary_pool", "No Pool")
+    
+    miner.api_version = data.get("api_version")
+    miner.is_online = True
+    miner.last_error = None
+    miner.last_seen = datetime.now(timezone.utc)
 
 
 class MinerDBService:
@@ -22,6 +61,7 @@ class MinerDBService:
             return {
                 "success": False,
                 "error": f"Miner with IP {ip} already exists",
+                "already_exists": True,
                 "miner": existing.to_dict()
             }
         
@@ -35,7 +75,17 @@ class MinerDBService:
                 last_error=result.get("error", "Failed to connect"),
             )
             db.add(miner)
-            await db.commit()  
+            try:
+                await db.commit()  
+            except IntegrityError:
+                await db.rollback()
+                existing = await MinerDBService.get_miner_by_ip(db, ip)
+                return {
+                    "success": False,
+                    "error": f"Miner with IP {ip} already exists",
+                    "already_exists": True,
+                    "miner": existing.to_dict() if existing else None
+                }
             await db.refresh(miner)
             
             return {
@@ -46,7 +96,17 @@ class MinerDBService:
         
         miner = MinerDevice.from_miner_data(ip, result["data"], name=name)
         db.add(miner)
-        await db.commit()  
+        try:
+            await db.commit()
+        except IntegrityError:
+            await db.rollback()
+            existing = await MinerDBService.get_miner_by_ip(db, ip)
+            return {
+                "success": False,
+                "error": f"Miner with IP {ip} already exists",
+                "already_exists": True,
+                "miner": existing.to_dict() if existing else None
+            }
         await db.refresh(miner)
         
         logger.info(f"Added new miner device: {ip} (model: {miner.model})")
@@ -145,43 +205,7 @@ class MinerDBService:
                 "miner": miner.to_dict()
             }
         
-        # Update all fields from fresh data
-        data = result["data"]
-        miner.hostname = data.get("hostname")
-        miner.mac = data.get("mac")
-        miner.make = data.get("make")
-        miner.model = data.get("model")
-        miner.firmware = data.get("firmware")
-        miner.hashrate_current = data.get("hashrate_current")
-        miner.hashrate_avg = data.get("hashrate_avg")
-        miner.expected_hashrate = data.get("expected_hashrate")
-        miner.temperature = data.get("temperature")
-        miner.temperature_max = data.get("temperature_max")
-        miner.vr_temperature = data.get("vr_temperature")
-        miner.power_usage = data.get("power_usage")
-        miner.power_limit = data.get("power_limit")
-        miner.efficiency = data.get("efficiency")
-        miner.voltage = data.get("voltage")
-        miner.fan_speeds = data.get("fan_speeds", [])
-        miner.chip_count = data.get("chip_count")
-        miner.is_mining = data.get("is_mining")
-        miner.errors = data.get("errors", [])
-        miner.uptime = data.get("uptime")
-        
-        # Handle pools
-        pools_data = []
-        for pool in data.get("pools", []):
-            if isinstance(pool, dict):
-                pools_data.append(pool)
-            else:
-                pools_data.append(pool.model_dump() if hasattr(pool, 'model_dump') else dict(pool))
-        miner.pools = pools_data
-        miner.primary_pool = data.get("primary_pool", "No Pool")
-        
-        miner.api_version = data.get("api_version")
-        miner.is_online = True
-        miner.last_error = None
-        miner.last_seen = datetime.now(timezone.utc)
+        _apply_device_fields(miner, result["data"])
         
         db.add(miner) 
         await db.commit()  
@@ -206,43 +230,7 @@ class MinerDBService:
                 "miner": miner.to_dict()
             }
         
-        # Update all fields from fresh data
-        data = device_result["data"]
-        miner.hostname = data.get("hostname")
-        miner.mac = data.get("mac")
-        miner.make = data.get("make")
-        miner.model = data.get("model")
-        miner.firmware = data.get("firmware")
-        miner.hashrate_current = data.get("hashrate_current")
-        miner.hashrate_avg = data.get("hashrate_avg")
-        miner.expected_hashrate = data.get("expected_hashrate")
-        miner.temperature = data.get("temperature")
-        miner.temperature_max = data.get("temperature_max")
-        miner.vr_temperature = data.get("vr_temperature")
-        miner.power_usage = data.get("power_usage")
-        miner.power_limit = data.get("power_limit")
-        miner.efficiency = data.get("efficiency")
-        miner.voltage = data.get("voltage")
-        miner.fan_speeds = data.get("fan_speeds", [])
-        miner.chip_count = data.get("chip_count")
-        miner.is_mining = data.get("is_mining")
-        miner.errors = data.get("errors", [])
-        miner.uptime = data.get("uptime")
-        
-        # Handle pools
-        pools_data = []
-        for pool in data.get("pools", []):
-            if isinstance(pool, dict):
-                pools_data.append(pool)
-            else:
-                pools_data.append(pool.model_dump() if hasattr(pool, 'model_dump') else dict(pool))
-        miner.pools = pools_data
-        miner.primary_pool = data.get("primary_pool", "No Pool")
-        
-        miner.api_version = data.get("api_version")
-        miner.is_online = True
-        miner.last_error = None
-        miner.last_seen = datetime.now(timezone.utc)
+        _apply_device_fields(miner, device_result["data"])
         
         db.add(miner)
         

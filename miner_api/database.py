@@ -8,11 +8,19 @@ from .config import settings
 
 logger = logging.getLogger("miner_api")
 
-# Create async engine for SQLite
+
+def _build_engine_kwargs() -> dict:
+    kwargs = {
+        "echo": settings.DATABASE_ECHO,
+    }
+    if settings.DATABASE_URL.startswith("sqlite"):
+        kwargs["connect_args"] = {"check_same_thread": False}
+    return kwargs
+
+
 engine = create_async_engine(
     settings.DATABASE_URL,
-    echo=settings.DATABASE_ECHO,
-    connect_args={"check_same_thread": False} 
+    **_build_engine_kwargs(),
 )
 
 async_session_factory = async_sessionmaker(
