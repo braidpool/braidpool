@@ -1,42 +1,13 @@
 import React, { useState } from 'react';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { Box, Container, Link, Typography, Button } from '@mui/material';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Dashboard from './components/Dashboard/Dashboard';
 import ShareDetails from './components/ShareDetails/ShareDetails';
 import MinedSharesExplorer from './components/MinerDashboard/MinedSharesExplorer';
-
-// Create a dark theme
-const theme = createTheme({
-  palette: {
-    mode: 'dark',
-    primary: {
-      main: '#3986e8',
-    },
-    secondary: {
-      main: '#dc004e',
-    },
-    background: {
-      default: '#121212',
-      paper: '#1e1e1e',
-    },
-  },
-  components: {
-    MuiContainer: {
-      styleOverrides: {
-        root: {
-          paddingLeft: 16,
-          paddingRight: 16,
-          '@media (min-width: 600px)': {
-            paddingLeft: 24,
-            paddingRight: 24,
-          },
-        },
-      },
-    },
-  },
-});
+import { ThemeProvider as CustomThemeProvider, useTheme } from './contexts/ThemeContext';
+import ThemeSwitcher from './components/ThemeSwitcher/ThemeSwitcher';
 
 function Copyright() {
   return (
@@ -51,14 +22,17 @@ function Copyright() {
   );
 }
 
-function App() {
+function AppContent() {
   const [shareDetailsOpen, setShareDetailsOpen] = useState(false);
+  const { muiTheme } = useTheme();
 
   return (
-    <ThemeProvider theme={theme}>
+    <ThemeProvider theme={muiTheme}>
       <CssBaseline />
       <BrowserRouter>
         <Box sx={{ display: 'flex' }}>
+          <ThemeSwitcher />
+
           {/* Test button for ShareDetails */}
           {/* <Button
             variant='contained'
@@ -84,7 +58,7 @@ function App() {
               display: 'flex',
               flexDirection: 'column',
               minHeight: '100vh',
-              backgroundColor: '#121212',
+              backgroundColor: 'background.default',
               width: '100%',
             }}
           >
@@ -117,6 +91,14 @@ function App() {
         </Box>
       </BrowserRouter>
     </ThemeProvider>
+  );
+}
+
+function App() {
+  return (
+    <CustomThemeProvider>
+      <AppContent />
+    </CustomThemeProvider>
   );
 }
 
