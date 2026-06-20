@@ -11,8 +11,8 @@ use serde::Serialize;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct UnCommittedMetadata {
-    pub extra_nonce_1: u32,
-    pub extra_nonce_2: u32,
+    pub extra_nonce_1: u64,
+    pub extra_nonce_2: u64,
     pub broadcast_timestamp: Time,
     pub signature: Signature,
 }
@@ -47,8 +47,8 @@ impl Encodable for UnCommittedMetadata {
 
 impl Decodable for UnCommittedMetadata {
     fn consensus_decode<R: BufRead + ?Sized>(r: &mut R) -> Result<Self, Error> {
-        let extra_nonce_1 = u32::consensus_decode(r)?;
-        let extra_nonce_2 = u32::consensus_decode(r)?;
+        let extra_nonce_1 = u64::consensus_decode(r)?;
+        let extra_nonce_2 = u64::consensus_decode(r)?;
         let broadcast_timestamp = Time::from_consensus(u32::consensus_decode(r).unwrap()).unwrap();
         let signature = Signature::from_str(&String::consensus_decode(r).unwrap()).unwrap();
 

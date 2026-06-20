@@ -79,7 +79,7 @@ fn test_serialized_uncommitted_metadata() {
         sighash_type: EcdsaSighashType::All,
     };
     let time_val = Time::from_consensus(1653195600).unwrap();
-    let extra_nonce = 42;
+    let extra_nonce: u64 = 42;
     let test_uncommitted_metadata = TestUnCommittedMetadataBuilder::new()
         .broadcast_timestamp(time_val)
         .extra_nonce(extra_nonce, extra_nonce)
@@ -127,7 +127,7 @@ fn test_serialized_bead() {
         .weak_target(weak_target)
         .transactions(vec![test_txid])
         .build();
-    let extra_nonce = 42;
+    let extra_nonce: u64 = 42;
     let hex = "3046022100839c1fbc5304de944f697c9f4b1d01d1faeba32d751c0f7acb21ac8a0f436a72022100e89bd46bb3a5a62adc679f659b7ce876d83ee297c7a5587b2011c4fcc72eab45";
     let sig = Signature {
         signature: secp256k1::ecdsa::Signature::from_str(hex).unwrap(),
@@ -197,7 +197,7 @@ fn test_bead_response_serialization() {
         .weak_target(weak_target)
         .transactions(vec![])
         .build();
-    let extra_nonce = 42;
+    let extra_nonce: u64 = 42;
     let hex = "3046022100839c1fbc5304de944f697c9f4b1d01d1faeba32d751c0f7acb21ac8a0f436a72022100e89bd46bb3a5a62adc679f659b7ce876d83ee297c7a5587b2011c4fcc72eab45";
     let sig = Signature {
         signature: secp256k1::ecdsa::Signature::from_str(hex).unwrap(),

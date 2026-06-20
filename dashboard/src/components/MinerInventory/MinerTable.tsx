@@ -10,6 +10,7 @@ const MinerTable: React.FC<MinerTableProps> = ({
   expandedAlerts,
   setExpandedAlerts,
   statusStyles,
+  onDelete,
 }) => {
   const hasAlerts = miners.some((m) => getAlerts(m).length > 0);
 
@@ -20,7 +21,7 @@ const MinerTable: React.FC<MinerTableProps> = ({
         style={{ borderColor: colors.cardAccentSecondary }}
       >
         <div
-          className={`grid ${hasAlerts ? 'grid-cols-8' : 'grid-cols-7'} gap-4 px-4 py-3 text-xs uppercase tracking-wide text-gray-400 border-b border-gray-800/60`}
+          className={`grid ${hasAlerts ? 'grid-cols-9' : 'grid-cols-8'} gap-4 px-4 py-3 text-xs uppercase tracking-wide text-gray-400 border-b border-gray-800/60`}
         >
           <div>Model</div>
           <div>Hashrate</div>
@@ -30,6 +31,7 @@ const MinerTable: React.FC<MinerTableProps> = ({
           {hasAlerts && <div>Alerts</div>}
           <div>Temp</div>
           <div>Details</div>
+          <div>Actions</div>
         </div>
         <div className="rounded-2xl   shadow-md p-4">
           {miners.map((miner) => {
@@ -40,7 +42,7 @@ const MinerTable: React.FC<MinerTableProps> = ({
             return (
               <div
                 key={miner.id}
-                className={`grid ${hasAlerts ? 'grid-cols-8' : 'grid-cols-7'} gap-4 px-4 py-3 text-sm text-gray-200 items-center`}
+                className={`grid ${hasAlerts ? 'grid-cols-9' : 'grid-cols-8'} gap-4 px-4 py-3 text-sm text-gray-200 items-center`}
               >
                 <div className="font-medium text-white truncate">
                   {miner.hostname ||
@@ -120,6 +122,17 @@ const MinerTable: React.FC<MinerTableProps> = ({
                   >
                     Details
                   </Link>
+                </div>
+                <div className="text-gray-300 whitespace-nowrap">
+                  {onDelete && (
+                    <button
+                      onClick={() => onDelete(miner.id)}
+                      className="inline-flex px-3 py-1 text-xs rounded border border-rose-600/50 bg-rose-900/30 hover:bg-rose-800/50 text-rose-300 cursor-pointer transition-colors"
+                      title={`Remove ${miner.hostname || miner.ip} from database`}
+                    >
+                      Remove
+                    </button>
+                  )}
                 </div>
               </div>
             );

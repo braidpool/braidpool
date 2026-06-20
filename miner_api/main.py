@@ -6,8 +6,11 @@ import time
 import uuid
 import logging
 import sys
+import asyncio
 from .config import settings
 from .routes import router
+from .database import init_db, close_db, async_session_factory
+from .db_services import MinerDBService
 from . import __version__
 
 # Setup logging
@@ -18,13 +21,58 @@ logging.basicConfig(
 )
 logger = logging.getLogger("miner_api")
 
+_refresh_task = None
+
+
+async def periodic_miner_refresh():
+    while True:
+        try:
+            await asyncio.sleep(settings.MINER_REFRESH_INTERVAL)
+            
+            async with async_session_factory() as db:
+                try:
+                    result = await MinerDBService.refresh_all_miners(db)
+                    logger.debug(
+                        f"Periodic refresh: {result['success']}/{result['total']} miners updated"
+                    )
+                except Exception as e:
+                    await db.rollback()
+                    logger.error(f"Error during periodic refresh: {e}")
+                    
+        except asyncio.CancelledError:
+            logger.info("Periodic refresh task cancelled")
+            break
+        except Exception as e:
+            logger.error(f"Unexpected error in periodic refresh: {e}")
+            await asyncio.sleep(60)  
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifecycle manager."""
+    global _refresh_task
+    
     logger.info(f"Starting Miner API v{__version__}")
     logger.info(f"Config: Host={settings.HOST}, Port={settings.PORT}")
+    
+    # Initialize database
+    await init_db()
+    logger.info(f"Database initialized: {settings.DATABASE_URL}")
+    
+    # Start background refresh task
+    if settings.MINER_REFRESH_ENABLED:
+        _refresh_task = asyncio.create_task(periodic_miner_refresh())
+        logger.info(f"Background refresh enabled (interval: {settings.MINER_REFRESH_INTERVAL}s)")
+    
     yield
+    
+    # Cleanup
+    if _refresh_task:
+        _refresh_task.cancel()
+        try:
+            await _refresh_task
+        except asyncio.CancelledError:
+            pass
+    
+    await close_db()
     logger.info("Shutting down")
 
 

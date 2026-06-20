@@ -1,5 +1,5 @@
 //These implementations must be defined under lib.rs as they are required for intergration tests
-use crate::db::db_handlers::prepare_bead_tuple_data;
+use crate::{db::db_handlers::prepare_bead_tuple_data, rpc_server::DashboardEvents};
 use bitcoin::{
     consensus::encode::deserialize, ecdsa::Signature, pow::CompactTargetExt, BlockHash,
     CompactTarget, EcdsaSighashType, Txid,
@@ -88,20 +88,20 @@ pub fn get_next_template_id() -> TemplateId {
 /// In Stratum mining, the extranonce is split into two parts:
 /// `EXTRANONCE1` (prefix) and `EXTRANONCE2` (suffix).
 ///
-/// This constant defines the size of `EXTRANONCE1` as **4 bytes**.
+/// This constant defines the size of `EXTRANONCE1` as **8 bytes**.
 /// Typically assigned by the mining pool to uniquely identify a miner generated randomly or can be done via the peer_addr hash.
-pub const EXTRANONCE1_SIZE: usize = 4;
+pub const EXTRANONCE1_SIZE: usize = 8;
 
 /// **Length of the extranonce suffix (in bytes).**
 ///
 ///These are the rollable bits defined under the extanonce,along with nonce and Version which can be worked upon to produce suitable valid share
 /// being submitted by the miner via `mining.submit` .
-pub const EXTRANONCE2_SIZE: usize = 4;
+pub const EXTRANONCE2_SIZE: usize = 8;
 /// **Separator between `EXTRANONCE1` and `EXTRANONCE2`.**
 ///
 /// This is an array of bytes used to clearly delimit the two extranonce parts.
-/// In this testing configuration, the separator length equals
-/// `EXTRANONCE1_SIZE + EXTRANONCE2_SIZE` (8 bytes total),
+/// The separator length equals
+/// `EXTRANONCE1_SIZE + EXTRANONCE2_SIZE` (16 bytes total),
 /// and is filled with the byte value `1u8` for simplicity.
 /// can be changed accordingly as per discussion .
 pub const EXTRANONCE_SEPARATOR: [u8; EXTRANONCE1_SIZE + EXTRANONCE2_SIZE] =
@@ -257,11 +257,13 @@ pub struct SwarmHandler {
     pub command_sender: Sender<SwarmCommand>,
     braid_arc: Arc<tokio::sync::RwLock<Braid>>,
     db_command_sender: tokio::sync::mpsc::Sender<BraidpoolDBTypes>,
+    dashboard_notification_sender: Arc<DashboardEvents>,
 }
 impl SwarmHandler {
     pub fn new(
         braid_arc: Arc<tokio::sync::RwLock<Braid>>,
         db_command_sender: tokio::sync::mpsc::Sender<BraidpoolDBTypes>,
+        dashboard_notification_sender: Arc<DashboardEvents>,
     ) -> (Self, Receiver<SwarmCommand>) {
         let (swarm_stratum_bridge_tx, swarm_stratum_bridge_rx) =
             mpsc::channel::<SwarmCommand>(1024);
@@ -270,6 +272,7 @@ impl SwarmHandler {
                 command_sender: swarm_stratum_bridge_tx,
                 braid_arc: Arc::clone(&braid_arc),
                 db_command_sender,
+                dashboard_notification_sender,
             },
             swarm_stratum_bridge_rx,
         )
@@ -277,12 +280,12 @@ impl SwarmHandler {
     pub async fn propagate_valid_bead(
         &mut self,
         candidate_block: bitcoin::Block,
-        extranonce_2_raw_value: u32,
+        extranonce_2_raw_value: u64,
         downstream_client_ip: &str,
         job_sent_timestamp: u32,
         downstream_payout_addr: &str,
         //TODO: Will be used as seperate entity after altering `uncommitted_metadata`
-        extranonce_1_raw_value: u32,
+        extranonce_1_raw_value: u64,
     ) -> Result<(), StratumErrors> {
         let (candidate_block_header, candidate_block_transactions) = candidate_block.into_parts();
         let ids: Vec<Txid> = candidate_block_transactions
@@ -363,18 +366,16 @@ impl SwarmHandler {
         };
         let status = braid_data.extend(&weak_share);
         match status {
-            AddBeadStatus::BeadAdded => {
+            AddBeadStatus::BeadAdded { .. } => {
                 let new_tips: Vec<_> = braid_data.tips.iter().map(|&idx| idx).collect();
+                let bead_hash = weak_share.block_header.block_hash();
                 info!(
-                    hash = %weak_share.block_header.block_hash(),
+                    hash = %bead_hash,
                     new_tips = ?new_tips,
                     "Braid extended successfully"
                 );
                 //Considering the index of the beads in braid will be same as the (insertion ids-1)
-                let bead_id = braid_data
-                    .bead_index_mapping
-                    .get(&weak_share.block_header.block_hash())
-                    .unwrap();
+                let bead_id = braid_data.bead_index_mapping.get(&bead_hash).unwrap();
                 let (txs_json, relative_json, parent_timestamp_json) = prepare_bead_tuple_data(
                     &braid_data.beads,
                     &braid_data.bead_index_mapping,
@@ -396,7 +397,7 @@ impl SwarmHandler {
                 {
                     Ok(_) => {
                         debug!(
-                            hash = %weak_share.block_header.block_hash(),
+                            hash = %bead_hash,
                             "InsertBeadSequentially sent to DB thread"
                         );
                     }
@@ -405,6 +406,18 @@ impl SwarmHandler {
                     }
                 };
                 let serialized_weak_share_bytes = bitcoin::consensus::serialize(&weak_share);
+                let res = self
+                    .dashboard_notification_sender
+                    .new_bead
+                    .send(Some(weak_share));
+                match res {
+                    Ok(_) => {
+                        debug!("Passing self mined bead to the dashboard notifier");
+                    }
+                    Err(error) => {
+                        error!("An error occurred while sending dashboard notification - {error}");
+                    }
+                }
                 //After validation of the candidate block constructed by the downstream node sending it to swarm for further propogation
                 match self
                     .command_sender
@@ -415,13 +428,13 @@ impl SwarmHandler {
                 {
                     Ok(_) => {
                         info!(
-                            hash = %weak_share.block_header.block_hash(),
+                            hash = %bead_hash,
                             "Bead sent to swarm"
                         );
                     }
                     Err(e) => {
                         error!(
-                            hash = %weak_share.block_header.block_hash(),
+                            hash = %bead_hash,
                             error = %e,
                             "Failed to send candidate block to swarm"
                         );

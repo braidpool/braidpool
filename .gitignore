@@ -25,3 +25,4 @@ venv
 .reviews/
 .worktrees/
 deny.toml
+miner_api.db
