@@ -328,8 +328,9 @@ impl RpcServer for RpcServerImpl {
             ErrorObjectOwned::owned(1, format!("Invalid bead data: {}", e), None::<()>)
         })?;
         let mut braid_data = self.braid_arc.write().await;
+        let bead_hash = braid_data.compute_bead_hash(&bead);
         info!(
-            hash = %braid_data.compute_bead_hash(&bead),
+            hash = %bead_hash,
             "Add bead request received"
         );
         let success_status = braid_data.extend(&bead);

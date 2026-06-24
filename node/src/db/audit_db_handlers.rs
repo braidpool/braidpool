@@ -1,6 +1,6 @@
 use crate::bead::Bead;
 use crate::error::DBErrors;
-use bitcoin::BlockHash;
+use bitcoin::{hashes::Hash, BlockHash};
 use sqlx::{Pool, Sqlite};
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
@@ -57,25 +57,28 @@ impl AuditDBHandler {
 
         let extranonce1 = format!("{:016x}", bead.uncommitted_metadata.extra_nonce_1);
         let extranonce2 = format!("{:016x}", bead.uncommitted_metadata.extra_nonce_2);
-
         let result = sqlx::query(INSERT_BEAD_QUERY)
             .bind(composite_hash.as_byte_array().as_slice())
             .bind(block_hash.as_byte_array().as_slice())
             .bind(bead.block_header.version.to_consensus() as i64)
             .bind(bead.block_header.prev_blockhash.as_byte_array().as_slice())
             .bind(bead.block_header.merkle_root.as_byte_array().as_slice())
-            .bind(bead.block_header.time.to_u32() as i64)
+            .bind(bead.block_header.time as i64)
             .bind(bead.block_header.bits.to_consensus() as i64)
             .bind(bead.block_header.nonce as i64)
             .bind(&bead.committed_metadata.payout_address)
-            .bind(bead.committed_metadata.start_timestamp.to_u32() as i64)
+            .bind(bead.committed_metadata.start_timestamp.to_consensus_u32() as i64)
             .bind(bead.committed_metadata.comm_pub_key.to_bytes())
             .bind(bead.committed_metadata.min_target.to_consensus() as i64)
             .bind(bead.committed_metadata.weak_target.to_consensus() as i64)
             .bind(miner_ip)
             .bind(extranonce1)
             .bind(extranonce2)
-            .bind(bead.uncommitted_metadata.broadcast_timestamp.to_u32() as i64)
+            .bind(
+                bead.uncommitted_metadata
+                    .broadcast_timestamp
+                    .to_consensus_u32() as i64,
+            )
             .bind(bead.uncommitted_metadata.signature.to_vec())
             .bind(created_at)
             .execute(&mut *tx)
@@ -100,7 +103,7 @@ impl AuditDBHandler {
             qb.push_values(parents, |mut b, (parent_hash, parent_timestamp)| {
                 b.push_bind(bead_id)
                     .push_bind(parent_hash.as_byte_array().as_slice())
-                    .push_bind(parent_timestamp.to_u32() as i64);
+                    .push_bind(parent_timestamp.to_consensus_u32() as i64);
             });
             qb.build()
                 .execute(&mut *tx)
@@ -155,11 +158,11 @@ impl AuditDBHandler {
                     attribute: "merkle_root".to_string(),
                 }
             })?);
-        let timestamp = bitcoin::BlockTime::from_u32(row.get::<i64, _>("timestamp") as u32);
+        let timestamp = row.get::<i64, _>("timestamp") as u32;
         let bits = bitcoin::CompactTarget::from_consensus(row.get::<i64, _>("bits") as u32);
         let nonce = row.get::<i64, _>("nonce") as u32;
 
-        let block_header = bitcoin::BlockHeader {
+        let block_header = bitcoin::block::Header {
             version,
             prev_blockhash,
             merkle_root,
@@ -170,13 +173,12 @@ impl AuditDBHandler {
 
         // Committed metadata
         let payout_address = row.get::<String, _>("payout_address");
-        let start_timestamp = bitcoin::absolute::MedianTimePast::from_u32(
-            row.get::<i64, _>("start_timestamp") as u32,
-        )
-        .map_err(|e| DBErrors::TupleAttributeParsingError {
-            error: e.to_string(),
-            attribute: "start_timestamp".to_string(),
-        })?;
+        let start_timestamp =
+            bitcoin::absolute::Time::from_consensus(row.get::<i64, _>("start_timestamp") as u32)
+                .map_err(|e| DBErrors::TupleAttributeParsingError {
+                    error: e.to_string(),
+                    attribute: "start_timestamp".to_string(),
+                })?;
 
         let comm_pub_key_bytes: Vec<u8> = row.get("comm_pub_key");
         let comm_pub_key = bitcoin::PublicKey::from_slice(&comm_pub_key_bytes).map_err(|e| {
@@ -206,7 +208,7 @@ impl AuditDBHandler {
                     attribute: "extranonce2".to_string(),
                 }
             })?;
-        let broadcast_timestamp = bitcoin::absolute::MedianTimePast::from_u32(
+        let broadcast_timestamp = bitcoin::absolute::Time::from_consensus(
             row.get::<i64, _>("broadcast_timestamp") as u32,
         )
         .map_err(|e| DBErrors::TupleAttributeParsingError {
@@ -242,7 +244,7 @@ impl AuditDBHandler {
                     attribute: "parent_block_hash".to_string(),
                 }
             })?);
-            let time = bitcoin::absolute::MedianTimePast::from_u32(
+            let time = bitcoin::absolute::Time::from_consensus(
                 p_row.get::<i64, _>("parent_timestamp") as u32,
             )
             .map_err(|e| DBErrors::TupleAttributeParsingError {

@@ -2,7 +2,7 @@ use crate::{
     bead::Bead,
     db::{init_db::init_db, BeadInsertData, BraidpoolDBTypes, InsertTupleTypes},
     error::DBErrors,
-    utils::{compute_block_hash, BeadHash},
+    utils::compute_block_hash,
 };
 use bitcoin::{
     absolute::Time, block::Version as BlockVersion, ecdsa::Signature, hashes::Hash, BlockHash,
@@ -168,6 +168,7 @@ impl DBHandler {
 
     /// Inserting chunks for bulk insertions
     async fn bulk_insert_chunk(
+        &self,
         local_transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
         chunk: &[BeadInsertData],
     ) -> Result<(), DBErrors> {
@@ -182,25 +183,27 @@ impl DBHandler {
             let bead_id = data.bead_id;
 
             let (txs, relatives, parent_ts) = Self::prepare_bead_tuple_values(data);
-
+            let block_hash_bytes = compute_block_hash(&bead.block_header, &self.network_name)
+                .to_byte_array()
+                .to_vec();
             all_bead_data.push(json!({
                 "id": bead_id as i64,
-                "hash": hex::encode(bead.block_header.block_hash().to_byte_array()),
+                "hash": hex::encode(block_hash_bytes),
                 "nVersion": bead.block_header.version.to_consensus(),
                 "hashPrevBlock": hex::encode(bead.block_header.prev_blockhash.to_byte_array()),
                 "hashMerkleRoot": hex::encode(bead.block_header.merkle_root.to_byte_array()),
-                "nTime": bead.block_header.time.to_u32(),
+                "nTime": bead.block_header.time,
                 "nBits": bead.block_header.bits.to_consensus(),
                 "nNonce": bead.block_header.nonce,
                 "payout_address": hex::encode(bead.committed_metadata.payout_address.as_bytes()),
-                "start_timestamp": bead.committed_metadata.start_timestamp.to_u32(),
+                "start_timestamp": bead.committed_metadata.start_timestamp.to_consensus_u32(),
                 "comm_pub_key": hex::encode(bead.committed_metadata.comm_pub_key.to_bytes()),
                 "min_target": bead.committed_metadata.min_target.to_consensus(),
                 "weak_target": bead.committed_metadata.weak_target.to_consensus(),
                 "miner_ip": bead.committed_metadata.miner_ip.clone(),
                 "extranonce1": hex::encode(bead.uncommitted_metadata.extra_nonce_1.to_be_bytes()),
                 "extranonce2": hex::encode(bead.uncommitted_metadata.extra_nonce_2.to_be_bytes()),
-                "broadcast_timestamp": bead.uncommitted_metadata.broadcast_timestamp.to_u32(),
+                "broadcast_timestamp": bead.uncommitted_metadata.broadcast_timestamp.to_consensus_u32(),
                 "signature": hex::encode(bead.uncommitted_metadata.signature.to_vec()),
             }));
             all_txs_json_parts.extend(txs);
@@ -318,7 +321,7 @@ impl DBHandler {
         let mut inserted_count = 0u32;
         // Iterating through each chunk and inserting the corrsponding chunk
         for chunk in all_beads.chunks(BATCH_INSERT_THRESHOLD) {
-            if let Err(e) = Self::bulk_insert_chunk(&mut local_transaction, chunk).await {
+            if let Err(e) = self.bulk_insert_chunk(&mut local_transaction, chunk).await {
                 error!(
                     error = ?e,
                     chunk_size = chunk.len(),
@@ -533,7 +536,7 @@ pub async fn fetch_beads_in_batch(
                         attribute: "parent_hash".into(),
                     })?;
             let ts: i64 = row.get("timestamp");
-            let parent_ts = MedianTimePast::from_u32(ts as u32).map_err(|e| {
+            let parent_ts = Time::from_consensus(ts as u32).map_err(|e| {
                 DBErrors::TupleAttributeParsingError {
                     error: format!("Invalid parent timestamp value {}: {}", ts, e),
                     attribute: "parent_bead_timestamps".into(),
@@ -566,7 +569,7 @@ fn build_bead_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<Bead, DBErrors> 
     let mut bead = Bead::default();
     bead.block_header.version = BlockVersion::from_consensus(row.get::<i32, _>("nVersion"));
     bead.block_header.bits = CompactTarget::from_consensus(row.get::<u32, _>("nBits"));
-    bead.block_header.time = BlockTime::from_u32(row.get::<u32, _>("nTime"));
+    bead.block_header.time = row.get::<u32, _>("nTime");
     bead.block_header.nonce = row.get::<u32, _>("nNonce");
 
     let prev_bytes: Vec<u8> = row.get("hashPrevBlock");
@@ -611,14 +614,14 @@ fn build_bead_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<Bead, DBErrors> 
 
     let start_ts = row.get::<u32, _>("start_timestamp");
     bead.committed_metadata.start_timestamp =
-        MedianTimePast::from_u32(start_ts).map_err(|e| DBErrors::TupleAttributeParsingError {
+        Time::from_consensus(start_ts).map_err(|e| DBErrors::TupleAttributeParsingError {
             error: format!("Invalid start_timestamp value {}: {}", start_ts, e),
             attribute: "start_timestamp".into(),
         })?;
 
     let broadcast_ts = row.get::<u32, _>("broadcast_timestamp");
-    bead.uncommitted_metadata.broadcast_timestamp = MedianTimePast::from_u32(broadcast_ts)
-        .map_err(|e| DBErrors::TupleAttributeParsingError {
+    bead.uncommitted_metadata.broadcast_timestamp =
+        Time::from_consensus(broadcast_ts).map_err(|e| DBErrors::TupleAttributeParsingError {
             error: format!("Invalid broadcast_timestamp value {}: {}", broadcast_ts, e),
             attribute: "broadcast_timestamp".into(),
         })?;
@@ -689,7 +692,7 @@ pub async fn fetch_bead_by_bead_hash(
                 })?
                 .to_string();
             let start_ts_val = row.get::<u32, _>("start_timestamp");
-            let start_timestamp = MedianTimePast::from_u32(start_ts_val).map_err(|e| {
+            let start_timestamp = Time::from_consensus(start_ts_val).map_err(|e| {
                 DBErrors::TupleAttributeParsingError {
                     error: format!("Invalid timestamp value {}: {}", start_ts_val, e),
                     attribute: "start_timestamp".to_string(),
@@ -715,13 +718,13 @@ pub async fn fetch_bead_by_bead_hash(
                     error: e.to_string(),
                     attribute: "extranonce2".to_string(),
                 })?;
-            let broadcast_timestamp = MedianTimePast::from_u32(
-                row.get::<u32, _>("broadcast_timestamp"),
-            )
-            .map_err(|e| DBErrors::TupleAttributeParsingError {
-                error: e.to_string(),
-                attribute: "broadcast_timestamp".to_string(),
-            })?;
+            let broadcast_timestamp =
+                Time::from_consensus(row.get::<u32, _>("broadcast_timestamp")).map_err(|e| {
+                    DBErrors::TupleAttributeParsingError {
+                        error: e.to_string(),
+                        attribute: "broadcast_timestamp".to_string(),
+                    }
+                })?;
             let signature =
                 Signature::from_slice(&row.get::<Vec<u8>, _>("signature")).map_err(|e| {
                     DBErrors::TupleAttributeParsingError {
@@ -792,7 +795,7 @@ pub async fn fetch_bead_by_bead_hash(
             }
         };
 
-    let mut parent_pairs_single: Vec<(BlockHash, MedianTimePast)> = Vec::new();
+    let mut parent_pairs_single: Vec<(BlockHash, Time)> = Vec::new();
     for parent_beads in parent_timestamp_rows {
         let parent_timestamp = parent_beads.get::<u32, _>("timestamp");
         let parent_bead_id = parent_beads.get::<i64, _>("parent");
@@ -821,7 +824,7 @@ pub async fn fetch_bead_by_bead_hash(
         };
         parent_pairs_single.push((
             parent_blockhash,
-            MedianTimePast::from_u32(parent_timestamp).map_err(|e| {
+            Time::from_consensus(parent_timestamp).map_err(|e| {
                 DBErrors::TupleAttributeParsingError {
                     error: format!("Invalid timestamp {}: {}", parent_timestamp, e),
                     attribute: "parent_timestamp".into(),
@@ -953,22 +956,26 @@ pub mod test {
             "ParentTimestamps count mismatch"
         );
 
+        // Beads were inserted under the `cpunet` network, so their stored `hash` column is
+        // network-scoped. Lookups and assertions must use the same network-scoped hash.
+        let network_name = "cpunet".to_string();
         for bead in current_file_braid.beads.iter() {
-            let fetched = fetch_bead_by_bead_hash(&test_pool, bead.block_header.block_hash())
+            let bead_hash = compute_block_hash(&bead.block_header, &network_name);
+            let fetched = fetch_bead_by_bead_hash(&test_pool, bead_hash)
                 .await
                 .unwrap()
-                .unwrap_or_else(|| panic!("Bead not found: {}", bead.block_header.block_hash()));
+                .unwrap_or_else(|| panic!("Bead not found: {}", bead_hash));
 
             assert_eq!(
-                fetched.block_header.block_hash().to_string(),
-                bead.block_header.block_hash().to_string()
+                compute_block_hash(&fetched.block_header, &network_name).to_string(),
+                bead_hash.to_string()
             );
 
             assert_eq!(
                 fetched.committed_metadata.parents.len(),
                 bead.committed_metadata.parents.len(),
                 "Parent count mismatch for bead {}",
-                bead.block_header.block_hash()
+                bead_hash
             );
         }
     }

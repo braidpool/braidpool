@@ -2,6 +2,7 @@ use crate::error::StratumErrors;
 use crate::template_creator::calculate_merkle_root;
 use crate::utils::compute_block_hash;
 use crate::{SwarmHandler, TemplateId, EXTRANONCE1_SIZE, EXTRANONCE2_SIZE, EXTRANONCE_SEPARATOR};
+use bitcoin::absolute::Time;
 use bitcoin::consensus::{serialize, Decodable};
 use bitcoin::hashes::Hash;
 use bitcoin::io::Cursor;
@@ -1118,7 +1119,6 @@ impl DownstreamClient {
                 }
                 merkle_branches_bytes.push(bytes.to_vec());
             }
-
             let merkle_root_bytes =
                 calculate_merkle_root(coinbase_tx.compute_txid(), &merkle_branches_bytes);
             let merkle_root = TxMerkleNode::from_byte_array(merkle_root_bytes);
@@ -1126,7 +1126,7 @@ impl DownstreamClient {
                 version: bitcoin::block::Version::from_consensus(final_version),
                 prev_blockhash: BlockHash::from_byte_array(prevhash_for_header),
                 merkle_root,
-                time: BlockTime::from_u32(ntime_u32),
+                time: ntime_u32,
                 bits: submitted_job.blocktemplate.bits,
                 nonce: nonce_u32,
             };
@@ -1139,13 +1139,16 @@ impl DownstreamClient {
                 valid_block_hash = Some(block_hash);
                 used_extranonce1 = extranonce1_candidate.clone();
                 meets_upstream = Self::validate_share_against_target(block_hash, &upstream_target);
+                let miner_target = miner_target.to_be_bytes();
+                let miner_target_hex = hex::encode(miner_target);
+                let upstream_target_hex = hex::encode(upstream_target.to_be_bytes());
                 debug!(
                     connection_id = %connection_id_hex,
                     worker = %worker_name,
                     job_id = %job_id_str,
                     block_hash = %block_hash,
-                    miner_target = %miner_target.to_hex(),
-                    upstream_target = %upstream_target.to_hex(),
+                    miner_target = %miner_target_hex,
+                    upstream_target = %upstream_target_hex,
                     meets_miner_diff = true,
                     meets_upstream_diff = %meets_upstream,
                     "Share difficulty validation results"
@@ -1275,9 +1278,7 @@ impl DownstreamClient {
 
                 let broadcast_time = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| {
-                        bitcoin::absolute::MedianTimePast::from_u32(d.as_secs() as u32).unwrap()
-                    })
+                    .map(|d| Time::from_consensus(d.as_secs() as u32).unwrap())
                     .unwrap();
 
                 let (extranonce_1_raw_value, extranonce_2_raw_value) = {
@@ -1321,8 +1322,10 @@ impl DownstreamClient {
 
                 let placeholder_sig_bytes = [0u8; 64];
                 let sig = bitcoin::ecdsa::Signature {
-                    signature: secp256k1::ecdsa::Signature::from_compact(&placeholder_sig_bytes)
-                        .expect("Valid placeholder signature"),
+                    signature: bitcoin::secp256k1::ecdsa::Signature::from_compact(
+                        &placeholder_sig_bytes,
+                    )
+                    .expect("Valid placeholder signature"),
                     sighash_type: bitcoin::EcdsaSighashType::All,
                 };
 
@@ -2378,7 +2381,7 @@ impl Notifier {
                 .map(|d| d.as_secs() as u32)
                 .unwrap_or(0)
         });
-        template.curtime = bitcoin::BlockTime::from_u32(unix_timestamp);
+        template.curtime = unix_timestamp;
         let template_id = TemplateId::from_upstream_string(&job_notification.job_id);
         let job_details = crate::stratum::JobDetails {
             blocktemplate: template,
@@ -2862,7 +2865,7 @@ impl Notifier {
                         .duration_since(std::time::UNIX_EPOCH)
                         .map(|d| d.as_secs() as u32)
                         .unwrap_or(0);
-                    base_template.curtime = bitcoin::BlockTime::from_u32(unix_timestamp);
+                    base_template.curtime = unix_timestamp;
 
                     let downstream_channel_mapping = downstream_connection_map
                         .read()
@@ -3436,7 +3439,6 @@ impl Server {
     ) -> Result<(), Box<std::io::Error>> {
         debug!("Starting stratum server");
         let bound_addr = listener.local_addr()?;
-
         let endpoints = crate::utils::server_endpoints(
             &self.stratum_config.hostname,
             bound_addr.port(),
@@ -3602,6 +3604,8 @@ impl Server {
                                 is_proxy_mode: is_proxy,
                                 payout_address: None,
                                 audit_miner_difficulty: self.stratum_config.audit_miner_difficulty,
+                                network_name:self.network_name.clone()
+
                             }));
 
                          //Notification sender to the `Notifier` task
@@ -4017,11 +4021,12 @@ mod test {
         let compact_100 = target_100.to_compact_lossy();
         println!("--- Difficulty 100.0 Test ---");
         println!("Difficulty: {}", difficulty);
-        println!("Target (Hex): {}", target_100.to_hex());
+        let target_100_hex = hex::encode(target_100.to_be_bytes());
+        println!("Target (Hex): {}", target_100_hex);
         println!("Target (nBits): {:#x}", compact_100.to_consensus());
 
         let expected_prefix = "00000000028c";
-        let actual_hex = target_100.to_hex();
+        let actual_hex = target_100_hex;
 
         assert!(
             actual_hex.starts_with(expected_prefix),
@@ -4064,7 +4069,6 @@ mod test {
             None,
             "cpunet".to_string(),
         );
-        let (addr_tx, addr_rx) = oneshot::channel();
 
         let server_task = tokio::spawn(async move {
             let _ = server
@@ -4140,7 +4144,6 @@ mod test {
             None,
             "cpunet".to_string(),
         );
-        let (addr_tx, addr_rx) = oneshot::channel();
 
         let server_task = tokio::spawn(async move {
             let _ = server
@@ -4195,7 +4198,6 @@ mod test {
         let bound_addr = listener.local_addr().unwrap();
 
         let mut server = Server::new(config, connection_mapping, None, "cpunet".to_string());
-        let (addr_tx, addr_rx) = oneshot::channel();
         tokio::spawn(async move {
             let _ = server
                 .run_stratum_service(
@@ -4295,7 +4297,6 @@ mod test {
             hostname: "127.0.0.1".to_string(),
             ..Default::default()
         };
-
 
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let bound_addr = listener.local_addr().unwrap();
@@ -4538,11 +4539,11 @@ mod test {
                 version: BlockVersion::from_consensus(536870912),
                 prev_blockhash: test_template_header.prev_blockhash,
                 merkle_root: merkle_root_for_grind,
-                time: BlockTime::from_u32(grind_ntime),
+                time: grind_ntime,
                 bits: grind_bits,
                 nonce,
             };
-            if grind_target.is_met_by(grind_header.block_hash()) {
+            if grind_target.is_met_by(compute_block_hash(&grind_header, &"cpunet".to_string())) {
                 valid_nonce = nonce;
                 break;
             }
@@ -4579,6 +4580,34 @@ mod test {
                 panic!("Expected StandardResponse, got a different response type");
             }
         }
+
+        let mut complete_coinbase = coinbase_tx_for_grind.clone();
+        complete_coinbase
+            .input
+            .get_mut(0)
+            .unwrap()
+            .witness
+            .push(vec![0u8; 32]);
+        let complete_block_header = BlockHeader {
+            version: BlockVersion::from_consensus(536870912),
+            prev_blockhash: test_template_header.prev_blockhash,
+            merkle_root: merkle_root_for_grind,
+            time: grind_ntime,
+            bits: grind_bits,
+            nonce: valid_nonce,
+        };
+        let complete_block = bitcoin::Block {
+            header: complete_block_header,
+            txdata: vec![complete_coinbase],
+        };
+        let complete_block_hex = hex::encode(serialize(&complete_block));
+
+        let expected_complete_block_hex = "00000020e6ebb395a1e2ba60f17650d790309e21af08062229ad955376ac57430000000090dea459e4b4db9ed0d542fc9415f04312b9b2fc1c3b07bd7a417b715d948ab4337edf68ffff7f200300000001020000000001010000000000000000000000000000000000000000000000000000000000000000ffffffff1e02611e10000000009495ac080000000003000000094272616964706f6f6cffffffff0300f2052a01000000160014e470d0179325db88b55771f6c0a5139dd81d73180000000000000000266a24aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf900000000000000002a6a286272616964706f6f6c5f626561645f6d657461646174615f686173685f33326201020304050607080120000000000000000000000000000000000000000000000000000000000000000000000000";
+        assert_eq!(complete_block_hex, expected_complete_block_hex);
+
+        assert!(complete_block_hex.starts_with("00000020"));
+        assert!(complete_block_hex
+            .contains("e6ebb395a1e2ba60f17650d790309e21af08062229ad955376ac574300000000"));
     }
     /// Minimal job+client setup used by the ntime/nonce fast-fail tests.
     async fn submit_setup() -> (

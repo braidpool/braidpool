@@ -260,7 +260,7 @@ impl Braid {
                     self.bead_index_mapping
                         .get(parent_hash)
                         .ok_or(BraidError::MissingParent {
-                            bead: bead.block_header.block_hash(),
+                            bead: compute_block_hash(&bead.block_header, &self.network_name),
                             parent: *parent_hash,
                         })?;
                 Ok((
@@ -268,7 +268,7 @@ impl Braid {
                     self.beads[parent_index]
                         .committed_metadata
                         .start_timestamp
-                        .to_u32(),
+                        .to_consensus_u32(),
                 ))
             })
             .collect()

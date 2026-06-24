@@ -1,4 +1,4 @@
-use bitcoin::consensus::encode::deserialize;
+use bitcoin::{consensus::encode::deserialize, hashes::Hash};
 use braidpool_common::cpunet::Cpunet;
 use clap::Parser;
 use futures::lock::Mutex;
@@ -128,7 +128,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let braid_ref = braid.clone();
         // FIXME instead we should look 144 blocks back from the bitcoin tip (1 day) and load beads
         // starting from that block as genesis
-    let network_ref = network_name.clone();
+        let network_ref = network_name.clone();
         let initial_bead_fetch_handle = tokio::spawn(async move {
             let mut guard = braid_ref.write().await;
             let fetched_beads =
@@ -1217,7 +1217,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                          } else if let braid::AddBeadStatus::BeadAdded { promoted_orphans}= &status {
                                             if !args.audit {
                                                 if let Err(error) = node::db::persist_added_bead(&braid_data, &bead, promoted_orphans.iter(), &db_tx).await {
-                                                    error!(error = %error, bead_hash = ?bead.block_header.block_hash(), "Failed to persist bead");
+                                                    error!(error = %error, bead_hash = ?compute_block_hash(&bead.block_header, &braid_data.network_name), "Failed to persist bead");
                                                     continue;
                                                 }
                                                 {
@@ -1312,7 +1312,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                         }
                                     } else if let braid::AddBeadStatus::BeadAdded { promoted_orphans } = &status {
                                         if let Err(error) = node::db::persist_added_bead(&braid_data, &bead, promoted_orphans.iter(), &db_tx).await {
-                                            error!(error = %error, bead_hash = ?bead.block_header.block_hash(), "Failed to persist bead (GetAllBeads)");
+                                            error!(error = %error, bead_hash = ?compute_block_hash(&bead.block_header, &braid_data.network_name), "Failed to persist bead (GetAllBeads)");
                                             continue;
                                         }
                                         // update score of the peer

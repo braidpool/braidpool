@@ -2328,13 +2328,13 @@ fn test_get_beads_after_multiple_tips() {
 #[test]
 fn test_extend_without_orphans_promotes_nothing() {
     let genesis = emit_bead();
-    let mut braid = Braid::new(vec![genesis.clone()]);
+    let mut braid = Braid::new(vec![genesis.clone()], "regtest".to_string());
 
     let mut child = emit_bead();
-    child
-        .committed_metadata
-        .parents
-        .push(genesis.block_header.block_hash());
+    child.committed_metadata.parents.push(compute_block_hash(
+        &genesis.block_header,
+        &braid.network_name,
+    ));
 
     match braid.extend(&child) {
         AddBeadStatus::BeadAdded { promoted_orphans } => {
@@ -2352,19 +2352,19 @@ fn test_extend_without_orphans_promotes_nothing() {
 #[test]
 fn test_extend_reports_promoted_orphan() {
     let genesis = emit_bead();
-    let mut braid = Braid::new(vec![genesis.clone()]);
+    let mut braid = Braid::new(vec![genesis.clone()], "regtest".to_string());
 
     let mut child = emit_bead();
-    child
-        .committed_metadata
-        .parents
-        .push(genesis.block_header.block_hash());
+    child.committed_metadata.parents.push(compute_block_hash(
+        &genesis.block_header,
+        &braid.network_name,
+    ));
 
     let mut grandchild = emit_bead();
     grandchild
         .committed_metadata
         .parents
-        .push(child.block_header.block_hash());
+        .push(compute_block_hash(&child.block_header, &braid.network_name));
 
     // Grandchild arrives before its parent `child` -> parked as an orphan.
     assert!(
@@ -2381,8 +2381,8 @@ fn test_extend_reports_promoted_orphan() {
         AddBeadStatus::BeadAdded { promoted_orphans } => {
             assert_eq!(promoted_orphans.len(), 1, "grandchild should be promoted");
             assert_eq!(
-                promoted_orphans[0].block_header.block_hash(),
-                grandchild.block_header.block_hash()
+                compute_block_hash(&promoted_orphans[0].block_header, &braid.network_name),
+                compute_block_hash(&grandchild.block_header, &braid.network_name)
             );
         }
         other => panic!("expected BeadAdded, got {:?}", other),
@@ -2398,20 +2398,21 @@ fn test_extend_reports_promoted_orphan() {
 #[test]
 fn test_extend_promotes_transitive_orphan_chain() {
     let genesis = emit_bead();
-    let mut braid = Braid::new(vec![genesis.clone()]);
+    let mut braid = Braid::new(vec![genesis.clone()], "regtest".to_string());
 
     let mut a = emit_bead();
-    a.committed_metadata
-        .parents
-        .push(genesis.block_header.block_hash());
+    a.committed_metadata.parents.push(compute_block_hash(
+        &genesis.block_header,
+        &braid.network_name,
+    ));
     let mut b = emit_bead();
     b.committed_metadata
         .parents
-        .push(a.block_header.block_hash());
+        .push(compute_block_hash(&a.block_header, &braid.network_name));
     let mut c = emit_bead();
     c.committed_metadata
         .parents
-        .push(b.block_header.block_hash());
+        .push(compute_block_hash(&b.block_header, &braid.network_name));
 
     // `c` and `b` arrive before `a`; both are parked.
     assert!(matches!(
@@ -2435,10 +2436,14 @@ fn test_extend_promotes_transitive_orphan_chain() {
             );
             let promoted_hashes: HashSet<_> = promoted_orphans
                 .iter()
-                .map(|bead| bead.block_header.block_hash())
+                .map(|bead| compute_block_hash(&bead.block_header, &braid.network_name))
                 .collect();
-            assert!(promoted_hashes.contains(&b.block_header.block_hash()));
-            assert!(promoted_hashes.contains(&c.block_header.block_hash()));
+            assert!(
+                promoted_hashes.contains(&compute_block_hash(&b.block_header, &braid.network_name))
+            );
+            assert!(
+                promoted_hashes.contains(&compute_block_hash(&c.block_header, &braid.network_name))
+            );
         }
         other => panic!("expected BeadAdded, got {:?}", other),
     }

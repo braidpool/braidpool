@@ -2,6 +2,7 @@
 use crate::bead::Bead;
 use crate::braid::Braid;
 use crate::error::BraidError;
+use crate::utils::compute_block_hash;
 pub mod audit_db_handlers;
 pub mod db_handlers;
 pub mod init_db;
@@ -17,9 +18,9 @@ impl BeadInsertData {
     pub fn resolve(braid: &Braid, bead: &Bead) -> Result<Self, BraidError> {
         let &bead_id = braid
             .bead_index_mapping
-            .get(&bead.block_header.block_hash())
+            .get(&braid.compute_bead_hash(bead))
             .ok_or(BraidError::BeadNotIndexed {
-                bead: bead.block_header.block_hash(),
+                bead: braid.compute_bead_hash(bead),
             })?;
         Ok(BeadInsertData {
             parent_refs: braid.resolve_parents(bead)?,
@@ -58,7 +59,7 @@ pub async fn persist_added_bead<'a>(
     {
         tracing::error!(err = ?error.0, "Failed to send InsertBeadsBatch to DB handler");
         return Err(BraidError::PersistenceChannelClosed {
-            bead: bead.block_header.block_hash(),
+            bead: compute_block_hash(&bead.block_header, &braid.network_name),
         });
     }
     Ok(())

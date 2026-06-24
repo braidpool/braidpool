@@ -5,8 +5,8 @@ use crate::db::audit_db_handlers::AuditDBHandler;
 use crate::uncommitted_metadata::UnCommittedMetadata;
 use crate::{TimeVec, TxIdVec};
 use bitcoin::consensus::serialize;
-use bitcoin::hashes::sha256d;
-use bitcoin::{BlockHash, BlockHeader, CompactTarget, TxMerkleNode};
+use bitcoin::hashes::{sha256d, Hash};
+use bitcoin::{block::Header as BlockHeader, BlockHash, CompactTarget, TxMerkleNode};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -39,7 +39,7 @@ fn create_genesis_bead_for_audit() -> Result<Bead, String> {
         version: bitcoin::block::Version::ONE,
         prev_blockhash: BlockHash::from_byte_array([0u8; 32]),
         merkle_root: TxMerkleNode::from_byte_array([0u8; 32]),
-        time: bitcoin::BlockTime::from_u32(genesis_time.to_consensus_u32()),
+        time: genesis_time.to_consensus_u32(),
         bits: CompactTarget::from_consensus(0x1d00ffff),
         nonce: 0,
     };
@@ -508,7 +508,10 @@ impl AuditDAG {
 
                     {
                         let mut braid = self.braid.write().await;
-                        *braid = crate::braid::Braid::new(vec![genesis_bead.clone()]);
+                        *braid = crate::braid::Braid::new(
+                            vec![genesis_bead.clone()],
+                            "mainnet".to_string(),
+                        );
                     }
 
                     self.active_parents = vec![(
@@ -536,7 +539,7 @@ impl AuditDAG {
                         // the database then the in-memory bead will start from the genesis.
                         let mut braid = self.braid.write().await;
                         let only_beads: Vec<Bead> = beads.iter().map(|(b, _)| b.clone()).collect();
-                        *braid = crate::braid::Braid::new(only_beads);
+                        *braid = crate::braid::Braid::new(only_beads, "mainnet".to_string());
                     }
 
                     self.active_parents = beads
@@ -851,14 +854,14 @@ mod tests {
     use std::str::FromStr;
 
     fn create_test_bead(parents: Vec<BlockHash>) -> Bead {
-        let block: bitcoin::BlockHeader = bitcoin::consensus::deserialize(&hex::decode(
+        let block: BlockHeader = bitcoin::consensus::deserialize(&hex::decode(
             "0100000000000000000000000000000000000000000000000000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a29ab5f49ffff001d1dac2b7c"
         ).unwrap()).unwrap();
 
         // Create a valid signature for uncommitted metadata
         let hex = "3046022100839c1fbc5304de944f697c9f4b1d01d1faeba32d751c0f7acb21ac8a0f436a72022100e89bd46bb3a5a62adc679f659b7ce876d83ee297c7a5587b2011c4fcc72eab45";
         let sig = Signature {
-            signature: secp256k1::ecdsa::Signature::from_str(hex).unwrap(),
+            signature: bitcoin::secp256k1::ecdsa::Signature::from_str(hex).unwrap(),
             sighash_type: EcdsaSighashType::All,
         };
 
@@ -1133,7 +1136,7 @@ mod tests {
     #[test]
     /// Verify a new connected miner is assigned with a new dedicated memory space
     fn test_audit_dag_register_miner() {
-        let braid = Arc::new(RwLock::new(Braid::new(vec![])));
+        let braid = Arc::new(RwLock::new(Braid::new(vec![], "mainnet".to_string())));
         let mut audit_dag = AuditDAG::new(braid);
 
         let miner_ip = "192.168.1.100".to_string();
@@ -1151,7 +1154,7 @@ mod tests {
     #[test]
     /// Verify the share acceptance, rejection and stats calculation logic.
     fn test_miner_stats_calculations() {
-        let braid = Arc::new(RwLock::new(Braid::new(vec![])));
+        let braid = Arc::new(RwLock::new(Braid::new(vec![], "mainnet".to_string())));
         let mut audit_dag = AuditDAG::new(braid);
         let miner_ip = "192.168.1.100".to_string();
 

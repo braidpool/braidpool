@@ -1,9 +1,5 @@
 //These implementations must be defined under lib.rs as they are required for intergration tests
-use crate::rpc_server::DashboardEvents, utils::compute_block_hash;
-use crate::{
-    db::db_handlers::prepare_bead_tuple_data, rpc_server::DashboardEvents,
-    utils::compute_block_hash,
-};
+use crate::{rpc_server::DashboardEvents, utils::compute_block_hash};
 use bitcoin::{
     consensus::encode::deserialize, ecdsa::Signature, BlockHash, CompactTarget, EcdsaSighashType,
     Txid,
@@ -338,7 +334,7 @@ impl SwarmHandler {
             .map(|&idx| {
                 let tip = braid_data.beads.get(idx).unwrap();
                 (
-                    braid_data.compute_bead_hash(current_tip_bead),
+                    braid_data.compute_bead_hash(tip),
                     tip.committed_metadata.start_timestamp,
                 )
             })
