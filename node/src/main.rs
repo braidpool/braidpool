@@ -1,7 +1,6 @@
 use bitcoin::consensus::encode::deserialize;
 use bitcoin::Network;
 use clap::Parser;
-use futures::lock::Mutex;
 use futures::StreamExt;
 use libp2p::kad::BootstrapOk;
 use libp2p::{
@@ -57,7 +56,7 @@ const ADDR_REFRENCE: &str =
     "/dnsaddr/french.braidpool.net/p2p/12D3KooWG9z8TziaNuYyEcc9FeUC3FTtrEf2XSnSdDpLvx4Jh2w3";
 use tokio::sync::{
     mpsc::{self},
-    RwLock,
+    Mutex, RwLock,
 };
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {

@@ -12,8 +12,10 @@ use std::{
     time::UNIX_EPOCH,
 };
 
-use futures::lock::Mutex;
-use tokio::sync::mpsc::{self, Receiver, Sender};
+use tokio::sync::{
+    mpsc::{self, Receiver, Sender},
+    Mutex,
+};
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
 

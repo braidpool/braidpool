@@ -10,7 +10,6 @@ use crate::stratum::BlockTemplate;
 use crate::utils::BeadHash;
 use bitcoin::block::HeaderExt;
 use bitcoin::Transaction;
-use futures::lock::Mutex;
 use jsonrpsee::core::async_trait;
 use jsonrpsee::core::middleware::Batch;
 use jsonrpsee::core::middleware::Notification;
@@ -30,7 +29,7 @@ use std::collections::HashSet;
 use std::future::Future;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::sync::{mpsc, oneshot, watch, RwLock};
+use tokio::sync::{mpsc, oneshot, watch, Mutex, RwLock};
 use tracing::{error, info, warn};
 
 #[cfg(test)]

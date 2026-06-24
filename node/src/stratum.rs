@@ -6,7 +6,7 @@ use bitcoin::consensus::serialize;
 use bitcoin::io::Cursor;
 use bitcoin::{absolute::Decodable, Transaction};
 use bitcoin::{BlockHash, BlockHeader, BlockTime, TxMerkleNode, Txid, Witness};
-use futures::{lock::Mutex, FutureExt};
+use futures::FutureExt;
 use num::ToPrimitive;
 use rand::random;
 use serde::{Deserialize, Serialize};
@@ -20,7 +20,7 @@ use tokio::{
         tcp::{OwnedReadHalf, OwnedWriteHalf},
         TcpListener,
     },
-    sync::{mpsc, oneshot, RwLock},
+    sync::{mpsc, oneshot, Mutex, RwLock},
 };
 use tokio_stream::StreamExt;
 use tokio_util::codec::{FramedRead, LinesCodec};
@@ -2068,11 +2068,10 @@ mod test {
         absolute::LockTime, pow::CompactTargetExt, script::ScriptBufExt, Amount, BlockHash,
         BlockVersion, OutPoint, ScriptBuf, Sequence, TxIn, TxOut,
     };
-    use futures::lock::Mutex;
     use tokio::{
         io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
         net::TcpStream,
-        sync::{mpsc, oneshot, RwLock},
+        sync::{mpsc, oneshot, Mutex, RwLock},
     };
 
     #[tokio::test]
