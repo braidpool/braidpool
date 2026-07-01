@@ -1184,19 +1184,18 @@ pub struct JobDetails {
 ///Declaring as `Arc` object for shared reference across different tasks due to
 /// multiple threads serving requests according to the new process of serving requests .
 pub struct MiningJobMap {
-    // template_id to job details
     mining_jobs: HashMap<TemplateId, JobDetails>,
-    // numeric job_id to template_id
     job_id_to_template: HashMap<u64, TemplateId>,
-    // Generate sequential numeric job IDs for miners
     next_job_id: u64,
+    capacity: usize,
 }
 impl MiningJobMap {
-    pub fn new() -> Self {
+    pub fn new(capacity: usize) -> Self {
         Self {
             mining_jobs: HashMap::new(),
             job_id_to_template: HashMap::new(),
             next_job_id: 0,
+            capacity,
         }
     }
     ///Inserting a suitable mining job which has been passed to the downstream being constructed from a suitable block template .
@@ -1209,10 +1208,18 @@ impl MiningJobMap {
 
         debug!(job_id = %numeric_job_id, template_id = %template_id, "Inserting mining job into MiningJobMap");
 
-        // Store job by template_id
-        self.mining_jobs.insert(template_id, job_details);
+        // Evict the oldest job when at capacity. next_job_id is monotonically
+        // increasing so the oldest surviving job id is always (next_job_id - capacity).
+        if self.job_id_to_template.len() >= self.capacity {
+            if let Some(oldest_id) = numeric_job_id.checked_sub(self.capacity as u64) {
+                if let Some(old_template) = self.job_id_to_template.remove(&oldest_id) {
+                    self.mining_jobs.remove(&old_template);
+                    debug!(evicted_job_id = %oldest_id, "Evicted oldest job from MiningJobMap");
+                }
+            }
+        }
 
-        // Map numeric job_id to template_id for reverse lookup
+        self.mining_jobs.insert(template_id, job_details);
         self.job_id_to_template.insert(numeric_job_id, template_id);
         self.next_job_id += 1;
         numeric_job_id
@@ -1246,6 +1253,11 @@ impl MiningJobMap {
     /// Get template_id from numeric job_id for mining.submit validation
     pub fn template_id_from_job_id(&self, job_id: u64) -> Option<TemplateId> {
         self.job_id_to_template.get(&job_id).copied()
+    }
+
+    #[cfg(test)]
+    pub fn len(&self) -> usize {
+        self.job_id_to_template.len()
     }
 }
 ///`Notifier` that will serve the purpose of notifying the downstream nodes with the lates available jobs
@@ -1839,7 +1851,7 @@ impl Server {
                             (id, format!("{:x}", id))
                         };
                  //downstream miner mapping for associated jobs for a specific channel for downstream
-                 let self_mining_map = Arc::new(Mutex::new(MiningJobMap::new()));
+                 let self_mining_map = Arc::new(Mutex::new(MiningJobMap::new(crate::MAX_JOBS_PER_MINER)));
                  match event{
                      Ok((stream,peer_addr))=>{
                          let (reader, writer) = stream.into_split();
@@ -2441,7 +2453,7 @@ mod test {
         let unix_timestamp = duration_since_epoch.as_secs().to_u32().unwrap();
         let mut mock_downstream_handler = DownstreamClient::default();
         let mock_mining_job_map: Arc<Mutex<MiningJobMap>> =
-            Arc::new(Mutex::new(MiningJobMap::new()));
+            Arc::new(Mutex::new(MiningJobMap::new(crate::MAX_JOBS_PER_MINER)));
         test_template.transactions.remove(0);
         let job_details = JobDetails {
             blocktemplate: test_template,
@@ -2601,5 +2613,38 @@ mod test {
         assert_eq!(client1.extranonce1.len(), EXTRANONCE1_SIZE);
         assert_eq!(client2.extranonce1.len(), EXTRANONCE1_SIZE);
         assert_eq!(client3.extranonce1.len(), EXTRANONCE1_SIZE);
+    }
+
+    #[tokio::test]
+    async fn test_mining_job_map_eviction() {
+        let capacity = 3;
+        let mut map = MiningJobMap::new(capacity);
+
+        let make_job = || JobDetails {
+            blocktemplate: BlockTemplate::default(),
+            coinbase1: String::new(),
+            coinbase2: String::new(),
+            coinbase_merkle_path: vec![],
+            coinbase_witness_commitment: None,
+            job_sent_time: 0,
+        };
+
+        // Insert capacity+2 jobs — oldest two should be evicted
+        for i in 0..5u64 {
+            let template_id = TemplateId::from(i as u32);
+            map.insert_mining_job(template_id, make_job()).await;
+        }
+
+        // Only `capacity` jobs should remain
+        assert_eq!(map.len(), capacity);
+
+        // Oldest jobs (id 0 and 1) must be gone
+        assert!(map.get_by_job_id(0).await.is_err());
+        assert!(map.get_by_job_id(1).await.is_err());
+
+        // Most recent jobs (id 2, 3, 4) must still be present
+        assert!(map.get_by_job_id(2).await.is_ok());
+        assert!(map.get_by_job_id(3).await.is_ok());
+        assert!(map.get_by_job_id(4).await.is_ok());
     }
 }

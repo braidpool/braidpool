@@ -25,6 +25,11 @@ use tracing::{debug, error, info, trace, warn};
 /// growth and ensures efficient resource usage.
 pub const MAX_CACHED_TEMPLATES: usize = 90;
 
+/// Maximum number of mining jobs retained per downstream miner connection.
+/// Oldest jobs are evicted on insert once this limit is reached.
+/// Miners only need the current job and a few recent ones for late share submission.
+pub const MAX_JOBS_PER_MINER: usize = 10;
+
 use crate::{
     bead::Bead,
     braid::{AddBeadStatus, Braid},
