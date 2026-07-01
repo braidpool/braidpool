@@ -15,6 +15,7 @@ use libp2p::{
     PeerId,
 };
 use node::db::db_handlers::fetch_beads_in_batch;
+use node::db::db_handlers::FETCH_BEAD_BATCH_SIZE;
 use node::ibd_manager::{IBD_TRIGGER_AFTER, MAX_IBD_INCOMING_THRESHOLD, MAX_IBD_RETRIES};
 use node::utils::BeadHash;
 use node::SwarmHandler;
@@ -90,7 +91,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // starting from that block as genesis
     let initial_bead_fetch_handle = tokio::spawn(async move {
         let mut guard = braid_ref.write().await;
-        let fetched_beads = fetch_beads_in_batch(&db_connection_pool_ref, 50).await?;
+        let fetched_beads =
+            fetch_beads_in_batch(&db_connection_pool_ref, FETCH_BEAD_BATCH_SIZE).await?;
         info!(beads = fetched_beads.len(), "Beads loaded from DB");
         for bead in &fetched_beads {
             let curr_bead_status = guard.extend(&bead);
