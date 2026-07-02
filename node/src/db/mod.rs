@@ -37,6 +37,29 @@ impl BeadInsertData {
     }
 }
 
+/// Resolves a newly-added bead and its promoted orphans against the braid index
+pub async fn persist_added_bead<'a>(
+    braid: &Braid,
+    bead: &Bead,
+    promoted_orphans: impl IntoIterator<Item = &'a Bead>,
+    db_tx: &tokio::sync::mpsc::Sender<BraidpoolDBTypes>,
+) -> Result<(), BraidError> {
+    let bead_data = BeadInsertData::resolve(braid, bead)?;
+    let removed_orphans = BeadInsertData::resolve_many(braid, promoted_orphans)?;
+    if let Err(error) = db_tx
+        .send(BraidpoolDBTypes::InsertTupleTypes {
+            query: InsertTupleTypes::InsertBeadsBatch {
+                beads: vec![bead_data],
+                removed_orphans,
+            },
+        })
+        .await
+    {
+        tracing::error!(err = ?error.0, "Failed to send InsertBeadsBatch to DB handler");
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone)]
 
 pub enum InsertTupleTypes {

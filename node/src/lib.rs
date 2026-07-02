@@ -286,7 +286,7 @@ impl SwarmHandler {
         downstream_payout_addr: &str,
         //TODO: Will be used as seperate entity after altering `uncommitted_metadata`
         extranonce_1_raw_value: u64,
-    ) -> Result<(), StratumErrors> {
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let (candidate_block_header, candidate_block_transactions) = candidate_block.into_parts();
         let ids: Vec<Txid> = candidate_block_transactions
             .iter()
@@ -342,9 +342,9 @@ impl SwarmHandler {
         let duration_since_epoch = match current_system_time.duration_since(UNIX_EPOCH) {
             Ok(duration) => duration,
             Err(error) => {
-                return Err(StratumErrors::ErrorFetchingCurrentUNIXTimestamp {
+                return Err(Box::new(StratumErrors::ErrorFetchingCurrentUNIXTimestamp {
                     error: error.to_string(),
-                })
+                }));
             }
         };
 
@@ -374,41 +374,22 @@ impl SwarmHandler {
                     new_tips = ?new_tips,
                     "Braid extended successfully"
                 );
-                match db::BeadInsertData::resolve(&braid_data, &weak_share) {
-                    Ok(bead) => {
-                        match db::BeadInsertData::resolve_many(&braid_data, promoted_orphans.iter())
-                        {
-                            Ok(removed_orphans) => {
-                                match self
-                                    .db_command_sender
-                                    .send(BraidpoolDBTypes::InsertTupleTypes {
-                                        query: db::InsertTupleTypes::InsertBeadsBatch {
-                                            beads: vec![bead],
-                                            removed_orphans,
-                                        },
-                                    })
-                                    .await
-                                {
-                                    Ok(_) => {
-                                        debug!(
-                                            hash = %bead_hash,
-                                            "InsertBeadsBatch sent to DB thread"
-                                        );
-                                    }
-                                    Err(error) => {
-                                        error!(error = ?error, "Database insertion command failed");
-                                    }
-                                }
-                            }
-                            Err(error) => {
-                                error!(error = %error, hash = %bead_hash, "Failed to resolve promoted orphans for persistence");
-                            }
-                        }
-                    }
-                    Err(error) => {
-                        error!(error = %error, hash = %bead_hash, "Failed to resolve bead for persistence");
-                    }
-                }
+
+                db::persist_added_bead(
+                    &braid_data,
+                    &weak_share,
+                    promoted_orphans.iter(),
+                    &self.db_command_sender,
+                )
+                .await
+                .map_err(|error| {
+                    error!(error = %error, hash = %bead_hash, "Failed to persist bead");
+                    error
+                })?;
+                debug!(
+                    hash = %bead_hash,
+                    "InsertBeadsBatch sent to DB thread"
+                );
                 let serialized_weak_share_bytes = bitcoin::consensus::serialize(&weak_share);
                 let res = self
                     .dashboard_notification_sender
@@ -419,7 +400,7 @@ impl SwarmHandler {
                         debug!("Passing self mined bead to the dashboard notifier");
                     }
                     Err(error) => {
-                        error!("An error occurred while sending dashboard notification - {error}");
+                        debug!("No dashboard subscriber for new bead notification - {error}");
                     }
                 }
                 //After validation of the candidate block constructed by the downstream node sending it to swarm for further propogation
@@ -442,9 +423,9 @@ impl SwarmHandler {
                             error = %e,
                             "Failed to send candidate block to swarm"
                         );
-                        return Err(StratumErrors::CandidateBlockNotSent {
+                        return Err(Box::new(StratumErrors::CandidateBlockNotSent {
                             error: e.to_string(),
-                        });
+                        }));
                     }
                 };
             }

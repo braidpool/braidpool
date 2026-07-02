@@ -649,32 +649,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                             peer_manager.penalize_for_invalid_bead(&message.source);
                                         }
                                     } else if let braid::AddBeadStatus::BeadAdded { promoted_orphans } = &status {
-                                        let bead_data = match node::db::BeadInsertData::resolve(&braid_data, &bead) {
-                                            Ok(data) => data,
-                                            Err(error) => {
-                                                error!(error = %error, bead_hash = ?bead.block_header.block_hash(), "Failed to resolve bead for persistence");
-                                                continue;
-                                            }
-                                        };
-                                        let removed_orphans = match node::db::BeadInsertData::resolve_many(&braid_data, promoted_orphans.iter()) {
-                                            Ok(orphans) => orphans,
-                                            Err(error) => {
-                                                error!(error = %error, "Failed to resolve promoted orphans for persistence");
-                                                continue;
-                                            }
-                                        };
-                                        let _query_send_result = match db_tx.send(node::db::BraidpoolDBTypes::InsertTupleTypes { query: node::db::InsertTupleTypes::InsertBeadsBatch { beads: vec![bead_data], removed_orphans } }).await{
-                                           Ok(_)=>{
-                                               debug!("Insert command sent successfully to db handler after receiving bead from peer");
-                                           },
-                                           Err(error)=>{
-                                               error!(
-                                                   source = ?message.source,
-                                                   err = ?error.0,
-                                                   "An error occurred while sending insert bead command received from peer"
-                                               );
-                                           }
-                                        };
+                                        if let Err(error) = node::db::persist_added_bead(&braid_data, &bead, promoted_orphans.iter(), &db_tx).await {
+                                            error!(error = %error, bead_hash = ?bead.block_header.block_hash(), "Failed to persist bead");
+                                            continue;
+                                        }
                                         {
                                             let mut peer_manager = peer_manager_arc.write().await;
                                             peer_manager.update_score(&message.source, 1.0);
@@ -685,7 +663,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                                     debug!("Notification sent to dashboard notification sender from peer");
                                                 }
                                                 Err(error) => {
-                                                    error!("An error occurred while sending dashboard notification - {error}");
+                                                    debug!("No dashboard subscriber for new bead notification - {error}");
                                             }
                                 }
                                     }
@@ -766,33 +744,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                             peer_manager.penalize_for_invalid_bead(&message.source);
                                         }
                                     } else if let braid::AddBeadStatus::BeadAdded { promoted_orphans } = &status {
-                                        let bead_data = match node::db::BeadInsertData::resolve(&braid_data, &bead) {
-                                            Ok(data) => data,
-                                            Err(error) => {
-                                                error!(error = %error, bead_hash = ?bead.block_header.block_hash(), "Failed to resolve bead for persistence (GetAllBeads)");
-                                                continue;
-                                            }
-                                        };
-                                        let removed_orphans = match node::db::BeadInsertData::resolve_many(&braid_data, promoted_orphans.iter()) {
-                                            Ok(orphans) => orphans,
-                                            Err(error) => {
-                                                error!(error = %error, "Failed to resolve promoted orphans for persistence (GetAllBeads)");
-                                                continue;
-                                            }
-                                        };
-                                        // update score of the peer and adding to local db store
-                                        let _query_send_result = match db_tx.send(node::db::BraidpoolDBTypes::InsertTupleTypes { query: node::db::InsertTupleTypes::InsertBeadsBatch { beads: vec![bead_data], removed_orphans } }).await{
-                                            Ok(_)=>{
-                                               debug!("Insert command sent successfully to db handler after receiving bead from peer");
-                                           },
-                                           Err(error)=>{
-                                               error!(
-                                                   source = ?message.source,
-                                                   err = ?error.0,
-                                                   "An error occurred while sending insert bead command received from peer"
-                                               );
-                                           }
-                                        };
+                                        if let Err(error) = node::db::persist_added_bead(&braid_data, &bead, promoted_orphans.iter(), &db_tx).await {
+                                            error!(error = %error, bead_hash = ?bead.block_header.block_hash(), "Failed to persist bead (GetAllBeads)");
+                                            continue;
+                                        }
+                                        // update score of the peer
                                         {
                                             let mut peer_manager = peer_manager_arc.write().await;
                                             peer_manager.update_score(&message.source, 1.0);
@@ -1098,47 +1054,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                             }
                                         } else if let braid::AddBeadStatus::BeadAdded { promoted_orphans } = &status {
 
-                                            let bead_data = match node::db::BeadInsertData::resolve(&braid_data, &bead) {
-                                                Ok(data) => data,
-                                                Err(error) => {
-                                                    error!(error = %error, bead_hash = ?curr_beadhash, "Failed to resolve bead for persistence (GetBeadsAfter)");
-                                                    continue;
-                                                }
-                                            };
-                                            let removed_orphans = match node::db::BeadInsertData::resolve_many(&braid_data, promoted_orphans.iter()) {
-                                                Ok(orphans) => orphans,
-                                                Err(error) => {
-                                                    error!(error = %error, bead_hash = ?curr_beadhash, "Failed to resolve promoted orphans for persistence (GetBeadsAfter)");
-                                                    continue;
-                                                }
-                                            };
+                                            //persisting the received beads from peer onto DB(disk)
+                                            if let Err(error) = node::db::persist_added_bead(&braid_data, &bead, promoted_orphans.iter(), &db_tx).await {
+                                                error!(error = %error, bead_hash = ?curr_beadhash, "Failed to persist bead (GetBeadsAfter)");
+                                                continue;
+                                            }
                                             // update score of the peer
                                             {
                                                 let mut peer_manager = peer_manager_arc.write().await;
                                                 peer_manager.update_score(&peer, 1.0);
                                             }
-                                            //persisting the received beads from peer onto DB(disk)
                                             let res =  dashboard_notifier.new_bead.send(Some(bead.clone()));
                                             match res {
                                                 Ok(_) => {
                                                     debug!("Notification sent to dashboard notification sender from IBD");
                                                 }
                                                 Err(error) => {
-                                                    error!("An error occurred while sending dashboard notification - {error}");
+                                                    debug!("No dashboard subscriber for new bead notification - {error}");
                                                 }
                                             }
-                                            match db_tx.send(node::db::BraidpoolDBTypes::InsertTupleTypes { query: node::db::InsertTupleTypes::InsertBeadsBatch { beads: vec![bead_data], removed_orphans } }).await{
-                                                Ok(_)=>{
-                                                    debug!(beadhash=?curr_beadhash,"Bead received in IBD persisted over disk with beadhash and status BeadAdded");
-                                                },
-                                                Err(error)=>{
-                                                    tracing::error!(
-                                                        peer = %peer,
-                                                        err = ?error.0,
-                                                        "An error occurred while persisting received bead from peer"
-                                                    );
-                                                }
-                                            };
                                         }
                                     }
                                     //Preparing next batch request to be sent to the sync node

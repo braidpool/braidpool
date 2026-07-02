@@ -358,7 +358,7 @@ impl fmt::Display for StratumErrors {
         }
     }
 }
-
+impl std::error::Error for StratumErrors {}
 /// Determines if an error indicates a connection/communication failure
 ///
 /// This function classifies errors to distinguish between:
