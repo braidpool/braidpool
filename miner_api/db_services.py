@@ -1,4 +1,3 @@
-
 import asyncio
 from typing import Optional, List
 from sqlalchemy import select
@@ -56,17 +55,7 @@ class MinerDBService:
     @staticmethod
     async def add_miner(db: AsyncSession, ip: str, name: Optional[str] = None) -> dict:
         """Add a new miner device to the database and fetch its initial data."""
-        existing = await MinerDBService.get_miner_by_ip(db, ip) # Check if miner already exists
-        if existing:
-            return {
-                "success": False,
-                "error": f"Miner with IP {ip} already exists",
-                "already_exists": True,
-                "miner": existing.to_dict()
-            }
-        
         result = await MinerService.get_miner_data(ip)
-        
         if not result.get("success"):
             miner = MinerDevice(
                 ip=ip,
@@ -76,7 +65,7 @@ class MinerDBService:
             )
             db.add(miner)
             try:
-                await db.commit()  
+                await db.commit()
             except IntegrityError:
                 await db.rollback()
                 existing = await MinerDBService.get_miner_by_ip(db, ip)
@@ -84,37 +73,61 @@ class MinerDBService:
                     "success": False,
                     "error": f"Miner with IP {ip} already exists",
                     "already_exists": True,
-                    "miner": existing.to_dict() if existing else None
+                    "miner": existing.to_dict() if existing else None,
                 }
             await db.refresh(miner)
-            
+            logger.info(f"Added offline miner device: {ip}")
             return {
                 "success": True,
                 "warning": "Miner added but currently offline",
-                "miner": miner.to_dict()
+                "miner": miner.to_dict(),
             }
-        
-        miner = MinerDevice.from_miner_data(ip, result["data"], name=name)
+        data = result["data"]
+        mac = data.get("mac")
+        if mac:
+            # MAC lookup 
+            existing = await MinerDBService.get_miner_by_mac(db, mac)
+            if existing:
+                old_ip = existing.ip
+                existing.ip = ip
+                if name is not None:
+                    existing.name = name
+                _apply_device_fields(existing, data)
+                db.add(existing)
+                await db.commit()
+                await db.refresh(existing)
+                if old_ip != ip:
+                    logger.info(f"Miner MAC {mac} IP updated from {old_ip} to {ip}, record updated.")
+                return {"success": True, "miner": existing.to_dict()}
+
+        # No existing record by MAC (or device has no MAC) 
+        existing_by_ip = await MinerDBService.get_miner_by_ip(db, ip)
+        if existing_by_ip:
+            return {
+                "success": False,
+                "error": f"Miner with IP {ip} already exists",
+                "already_exists": True,
+                "miner": existing_by_ip.to_dict(),
+            }
+
+        miner = MinerDevice.from_miner_data(ip, data, name=name)
         db.add(miner)
         try:
             await db.commit()
         except IntegrityError:
             await db.rollback()
-            existing = await MinerDBService.get_miner_by_ip(db, ip)
+            existing_by_ip = await MinerDBService.get_miner_by_ip(db, ip)
             return {
                 "success": False,
                 "error": f"Miner with IP {ip} already exists",
                 "already_exists": True,
-                "miner": existing.to_dict() if existing else None
+                "miner": existing_by_ip.to_dict() if existing_by_ip else None,
             }
         await db.refresh(miner)
-        
+
         logger.info(f"Added new miner device: {ip} (model: {miner.model})")
-        
-        return {
-            "success": True,
-            "miner": miner.to_dict()
-        }
+
+        return {"success": True, "miner": miner.to_dict()}
     
     @staticmethod
     async def get_miner_by_ip(db: AsyncSession, ip: str) -> Optional[MinerDevice]:
@@ -123,7 +136,13 @@ class MinerDBService:
             select(MinerDevice).where(MinerDevice.ip == ip)
         )
         return result.scalar_one_or_none()
-    
+    @staticmethod
+    async def get_miner_by_mac(db: AsyncSession, mac: str) -> Optional[MinerDevice]:
+        result = await db.execute(
+            select(MinerDevice).where(MinerDevice.mac == mac)
+        )
+        return result.scalar_one_or_none()
+
     @staticmethod
     async def get_miner_by_id(db: AsyncSession, miner_id: str) -> Optional[MinerDevice]:
         """Get a miner by ID."""
