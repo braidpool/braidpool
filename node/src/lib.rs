@@ -286,7 +286,7 @@ impl SwarmHandler {
         downstream_payout_addr: &str,
         //TODO: Will be used as seperate entity after altering `uncommitted_metadata`
         extranonce_1_raw_value: u64,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), StratumErrors> {
         let (candidate_block_header, candidate_block_transactions) = candidate_block.into_parts();
         let ids: Vec<Txid> = candidate_block_transactions
             .iter()
@@ -342,9 +342,9 @@ impl SwarmHandler {
         let duration_since_epoch = match current_system_time.duration_since(UNIX_EPOCH) {
             Ok(duration) => duration,
             Err(error) => {
-                return Err(Box::new(StratumErrors::ErrorFetchingCurrentUNIXTimestamp {
+                return Err(StratumErrors::ErrorFetchingCurrentUNIXTimestamp {
                     error: error.to_string(),
-                }));
+                });
             }
         };
 
@@ -384,7 +384,9 @@ impl SwarmHandler {
                 .await
                 .map_err(|error| {
                     error!(error = %error, hash = %bead_hash, "Failed to persist bead");
-                    error
+                    StratumErrors::BeadPersistenceFailed {
+                        error: error.to_string(),
+                    }
                 })?;
                 debug!(
                     hash = %bead_hash,
@@ -423,9 +425,9 @@ impl SwarmHandler {
                             error = %e,
                             "Failed to send candidate block to swarm"
                         );
-                        return Err(Box::new(StratumErrors::CandidateBlockNotSent {
+                        return Err(StratumErrors::CandidateBlockNotSent {
                             error: e.to_string(),
-                        }));
+                        });
                     }
                 };
             }

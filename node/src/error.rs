@@ -24,6 +24,10 @@ pub enum BraidError {
     BeadNotIndexed {
         bead: BeadHash,
     },
+    /// The bead was resolved but the db channel closed due to an error
+    PersistenceChannelClosed {
+        bead: BeadHash,
+    },
 }
 #[derive(Debug)]
 pub enum BraidRPCError {
@@ -228,6 +232,10 @@ pub enum StratumErrors {
     ErrorFetchingCurrentUNIXTimestamp {
         error: String,
     },
+    /// A bead received was not able to get persisted to DB locally
+    BeadPersistenceFailed {
+        error: String,
+    },
 }
 pub enum StratumResponseErrors {}
 impl fmt::Display for StratumErrors {
@@ -355,6 +363,13 @@ impl fmt::Display for StratumErrors {
             StratumErrors::MiningJobInsertError { mining_job } => {
                 write!(f,"An error occurred while inserting the following job into the mining map - {:?}",mining_job)
             }
+            StratumErrors::BeadPersistenceFailed { error } => {
+                write!(
+                    f,
+                    "Self-mined bead added to braid but not persisted to DB - {}",
+                    error
+                )
+            }
         }
     }
 }
@@ -458,6 +473,13 @@ impl fmt::Display for BraidError {
             }
             BraidError::BeadNotIndexed { bead } => {
                 write!(f, "Bead {} not found in braid index", bead)
+            }
+            BraidError::PersistenceChannelClosed { bead } => {
+                write!(
+                    f,
+                    "Persistence channel closed; bead {} was not persisted",
+                    bead
+                )
             }
         }
     }

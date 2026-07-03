@@ -56,6 +56,9 @@ pub async fn persist_added_bead<'a>(
         .await
     {
         tracing::error!(err = ?error.0, "Failed to send InsertBeadsBatch to DB handler");
+        return Err(BraidError::PersistenceChannelClosed {
+            bead: bead.block_header.block_hash(),
+        });
     }
     Ok(())
 }

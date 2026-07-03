@@ -18,7 +18,7 @@ pub const DB_CHANNEL_CAPACITY: usize = 1024;
 pub const BATCH_INSERT_THRESHOLD: usize = 500;
 pub const FETCH_BEAD_BATCH_SIZE: u32 = 50;
 //Bulk insertion sub-queries
-const BULK_INSERT_BEADS: &'static str =
+const BULK_INSERT_BEADS: &str =
     "INSERT INTO bead (id, hash, nVersion, hashPrevBlock, hashMerkleRoot, nTime, 
         nBits, nNonce, payout_address, start_timestamp, comm_pub_key, min_target, 
         weak_target, miner_ip, extranonce1, extranonce2, broadcast_timestamp, signature) 
@@ -43,7 +43,7 @@ const BULK_INSERT_BEADS: &'static str =
         unhex(json_extract(value, '$.signature')) 
     FROM json_each(?);";
 //Separating into sub-queries
-const BULK_INSERT_TRANSACTIONS: &'static str = "INSERT INTO Transactions (bead_id, txid) 
+const BULK_INSERT_TRANSACTIONS: &str = "INSERT INTO Transactions (bead_id, txid) 
     SELECT json_extract(value, '$.bead_id'), unhex(json_extract(value, '$.txid')) 
     FROM json_each(?);";
 
@@ -588,38 +588,11 @@ fn build_bead_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<Bead, DBErrors> 
             }
         })?;
 
-                bead.uncommitted_metadata.signature =
-                    Signature::from_slice(&row.get::<Vec<u8>, _>("signature")).unwrap();
-                bead
-            });
-
-            if let Ok(tx_bytes) = row.try_get::<Vec<u8>, _>("txid") {
-                let arr: [u8; 32] = tx_bytes.try_into().unwrap();
-                bead.committed_metadata
-                    .transaction_ids
-                    .0
-                    .push(Txid::from_byte_array(arr));
-            }
-            if let (Ok(parent_hash), Ok(ts)) = (
-                row.try_get::<Vec<u8>, _>("parent_hash"),
-                row.try_get::<u32, _>("parent_timestamp"),
-            ) {
-                if parent_hash.is_empty() {
-                    //Genesis bead case
-                    continue;
-                }
-                let arr: [u8; 32] = parent_hash.try_into().unwrap();
-                bead.committed_metadata
-                    .parents
-                    .insert(BlockHash::from_byte_array(arr));
-                tracing::info!(
-                    parent_hash = %BlockHash::from_byte_array(arr),
-                    "Parent hash added to bead's parent set"
-                );
-                bead.committed_metadata
-                    .parent_bead_timestamps
-                    .0
-                    .push(MedianTimePast::from_u32(ts).unwrap());
+    bead.uncommitted_metadata.signature =
+        Signature::from_slice(&row.get::<Vec<u8>, _>("signature")).map_err(|e| {
+            DBErrors::TupleAttributeParsingError {
+                error: format!("Invalid signature: {}", e),
+                attribute: "signature".into(),
             }
         })?;
 
@@ -692,9 +665,20 @@ pub async fn fetch_bead_by_bead_hash(
                     error: e.to_string(),
                     attribute: "extranonce2".to_string(),
                 })?;
-            let broadcast_timestamp =
-                MedianTimePast::from_u32(row.get::<u32, _>("broadcast_timestamp")).unwrap();
-            let signature = Signature::from_slice(&row.get::<Vec<u8>, _>("signature")).unwrap();
+            let broadcast_timestamp = MedianTimePast::from_u32(
+                row.get::<u32, _>("broadcast_timestamp"),
+            )
+            .map_err(|e| DBErrors::TupleAttributeParsingError {
+                error: e.to_string(),
+                attribute: "broadcast_timestamp".to_string(),
+            })?;
+            let signature =
+                Signature::from_slice(&row.get::<Vec<u8>, _>("signature")).map_err(|e| {
+                    DBErrors::TupleAttributeParsingError {
+                        error: e.to_string(),
+                        attribute: "signature".to_string(),
+                    }
+                })?;
             bead_id = id;
             fetched_bead.block_header.version = version;
             fetched_bead.block_header.bits = nbits;
