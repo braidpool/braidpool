@@ -1213,10 +1213,9 @@ pub async fn test_extend_rpc() {
     let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
     let (proxy_tx, _) = mpsc::unbounded_channel();
 
-    let server_addr = "127.0.0.1:9101";
-    let _ = run_rpc_server(
+    let (server_addr, _) = run_rpc_server(
         Arc::clone(&braid),
-        server_addr,
+        "127.0.0.1:0",
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
         // Provide a dummy ConnectionMapping for the test
         Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
@@ -1226,9 +1225,6 @@ pub async fn test_extend_rpc() {
     )
     .await
     .unwrap();
-
-    // Give server time to start
-    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
 
     let target_uri = format!("http://{}", server_addr);
     let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
@@ -1264,9 +1260,10 @@ pub async fn test_same_bead_extend() {
         jsonrpsee::server::middleware::rpc::RpcServiceBuilder::new().layer_fn(LoggingMiddleware);
     let server = jsonrpsee::server::Server::builder()
         .set_rpc_middleware(rpc_middleware)
-        .build("127.0.0.1:8889")
+        .build("127.0.0.1:0")
         .await
         .unwrap();
+    let server_addr = server.local_addr().unwrap();
     let rpc_impl = RpcServerImpl::new(
         braid,
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
@@ -1280,7 +1277,6 @@ pub async fn test_same_bead_extend() {
     );
     let _handle = server.start(rpc_impl.into_rpc());
 
-    let server_addr = "127.0.0.1:8889";
     let target_uri = format!("http://{}", server_addr);
     let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
 
@@ -1319,9 +1315,10 @@ pub async fn test_cohort_count_rpc() {
         jsonrpsee::server::middleware::rpc::RpcServiceBuilder::new().layer_fn(LoggingMiddleware);
     let server = jsonrpsee::server::Server::builder()
         .set_rpc_middleware(rpc_middleware)
-        .build("127.0.0.1:9000")
+        .build("127.0.0.1:0")
         .await
         .unwrap();
+    let server_addr = server.local_addr().unwrap();
     let rpc_impl = RpcServerImpl::new(
         braid,
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
@@ -1335,7 +1332,6 @@ pub async fn test_cohort_count_rpc() {
     );
     let _handle = server.start(rpc_impl.into_rpc());
 
-    let server_addr = "127.0.0.1:9000";
     let target_uri = format!("http://{}", server_addr);
     let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
 
@@ -1388,10 +1384,9 @@ pub async fn test_get_bead_count_cli_flow() {
     let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
 
     // Start RPC server
-    let server_addr = "127.0.0.1:9100"; // Different port to avoid conflicts
-    let _server_addr = run_rpc_server(
+    let (server_addr, _) = run_rpc_server(
         Arc::clone(&braid),
-        server_addr,
+        "127.0.0.1:0",
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
         Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
@@ -1403,9 +1398,6 @@ pub async fn test_get_bead_count_cli_flow() {
     )
     .await
     .unwrap();
-
-    // Give server time to start
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
     // Test: Make HTTP request like CLI would
     let target_uri = format!("http://{}", server_addr);
@@ -1433,10 +1425,9 @@ pub async fn test_get_tips_cli_flow() {
     }
 
     // Start RPC server
-    let server_addr = "127.0.0.1:6684";
-    let _ = run_rpc_server(
+    let (server_addr, _) = run_rpc_server(
         Arc::clone(&braid),
-        server_addr,
+        "127.0.0.1:0",
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
         Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
@@ -1448,8 +1439,6 @@ pub async fn test_get_tips_cli_flow() {
     )
     .await
     .unwrap();
-
-    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
 
     // Test gettips command
     let target_uri = format!("http://{}", server_addr);
@@ -1476,10 +1465,9 @@ pub async fn test_get_bead_rpc() {
     let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
     let (proxy_tx, _) = mpsc::unbounded_channel();
 
-    let server_addr = "127.0.0.1:9001";
-    let _ = run_rpc_server(
+    let (server_addr, _) = run_rpc_server(
         Arc::clone(&braid),
-        server_addr,
+        "127.0.0.1:0",
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
         Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
@@ -1537,10 +1525,9 @@ pub async fn test_get_cohort_rpc() {
 
     let (proxy_tx, _) = mpsc::unbounded_channel();
 
-    let server_addr = "127.0.0.1:9002";
-    let _ = run_rpc_server(
+    let (server_addr, _) = run_rpc_server(
         Arc::clone(&braid),
-        server_addr,
+        "127.0.0.1:0",
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
         Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
@@ -1589,10 +1576,9 @@ pub async fn test_get_genesis_rpc() {
     let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
     let (proxy_tx, _) = mpsc::unbounded_channel();
 
-    let server_addr = "127.0.0.1:9003";
-    let _ = run_rpc_server(
+    let (server_addr, _) = run_rpc_server(
         Arc::clone(&braid),
-        server_addr,
+        "127.0.0.1:0",
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
         Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
@@ -1629,10 +1615,9 @@ pub async fn test_get_parents_and_children_rpc() {
 
     let (proxy_tx, _) = mpsc::unbounded_channel();
 
-    let server_addr = "127.0.0.1:9004";
-    let _ = run_rpc_server(
+    let (server_addr, _) = run_rpc_server(
         Arc::clone(&braid),
-        server_addr,
+        "127.0.0.1:0",
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
         Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
@@ -1698,10 +1683,9 @@ pub async fn test_get_hwpath_rpc() {
 
     let (proxy_tx, _) = mpsc::unbounded_channel();
 
-    let server_addr = "127.0.0.1:9005";
-    let _ = run_rpc_server(
+    let (server_addr, _) = run_rpc_server(
         Arc::clone(&braid),
-        server_addr,
+        "127.0.0.1:0",
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
         Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
@@ -1742,10 +1726,9 @@ pub async fn test_get_braid_info_rpc() {
 
     let (proxy_tx, _) = mpsc::unbounded_channel();
 
-    let server_addr = "127.0.0.1:9006";
-    let _ = run_rpc_server(
+    let (server_addr, _) = run_rpc_server(
         Arc::clone(&braid),
-        server_addr,
+        "127.0.0.1:0",
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
         Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
@@ -1781,10 +1764,9 @@ pub async fn test_get_node_info_rpc() {
 
     let (proxy_tx, _) = mpsc::unbounded_channel();
 
-    let server_addr = "127.0.0.1:9007";
-    let _ = run_rpc_server(
+    let (server_addr, _) = run_rpc_server(
         Arc::clone(&braid),
-        server_addr,
+        "127.0.0.1:0",
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
         Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
@@ -1837,11 +1819,11 @@ pub async fn test_get_peer_info_rpc() {
 
     // --- 1. Test with no peers ---
     let peer_manager_empty = Arc::new(tokio::sync::RwLock::new(PeerManager::new(8)));
-    let server_addr_empty = "127.0.0.1:9008";
     let server_empty = jsonrpsee::server::Server::builder()
-        .build(server_addr_empty)
+        .build("127.0.0.1:0")
         .await
         .unwrap();
+    let server_addr_empty = server_empty.local_addr().unwrap();
     let rpc_impl_empty = RpcServerImpl::new(
         Arc::clone(&braid),
         peer_manager_empty,
@@ -1879,11 +1861,11 @@ pub async fn test_get_peer_info_rpc() {
     peer_manager_with_peers.update_score(&peer_id, 25.0);
 
     let peer_manager_arc = Arc::new(tokio::sync::RwLock::new(peer_manager_with_peers));
-    let server_addr_with_peers = "127.0.0.1:9018"; // Use a different port
     let server_with_peers = jsonrpsee::server::Server::builder()
-        .build(server_addr_with_peers)
+        .build("127.0.0.1:0")
         .await
         .unwrap();
+    let server_addr_with_peers = server_with_peers.local_addr().unwrap();
     let rpc_impl_with_peers = RpcServerImpl::new(
         Arc::clone(&braid),
         peer_manager_arc,
@@ -1942,10 +1924,9 @@ pub async fn test_get_miner_info_rpc() {
         );
     }
 
-    let server_addr = "127.0.0.1:9009";
-    let _ = run_rpc_server(
+    let (server_addr, _) = run_rpc_server(
         Arc::clone(&braid),
-        server_addr,
+        "127.0.0.1:0",
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
         stratum_map,
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
@@ -1976,11 +1957,11 @@ pub async fn test_staged_transactions_rpc() {
     let (proxy_tx, _) = mpsc::unbounded_channel();
     let latest_block = Arc::new(Mutex::new(stratum::BlockTemplate::default()));
 
-    let server_addr = "127.0.0.1:9013";
     let server = jsonrpsee::server::Server::builder()
-        .build(server_addr)
+        .build("127.0.0.1:0")
         .await
         .unwrap();
+    let server_addr = server.local_addr().unwrap();
     let rpc_impl = RpcServerImpl::new(
         braid,
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
@@ -2070,10 +2051,9 @@ pub async fn test_get_ipc_stats_rpc() {
         )])));
     let (proxy_tx, mut proxy_rx) = mpsc::unbounded_channel();
 
-    let server_addr = "127.0.0.1:9012";
-    let _ = run_rpc_server(
+    let (server_addr, _) = run_rpc_server(
         Arc::clone(&braid),
-        server_addr,
+        "127.0.0.1:0",
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
         Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
@@ -2122,10 +2102,9 @@ pub async fn test_get_ipc_stats_rpc_simple() {
         )])));
     let (proxy_tx, mut proxy_rx) = mpsc::unbounded_channel();
 
-    let server_addr = "127.0.0.1:9020";
-    let _ = run_rpc_server(
+    let (server_addr, _) = run_rpc_server(
         Arc::clone(&braid),
-        server_addr,
+        "127.0.0.1:0",
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
         Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
@@ -2134,8 +2113,6 @@ pub async fn test_get_ipc_stats_rpc_simple() {
     )
     .await
     .unwrap();
-
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
     let target_uri = format!("http://{}", server_addr);
     let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
@@ -2176,10 +2153,9 @@ pub async fn test_unstage_transactions_rpc_simple() {
         )])));
     let (proxy_tx, mut proxy_rx) = mpsc::unbounded_channel();
 
-    let server_addr = "127.0.0.1:9021";
-    let _ = run_rpc_server(
+    let (server_addr, _) = run_rpc_server(
         Arc::clone(&braid),
-        server_addr,
+        "127.0.0.1:0",
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
         Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
@@ -2188,8 +2164,6 @@ pub async fn test_unstage_transactions_rpc_simple() {
     )
     .await
     .unwrap();
-
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
     let target_uri = format!("http://{}", server_addr);
     let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
@@ -2237,10 +2211,9 @@ pub async fn test_get_mining_info_rpc() {
 
     let (proxy_tx, _) = mpsc::unbounded_channel();
 
-    let server_addr = "127.0.0.1:9089";
-    let _ = run_rpc_server(
+    let (server_addr, _) = run_rpc_server(
         Arc::clone(&braid),
-        server_addr,
+        "127.0.0.1:0",
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
         Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
@@ -2249,8 +2222,6 @@ pub async fn test_get_mining_info_rpc() {
     )
     .await
     .unwrap();
-
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
     let target_uri = format!("http://{}", server_addr);
     let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
@@ -2376,10 +2347,9 @@ pub async fn test_subscribe_bead_rpc() {
     ])));
     let (proxy_tx, _) = mpsc::unbounded_channel();
 
-    let server_addr = "127.0.0.1:9050";
-    let (_addr, dashboard_events) = run_rpc_server(
+    let (server_addr, dashboard_events) = run_rpc_server(
         Arc::clone(&braid),
-        server_addr,
+        "127.0.0.1:0",
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
         Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
