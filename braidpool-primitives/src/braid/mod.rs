@@ -60,22 +60,25 @@ impl Braid {
     }
 
     pub fn add_bead(&mut self, bead: Bead) -> AddBeadStatus {
-        if bead.is_valid_bead() == false {
+        let bead_hash = bead.block_header.block_hash();
+
+        if !bead.is_valid_bead() {
             return AddBeadStatus::InvalidBead;
         }
 
-        // if self.contains_bead(bead.bead_hash) {
-        //     return AddBeadStatus::DagAlreadyContainsBead;
-        // }
+        if self.contains_bead(bead_hash) {
+            return AddBeadStatus::DagAlreadyContainsBead;
+        }
 
         if self.is_bead_orphaned(&bead) {
             self.orphan_beads.push(bead);
             return AddBeadStatus::ParentsNotYetReceived;
         }
 
-        // self.beads.insert(bead.bead_hash);
         self.remove_parent_beads_from_tips(&bead);
-        // self.tips.insert(bead.bead_hash);
+        self.beads.insert(bead_hash);
+        self.tips.insert(bead_hash);
+        self.loaded_beads_in_memory.insert(bead_hash, bead);
 
         self.cohorts = self.calculate_cohorts();
         self.update_orphan_bead_set();
