@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import Card from '../common/Card';
 import Header from '../common/Header';
 import MinerInventoryDashboard from '../MinerInventory/MinerInventoryDashboard';
@@ -10,7 +10,22 @@ import { Page } from './Types';
 import BlockViewer from './BlockViewer';
 
 const Dashboard = () => {
-  const [currentPage, setCurrentPage] = useState<Page>(Page.DASHBOARD);
+  const navigate = useNavigate();
+  const { page } = useParams<{ page?: string }>();
+
+  const getPageFromRoute = (routePage?: string): Page => {
+    if (!routePage) return Page.DASHBOARD;
+
+    return Object.values(Page).includes(routePage as Page)
+      ? (routePage as Page)
+      : Page.DASHBOARD;
+  };
+
+  const currentPage = getPageFromRoute(page);
+  const setCurrentPage = (nextPage: Page) => {
+    const nextPath = `/${nextPage}`;
+    navigate(nextPath);
+  };
 
   // Render the main content based on selected page
   const renderPage = () => {
