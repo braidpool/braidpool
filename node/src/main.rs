@@ -329,9 +329,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     };
     // load beads from db (if present) and insert in braid here
-    // Initializing the peer manager (shared between swarm and RPC server)
-    // Using RwLock to allow concurrent reads (RPC server) while swarm handler can write
-    let peer_manager_arc = Arc::new(tokio::sync::RwLock::new(PeerManager::new(8)));
     //For local testing uncomment this keypair peer since it running to process will
     //result in same peerID leading to OutgoingConnectionError
     // let keypair = identity::Keypair::generate_ed25519();
