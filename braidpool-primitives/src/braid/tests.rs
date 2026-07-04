@@ -23,8 +23,7 @@ fn create_test_bead(parents: HashSet<BeadHash>, nonce: u32) -> Bead {
         .require_network(Network::Bitcoin)
         .unwrap();
     let secp = Secp256k1::new();
-    let secret_key =
-        SecretKey::from_byte_array(&[0xcd; 32]).expect("32 bytes, within curve order");
+    let secret_key = SecretKey::from_slice(&[0xcd; 32]).expect("32 bytes, within curve order");
     let public_key = PublicKey::from_secret_key(&secp, &secret_key);
     let socket_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
 
