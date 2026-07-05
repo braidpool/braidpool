@@ -422,7 +422,7 @@ pub async fn fetch_beads_in_batch(
             }
             if let (Ok(parent_hash), Ok(ts)) = (
                 row.try_get::<Vec<u8>, _>("parent_hash"),
-                row.try_get::<i32, _>("parent_timestamp"),
+                row.try_get::<u32, _>("parent_timestamp"),
             ) {
                 if parent_hash.is_empty() {
                     //Genesis bead case
@@ -439,7 +439,7 @@ pub async fn fetch_beads_in_batch(
                 bead.committed_metadata
                     .parent_bead_timestamps
                     .0
-                    .push(MedianTimePast::from_u32(ts as u32).unwrap());
+                    .push(MedianTimePast::from_u32(ts).unwrap());
             }
         }
     }
