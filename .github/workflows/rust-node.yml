@@ -4,16 +4,22 @@ name: Rust Node CI
 
 jobs:
   check:
-    name: Check/ ${{ matrix.toolchain }}
-    runs-on: ubuntu-latest
+    name: Check / ${{ matrix.os }} / ${{ matrix.toolchain }}
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
+        os: [ubuntu-latest, macos-latest]
         toolchain: [stable]
     steps:
-      - name: Install Cap'n Proto
+      - name: Install Cap'n Proto (Ubuntu)
+        if: runner.os == 'Linux'
         run: |
           export DEBIAN_FRONTEND=noninteractive
           sudo apt-get install -y capnproto libcapnp-dev
+      - name: Install Cap'n Proto (macOS)
+        if: runner.os == 'macOS'
+        run: brew install capnp
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # tag=v6.0.2
       - name: Install Rust ${{ matrix.toolchain }}
         uses: dtolnay/rust-toolchain@0b1efabc08b657293548b77fb76cc02d26091c7e
@@ -21,22 +27,28 @@ jobs:
           toolchain: ${{ matrix.toolchain }}
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # tag=v2.9.1
         with:
-          shared-key: node-ci-stable-${{ matrix.toolchain }}
+          shared-key: node-ci-stable-${{ matrix.os }}-${{ matrix.toolchain }}
           cache-on-failure: true
       - name: Check code
         run: cargo check --manifest-path Cargo.toml
 
   msrv:
-    name: MSRV Check / ${{ matrix.toolchain }}
-    runs-on: ubuntu-latest
+    name: MSRV Check / ${{ matrix.os }} / ${{ matrix.toolchain }}
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
+        os: [ubuntu-latest, macos-latest]
         toolchain: ["1.88"]
     steps:
-      - name: Install Cap'n Proto
+      - name: Install Cap'n Proto (Ubuntu)
+        if: runner.os == 'Linux'
         run: |
           export DEBIAN_FRONTEND=noninteractive
           sudo apt-get install -y capnproto libcapnp-dev
+      - name: Install Cap'n Proto (macOS)
+        if: runner.os == 'macOS'
+        run: brew install capnp
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # tag=v6.0.2
       - name: Install Rust ${{ matrix.toolchain }}
         uses: dtolnay/rust-toolchain@0b1efabc08b657293548b77fb76cc02d26091c7e
@@ -44,22 +56,28 @@ jobs:
           toolchain: ${{ matrix.toolchain }}
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # tag=v2.9.1
         with:
-          shared-key: node-ci-msrv-${{ matrix.toolchain }}
+          shared-key: node-ci-msrv-${{ matrix.os }}-${{ matrix.toolchain }}
           cache-on-failure: true
       - name: Check MSRV
         run: cargo check --workspace
 
   test:
-    name: Test Suite / ${{ matrix.toolchain }}
-    runs-on: ubuntu-latest
+    name: Test Suite / ${{ matrix.os }} / ${{ matrix.toolchain }}
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
+        os: [ubuntu-latest, macos-latest]
         toolchain: [stable]
     steps:
-      - name: Install Cap'n Proto
+      - name: Install Cap'n Proto (Ubuntu)
+        if: runner.os == 'Linux'
         run: |
           export DEBIAN_FRONTEND=noninteractive
           sudo apt-get install -y capnproto libcapnp-dev
+      - name: Install Cap'n Proto (macOS)
+        if: runner.os == 'macOS'
+        run: brew install capnp
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # tag=v6.0.2
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@0b1efabc08b657293548b77fb76cc02d26091c7e
@@ -67,17 +85,19 @@ jobs:
           toolchain: ${{ matrix.toolchain }}
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # tag=v2.9.1
         with:
-          shared-key: node-ci-${{ matrix.toolchain }}
+          shared-key: node-ci-${{ matrix.os }}-${{ matrix.toolchain }}
           cache-on-failure: true
       - name: Run tests
         run: cargo test --workspace
 
   fmt:
-    name: Rustfmt
+    name: Rustfmt / ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
+        os: [ubuntu-latest, macos-latest]
         toolchain: [stable]
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # tag=v6.0.2
       - name: Install Rust ${{ matrix.toolchain }}

@@ -141,6 +141,7 @@ export function RewardsDashboard() {
             <ActionIconButton
               ariaLabel="Download chart"
               onClick={handleDownloadRewardsChart}
+              ariaLabel="Download Reward Chart"
               icon={
                 <svg
                   xmlns="http://www.w3.org/2000/svg"

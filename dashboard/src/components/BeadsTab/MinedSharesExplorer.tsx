@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import DashboardHeader from './DashboardHeader';
 import BeadRow from './BeadRow';
 import { TrendsTab } from './Trends/TrendsTab';
@@ -7,6 +7,7 @@ import { Transaction, Bead, BeadId } from './lib/Types';
 import { processBlockData } from './lib/Utils';
 import { WEBSOCKET_URLS } from '../../URLs';
 import { ITEMS_PER_PAGE, DEFAULT_TIME_RANGE } from './Constants';
+import GraphVisualization from '../BraidPoolDAG/BraidPoolDAG';
 import { PoolDominance } from './PoolDominance/PoolDominance';
 
 export default function MinedSharesExplorer() {
@@ -21,7 +22,6 @@ export default function MinedSharesExplorer() {
   const wsRef = useRef<WebSocket | null>(null);
   const timeRange = DEFAULT_TIME_RANGE;
 
-  // Pagination state
   const itemsPerPage = ITEMS_PER_PAGE;
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -146,19 +146,19 @@ export default function MinedSharesExplorer() {
       }
     };
   }, []);
+
   const toggleBead = (beadId: string) => {
     setExpandedBeads((prev) => ({ ...prev, [beadId]: !prev[beadId] }));
     setActiveBead(beadId);
   };
-
   return (
     <div className="min-h-screen text-textPrimary relative">
       <div className="container mx-auto px-2 sm:px-4 py-8">
         <DashboardHeader activeTab={activeTab} setActiveTab={setActiveTab} />
-
         <div className="relative">
           {activeTab === 'beads' && (
             <div className="space-y-8">
+              <GraphVisualization />
               <div className=" rounded-sm overflow-hidden">
                 {/* Table header */}
                 <div

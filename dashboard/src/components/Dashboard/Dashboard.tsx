@@ -1,9 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import Card from '../common/Card';
 import Header from '../common/Header';
 import MinerInventoryDashboard from '../MinerInventory/MinerInventoryDashboard';
 import MempoolLatencyStats from '../Mempool/MempoolLatencyStats';
-import GraphVisualization from '../BraidPoolDAG/BraidPoolDAG';
 import MinedSharesExplorer from '../BeadsTab/MinedSharesExplorer';
 import NodeHealth from '../NodeHealth/NodeHealth';
 import BitcoinStats from '../BitcoinStats/BitcoinStats';
@@ -17,7 +16,22 @@ interface DashboardProps {
 }
 
 const Dashboard = ({ currentTheme, setCurrentTheme }: DashboardProps) => {
-  const [currentPage, setCurrentPage] = useState<Page>(Page.DASHBOARD);
+  const navigate = useNavigate();
+  const { page } = useParams<{ page?: string }>();
+
+  const getPageFromRoute = (routePage?: string): Page => {
+    if (!routePage) return Page.DASHBOARD;
+
+    return Object.values(Page).includes(routePage as Page)
+      ? (routePage as Page)
+      : Page.DASHBOARD;
+  };
+
+  const currentPage = getPageFromRoute(page);
+  const setCurrentPage = (nextPage: Page) => {
+    const nextPath = `/${nextPage}`;
+    navigate(nextPath);
+  };
 
   // Render the main content based on selected page
   const renderPage = () => {
@@ -47,16 +61,7 @@ const Dashboard = ({ currentTheme, setCurrentTheme }: DashboardProps) => {
             </Card>
           </div>
         );
-      case Page.DAG_VISUALIZATION:
-        return (
-          <div className="p-2">
-            <Card title="Braid Visualization">
-              <div>
-                <GraphVisualization />
-              </div>
-            </Card>
-          </div>
-        );
+
       case Page.BITCOIN_STATS:
         return (
           <div className="p-2">

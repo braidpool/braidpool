@@ -1,6 +1,5 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import Dashboard from './components/Dashboard/Dashboard';
-import MinedSharesExplorer from './components/BeadsTab/MinedSharesExplorer';
 import Footer from './components/Footer/Footer';
 import { useState, useEffect } from 'react';
 import { themes, ThemeType } from './theme/colors';
@@ -23,6 +22,10 @@ function App() {
           <Routes>
             <Route
               path="/"
+              element={<Navigate to="/dashboard" replace />}
+            />
+            <Route
+              path="/:page"
               element={
                 <Dashboard
                   currentTheme={currentTheme}
@@ -32,7 +35,7 @@ function App() {
             />
             <Route
               path="/minedsharesexplorer"
-              element={<MinedSharesExplorer />}
+              element={<Navigate to="/miner-stats" replace />}
             />
           </Routes>
         </main>

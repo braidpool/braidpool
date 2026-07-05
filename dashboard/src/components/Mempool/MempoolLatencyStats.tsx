@@ -212,6 +212,7 @@ const MempoolLatencyStats = () => {
             <ActionIconButton
               ariaLabel="Download chart"
               onClick={handleDownloadFeeDist}
+              ariaLabel="Download Fee Distribution"
               icon={
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -259,6 +260,7 @@ const MempoolLatencyStats = () => {
           <ActionIconButton
             ariaLabel="Download chart"
             onClick={handleDownloadBlockFees}
+            ariaLabel="Download Block Fees"
             icon={
               <svg
                 xmlns="http://www.w3.org/2000/svg"

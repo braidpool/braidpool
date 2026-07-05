@@ -70,6 +70,7 @@ export interface MinerTableProps {
   expandedAlerts: Record<string, boolean>;
   setExpandedAlerts: Dispatch<SetStateAction<Record<string, boolean>>>;
   statusStyles: Record<Miner['status'], string>;
+  onDelete?: (minerId: string) => void;
 }
 export interface MinerDashboardHeaderProps {
   totalMiners: number;

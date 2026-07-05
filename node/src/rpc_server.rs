@@ -15,10 +15,13 @@ use jsonrpsee::core::async_trait;
 use jsonrpsee::core::middleware::Batch;
 use jsonrpsee::core::middleware::Notification;
 use jsonrpsee::core::middleware::RpcServiceT;
+use jsonrpsee::core::to_json_raw_value;
+use jsonrpsee::core::SubscriptionResult;
 use jsonrpsee::proc_macros::rpc;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Request;
 use jsonrpsee::ConnectionId;
+use jsonrpsee::PendingSubscriptionSink;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use serde_json::Value;
@@ -27,13 +30,15 @@ use std::collections::HashSet;
 use std::future::Future;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::sync::{mpsc, oneshot, RwLock};
+use tokio::sync::{mpsc, oneshot, watch, RwLock};
 use tracing::{error, info, warn};
 
 #[cfg(test)]
 use {
     crate::braid, crate::utils::create_test_bead, jsonrpsee::core::client::ClientT,
-    jsonrpsee::core::params::ArrayParams, jsonrpsee::http_client::HttpClient,
+    jsonrpsee::core::client::SubscriptionClientT, jsonrpsee::core::params::ArrayParams,
+    jsonrpsee::http_client::HttpClient, jsonrpsee::rpc_params,
+    jsonrpsee::ws_client::WsClientBuilder,
 };
 
 //server side trait to be implemented for the handler
@@ -108,6 +113,10 @@ pub trait Rpc {
         method: String,
         params: serde_json::Value,
     ) -> Result<serde_json::Value, ErrorObjectOwned>;
+
+    /// Push notifications: emits the most recent bead.
+    #[subscription(name = "subscribebead", item = Bead)]
+    async fn subscribe_bead(&self) -> SubscriptionResult;
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -243,6 +252,19 @@ pub enum RpcProxyCommand {
     },
 }
 
+/// Push-notification channels delivered to dashboard subscribers over WebSocket.
+pub struct DashboardEvents {
+    /// Emits the `Bead` of the most recently added bead.
+    pub new_bead: watch::Sender<Option<Bead>>,
+}
+
+impl DashboardEvents {
+    pub fn new() -> Arc<Self> {
+        let (new_bead, _) = watch::channel(None);
+        Arc::new(Self { new_bead })
+    }
+}
+
 // RPC Server implementation using channels
 pub struct RpcServerImpl {
     braid_arc: Arc<RwLock<Braid>>,
@@ -251,6 +273,7 @@ pub struct RpcServerImpl {
     latest_block: Arc<Mutex<BlockTemplate>>,
     rpc_proxy_tx: mpsc::UnboundedSender<RpcProxyCommand>,
     bitcoin_rpc_config: Option<BitcoinRpcConfig>,
+    dashboard_events: Arc<DashboardEvents>,
 }
 
 impl RpcServerImpl {
@@ -269,7 +292,13 @@ impl RpcServerImpl {
             latest_block: latest_block_template,
             rpc_proxy_tx,
             bitcoin_rpc_config,
+            dashboard_events: DashboardEvents::new(),
         }
+    }
+
+    /// Returns a handle to the push-notification channels for external producers.
+    pub fn dashboard_events(&self) -> Arc<DashboardEvents> {
+        Arc::clone(&self.dashboard_events)
     }
 }
 #[async_trait]
@@ -293,15 +322,20 @@ impl RpcServer for RpcServerImpl {
         let bead: Bead = serde_json::from_str(&bead_data).map_err(|e| {
             ErrorObjectOwned::owned(1, format!("Invalid bead data: {}", e), None::<()>)
         })?;
+        let bead_hash = bead.block_header.block_hash();
         info!(
-            hash = %bead.block_header.block_hash(),
+            hash = %bead_hash,
             "Add bead request received"
         );
         let mut braid_data = self.braid_arc.write().await;
         let success_status = braid_data.extend(&bead);
+        drop(braid_data);
 
         match success_status {
-            AddBeadStatus::BeadAdded => Ok("Bead added successfully".to_string()),
+            AddBeadStatus::BeadAdded { .. } => {
+                let _ = self.dashboard_events.new_bead.send(Some(bead));
+                Ok("Bead added successfully".to_string())
+            }
             AddBeadStatus::DagAlreadyContainsBead => Ok("Bead already exists".to_string()),
             AddBeadStatus::InvalidBead => {
                 Err(ErrorObjectOwned::owned(4, "Invalid bead", None::<()>))
@@ -986,6 +1020,37 @@ impl RpcServer for RpcServerImpl {
             }
         }
     }
+
+    async fn subscribe_bead(&self, pending: PendingSubscriptionSink) -> SubscriptionResult {
+        let sink = pending.accept().await?;
+        let mut rx = self.dashboard_events.new_bead.subscribe();
+        // Skip the initial `None` and marking it as seen so that
+        // the receiver will see only the values after first
+        // concrete value has been seen .
+        rx.mark_unchanged();
+        info!("New bead subscription accepted");
+        loop {
+            // If all the senders have been dropped and the last value has been seen by
+            // the subscriber.
+            if rx.changed().await.is_err() {
+                break;
+            }
+            let bead = rx.borrow().clone();
+            let Some(bead) = bead else { continue };
+            let msg = match to_json_raw_value(&bead) {
+                Ok(m) => m,
+                Err(e) => {
+                    error!(error = %e, "Failed to serialize new-bead notification");
+                    continue;
+                }
+            };
+            if sink.send(msg).await.is_err() {
+                // Subscriber disconnected.
+                break;
+            }
+        }
+        Ok(())
+    }
 }
 struct LoggingMiddleware<S>(S);
 
@@ -1030,7 +1095,7 @@ pub async fn run_rpc_server(
     latest_block_template: Arc<Mutex<BlockTemplate>>,
     rpc_proxy_tx: mpsc::UnboundedSender<RpcProxyCommand>,
     bitcoin_rpc_config: Option<BitcoinRpcConfig>,
-) -> Result<SocketAddr, ()> {
+) -> Result<(SocketAddr, Arc<DashboardEvents>), ()> {
     //Initializing the middleware
     let rpc_middleware =
         jsonrpsee::server::middleware::rpc::RpcServiceBuilder::new().layer_fn(LoggingMiddleware);
@@ -1055,6 +1120,7 @@ pub async fn run_rpc_server(
         rpc_proxy_tx,
         bitcoin_rpc_config.clone(),
     );
+    let dashboard_notification_ref = rpc_impl.dashboard_events();
     let handle = server.start(rpc_impl.into_rpc());
 
     // Parse host from bind_address
@@ -1076,7 +1142,7 @@ pub async fn run_rpc_server(
         //handling the stopping of the server
         handle.stopped(),
     );
-    Ok(addr)
+    Ok((addr, dashboard_notification_ref))
 }
 
 /// Call Bitcoin RPC method directly using HTTP JSON-RPC
@@ -1147,10 +1213,9 @@ pub async fn test_extend_rpc() {
     let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
     let (proxy_tx, _) = mpsc::unbounded_channel();
 
-    let server_addr = "127.0.0.1:9101";
-    let _ = run_rpc_server(
+    let (server_addr, _) = run_rpc_server(
         Arc::clone(&braid),
-        server_addr,
+        "127.0.0.1:0",
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
         // Provide a dummy ConnectionMapping for the test
         Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
@@ -1160,9 +1225,6 @@ pub async fn test_extend_rpc() {
     )
     .await
     .unwrap();
-
-    // Give server time to start
-    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
 
     let target_uri = format!("http://{}", server_addr);
     let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
@@ -1198,9 +1260,10 @@ pub async fn test_same_bead_extend() {
         jsonrpsee::server::middleware::rpc::RpcServiceBuilder::new().layer_fn(LoggingMiddleware);
     let server = jsonrpsee::server::Server::builder()
         .set_rpc_middleware(rpc_middleware)
-        .build("127.0.0.1:8889")
+        .build("127.0.0.1:0")
         .await
         .unwrap();
+    let server_addr = server.local_addr().unwrap();
     let rpc_impl = RpcServerImpl::new(
         braid,
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
@@ -1214,7 +1277,6 @@ pub async fn test_same_bead_extend() {
     );
     let _handle = server.start(rpc_impl.into_rpc());
 
-    let server_addr = "127.0.0.1:8889";
     let target_uri = format!("http://{}", server_addr);
     let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
 
@@ -1253,9 +1315,10 @@ pub async fn test_cohort_count_rpc() {
         jsonrpsee::server::middleware::rpc::RpcServiceBuilder::new().layer_fn(LoggingMiddleware);
     let server = jsonrpsee::server::Server::builder()
         .set_rpc_middleware(rpc_middleware)
-        .build("127.0.0.1:9000")
+        .build("127.0.0.1:0")
         .await
         .unwrap();
+    let server_addr = server.local_addr().unwrap();
     let rpc_impl = RpcServerImpl::new(
         braid,
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
@@ -1269,7 +1332,6 @@ pub async fn test_cohort_count_rpc() {
     );
     let _handle = server.start(rpc_impl.into_rpc());
 
-    let server_addr = "127.0.0.1:9000";
     let target_uri = format!("http://{}", server_addr);
     let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
 
@@ -1322,10 +1384,9 @@ pub async fn test_get_bead_count_cli_flow() {
     let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
 
     // Start RPC server
-    let server_addr = "127.0.0.1:9100"; // Different port to avoid conflicts
-    let _server_addr = run_rpc_server(
+    let (server_addr, _) = run_rpc_server(
         Arc::clone(&braid),
-        server_addr,
+        "127.0.0.1:0",
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
         Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
@@ -1337,9 +1398,6 @@ pub async fn test_get_bead_count_cli_flow() {
     )
     .await
     .unwrap();
-
-    // Give server time to start
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
     // Test: Make HTTP request like CLI would
     let target_uri = format!("http://{}", server_addr);
@@ -1367,10 +1425,9 @@ pub async fn test_get_tips_cli_flow() {
     }
 
     // Start RPC server
-    let server_addr = "127.0.0.1:6684";
-    let _ = run_rpc_server(
+    let (server_addr, _) = run_rpc_server(
         Arc::clone(&braid),
-        server_addr,
+        "127.0.0.1:0",
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
         Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
@@ -1382,8 +1439,6 @@ pub async fn test_get_tips_cli_flow() {
     )
     .await
     .unwrap();
-
-    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
 
     // Test gettips command
     let target_uri = format!("http://{}", server_addr);
@@ -1410,10 +1465,9 @@ pub async fn test_get_bead_rpc() {
     let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
     let (proxy_tx, _) = mpsc::unbounded_channel();
 
-    let server_addr = "127.0.0.1:9001";
-    let _ = run_rpc_server(
+    let (server_addr, _) = run_rpc_server(
         Arc::clone(&braid),
-        server_addr,
+        "127.0.0.1:0",
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
         Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
@@ -1471,10 +1525,9 @@ pub async fn test_get_cohort_rpc() {
 
     let (proxy_tx, _) = mpsc::unbounded_channel();
 
-    let server_addr = "127.0.0.1:9002";
-    let _ = run_rpc_server(
+    let (server_addr, _) = run_rpc_server(
         Arc::clone(&braid),
-        server_addr,
+        "127.0.0.1:0",
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
         Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
@@ -1523,10 +1576,9 @@ pub async fn test_get_genesis_rpc() {
     let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
     let (proxy_tx, _) = mpsc::unbounded_channel();
 
-    let server_addr = "127.0.0.1:9003";
-    let _ = run_rpc_server(
+    let (server_addr, _) = run_rpc_server(
         Arc::clone(&braid),
-        server_addr,
+        "127.0.0.1:0",
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
         Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
@@ -1563,10 +1615,9 @@ pub async fn test_get_parents_and_children_rpc() {
 
     let (proxy_tx, _) = mpsc::unbounded_channel();
 
-    let server_addr = "127.0.0.1:9004";
-    let _ = run_rpc_server(
+    let (server_addr, _) = run_rpc_server(
         Arc::clone(&braid),
-        server_addr,
+        "127.0.0.1:0",
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
         Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
@@ -1632,10 +1683,9 @@ pub async fn test_get_hwpath_rpc() {
 
     let (proxy_tx, _) = mpsc::unbounded_channel();
 
-    let server_addr = "127.0.0.1:9005";
-    let _ = run_rpc_server(
+    let (server_addr, _) = run_rpc_server(
         Arc::clone(&braid),
-        server_addr,
+        "127.0.0.1:0",
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
         Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
@@ -1676,10 +1726,9 @@ pub async fn test_get_braid_info_rpc() {
 
     let (proxy_tx, _) = mpsc::unbounded_channel();
 
-    let server_addr = "127.0.0.1:9006";
-    let _ = run_rpc_server(
+    let (server_addr, _) = run_rpc_server(
         Arc::clone(&braid),
-        server_addr,
+        "127.0.0.1:0",
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
         Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
@@ -1715,10 +1764,9 @@ pub async fn test_get_node_info_rpc() {
 
     let (proxy_tx, _) = mpsc::unbounded_channel();
 
-    let server_addr = "127.0.0.1:9007";
-    let _ = run_rpc_server(
+    let (server_addr, _) = run_rpc_server(
         Arc::clone(&braid),
-        server_addr,
+        "127.0.0.1:0",
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
         Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
@@ -1771,11 +1819,11 @@ pub async fn test_get_peer_info_rpc() {
 
     // --- 1. Test with no peers ---
     let peer_manager_empty = Arc::new(tokio::sync::RwLock::new(PeerManager::new(8)));
-    let server_addr_empty = "127.0.0.1:9008";
     let server_empty = jsonrpsee::server::Server::builder()
-        .build(server_addr_empty)
+        .build("127.0.0.1:0")
         .await
         .unwrap();
+    let server_addr_empty = server_empty.local_addr().unwrap();
     let rpc_impl_empty = RpcServerImpl::new(
         Arc::clone(&braid),
         peer_manager_empty,
@@ -1813,11 +1861,11 @@ pub async fn test_get_peer_info_rpc() {
     peer_manager_with_peers.update_score(&peer_id, 25.0);
 
     let peer_manager_arc = Arc::new(tokio::sync::RwLock::new(peer_manager_with_peers));
-    let server_addr_with_peers = "127.0.0.1:9018"; // Use a different port
     let server_with_peers = jsonrpsee::server::Server::builder()
-        .build(server_addr_with_peers)
+        .build("127.0.0.1:0")
         .await
         .unwrap();
+    let server_addr_with_peers = server_with_peers.local_addr().unwrap();
     let rpc_impl_with_peers = RpcServerImpl::new(
         Arc::clone(&braid),
         peer_manager_arc,
@@ -1876,10 +1924,9 @@ pub async fn test_get_miner_info_rpc() {
         );
     }
 
-    let server_addr = "127.0.0.1:9009";
-    let _ = run_rpc_server(
+    let (server_addr, _) = run_rpc_server(
         Arc::clone(&braid),
-        server_addr,
+        "127.0.0.1:0",
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
         stratum_map,
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
@@ -1910,11 +1957,11 @@ pub async fn test_staged_transactions_rpc() {
     let (proxy_tx, _) = mpsc::unbounded_channel();
     let latest_block = Arc::new(Mutex::new(stratum::BlockTemplate::default()));
 
-    let server_addr = "127.0.0.1:9013";
     let server = jsonrpsee::server::Server::builder()
-        .build(server_addr)
+        .build("127.0.0.1:0")
         .await
         .unwrap();
+    let server_addr = server.local_addr().unwrap();
     let rpc_impl = RpcServerImpl::new(
         braid,
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
@@ -2004,10 +2051,9 @@ pub async fn test_get_ipc_stats_rpc() {
         )])));
     let (proxy_tx, mut proxy_rx) = mpsc::unbounded_channel();
 
-    let server_addr = "127.0.0.1:9012";
-    let _ = run_rpc_server(
+    let (server_addr, _) = run_rpc_server(
         Arc::clone(&braid),
-        server_addr,
+        "127.0.0.1:0",
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
         Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
@@ -2056,10 +2102,9 @@ pub async fn test_get_ipc_stats_rpc_simple() {
         )])));
     let (proxy_tx, mut proxy_rx) = mpsc::unbounded_channel();
 
-    let server_addr = "127.0.0.1:9020";
-    let _ = run_rpc_server(
+    let (server_addr, _) = run_rpc_server(
         Arc::clone(&braid),
-        server_addr,
+        "127.0.0.1:0",
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
         Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
@@ -2068,8 +2113,6 @@ pub async fn test_get_ipc_stats_rpc_simple() {
     )
     .await
     .unwrap();
-
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
     let target_uri = format!("http://{}", server_addr);
     let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
@@ -2110,10 +2153,9 @@ pub async fn test_unstage_transactions_rpc_simple() {
         )])));
     let (proxy_tx, mut proxy_rx) = mpsc::unbounded_channel();
 
-    let server_addr = "127.0.0.1:9021";
-    let _ = run_rpc_server(
+    let (server_addr, _) = run_rpc_server(
         Arc::clone(&braid),
-        server_addr,
+        "127.0.0.1:0",
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
         Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
@@ -2122,8 +2164,6 @@ pub async fn test_unstage_transactions_rpc_simple() {
     )
     .await
     .unwrap();
-
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
     let target_uri = format!("http://{}", server_addr);
     let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
@@ -2171,10 +2211,9 @@ pub async fn test_get_mining_info_rpc() {
 
     let (proxy_tx, _) = mpsc::unbounded_channel();
 
-    let server_addr = "127.0.0.1:9089";
-    let _ = run_rpc_server(
+    let (server_addr, _) = run_rpc_server(
         Arc::clone(&braid),
-        server_addr,
+        "127.0.0.1:0",
         Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
         Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
@@ -2183,8 +2222,6 @@ pub async fn test_get_mining_info_rpc() {
     )
     .await
     .unwrap();
-
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
     let target_uri = format!("http://{}", server_addr);
     let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
@@ -2299,5 +2336,56 @@ pub async fn test_get_mining_info_rpc() {
         );
     } else {
         panic!("Expected Call error");
+    }
+}
+
+#[tokio::test]
+pub async fn test_subscribe_bead_rpc() {
+    let test_genesis_bead = create_test_bead(1, None);
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(vec![
+        test_genesis_bead.clone(),
+    ])));
+    let (proxy_tx, _) = mpsc::unbounded_channel();
+
+    let (server_addr, dashboard_events) = run_rpc_server(
+        Arc::clone(&braid),
+        "127.0.0.1:0",
+        Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
+        Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
+        Arc::new(Mutex::new(stratum::BlockTemplate::default())),
+        proxy_tx,
+        None,
+    )
+    .await
+    .unwrap();
+
+    let test_ws_client = WsClientBuilder::default()
+        .build(format!("ws://{}", server_addr))
+        .await
+        .unwrap();
+
+    let mut subscription = test_ws_client
+        .subscribe::<Bead, _>("subscribebead", rpc_params![], "unsubscribebead")
+        .await
+        .expect("subscription should be accepted");
+    println!("Subscription id received - {:?}", subscription.kind());
+    let new_bead = create_test_bead(2, Some(test_genesis_bead.block_header.block_hash()));
+    dashboard_events
+        .new_bead
+        .send(Some(new_bead.clone()))
+        .expect("send should succeed while subscriber is alive");
+
+    let received = subscription.next().await;
+    match received {
+        Some(result) => {
+            if let Err(error) = result {
+                panic!("An error occurred while reading the notification - {error}");
+            } else if let Ok(received_bead) = result {
+                assert_eq!(received_bead, new_bead);
+            }
+        }
+        None => {
+            panic!("Notification not received !");
+        }
     }
 }

@@ -2,11 +2,31 @@ use clap::Parser;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
+/// Default data directory path for Linux
+#[cfg(target_os = "linux")]
+const DEFAULT_DATADIR: &str = "~/.braidpool/";
+
+/// Default data directory path for macOS
+#[cfg(target_os = "macos")]
+const DEFAULT_DATADIR: &str = "~/Library/Application Support/braidpool/";
+
+/// Default Bitcoin RPC cookie path for Linux
+#[cfg(target_os = "linux")]
+const DEFAULT_RPC_COOKIE: &str = "~/.bitcoin/.cookie";
+
+/// Default Bitcoin RPC cookie path for macOS
+#[cfg(target_os = "macos")]
+const DEFAULT_RPC_COOKIE: &str = "~/Library/Application Support/Bitcoin/.cookie";
+
+/// Default IPC socket path for Unix platforms (Linux/macOS) — Unix domain socket
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+const DEFAULT_IPC_SOCKET: &str = "/tmp/bitcoin-cpunet.sock";
+
 #[derive(Parser, Debug, Clone)]
 #[command(name = "braid", about = "Braidpool Node CLI")]
 pub struct Cli {
     /// Braid data directory
-    #[arg(long, default_value = "~/.braidpool/")]
+    #[arg(long, default_value = DEFAULT_DATADIR)]
     pub datadir: PathBuf,
 
     /// Bind to a given address and always listen on it
@@ -39,7 +59,7 @@ pub struct Cli {
     pub network: Option<String>,
 
     /// Use this cookie file for bitcoin RPC
-    #[arg(long, default_value = "~/.bitcoin/.cookie")]
+    #[arg(long, default_value = DEFAULT_RPC_COOKIE)]
     pub rpccookie: Option<String>,
 
     /// TCP port for the local Stratum server
@@ -50,8 +70,8 @@ pub struct Cli {
     #[arg(long, default_value = "127.0.0.1:6682")]
     pub rpc_bind: SocketAddr,
 
-    /// Path to Bitcoin Core IPC socket
-    #[arg(long, default_value = "/tmp/bitcoin-cpunet.sock")]
+    /// Path to Bitcoin Core IPC socket (Unix domain socket on Linux/macOS)
+    #[arg(long, default_value = DEFAULT_IPC_SOCKET)]
     pub ipc_socket: String,
 }
 

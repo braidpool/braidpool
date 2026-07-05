@@ -8,10 +8,10 @@ use bitcoin::{absolute::Decodable, Transaction};
 use bitcoin::{BlockHash, BlockHeader, BlockTime, TxMerkleNode, Txid, Witness};
 use futures::{lock::Mutex, FutureExt};
 use num::ToPrimitive;
-use rand::RngCore;
+use rand::random;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::time::UNIX_EPOCH;
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use tokio::{
@@ -20,7 +20,7 @@ use tokio::{
         tcp::{OwnedReadHalf, OwnedWriteHalf},
         TcpListener,
     },
-    sync::{mpsc, RwLock},
+    sync::{mpsc, oneshot, RwLock},
 };
 use tokio_stream::StreamExt;
 use tokio_util::codec::{FramedRead, LinesCodec};
@@ -734,7 +734,7 @@ impl DownstreamClient {
             }
         }
         //Passing both the extranonces for committment in uncommitted metadata
-        let extranonce_2_raw_value = match u32::from_str_radix(extranonce2, 16) {
+        let extranonce_2_raw_value = match u64::from_str_radix(extranonce2, 16) {
             Ok(v) => v,
             Err(e) => {
                 error!(connection_id = %connection_id_hex, error = %e, extranonce2 = %extranonce2, "Failed to parse extranonce2");
@@ -744,7 +744,7 @@ impl DownstreamClient {
             }
         };
         let extranonce_1_hex_str = hex::encode(self.extranonce1.clone());
-        let extranonce_1_raw_value = match u32::from_str_radix(&extranonce_1_hex_str, 16) {
+        let extranonce_1_raw_value = match u64::from_str_radix(&extranonce_1_hex_str, 16) {
             Ok(v) => v,
             Err(e) => {
                 error!(connection_id = %connection_id_hex, error = %e, extranonce1 = %extranonce_1_hex_str, "Failed to parse extranonce1");
@@ -1080,15 +1080,13 @@ impl DownstreamClient {
     }
 }
 
+static NEXT_CONNECTION_ID: AtomicU32 = AtomicU32::new(0);
+
 impl Default for DownstreamClient {
     fn default() -> Self {
-        //ExtraNonce1. - Hex-encoded, per-connection unique string which will be used for creating generation transactions later.
-        //4 bytes
-        let mut extranonce1_bytes = [0; 4];
-        rand::thread_rng().fill_bytes(&mut extranonce1_bytes);
-        let connection_id = rand::thread_rng().next_u32(); // FIXME use a counter here, not an RNG
-                                                           // (will collide with 65k mining devices)
-        let extranonce1_hex = hex::encode(&extranonce1_bytes); // FIXME should be connection_id
+        let connection_id = NEXT_CONNECTION_ID.fetch_add(1, Ordering::SeqCst);
+        let extranonce1_bytes = random::<u64>().to_be_bytes();
+        let extranonce1_hex = hex::encode(extranonce1_bytes);
         debug!(
             connection_id = %format!("{:x}", connection_id),
             extranonce1 = %extranonce1_hex,
@@ -1100,7 +1098,6 @@ impl Default for DownstreamClient {
             subscribed: false,
             suggest_difficulty_done: false,
             channel_configured: false,
-            //generating a random u32 client connection id
             connection_id,
             extranonce1: Vec::from(extranonce1_bytes),
             version_rolling_mask: None,
@@ -1787,6 +1784,7 @@ impl Server {
         notification_sender: mpsc::Sender<NotifyCmd>,
         swarm_handler: Arc<Mutex<SwarmHandler>>,
         ibd_or_not: Arc<AtomicBool>,
+        bound_addr_tx: Option<oneshot::Sender<SocketAddr>>,
     ) -> Result<(), Box<std::io::Error>> {
         debug!("Starting stratum server");
         let bind_address = format!(
@@ -1800,16 +1798,20 @@ impl Server {
                 return Err(Box::new(e));
             }
         };
+        let bound_addr = listener.local_addr()?;
+        if let Some(tx) = bound_addr_tx {
+            let _ = tx.send(bound_addr);
+        }
 
         let endpoints = crate::utils::server_endpoints(
             &self.stratum_config.hostname,
-            self.stratum_config.port,
+            bound_addr.port(),
             "stratum+tcp",
         );
         if endpoints.is_empty() {
             warn!(
                 host = %self.stratum_config.hostname,
-                port = %self.stratum_config.port,
+                port = %bound_addr.port(),
                 "Server listening but no interfaces were discovered"
             );
         } else {
@@ -2059,6 +2061,7 @@ mod test {
     use crate::{
         braid,
         db::db_handlers::DBHandler,
+        rpc_server::DashboardEvents,
         stratum::{ConnectionMapping, MiningJobMap, NotifyCmd, Server, StratumServerConfig},
     };
     use bitcoin::{
@@ -2069,7 +2072,7 @@ mod test {
     use tokio::{
         io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
         net::TcpStream,
-        sync::{mpsc, RwLock},
+        sync::{mpsc, oneshot, RwLock},
     };
 
     #[tokio::test]
@@ -2084,15 +2087,16 @@ mod test {
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
         let (_test_db_handler, test_db_tx) = DBHandler::new().await.unwrap();
         let (swarm_handler, mut swarm_command_receiver) =
-            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx);
+            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx, DashboardEvents::new());
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let config = StratumServerConfig {
             hostname: "127.0.0.1".to_string(),
-            port: 3353,
+            port: 0,
             ..Default::default()
         };
 
         let mut server = Server::new(config.clone(), connection_mapping.clone(), None);
+        let (addr_tx, addr_rx) = oneshot::channel();
 
         let server_task = tokio::spawn(async move {
             let _ = server
@@ -2101,13 +2105,13 @@ mod test {
                     notify_tx,
                     swarm_handler_arc,
                     test_ibd_spinlock.clone(),
+                    Some(addr_tx),
                 )
                 .await;
         });
 
-        tokio::time::sleep(Duration::from_millis(300)).await;
-
-        let addr = format!("{}:{}", config.hostname, config.port);
+        let bound_addr = addr_rx.await.unwrap();
+        let addr = bound_addr.to_string();
         let mut mock_connection_handles = Vec::new();
         for i in 0..3 {
             let addr_clone = addr.clone();
@@ -2148,17 +2152,18 @@ mod test {
         let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let (_test_db_handler, test_db_tx) = DBHandler::new().await.unwrap();
         let (swarm_handler, mut swarm_command_receiver) =
-            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx);
+            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx, DashboardEvents::new());
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
 
         let config = StratumServerConfig {
             hostname: "127.0.0.1".to_string(),
-            port: 3356,
+            port: 0,
             ..Default::default()
         };
 
         let mut server = Server::new(config.clone(), connection_mapping.clone(), None);
+        let (addr_tx, addr_rx) = oneshot::channel();
 
         let server_task = tokio::spawn(async move {
             let _ = server
@@ -2167,14 +2172,13 @@ mod test {
                     notify_tx,
                     swarm_handler_arc,
                     test_ibd_spinlock,
+                    Some(addr_tx),
                 )
                 .await;
         });
 
-        tokio::time::sleep(Duration::from_millis(300)).await;
-
-        let addr = format!("{}:{}", config.hostname, config.port);
-        let mut stream = TcpStream::connect(&addr).await.unwrap();
+        let bound_addr = addr_rx.await.unwrap();
+        let mut stream = TcpStream::connect(bound_addr).await.unwrap();
 
         let msg = r#"{"id":1,"method":"mining.subscribe","params":[]}"#;
         stream.write_all(msg.as_bytes()).await.unwrap();
@@ -2199,16 +2203,16 @@ mod test {
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
         let (_test_db_handler, test_db_tx) = DBHandler::new().await.unwrap();
         let (swarm_handler, mut swarm_command_receiver) =
-            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx);
+            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx, DashboardEvents::new());
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let config = StratumServerConfig {
             hostname: "127.0.0.1".to_string(),
-            port: 3357,
+            port: 0,
             ..Default::default()
         };
 
-        let port = config.port;
         let mut server = Server::new(config, connection_mapping, None);
+        let (addr_tx, addr_rx) = oneshot::channel();
         tokio::spawn(async move {
             let _ = server
                 .run_stratum_service(
@@ -2216,14 +2220,13 @@ mod test {
                     notify_tx,
                     swarm_handler_arc,
                     ibd_spinlock.clone(),
+                    Some(addr_tx),
                 )
                 .await;
         });
 
-        tokio::time::sleep(Duration::from_millis(300)).await;
-
-        let addr = format!("127.0.0.1:{}", port);
-        let mut stream = TcpStream::connect(&addr).await.unwrap();
+        let bound_addr = addr_rx.await.unwrap();
+        let mut stream = TcpStream::connect(bound_addr).await.unwrap();
 
         let request = r#"{"id":2,"method":"mining.authorize","params":["satoshi","braidpool"]}"#;
         stream.write_all(request.as_bytes()).await.unwrap();
@@ -2250,15 +2253,15 @@ mod test {
         let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
         let (swarm_handler, mut swarm_command_receiver) =
-            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx);
+            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx, DashboardEvents::new());
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let config = StratumServerConfig {
             hostname: "127.0.0.1".to_string(),
-            port: 3358,
+            port: 0,
             ..Default::default()
         };
-        let port = config.port;
         let mut server = Server::new(config, connection_mapping, None);
+        let (addr_tx, addr_rx) = oneshot::channel();
         tokio::spawn(async move {
             let _ = server
                 .run_stratum_service(
@@ -2266,12 +2269,12 @@ mod test {
                     notify_tx,
                     swarm_handler_arc,
                     ibd_spinlock.clone(),
+                    Some(addr_tx),
                 )
                 .await;
         });
-        tokio::time::sleep(Duration::from_millis(300)).await;
-        let addr = format!("127.0.0.1:{}", port);
-        let mut stream = TcpStream::connect(&addr).await.unwrap();
+        let bound_addr = addr_rx.await.unwrap();
+        let mut stream = TcpStream::connect(bound_addr).await.unwrap();
         let request = r#"{"id":3,"method":"mining.suggest_difficulty","params":[1000]}"#;
         stream.write_all(request.as_bytes()).await.unwrap();
         stream.write_all(b"\n").await.unwrap();
@@ -2294,32 +2297,32 @@ mod test {
             Arc::new(Mutex::new(HashMap::new()));
         let (notify_tx, _notify_rx) = mpsc::channel::<NotifyCmd>(32);
         let (swarm_handler, mut swarm_command_receiver) =
-            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx);
+            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx, DashboardEvents::new());
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let config = StratumServerConfig {
             hostname: "127.0.0.1".to_string(),
-            port: 5050,
+            port: 0,
             ..Default::default()
         };
 
         let mut server = Server::new(config, connection_mapping.clone(), None);
         let mining_job_map_clone = mining_job_map.clone();
         let notify_tx_clone = notify_tx.clone();
+        let (addr_tx, addr_rx) = oneshot::channel();
         tokio::spawn(async move {
-            server
+            let _ = server
                 .run_stratum_service(
                     mining_job_map_clone,
                     notify_tx_clone,
                     swarm_handler_arc,
                     ibd_spinlock,
+                    Some(addr_tx),
                 )
-                .await
-                .unwrap();
+                .await;
         });
 
-        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-        let mut stream = TcpStream::connect("127.0.0.1:5050").await.unwrap();
+        let bound_addr = addr_rx.await.unwrap();
+        let mut stream = TcpStream::connect(bound_addr).await.unwrap();
 
         stream
             .write_all(b"{\"method\":\"mining.subscribe\", \"params\": [\"test\", 1]\n")
@@ -2359,7 +2362,7 @@ mod test {
             Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
         let (_test_db_handler, test_db_tx) = DBHandler::new().await.unwrap();
         let (swarm_handler, mut swarm_command_receiver) =
-            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx);
+            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx, DashboardEvents::new());
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let test_merkle_bytes: [u8; 32] = [0u8; 32];
         let mut test_witness = Witness::new();
@@ -2378,7 +2381,7 @@ mod test {
                     vout: OutPoint::COINBASE_PREVOUT.vout,
                 },
                 script_sig: ScriptBuf::from_hex(
-                    "02611e080101010101010101094272616964706f6f6c",
+                    "02611e1001010101010101010101010101010101094272616964706f6f6c",
                 )
                 .unwrap(),
                 sequence: Sequence::MAX,
@@ -2406,7 +2409,7 @@ mod test {
             lock_time: LockTime::ZERO,
         };
         let test_template_header = bitcoin::block::Header {
-            bits: bitcoin::pow::CompactTarget::from_unprefixed_hex("1d00ffff").unwrap(),
+            bits: bitcoin::pow::CompactTarget::from_unprefixed_hex("207fffff").unwrap(),
             nonce: 0,
             version: BlockVersion::from_consensus(536870912),
             time: BlockTime::from_u32(1759477299),
@@ -2453,14 +2456,6 @@ mod test {
             .await
             .insert_mining_job(1, job_details.clone())
             .await;
-        let test_submit_request_params = json!([
-            "bitaxe",
-            numeric_job_id.to_string(),
-            "03000000",
-            "68df7e33",
-            "068beb7a",
-            "00000000"
-        ]);
         let configure_test_request = json!([
             [
                 "version-rolling"
@@ -2469,11 +2464,61 @@ mod test {
                 "version-rolling.mask": "ffffffff"
             }
         ]);
-        let test_extranonce_1 = hex::decode("9495ac08").unwrap();
+        let test_extranonce_1 = hex::decode("000000009495ac08").unwrap();
         mock_downstream_handler.extranonce1 = test_extranonce_1;
         let configure_response = mock_downstream_handler
             .handle_configure(&configure_test_request, 1)
             .await;
+
+        // Grind a valid nonce for 207fffff difficulty by replicating handle_submit's
+        // coinbase construction to get the real merkle root.
+        // extranonce1 must be set first (above) so the coinbase matches exactly.
+        let extranonce1_hex_for_grind = hex::encode(&mock_downstream_handler.extranonce1);
+        let extranonce2_for_grind = "0000000003000000";
+        let coinbase_hex_for_grind = format!(
+            "{}{}{}{}",
+            constructed_test_notification_ref.coinbase1,
+            extranonce1_hex_for_grind,
+            extranonce2_for_grind,
+            constructed_test_notification_ref.coinbase2,
+        );
+        let coinbase_bytes_for_grind = hex::decode(&coinbase_hex_for_grind).unwrap();
+        let mut grind_cursor = Cursor::new(coinbase_bytes_for_grind);
+        let coinbase_tx_for_grind =
+            bitcoin::Transaction::consensus_decode(&mut grind_cursor).unwrap();
+        let merkle_root_bytes_for_grind =
+            calculate_merkle_root(coinbase_tx_for_grind.compute_txid(), &[]);
+        let merkle_root_for_grind = TxMerkleNode::from_byte_array(merkle_root_bytes_for_grind);
+        // BIP310: miner mask ffffffff & pool limit 0x1FFFE000 = 0x1FFFE000 stored mask.
+        // version_bits=0 => final_version = (0x20000000 & !0x1FFFE000) | 0 = 0x20000000
+        let grind_bits = bitcoin::pow::CompactTarget::from_unprefixed_hex("207fffff").unwrap();
+        let grind_target = bitcoin::Target::from_compact(grind_bits);
+        let grind_ntime = u32::from_str_radix("68df7e33", 16).unwrap();
+        let mut valid_nonce: u32 = 0;
+        for nonce in 0u32..=u32::MAX {
+            let grind_header = BlockHeader {
+                version: BlockVersion::from_consensus(536870912),
+                prev_blockhash: test_template_header.prev_blockhash,
+                merkle_root: merkle_root_for_grind,
+                time: BlockTime::from_u32(grind_ntime),
+                bits: grind_bits,
+                nonce,
+            };
+            if grind_target.is_met_by(grind_header.block_hash()) {
+                valid_nonce = nonce;
+                break;
+            }
+        }
+        let valid_nonce_hex = format!("{:08x}", valid_nonce);
+
+        let test_submit_request_params = json!([
+            "bitaxe",
+            numeric_job_id.to_string(),
+            "0000000003000000",
+            "68df7e33",
+            valid_nonce_hex,
+            "00000000"
+        ]);
         let submit_response: StratumResponses = mock_downstream_handler
             .handle_submit(
                 &test_submit_request_params,
@@ -2490,7 +2535,7 @@ mod test {
                 assert_eq!(json_response, true);
             }
             _ => {
-                println!("Invalid response received");
+                panic!("Expected StandardResponse, got a different response type");
             }
         }
     }
@@ -2535,5 +2580,26 @@ mod test {
             mr.to_string(),
             "690699e45d09d84d81cb58a4f8ba734e7fc90856d8b24524797f9a54ff57b1a1".to_string()
         );
+    }
+
+    #[test]
+    fn test_unique_extranonce1_per_connection() {
+        let client1 = DownstreamClient::default();
+        let client2 = DownstreamClient::default();
+        let client3 = DownstreamClient::default();
+
+        // connection_ids must be strictly increasing
+        assert!(client2.connection_id() > client1.connection_id());
+        assert!(client3.connection_id() > client2.connection_id());
+
+        // extranonce1 must be unique across all three connections
+        assert_ne!(client1.extranonce1, client2.extranonce1);
+        assert_ne!(client2.extranonce1, client3.extranonce1);
+        assert_ne!(client1.extranonce1, client3.extranonce1);
+
+        // extranonce1 must be exactly EXTRANONCE1_SIZE bytes
+        assert_eq!(client1.extranonce1.len(), EXTRANONCE1_SIZE);
+        assert_eq!(client2.extranonce1.len(), EXTRANONCE1_SIZE);
+        assert_eq!(client3.extranonce1.len(), EXTRANONCE1_SIZE);
     }
 }
