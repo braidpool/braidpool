@@ -10,13 +10,15 @@ use bitcoin::{
     absolute::MedianTimePast, ecdsa::Signature, BlockHash, BlockTime, BlockVersion, CompactTarget,
     PublicKey, TxMerkleNode, Txid,
 };
-use futures::lock::Mutex;
 use num::ToPrimitive;
 use serde_json::json;
 use sqlx::{Pool, Row, Sqlite};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::sync::{
+    mpsc::{Receiver, Sender},
+    Mutex,
+};
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
 const DB_CHANNEL_CAPACITY: usize = 1024;
