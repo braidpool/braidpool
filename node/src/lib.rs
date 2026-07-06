@@ -20,13 +20,13 @@ use tracing::{debug, error, info, trace, warn};
 /// growth and ensures efficient resource usage.
 pub const MAX_CACHED_TEMPLATES: usize = 90;
 
-/// Maximum number of active jobs retained in the global job store.
+/// Capacity of the `GlobalJobStore` shared across all miner connections.
 ///
-/// The global job store holds `Arc<JobDetails>` entries shared across all connected miners.
-/// When the store exceeds this capacity, the oldest job_id entries are evicted. Template
-/// data is only freed when no remaining job_id references it, preventing use-after-free.
+/// The store holds `Arc<JobDetails>` entries; all miners share the same allocation.
+/// When the store reaches this limit, the oldest job_id is evicted. Template data is
+/// freed only once no remaining job_id references it, preventing use-after-eviction.
 /// At bead rate (150ms), 5 slots retain ~750ms of history — enough for in-flight submits.
-pub const MAX_JOBS_PER_MINER: usize = 5;
+pub const GLOBAL_JOB_STORE_CAPACITY: usize = 5;
 
 use crate::{
     bead::Bead,
