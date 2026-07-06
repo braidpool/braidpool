@@ -1768,13 +1768,13 @@ impl Server {
     }
     /// Starts and runs the Stratum server, handling incoming miner connections.
     ///
-    /// This asynchronous function continuously listens on the configured hostname and port
+    /// This asynchronous function continuously listens on the provided `TcpListener`
     /// for new TCP connections from downstream miners. Each connection is managed in a separate
     /// task, allowing concurrent processing of multiple miners.
     ///
     /// # Returns
     /// * `Ok(())` – Runs indefinitely; returns only if the listener loop is broken or an unrecoverable error occurs.
-    /// * `Err(Box<std::io::Error>)` – If binding to the server address fails.
+    /// * `Err(Box<std::io::Error>)` – If the listener's local address cannot be resolved.
     pub async fn run_stratum_service(
         &mut self,
         listener: TcpListener,
@@ -2338,6 +2338,28 @@ mod test {
         // Uses bits=207fffff (minimum difficulty) so the nonce grind terminates
         // in 1-2 iterations on average. The nonce is computed at test time by
         // replicating handle_submit coinbase construction exactly.
+        //
+        // Serialized block produced by this test
+        // (extranonce1=000000009495ac08, extranonce2=0000000003000000,
+        //  ntime=68df7e33, bits=207fffff — verified deterministic across runs):
+        //
+        //   00000020                                 version (LE)
+        //   e6ebb395a1e2ba60f17650d790309e21         prev_blockhash (bytes  1-16)
+        //   af08062229ad955376ac574300000000         prev_blockhash (bytes 17-32)
+        //   90dea459e4b4db9ed0d542fc9415f043         merkle_root    (bytes  1-16)
+        //   12b9b2fc1c3b07bd7a417b715d948ab4         merkle_root    (bytes 17-32)
+        //   337edf68                                 ntime (LE)
+        //   ffff7f20                                 bits (LE)
+        //   03000000                                 nonce (LE)
+        //   01                                       tx count
+        //   coinbase tx (split at 64 hex chars = 32 bytes per line):
+        //   0200000001000000000000000000000000000000000000000000000000000000
+        //   0000000000ffffffff1e02611e10000000009495ac0800000000030000000942
+        //   72616964706f6f6cffffffff0300f2052a01000000160014e470d0179325db88
+        //   b55771f6c0a5139dd81d73180000000000000000266a24aa21a9ede2f61c3f71
+        //   d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf90000000000
+        //   0000002a6a286272616964706f6f6c5f626561645f6d657461646174615f6861
+        //   73685f333262010203040506070800000000
         let genesis_beads = Vec::from([]);
         let test_braid: Arc<RwLock<braid::Braid>> =
             Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
