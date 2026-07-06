@@ -260,7 +260,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //Connection mapping for all the downstream connection connected to the stratum server
     let connection_mapping_for_shutdown = connection_mapping.clone();
     //Global job store shared across all connected miners
-    let global_job_store = Arc::new(Mutex::new(GlobalJobStore::new(node::MAX_JOBS_PER_MINER)));
+    let global_job_store = Arc::new(Mutex::new(GlobalJobStore::new(
+        node::GLOBAL_JOB_STORE_CAPACITY,
+    )));
     //Intializing `notifier` for mining.notify
     let mut notifier: Notifier = Notifier::new(notification_rx, Arc::clone(&global_job_store));
     //Stratum configuration initialization
