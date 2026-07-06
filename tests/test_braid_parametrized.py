@@ -150,6 +150,23 @@ class TestAllAncestors:
         # With distinct explicit dicts, bead 1 should only record bead 0.
         assert a2[1] == {0}
 
+    def test_default_ancestors_dict_is_isolated(self):
+        """Calls that omit the ancestors argument must not share state.
+
+        Regression test: all_ancestors/all_ancestors_recursive previously used a
+        mutable default argument (ancestors={}), so a single dict was reused
+        across every call. Repeated calls on different graphs then returned stale
+        ancestor sets cached from an earlier call.
+        """
+        graph_a = {0: set(), 1: {0}}    # bead 1's only ancestor is 0
+        graph_b = {0: set(), 1: set()}  # bead 1 is a genesis: no ancestors
+        for func in (all_ancestors, all_ancestors_recursive):
+            first = func(1, graph_a)    # no explicit ancestors dict
+            second = func(1, graph_b)   # no explicit ancestors dict, same bead index
+            assert first[1] == {0}, func.__name__
+            # Would be {0} (leaked from the first call) if the default were shared.
+            assert second[1] == set(), func.__name__
+
 
 # cohorts()
 class TestCohorts:
