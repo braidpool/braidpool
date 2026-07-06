@@ -20,7 +20,7 @@ use tokio::{
         tcp::{OwnedReadHalf, OwnedWriteHalf},
         TcpListener,
     },
-    sync::{mpsc, oneshot, RwLock},
+    sync::{mpsc, RwLock},
 };
 use tokio_stream::StreamExt;
 use tokio_util::codec::{FramedRead, LinesCodec};
@@ -102,8 +102,6 @@ impl Default for BlockTemplate {
 pub struct StratumServerConfig {
     /// Hostname or IP address to bind the Stratum server.
     pub hostname: String,
-    /// TCP port for incoming Stratum connections.
-    pub port: u16,
     /// Initial mining difficulty assigned to new clients as per in the `braidpool_spec.md`.
     pub start_difficulty: u64,
     /// Minimum allowed mining difficulty as per in the `braidpool_spec.md`.
@@ -118,7 +116,6 @@ impl Default for StratumServerConfig {
     fn default() -> Self {
         Self {
             hostname: String::from("0.0.0.0"),
-            port: 3333,
             //Placeholders can be changed in default
             start_difficulty: 1,
             minimum_difficulty: 1,
@@ -1771,37 +1768,23 @@ impl Server {
     }
     /// Starts and runs the Stratum server, handling incoming miner connections.
     ///
-    /// This asynchronous function continuously listens on the configured hostname and port
+    /// This asynchronous function continuously listens on the provided `TcpListener`
     /// for new TCP connections from downstream miners. Each connection is managed in a separate
     /// task, allowing concurrent processing of multiple miners.
     ///
     /// # Returns
     /// * `Ok(())` – Runs indefinitely; returns only if the listener loop is broken or an unrecoverable error occurs.
-    /// * `Err(Box<std::io::Error>)` – If binding to the server address fails.
+    /// * `Err(Box<std::io::Error>)` – If the listener's local address cannot be resolved.
     pub async fn run_stratum_service(
         &mut self,
+        listener: TcpListener,
         mining_job_map: Arc<Mutex<HashMap<String, Arc<Mutex<MiningJobMap>>>>>,
         notification_sender: mpsc::Sender<NotifyCmd>,
         swarm_handler: Arc<Mutex<SwarmHandler>>,
         ibd_or_not: Arc<AtomicBool>,
-        bound_addr_tx: Option<oneshot::Sender<SocketAddr>>,
     ) -> Result<(), Box<std::io::Error>> {
         debug!("Starting stratum server");
-        let bind_address = format!(
-            "{}:{}",
-            self.stratum_config.hostname, self.stratum_config.port
-        );
-        let listener = match TcpListener::bind(&bind_address).await {
-            Ok(listener) => listener,
-            Err(e) => {
-                error!(address = %bind_address, error = %e, "Failed to bind stratum server");
-                return Err(Box::new(e));
-            }
-        };
         let bound_addr = listener.local_addr()?;
-        if let Some(tx) = bound_addr_tx {
-            let _ = tx.send(bound_addr);
-        }
 
         let endpoints = crate::utils::server_endpoints(
             &self.stratum_config.hostname,
@@ -2071,8 +2054,8 @@ mod test {
     use futures::lock::Mutex;
     use tokio::{
         io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
-        net::TcpStream,
-        sync::{mpsc, oneshot, RwLock},
+        net::{TcpListener, TcpStream},
+        sync::{mpsc, RwLock},
     };
 
     #[tokio::test]
@@ -2091,27 +2074,26 @@ mod test {
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let config = StratumServerConfig {
             hostname: "127.0.0.1".to_string(),
-            port: 0,
             ..Default::default()
         };
 
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let bound_addr = listener.local_addr().unwrap();
+        let addr = bound_addr.to_string();
+
         let mut server = Server::new(config.clone(), connection_mapping.clone(), None);
-        let (addr_tx, addr_rx) = oneshot::channel();
 
         let server_task = tokio::spawn(async move {
             let _ = server
                 .run_stratum_service(
+                    listener,
                     mining_job_map,
                     notify_tx,
                     swarm_handler_arc,
                     test_ibd_spinlock.clone(),
-                    Some(addr_tx),
                 )
                 .await;
         });
-
-        let bound_addr = addr_rx.await.unwrap();
-        let addr = bound_addr.to_string();
         let mut mock_connection_handles = Vec::new();
         for i in 0..3 {
             let addr_clone = addr.clone();
@@ -2158,26 +2140,26 @@ mod test {
 
         let config = StratumServerConfig {
             hostname: "127.0.0.1".to_string(),
-            port: 0,
             ..Default::default()
         };
 
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let bound_addr = listener.local_addr().unwrap();
+
         let mut server = Server::new(config.clone(), connection_mapping.clone(), None);
-        let (addr_tx, addr_rx) = oneshot::channel();
 
         let server_task = tokio::spawn(async move {
             let _ = server
                 .run_stratum_service(
+                    listener,
                     mining_job_map,
                     notify_tx,
                     swarm_handler_arc,
                     test_ibd_spinlock,
-                    Some(addr_tx),
                 )
                 .await;
         });
 
-        let bound_addr = addr_rx.await.unwrap();
         let mut stream = TcpStream::connect(bound_addr).await.unwrap();
 
         let msg = r#"{"id":1,"method":"mining.subscribe","params":[]}"#;
@@ -2207,25 +2189,25 @@ mod test {
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let config = StratumServerConfig {
             hostname: "127.0.0.1".to_string(),
-            port: 0,
             ..Default::default()
         };
 
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let bound_addr = listener.local_addr().unwrap();
+
         let mut server = Server::new(config, connection_mapping, None);
-        let (addr_tx, addr_rx) = oneshot::channel();
         tokio::spawn(async move {
             let _ = server
                 .run_stratum_service(
+                    listener,
                     mining_job_map,
                     notify_tx,
                     swarm_handler_arc,
                     ibd_spinlock.clone(),
-                    Some(addr_tx),
                 )
                 .await;
         });
 
-        let bound_addr = addr_rx.await.unwrap();
         let mut stream = TcpStream::connect(bound_addr).await.unwrap();
 
         let request = r#"{"id":2,"method":"mining.authorize","params":["satoshi","braidpool"]}"#;
@@ -2257,23 +2239,23 @@ mod test {
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let config = StratumServerConfig {
             hostname: "127.0.0.1".to_string(),
-            port: 0,
             ..Default::default()
         };
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let bound_addr = listener.local_addr().unwrap();
+
         let mut server = Server::new(config, connection_mapping, None);
-        let (addr_tx, addr_rx) = oneshot::channel();
         tokio::spawn(async move {
             let _ = server
                 .run_stratum_service(
+                    listener,
                     mining_job_map,
                     notify_tx,
                     swarm_handler_arc,
                     ibd_spinlock.clone(),
-                    Some(addr_tx),
                 )
                 .await;
         });
-        let bound_addr = addr_rx.await.unwrap();
         let mut stream = TcpStream::connect(bound_addr).await.unwrap();
         let request = r#"{"id":3,"method":"mining.suggest_difficulty","params":[1000]}"#;
         stream.write_all(request.as_bytes()).await.unwrap();
@@ -2301,27 +2283,27 @@ mod test {
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
         let config = StratumServerConfig {
             hostname: "127.0.0.1".to_string(),
-            port: 0,
             ..Default::default()
         };
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let bound_addr = listener.local_addr().unwrap();
 
         let mut server = Server::new(config, connection_mapping.clone(), None);
         let mining_job_map_clone = mining_job_map.clone();
         let notify_tx_clone = notify_tx.clone();
-        let (addr_tx, addr_rx) = oneshot::channel();
         tokio::spawn(async move {
             let _ = server
                 .run_stratum_service(
+                    listener,
                     mining_job_map_clone,
                     notify_tx_clone,
                     swarm_handler_arc,
                     ibd_spinlock,
-                    Some(addr_tx),
                 )
                 .await;
         });
 
-        let bound_addr = addr_rx.await.unwrap();
         let mut stream = TcpStream::connect(bound_addr).await.unwrap();
 
         stream
@@ -2349,14 +2331,35 @@ mod test {
         assert_eq!(response["id"], 1);
     }
 
-    //TODO: this test is currently conditional wrt to master branch for our forked rust-bitcoin hence commented out
-
     #[tokio::test]
     async fn submit_work_version_rolling() {
-        /*
-        Test block taken - 00000020e6ebb395a1e2ba60f17650d790309e21af08062229ad955376ac574300000000e8de27818e402a0d5e6028f363be4b47d809ad348e6bc88ac2f9c2bedf0409e9337edf68ffff001d7aeb8b0601020000000001010000000000000000000000000000000000000000000000000000000000000000ffffffff1602611e089495ac0803000000094272616964706f6f6cffffffff0300f2052a01000000160014e470d0179325db88b55771f6c0a5139dd81d73180000000000000000266a24aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf900000000000000002a6a286272616964706f6f6c5f626561645f6d657461646174615f686173685f33326201020304050607080120000000000000000000000000000000000000000000000000000000000000000000000000
-
-         */
+        // Tests BIP310 version rolling end-to-end: configure mask, construct job,
+        // grind a valid nonce, submit, assert accepted.
+        // Uses bits=207fffff (minimum difficulty) so the nonce grind terminates
+        // in 1-2 iterations on average. The nonce is computed at test time by
+        // replicating handle_submit coinbase construction exactly.
+        //
+        // Serialized block produced by this test
+        // (extranonce1=000000009495ac08, extranonce2=0000000003000000,
+        //  ntime=68df7e33, bits=207fffff — verified deterministic across runs):
+        //
+        //   00000020                                 version (LE)
+        //   e6ebb395a1e2ba60f17650d790309e21         prev_blockhash (bytes  1-16)
+        //   af08062229ad955376ac574300000000         prev_blockhash (bytes 17-32)
+        //   90dea459e4b4db9ed0d542fc9415f043         merkle_root    (bytes  1-16)
+        //   12b9b2fc1c3b07bd7a417b715d948ab4         merkle_root    (bytes 17-32)
+        //   337edf68                                 ntime (LE)
+        //   ffff7f20                                 bits (LE)
+        //   03000000                                 nonce (LE)
+        //   01                                       tx count
+        //   coinbase tx (split at 64 hex chars = 32 bytes per line):
+        //   0200000001000000000000000000000000000000000000000000000000000000
+        //   0000000000ffffffff1e02611e10000000009495ac0800000000030000000942
+        //   72616964706f6f6cffffffff0300f2052a01000000160014e470d0179325db88
+        //   b55771f6c0a5139dd81d73180000000000000000266a24aa21a9ede2f61c3f71
+        //   d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf90000000000
+        //   0000002a6a286272616964706f6f6c5f626561645f6d657461646174615f6861
+        //   73685f333262010203040506070800000000
         let genesis_beads = Vec::from([]);
         let test_braid: Arc<RwLock<braid::Braid>> =
             Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
@@ -2367,9 +2370,6 @@ mod test {
         let test_merkle_bytes: [u8; 32] = [0u8; 32];
         let mut test_witness = Witness::new();
         test_witness.push(vec![0u8; 32]);
-        //Little more doubt in construction of initial coinbase only and in merkle which can be due to coinbase only
-        //There is a case in prevblockhash too but it can be discussed afterwards
-        //Cleaning up connection channels from connection mapping as well as from global map arc of stratum server
         let test_coinbase_transaction: Transaction = Transaction {
             version: bitcoin::TransactionVersion::TWO,
             input: vec![TxIn {
