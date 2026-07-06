@@ -31,7 +31,10 @@ use node::{
     peer_manager::PeerManager,
     rpc_server::{run_rpc_server, BitcoinRpcConfig, RpcProxyCommand},
     setup_tracing,
-    stratum::{BlockTemplate, ConnectionMapping, Notifier, NotifyCmd, Server, StratumServerConfig},
+    stratum::{
+        BlockTemplate, ConnectionMapping, GlobalJobStore, Notifier, NotifyCmd, Server,
+        StratumServerConfig,
+    },
     SwarmCommand, TemplateId,
 };
 use std::collections::HashSet;
@@ -255,12 +258,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //cloning the channel to be sent across different interfaces
     let notification_tx_clone = notification_tx.clone();
     //Connection mapping for all the downstream connection connected to the stratum server
-    // let connection_mapping = Arc::new(Mutex::new(ConnectionMapping::new()));
     let connection_mapping_for_shutdown = connection_mapping.clone();
-    //Mining job map keeping all the jobs provided to the downstream
-    let mining_job_map = Arc::new(Mutex::new(HashMap::new()));
+    //Global job store shared across all connected miners
+    let global_job_store = Arc::new(Mutex::new(GlobalJobStore::new(node::MAX_JOBS_PER_MINER)));
     //Intializing `notifier` for mining.notify
-    let mut notifier: Notifier = Notifier::new(notification_rx, Arc::clone(&mining_job_map));
+    let mut notifier: Notifier = Notifier::new(notification_rx, Arc::clone(&global_job_store));
     //Stratum configuration initialization
     let stratum_config = StratumServerConfig::default();
     let stratum_bind_address = format!("{}:{}", stratum_config.hostname, args.stratum_port);
@@ -376,7 +378,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let upstream_cache = upstream_pool::UpstreamCache::new();
         let upstream_cache_clone = upstream_cache.clone();
         upstream_cache_for_notifier = Some(upstream_cache.clone());
-        let mining_job_map_for_upstream_cleanup = mining_job_map.clone();
+        let global_job_store_for_upstream_cleanup = global_job_store.clone();
         // For forwarding shares to upstream pool (stratum server -> upstream client), using Arc<Mutex<Receiver>> so the receiver survives reconnections,
         // Buffer 50,000 shares to survive upstream lag spikes without blocking miners
         let (upstream_share_tx, upstream_share_rx) =
@@ -735,15 +737,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             break;
                         }
                         info!("Invalidating all upstream jobs to prevent stale shares...");
-                        let global_map = mining_job_map_for_upstream_cleanup.lock().await;
-                        for miner_job_map in global_map.values() {
-                            let mut map = miner_job_map.lock().await;
-                            map.clear_upstream_jobs();
-                        }
-                        info!(
-                            "Upstream job cache cleared for {} miners.",
-                            global_map.len()
-                        );
+                        global_job_store_for_upstream_cleanup
+                            .lock()
+                            .await
+                            .clear_upstream_jobs();
+                        info!("Upstream job cache cleared.");
 
                         // Calculate backoff delay with jitter
                         let delay = std::cmp::min(
@@ -832,7 +830,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let _res = stratum_server
             .run_stratum_service(
                 stratum_listener,
-                mining_job_map,
+                global_job_store,
                 notification_tx_clone,
                 swarm_handler_arc.clone(),
                 spin_lock_ref,
