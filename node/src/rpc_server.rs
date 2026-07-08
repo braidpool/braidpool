@@ -41,6 +41,45 @@ use {
     jsonrpsee::ws_client::WsClientBuilder,
 };
 
+/// Read-only Bitcoin Core RPC methods that `bitcoinproxy` is allowed to forward.
+///
+/// The proxy talks to Bitcoin Core using the node's own credentials, so without
+/// filtering any local caller could invoke wallet/control methods such as
+/// `dumpprivkey` (exfiltrate private keys) or `sendtoaddress` (drain funds).
+/// Only the informational, read-only methods a dashboard or miner needs are
+/// permitted; everything else is rejected before it reaches Bitcoin Core.
+const BITCOIN_PROXY_ALLOWED_METHODS: &[&str] = &[
+    "getblockchaininfo",
+    "getbestblockhash",
+    "getblock",
+    "getblockcount",
+    "getblockhash",
+    "getblockheader",
+    "getblockstats",
+    "getchaintips",
+    "getchaintxstats",
+    "getdifficulty",
+    "getmempoolinfo",
+    "getrawmempool",
+    "gettxout",
+    "gettxoutproof",
+    "gettxoutsetinfo",
+    "getmininginfo",
+    "getnetworkhashps",
+    "getblocktemplate",
+    "getnetworkinfo",
+    "getpeerinfo",
+    "getconnectioncount",
+    "getnodeaddresses",
+    "estimatesmartfee",
+    "uptime",
+];
+
+/// Returns `true` if `method` may be forwarded through `bitcoinproxy`.
+fn is_allowed_proxy_method(method: &str) -> bool {
+    BITCOIN_PROXY_ALLOWED_METHODS.contains(&method)
+}
+
 //server side trait to be implemented for the handler
 //that is the JSON-RPC handle to initiate the RPC context
 //supporting both http and websockets
@@ -996,6 +1035,22 @@ impl RpcServer for RpcServerImpl {
         params: serde_json::Value,
     ) -> Result<serde_json::Value, ErrorObjectOwned> {
         info!(method = %method, "bitcoin_proxy request received");
+
+        // Only forward read-only methods. Wallet/control methods (e.g.
+        // dumpprivkey, sendtoaddress) must never reach Bitcoin Core through the
+        // proxy, otherwise any caller could use the node's credentials to steal
+        // keys or move funds.
+        if !is_allowed_proxy_method(&method) {
+            warn!(method = %method, "bitcoin_proxy rejected disallowed method");
+            return Err(ErrorObjectOwned::owned(
+                7,
+                format!(
+                    "Method '{}' is not permitted through bitcoinproxy; only read-only methods are allowed",
+                    method
+                ),
+                None::<()>,
+            ));
+        }
 
         let rpc_config = self.bitcoin_rpc_config.as_ref().ok_or_else(|| {
             ErrorObjectOwned::owned(
@@ -2386,6 +2441,55 @@ pub async fn test_subscribe_bead_rpc() {
         }
         None => {
             panic!("Notification not received !");
+        }
+    }
+}
+
+#[cfg(test)]
+mod proxy_allowlist_tests {
+    use super::{is_allowed_proxy_method, BITCOIN_PROXY_ALLOWED_METHODS};
+    use std::collections::HashSet;
+
+    #[test]
+    fn allows_read_only_methods() {
+        assert!(is_allowed_proxy_method("getblockchaininfo"));
+        assert!(is_allowed_proxy_method("getmininginfo"));
+        assert!(is_allowed_proxy_method("getblocktemplate"));
+    }
+
+    #[test]
+    fn rejects_wallet_and_control_methods() {
+        for method in [
+            "dumpprivkey",
+            "sendtoaddress",
+            "importprivkey",
+            "walletpassphrase",
+            "stop",
+        ] {
+            assert!(
+                !is_allowed_proxy_method(method),
+                "{method} must not be forwarded through bitcoinproxy"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_unknown_empty_and_miscased_methods() {
+        assert!(!is_allowed_proxy_method(""));
+        assert!(!is_allowed_proxy_method("notarealmethod"));
+        // Bitcoin Core dispatch is case-sensitive; do not let casing bypass the filter.
+        assert!(!is_allowed_proxy_method("GETBLOCKCHAININFO"));
+        assert!(!is_allowed_proxy_method("getblockchaininfo "));
+    }
+
+    #[test]
+    fn allowlist_has_no_duplicates() {
+        let mut seen = HashSet::new();
+        for method in BITCOIN_PROXY_ALLOWED_METHODS {
+            assert!(
+                seen.insert(*method),
+                "duplicate entry in allowlist: {method}"
+            );
         }
     }
 }
