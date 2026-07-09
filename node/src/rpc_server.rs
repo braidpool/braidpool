@@ -3,6 +3,7 @@ use crate::braid::consensus_functions;
 use crate::braid::consensus_functions::highest_work_path;
 use crate::braid::AddBeadStatus;
 use crate::braid::Braid;
+use crate::db::BraidpoolDBTypes;
 use crate::ipc::client::QueueStats;
 use crate::peer_manager::PeerManager;
 use crate::stratum;
@@ -274,6 +275,7 @@ pub struct RpcServerImpl {
     rpc_proxy_tx: mpsc::UnboundedSender<RpcProxyCommand>,
     bitcoin_rpc_config: Option<BitcoinRpcConfig>,
     dashboard_events: Arc<DashboardEvents>,
+    db_tx: mpsc::Sender<BraidpoolDBTypes>,
 }
 
 impl RpcServerImpl {
@@ -284,6 +286,7 @@ impl RpcServerImpl {
         latest_block_template: Arc<Mutex<BlockTemplate>>,
         rpc_proxy_tx: mpsc::UnboundedSender<RpcProxyCommand>,
         bitcoin_rpc_config: Option<BitcoinRpcConfig>,
+        db_tx: mpsc::Sender<BraidpoolDBTypes>,
     ) -> Self {
         Self {
             braid_arc: braid_shared_pointer,
@@ -293,6 +296,7 @@ impl RpcServerImpl {
             rpc_proxy_tx,
             bitcoin_rpc_config,
             dashboard_events: DashboardEvents::new(),
+            db_tx,
         }
     }
 
@@ -329,10 +333,26 @@ impl RpcServer for RpcServerImpl {
         );
         let mut braid_data = self.braid_arc.write().await;
         let success_status = braid_data.extend(&bead);
-        drop(braid_data);
 
         match success_status {
-            AddBeadStatus::BeadAdded { .. } => {
+            AddBeadStatus::BeadAdded { promoted_orphans } => {
+                if let Err(error) = crate::db::persist_added_bead(
+                    &braid_data,
+                    &bead,
+                    promoted_orphans.iter(),
+                    &self.db_tx,
+                )
+                .await
+                {
+                    drop(braid_data);
+                    error!(error = %error, hash = %bead_hash, "Failed to persist bead added via RPC");
+                    return Err(ErrorObjectOwned::owned(
+                        5,
+                        format!("Failed to persist bead: {}", error),
+                        None::<()>,
+                    ));
+                }
+                drop(braid_data);
                 let _ = self.dashboard_events.new_bead.send(Some(bead));
                 Ok("Bead added successfully".to_string())
             }
@@ -669,7 +689,7 @@ impl RpcServer for RpcServerImpl {
         let braid_data = self.braid_arc.read().await;
 
         let parent_index = match braid_data.bead_index_mapping.get(&parent_hash) {
-            Some(index) => *index,
+            Some(&index) => index,
             None => return Err(ErrorObjectOwned::owned(3, "Bead not found", None::<()>)),
         };
 
@@ -1095,6 +1115,7 @@ pub async fn run_rpc_server(
     latest_block_template: Arc<Mutex<BlockTemplate>>,
     rpc_proxy_tx: mpsc::UnboundedSender<RpcProxyCommand>,
     bitcoin_rpc_config: Option<BitcoinRpcConfig>,
+    db_tx: mpsc::Sender<BraidpoolDBTypes>,
 ) -> Result<(SocketAddr, Arc<DashboardEvents>), ()> {
     //Initializing the middleware
     let rpc_middleware =
@@ -1119,6 +1140,7 @@ pub async fn run_rpc_server(
         latest_block_template,
         rpc_proxy_tx,
         bitcoin_rpc_config.clone(),
+        db_tx,
     );
     let dashboard_notification_ref = rpc_impl.dashboard_events();
     let handle = server.start(rpc_impl.into_rpc());
@@ -1204,7 +1226,16 @@ async fn call_bitcoin_rpc_direct(
         .result
         .ok_or_else(|| "RPC response missing result field".into())
 }
-
+/// Returns a DB command sender backed by a background task that drains the
+/// channel, so tests can construct an [`RpcServerImpl`] without a real DB
+/// handler while keeping `db_tx.send(..)` calls succeeding.
+#[cfg(test)]
+fn test_db_tx() -> mpsc::Sender<BraidpoolDBTypes> {
+    let (tx, mut rx) =
+        mpsc::channel::<BraidpoolDBTypes>(crate::db::db_handlers::DB_CHANNEL_CAPACITY);
+    tokio::spawn(async move { while rx.recv().await.is_some() {} });
+    tx
+}
 #[tokio::test]
 pub async fn test_extend_rpc() {
     let test_bead1 = create_test_bead(1, None);
@@ -1222,6 +1253,7 @@ pub async fn test_extend_rpc() {
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
         None,
+        test_db_tx(),
     )
     .await
     .unwrap();
@@ -1274,6 +1306,7 @@ pub async fn test_same_bead_extend() {
             tx
         },
         None, // No Bitcoin RPC config for tests
+        test_db_tx(),
     );
     let _handle = server.start(rpc_impl.into_rpc());
 
@@ -1329,6 +1362,7 @@ pub async fn test_cohort_count_rpc() {
             tx
         },
         None, // No Bitcoin RPC config for tests
+        test_db_tx(),
     );
     let _handle = server.start(rpc_impl.into_rpc());
 
@@ -1395,6 +1429,7 @@ pub async fn test_get_bead_count_cli_flow() {
             tx
         },
         None,
+        test_db_tx(),
     )
     .await
     .unwrap();
@@ -1436,6 +1471,7 @@ pub async fn test_get_tips_cli_flow() {
             tx
         },
         None,
+        test_db_tx(),
     )
     .await
     .unwrap();
@@ -1473,6 +1509,7 @@ pub async fn test_get_bead_rpc() {
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
         None,
+        test_db_tx(),
     )
     .await
     .unwrap();
@@ -1533,6 +1570,7 @@ pub async fn test_get_cohort_rpc() {
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
         None,
+        test_db_tx(),
     )
     .await
     .unwrap();
@@ -1584,6 +1622,7 @@ pub async fn test_get_genesis_rpc() {
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
         None,
+        test_db_tx(),
     )
     .await
     .unwrap();
@@ -1623,6 +1662,7 @@ pub async fn test_get_parents_and_children_rpc() {
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
         None,
+        test_db_tx(),
     )
     .await
     .unwrap();
@@ -1691,6 +1731,7 @@ pub async fn test_get_hwpath_rpc() {
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
         None,
+        test_db_tx(),
     )
     .await
     .unwrap();
@@ -1734,6 +1775,7 @@ pub async fn test_get_braid_info_rpc() {
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
         None,
+        test_db_tx(),
     )
     .await
     .unwrap();
@@ -1772,6 +1814,7 @@ pub async fn test_get_node_info_rpc() {
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
         None,
+        test_db_tx(),
     )
     .await
     .unwrap();
@@ -1831,6 +1874,7 @@ pub async fn test_get_peer_info_rpc() {
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx.clone(),
         None,
+        test_db_tx(),
     );
     let handle_empty = server_empty.start(rpc_impl_empty.into_rpc());
 
@@ -1873,6 +1917,7 @@ pub async fn test_get_peer_info_rpc() {
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
         None,
+        test_db_tx(),
     );
     let handle_with_peers = server_with_peers.start(rpc_impl_with_peers.into_rpc());
 
@@ -1932,6 +1977,7 @@ pub async fn test_get_miner_info_rpc() {
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
         None,
+        test_db_tx(),
     )
     .await
     .unwrap();
@@ -1969,6 +2015,7 @@ pub async fn test_staged_transactions_rpc() {
         Arc::clone(&latest_block),
         proxy_tx,
         None,
+        test_db_tx(),
     );
     let handle = server.start(rpc_impl.into_rpc());
 
@@ -2059,6 +2106,7 @@ pub async fn test_get_ipc_stats_rpc() {
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
         None,
+        test_db_tx(),
     )
     .await
     .unwrap();
@@ -2110,6 +2158,7 @@ pub async fn test_get_ipc_stats_rpc_simple() {
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
         None,
+        test_db_tx(),
     )
     .await
     .unwrap();
@@ -2161,6 +2210,7 @@ pub async fn test_unstage_transactions_rpc_simple() {
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
         None,
+        test_db_tx(),
     )
     .await
     .unwrap();
@@ -2219,6 +2269,7 @@ pub async fn test_get_mining_info_rpc() {
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
         None,
+        test_db_tx(),
     )
     .await
     .unwrap();
@@ -2355,6 +2406,7 @@ pub async fn test_subscribe_bead_rpc() {
         Arc::new(Mutex::new(stratum::BlockTemplate::default())),
         proxy_tx,
         None,
+        test_db_tx(),
     )
     .await
     .unwrap();

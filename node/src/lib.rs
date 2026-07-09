@@ -1,5 +1,5 @@
 //These implementations must be defined under lib.rs as they are required for intergration tests
-use crate::{db::db_handlers::prepare_bead_tuple_data, rpc_server::DashboardEvents};
+use crate::rpc_server::DashboardEvents;
 use bitcoin::{
     consensus::encode::deserialize, ecdsa::Signature, pow::CompactTargetExt, BlockHash,
     CompactTarget, EcdsaSighashType, Txid,
@@ -344,7 +344,7 @@ impl SwarmHandler {
             Err(error) => {
                 return Err(StratumErrors::ErrorFetchingCurrentUNIXTimestamp {
                     error: error.to_string(),
-                })
+                });
             }
         };
 
@@ -366,7 +366,7 @@ impl SwarmHandler {
         };
         let status = braid_data.extend(&weak_share);
         match status {
-            AddBeadStatus::BeadAdded { .. } => {
+            AddBeadStatus::BeadAdded { promoted_orphans } => {
                 let new_tips: Vec<_> = braid_data.tips.iter().map(|&idx| idx).collect();
                 let bead_hash = weak_share.block_header.block_hash();
                 info!(
@@ -374,37 +374,24 @@ impl SwarmHandler {
                     new_tips = ?new_tips,
                     "Braid extended successfully"
                 );
-                //Considering the index of the beads in braid will be same as the (insertion ids-1)
-                let bead_id = braid_data.bead_index_mapping.get(&bead_hash).unwrap();
-                let (txs_json, relative_json, parent_timestamp_json) = prepare_bead_tuple_data(
-                    &braid_data.beads,
-                    &braid_data.bead_index_mapping,
+
+                db::persist_added_bead(
+                    &braid_data,
                     &weak_share,
+                    promoted_orphans.iter(),
+                    &self.db_command_sender,
                 )
-                .unwrap();
-                let _db_insertion_command = match self
-                    .db_command_sender
-                    .send(BraidpoolDBTypes::InsertTupleTypes {
-                        query: db::InsertTupleTypes::InsertBeadSequentially {
-                            bead_to_insert: weak_share.clone(),
-                            txs_json: txs_json,
-                            relative_json: relative_json,
-                            parent_timestamp_json: parent_timestamp_json,
-                            bead_id: *bead_id,
-                        },
-                    })
-                    .await
-                {
-                    Ok(_) => {
-                        debug!(
-                            hash = %bead_hash,
-                            "InsertBeadSequentially sent to DB thread"
-                        );
+                .await
+                .map_err(|error| {
+                    error!(error = %error, hash = %bead_hash, "Failed to persist bead");
+                    StratumErrors::BeadPersistenceFailed {
+                        error: error.to_string(),
                     }
-                    Err(error) => {
-                        error!(error = ?error, "Database insertion command failed");
-                    }
-                };
+                })?;
+                debug!(
+                    hash = %bead_hash,
+                    "InsertBeadsBatch sent to DB thread"
+                );
                 let serialized_weak_share_bytes = bitcoin::consensus::serialize(&weak_share);
                 let res = self
                     .dashboard_notification_sender
@@ -415,7 +402,7 @@ impl SwarmHandler {
                         debug!("Passing self mined bead to the dashboard notifier");
                     }
                     Err(error) => {
-                        error!("An error occurred while sending dashboard notification - {error}");
+                        debug!("No dashboard subscriber for new bead notification - {error}");
                     }
                 }
                 //After validation of the candidate block constructed by the downstream node sending it to swarm for further propogation

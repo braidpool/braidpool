@@ -2,6 +2,7 @@
 use std::{fmt, path::PathBuf};
 
 use crate::stratum::{BlockTemplate, JobDetails};
+use crate::utils::BeadHash;
 use crate::TemplateId;
 use bitcoin::address::ParseError as AddressParseError;
 use tokio::sync::oneshot;
@@ -11,6 +12,22 @@ use tokio::sync::oneshot;
 pub enum BraidError {
     MissingAncestorWork,
     HighestWorkBeadFetchFailed,
+    /// A bead's committed parent hash is not present in the braid index. This is
+    /// a consensus/DAG invariant violation: a connected bead must have all of
+    /// its parents resolvable.
+    MissingParent {
+        bead: BeadHash,
+        parent: BeadHash,
+    },
+    /// A bead is not present in the braid index when persistence was attempted,
+    /// despite the braid reporting it as added. Indicates a consensus/logic bug.
+    BeadNotIndexed {
+        bead: BeadHash,
+    },
+    /// The bead was resolved but the db channel closed due to an error
+    PersistenceChannelClosed {
+        bead: BeadHash,
+    },
 }
 #[derive(Debug)]
 pub enum BraidRPCError {
@@ -215,6 +232,10 @@ pub enum StratumErrors {
     ErrorFetchingCurrentUNIXTimestamp {
         error: String,
     },
+    /// A bead received was not able to get persisted to DB locally
+    BeadPersistenceFailed {
+        error: String,
+    },
 }
 pub enum StratumResponseErrors {}
 impl fmt::Display for StratumErrors {
@@ -342,10 +363,17 @@ impl fmt::Display for StratumErrors {
             StratumErrors::MiningJobInsertError { mining_job } => {
                 write!(f,"An error occurred while inserting the following job into the mining map - {:?}",mining_job)
             }
+            StratumErrors::BeadPersistenceFailed { error } => {
+                write!(
+                    f,
+                    "Self-mined bead added to braid but not persisted to DB - {}",
+                    error
+                )
+            }
         }
     }
 }
-
+impl std::error::Error for StratumErrors {}
 /// Determines if an error indicates a connection/communication failure
 ///
 /// This function classifies errors to distinguish between:
@@ -435,6 +463,23 @@ impl fmt::Display for BraidError {
             BraidError::MissingAncestorWork => write!(f, "Missing ancestor work map"),
             BraidError::HighestWorkBeadFetchFailed => {
                 write!(f, "An error occurred while fetching the highest work bead")
+            }
+            BraidError::MissingParent { bead, parent } => {
+                write!(
+                    f,
+                    "Parent {} of bead {} not found in braid index",
+                    parent, bead
+                )
+            }
+            BraidError::BeadNotIndexed { bead } => {
+                write!(f, "Bead {} not found in braid index", bead)
+            }
+            BraidError::PersistenceChannelClosed { bead } => {
+                write!(
+                    f,
+                    "Persistence channel closed; bead {} was not persisted",
+                    bead
+                )
             }
         }
     }

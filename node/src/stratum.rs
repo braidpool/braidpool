@@ -750,7 +750,7 @@ impl DownstreamClient {
                 });
             }
         };
-        let _swarm_command_sent = match swarm_handler
+        match swarm_handler
             .lock()
             .await
             .propagate_valid_bead(
@@ -771,11 +771,16 @@ impl DownstreamClient {
                     peer = %self.downstream_ip,
                     "Candidate block submitted"
                 );
-                Ok(StratumResponses::StandardResponse {
-                    std_response: StandardResponse::new_ok(Some(client_request_id), json!(true)),
-                })
             }
-            Err(error) => Err(error),
+            Err(error) => {
+                error!(
+                    connection_id = %connection_id_hex,
+                    peer = %self.downstream_ip,
+                    error = %error,
+                    "Failed to propagate/persist self-mined bead"
+                );
+                return Err(error);
+            }
         };
         Ok(StratumResponses::StandardResponse {
             std_response: StandardResponse::new_ok(Some(client_request_id), json!(true)),
