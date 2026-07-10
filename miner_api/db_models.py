@@ -10,7 +10,7 @@ class MinerDevice(Base):
     __tablename__ = "miner_devices"
     
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    ip = Column(String(45), nullable=False, index=True)  # IPv4 or IPv6
+    ip = Column(String(45), nullable=False, index=True)  # IPv4 or IPv6 — mutable, not unique
     name = Column(String(255), nullable=True)  # User-defined name for the miner
     
     # Device identification

@@ -12,9 +12,15 @@ from .services import MinerService
 logger = logging.getLogger("miner_api")
 
 
+def _normalize_mac(mac: Optional[str]) -> Optional[str]:
+    if not mac:
+        return None
+    return mac.strip().lower().replace("-", ":")
+
+
 def _apply_device_fields(miner: MinerDevice, data: dict) -> None:
     miner.hostname = data.get("hostname")
-    miner.mac = data.get("mac")
+    miner.mac = _normalize_mac(data.get("mac"))
     miner.make = data.get("make")
     miner.model = data.get("model")
     miner.firmware = data.get("firmware")
@@ -57,6 +63,14 @@ class MinerDBService:
         """Add a new miner device to the database and fetch its initial data."""
         result = await MinerService.get_miner_data(ip)
         if not result.get("success"):
+            existing_by_ip = await MinerDBService.get_miner_by_ip(db, ip)
+            if existing_by_ip:
+                return {
+                    "success": False,
+                    "error": f"Miner with IP {ip} already exists",
+                    "already_exists": True,
+                    "miner": existing_by_ip.to_dict(),
+                }
             miner = MinerDevice(
                 ip=ip,
                 name=name,
@@ -66,15 +80,10 @@ class MinerDBService:
             db.add(miner)
             try:
                 await db.commit()
-            except IntegrityError:
+            except Exception as e:
                 await db.rollback()
-                existing = await MinerDBService.get_miner_by_ip(db, ip)
-                return {
-                    "success": False,
-                    "error": f"Miner with IP {ip} already exists",
-                    "already_exists": True,
-                    "miner": existing.to_dict() if existing else None,
-                }
+                logger.error(f"Database error adding offline miner {ip}: {e}")
+                return {"success": False, "error": "Database error adding miner", "db_error": True}
             await db.refresh(miner)
             logger.info(f"Added offline miner device: {ip}")
             return {
@@ -83,32 +92,30 @@ class MinerDBService:
                 "miner": miner.to_dict(),
             }
         data = result["data"]
-        mac = data.get("mac")
-        if mac:
-            # MAC lookup 
-            existing = await MinerDBService.get_miner_by_mac(db, mac)
-            if existing:
-                old_ip = existing.ip
-                existing.ip = ip
-                if name is not None:
-                    existing.name = name
-                _apply_device_fields(existing, data)
-                db.add(existing)
+        mac = _normalize_mac(data.get("mac"))
+        if not mac:
+            logger.error(f"Device at {ip} did not report a MAC address; cannot add miner.")
+            return {"success": False, "error": "Device did not report a MAC address"}
+
+        data["mac"] = mac
+        existing = await MinerDBService.get_miner_by_mac(db, mac)
+        if existing:
+            old_ip = existing.ip
+            existing.ip = ip
+            if name is not None:
+                existing.name = name
+            _apply_device_fields(existing, data)
+            db.add(existing)
+            try:
                 await db.commit()
                 await db.refresh(existing)
-                if old_ip != ip:
-                    logger.info(f"Miner MAC {mac} IP updated from {old_ip} to {ip}, record updated.")
-                return {"success": True, "miner": existing.to_dict()}
-
-        # No existing record by MAC (or device has no MAC) 
-        existing_by_ip = await MinerDBService.get_miner_by_ip(db, ip)
-        if existing_by_ip:
-            return {
-                "success": False,
-                "error": f"Miner with IP {ip} already exists",
-                "already_exists": True,
-                "miner": existing_by_ip.to_dict(),
-            }
+            except Exception as e:
+                await db.rollback()
+                logger.error(f"Database error updating miner MAC {mac}: {e}")
+                return {"success": False, "error": "Database error updating miner", "db_error": True}
+            if old_ip != ip:
+                logger.info(f"Miner MAC {mac} IP updated from {old_ip} to {ip}, record updated.")
+            return {"success": True, "miner": existing.to_dict()}
 
         miner = MinerDevice.from_miner_data(ip, data, name=name)
         db.add(miner)
@@ -116,12 +123,12 @@ class MinerDBService:
             await db.commit()
         except IntegrityError:
             await db.rollback()
-            existing_by_ip = await MinerDBService.get_miner_by_ip(db, ip)
+            existing = await MinerDBService.get_miner_by_mac(db, mac)
             return {
                 "success": False,
-                "error": f"Miner with IP {ip} already exists",
+                "error": f"Miner with MAC {mac} already exists",
                 "already_exists": True,
-                "miner": existing_by_ip.to_dict() if existing_by_ip else None,
+                "miner": existing.to_dict() if existing else None,
             }
         await db.refresh(miner)
 
@@ -131,17 +138,24 @@ class MinerDBService:
     
     @staticmethod
     async def get_miner_by_ip(db: AsyncSession, ip: str) -> Optional[MinerDevice]:
-        """Get a miner by IP address."""
+        """Get a miner by IP address. Returns the first match; IP is no longer unique."""
         result = await db.execute(
             select(MinerDevice).where(MinerDevice.ip == ip)
         )
-        return result.scalar_one_or_none()
+        return result.scalars().first()
     @staticmethod
     async def get_miner_by_mac(db: AsyncSession, mac: str) -> Optional[MinerDevice]:
         result = await db.execute(
             select(MinerDevice).where(MinerDevice.mac == mac)
         )
-        return result.scalar_one_or_none()
+        rows = result.scalars().all()
+        if not rows:
+            return None
+        if len(rows) > 1:
+            logger.warning(
+                f"Multiple rows found for MAC {mac}; returning first match to allow recovery"
+            )
+        return rows[0]
 
     @staticmethod
     async def get_miner_by_id(db: AsyncSession, miner_id: str) -> Optional[MinerDevice]:
