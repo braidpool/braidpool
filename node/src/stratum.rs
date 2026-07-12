@@ -2473,7 +2473,22 @@ mod test {
         mock_downstream_handler.extranonce1 = test_extranonce_1;
         let configure_response = mock_downstream_handler
             .handle_configure(&configure_test_request, 1)
-            .await;
+            .await
+            .unwrap();
+        // ffffffff & 0x1FFFE000 = 1fffe000 (BIP310 rollable range intersection)
+        match configure_response {
+            StratumResponses::StandardResponse { std_response } => {
+                let result = std_response.result.unwrap();
+                assert_eq!(result["version-rolling"], true);
+                assert_eq!(result["version-rolling.mask"], "1fffe000");
+            }
+            _ => panic!("Expected StandardResponse from mining.configure"),
+        }
+        // handle_submit validates against self.version_rolling_mask, not the wire response
+        assert_eq!(
+            mock_downstream_handler.version_rolling_mask.as_deref(),
+            Some("1fffe000")
+        );
 
         // Grind a valid nonce for 207fffff difficulty by replicating handle_submit's
         // coinbase construction to get the real merkle root.
