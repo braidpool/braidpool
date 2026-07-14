@@ -4,6 +4,7 @@ use libp2p::PeerId;
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
+pub mod ingest_beads;
 pub mod peer_state;
 pub mod retry;
 
@@ -31,11 +32,12 @@ pub enum SyncState {
     Complete,
 }
 
-/// Inputs to the engine, translated by the adapter from swarm responses, timers,
-/// and braid reads.
+/// Inputs to the engine for triggering SyncActions on the basis of event received in the
+/// main event loop .
 #[derive(Debug, Clone)]
 pub enum SyncEvent {
     /// Begin (or retry) IBD against a peer the adapter has already selected.
+    /// upon retry the previous state is preserved still .
     Start { peer: PeerId },
     /// The adapter could not find any peer to sync from.
     NoPeerAvailable,
@@ -68,8 +70,7 @@ pub enum SyncEvent {
 /// Outputs from the engine, executed by the ingest handler.
 #[derive(Debug, Clone, PartialEq)]
 pub enum SyncAction {
-    /// Send a fully-formed bead-sync request to `peer` (`GetTips` or `GetBeads`,
-    /// which need no braid data). The adapter records the returned request id as
+    /// Send a fully-formed bead-sync request to `peer`. The adapter records the returned request id as
     /// the in-flight request for timeout/failure correlation.
     SendRequest { peer: PeerId, request: BeadRequest },
     /// Ask `peer` for the next page of bead hashes *after our current tips*.
@@ -81,11 +82,10 @@ pub enum SyncAction {
     /// re-download the page just applied. The adapter forms
     /// `GetBeadsAfter(current_tips)` at execution time.
     RequestHashPage { peer: PeerId },
-    /// Anti-spam passed: apply these beads — the adapter extends the braid
-    /// (`braid.extend`, slice 1) and persists them (slice 2 DB commands). Always
-    /// executed before any [`SyncAction::RequestHashPage`] that follows it.
+    /// Ingest these beads — the adapter extends the braid
+    ///  and persists them  Always executed before any [`SyncAction::RequestHashPage`] that follows it.
     ApplyBeads { beads: Vec<Bead> },
-    /// Drop `peer` (unsolicited bead or oversized hash page).
+    /// Drop `peer` (invalid bead or oversized hash page).
     DisconnectPeer { peer: PeerId },
     /// Wait `after`, then the adapter selects a peer and re-issues [`SyncEvent::Start`].
     ScheduleRetry { after: Duration },
@@ -101,7 +101,7 @@ pub struct SyncEngine {
     active: Option<SyncPeerState>,
     /// Consecutive IBD failures per peer. A peer reaching the retry ceiling is
     /// surfaced via [`SyncEngine::exhausted_peers`] so the adapter excludes it
-    /// from sync-peer selection  according to MAX_LIMIT
+    /// from sync-peer selection  according to max_retries.
     retries: HashMap<PeerId, u64>,
     retry: RetryPolicy,
 }
@@ -161,7 +161,8 @@ impl SyncEngine {
             | SyncEvent::PeerDisconnected { peer } => self.on_failure(peer),
         }
     }
-
+    // This will reset the states hence should be called only once during an IBD if
+    // no request gets timed out.
     fn on_start(&mut self, peer: PeerId) -> Vec<SyncAction> {
         self.active = Some(SyncPeerState::new(peer));
         self.state = SyncState::AwaitingTips;
