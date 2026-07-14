@@ -201,6 +201,15 @@ pub struct SuggestDifficultyResponse {
 }
 ///This will persist the client specific information for each of the new downstream connected
 /// to the stratum service which are setup during either `mining.subscribe` or `mining.configure` or `mining.authorize`
+
+/// Per-connection share accounting logged at disconnect.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct ShareCounters {
+    pub accepted: u64,
+    pub stale: u64,
+    pub invalid: u64,
+}
+
 #[derive(Debug, Clone)]
 pub struct DownstreamClient {
     ///Authorized or not
@@ -247,6 +256,8 @@ pub struct DownstreamClient {
     pub audit_miner_difficulty: Option<f64>,
     /// Network this connection mines on, deciding which block hash proof-of-work is checked against
     pub network: PoolNetwork,
+    /// Accepted, stale, and invalid share counts for this connection.
+    pub share_counters: ShareCounters,
 }
 impl DownstreamClient {
     /// A helper function to keep connection_id immutable after assignment
@@ -519,12 +530,14 @@ impl DownstreamClient {
         let param_array = match submit_work_params.as_array() {
             Some(param_array) => param_array,
             None => {
+                self.share_counters.invalid += 1;
                 return Err(StratumErrors::InvalidMethodParams {
                     method: "mining.submit".to_string(),
                 });
             }
         };
         if param_array.len() < 5 {
+            self.share_counters.invalid += 1;
             return Err(StratumErrors::InvalidMethodParams {
                 method: "mining.submit".to_string(),
             });
@@ -542,7 +555,10 @@ impl DownstreamClient {
         };
         let worker_name = match worker_name_res {
             Ok(name) => name,
-            Err(error) => return Err(error),
+            Err(error) => {
+                self.share_counters.invalid += 1;
+                return Err(error);
+            }
         };
         debug!(
             connection_id = %connection_id_hex,
@@ -563,6 +579,7 @@ impl DownstreamClient {
         let job_id_str = match param_array.get(1).and_then(|v| v.as_str()) {
             Some(id_str) => id_str,
             None => {
+                self.share_counters.invalid += 1;
                 return Err(StratumErrors::ParamNotFound {
                     param: "job_id".to_string(),
                     method: "mining.submit".to_string(),
@@ -573,10 +590,11 @@ impl DownstreamClient {
         let extranonce2: &str = match param_array.get(2).and_then(|v| v.as_str()) {
             Some(extra) => extra,
             None => {
+                self.share_counters.invalid += 1;
                 return Err(StratumErrors::ParamNotFound {
                     param: "extranonce2".to_string(),
                     method: "mining.submit".to_string(),
-                })
+                });
             }
         };
         let expected_hex_len = self.miner_extranonce2_size * 2;
@@ -619,20 +637,22 @@ impl DownstreamClient {
         let ntime: &str = match param_array.get(3).and_then(|v| v.as_str()) {
             Some(nt) => nt,
             None => {
+                self.share_counters.invalid += 1;
                 return Err(StratumErrors::ParamNotFound {
                     param: "ntime".to_string(),
                     method: "mining.submit".to_string(),
-                })
+                });
             }
         };
 
         let nonce: &str = match param_array.get(4).and_then(|v| v.as_str()) {
             Some(n) => n,
             None => {
+                self.share_counters.invalid += 1;
                 return Err(StratumErrors::ParamNotFound {
                     param: "nonce".to_string(),
                     method: "mining.submit".to_string(),
-                })
+                });
             }
         };
 
@@ -658,6 +678,7 @@ impl DownstreamClient {
                         match u64::from_str_radix(job_id_str, 16) {
                             Ok(id) => id,
                             Err(e) => {
+                                self.share_counters.invalid += 1;
                                 return Err(StratumErrors::JobIdCouldNotBeParsed {
                                     method: "mining.submit".to_string(),
                                     error: format!("Invalid job_id (not valid decimal, hex, or upstream): {}, {}", job_id_str, e),
@@ -671,13 +692,23 @@ impl DownstreamClient {
                     mode = "braidpool",
                     "Found job by numeric ID"
                 );
-                let job = job_mapping.get_by_job_id(numeric_job_id)?.clone();
-                let templateid = job_mapping
-                    .template_id_from_job_id(numeric_job_id)
-                    .ok_or_else(|| StratumErrors::MiningJobNotFound {
-                        job_id: Some(numeric_job_id),
-                        template_id: None,
-                    })?;
+                let job = match job_mapping.get_by_job_id(numeric_job_id) {
+                    Ok(j) => j.clone(),
+                    Err(e) => {
+                        self.share_counters.stale += 1;
+                        return Err(e);
+                    }
+                };
+                let templateid = match job_mapping.template_id_from_job_id(numeric_job_id) {
+                    Some(id) => id,
+                    None => {
+                        self.share_counters.stale += 1;
+                        return Err(StratumErrors::MiningJobNotFound {
+                            job_id: Some(numeric_job_id),
+                            template_id: None,
+                        });
+                    }
+                };
                 (job, templateid)
             }
         };
@@ -705,6 +736,7 @@ impl DownstreamClient {
             Ok(v) => v,
             Err(e) => {
                 error!(connection_id = %connection_id_hex, error = %e, ntime = %ntime, "Failed to parse ntime");
+                self.share_counters.invalid += 1;
                 return Err(StratumErrors::InvalidMethodParams {
                     method: "mining.submit".to_string(),
                 });
@@ -714,6 +746,7 @@ impl DownstreamClient {
             Ok(v) => v,
             Err(e) => {
                 error!(connection_id = %connection_id_hex, error = %e, nonce = %nonce, "Failed to parse nonce");
+                self.share_counters.invalid += 1;
                 return Err(StratumErrors::InvalidMethodParams {
                     method: "mining.submit".to_string(),
                 });
@@ -735,6 +768,7 @@ impl DownstreamClient {
             Ok(bytes) => bytes,
             Err(e) => {
                 error!(connection_id = %connection_id_hex, error = %e, "Failed to decode coinbase hex");
+                self.share_counters.invalid += 1;
                 return Err(StratumErrors::InvalidCoinbase);
             }
         };
@@ -753,6 +787,7 @@ impl DownstreamClient {
             Ok(tx) => tx,
             Err(e) => {
                 error!(connection_id = %connection_id_hex, error = %e, "Failed to decode coinbase transaction");
+                self.share_counters.invalid += 1;
                 return Err(StratumErrors::InvalidCoinbase);
             }
         };
@@ -764,6 +799,7 @@ impl DownstreamClient {
             //Computing hex of merkle branch in big-endian as expected by the miner
             if let Err(e) = hex::decode_to_slice(&merkle_branch, &mut merkle_branch_bytes) {
                 error!(connection_id = %connection_id_hex, error = %e, merkle_branch = %merkle_branch, "Failed to decode merkle branch hex");
+                self.share_counters.invalid += 1;
                 return Err(StratumErrors::InvalidCoinbase);
             }
             merkle_branches_bytes.push(Vec::from(merkle_branch_bytes));
@@ -784,10 +820,11 @@ impl DownstreamClient {
             let rolled_version_bits: &str = match param_array.get(5).and_then(|v| v.as_str()) {
                 Some(n) => n,
                 None => {
+                    self.share_counters.invalid += 1;
                     return Err(StratumErrors::ParamNotFound {
                         param: "rolled_version_bits".to_string(),
                         method: "mining.submit".to_string(),
-                    })
+                    });
                 }
             };
 
@@ -795,23 +832,26 @@ impl DownstreamClient {
             match hex::decode_to_slice(rolled_version_bits, &mut rolled_version) {
                 Ok(_) => (),
                 Err(e) => {
+                    self.share_counters.invalid += 1;
                     return Err(StratumErrors::VersionRollingHexParseError {
                         error: e.to_string(),
-                    })
+                    });
                 }
             }
             let version_bits = i32::from_be_bytes(rolled_version);
 
             let mut mask_bytes = [0u8; 4];
-            hex::decode_to_slice(mask_hex, &mut mask_bytes).map_err(|e| {
-                StratumErrors::VersionRollingHexParseError {
+            if let Err(e) = hex::decode_to_slice(mask_hex, &mut mask_bytes) {
+                self.share_counters.invalid += 1;
+                return Err(StratumErrors::VersionRollingHexParseError {
                     error: e.to_string(),
-                }
-            })?;
+                });
+            }
             let mask_version_bits = i32::from_be_bytes(mask_bytes);
 
             let precondition = version_bits & !mask_version_bits;
             if precondition != 0 {
+                self.share_counters.invalid += 1;
                 return Err(StratumErrors::MaskNotValid {
                     error: "version_bits & !mask_version_bits must be equal to Zero".to_string(),
                 });
@@ -874,6 +914,7 @@ impl DownstreamClient {
                     job_id = job_id_str,
                     "Job missing witness commitment"
                 );
+                self.share_counters.invalid += 1;
                 return Err(StratumErrors::InvalidCoinbase);
             }
         };
@@ -881,6 +922,7 @@ impl DownstreamClient {
             Some(w) => w,
             None => {
                 error!(connection_id = %connection_id_hex, "Witness commitment is empty");
+                self.share_counters.invalid += 1;
                 return Err(StratumErrors::InvalidCoinbase);
             }
         };
@@ -888,6 +930,7 @@ impl DownstreamClient {
             Some(input) => input.witness.push(witness_bytes),
             None => {
                 error!(connection_id = %connection_id_hex, "Coinbase transaction has no inputs");
+                self.share_counters.invalid += 1;
                 return Err(StratumErrors::InvalidCoinbase);
             }
         };
@@ -915,6 +958,7 @@ impl DownstreamClient {
 
         match pow_result {
             Ok(block_hash) => {
+                self.share_counters.accepted += 1;
                 debug!(
                     connection_id = %connection_id_hex,
                     target = %target,
@@ -964,6 +1008,7 @@ impl DownstreamClient {
                     target = %target,
                     "Header does not meet target"
                 );
+                self.share_counters.invalid += 1;
                 return Ok(StratumResponses::StandardResponse {
                     std_response: StandardResponse::new_ok(Some(client_request_id), json!(false)),
                 });
@@ -989,7 +1034,7 @@ impl DownstreamClient {
                 });
             }
         };
-        let _swarm_command_sent = match swarm_handler
+        match swarm_handler
             .lock()
             .await
             .propagate_valid_bead(
@@ -1010,11 +1055,17 @@ impl DownstreamClient {
                     peer = %self.downstream_ip,
                     "Candidate block submitted"
                 );
-                Ok(StratumResponses::StandardResponse {
-                    std_response: StandardResponse::new_ok(Some(client_request_id), json!(true)),
-                })
             }
-            Err(error) => Err(error),
+            Err(error) => {
+                error!(
+                    connection_id = %connection_id_hex,
+                    peer = %self.downstream_ip,
+                    error = %error,
+                    "Failed to propagate/persist self-mined bead"
+                );
+                // node-side failure after valid PoW — not a miner counter
+                return Err(error);
+            }
         };
         Ok(StratumResponses::StandardResponse {
             std_response: StandardResponse::new_ok(Some(client_request_id), json!(true)),
@@ -1942,6 +1993,7 @@ impl DownstreamClient {
             is_proxy_mode: false,
             payout_address: None,
             audit_miner_difficulty: None,
+            share_counters: ShareCounters::default(),
         }
     }
 }
@@ -3609,8 +3661,8 @@ impl Server {
                                 is_proxy_mode: is_proxy,
                                 payout_address: None,
                                 audit_miner_difficulty: self.stratum_config.audit_miner_difficulty,
-                                network:self.network
-
+                                network: self.network,
+                                share_counters: ShareCounters::default(),
                             }));
 
                          //Notification sender to the `Notifier` task
@@ -3646,7 +3698,23 @@ impl Server {
                             // catering each new connection as seperate process
                             tokio::spawn(async move{
                                 let _=  Self::handle_connection(downstream_client.clone(),peer_addr,reader,writer,&mut downstream_rx,self_mining_map.clone(),downstream_tx,notification_sender,swarm_handler_arc_ref,audit_dag_clone,upstream_share_tx_clone,connection_mapping_clone,upstream_configure_tx_clone,control_rx,).await;
-                                debug!("Cleaning up disconnected miner: {}", peer_addr_string);
+                                let (counters, cid_hex) = {
+                                    let c = downstream_client.lock().await;
+                                    (c.share_counters, format!("{:x}", c.connection_id()))
+                                };
+                                info!(
+                                    connection_id = %cid_hex,
+                                    peer = %peer_addr_string,
+                                    accepted = counters.accepted,
+                                    stale = counters.stale,
+                                    invalid = counters.invalid,
+                                    "miner disconnected"
+                                );
+                                debug!(
+                                    connection_id = %cid_hex,
+                                    peer = %peer_addr_string,
+                                    "Cleaning up disconnected miner"
+                                );
 
                              // cleanup after connection closes, remove from connection mapping
                              connection_mapping_for_cleanup
@@ -4761,5 +4829,254 @@ mod test {
         assert_eq!(client1.extranonce1.len(), UPSTREAM_EXTRANONCE1_SIZE);
         assert_eq!(client2.extranonce1.len(), UPSTREAM_EXTRANONCE1_SIZE);
         assert_eq!(client3.extranonce1.len(), UPSTREAM_EXTRANONCE1_SIZE);
+    }
+
+    // ── ShareCounters tests─────────
+
+    async fn make_job_map_with_entry() -> (Arc<Mutex<MiningJobMap>>, u64, Arc<Mutex<SwarmHandler>>)
+    {
+        let genesis_beads = Vec::from([]);
+        let test_braid = Arc::new(RwLock::new(braid::Braid::new(
+            genesis_beads,
+            PoolNetwork::Cpunet,
+        )));
+        let (_db, db_tx) = DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
+        let (swarm_handler, _rx) =
+            SwarmHandler::new(Arc::clone(&test_braid), db_tx, DashboardEvents::new());
+        let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
+
+        let mut test_witness = bitcoin::Witness::new();
+        test_witness.push(vec![0u8; 32]);
+        let coinbase_tx = bitcoin::Transaction {
+            version: bitcoin::blockdata::transaction::Version::TWO,
+            input: vec![bitcoin::TxIn {
+                previous_output: bitcoin::OutPoint {
+                    txid: bitcoin::Txid::from_str(
+                        "0000000000000000000000000000000000000000000000000000000000000000",
+                    )
+                    .unwrap(),
+                    vout: bitcoin::OutPoint::null().vout,
+                },
+                script_sig: bitcoin::ScriptBuf::from_hex(
+                    "02611e1001010101010101010101010101010101094272616964706f6f6c",
+                )
+                .unwrap(),
+                sequence: bitcoin::Sequence::MAX,
+                witness: test_witness.clone(),
+            }],
+            output: vec![
+                bitcoin::TxOut {
+                    value: bitcoin::Amount::from_btc(50.0).unwrap(),
+                    script_pubkey: bitcoin::ScriptBuf::from_hex(
+                        "0014e470d0179325db88b55771f6c0a5139dd81d7318",
+                    )
+                    .unwrap(),
+                },
+                bitcoin::TxOut {
+                    value: bitcoin::Amount::from_sat(0),
+                    script_pubkey: bitcoin::ScriptBuf::from_hex(
+                        "6a24aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf9",
+                    )
+                    .unwrap(),
+                },
+                bitcoin::TxOut {
+                    value: bitcoin::Amount::from_sat(0),
+                    script_pubkey: bitcoin::ScriptBuf::from_hex(
+                        "6a286272616964706f6f6c5f626561645f6d657461646174615f686173685f3332620102030405060708",
+                    )
+                    .unwrap(),
+                },
+            ],
+            lock_time: bitcoin::absolute::LockTime::ZERO,
+        };
+        let template_header = bitcoin::block::Header {
+            bits: bitcoin::pow::CompactTarget::from_unprefixed_hex("207fffff").unwrap(),
+            nonce: 0,
+            version: bitcoin::block::Version::from_consensus(536870912),
+            time: 1759477299u32,
+            prev_blockhash: bitcoin::BlockHash::from_str(
+                "000000004357ac765395ad29220608af219e3090d75076f160bae2a195b3ebe6",
+            )
+            .unwrap(),
+            merkle_root: TxMerkleNode::from_byte_array([0u8; 32]),
+        };
+        let mut template = BlockTemplate {
+            version: template_header.version,
+            previousblockhash: template_header.prev_blockhash,
+            transactions: vec![coinbase_tx],
+            curtime: template_header.time,
+            bits: template_header.bits,
+            ..Default::default()
+        };
+        let notification = Notifier::construct_job_notification(
+            false,
+            template.clone(),
+            TemplateId::Braidpool(1),
+            vec![],
+        )
+        .await
+        .unwrap();
+        template.transactions.remove(0);
+        let unix_ts = std::time::SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+            .to_u32()
+            .unwrap();
+        let job_details = JobDetails {
+            blocktemplate: template,
+            coinbase1: notification.coinbase1.clone(),
+            coinbase2: notification.coinbase2.clone(),
+            coinbase_merkle_path: vec![],
+            coinbase_witness_commitment: Some(test_witness),
+            job_sent_time: unix_ts,
+            is_upstream_job: false,
+        };
+        let map = Arc::new(Mutex::new(MiningJobMap::new()));
+        let job_id = map
+            .lock()
+            .await
+            .insert_mining_job(TemplateId::Braidpool(1), job_details)
+            .await;
+        (map, job_id, swarm_handler_arc)
+    }
+
+    #[tokio::test]
+    async fn test_share_counter_malformed_params_counts_invalid() {
+        let mut client = DownstreamClient::new(PoolNetwork::Cpunet);
+        client.authorized = true;
+        let map = Arc::new(Mutex::new(MiningJobMap::new()));
+        let (_db, db_tx) = DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
+        let test_braid = Arc::new(RwLock::new(braid::Braid::new(vec![], PoolNetwork::Cpunet)));
+        let (sh, _rx) = SwarmHandler::new(Arc::clone(&test_braid), db_tx, DashboardEvents::new());
+        let sh_arc = Arc::new(Mutex::new(sh));
+
+        // Empty params array — fails before lookup
+        let result = client
+            .handle_submit(&json!([]), map, 1, sh_arc, None, None, None)
+            .await;
+        assert!(result.is_err());
+        assert_eq!(client.share_counters.invalid, 1);
+        assert_eq!(client.share_counters.stale, 0);
+        assert_eq!(client.share_counters.accepted, 0);
+    }
+
+    #[tokio::test]
+    async fn test_share_counter_bogus_job_id_counts_stale() {
+        let mut client = DownstreamClient::new(PoolNetwork::Cpunet);
+        client.authorized = true;
+        // Empty map — job 99999 doesn't exist
+        let map = Arc::new(Mutex::new(MiningJobMap::new()));
+        let (_db, db_tx) = DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
+        let test_braid = Arc::new(RwLock::new(braid::Braid::new(vec![], PoolNetwork::Cpunet)));
+        let (sh, _rx) = SwarmHandler::new(Arc::clone(&test_braid), db_tx, DashboardEvents::new());
+        let sh_arc = Arc::new(Mutex::new(sh));
+
+        let params = json!([
+            "worker",
+            "99999",
+            "0000000000000000",
+            "68df7e33",
+            "00000001"
+        ]);
+        let result = client
+            .handle_submit(&params, map, 1, sh_arc, None, None, None)
+            .await;
+        assert!(result.is_err());
+        assert_eq!(client.share_counters.stale, 1);
+        assert_eq!(client.share_counters.invalid, 0);
+        assert_eq!(client.share_counters.accepted, 0);
+    }
+
+    #[tokio::test]
+    async fn test_share_counter_below_target_counts_invalid() {
+        // Submits a known-failing nonce against the 207fffff (min-difficulty) job
+        // from make_job_map_with_entry. From submit_work_version_rolling we know
+        // that with extranonce1=000000009495ac08, extranonce2=0000000003000000,
+        // ntime=68df7e33, the valid nonce is 3 — so nonce 0 fails PoW.
+        // The share returns Ok(false), not Err — which is exactly why
+        // return-type classification would miscount it as accepted.
+        let (map, job_id, sh_arc) = make_job_map_with_entry().await;
+        let mut client = DownstreamClient::new(PoolNetwork::Cpunet);
+        client.authorized = true;
+        client.extranonce1 = hex::decode("000000009495ac08").unwrap();
+
+        let params = json!([
+            "worker",
+            job_id.to_string(),
+            "0000000003000000",
+            "68df7e33",
+            "00000000"
+        ]);
+        let result = client
+            .handle_submit(&params, map, 1, sh_arc, None, None, None)
+            .await;
+        // Stratum protocol: returns Ok(false) for rejected share, not Err
+        assert!(result.is_ok());
+        assert_eq!(client.share_counters.invalid, 1);
+        assert_eq!(client.share_counters.accepted, 0);
+        assert_eq!(client.share_counters.stale, 0);
+    }
+
+    #[tokio::test]
+    async fn test_share_counter_valid_submit_counts_accepted() {
+        let (map, job_id, sh_arc) = make_job_map_with_entry().await;
+        let mut client = DownstreamClient::new(PoolNetwork::Cpunet);
+        client.authorized = true;
+        // Set extranonce1 to match the helper's coinbase (all zeros — coinbase1
+        // in the helper uses placeholder bytes; we just need a consistent value)
+        client.extranonce1 = hex::decode("000000009495ac08").unwrap();
+
+        // Replicate handle_submit's coinbase construction to grind a valid nonce
+        let job_map_locked = map.lock().await;
+        let job = job_map_locked.get_by_job_id(job_id).unwrap();
+        let extranonce1_hex = hex::encode(&client.extranonce1);
+        let extranonce2 = "0000000003000000";
+        let coinbase_hex = format!(
+            "{}{}{}{}",
+            job.coinbase1, extranonce1_hex, extranonce2, job.coinbase2
+        );
+        let coinbase_bytes = hex::decode(&coinbase_hex).unwrap();
+        let coinbase_tx =
+            bitcoin::Transaction::consensus_decode(&mut Cursor::new(coinbase_bytes)).unwrap();
+        let merkle_root_bytes = calculate_merkle_root(coinbase_tx.compute_txid(), &[]);
+        let merkle_root = TxMerkleNode::from_byte_array(merkle_root_bytes);
+        let bits = bitcoin::pow::CompactTarget::from_unprefixed_hex("207fffff").unwrap();
+        let target = bitcoin::Target::from_compact(bits);
+        let ntime = 0x68df7e33u32;
+        let prev = job.blocktemplate.previousblockhash;
+        drop(job_map_locked);
+
+        let mut valid_nonce = 0u32;
+        for n in 0u32..=u32::MAX {
+            let h = BlockHeader {
+                version: bitcoin::block::Version::from_consensus(536870912),
+                prev_blockhash: prev,
+                merkle_root,
+                time: ntime,
+                bits,
+                nonce: n,
+            };
+            if target.is_met_by(PoolNetwork::Cpunet.block_hash(&h)) {
+                valid_nonce = n;
+                break;
+            }
+        }
+
+        let params = json!([
+            "bitaxe",
+            job_id.to_string(),
+            extranonce2,
+            format!("{:08x}", ntime),
+            format!("{:08x}", valid_nonce)
+        ]);
+        // propagate_valid_bead may fail in test (no real swarm) — accepted is
+        // bumped before propagation so the counter is valid regardless.
+        let _ = client
+            .handle_submit(&params, map, 1, sh_arc, None, None, None)
+            .await;
+        assert_eq!(client.share_counters.accepted, 1);
+        assert_eq!(client.share_counters.stale, 0);
+        assert_eq!(client.share_counters.invalid, 0);
     }
 }
