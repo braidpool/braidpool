@@ -40,6 +40,8 @@ impl BeadInsertData {
 }
 
 /// Resolves a newly-added bead and its promoted orphans against the braid index
+/// for single bead insertion along with its if any resolved orphans.
+
 pub async fn persist_added_bead<'a>(
     braid: &Braid,
     bead: &Bead,
