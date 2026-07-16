@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from typing import Iterator
 
 from test_framework.constants import LOG_NAMES
 
 
-def iter_logs(root: Path):
+def iter_logs(root: Path) -> Iterator[Path]:
     for path in sorted(root.rglob("*")):
         if path.is_file() and path.name in LOG_NAMES:
             yield path

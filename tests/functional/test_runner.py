@@ -11,7 +11,6 @@ import os
 import re
 import shlex
 import shutil
-import signal
 import subprocess
 import sys
 import tempfile
@@ -20,6 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
+from test_framework.cleanup_manager import terminate_process_group
 from test_framework.constants import STDERR_LOG_NAME, STDOUT_LOG_NAME, TEST_EXIT_PASSED, TEST_EXIT_SKIPPED
 from test_framework.logging_utils import configure_stream_logger, log_duration, log_event, log_exception
 
@@ -96,7 +96,13 @@ class RunningJob:
         return timeout is not None and now - self.start_time > timeout
 
     def terminate(self) -> None:
-        terminate_process_group(self.process)
+        terminate_process_group(
+            self.process,
+            name=self.scheduled.script_name,
+            term_timeout=2.0,
+            kill_timeout=1.0,
+            logger=logger,
+        )
 
     def to_result(self) -> TestResult:
         if self.timed_out:
@@ -247,30 +253,6 @@ class TestHandler:
             )
         )
         log_event(logger, "runner_test_started", test=scheduled.display_name, pid=proc.pid, port_seed=scheduled.port_seed)
-
-# Function to terminate a process group, firstly with SIGTERM and a wait, then with SIGKILL if it does not exit.
-# Ignoring cases where the process is already gone. This is used for cleaning up test subprocesses on timeout or interrupt.
-def terminate_process_group(proc: subprocess.Popen) -> None:
-    """Terminate a process group robustly."""
-    if proc.poll() is not None:
-        return
-    try:
-        pgid = os.getpgid(proc.pid)
-    except OSError:
-        return
-    for sig, wait_time in ((signal.SIGTERM, 2.0), (signal.SIGTERM, 1.0), (signal.SIGKILL, 1.0)):
-        if proc.poll() is not None:
-            return
-        try:
-            log_event(logger, "runner_signal_sent", level=logging.DEBUG, pid=proc.pid, signal=sig.name)
-            os.killpg(pgid, sig)
-        except ProcessLookupError:
-            return
-        try:
-            proc.wait(timeout=wait_time)
-            return
-        except subprocess.TimeoutExpired:
-            continue
 
 
 def build_test_list(tests: list[str], *, extended: bool, exclude: str | None, pattern: str | None) -> list[str]:
