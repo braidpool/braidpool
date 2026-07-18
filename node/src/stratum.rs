@@ -1142,6 +1142,21 @@ impl DownstreamClient {
 
         if let (Some(header), Some(block_hash)) = (valid_header, valid_block_hash) {
             let share_id = block_hash;
+            let upstream_ext1_size = used_extranonce1
+                .len()
+                .checked_sub(PREFIX_BYTES_SIZE + COMMITMENT_SIZE)
+                .ok_or_else(|| StratumErrors::InvalidMethodParams {
+                    method: "mining.submit: extranonce1 too short for audit mode".to_string(),
+                })?;
+
+            if upstream_ext1_size != 4 && upstream_ext1_size != 8 {
+                return Err(StratumErrors::InvalidMethodParams {
+                    method: format!(
+                        "mining.submit: unsupported upstream ext1 size: {}",
+                        upstream_ext1_size
+                    ),
+                });
+            }
 
             let bead = {
                 let payout_address = self
@@ -1244,54 +1259,46 @@ impl DownstreamClient {
                         bitcoin::absolute::MedianTimePast::from_u32(d.as_secs() as u32).unwrap()
                     })
                     .unwrap();
+
                 let (extranonce_1_raw_value, extranonce_2_raw_value) = {
-                    if used_extranonce1.len() < UPSTREAM_EXTRANONCE1_SIZE {
-                        error!(
-                            worker = %worker_name,
-                            extranonce1_len = %used_extranonce1.len(),
-                            required = UPSTREAM_EXTRANONCE1_SIZE,
-                            "extranonce1 too short, expected at least 4 bytes, this upstream pool is not supported yet."
-                        );
-                        return Err(StratumErrors::InvalidMethodParams {
-                            method: "mining.submit: extranonce1 too short for audit mode"
-                                .to_string(),
-                        });
-                    }
-                    let upstream_bytes = &used_extranonce1[..UPSTREAM_EXTRANONCE1_SIZE];
-                    let upstream_u32 = u32::from_be_bytes([
-                        upstream_bytes[0],
-                        upstream_bytes[1],
-                        upstream_bytes[2],
-                        upstream_bytes[3],
-                    ]);
-                    const MAX_AUDIT_BYTES: usize = 64;
-                    let audit_bytes = &used_extranonce1[UPSTREAM_EXTRANONCE1_SIZE..];
-                    if audit_bytes.len() > MAX_AUDIT_BYTES {
-                        return Err(StratumErrors::InvalidMethodParams {
-                            method: "mining.submit: audit extranonce too long".to_string(),
-                        });
-                    }
-                    let audit_hash = bitcoin::hashes::sha256::Hash::hash(audit_bytes);
-                    let audit_hash_bytes = audit_hash.to_byte_array();
-                    let audit_hash_u32 = u32::from_be_bytes([
-                        audit_hash_bytes[0],
-                        audit_hash_bytes[1],
-                        audit_hash_bytes[2],
-                        audit_hash_bytes[3],
-                    ]);
+                    let upstream_bytes = &used_extranonce1[..upstream_ext1_size];
+
+                    let extra_nonce_1: u64 = if upstream_ext1_size == 8 {
+                        u64::from_be_bytes(upstream_bytes.try_into().unwrap())
+                    } else {
+                        u32::from_be_bytes(upstream_bytes.try_into().unwrap()) as u64
+                    };
+
+                    let audit_portion = &used_extranonce1[upstream_ext1_size..];
+                    let miner_roll_bytes = hex::decode(extranonce2).map_err(|e| {
+                        StratumErrors::InvalidMethodParams {
+                            method: format!("mining.submit: invalid extranonce2 hex: {}", e),
+                        }
+                    })?;
+                    let mut nonce2_buf = [0u8; 8];
+                    let audit_len = audit_portion.len().min(PREFIX_BYTES_SIZE + COMMITMENT_SIZE);
+                    nonce2_buf[..audit_len].copy_from_slice(&audit_portion[..audit_len]);
+                    let roll_len = miner_roll_bytes
+                        .len()
+                        .min(std::mem::size_of::<u64>() - audit_len);
+                    nonce2_buf[audit_len..audit_len + roll_len]
+                        .copy_from_slice(&miner_roll_bytes[..roll_len]);
+                    let extra_nonce_2 = u64::from_be_bytes(nonce2_buf);
+
                     debug!(
                         worker = %worker_name,
-                        extranonce1_len = %used_extranonce1.len(),
+                        upstream_ext1_size = %upstream_ext1_size,
                         upstream_ext1 = %hex::encode(upstream_bytes),
-                        upstream_ext1_u32 = %format!("{:08x}", upstream_u32),
-                        audit_portion_len = %audit_bytes.len(),
-                        audit_portion = %hex::encode(audit_bytes),
-                        audit_hash_u32 = %format!("{:08x}", audit_hash_u32),
-                        "Parsed extranonce values for bead metadata"
+                        extra_nonce_1 = %format!("{:016x}", extra_nonce_1),
+                        audit_portion = %hex::encode(audit_portion),
+                        miner_roll = %extranonce2,
+                        extra_nonce_2 = %format!("{:016x}", extra_nonce_2),
+                        "Packed extranonce values for bead metadata"
                     );
 
-                    (upstream_u32, audit_hash_u32)
+                    (extra_nonce_1, extra_nonce_2)
                 };
+
                 let placeholder_sig_bytes = [0u8; 64];
                 let sig = bitcoin::ecdsa::Signature {
                     signature: secp256k1::ecdsa::Signature::from_compact(&placeholder_sig_bytes)
@@ -1301,8 +1308,8 @@ impl DownstreamClient {
 
                 let uncommitted_metadata = crate::uncommitted_metadata::UnCommittedMetadata {
                     broadcast_timestamp: broadcast_time,
-                    extra_nonce_1: extranonce_1_raw_value as u64,
-                    extra_nonce_2: extranonce_2_raw_value as u64,
+                    extra_nonce_1: extranonce_1_raw_value,
+                    extra_nonce_2: extranonce_2_raw_value,
                     signature: sig,
                 };
 
@@ -1363,8 +1370,7 @@ impl DownstreamClient {
                                 let full_extranonce2 = if let Some(ref prefix) =
                                     self.extranonce2_prefix
                                 {
-                                    let commitment_start =
-                                        UPSTREAM_EXTRANONCE1_SIZE + PREFIX_BYTES_SIZE;
+                                    let commitment_start = upstream_ext1_size + PREFIX_BYTES_SIZE;
                                     let commitment_end = commitment_start + COMMITMENT_SIZE;
                                     if used_extranonce1.len() < commitment_end {
                                         error!(
@@ -3475,6 +3481,7 @@ impl Server {
                                             }
                                         };
 
+                                        let upstream_ext1_len = upstream_ext1_bytes.len();
                                         let mut extended_extranonce1 = upstream_ext1_bytes;
                                         extended_extranonce1.extend_from_slice(&prefix_bytes);
                                         let bead_hash_commitment = mapping.get_current_bead_commitment();
@@ -3503,7 +3510,7 @@ impl Server {
                                             );
                                             {
                                                 let mut dag_guard = dag.lock().await;
-                                                dag_guard.register_miner(peer_addr.to_string(), prefix_bytes.clone());
+                                                dag_guard.register_miner(peer_addr.to_string(), prefix_bytes.clone(), upstream_ext1_len, miner_ext2_size);
                                                 if let Some(miner_state) = dag_guard.miner_states.get_mut(&peer_addr.to_string()) {
                                                     let commitment = crate::audit::AuditCommitment::from_hash_prefix(&bead_hash_commitment);
                                                     miner_state.current_commitment = commitment;
@@ -3542,7 +3549,7 @@ impl Server {
                                     }
                                 } else {
                                     // Normal Braidpool mode, generate local extranonce
-                                    let mut bytes = [0u8; 4];
+                                    let mut bytes = [0u8; 8];
                                     rand::thread_rng().fill_bytes(&mut bytes);
                                     info!("New Braidpool connection using local extranonce: {}", hex::encode(&bytes));
                                     (bytes.to_vec(), EXTRANONCE2_SIZE, None, false)
@@ -4579,8 +4586,8 @@ mod test {
         assert_ne!(client1.extranonce1, client3.extranonce1);
 
         // extranonce1 must be exactly EXTRANONCE1_SIZE bytes
-        assert_eq!(client1.extranonce1.len(), EXTRANONCE1_SIZE);
-        assert_eq!(client2.extranonce1.len(), EXTRANONCE1_SIZE);
-        assert_eq!(client3.extranonce1.len(), EXTRANONCE1_SIZE);
+        assert_eq!(client1.extranonce1.len(), UPSTREAM_EXTRANONCE1_SIZE);
+        assert_eq!(client2.extranonce1.len(), UPSTREAM_EXTRANONCE1_SIZE);
+        assert_eq!(client3.extranonce1.len(), UPSTREAM_EXTRANONCE1_SIZE);
     }
 }

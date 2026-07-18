@@ -55,8 +55,8 @@ impl AuditDBHandler {
             .unwrap_or_default()
             .as_secs() as i64;
 
-        let extranonce1 = format!("{:08x}", bead.uncommitted_metadata.extra_nonce_1);
-        let extranonce2 = format!("{:08x}", bead.uncommitted_metadata.extra_nonce_2);
+        let extranonce1 = format!("{:016x}", bead.uncommitted_metadata.extra_nonce_1);
+        let extranonce2 = format!("{:016x}", bead.uncommitted_metadata.extra_nonce_2);
 
         let result = sqlx::query(INSERT_BEAD_QUERY)
             .bind(composite_hash.as_byte_array().as_slice())
