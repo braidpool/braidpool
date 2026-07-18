@@ -199,29 +199,35 @@ impl AuditCommitment {
         hex::encode(&self.commitment_bytes)
     }
 
-    pub fn verify_in_extranonce1(&self, extranonce1_bytes: &[u8], miner_prefix: &[u8]) -> bool {
-        if extranonce1_bytes.len() != TOTAL_EXTRANONCE1_BYTES {
+    pub fn verify_in_extranonce1(
+        &self,
+        extranonce1_bytes: &[u8],
+        miner_prefix: &[u8],
+        upstream_ext1_size: usize,
+    ) -> bool {
+        let expected_total = upstream_ext1_size + MINER_PREFIX_BYTES + COMMITMENT_BYTES;
+        if extranonce1_bytes.len() != expected_total {
             return false;
         }
-        if &extranonce1_bytes
-            [UPSTREAM_EXTRANONCE1_BYTES..UPSTREAM_EXTRANONCE1_BYTES + MINER_PREFIX_BYTES]
+        if &extranonce1_bytes[upstream_ext1_size..upstream_ext1_size + MINER_PREFIX_BYTES]
             != miner_prefix
         {
             return false;
         }
-        let commitment_start = UPSTREAM_EXTRANONCE1_BYTES + MINER_PREFIX_BYTES;
+        let commitment_start = upstream_ext1_size + MINER_PREFIX_BYTES;
         let commitment_end = commitment_start + COMMITMENT_BYTES;
         &extranonce1_bytes[commitment_start..commitment_end] == &self.commitment_bytes
     }
 
-    pub fn extract_miner_prefix_from_ext1(extranonce1_bytes: &[u8]) -> Option<Vec<u8>> {
-        if extranonce1_bytes.len() < UPSTREAM_EXTRANONCE1_BYTES + MINER_PREFIX_BYTES {
+    pub fn extract_miner_prefix_from_ext1(
+        extranonce1_bytes: &[u8],
+        upstream_ext1_size: usize,
+    ) -> Option<Vec<u8>> {
+        if extranonce1_bytes.len() < upstream_ext1_size + MINER_PREFIX_BYTES {
             return None;
         }
         Some(
-            extranonce1_bytes
-                [UPSTREAM_EXTRANONCE1_BYTES..UPSTREAM_EXTRANONCE1_BYTES + MINER_PREFIX_BYTES]
-                .to_vec(),
+            extranonce1_bytes[upstream_ext1_size..upstream_ext1_size + MINER_PREFIX_BYTES].to_vec(),
         )
     }
 }
@@ -233,15 +239,19 @@ pub struct MinerAuditState {
     pub miner_prefix: Vec<u8>,
     pub commitment_pending: bool,
     pub previous_commitment: Option<AuditCommitment>,
+    pub upstream_ext1_size: usize,
+    pub miner_roll_bytes: usize,
 }
 
 impl MinerAuditState {
-    pub fn new(miner_prefix: Vec<u8>) -> Self {
+    pub fn new(miner_prefix: Vec<u8>, upstream_ext1_size: usize, miner_roll_bytes: usize) -> Self {
         Self {
             current_commitment: AuditCommitment::genesis(),
             miner_prefix,
             commitment_pending: false,
             previous_commitment: None,
+            upstream_ext1_size,
+            miner_roll_bytes,
         }
     }
 
@@ -266,25 +276,29 @@ impl MinerAuditState {
         extranonce1_bytes: &[u8],
         extranonce2_hex: &str,
     ) -> AuditVerificationResult {
-        if extranonce1_bytes.len() != TOTAL_EXTRANONCE1_BYTES {
+        let expected_total = self.upstream_ext1_size + MINER_PREFIX_BYTES + COMMITMENT_BYTES;
+        if extranonce1_bytes.len() != expected_total {
             return AuditVerificationResult::Invalid {
                 reason: format!(
                     "Wrong extranonce1 length: expected {} bytes, got {}",
-                    TOTAL_EXTRANONCE1_BYTES,
+                    expected_total,
                     extranonce1_bytes.len()
                 ),
             };
         }
-        if extranonce2_hex.len() != MINER_ROLL_BYTES * 2 {
+        if extranonce2_hex.len() != self.miner_roll_bytes * 2 {
             return AuditVerificationResult::Invalid {
                 reason: format!(
                     "Wrong extranonce2 length: expected {} hex chars, got {}",
-                    MINER_ROLL_BYTES * 2,
+                    self.miner_roll_bytes * 2,
                     extranonce2_hex.len()
                 ),
             };
         }
-        if let Some(prefix) = AuditCommitment::extract_miner_prefix_from_ext1(extranonce1_bytes) {
+        if let Some(prefix) = AuditCommitment::extract_miner_prefix_from_ext1(
+            extranonce1_bytes,
+            self.upstream_ext1_size,
+        ) {
             if prefix != self.miner_prefix {
                 return AuditVerificationResult::Invalid {
                     reason: format!(
@@ -299,10 +313,11 @@ impl MinerAuditState {
                 reason: "Could not extract miner prefix from extranonce1".to_string(),
             };
         }
-        if self
-            .current_commitment
-            .verify_in_extranonce1(extranonce1_bytes, &self.miner_prefix)
-        {
+        if self.current_commitment.verify_in_extranonce1(
+            extranonce1_bytes,
+            &self.miner_prefix,
+            self.upstream_ext1_size,
+        ) {
             let miner_roll = hex::decode(extranonce2_hex)
                 .ok()
                 .and_then(|bytes| bytes.first().copied());
@@ -312,7 +327,7 @@ impl MinerAuditState {
                 miner_roll,
             }
         } else {
-            let commitment_start = UPSTREAM_EXTRANONCE1_BYTES + MINER_PREFIX_BYTES;
+            let commitment_start = self.upstream_ext1_size + MINER_PREFIX_BYTES;
             let commitment_end = commitment_start + COMMITMENT_BYTES;
             let actual = hex::encode(&extranonce1_bytes[commitment_start..commitment_end]);
 
@@ -335,7 +350,11 @@ impl MinerAuditState {
         let result = self.verify_share(extranonce1_bytes, extranonce2_hex);
         if matches!(result, AuditVerificationResult::Invalid { .. }) {
             if let Some(prev_commitment) = previous_commitment {
-                if prev_commitment.verify_in_extranonce1(extranonce1_bytes, &self.miner_prefix) {
+                if prev_commitment.verify_in_extranonce1(
+                    extranonce1_bytes,
+                    &self.miner_prefix,
+                    self.upstream_ext1_size,
+                ) {
                     warn!(
                         old = %prev_commitment.to_hex(),
                         current = %self.current_commitment.to_hex(),
@@ -741,9 +760,15 @@ impl AuditDAG {
         }
     }
 
-    pub fn register_miner(&mut self, miner_ip: String, prefix: Vec<u8>) {
+    pub fn register_miner(
+        &mut self,
+        miner_ip: String,
+        prefix: Vec<u8>,
+        upstream_ext1_size: usize,
+        miner_roll_bytes: usize,
+    ) {
         let prefix_hex = hex::encode(&prefix);
-        let state = MinerAuditState::new(prefix);
+        let state = MinerAuditState::new(prefix, upstream_ext1_size, miner_roll_bytes);
         self.miner_states.insert(miner_ip.clone(), state);
         info!(
             miner = %miner_ip,
@@ -929,7 +954,11 @@ mod tests {
             &commitment.commitment_bytes,
         );
 
-        assert!(commitment.verify_in_extranonce1(&extranonce1, &miner_prefix));
+        assert!(commitment.verify_in_extranonce1(
+            &extranonce1,
+            &miner_prefix,
+            UPSTREAM_EXTRANONCE1_BYTES
+        ));
     }
 
     #[test]
@@ -939,7 +968,11 @@ mod tests {
         let extranonce1 = vec![0xff; 5]; // Too short
         let miner_prefix = vec![0xaa, 0xbb];
 
-        assert!(!commitment.verify_in_extranonce1(&extranonce1, &miner_prefix));
+        assert!(!commitment.verify_in_extranonce1(
+            &extranonce1,
+            &miner_prefix,
+            UPSTREAM_EXTRANONCE1_BYTES
+        ));
     }
 
     #[test]
@@ -954,7 +987,11 @@ mod tests {
             &commitment.commitment_bytes,
         );
 
-        assert!(!commitment.verify_in_extranonce1(&extranonce1, &miner_prefix));
+        assert!(!commitment.verify_in_extranonce1(
+            &extranonce1,
+            &miner_prefix,
+            UPSTREAM_EXTRANONCE1_BYTES
+        ));
     }
 
     #[test]
@@ -970,7 +1007,11 @@ mod tests {
             &wrong_commitment,
         );
 
-        assert!(!commitment.verify_in_extranonce1(&extranonce1, &miner_prefix));
+        assert!(!commitment.verify_in_extranonce1(
+            &extranonce1,
+            &miner_prefix,
+            UPSTREAM_EXTRANONCE1_BYTES
+        ));
     }
 
     #[test]
@@ -983,7 +1024,10 @@ mod tests {
             &[0x11, 0x22, 0x33, 0x44, 0x55],
         );
 
-        let extracted = AuditCommitment::extract_miner_prefix_from_ext1(&extranonce1);
+        let extracted = AuditCommitment::extract_miner_prefix_from_ext1(
+            &extranonce1,
+            UPSTREAM_EXTRANONCE1_BYTES,
+        );
         assert_eq!(extracted, Some(miner_prefix));
     }
 
@@ -991,7 +1035,7 @@ mod tests {
     /// Verify that on a new job arrival, the old commitment and the new one update correctly.
     fn test_miner_audit_state_update_commitment() {
         let prefix = vec![0xaa, 0xbb];
-        let mut state = MinerAuditState::new(prefix);
+        let mut state = MinerAuditState::new(prefix, UPSTREAM_EXTRANONCE1_BYTES, MINER_ROLL_BYTES);
         let bead = create_test_bead(vec![]);
 
         let old_commitment = state.current_commitment.clone();
@@ -1009,7 +1053,7 @@ mod tests {
     /// Validate that the incoming share contains the unaltered and valid prefix.
     fn test_verify_share_prefix_mismatch() {
         let prefix = vec![0xaa, 0xbb];
-        let state = MinerAuditState::new(prefix);
+        let state = MinerAuditState::new(prefix, UPSTREAM_EXTRANONCE1_BYTES, MINER_ROLL_BYTES);
 
         let extranonce1 = build_extranonce1(
             &[0xff; UPSTREAM_EXTRANONCE1_BYTES],
@@ -1030,7 +1074,8 @@ mod tests {
     /// Verify that the correct share was successfully accepted and marked as valid.
     fn test_verify_share_valid() {
         let prefix = vec![0xaa, 0xbb];
-        let state = MinerAuditState::new(prefix.clone());
+        let state =
+            MinerAuditState::new(prefix.clone(), UPSTREAM_EXTRANONCE1_BYTES, MINER_ROLL_BYTES);
 
         let extranonce1 = build_extranonce1(
             &[0xff; UPSTREAM_EXTRANONCE1_BYTES],
@@ -1056,7 +1101,8 @@ mod tests {
     /// verify that a share built on the previous commitment is explicitly rejected as stale.
     fn test_verify_share_with_fallback_uses_previous() {
         let prefix = vec![0xaa, 0xbb];
-        let mut state = MinerAuditState::new(prefix.clone());
+        let mut state =
+            MinerAuditState::new(prefix.clone(), UPSTREAM_EXTRANONCE1_BYTES, MINER_ROLL_BYTES);
 
         let extranonce1 = build_extranonce1(
             &[0xff; UPSTREAM_EXTRANONCE1_BYTES],
@@ -1093,7 +1139,12 @@ mod tests {
         let miner_ip = "192.168.1.100".to_string();
         let prefix = vec![0xaa, 0xbb];
 
-        audit_dag.register_miner(miner_ip.clone(), prefix.clone());
+        audit_dag.register_miner(
+            miner_ip.clone(),
+            prefix.clone(),
+            UPSTREAM_EXTRANONCE1_BYTES,
+            MINER_ROLL_BYTES,
+        );
         assert_eq!(audit_dag.miner_states[&miner_ip].miner_prefix, prefix);
     }
 
@@ -1104,7 +1155,12 @@ mod tests {
         let mut audit_dag = AuditDAG::new(braid);
         let miner_ip = "192.168.1.100".to_string();
 
-        audit_dag.register_miner(miner_ip.clone(), vec![0x00, 0x01]);
+        audit_dag.register_miner(
+            miner_ip.clone(),
+            vec![0x00, 0x01],
+            UPSTREAM_EXTRANONCE1_BYTES,
+            MINER_ROLL_BYTES,
+        );
 
         // Insert exactly 10 test records with various states
         for i in 0..10 {
