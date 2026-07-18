@@ -84,6 +84,45 @@ impl DBHandler {
             db_handler_tx,
         ))
     }
+
+    #[cfg(test)]
+    pub async fn new_in_memory() -> Result<(Self, Sender<BraidpoolDBTypes>), DBErrors> {
+        use sqlx::{sqlite::SqliteConnectOptions, SqlitePool};
+        use std::str::FromStr;
+        const SCHEMA: &str = include_str!("schema.sql");
+
+        let pool_options = SqliteConnectOptions::from_str("sqlite::memory:")
+            .map_err(|e| DBErrors::ConnectionUrlNotParsed {
+                error: e.to_string(),
+                url: "sqlite::memory:".to_string(),
+            })?
+            .foreign_keys(true)
+            .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal);
+
+        let db_connection_pool = SqlitePool::connect_with(pool_options).await.map_err(|e| {
+            DBErrors::ConnectionToSQlitePoolFailed {
+                error: e.to_string(),
+            }
+        })?;
+
+        sqlx::query(SCHEMA)
+            .execute(&db_connection_pool)
+            .await
+            .map_err(|e| DBErrors::SchemaNotInitialized {
+                error: e.to_string(),
+                db_path: std::path::PathBuf::from(":memory:"),
+            })?;
+
+        let (db_handler_tx, db_handler_rx) = tokio::sync::mpsc::channel(DB_CHANNEL_CAPACITY);
+        Ok((
+            Self {
+                receiver: db_handler_rx,
+                db_connection_pool,
+            },
+            db_handler_tx,
+        ))
+    }
+
     /// Builds the `(transactions, relatives, parent_timestamps)` JSON value tuples for a single
     /// bead.
     fn prepare_bead_tuple_values(
