@@ -928,12 +928,11 @@ pub fn test_cohorts_braid_testcases() {
 }
 
 #[test]
-#[allow(unused)]
 pub fn reverse_cohorts_testcases() {
-    let ancestors = std::env::current_dir().unwrap();
-    let ancestors_directory: Vec<&Path> = ancestors.ancestors().collect();
-    let parent_directory = ancestors_directory[1];
-    let test_absolute_path = parent_directory.join(BRAIDTESTDIRECTORY);
+    let test_absolute_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join(BRAIDTESTDIRECTORY);
     for test_braid_file in std::fs::read_dir(test_absolute_path.as_path()).unwrap() {
         let re = test_braid_file.unwrap().file_name();
         let current_file_name = re.to_str().unwrap();
@@ -948,10 +947,20 @@ pub fn reverse_cohorts_testcases() {
             current_braid_parents.insert(beads.0, current_bead_parents);
         }
         let reversed_beads = reverse(&current_file_braid, &current_braid_parents);
-        let current_braid_cohorts = file_braid.cohorts;
 
         let computed_val = cohort(&current_file_braid, &reversed_beads, None, None);
-        //TODO:assetion to be done
+
+        let mut file_cohorts: Vec<HashSet<usize>> = file_braid
+            .cohorts
+            .iter()
+            .map(|c| c.iter().copied().collect())
+            .collect();
+        file_cohorts.reverse();
+        assert_eq!(
+            computed_val, file_cohorts,
+            "Reversed cohorts do not match for file: {}",
+            current_file_name
+        );
     }
 }
 #[test]
