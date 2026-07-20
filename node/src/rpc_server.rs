@@ -99,6 +99,9 @@ pub trait Rpc {
     #[method(name = "getnodeinfo")]
     async fn get_node_info(&self, bead_hash: String) -> Result<Value, ErrorObjectOwned>;
 
+    #[method(name = "getworkbybead")]
+    async fn get_work_by_bead(&self, bead_hash: String) -> Result<Value, ErrorObjectOwned>;
+
     #[method(name = "getpeerinfo")]
     async fn get_peer_info(&self) -> Result<Value, ErrorObjectOwned>;
 
@@ -158,6 +161,12 @@ struct NodeInfo {
     miner_ip: String,
     payout_address: String,
     minimum_target: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct BeadWork {
+    bead_hash: String,
+    work: String,
 }
 
 /// Per-tx entry returned by stagedtransactions. Includes txid so callers can pass it to unstagetransactions.
@@ -940,6 +949,38 @@ impl RpcServer for RpcServerImpl {
         };
 
         serde_json::to_value(&node_info)
+            .map_err(|_| ErrorObjectOwned::owned(2, "Internal Server Error", None::<()>))
+    }
+
+    async fn get_work_by_bead(&self, bead_hash: String) -> Result<Value, ErrorObjectOwned> {
+        info!(bead_hash = %bead_hash, "Get Work By Bead request received");
+
+        let hash = bead_hash
+            .parse::<BeadHash>()
+            .map_err(|_| ErrorObjectOwned::owned(
+                1,
+                "Invalid bead hash format. Expected a 64-character hex-encoded string representing a bead's block hash.",
+                None::<()>
+            ))?;
+
+        let braid_data = self.braid_arc.read().await;
+
+        let bead = braid_data
+            .beads
+            .iter()
+            .find(|bead| bead.block_header.block_hash() == hash)
+            .ok_or_else(|| ErrorObjectOwned::owned(
+                3,
+                format!("Bead not found. No bead with hash '{}' exists in the braid. Use 'gettips' or 'getbraidinfo' to find available bead hashes.", bead_hash),
+                None::<()>
+            ))?;
+
+        let bead_work = BeadWork {
+            bead_hash,
+            work: bead.block_header.work().to_string(),
+        };
+
+        serde_json::to_value(&bead_work)
             .map_err(|_| ErrorObjectOwned::owned(2, "Internal Server Error", None::<()>))
     }
 
@@ -1839,6 +1880,53 @@ pub async fn test_get_node_info_rpc() {
         node_info.payout_address,
         test_bead1.committed_metadata.payout_address
     );
+}
+
+#[tokio::test]
+pub async fn test_get_work_by_bead_rpc() {
+    let test_bead1 = create_test_bead(1, None);
+    let genesis_beads = vec![test_bead1.clone()];
+
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+
+    let (proxy_tx, _) = mpsc::unbounded_channel();
+
+    let (server_addr, _) = run_rpc_server(
+        Arc::clone(&braid),
+        "127.0.0.1:0",
+        Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
+        Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
+        Arc::new(Mutex::new(stratum::BlockTemplate::default())),
+        proxy_tx,
+        None,
+        test_db_tx(),
+    )
+    .await
+    .unwrap();
+    let target_uri = format!("http://{}", server_addr);
+    let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
+
+    let bead_hash = test_bead1.block_header.block_hash().to_string();
+    let mut params = ArrayParams::new();
+    params.insert(bead_hash.clone()).unwrap();
+
+    let response: Result<Value, jsonrpsee::core::ClientError> =
+        client.request("getworkbybead", params).await;
+
+    assert!(response.is_ok());
+    let bead_work: BeadWork = serde_json::from_value(response.unwrap()).unwrap();
+
+    assert_eq!(bead_work.bead_hash, bead_hash);
+    assert_eq!(bead_work.work, test_bead1.block_header.work().to_string());
+
+    // Unknown bead hash should return an error
+    let mut missing_params = ArrayParams::new();
+    missing_params
+        .insert("0000000000000000000000000000000000000000000000000000000000000000".to_string())
+        .unwrap();
+    let missing_response: Result<Value, jsonrpsee::core::ClientError> =
+        client.request("getworkbybead", missing_params).await;
+    assert!(missing_response.is_err());
 }
 
 #[tokio::test]

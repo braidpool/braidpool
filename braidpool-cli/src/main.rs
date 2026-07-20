@@ -113,6 +113,13 @@ enum Commands {
         bead_hash: String,
     },
 
+    /// Get the cumulative work associated with a specific bead
+    #[command(name = "getworkbybead")]
+    GetWorkByBead {
+        /// The bead hash (block hash) as a 64-character hex-encoded string representing the bead's block hash
+        bead_hash: String,
+    },
+
     /// Get peer information (IP/PeerID/libp2p address of connected peers)
     #[command(name = "getpeerinfo")]
     GetPeerInfo,
@@ -317,6 +324,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::GetIpcStats => ("getipcstats", json!([])),
         Commands::GetBraidInfo => ("getbraidinfo", json!([])),
         Commands::GetNodeInfo { bead_hash } => ("getnodeinfo", json!([bead_hash])),
+        Commands::GetWorkByBead { bead_hash } => ("getworkbybead", json!([bead_hash])),
         Commands::GetPeerInfo => ("getpeerinfo", json!([])),
         Commands::StagedTransactions => ("stagedtransactions", json!([])),
         Commands::UnstageTransactions { tx_id } => ("unstagetransactions", json!([tx_id])),
