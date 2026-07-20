@@ -10,8 +10,6 @@ use bitcoin::{
 use serde_json::json;
 use sqlx::{Pool, Row, Sqlite};
 use tokio::sync::mpsc::{Receiver, Sender};
-#[cfg(test)]
-use tracing::info;
 use tracing::{debug, error, trace};
 pub const DB_CHANNEL_CAPACITY: usize = 1024;
 /// Maximum number of beads (including orphans) to insert in a single bulk query to limit the memory consumption
@@ -87,7 +85,10 @@ impl DBHandler {
 
     #[cfg(test)]
     pub async fn new_in_memory() -> Result<(Self, Sender<BraidpoolDBTypes>), DBErrors> {
-        use sqlx::{sqlite::SqliteConnectOptions, SqlitePool};
+        use sqlx::{
+            sqlite::{SqliteConnectOptions, SqlitePoolOptions},
+            Executor,
+        };
         use std::str::FromStr;
         const SCHEMA: &str = include_str!("schema.sql");
 
@@ -99,14 +100,20 @@ impl DBHandler {
             .foreign_keys(true)
             .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal);
 
-        let db_connection_pool = SqlitePool::connect_with(pool_options).await.map_err(|e| {
-            DBErrors::ConnectionToSQlitePoolFailed {
+        // sqlite::memory: creates a separate DB per connection; max_connections(1)
+        // ensures all operations share the same in-memory database.
+        let db_connection_pool = SqlitePoolOptions::new()
+            .min_connections(1)
+            .max_connections(1)
+            .connect_with(pool_options)
+            .await
+            .map_err(|e| DBErrors::ConnectionToSQlitePoolFailed {
                 error: e.to_string(),
-            }
-        })?;
+            })?;
 
-        sqlx::query(SCHEMA)
-            .execute(&db_connection_pool)
+        // execute() handles multi-statement SQL; sqlx::query() would only run the first statement.
+        db_connection_pool
+            .execute(SCHEMA)
             .await
             .map_err(|e| DBErrors::SchemaNotInitialized {
                 error: e.to_string(),
@@ -853,44 +860,19 @@ pub async fn fetch_bead_by_bead_hash(
 #[allow(unused)]
 pub mod test {
     use super::*;
-    use serde_json::json;
-    use sqlx::{sqlite::SqliteConnectOptions, SqlitePool};
-    use std::collections::{HashMap, HashSet};
-    use std::{fs, path::Path, str::FromStr};
-    const TEST_DB_URL: &str = "sqlite::memory:";
     use crate::{
         braid,
         utils::test_utils::test_utility_functions::{
             emit_bead, loading_braid_from_file, BRAIDTESTDIRECTORY,
         },
     };
-    pub async fn test_db_initializer() -> Pool<Sqlite> {
-        let test_pool_settings = SqliteConnectOptions::from_str(TEST_DB_URL)
-            .unwrap()
-            .foreign_keys(true)
-            .with_regexp()
-            .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal);
-        let test_pool = SqlitePool::connect_with(test_pool_settings).await.unwrap();
-        let schema_path = std::env::current_dir().unwrap().join("src/db/schema.sql");
-        let schema_sql = fs::read_to_string(&schema_path).unwrap();
-
-        let setup_result = sqlx::query(&schema_sql.as_str()).execute(&test_pool).await;
-
-        match setup_result {
-            Ok(_) => {
-                info!("Test Schema setup success");
-            }
-            Err(error) => {
-                panic!("{:?}", error);
-            }
-        }
-
-        test_pool
-    }
-
+    use serde_json::json;
+    use std::collections::{HashMap, HashSet};
+    use std::path::Path;
     #[tokio::test]
     async fn test_batch_insertion_beads() {
-        let test_pool = test_db_initializer().await;
+        let (handler, _db_tx) = DBHandler::new_in_memory().await.unwrap();
+        let test_pool = handler.db_connection_pool.clone();
         let ancestors = std::env::current_dir().unwrap();
         let ancestors_directory: Vec<&Path> = ancestors.ancestors().collect();
         let parent_directory = ancestors_directory[1];
@@ -913,12 +895,7 @@ pub mod test {
         let orphans = bead_insert_data.split_off(split_at);
         let beads = bead_insert_data;
 
-        // Drive the real batched-insert code path over the in-memory test pool.
-        let (_db_tx, db_rx) = tokio::sync::mpsc::channel::<BraidpoolDBTypes>(DB_CHANNEL_CAPACITY);
-        let handler = DBHandler {
-            receiver: db_rx,
-            db_connection_pool: test_pool.clone(),
-        };
+        // Use in-memory DBHandler to drive the batched-insert production code path.
         handler
             .insert_beads_batch(beads, orphans)
             .await
