@@ -10,42 +10,34 @@ type MerkleRoot = TxMerkleNode;
 
 pub struct MerklePathProof {
     pub transaction_hash: Txid,
-    pub is_right_leaf: bool,
+    /// Index of the transaction in the block. Its bits give the left/right
+    /// position of the running hash at each level of the merkle tree.
+    /// Fixed-width so the layout is identical across platforms.
+    pub transaction_index: u32,
     pub merkle_path: Vec<TxMerkleNode>,
 }
 
 impl MerklePathProof {
     pub fn calculate_corresponding_merkle_root(&self) -> MerkleRoot {
-        let hashing_order = self.get_merkle_hashing_order();
-        let mut concatenated_hashes: Vec<u8> = Vec::new();
-        for hash in hashing_order.iter() {
-            concatenated_hashes.extend_from_slice(hash);
+        let mut current_hash: [u8; 32] = self.transaction_hash.to_byte_array();
+        let mut index = self.transaction_index;
+        let mut preimage = [0u8; 64];
+
+        for sibling in self.merkle_path.iter() {
+            if index & 1 == 1 {
+                // Running hash is the right child at this level.
+                preimage[..32].copy_from_slice(sibling.as_byte_array());
+                preimage[32..].copy_from_slice(&current_hash);
+            } else {
+                // Running hash is the left child at this level.
+                preimage[..32].copy_from_slice(&current_hash);
+                preimage[32..].copy_from_slice(sibling.as_byte_array());
+            }
+            current_hash = Sha256d::hash(&preimage).to_byte_array();
+            index >>= 1;
         }
 
-        let calculated_merkle_root = Sha256d::hash(&concatenated_hashes);
-        TxMerkleNode::from_byte_array(calculated_merkle_root.to_byte_array())
-    }
-}
-
-impl MerklePathProof {
-    // All private functions go here!
-    fn get_merkle_hashing_order(&self) -> Vec<[u8; 32]> {
-        let mut hashing_order: Vec<[u8; 32]> = Vec::new();
-        let index_for_starting_the_copy: usize;
-        if self.is_right_leaf {
-            hashing_order.push(self.merkle_path[0].as_byte_array().clone());
-            hashing_order.push(self.transaction_hash.as_byte_array().clone());
-            index_for_starting_the_copy = 1;
-        } else {
-            hashing_order.push(self.transaction_hash.as_byte_array().clone());
-            index_for_starting_the_copy = 0;
-        };
-
-        for index in index_for_starting_the_copy..self.merkle_path.len() {
-            hashing_order.push(self.merkle_path[index].as_byte_array().clone());
-        }
-
-        hashing_order
+        TxMerkleNode::from_byte_array(current_hash)
     }
 }
 
