@@ -16,7 +16,10 @@ pub fn arp_hosts() -> Vec<Ipv4Addr> {
     let cmd = if is_wsl() { "arp.exe" } else { "arp" };
     let output = match Command::new(cmd).arg("-a").output() {
         Ok(o) => o,
-        Err(e) => { warn!("arp -a failed: {e}"); return Vec::new(); }
+        Err(e) => {
+            warn!("arp -a failed: {e}");
+            return Vec::new();
+        }
     };
     parse_arp_output(&String::from_utf8_lossy(&output.stdout))
 }
@@ -63,10 +66,13 @@ Interface: 192.168.1.5 --- 0x11
   224.0.0.22            01-00-5e-00-00-16     static
 ";
         let hosts = parse_arp_output(input);
-        assert_eq!(hosts, vec![
-            "192.168.1.1".parse::<Ipv4Addr>().unwrap(),
-            "192.168.1.10".parse::<Ipv4Addr>().unwrap(),
-        ]);
+        assert_eq!(
+            hosts,
+            vec![
+                "192.168.1.1".parse::<Ipv4Addr>().unwrap(),
+                "192.168.1.10".parse::<Ipv4Addr>().unwrap(),
+            ]
+        );
     }
 
     #[test]
@@ -77,10 +83,13 @@ Address         HWtype  HWaddress           Flags Mask     Iface
 192.168.1.50    ether   00:50:56:ee:fd:46   C              eth0
 ";
         let hosts = parse_arp_output(input);
-        assert_eq!(hosts, vec![
-            "192.168.1.1".parse::<Ipv4Addr>().unwrap(),
-            "192.168.1.50".parse::<Ipv4Addr>().unwrap(),
-        ]);
+        assert_eq!(
+            hosts,
+            vec![
+                "192.168.1.1".parse::<Ipv4Addr>().unwrap(),
+                "192.168.1.50".parse::<Ipv4Addr>().unwrap(),
+            ]
+        );
     }
 
     #[test]
@@ -90,9 +99,12 @@ Address         HWtype  HWaddress           Flags Mask     Iface
 ? (192.168.1.50) at 00:50:56:ee:fd:46 [ether] on eth0
 ";
         let hosts = parse_arp_output(input);
-        assert_eq!(hosts, vec![
-            "192.168.1.1".parse::<Ipv4Addr>().unwrap(),
-            "192.168.1.50".parse::<Ipv4Addr>().unwrap(),
-        ]);
+        assert_eq!(
+            hosts,
+            vec![
+                "192.168.1.1".parse::<Ipv4Addr>().unwrap(),
+                "192.168.1.50".parse::<Ipv4Addr>().unwrap(),
+            ]
+        );
     }
 }

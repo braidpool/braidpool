@@ -5,21 +5,17 @@ use std::{net::IpAddr, str::FromStr};
 async fn main() -> anyhow::Result<()> {
     let arg = std::env::args().nth(1);
     match arg.as_deref() {
-        None => {
-            match scanner::scan_lan().await {
-                Ok(miners) => print_miners(&miners),
-                Err(e) => println!("Error: {e}"),
-            }
-        }
-        Some(target) if target.contains('/') => {
-            match scanner::scan_subnet(target).await {
-                Ok(miners) => print_miners(&miners),
-                Err(e) => println!("Error: {e}"),
-            }
-        }
+        None => match scanner::scan_lan().await {
+            Ok(miners) => print_miners(&miners),
+            Err(e) => println!("Error: {e}"),
+        },
+        Some(target) if target.contains('/') => match scanner::scan_subnet(target).await {
+            Ok(miners) => print_miners(&miners),
+            Err(e) => println!("Error: {e}"),
+        },
         Some(target) => {
-            let ip = IpAddr::from_str(target)
-                .map_err(|_| anyhow::anyhow!("invalid IP: {target}"))?;
+            let ip =
+                IpAddr::from_str(target).map_err(|_| anyhow::anyhow!("invalid IP: {target}"))?;
             match scanner::scan_ip(ip).await? {
                 Some(m) => {
                     let info = m.get_device_info();
