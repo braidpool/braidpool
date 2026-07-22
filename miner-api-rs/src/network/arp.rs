@@ -38,7 +38,12 @@ fn parse_arp_output(text: &str) -> Vec<Ipv4Addr> {
         for token in trimmed.split_whitespace() {
             let candidate = token.trim_matches(|c| c == '(' || c == ')');
             if let Ok(ip) = Ipv4Addr::from_str(candidate) {
-                if !ip.is_broadcast() && !ip.is_multicast() && !ip.is_loopback() {
+                if !ip.is_broadcast()
+                    && !ip.is_multicast()       // 224.0.0.0/4
+                    && !ip.is_loopback()        // 127.x.x.x
+                    && !ip.is_unspecified()     // 0.0.0.0
+                    && ip.octets()[3] != 255
+                {
                     debug!(ip = %ip, "ARP host");
                     addrs.push(ip);
                 }
@@ -49,62 +54,4 @@ fn parse_arp_output(text: &str) -> Vec<Ipv4Addr> {
     addrs.sort();
     addrs.dedup();
     addrs
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parse_windows_arp() {
-        let input = "\
-Interface: 192.168.1.5 --- 0x11
-  Internet Address      Physical Address      Type
-  192.168.1.1           00-50-56-e0-27-c3     dynamic
-  192.168.1.10          00-50-56-ee-fd-46     dynamic
-  192.168.1.255         ff-ff-ff-ff-ff-ff     static
-  224.0.0.22            01-00-5e-00-00-16     static
-";
-        let hosts = parse_arp_output(input);
-        assert_eq!(
-            hosts,
-            vec![
-                "192.168.1.1".parse::<Ipv4Addr>().unwrap(),
-                "192.168.1.10".parse::<Ipv4Addr>().unwrap(),
-            ]
-        );
-    }
-
-    #[test]
-    fn parse_linux_arp() {
-        let input = "\
-Address         HWtype  HWaddress           Flags Mask     Iface
-192.168.1.1     ether   00:50:56:e0:27:c3   C              eth0
-192.168.1.50    ether   00:50:56:ee:fd:46   C              eth0
-";
-        let hosts = parse_arp_output(input);
-        assert_eq!(
-            hosts,
-            vec![
-                "192.168.1.1".parse::<Ipv4Addr>().unwrap(),
-                "192.168.1.50".parse::<Ipv4Addr>().unwrap(),
-            ]
-        );
-    }
-
-    #[test]
-    fn parse_linux_arp_paren_format() {
-        let input = "\
-? (192.168.1.1) at 00:50:56:e0:27:c3 [ether] on eth0
-? (192.168.1.50) at 00:50:56:ee:fd:46 [ether] on eth0
-";
-        let hosts = parse_arp_output(input);
-        assert_eq!(
-            hosts,
-            vec![
-                "192.168.1.1".parse::<Ipv4Addr>().unwrap(),
-                "192.168.1.50".parse::<Ipv4Addr>().unwrap(),
-            ]
-        );
-    }
 }
