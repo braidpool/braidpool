@@ -14,6 +14,7 @@ use crate::stratum::BlockTemplate;
 use crate::utils::compute_block_hash;
 use crate::utils::BeadHash;
 use bitcoin::Transaction;
+use bitcoin::Txid;
 use futures::lock::Mutex;
 use jsonrpsee::core::async_trait;
 use jsonrpsee::core::middleware::Batch;
@@ -110,6 +111,22 @@ pub trait Rpc {
 
     #[method(name = "unstagetransactions")]
     async fn unstage_transactions(&self, txid: String) -> Result<bool, ErrorObjectOwned>;
+
+    /// Returns which of the 6 confirmation stages a given txid is currently in.
+    #[method(name = "gettransactionstatus")]
+    async fn get_transaction_status(&self, txid: String) -> Result<Value, ErrorObjectOwned>;
+
+    /// Returns the most recent mempool entries from Bitcoin Core, sorted newest-first.
+    #[method(name = "getmempoolentries")]
+    async fn get_mempool_entries(&self, limit: u32) -> Result<Value, ErrorObjectOwned>;
+
+    /// Returns paginated list of txids committed across all beads.
+    #[method(name = "getcommittedtransactions")]
+    async fn get_committed_transactions(
+        &self,
+        page: u32,
+        page_size: u32,
+    ) -> Result<Value, ErrorObjectOwned>;
 
     #[method(name = "bitcoinproxy")]
     async fn bitcoin_proxy(
@@ -1008,12 +1025,239 @@ impl RpcServer for RpcServerImpl {
         }
     }
 
+    async fn get_transaction_status(&self, txid: String) -> Result<Value, ErrorObjectOwned> {
+        info!(txid = %txid, "get_transaction_status request received");
+
+        // Stage 2: txid is in the current block template (staged for next share/block)
+        {
+            let template = self.latest_block.lock().await;
+            let in_template = template
+                .transactions
+                .iter()
+                .skip(1) // skip coinbase
+                .any(|tx| tx.compute_txid().to_string() == txid);
+            if in_template {
+                return Ok(serde_json::json!({
+                    "txid": txid,
+                    "stage": 2,
+                    "stage_name": "staged",
+                    "detail": {}
+                }));
+            }
+        }
+
+        // Stage 3: txid committed in a bead
+        let txid_parsed = txid.parse::<Txid>().map_err(|_| {
+            ErrorObjectOwned::owned(
+                1,
+                "Invalid txid: expected 64-character hex string",
+                None::<()>,
+            )
+        })?;
+        {
+            let braid = self.braid_arc.read().await;
+            if let Some(bead_hash) = braid.txid_to_bead.get(&txid_parsed) {
+                return Ok(serde_json::json!({
+                    "txid": txid,
+                    "stage": 3,
+                    "stage_name": "committed",
+                    "detail": { "bead_hash": bead_hash.to_string() }
+                }));
+            }
+        }
+
+        // Stages 1, 5, 6: query Bitcoin Core via getrawtransaction
+        if let Some(rpc_config) = &self.bitcoin_rpc_config {
+            match call_bitcoin_rpc_direct(
+                rpc_config,
+                "getrawtransaction",
+                &serde_json::json!([txid, true]),
+            )
+            .await
+            {
+                Ok(tx_data) => {
+                    let confirmations = tx_data
+                        .get("confirmations")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
+                    let has_block = tx_data.get("blockhash").is_some();
+                    let (stage, stage_name): (u8, &str) = if has_block && confirmations >= 6 {
+                        (6, "confirmed")
+                    } else if has_block {
+                        (5, "mined")
+                    } else {
+                        (1, "mempool")
+                    };
+                    let mut detail = serde_json::json!({
+                        "fee": tx_data.get("fee"),
+                        "vsize": tx_data.get("vsize"),
+                        "size": tx_data.get("size"),
+                        "weight": tx_data.get("weight"),
+                        "version": tx_data.get("version"),
+                        "locktime": tx_data.get("locktime"),
+                        "vin": tx_data.get("vin"),
+                        "vout": tx_data.get("vout"),
+                    });
+                    if let Some(block_hash) = tx_data.get("blockhash") {
+                        detail["block_hash"] = block_hash.clone();
+                        detail["confirmations"] = serde_json::json!(confirmations);
+                        if let Some(bt) = tx_data.get("blocktime") {
+                            detail["blocktime"] = bt.clone();
+                        }
+                    }
+                    return Ok(serde_json::json!({
+                        "txid": txid,
+                        "stage": stage,
+                        "stage_name": stage_name,
+                        "detail": detail,
+                    }));
+                }
+                Err(e) => {
+                    warn!(txid = %txid, error = %e, "getrawtransaction failed in gettransactionstatus");
+                }
+            }
+        }
+
+        Ok(serde_json::json!({
+            "txid": txid,
+            "stage": 0,
+            "stage_name": "unknown",
+            "detail": {}
+        }))
+    }
+
+    async fn get_mempool_entries(&self, limit: u32) -> Result<Value, ErrorObjectOwned> {
+        info!(limit = %limit, "get_mempool_entries request received");
+
+        let rpc_config = self.bitcoin_rpc_config.as_ref().ok_or_else(|| {
+            ErrorObjectOwned::owned(
+                5,
+                "Bitcoin RPC not configured. Provide --rpcuser/--rpcpass to enable mempool queries.",
+                None::<()>,
+            )
+        })?;
+
+        let raw =
+            call_bitcoin_rpc_direct(rpc_config, "getrawmempool", &serde_json::json!([true]))
+                .await
+                .map_err(|e| {
+                    ErrorObjectOwned::owned(
+                        6,
+                        format!("Bitcoin RPC error: {}", e),
+                        None::<()>,
+                    )
+                })?;
+
+        let obj = raw.as_object().ok_or_else(|| {
+            ErrorObjectOwned::owned(2, "Unexpected getrawmempool response", None::<()>)
+        })?;
+
+        let mut entries: Vec<serde_json::Value> = obj
+            .iter()
+            .map(|(txid, entry)| {
+                let fee_btc = entry
+                    .get("fees")
+                    .and_then(|f| f.get("base"))
+                    .and_then(|v| v.as_f64())
+                    .or_else(|| entry.get("fee").and_then(|v| v.as_f64()))
+                    .unwrap_or(0.0);
+                let fee_sats = (fee_btc * 1e8).round() as u64;
+                let vsize = entry.get("vsize").and_then(|v| v.as_u64()).unwrap_or(0);
+                let fee_rate = if vsize > 0 {
+                    (fee_sats as f64 / vsize as f64 * 100.0).round() / 100.0
+                } else {
+                    0.0
+                };
+                let rbf = entry
+                    .get("bip125-replaceable")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s == "yes")
+                    .unwrap_or(false);
+                serde_json::json!({
+                    "txid": txid,
+                    "fee": fee_sats,
+                    "vsize": vsize,
+                    "fee_rate": fee_rate,
+                    "time": entry.get("time").and_then(|v| v.as_u64()).unwrap_or(0),
+                    "rbf": rbf,
+                })
+            })
+            .collect();
+
+        entries.sort_by(|a, b| {
+            let ta = a.get("time").and_then(|v| v.as_u64()).unwrap_or(0);
+            let tb = b.get("time").and_then(|v| v.as_u64()).unwrap_or(0);
+            tb.cmp(&ta)
+        });
+        entries.truncate(limit as usize);
+
+        serde_json::to_value(entries).map_err(|e| {
+            ErrorObjectOwned::owned(2, format!("Serialization error: {}", e), None::<()>)
+        })
+    }
+
+    async fn get_committed_transactions(
+        &self,
+        page: u32,
+        page_size: u32,
+    ) -> Result<Value, ErrorObjectOwned> {
+        info!(page = %page, page_size = %page_size, "get_committed_transactions request received");
+
+        let braid = self.braid_arc.read().await;
+        let mut all_entries: Vec<serde_json::Value> = Vec::new();
+
+        for bead in braid.beads.iter().rev() {
+            let bead_hash = bead.block_header.block_hash().to_string();
+            let timestamp = bead.committed_metadata.start_timestamp.to_consensus_u32();
+            for txid in &bead.committed_metadata.transaction_ids.0 {
+                all_entries.push(serde_json::json!({
+                    "txid": txid.to_string(),
+                    "bead_hash": bead_hash,
+                    "timestamp": timestamp,
+                }));
+            }
+        }
+
+        let total = all_entries.len();
+        let start = (page * page_size) as usize;
+        let end = (start + page_size as usize).min(total);
+        let page_entries: Vec<serde_json::Value> = if start < total {
+            all_entries[start..end].to_vec()
+        } else {
+            Vec::new()
+        };
+
+        Ok(serde_json::json!({
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "transactions": page_entries,
+        }))
+    }
+
     async fn bitcoin_proxy(
         &self,
         method: String,
         params: serde_json::Value,
     ) -> Result<serde_json::Value, ErrorObjectOwned> {
         info!(method = %method, "bitcoin_proxy request received");
+
+        const ALLOWED: &[&str] = &[
+            "getrawmempool",
+            "getrawtransaction",
+            "getblockcount",
+            "getmempoolentry",
+            "getblocktemplate",
+            "getblockchaininfo",
+            "getblock",
+        ];
+        if !ALLOWED.contains(&method.as_str()) {
+            return Err(ErrorObjectOwned::owned(
+                7,
+                format!("bitcoinproxy: method '{}' is not permitted", method),
+                None::<()>,
+            ));
+        }
 
         let rpc_config = self.bitcoin_rpc_config.as_ref().ok_or_else(|| {
             ErrorObjectOwned::owned(
