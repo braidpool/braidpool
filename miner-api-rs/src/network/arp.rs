@@ -17,7 +17,7 @@ pub fn arp_hosts() -> Vec<Ipv4Addr> {
     let output = match Command::new(cmd).arg("-a").output() {
         Ok(o) => o,
         Err(e) => {
-            warn!("{cmd} -a failed: {e}");
+            warn!(cmd = %cmd, error = %e, "failed to run arp -a");
             return Vec::new();
         }
     };
