@@ -9,10 +9,10 @@ async fn main() -> anyhow::Result<()> {
             let miners = scanner::scan_lan().await;
             print_miners(&miners);
         }
-        Some(target) if target.contains('/') => match scanner::scan_subnet(target).await {
-            Ok(miners) => print_miners(&miners),
-            Err(e) => println!("Error: {e}"),
-        },
+        Some(target) if target.contains('/') => {
+            let miners = scanner::scan_subnet(target).await?;
+            print_miners(&miners);
+        }
         Some(target) => {
             let ip =
                 IpAddr::from_str(target).map_err(|_| anyhow::anyhow!("invalid IP: {target}"))?;
