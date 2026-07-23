@@ -137,9 +137,7 @@ enum Commands {
 
     /// Look up which of the 6 confirmation stages a given txid is currently in
     #[command(name = "gettransactionstatus")]
-    GetTransactionStatus {
-        txid: String,
-    },
+    GetTransactionStatus { txid: String },
 
     /// List txids committed across all beads, paginated (newest-first)
     #[command(name = "getcommittedtransactions")]
