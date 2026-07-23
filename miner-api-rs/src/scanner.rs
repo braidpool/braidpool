@@ -7,7 +7,7 @@ use tracing::{debug, info, warn};
 pub async fn scan_lan() -> Vec<Box<dyn asic_rs::core::traits::miner::Miner>> {
     let hosts = arp_hosts();
     if hosts.is_empty() {
-        warn!("ARP table is empty — try scan_subnet(\"192.168.x.x/24\") instead.");
+        warn!("ARP table is empty");
         return Vec::new();
     }
     info!("{} ARP host(s) — probing", hosts.len());
