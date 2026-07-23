@@ -32,7 +32,7 @@ pub async fn scan_ips(
                 (ip, f.get_miner(ip).await)
             }
         })
-        .buffer_unordered(64)
+        .buffer_unordered(256)
         .filter_map(|(ip, r)| async move {
             match r {
                 Ok(Some(m)) => Some(m),
