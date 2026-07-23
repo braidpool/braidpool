@@ -1,4 +1,3 @@
-use bitcoin::Txid;
 use crate::bead::Bead;
 use crate::config::PoolNetwork;
 use crate::error::BraidError;
