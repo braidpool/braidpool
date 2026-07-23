@@ -48,10 +48,9 @@ fn parse_arp_output(text: &str) -> Vec<Ipv4Addr> {
             let candidate = token.trim_matches(|c| c == '(' || c == ')');
             if let Ok(ip) = Ipv4Addr::from_str(candidate) {
                 if !ip.is_broadcast()
-                    && !ip.is_multicast()       // 224.0.0.0/4
-                    && !ip.is_loopback()        // 127.x.x.x
-                    && !ip.is_unspecified()
-                // 0.0.0.0
+                    && !ip.is_multicast() // 224.0.0.0/4
+                    && !ip.is_loopback() // 127.x.x.x
+                    && !ip.is_unspecified() // 0.0.0.0
                 {
                     debug!(ip = %ip, "ARP host");
                     addrs.push(ip);
