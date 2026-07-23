@@ -1,3 +1,4 @@
+use bitcoin::Txid;
 use crate::bead::Bead;
 use crate::error::BraidError;
 use crate::utils::BeadHash;
@@ -35,6 +36,8 @@ pub struct Braid {
     pub orphan_beads: Vec<Bead>,
     pub genesis_beads: HashSet<usize>,
     pub bead_index_mapping: HashMap<BeadHash, usize>,
+    /// Reverse index: txid → bead_hash for all committed transaction IDs.
+    pub txid_to_bead: HashMap<Txid, BeadHash>,
 }
 
 impl Braid {
@@ -43,11 +46,16 @@ impl Braid {
         let mut beads = Vec::new();
         let mut bead_indices = HashSet::new();
         let mut bead_index_mapping = HashMap::new();
+        let mut txid_to_bead: HashMap<Txid, BeadHash> = HashMap::new();
 
         for (index, bead) in genesis_beads.into_iter().enumerate() {
             beads.push(bead.clone());
             bead_indices.insert(index);
-            bead_index_mapping.insert(bead.block_header.block_hash(), index);
+            let bead_hash = bead.block_header.block_hash();
+            bead_index_mapping.insert(bead_hash, index);
+            for txid in &bead.committed_metadata.transaction_ids.0 {
+                txid_to_bead.insert(*txid, bead_hash);
+            }
         }
         let mut genesis_cohort: Vec<Cohort> = Vec::new();
         if bead_indices.len() != 0 {
@@ -61,6 +69,7 @@ impl Braid {
             orphan_beads: Vec::new(),
             genesis_beads: bead_indices,
             bead_index_mapping,
+            txid_to_bead,
         }
     }
     pub fn reset(&mut self) {
@@ -71,6 +80,7 @@ impl Braid {
         self.orphan_beads.clear();
         self.genesis_beads.clear();
         self.bead_index_mapping.clear();
+        self.txid_to_bead.clear();
     }
 }
 #[allow(unused)]
@@ -122,6 +132,9 @@ impl Braid {
         self.beads.push(bead.clone());
         let new_bead_index = self.beads.len() - 1;
         self.bead_index_mapping.insert(bead_hash, new_bead_index);
+        for txid in &bead.committed_metadata.transaction_ids.0 {
+            self.txid_to_bead.insert(*txid, bead_hash);
+        }
 
         // Find earliest parent of bead in cohorts and nuke all cohorts after that
         let mut found_parent_indices = HashSet::new();
