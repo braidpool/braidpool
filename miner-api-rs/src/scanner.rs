@@ -5,7 +5,13 @@ use std::net::IpAddr;
 use tracing::{debug, info, warn};
 
 pub async fn scan_lan() -> Vec<Box<dyn asic_rs::core::traits::miner::Miner>> {
-    let hosts = arp_hosts();
+    let hosts = match tokio::task::spawn_blocking(arp_hosts).await {
+        Ok(hosts) => hosts,
+        Err(e) => {
+            warn!(error = %e, "failed to read ARP table");
+            return Vec::new();
+        }
+    };
     if hosts.is_empty() {
         warn!("ARP table is empty");
         return Vec::new();
