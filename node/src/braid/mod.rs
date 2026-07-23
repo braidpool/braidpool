@@ -1,7 +1,7 @@
-use bitcoin::Txid;
 use crate::bead::Bead;
 use crate::error::BraidError;
 use crate::utils::BeadHash;
+use bitcoin::Txid;
 use num::BigUint;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;

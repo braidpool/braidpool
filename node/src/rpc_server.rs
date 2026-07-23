@@ -1139,16 +1139,11 @@ impl RpcServer for RpcServerImpl {
             )
         })?;
 
-        let raw =
-            call_bitcoin_rpc_direct(rpc_config, "getrawmempool", &serde_json::json!([true]))
-                .await
-                .map_err(|e| {
-                    ErrorObjectOwned::owned(
-                        6,
-                        format!("Bitcoin RPC error: {}", e),
-                        None::<()>,
-                    )
-                })?;
+        let raw = call_bitcoin_rpc_direct(rpc_config, "getrawmempool", &serde_json::json!([true]))
+            .await
+            .map_err(|e| {
+                ErrorObjectOwned::owned(6, format!("Bitcoin RPC error: {}", e), None::<()>)
+            })?;
 
         let obj = raw.as_object().ok_or_else(|| {
             ErrorObjectOwned::owned(2, "Unexpected getrawmempool response", None::<()>)
