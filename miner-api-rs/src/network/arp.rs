@@ -50,7 +50,8 @@ fn parse_arp_output(text: &str) -> Vec<Ipv4Addr> {
                 if !ip.is_broadcast()
                     && !ip.is_multicast() // 224.0.0.0/4
                     && !ip.is_loopback() // 127.x.x.x
-                    && !ip.is_unspecified() // 0.0.0.0
+                    && !ip.is_unspecified()
+                // 0.0.0.0
                 {
                     debug!(ip = %ip, "ARP host");
                     addrs.push(ip);
