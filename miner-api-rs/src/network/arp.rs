@@ -17,10 +17,19 @@ pub fn arp_hosts() -> Vec<Ipv4Addr> {
     let output = match Command::new(cmd).arg("-a").output() {
         Ok(o) => o,
         Err(e) => {
-            warn!("arp -a failed: {e}");
+            warn!("{cmd} -a failed: {e}");
             return Vec::new();
         }
     };
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        warn!(
+            "{cmd} -a exited with {status}; stderr: {stderr}",
+            status = output.status,
+        );
+        // Some arp implementations exit non-zero even when they print valid
+        // entries, so fall through and attempt to parse stdout anyway.
+    }
     parse_arp_output(&String::from_utf8_lossy(&output.stdout))
 }
 

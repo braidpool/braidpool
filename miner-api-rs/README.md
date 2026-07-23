@@ -1,4 +1,4 @@
 Run:
 ```bash
- cargo run -p miner-asicrs --bin diagnose
+ cargo run -p miner-api-rs --bin diagnose
 ```

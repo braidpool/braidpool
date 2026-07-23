@@ -1,14 +1,14 @@
-use miner_asicrs::scanner;
+use miner_api_rs::scanner;
 use std::{net::IpAddr, str::FromStr};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let arg = std::env::args().nth(1);
     match arg.as_deref() {
-        None => match scanner::scan_lan().await {
-            Ok(miners) => print_miners(&miners),
-            Err(e) => println!("Error: {e}"),
-        },
+        None => {
+            let miners = scanner::scan_lan().await;
+            print_miners(&miners);
+        }
         Some(target) if target.contains('/') => match scanner::scan_subnet(target).await {
             Ok(miners) => print_miners(&miners),
             Err(e) => println!("Error: {e}"),
@@ -29,7 +29,7 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn print_miners(miners: &[Box<dyn miner_asicrs::asic_rs::core::traits::miner::Miner>]) {
+fn print_miners(miners: &[Box<dyn miner_api_rs::asic_rs::core::traits::miner::Miner>]) {
     if miners.is_empty() {
         println!("  no miners found");
     } else {
