@@ -20,10 +20,7 @@ function App() {
       <BrowserRouter>
         <main className="flex-grow flex flex-col">
           <Routes>
-            <Route
-              path="/"
-              element={<Navigate to="/dashboard" replace />}
-            />
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route
               path="/:page"
               element={

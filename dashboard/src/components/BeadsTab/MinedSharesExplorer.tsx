@@ -11,10 +11,9 @@ import GraphVisualization from '../BraidPoolDAG/BraidPoolDAG';
 import { PoolDominance } from './PoolDominance/PoolDominance';
 
 export default function MinedSharesExplorer() {
-  const [expandedBeads, setExpandedBeads] = useState<Record<BeadId, boolean>>({
-    bead1: true,
-    bead2: false,
-  });
+  const [expandedBeads, setExpandedBeads] = useState<Record<BeadId, boolean>>(
+    {}
+  );
   const [activeTab, setActiveTab] = useState('beads');
   const [liveBeads, setLiveBeads] = useState<Bead[]>([]);
   const [activeBead, setActiveBead] = useState<BeadId | null>(null);
@@ -64,30 +63,49 @@ export default function MinedSharesExplorer() {
             transactions,
           } = processed;
 
+          type RawTransaction = {
+            id?: string;
+            hash?: string;
+            txid?: string;
+            timestamp?: string;
+            count?: number;
+            blockId?: string;
+            fee?: number | string;
+            size?: number | string;
+            feePaid?: string;
+            feeRate?: number | string;
+            inputs?: number | string;
+            outputs?: number | string;
+          };
+
           const validatedTransactions: Transaction[] = (transactions || []).map(
-            (tx: any, index: number) => ({
+            (tx: RawTransaction, index: number) => ({
               id: tx.id || `${blockHash}_tx_${index}`,
               hash: tx.hash || tx.txid || '',
               timestamp: tx.timestamp || timestamp,
               count: tx.count || 0,
               blockId: tx.blockId || height.toString(),
               fee:
-                typeof tx.fee === 'number' ? tx.fee : parseFloat(tx.fee) || 0,
+                typeof tx.fee === 'number'
+                  ? tx.fee
+                  : parseFloat(tx.fee ?? '') || 0,
               size:
-                typeof tx.size === 'number' ? tx.size : parseInt(tx.size) || 0,
+                typeof tx.size === 'number'
+                  ? tx.size
+                  : parseInt(tx.size ?? '') || 0,
               feePaid: tx.feePaid || '0',
               feeRate:
                 typeof tx.feeRate === 'number'
                   ? tx.feeRate
-                  : parseInt(tx.feeRate) || 0,
+                  : parseInt(tx.feeRate ?? '') || 0,
               inputs:
                 typeof tx.inputs === 'number'
                   ? tx.inputs
-                  : parseInt(tx.inputs) || 0,
+                  : parseInt(tx.inputs ?? '') || 0,
               outputs:
                 typeof tx.outputs === 'number'
                   ? tx.outputs
-                  : parseInt(tx.outputs) || 0,
+                  : parseInt(tx.outputs ?? '') || 0,
             })
           );
 
@@ -131,7 +149,6 @@ export default function MinedSharesExplorer() {
 
     ws.onclose = () => {
       if (!isMounted) return;
-      console.log('WebSocket disconnected');
       setWsConnected(false);
     };
 

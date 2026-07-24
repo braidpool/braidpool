@@ -210,9 +210,8 @@ const MempoolLatencyStats = () => {
         <div className="shadow p-6 relative">
           <div className="absolute right-3 top-3 z-10">
             <ActionIconButton
-              ariaLabel="Download chart"
-              onClick={handleDownloadFeeDist}
               ariaLabel="Download Fee Distribution"
+              onClick={handleDownloadFeeDist}
               icon={
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -258,9 +257,8 @@ const MempoolLatencyStats = () => {
       <section className="shadow p-6 relative">
         <div className="absolute right-3 top-0 z-10">
           <ActionIconButton
-            ariaLabel="Download chart"
-            onClick={handleDownloadBlockFees}
             ariaLabel="Download Block Fees"
+            onClick={handleDownloadBlockFees}
             icon={
               <svg
                 xmlns="http://www.w3.org/2000/svg"

@@ -6,7 +6,7 @@ export function layoutNodes(
   allNodes: GraphNode[],
   hwPath: string[],
   beadWork: Record<string, number> = {},
-  svgHeight: number,
+  svgHeight: number = 600,
   previousCohortTips: Record<string, Position> = {},
   margin: { top: number; right: number; bottom: number; left: number } = {
     top: 0,

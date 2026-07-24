@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import * as d3 from 'd3';
 import { Loader } from 'lucide-react';
-import { GraphData, GraphNode, NodeIdMapping, Position } from './Types';
+import { GraphData, GraphNode, NodeIdMapping } from './Types';
 import colors from '../../theme/colors';
 import {
   layoutNodes,
@@ -313,9 +313,6 @@ const GraphVisualization: React.FC = () => {
     });
   };
 
-  // have not used it YET.. might come in handy in the future
-  const [_svgHeight, setSvgHeight] = useState(height);
-
   useEffect(() => {
     if (!svgRef.current || !graphData) return;
     const filteredCohorts = graphData.cohorts.slice(-selectedCohorts);
@@ -364,16 +361,8 @@ const GraphVisualization: React.FC = () => {
 
     const hwPath = graphData.highest_work_path;
     const cohorts = graphData.cohorts;
-    const positions = layoutNodes(allNodes, hwPath);
+    const positions = layoutNodes(allNodes, hwPath, {}, height);
     const hwPathSet = new Set(hwPath);
-
-    // Calculate required height based on node positions
-    const allY = Object.values(positions).map((pos) => pos.y);
-    // const minY = Math.min(...allY);
-    // const maxY = Math.max(...allY);
-    const padding = PADDING; // Additional padding
-    const dynamicHeight = height / 2 + margin.top + margin.bottom + padding;
-    setSvgHeight(dynamicHeight);
 
     // making old nodes invisible
     const visibleNodes = allNodes.filter((node) =>

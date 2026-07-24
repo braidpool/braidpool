@@ -36,9 +36,8 @@ const BandwidthPanel: React.FC<BandwidthPanelProps> = ({
     <div className="bg-paper border border-border rounded-xl shadow-md p-4 relative">
       <div className="absolute right-3 top-3 z-10">
         <ActionIconButton
-          ariaLabel="Download chart"
-          onClick={handleDownload}
           ariaLabel="Download Bandwidth Chart"
+          onClick={handleDownload}
           icon={
             <svg
               xmlns="http://www.w3.org/2000/svg"
