@@ -965,19 +965,44 @@ impl RpcServer for RpcServerImpl {
 
         let braid_data = self.braid_arc.read().await;
 
-        let bead = braid_data
-            .beads
-            .iter()
-            .find(|bead| bead.block_header.block_hash() == hash)
+        let bead_index = *braid_data
+            .bead_index_mapping
+            .get(&hash)
             .ok_or_else(|| ErrorObjectOwned::owned(
                 3,
                 format!("Bead not found. No bead with hash '{}' exists in the braid. Use 'gettips' or 'getbraidinfo' to find available bead hashes.", bead_hash),
                 None::<()>
             ))?;
 
+        // Cumulative work = the bead's own work plus the work of every one of its
+        // ancestors (its full "past set" in the DAG), mirroring how `total_work` in
+        // `getbraidinfo` sums work across beads rather than reporting a single PoW value.
+        let mut parents_map: HashMap<usize, HashSet<usize>> = HashMap::new();
+        for (index, bead) in braid_data.beads.iter().enumerate() {
+            let parent_indices: HashSet<usize> = bead
+                .committed_metadata
+                .parents
+                .iter()
+                .filter_map(|p_hash| braid_data.bead_index_mapping.get(p_hash).copied())
+                .collect();
+            parents_map.insert(index, parent_indices);
+        }
+
+        let mut ancestors: HashMap<usize, HashSet<usize>> = HashMap::new();
+        consensus_functions::get_all_ancestors(&braid_data, hash, &mut ancestors, &parents_map);
+
+        let bead_own_work = braid_data.beads[bead_index].block_header.work();
+        let cumulative_work = ancestors
+            .get(&bead_index)
+            .into_iter()
+            .flatten()
+            .fold(bead_own_work, |acc, &ancestor_idx| {
+                acc + braid_data.beads[ancestor_idx].block_header.work()
+            });
+
         let bead_work = BeadWork {
             bead_hash,
-            work: bead.block_header.work().to_string(),
+            work: cumulative_work.to_string(),
         };
 
         serde_json::to_value(&bead_work)
@@ -1884,10 +1909,20 @@ pub async fn test_get_node_info_rpc() {
 
 #[tokio::test]
 pub async fn test_get_work_by_bead_rpc() {
+    // Build a 3-bead chain: bead1 (genesis) -> bead2 -> bead3, so the RPC's
+    // cumulative-work computation (bead + all ancestors) can be distinguished
+    // from a single bead's own proof-of-work.
     let test_bead1 = create_test_bead(1, None);
+    let test_bead2 = create_test_bead(2, Some(test_bead1.block_header.block_hash()));
+    let test_bead3 = create_test_bead(3, Some(test_bead2.block_header.block_hash()));
     let genesis_beads = vec![test_bead1.clone()];
 
     let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+    {
+        let mut braid_guard = braid.write().await;
+        braid_guard.extend(&test_bead2);
+        braid_guard.extend(&test_bead3);
+    }
 
     let (proxy_tx, _) = mpsc::unbounded_channel();
 
@@ -1906,18 +1941,42 @@ pub async fn test_get_work_by_bead_rpc() {
     let target_uri = format!("http://{}", server_addr);
     let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
 
-    let bead_hash = test_bead1.block_header.block_hash().to_string();
-    let mut params = ArrayParams::new();
-    params.insert(bead_hash.clone()).unwrap();
+    // Genesis bead has no ancestors, so cumulative work equals its own work.
+    let bead1_hash = test_bead1.block_header.block_hash().to_string();
+    let mut params1 = ArrayParams::new();
+    params1.insert(bead1_hash.clone()).unwrap();
 
-    let response: Result<Value, jsonrpsee::core::ClientError> =
-        client.request("getworkbybead", params).await;
+    let response1: Result<Value, jsonrpsee::core::ClientError> =
+        client.request("getworkbybead", params1).await;
 
-    assert!(response.is_ok());
-    let bead_work: BeadWork = serde_json::from_value(response.unwrap()).unwrap();
+    assert!(response1.is_ok());
+    let bead1_work: BeadWork = serde_json::from_value(response1.unwrap()).unwrap();
 
-    assert_eq!(bead_work.bead_hash, bead_hash);
-    assert_eq!(bead_work.work, test_bead1.block_header.work().to_string());
+    assert_eq!(bead1_work.bead_hash, bead1_hash);
+    assert_eq!(bead1_work.work, test_bead1.block_header.work().to_string());
+
+    // Tip bead's cumulative work must be the sum of its own work plus every
+    // ancestor's work, not just its own proof-of-work.
+    let bead3_hash = test_bead3.block_header.block_hash().to_string();
+    let mut params3 = ArrayParams::new();
+    params3.insert(bead3_hash.clone()).unwrap();
+
+    let response3: Result<Value, jsonrpsee::core::ClientError> =
+        client.request("getworkbybead", params3).await;
+
+    assert!(response3.is_ok());
+    let bead3_work: BeadWork = serde_json::from_value(response3.unwrap()).unwrap();
+
+    let expected_cumulative_work = (test_bead1.block_header.work()
+        + test_bead2.block_header.work()
+        + test_bead3.block_header.work())
+    .to_string();
+
+    assert_eq!(bead3_work.bead_hash, bead3_hash);
+    assert_eq!(bead3_work.work, expected_cumulative_work);
+    // Sanity check: cumulative work must differ from the bead's own PoW alone,
+    // otherwise this test wouldn't catch a regression to per-bead PoW.
+    assert_ne!(bead3_work.work, test_bead3.block_header.work().to_string());
 
     // Unknown bead hash should return an error
     let mut missing_params = ArrayParams::new();
@@ -1927,6 +1986,68 @@ pub async fn test_get_work_by_bead_rpc() {
     let missing_response: Result<Value, jsonrpsee::core::ClientError> =
         client.request("getworkbybead", missing_params).await;
     assert!(missing_response.is_err());
+}
+
+#[tokio::test]
+pub async fn test_get_work_by_bead_diamond_dag_rpc() {
+    // Diamond DAG: bead1 is the shared ancestor of bead2 and bead3, which are
+    // both parents of bead4. Cumulative work for bead4 must count bead1's work
+    // exactly once, not twice (no double-counting a shared ancestor reached via
+    // two different paths).
+    let test_bead1 = create_test_bead(1, None);
+    let test_bead2 = create_test_bead(2, Some(test_bead1.block_header.block_hash()));
+    let mut test_bead3 = create_test_bead(3, Some(test_bead1.block_header.block_hash()));
+    test_bead3.block_header.nonce = 30;
+    let mut test_bead4 = create_test_bead(4, Some(test_bead2.block_header.block_hash()));
+    test_bead4
+        .committed_metadata
+        .parents
+        .insert(test_bead3.block_header.block_hash());
+
+    let genesis_beads = vec![test_bead1.clone()];
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+    {
+        let mut braid_guard = braid.write().await;
+        braid_guard.extend(&test_bead2);
+        braid_guard.extend(&test_bead3);
+        braid_guard.extend(&test_bead4);
+    }
+
+    let (proxy_tx, _) = mpsc::unbounded_channel();
+
+    let (server_addr, _) = run_rpc_server(
+        Arc::clone(&braid),
+        "127.0.0.1:0",
+        Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
+        Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
+        Arc::new(Mutex::new(stratum::BlockTemplate::default())),
+        proxy_tx,
+        None,
+        test_db_tx(),
+    )
+    .await
+    .unwrap();
+    let target_uri = format!("http://{}", server_addr);
+    let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
+
+    let bead4_hash = test_bead4.block_header.block_hash().to_string();
+    let mut params = ArrayParams::new();
+    params.insert(bead4_hash.clone()).unwrap();
+
+    let response: Result<Value, jsonrpsee::core::ClientError> =
+        client.request("getworkbybead", params).await;
+
+    assert!(response.is_ok());
+    let bead4_work: BeadWork = serde_json::from_value(response.unwrap()).unwrap();
+
+    let expected_cumulative_work = (test_bead1.block_header.work()
+        + test_bead2.block_header.work()
+        + test_bead3.block_header.work()
+        + test_bead4.block_header.work())
+    .to_string();
+
+    assert_eq!(bead4_work.bead_hash, bead4_hash);
+    assert_eq!(bead4_work.work, expected_cumulative_work);
 }
 
 #[tokio::test]
