@@ -958,7 +958,6 @@ impl DownstreamClient {
 
         match pow_result {
             Ok(block_hash) => {
-                self.share_counters.accepted += 1;
                 debug!(
                     connection_id = %connection_id_hex,
                     target = %target,
@@ -1019,6 +1018,7 @@ impl DownstreamClient {
             Ok(v) => v,
             Err(e) => {
                 error!(connection_id = %connection_id_hex, error = %e, extranonce2 = %extranonce2, "Failed to parse extranonce2");
+                self.share_counters.invalid += 1;
                 return Err(StratumErrors::InvalidMethodParams {
                     method: "mining.submit".to_string(),
                 });
@@ -1034,6 +1034,8 @@ impl DownstreamClient {
                 });
             }
         };
+        // All miner-input validation passed — the share is accepted.
+        self.share_counters.accepted += 1;
         match swarm_handler
             .lock()
             .await
@@ -4831,7 +4833,7 @@ mod test {
         assert_eq!(client3.extranonce1.len(), UPSTREAM_EXTRANONCE1_SIZE);
     }
 
-    // ── ShareCounters tests─────────
+    // ShareCounters tests
 
     async fn make_job_map_with_entry() -> (Arc<Mutex<MiningJobMap>>, u64, Arc<Mutex<SwarmHandler>>)
     {
