@@ -742,7 +742,7 @@ pub async fn fetch_bead_by_bead_hash(
             }
         };
     for parent_beads in parent_timestamp_rows {
-        let parent_timestamp = parent_beads.get::<i32, _>("timestamp");
+        let parent_timestamp = parent_beads.get::<u32, _>("timestamp");
         let parent_bead_id = parent_beads.get::<i64, _>("parent");
         //Fetching parent_bead from DB
         let parent_bead_hash_raw_bytes = match sqlx::query("SELECT  hash FROM Bead WHERE id = ?")
@@ -768,7 +768,7 @@ pub async fn fetch_bead_by_bead_hash(
             }
         };
         //Extending parent bead timestamp
-        let parent_ts = MedianTimePast::from_u32(parent_timestamp as u32).map_err(|e| {
+        let parent_ts = MedianTimePast::from_u32(parent_timestamp).map_err(|e| {
             DBErrors::TupleAttributeParsingError {
                 error: format!("Invalid parent timestamp value {}: {}", parent_timestamp, e),
                 attribute: "parent_bead_timestamps".to_string(),
