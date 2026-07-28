@@ -38,7 +38,7 @@ pub fn test_extend_functionality() {
             test_bead_0.block_header.block_hash(),
             0,
         )]),
-            txid_to_bead: HashMap::new(),
+        txid_to_bead: HashMap::new(),
     };
     assert_eq!(
         test_braid.cohorts,
@@ -252,7 +252,7 @@ pub fn test_orphan_beads_functinality() {
             test_bead_0.block_header.block_hash(),
             0,
         )]),
-            txid_to_bead: HashMap::new(),
+        txid_to_bead: HashMap::new(),
     };
     assert_eq!(
         test_braid.cohorts,
@@ -334,7 +334,7 @@ pub fn test_genesis1() {
             (test_bead_2.block_header.block_hash(), 2),
             (test_bead_3.block_header.block_hash(), 3),
         ]),
-            txid_to_bead: HashMap::new(),
+        txid_to_bead: HashMap::new(),
     };
 
     //mapping of the indices with set of indices representing its parents
@@ -385,7 +385,7 @@ pub fn test_genesis2() {
             (test_bead_2.block_header.block_hash(), 2),
             (test_bead_3.block_header.block_hash(), 3),
         ]),
-            txid_to_bead: HashMap::new(),
+        txid_to_bead: HashMap::new(),
     };
     //mapping of the indices with set of indices representing its parents
     //where the key represents the ith indexed bead from self.beads which contains all the beads
@@ -439,7 +439,7 @@ pub fn test_genesis3() {
             (test_bead_3.block_header.block_hash(), 3),
             (test_bead_4.block_header.block_hash(), 4),
         ]),
-            txid_to_bead: HashMap::new(),
+        txid_to_bead: HashMap::new(),
     };
     //mapping of the indices with set of indices representing its parents
     //where the key represents the ith indexed bead from self.beads which contains all the beads
@@ -527,7 +527,7 @@ pub fn test_tips1() {
             (test_bead_2.block_header.block_hash(), 2),
             (test_bead_3.block_header.block_hash(), 3),
         ]),
-            txid_to_bead: HashMap::new(),
+        txid_to_bead: HashMap::new(),
     };
 
     //mapping of the indices with set of indices representing its parents
@@ -584,7 +584,7 @@ pub fn test_tips2() {
             (test_bead_2.block_header.block_hash(), 2),
             (test_bead_3.block_header.block_hash(), 3),
         ]),
-            txid_to_bead: HashMap::new(),
+        txid_to_bead: HashMap::new(),
     };
 
     //mapping of the indices with set of indices representing its parents
@@ -671,7 +671,7 @@ pub fn test_tips3() {
             (test_bead_4.block_header.block_hash(), 4),
             (test_bead_5.block_header.block_hash(), 5),
         ]),
-            txid_to_bead: HashMap::new(),
+        txid_to_bead: HashMap::new(),
     };
     //mapping of the indices with set of indices representing its parents
     //where the key represents the ith indexed bead from self.beads which contains all the beads
@@ -760,7 +760,7 @@ pub fn test_reverse() {
             (test_bead_4.block_header.block_hash(), 4),
             (test_bead_5.block_header.block_hash(), 5),
         ]),
-            txid_to_bead: HashMap::new(),
+        txid_to_bead: HashMap::new(),
     };
     //mapping of the indices with set of indices representing its parents
     //where the key represents the ith indexed bead from self.beads which contains all the beads
@@ -869,7 +869,7 @@ pub fn test_cohorts_parents_1() {
             (test_bead_2.block_header.block_hash(), 2),
             (test_bead_3.block_header.block_hash(), 3),
         ]),
-            txid_to_bead: HashMap::new(),
+        txid_to_bead: HashMap::new(),
     };
 
     //mapping of the indices with set of indices representing its parents
@@ -1014,7 +1014,7 @@ pub fn test_highest_work_path_1() {
             (test_bead_2.block_header.block_hash(), 2),
             (test_bead_3.block_header.block_hash(), 3),
         ]),
-            txid_to_bead: HashMap::new(),
+        txid_to_bead: HashMap::new(),
     };
 
     //mapping of the indices with set of indices representing its parents
@@ -1083,7 +1083,7 @@ pub fn test_diamond_path_highest_work() {
             (test_bead_3.block_header.block_hash(), 3),
             (test_bead_4.block_header.block_hash(), 4),
         ]),
-            txid_to_bead: HashMap::new(),
+        txid_to_bead: HashMap::new(),
     };
     //mapping of the indices with set of indices representing its parents
     //where the key represents the ith indexed bead from self.beads which contains all the beads
@@ -1433,7 +1433,7 @@ fn test_extend_function() {
             orphan_beads: Vec::new(),
             genesis_beads: genesis_set,
             bead_index_mapping,
-                    txid_to_bead: HashMap::new(),
+            txid_to_bead: HashMap::new(),
         };
 
         // Extend braid with remaining beads in order of index
