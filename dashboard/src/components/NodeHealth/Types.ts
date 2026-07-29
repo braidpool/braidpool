@@ -1,3 +1,4 @@
+import { TIME_RANGES } from './Constants';
 export interface BlockchainInfo {
   chain: string;
   blocks: number;
@@ -87,3 +88,4 @@ export interface BandwidthHistoryPoint {
 export interface BandwidthPanelProps {
   bandwidthHistory: BandwidthHistoryPoint[];
 }
+export type TimeRangeLabel = (typeof TIME_RANGES)[number]['label'];
