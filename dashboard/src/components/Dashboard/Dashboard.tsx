@@ -77,15 +77,7 @@ const Dashboard = () => {
           </div>
         );
       case Page.NODE_HEALTH:
-        return (
-          <div className="p-2">
-            <Card title="Node Health Dashboard">
-              <div>
-                <NodeHealth />
-              </div>
-            </Card>
-          </div>
-        );
+        return <NodeHealth />;
 
       default:
         return (

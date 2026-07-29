@@ -1,42 +1,61 @@
+import { Share2 } from 'lucide-react';
 import { NetworkPanelProps } from './Types';
 
 export default function NetworkPanel({ network }: NetworkPanelProps) {
+  const cards = [
+    {
+      label: 'Network Status:',
+      value: network.networkactive ? 'Active' : 'Inactive',
+      badge: true,
+    },
+    {
+      label: 'Protocol:',
+      value: network.protocolversion,
+    },
+    {
+      label: 'Version:',
+      value: network.subversion,
+    },
+    {
+      label: 'Relay Fee:',
+      value: `${network.relayfee} BTC`,
+    },
+  ];
+
   return (
-    <div className="grid grid-cols-1 gap-6 px-4 w-full">
-      <div className="bg-[#1e1e1e] border border-gray-700 rounded-xl backdrop-blur-sm p-6">
-        <h2 className="text-white text-lg font-semibold mb-4">
-          Network Status
-        </h2>
-        <div className="grid sm:grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <p className="text-sm font-medium text-gray-300">Network Active</p>
-            <span
-              className={`inline-block mt-1 px-3 py-1 text-sm font-medium rounded-full ${
-                network.networkactive
-                  ? 'bg-green-600 text-white'
-                  : 'bg-red-600 text-white'
-              }`}
-            >
-              {network.networkactive ? 'Active' : 'Inactive'}
-            </span>
+    <div className="rounded-lg border border-gray-700 bg-[#1e1e1e] p-6">
+      <div className="flex items-center gap-2 mb-5">
+        <Share2 className="w-4 h-4 text-blue-400" />
+        <h2 className="text-lg font-semibold text-white">Network Status</h2>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 ">
+        {cards.map((item) => (
+          <div
+            key={item.label}
+            className="rounded-lg border border-gray-700 p-4"
+          >
+            <div className="flex items-baseline gap-2">
+              <span className="text-gray-500 text-sm">{item.label}</span>
+
+              {item.badge ? (
+                <span
+                  className={`px-2 py-1 rounded-sm text-sm font-semibold ${
+                    network.networkactive
+                      ? 'bg-green-600 text-white'
+                      : 'bg-red-600 text-white'
+                  }`}
+                >
+                  {item.value}
+                </span>
+              ) : (
+                <span className="font-mono text-sm font-semibold text-white">
+                  {item.value}
+                </span>
+              )}
+            </div>
           </div>
-          <div>
-            <p className="text-sm font-medium text-gray-300">Version</p>
-            <p className="font-mono text-white mt-1">{network.subversion}</p>
-          </div>
-          <div>
-            <p className="text-sm font-medium text-gray-300">
-              Protocol Version
-            </p>
-            <p className="font-mono text-white mt-1">
-              {network.protocolversion}
-            </p>
-          </div>
-          <div>
-            <p className="text-sm font-medium text-gray-300">Relay Fee</p>
-            <p className="font-mono text-white mt-1">{network.relayfee} BTC</p>
-          </div>
-        </div>
+        ))}
       </div>
     </div>
   );
