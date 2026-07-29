@@ -2,7 +2,7 @@
 
 interface ImportMetaEnv {
   readonly VITE_APP_TITLE: string;
-  readonly VITE_NODE_RPC_WS?: string;
+  // add more environment variables as needed
 }
 
 interface ImportMeta {

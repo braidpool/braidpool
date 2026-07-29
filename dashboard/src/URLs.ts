@@ -8,9 +8,7 @@ export const WEBSOCKET_URLS = {
   // Main WebSocket for general real-time updates (used in multiple components)
   MAIN_WEBSOCKET: 'ws://localhost:5000',
 
-  NODE_RPC_WS:
-    (import.meta.env.VITE_NODE_RPC_WS as string | undefined) ??
-    'ws://localhost:6682',
+  NODE_RPC_WS: 'ws://localhost:6682',
 
   // WebSocket for block viewer updates (mempool)
   BLOCK_VIEWER_WEBSOCKET: 'http://localhost:8080/api/v1/ws',
