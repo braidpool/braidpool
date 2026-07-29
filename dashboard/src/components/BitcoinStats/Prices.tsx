@@ -25,6 +25,7 @@ import { WEBSOCKET_URLS } from '../../URLs';
 import { MAX_HISTORY_ITEMS } from './Constants';
 import ActionIconButton from '../common/ActionIconButton';
 import { downloadSvgFromContainer } from '../../utils/downloadSvg';
+import { Download } from 'lucide-react';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY'] as const;
 
@@ -427,20 +428,13 @@ const BitcoinPriceTracker: React.FC = () => {
             <p className="font-semibold text-base">
               Bitcoin Price History (Live)
             </p>
-            <ActionIconButton
-              ariaLabel="Download price history"
+            <button
               onClick={handleDownloadPriceHistory}
-              icon={
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path d="M3 14.5A2.5 2.5 0 0 0 5.5 17h9a2.5 2.5 0 0 0 2.5-2.5V11a.75.75 0 0 0-1.5 0v3.5a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1V11a.75.75 0 0 0-1.5 0v3.5Z" />
-                  <path d="M10 2a.75.75 0 0 0-.75.75v8.19L7.53 9.22a.75.75 0 0 0-1.06 1.06l3 3a.75.75 0 0 0 1.06 0l3-3a.75.75 0 1 0-1.06-1.06L10.75 10.94V2.75A.75.75 0 0 0 10 2Z" />
-                </svg>
-              }
-            />
+              className="p-1.5 rounded text-gray-500 hover:text-gray-300 hover:bg-gray-800 transition-colors"
+              aria-label="Download Price chart"
+            >
+              <Download className="w-4 h-4" />
+            </button>
           </div>
           <span className="text-sm text-gray-500 mb-2">
             Live updates in {currency}
