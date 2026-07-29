@@ -75,7 +75,7 @@ const BandwidthPanel: React.FC<BandwidthPanelProps> = ({
             className="p-1.5 rounded text-gray-500 hover:text-gray-300 hover:bg-gray-800 transition-colors"
             aria-label="Download chart"
           >
-            <Download className="w-4.5 h-4.5" />
+            <Download className="w-4 h-4" />
           </button>
         </div>
       </div>
