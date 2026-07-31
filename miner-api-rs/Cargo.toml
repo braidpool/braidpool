@@ -9,7 +9,7 @@ publish = false
 
 [dependencies]
 anyhow = "1.0"
-asic-rs = "0.7"
+asic-rs = "0.6"
 tokio = { workspace = true }
 tracing = { workspace = true }
 futures = { workspace = true }
