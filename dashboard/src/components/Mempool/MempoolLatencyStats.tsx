@@ -21,10 +21,8 @@ import {
 } from './Types';
 import { currencyLabels, currencyColors } from './Constants';
 import { WEBSOCKET_URLS } from '@/URLs';
-import { Loader } from 'lucide-react';
-import ActionIconButton from '../common/ActionIconButton';
+import { Loader, Download } from 'lucide-react';
 import { downloadSvgFromContainer } from '../../utils/downloadSvg';
-import { Download } from 'lucide-react';
 
 const MempoolLatencyStats = () => {
   const wsRef = useRef<WebSocket | null>(null);
