@@ -570,6 +570,7 @@ impl DownstreamClient {
                 "Miner {} tried to submit without authorization",
                 worker_name
             );
+            self.share_counters.invalid += 1;
             return Err(StratumErrors::InvalidMethodParams {
                 method: "mining.submit".to_string(),
             });
@@ -5025,8 +5026,7 @@ mod test {
         let (map, job_id, sh_arc) = make_job_map_with_entry().await;
         let mut client = DownstreamClient::new(PoolNetwork::Cpunet);
         client.authorized = true;
-        // Set extranonce1 to match the helper's coinbase (all zeros — coinbase1
-        // in the helper uses placeholder bytes; we just need a consistent value)
+        // Must match the extranonce1 embedded in the coinbase built by make_job_map_with_entry.
         client.extranonce1 = hex::decode("000000009495ac08").unwrap();
 
         // Replicate handle_submit's coinbase construction to grind a valid nonce
@@ -5080,5 +5080,27 @@ mod test {
         assert_eq!(client.share_counters.accepted, 1);
         assert_eq!(client.share_counters.stale, 0);
         assert_eq!(client.share_counters.invalid, 0);
+    }
+
+    #[tokio::test]
+    async fn test_share_counter_unauthorized_submit_counts_invalid() {
+        // authorized stays false (default) — the auth gate should reject before
+        // params are parsed. Valid-looking params ensure the only failure reason
+        // is the auth check, not a malformed-params path.
+        let mut client = DownstreamClient::default();
+        let map = Arc::new(Mutex::new(MiningJobMap::new()));
+        let (_db, db_tx) = DBHandler::new().await.unwrap();
+        let test_braid = Arc::new(RwLock::new(braid::Braid::new(vec![])));
+        let (sh, _rx) = SwarmHandler::new(Arc::clone(&test_braid), db_tx, DashboardEvents::new());
+        let sh_arc = Arc::new(Mutex::new(sh));
+
+        let params = json!(["worker", "1", "0000000000000000", "68df7e33", "00000001"]);
+        let result = client
+            .handle_submit(&params, map, 1, sh_arc, None, None, None)
+            .await;
+        assert!(result.is_err());
+        assert_eq!(client.share_counters.invalid, 1);
+        assert_eq!(client.share_counters.stale, 0);
+        assert_eq!(client.share_counters.accepted, 0);
     }
 }
