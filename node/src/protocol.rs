@@ -74,6 +74,15 @@ mod tests {
     }
 
     #[test]
+    fn it_returns_err_on_malformed_bytes() {
+        // A peer can send arbitrary bytes. from_bytes must return Err instead of
+        // panicking so that message_received can drop the connection rather than
+        // crash the whole node.
+        assert!(Message::from_bytes(&[0xff, 0xff, 0xff, 0xff]).is_err());
+        assert!(Message::from_bytes(&[]).is_err());
+    }
+
+    #[test]
     fn it_matches_start_message_for_ping() {
         let addr = SocketAddr::from_str("127.0.0.1:25188").unwrap();
         let start_message = PingMessage::start(&addr).unwrap();

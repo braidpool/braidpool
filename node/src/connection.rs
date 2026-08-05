@@ -69,7 +69,10 @@ impl Connection {
     async fn message_received(&mut self, message: &Bytes) -> Result<(), &'static str> {
         use futures::SinkExt;
 
-        let message: Message = protocol::Message::from_bytes(message).unwrap();
+        // A peer can send arbitrary bytes; a failed decode must drop this
+        // connection, not panic the whole node.
+        let message: Message = protocol::Message::from_bytes(message)
+            .map_err(|_| "failed to deserialize peer message")?;
         match message.response_for_received() {
             Ok(result) => {
                 if let Some(response) = result {
