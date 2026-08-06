@@ -9,7 +9,7 @@ export default function NetworkPanel({ network }: NetworkPanelProps) {
       badge: true,
     },
     {
-      label: 'Protocol:',
+      label: 'Protocol Version:',
       value: network.protocolversion,
     },
     {
