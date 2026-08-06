@@ -49,8 +49,19 @@ impl Decodable for UnCommittedMetadata {
     fn consensus_decode<R: BufRead + ?Sized>(r: &mut R) -> Result<Self, Error> {
         let extra_nonce_1 = u64::consensus_decode(r)?;
         let extra_nonce_2 = u64::consensus_decode(r)?;
-        let broadcast_timestamp = Time::from_consensus(u32::consensus_decode(r).unwrap()).unwrap();
-        let signature = Signature::from_str(&String::consensus_decode(r).unwrap()).unwrap();
+        let broadcast_timestamp =
+            Time::from_consensus(u32::consensus_decode(r)?).map_err(|_| {
+                Error::from(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "invalid broadcast_timestamp in UnCommittedMetadata",
+                ))
+            })?;
+        let signature = Signature::from_str(&String::consensus_decode(r)?).map_err(|_| {
+            Error::from(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "invalid signature in UnCommittedMetadata",
+            ))
+        })?;
 
         Ok(UnCommittedMetadata {
             extra_nonce_1,

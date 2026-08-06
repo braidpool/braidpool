@@ -122,10 +122,21 @@ impl Decodable for CommittedMetadata {
         let parents = Vec::<BeadHash>::consensus_decode(r)?;
         let parent_bead_timestamps = TimeVec::consensus_decode(r)?;
         let payout_address = String::consensus_decode(r)?;
-        let start_timestamp = Time::from_consensus(u32::consensus_decode(r).unwrap()).unwrap();
-        let comm_pub_key = PublicKey::from_slice(&Vec::<u8>::consensus_decode(r).unwrap()).unwrap();
-        let min_target = CompactTarget::consensus_decode(r).unwrap();
-        let weak_target = CompactTarget::consensus_decode(r).unwrap();
+        let start_timestamp = Time::from_consensus(u32::consensus_decode(r)?).map_err(|_| {
+            Error::from(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "invalid start_timestamp in CommittedMetadata",
+            ))
+        })?;
+        let comm_pub_key =
+            PublicKey::from_slice(&Vec::<u8>::consensus_decode(r)?).map_err(|_| {
+                Error::from(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "invalid comm_pub_key in CommittedMetadata",
+                ))
+            })?;
+        let min_target = CompactTarget::consensus_decode(r)?;
+        let weak_target = CompactTarget::consensus_decode(r)?;
         let miner_ip = String::consensus_decode(r)?;
         Ok(CommittedMetadata {
             transaction_ids,
