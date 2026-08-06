@@ -216,21 +216,12 @@ const NodeHealth: React.FC = () => {
   return (
     <div className="bg-[#1e1e1e] px-4 sm:px-6 py-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-6 gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-10 gap-2">
         <div>
           <h1 className="text-2xl font-bold text-white tracking-tight">
             Node Health Dashboard
           </h1>
-          <div className="flex items-center gap-1.5 mt-1">
-            <span
-              className={`w-1.5 h-1.5 rounded-full inline-block ${wsConnected ? 'bg-green-500' : 'bg-yellow-500'}`}
-            />
-            <span
-              className={`text-sm ${wsConnected ? 'text-green-500' : 'text-yellow-500'}`}
-            >
-              {wsConnected ? 'All systems operational' : 'Reconnecting...'}
-            </span>
-          </div>
+         
         </div>
         <div className="flex items-center gap-1.5 text-sm text-gray-500">
           <Clock className="w-3.5 h-3.5" />
