@@ -83,6 +83,8 @@ export interface BandwidthHistoryPoint {
   timestamp: number;
   totalbytesrecv: number;
   totalbytessent: number;
+  bandwidthRecv: number;
+  bandwidthSent: number;
 }
 
 export interface BandwidthPanelProps {
