@@ -25,8 +25,8 @@ pub const MAX_CACHED_TEMPLATES: usize = 90;
 /// The store holds `Arc<JobDetails>` entries; all miners share the same allocation.
 /// When the store reaches this limit, the oldest job_id is evicted. Template data is
 /// freed only once no remaining job_id references it, preventing use-after-eviction.
-/// At bead rate (150ms), 5 slots retain ~750ms of history — enough for in-flight submits.
-pub const GLOBAL_JOB_STORE_CAPACITY: usize = 5;
+/// At bead rate (150ms), 20 slots retain ~3s of history for in-flight submits.
+pub const GLOBAL_JOB_STORE_CAPACITY: usize = 20;
 
 use crate::{
     bead::Bead,
