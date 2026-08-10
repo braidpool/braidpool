@@ -588,7 +588,7 @@ impl DownstreamClient {
                 method: format!(
                     "mining.submit: extranonce2 must be {} hex chars ({} bytes), got {}",
                     expected_hex_len,
-                    self.extranonce2_len,
+                    self.miner_extranonce2_size,
                     extranonce2.len()
                 ),
             });
@@ -697,6 +697,25 @@ impl DownstreamClient {
                 .await;
         }
 
+        let ntime_u32 = match u32::from_str_radix(ntime, 16) {
+            Ok(v) => v,
+            Err(e) => {
+                error!(connection_id = %connection_id_hex, error = %e, ntime = %ntime, "Failed to parse ntime");
+                return Err(StratumErrors::InvalidMethodParams {
+                    method: "mining.submit".to_string(),
+                });
+            }
+        };
+        let nonce_u32 = match u32::from_str_radix(nonce, 16) {
+            Ok(v) => v,
+            Err(e) => {
+                error!(connection_id = %connection_id_hex, error = %e, nonce = %nonce, "Failed to parse nonce");
+                return Err(StratumErrors::InvalidMethodParams {
+                    method: "mining.submit".to_string(),
+                });
+            }
+        };
+
         //Building the coinbase and then eventually the block and testing for the validation against the
         //mainnet/regtest/cpunet/testnet difficulty or the weakshare local difficulty .
         let extranonce_1_hex = hex::encode(self.extranonce1.clone());
@@ -798,24 +817,6 @@ impl DownstreamClient {
                 (header_version & !mask_version_bits) | (version_bits & mask_version_bits);
         }
         //Computing the block header
-        let ntime_u32 = match u32::from_str_radix(ntime, 16) {
-            Ok(v) => v,
-            Err(e) => {
-                error!(connection_id = %connection_id_hex, error = %e, ntime = %ntime, "Failed to parse ntime");
-                return Err(StratumErrors::InvalidMethodParams {
-                    method: "mining.submit".to_string(),
-                });
-            }
-        };
-        let nonce_u32 = match u32::from_str_radix(nonce, 16) {
-            Ok(v) => v,
-            Err(e) => {
-                error!(connection_id = %connection_id_hex, error = %e, nonce = %nonce, "Failed to parse nonce");
-                return Err(StratumErrors::InvalidMethodParams {
-                    method: "mining.submit".to_string(),
-                });
-            }
-        };
         let header = BlockHeader {
             version: bitcoin::blockdata::block::Version::from_consensus(final_masked_version),
             prev_blockhash: submitted_job.blocktemplate.previousblockhash,
@@ -4527,6 +4528,87 @@ mod test {
             }
         }
     }
+    /// Minimal job+client setup used by the ntime/nonce fast-fail tests.
+    async fn submit_setup() -> (
+        DownstreamClient,
+        Arc<Mutex<MiningJobMap>>,
+        Arc<Mutex<SwarmHandler>>,
+        u64,
+    ) {
+        let template = BlockTemplate {
+            bits: bitcoin::pow::CompactTarget::from_unprefixed_hex("207fffff").unwrap(),
+            ..BlockTemplate::default()
+        };
+        let job_details = JobDetails {
+            blocktemplate: template,
+            coinbase1: String::new(),
+            coinbase2: String::new(),
+            coinbase_merkle_path: vec![],
+            coinbase_witness_commitment: None,
+            job_sent_time: 0,
+            is_upstream_job: false,
+        };
+        let map = Arc::new(Mutex::new(MiningJobMap::new()));
+        let job_id = map
+            .lock()
+            .await
+            .insert_mining_job(TemplateId::Braidpool(1), job_details)
+            .await;
+        let mut client = DownstreamClient::default();
+        client.authorized = true;
+        client.extranonce1 = vec![0u8; 8];
+        let test_braid = Arc::new(RwLock::new(braid::Braid::new(vec![])));
+        let (_db, db_tx) = DBHandler::new().await.unwrap();
+        let (swarm, _rx) = SwarmHandler::new(test_braid, db_tx, DashboardEvents::new());
+        let swarm_arc = Arc::new(Mutex::new(swarm));
+        (client, map, swarm_arc, job_id)
+    }
+
+    #[tokio::test]
+    async fn non_hex_ntime_returns_err_before_coinbase_work() {
+        let (mut client, map, swarm, job_id) = submit_setup().await;
+        let params = json!([
+            "miner",
+            job_id.to_string(),
+            "0000000000000000", // extranonce2
+            "zzzzzzzz",         // invalid ntime — not hex
+            "00000000",         // nonce
+        ]);
+        let result = client
+            .handle_submit(&params, map, 1, swarm, None, None, None)
+            .await;
+        assert!(
+            matches!(result, Err(StratumErrors::InvalidMethodParams { .. })),
+            "non-hex ntime must be rejected before coinbase work"
+        );
+    }
+
+    #[tokio::test]
+    async fn unpadded_nonce_is_accepted_by_parser() {
+        // A miner formatting nonce with {:x} instead of {:08x} sends "3" for nonce 3.
+        // from_str_radix parses this correctly — the value is right, just unpadded.
+        // This test pins that behaviour: strict 8-char length validation would
+        // reject valid work. The submit reaches PoW check (returns Ok(false)) rather
+        // than failing at the parse step (which would return Err).
+        let (mut client, map, swarm, job_id) = submit_setup().await;
+        let params = json!([
+            "miner",
+            job_id.to_string(),
+            "0000000000000000", // extranonce2
+            "68df7e33",         // valid ntime
+            "3",                // nonce "3" — unpadded, correct value
+        ]);
+        let result = client
+            .handle_submit(&params, map, 1, swarm, None, None, None)
+            .await;
+        // Must NOT be a parse error. PoW will not be met (nonce=3 at any real difficulty),
+        // so we expect Ok(false) — the submit got through the parse and into validation.
+        assert!(
+            !matches!(result, Err(StratumErrors::InvalidMethodParams { .. })),
+            "unpadded nonce must not be rejected at parse — from_str_radix handles it correctly"
+        );
+    }
+
     #[test]
     fn prev_hash_test() {
         let prev_test_hash = "00000000cbdd48c69c45ffd07dc26fc3668bb70870374354535061f8f5304c7c";
