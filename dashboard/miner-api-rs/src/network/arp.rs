@@ -26,7 +26,7 @@ pub fn arp_hosts() -> Vec<Ipv4Addr> {
         warn!(
             "{cmd} -a exited with {status}; stderr: {stderr}",
             status = output.status,
-        );.
+        );
     }
     parse_arp_output(&String::from_utf8_lossy(&output.stdout))
 }
