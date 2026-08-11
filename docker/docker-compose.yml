@@ -1,0 +1,108 @@
+services:
+
+  bitcoin:
+    build:
+      context: ..
+      dockerfile: docker/cpunet_bitcoin_node/Dockerfile
+    image: bitcoin-cpunet:latest
+    container_name: bitcoin-core
+    restart: unless-stopped
+    volumes:
+      - bitcoin_data:/data/.bitcoin
+      - ipc_socket:/tmp/bitcoin-ipc
+    networks:
+      - braidpool_net
+    secrets:
+      - bitcoin_rpc_user
+      - bitcoin_rpc_password
+    environment:
+      - BITCOIN_RPC_USER_FILE=/run/secrets/bitcoin_rpc_user
+      - BITCOIN_RPC_PASSWORD_FILE=/run/secrets/bitcoin_rpc_password
+    healthcheck:
+      test: ["CMD-SHELL", "bitcoin-cli -cpunet -datadir=/data/.bitcoin -conf=/data/.bitcoin/bitcoin.conf getblockcount || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    ports:
+      - "28333:28333"
+      - "28332:28332"
+      - "38332:38332"
+      - "38338:38338"
+
+  node:
+    build:
+      context: ..
+      dockerfile: docker/node/Dockerfile
+    image: braidpool-node:latest
+    container_name: braidpool-node
+    restart: unless-stopped
+    depends_on:
+      bitcoin:
+        condition: service_healthy
+    volumes:
+      - braidpool_data:/data
+      - ipc_socket:/tmp/bitcoin-ipc
+    secrets:
+      - bitcoin_rpc_user
+      - bitcoin_rpc_password
+    environment:
+      - HOME=/data
+      - BRAIDPOOL_DATADIR=/data/.braidpool
+      - BRAIDPOOL_BIND=0.0.0.0:6680
+      - BRAIDPOOL_NETWORK=cpunet
+      - BRAIDPOOL_BITCOIN_HOST=bitcoin
+      - BRAIDPOOL_BITCOIN_PORT=28332
+      - BRAIDPOOL_RPC_USER_FILE=/run/secrets/bitcoin_rpc_user
+      - BRAIDPOOL_RPC_PASS_FILE=/run/secrets/bitcoin_rpc_password
+      - BRAIDPOOL_IPC_SOCKET=/tmp/bitcoin-ipc/bitcoin.sock
+      - BRAIDPOOL_PEERS=""
+      - RUST_LOG=info
+    ports:
+      - "6680:6680" 
+      - "6682:6682" 
+      - "3333:3333"   
+    networks:
+      - braidpool_net
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:6682/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  miner:
+    build:
+      context: ..
+      dockerfile: docker/miner/Dockerfile
+    image: cpunet-miner:latest
+    container_name: cpunet-miner
+    restart: unless-stopped
+    depends_on:
+      node:
+        condition: service_healthy
+    environment:
+      - STRATUM_URL=stratum+tcp://braidpool-node:3333
+      - WORKER_USER=miner
+      - WORKER_PASS=x
+      - MINER_THREADS=1
+      - DEBUG_MODE=false
+      - RUST_LOG=info
+      - RETRY_DELAY=5
+    networks:
+      - braidpool_net
+
+volumes:
+  bitcoin_data:
+  braidpool_data:
+  ipc_socket:
+
+networks:
+  braidpool_net:
+    driver: bridge
+
+secrets:
+  bitcoin_rpc_user:
+    file: ./secrets/bitcoin_rpc_user.txt
+  bitcoin_rpc_password:
+    file: ./secrets/bitcoin_rpc_password.txt
