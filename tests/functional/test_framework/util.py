@@ -83,14 +83,14 @@ def find_binary(
     env_value = os.environ.get(env_var)
     if env_value:
         path = Path(env_value).expanduser()
-        if path.exists():
+        if path.is_file() and os.access(path, os.X_OK):
             log_event(logger, "binary_found", level=logging.DEBUG, name=name, source="environment", path=path)
             return path
 
-    root = repo_root or Path.cwd()
+    root = repo_root or Path(__file__).resolve().parent.parent.parent.parent
     for relative_path in relative_paths:
         path = (root / relative_path).expanduser()
-        if path.exists():
+        if path.is_file() and os.access(path, os.X_OK):
             log_event(logger, "binary_found", level=logging.DEBUG, name=name, source="relative_path", path=path)
             return path
 

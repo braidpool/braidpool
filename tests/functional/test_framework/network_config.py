@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -19,17 +19,12 @@ class NetworkConfig:
     initial_blocks: int = 101
 
 
+    bitcoin_rpc_port: int | None = None
     bitcoin_p2p_port: int | None = None
     bitcoin_ipc_socket: Path | None = None
-
-    # Braidpool ports are allocated from the test's deterministic port range, but can be overridden here if needed.
-    braidpool_bind_ports: list[int] = field(default_factory=list)
-    braidpool_rpc_ports: list[int] = field(default_factory=list)
-    braidpool_stratum_ports: list[int] = field(default_factory=list)
     
     #Binary paths
     bitcoin_bin_path: Path | None = None
-    bitcoin_cli_path: Path | None = None
     braidpool_bin_path: Path | None = None
     minerd_bin_path: Path | None = None
 

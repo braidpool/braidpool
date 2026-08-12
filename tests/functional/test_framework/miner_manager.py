@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 import subprocess
 from pathlib import Path
-from typing import Any, Callable, Protocol
+from typing import Any, Callable, Protocol, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from test_framework.test_node import TestNode
 
 from test_framework.constants import STDERR_LOG_NAME, STDOUT_LOG_NAME
 from test_framework.log_manager import LogManager
@@ -53,12 +57,6 @@ class CpuMiner:
         self.stderr_path = self.run_dir / STDERR_LOG_NAME
         self.run_dir.mkdir(parents=True, exist_ok=True)
 
-    def __del__(self) -> None:
-        if self.process is not None and self.process.poll() is None:
-            try:
-                self.process.kill()
-            except OSError:
-                pass
 
     def start(self, extra_args: list[str] | None = None) -> None:
         """Start minerd with stdout/stderr redirected to files."""
@@ -85,23 +83,26 @@ class CpuMiner:
             stdout_path=self.stdout_path,
             stderr_path=self.stderr_path,
         )
-        stdout_file = open(self.stdout_path, "ab", buffering=0)
-        stderr_file = open(self.stderr_path, "ab", buffering=0)
+        stdout_file = None
+        stderr_file = None
         try:
-            try:
-                self.process = subprocess.Popen(
-                    args,
-                    stdout=stdout_file,
-                    stderr=stderr_file,
-                    cwd=self.run_dir,
-                    start_new_session=True,
-                )
-            except Exception as exc:
-                log_exception(self.logger, "miner_start_failed", exc, miner_id=self.miner_id)
-                raise
+            stdout_file = open(self.stdout_path, "ab", buffering=0)
+            stderr_file = open(self.stderr_path, "ab", buffering=0)
+            self.process = subprocess.Popen(
+                args,
+                stdout=stdout_file,
+                stderr=stderr_file,
+                cwd=self.run_dir,
+                start_new_session=True,
+            )
+        except Exception as exc:
+            log_exception(self.logger, "miner_start_failed", exc, miner_id=self.miner_id)
+            raise
         finally:
-            stdout_file.close()
-            stderr_file.close()
+            if stdout_file:
+                stdout_file.close()
+            if stderr_file:
+                stderr_file.close()
         log_event(self.logger, "miner_started", miner_id=self.miner_id, pid=self.process.pid)
 
     def stop(self, *, term_timeout: float = 2.0, kill_timeout: float = 1.0) -> None:
@@ -109,6 +110,7 @@ class CpuMiner:
         process = self.process
         if process is None or process.poll() is not None:
             log_event(self.logger, "miner_stop_skipped", level=logging.DEBUG, miner_id=self.miner_id)
+            self.process = None
             return
         log_event(self.logger, "miner_stopping", miner_id=self.miner_id, pid=process.pid)
         terminate_process_group(
@@ -119,6 +121,7 @@ class CpuMiner:
             logger=self.logger,
         )
         log_event(self.logger, "miner_stopped", miner_id=self.miner_id, returncode=process.returncode)
+        self.process = None
 
     def is_alive(self) -> bool:
         return self.process is not None and self.process.poll() is None
@@ -152,7 +155,7 @@ class MinerManager:
         self.miners: list[CpuMiner] = []
         self.logger = log_manager.logger
 
-    def spawn_miner(self, node: StratumNode) -> CpuMiner:
+    def spawn_miner(self, node: 'TestNode') -> CpuMiner:
         """Create and start a miner attached to *node*'s stratum port."""
         stratum_port = node.stratum_port
         if stratum_port is None:
@@ -186,7 +189,7 @@ class MinerManager:
     def _resolve_minerd_path(self) -> Path:
         if self.config.minerd_bin_path is not None:
             path = Path(self.config.minerd_bin_path)
-            if path.exists():
+            if path.is_file() and os.access(path, os.X_OK):
                 return path
         return find_minerd()
 
