@@ -2459,6 +2459,30 @@ impl Notifier {
         Ok(())
     }
 
+    /// Builds an `Arc<JobDetails>` for a Braidpool-originated job.
+    ///
+    /// Strips the coinbase placeholder (index 0) from `template`, then wraps the
+    /// result with wire fields from `notification` and the supplied timestamp.
+    /// Both the broadcast path and the resend path use this so `is_upstream_job`
+    /// and the construction logic live in one place.
+    fn make_braidpool_job(
+        template: &BlockTemplate,
+        notification: &JobNotification,
+        unix_timestamp: u32,
+    ) -> Arc<JobDetails> {
+        let mut t = template.clone();
+        t.transactions.remove(0);
+        Arc::new(JobDetails {
+            blocktemplate: t,
+            coinbase1: notification.coinbase1.clone(),
+            coinbase2: notification.coinbase2.clone(),
+            coinbase_merkle_path: notification.merkle_branches.clone(),
+            coinbase_witness_commitment: notification.coinbase_witness_commitment.clone(),
+            job_sent_time: unix_timestamp,
+            is_upstream_job: false,
+        })
+    }
+
     /// Runs the Stratum notifier task that handles broadcasting mining jobs to downstream miners.
     ///
     /// This asynchronous function continuously listens for notification commands and performs
@@ -2548,20 +2572,8 @@ impl Notifier {
                         }
                     };
 
-                    let mut template_for_job = template.clone();
-                    template_for_job.transactions.remove(0);
-
-                    let job_details = Arc::new(JobDetails {
-                        blocktemplate: template_for_job,
-                        coinbase1: job_notification.coinbase1.clone(),
-                        coinbase2: job_notification.coinbase2.clone(),
-                        coinbase_merkle_path: job_notification.merkle_branches.clone(),
-                        coinbase_witness_commitment: job_notification
-                            .coinbase_witness_commitment
-                            .clone(),
-                        job_sent_time: unix_timestamp,
-                        is_upstream_job: false,
-                    });
+                    let job_details =
+                        Self::make_braidpool_job(&template, &job_notification, unix_timestamp);
 
                     // Insert once; all miners reference the same allocation
                     let numeric_job_id =
@@ -2762,19 +2774,11 @@ impl Notifier {
                                                 }
                                             }
                                         };
-                                        let mut latest_template_ref = latest_template.clone();
-                                        latest_template_ref.transactions.remove(0);
-                                        let job_details = Arc::new(JobDetails {
-                                            blocktemplate: latest_template_ref,
-                                            coinbase1: job.coinbase1.clone(),
-                                            coinbase2: job.coinbase2.clone(),
-                                            coinbase_merkle_path: job.merkle_branches.clone(),
-                                            coinbase_witness_commitment: job
-                                                .coinbase_witness_commitment
-                                                .clone(),
-                                            job_sent_time: unix_timestamp,
-                                            is_upstream_job: false,
-                                        });
+                                        let job_details = Self::make_braidpool_job(
+                                            &latest_template,
+                                            &job,
+                                            unix_timestamp,
+                                        );
                                         self.job_store
                                             .lock()
                                             .await
@@ -4607,7 +4611,7 @@ mod test {
     /// Minimal job+client setup used by the ntime/nonce fast-fail tests.
     async fn submit_setup() -> (
         DownstreamClient,
-        Arc<Mutex<MiningJobMap>>,
+        Arc<Mutex<GlobalJobStore>>,
         Arc<Mutex<SwarmHandler>>,
         u64,
     ) {
@@ -4615,7 +4619,7 @@ mod test {
             bits: bitcoin::pow::CompactTarget::from_unprefixed_hex("207fffff").unwrap(),
             ..BlockTemplate::default()
         };
-        let job_details = JobDetails {
+        let job_details = Arc::new(JobDetails {
             blocktemplate: template,
             coinbase1: String::new(),
             coinbase2: String::new(),
@@ -4623,21 +4627,22 @@ mod test {
             coinbase_witness_commitment: None,
             job_sent_time: 0,
             is_upstream_job: false,
-        };
-        let map = Arc::new(Mutex::new(MiningJobMap::new()));
-        let job_id = map
+        });
+        let store = Arc::new(Mutex::new(GlobalJobStore::new(
+            crate::GLOBAL_JOB_STORE_CAPACITY,
+        )));
+        let job_id = store
             .lock()
             .await
-            .insert_mining_job(TemplateId::Braidpool(1), job_details)
-            .await;
+            .insert(TemplateId::Braidpool(1), job_details);
         let mut client = DownstreamClient::new(PoolNetwork::Cpunet);
         client.authorized = true;
         client.extranonce1 = vec![0u8; 8];
         let test_braid = Arc::new(RwLock::new(braid::Braid::new(vec![], PoolNetwork::Cpunet)));
-        let (_db, db_tx) = DBHandler::new(PoolNetwork::Cpunet).await.unwrap();
+        let (_db, db_tx) = DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
         let (swarm, _rx) = SwarmHandler::new(test_braid, db_tx, DashboardEvents::new());
         let swarm_arc = Arc::new(Mutex::new(swarm));
-        (client, map, swarm_arc, job_id)
+        (client, store, swarm_arc, job_id)
     }
 
     #[tokio::test]
