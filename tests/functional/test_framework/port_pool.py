@@ -43,9 +43,9 @@ class PortPool:
     BASE_PORT = 16000
     PORTS_PER_TEST = 100
 
-    #Component wise port ranges, within the range alloted to the test. (They can be increased or made dyanmic if needed)
     _COMPONENT_RANGES = {
-        "bitcoin": range(0, 10),
+        "bitcoin_rpc": range(0, 5),
+        "bitcoin_p2p": range(5, 10),
         "braidpool_p2p": range(10, 40),
         "braidpool_rpc": range(40, 70),
         "braidpool_stratum": range(70, 90),
@@ -186,6 +186,7 @@ class PortPool:
     @staticmethod
     def _bind_probe(port: int) -> None:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             sock.bind(("127.0.0.1", port))
 
     def _validate_bindable(self, port: int, component: str, offset: int | str) -> None:
