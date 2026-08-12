@@ -28,6 +28,8 @@ logger = logging.getLogger(__name__)
 
 # Set of test scripts to run, in order. Extended tests are optional.
 BASE_SCRIPTS = [
+    "feature_framework_unit_tests.py",
+    "feature_node_startup.py",
 ]
 
 EXTENDED_SCRIPTS: list[str] = []

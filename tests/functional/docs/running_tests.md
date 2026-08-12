@@ -5,7 +5,7 @@ This guide explains how to run both the framework self-tests and the node-startu
 
 ## 2. Unit Tests — No Binaries Required
 
-`feature_framework_unit_tests.py` is entirely self-contained. All 38 tests run in-process using mocks and temporary directories.
+`feature_framework_unit_tests.py` is entirely self-contained. All 39 tests run in-process using mocks and temporary directories.
 
 ### Run directly
 
@@ -71,8 +71,8 @@ cd ..
 git clone https://github.com/bitcoin/bitcoin.git
 cd bitcoin
 cmake -B build -DBUILD_UTIL_CHAINSTATE=OFF
-cmake --build build -j$(nproc) --target bitcoin-node bitcoin-cli
-# → build/bin/bitcoin-node, build/bin/bitcoin-cli
+cmake --build build -j$(nproc) --target bitcoin-node
+# → build/bin/bitcoin-node
 cd ../braidpool
 ```
 
@@ -85,7 +85,6 @@ cd ../braidpool
 # These paths are according to the paths stated above, if it is something els, then define accordingly:
 export BRAIDPOOL_BIN_PATH=$(pwd)/target/debug/node
 export BITCOIN_NODE_PATH=$(pwd)/../bitcoin/build/bin/bitcoin-node
-export BITCOIN_CLI_PATH=$(pwd)/../bitcoin/build/bin/bitcoin-cli
 ```
 
 **Option B — CLI flags (recommended for one-off runs)**
@@ -94,8 +93,7 @@ export BITCOIN_CLI_PATH=$(pwd)/../bitcoin/build/bin/bitcoin-cli
 cd tests/functional
 python3 feature_node_startup.py \
   --braidpool-bin ../../target/debug/node \
-  --bitcoin-bin   ../../bitcoin/build/bin/bitcoin-node \
-  --bitcoin-cli   ../../bitcoin/build/bin/bitcoin-cli
+  --bitcoin-bin   ../../bitcoin/build/bin/bitcoin-node
 ```
 
 ### Step 4 — Run via test runner
@@ -170,7 +168,6 @@ If all three fail, `SkipTest` is raised and the test is marked **Skipped** (exit
 |--------|-------------|
 | `braidpool-node` | `target/debug/node`, `target/release/node`, `node` |
 | `bitcoin-node` | `../bitcoin/build/bin/bitcoin-node`, `bitcoin-node`, `target/debug/bitcoin-node` |
-| `bitcoin-cli` | `../bitcoin/build/bin/bitcoin-cli`, `bitcoin-cli`, `target/debug/bitcoin-cli` |
 | `minerd` | `node/src/cpuminer/minerd` |
 
 > **Note:** The framework always resolves repo root from its own file location
