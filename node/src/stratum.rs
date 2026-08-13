@@ -4584,28 +4584,26 @@ mod test {
     }
 
     #[tokio::test]
-    async fn unpadded_nonce_is_accepted_by_parser() {
-        // A miner formatting nonce with {:x} instead of {:08x} sends "3" for nonce 3.
-        // from_str_radix parses this correctly — the value is right, just unpadded.
-        // This test pins that behaviour: strict 8-char length validation would
-        // reject valid work. The submit reaches PoW check (returns Ok(false)) rather
-        // than failing at the parse step (which would return Err).
+    async fn unpadded_nonce_not_rejected_by_length_check() {
+        // Pins the decision not to enforce strict 8-char width on nonce.
+        // A miner using {:x} formatting sends "3" for nonce 3 — correct value, just unpadded.
+        // A length check would reject valid shares like this one.
         let (mut client, map, swarm, job_id) = submit_setup().await;
         let params = json!([
             "miner",
             job_id.to_string(),
-            "0000000000000000", // extranonce2
-            "68df7e33",         // valid ntime
-            "3",                // nonce "3" — unpadded, correct value
+            "0000000000000000",
+            "68df7e33",
+            "3", // unpadded nonce, correct value
         ]);
         let result = client
             .handle_submit(&params, map, 1, swarm, None, None, None)
             .await;
-        // Must NOT be a parse error. PoW will not be met (nonce=3 at any real difficulty),
-        // so we expect Ok(false) — the submit got through the parse and into validation.
+        // Passes the parse step; fails later at coinbase decode (InvalidCoinbase),
+        // not at nonce parsing (InvalidMethodParams).
         assert!(
             !matches!(result, Err(StratumErrors::InvalidMethodParams { .. })),
-            "unpadded nonce must not be rejected at parse — from_str_radix handles it correctly"
+            "unpadded nonce must not be rejected before coinbase work"
         );
     }
 
