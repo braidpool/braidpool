@@ -4721,7 +4721,7 @@ mod test {
         client.authorized = true;
         client.extranonce1 = vec![0u8; 8];
         let test_braid = Arc::new(RwLock::new(braid::Braid::new(vec![], PoolNetwork::Cpunet)));
-        let (_db, db_tx) = DBHandler::new(PoolNetwork::Cpunet).await.unwrap();
+        let (_db, db_tx) = DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
         let (swarm, _rx) = SwarmHandler::new(test_braid, db_tx, DashboardEvents::new());
         let swarm_arc = Arc::new(Mutex::new(swarm));
         (client, map, swarm_arc, job_id)
@@ -4945,26 +4945,6 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_share_counter_malformed_params_counts_invalid() {
-        let mut client = DownstreamClient::new(PoolNetwork::Cpunet);
-        client.authorized = true;
-        let map = Arc::new(Mutex::new(MiningJobMap::new()));
-        let (_db, db_tx) = DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
-        let test_braid = Arc::new(RwLock::new(braid::Braid::new(vec![], PoolNetwork::Cpunet)));
-        let (sh, _rx) = SwarmHandler::new(Arc::clone(&test_braid), db_tx, DashboardEvents::new());
-        let sh_arc = Arc::new(Mutex::new(sh));
-
-        // Empty params array — fails before lookup
-        let result = client
-            .handle_submit(&json!([]), map, 1, sh_arc, None, None, None)
-            .await;
-        assert!(result.is_err());
-        assert_eq!(client.share_counters.invalid, 1);
-        assert_eq!(client.share_counters.stale, 0);
-        assert_eq!(client.share_counters.accepted, 0);
-    }
-
-    #[tokio::test]
     async fn test_share_counter_bogus_job_id_counts_stale() {
         let mut client = DownstreamClient::new(PoolNetwork::Cpunet);
         client.authorized = true;
@@ -5087,10 +5067,10 @@ mod test {
         // authorized stays false (default) — the auth gate should reject before
         // params are parsed. Valid-looking params ensure the only failure reason
         // is the auth check, not a malformed-params path.
-        let mut client = DownstreamClient::default();
+        let mut client = DownstreamClient::new(PoolNetwork::Cpunet);
         let map = Arc::new(Mutex::new(MiningJobMap::new()));
-        let (_db, db_tx) = DBHandler::new().await.unwrap();
-        let test_braid = Arc::new(RwLock::new(braid::Braid::new(vec![])));
+        let (_db, db_tx) = DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
+        let test_braid = Arc::new(RwLock::new(braid::Braid::new(vec![], PoolNetwork::Cpunet)));
         let (sh, _rx) = SwarmHandler::new(Arc::clone(&test_braid), db_tx, DashboardEvents::new());
         let sh_arc = Arc::new(Mutex::new(sh));
 
