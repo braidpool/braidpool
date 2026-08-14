@@ -8,15 +8,23 @@ repository.workspace = true
 publish = false
 
 [dependencies]
-anyhow = "1.0"
+anyhow = { workspace = true }
 asic-rs = "0.6"
 tokio = { workspace = true }
 tracing = { workspace = true }
 futures = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+axum = { version = "0.7", features = ["json", "ws"] }
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+tokio = { workspace = true }
 
 [[bin]]
-name = "diagnose"
-path = "src/bin/diagnose.rs"
+name = "server"
+path = "src/bin/server.rs"

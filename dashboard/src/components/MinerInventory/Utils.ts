@@ -1,12 +1,15 @@
 import { Miner, MinerAlert as Alert } from './Types';
 import { THRESHOLDS } from './Constant';
 const determineStatus = (data: any): 'online' | 'warning' | 'offline' => {
-  if (data.is_online === false) return 'offline';
-  if (!data.is_mining || (data.hashrate_current || 0) === 0) return 'offline';
+  // Truly offline device not responding on the network
+  if (!data.is_online) return 'offline';
+// Online but not mining = thermal protection(overheat mode), error stop, or initialising
+  if (data.is_mining === false || data.is_mining == null) return 'warning';
+
   if (
     (data.temperature || 0) > THRESHOLDS.ASIC_TEMP_CRITICAL ||
     (data.vr_temperature || 0) > THRESHOLDS.VR_TEMP_CRITICAL ||
-    data.errors?.length > 0
+    (data.errors?.length || 0) > 0
   )
     return 'warning';
   return 'online';
@@ -48,6 +51,16 @@ export const mapApiToMiner = (m: any, lastSeenFallback = 'Never'): Miner => ({
 export const getAlerts = (miner: Miner): Alert[] => {
   if (miner.status === 'offline') return [];
   const alerts: Alert[] = [];
+  if (!miner.is_mining) {
+    const temp = miner.temperature || 0;
+    if (temp > 0 && temp >= THRESHOLDS.ASIC_TEMP_CRITICAL - 10) {
+      alerts.push({ message: `Overheat Mode (${temp}\u00B0C)` });
+    } else if (miner.errors && miner.errors.length > 0) {
+      alerts.push({ message: 'Stopped — device error' });
+    } else {
+      alerts.push({ message: 'Not Mining' });
+    }
+  }
   if (miner.temperature > THRESHOLDS.ASIC_TEMP_CRITICAL) {
     alerts.push({ message: `ASIC Temp High` });
   }

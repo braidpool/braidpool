@@ -65,11 +65,7 @@ export type MinerAlert = {
 };
 export interface MinerTableProps {
   miners: Miner[];
-  minerHistory: Record<string, MinerAnalyticsPoint[]>;
   getAlerts: (miner: Miner) => MinerAlert[];
-  expandedAlerts: Record<string, boolean>;
-  setExpandedAlerts: Dispatch<SetStateAction<Record<string, boolean>>>;
-  statusStyles: Record<Miner['status'], string>;
   onDelete?: (minerId: string) => void;
 }
 export interface MinerDashboardHeaderProps {
@@ -79,9 +75,7 @@ export interface MinerDashboardHeaderProps {
   avgEfficiency: number;
 }
 export interface MinerControlsProps {
-  newMinerIP: string;
-  setNewMinerIP: (ip: string) => void;
-  addMinerByIP: () => void;
   loading: boolean;
   lastUpdate: Date | null;
+  wsConnected: boolean;
 }
