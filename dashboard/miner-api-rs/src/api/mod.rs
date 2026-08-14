@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use axum::{routing::{delete, get, post, put}, Router};
+use axum::{
+    routing::{delete, get, post, put},
+    Router,
+};
 use sqlx::SqlitePool;
 use tokio::sync::broadcast;
 use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer};
@@ -12,7 +15,7 @@ pub mod models;
 pub struct AppState {
     pub pool: SqlitePool,
     pub config: crate::config::Config,
-       pub broadcast_tx: broadcast::Sender<String>,
+    pub broadcast_tx: broadcast::Sender<String>,
 }
 
 pub fn build_router(state: Arc<AppState>) -> Router {
@@ -30,7 +33,10 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route("/api/miners/:id", delete(handlers::delete_miner))
         // Refresh
         .route("/api/miners/:id/refresh", post(handlers::refresh_miner))
-        .route("/api/miners/refresh/all", post(handlers::refresh_all_miners))
+        .route(
+            "/api/miners/refresh/all",
+            post(handlers::refresh_all_miners),
+        )
         // Scan
         .route("/api/miners/scan/lan", post(handlers::scan_lan))
         .route("/api/miners/scan/subnet", post(handlers::scan_subnet))
@@ -42,10 +48,8 @@ pub fn build_router(state: Arc<AppState>) -> Router {
 }
 
 fn build_cors(origins: &[String]) -> CorsLayer {
-    let allow: Vec<axum::http::HeaderValue> = origins
-        .iter()
-        .filter_map(|o| o.parse().ok())
-        .collect();
+    let allow: Vec<axum::http::HeaderValue> =
+        origins.iter().filter_map(|o| o.parse().ok()).collect();
 
     CorsLayer::new()
         .allow_origin(AllowOrigin::list(allow))

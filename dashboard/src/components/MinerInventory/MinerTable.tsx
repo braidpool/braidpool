@@ -13,13 +13,19 @@ function formatUptime(s: number): string {
 }
 
 const STATUS_STYLES: Record<string, string> = {
-  online:  'bg-emerald-500/10 text-emerald-300 border-emerald-500/40',
+  online: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/40',
   warning: 'bg-amber-500/10 text-amber-300 border-amber-500/40',
   offline: 'bg-rose-500/10 text-rose-300 border-rose-500/40',
 };
 
-const MinerTable: React.FC<MinerTableProps> = ({ miners, getAlerts, onDelete }) => {
-  const [expandedAlerts, setExpandedAlerts] = useState<Record<string, boolean>>({});
+const MinerTable: React.FC<MinerTableProps> = ({
+  miners,
+  getAlerts,
+  onDelete,
+}) => {
+  const [expandedAlerts, setExpandedAlerts] = useState<Record<string, boolean>>(
+    {}
+  );
   const hasAlerts = miners.some((m) => getAlerts(m).length > 0);
 
   return (
@@ -40,7 +46,7 @@ const MinerTable: React.FC<MinerTableProps> = ({ miners, getAlerts, onDelete }) 
           {hasAlerts && <div>Alerts</div>}
           <div>Temp</div>
           <div>Pool</div>
-          <div >Uptime</div>
+          <div>Uptime</div>
           <div>Actions</div>
         </div>
 
@@ -58,14 +64,12 @@ const MinerTable: React.FC<MinerTableProps> = ({ miners, getAlerts, onDelete }) 
                 key={miner.id}
                 className={`grid ${hasAlerts ? 'grid-cols-10' : 'grid-cols-9'} gap-4 px-4 py-3 text-sm text-gray-200 items-start hover:bg-white/[0.02] transition-colors`}
               >
-                
                 <div>
                   <div className="font-medium text-white truncate">
                     {miner.make || miner.model
                       ? [miner.make, miner.model].filter(Boolean).join(' ')
                       : 'Unknown'}
                   </div>
-
                 </div>
 
                 {/* Hashrate */}
@@ -80,13 +84,16 @@ const MinerTable: React.FC<MinerTableProps> = ({ miners, getAlerts, onDelete }) 
 
                 {/* Efficiency */}
                 <div className="whitespace-nowrap">
-                  {miner.efficiency ? `${miner.efficiency.toFixed(1)} J/TH` : 'NA'}
+                  {miner.efficiency
+                    ? `${miner.efficiency.toFixed(1)} J/TH`
+                    : 'NA'}
                 </div>
 
                 {/* Power / Uptime */}
                 <div>
-                  <div className="whitespace-nowrap">{miner.power_usage || 0} W</div>
-                 
+                  <div className="whitespace-nowrap">
+                    {miner.power_usage || 0} W
+                  </div>
                 </div>
 
                 {/* Status */}
@@ -99,13 +106,16 @@ const MinerTable: React.FC<MinerTableProps> = ({ miners, getAlerts, onDelete }) 
                 </div>
 
                 {/* Alerts  */}
-                {hasAlerts && (
-                  alerts.length > 0 ? (
+                {hasAlerts &&
+                  (alerts.length > 0 ? (
                     <div className="flex flex-col gap-1.5">
                       <div
                         className="cursor-pointer select-none"
                         onClick={() =>
-                          setExpandedAlerts((prev) => ({ ...prev, [miner.id]: !prev[miner.id] }))
+                          setExpandedAlerts((prev) => ({
+                            ...prev,
+                            [miner.id]: !prev[miner.id],
+                          }))
                         }
                       >
                         <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-md border text-xs font-medium bg-gray-800/60 border-gray-700/40 text-amber-300 hover:bg-gray-800/80">
@@ -115,7 +125,9 @@ const MinerTable: React.FC<MinerTableProps> = ({ miners, getAlerts, onDelete }) 
                               +{remainingCount}
                             </span>
                           )}
-                          <span className="ml-auto text-gray-500 text-[10px]">{isExpanded ? '\u25B2' : '\u25BC'}</span>
+                          <span className="ml-auto text-gray-500 text-[10px]">
+                            {isExpanded ? '\u25B2' : '\u25BC'}
+                          </span>
                         </div>
                       </div>
                       {isExpanded && alerts.length > 1 && (
@@ -128,26 +140,24 @@ const MinerTable: React.FC<MinerTableProps> = ({ miners, getAlerts, onDelete }) 
                     </div>
                   ) : (
                     <div />
-                  )
-                )}
+                  ))}
 
                 {/* Temperature */}
                 <div className="text-gray-300">
                   <div className="whitespace-nowrap">
-                    {miner.temperature || 0}{`\u00B0`}C{' '}
+                    {miner.temperature || 0}
+                    {`\u00B0`}C{' '}
                     <span className="text-gray-500 text-xs">ASIC</span>
-                   
                   </div>
-                 
-                
                 </div>
 
                 {/* Pool / Worker */}
                 <div>
                   {miner.primary_pool && miner.primary_pool !== 'No Pool' ? (
                     <>
-                      <div className="text-sm text-gray-200">{miner.primary_pool} | {pool.user}</div>
-                     
+                      <div className="text-sm text-gray-200">
+                        {miner.primary_pool} | {pool.user}
+                      </div>
                     </>
                   ) : (
                     <span className="text-gray-600">{'\u2014'}</span>
@@ -155,11 +165,12 @@ const MinerTable: React.FC<MinerTableProps> = ({ miners, getAlerts, onDelete }) 
                 </div>
                 {/* Uptime */}
                 <div>
-                
-                     {miner.uptime ? (
-                    <div className="text-sm text-gray-200">{formatUptime(miner.uptime)}</div>
+                  {miner.uptime ? (
+                    <div className="text-sm text-gray-200">
+                      {formatUptime(miner.uptime)}
+                    </div>
                   ) : null}
-</div>
+                </div>
                 {/* Remove */}
                 <div>
                   {onDelete && (

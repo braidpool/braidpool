@@ -42,16 +42,25 @@ async fn main() -> anyhow::Result<()> {
         let pool = pool.clone();
         let tx = broadcast_tx.clone();
         tokio::spawn(async move {
-            let mut interval =
-                tokio::time::interval(std::time::Duration::from_secs(refresh_secs));
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(refresh_secs));
             interval.tick().await; // skip first immediate tick
 
             loop {
                 interval.tick().await;
                 info!("periodic refresh starting");
-                match miner_api_rs::db::service::refresh_all(&pool, timeout_secs, config_max_concurrent).await {
+                match miner_api_rs::db::service::refresh_all(
+                    &pool,
+                    timeout_secs,
+                    config_max_concurrent,
+                )
+                .await
+                {
                     Ok(s) => {
-                        info!(success = s.success, failed = s.failed, "periodic refresh done");
+                        info!(
+                            success = s.success,
+                            failed = s.failed,
+                            "periodic refresh done"
+                        );
                         broadcast_miners(&pool, &tx).await;
                     }
                     Err(e) => tracing::error!(error = %e, "periodic refresh error"),
@@ -60,7 +69,7 @@ async fn main() -> anyhow::Result<()> {
         });
     }
 
-    // background periodic LAN scan 
+    // background periodic LAN scan
     {
         let pool = pool.clone();
         let tx = broadcast_tx.clone();
@@ -68,8 +77,7 @@ async fn main() -> anyhow::Result<()> {
             // Delay first scan so the server is fully up before probing.
             tokio::time::sleep(std::time::Duration::from_secs(10)).await;
 
-            let mut interval =
-                tokio::time::interval(std::time::Duration::from_secs(scan_secs));
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(scan_secs));
 
             loop {
                 interval.tick().await;
@@ -81,13 +89,10 @@ async fn main() -> anyhow::Result<()> {
                 for miner in &miners {
                     let ip = miner.get_ip();
                     // Use the already-identified handle — no second probe needed.
-                    let data = miner_api_rs::miner_service::normalize_handle(
-                        miner.as_ref(),
-                        timeout_secs,
-                    )
-                    .await;
-                    match miner_api_rs::db::service::upsert_discovered(&pool, ip, &data).await
-                    {
+                    let data =
+                        miner_api_rs::miner_service::normalize_handle(miner.as_ref(), timeout_secs)
+                            .await;
+                    match miner_api_rs::db::service::upsert_discovered(&pool, ip, &data).await {
                         Ok(true) => added += 1,
                         Ok(false) => {}
                         Err(e) => {
@@ -104,7 +109,7 @@ async fn main() -> anyhow::Result<()> {
         });
     }
 
-    // ── bind and serve 
+    // ── bind and serve
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     info!(addr = %addr, "listening");
 
@@ -117,10 +122,7 @@ async fn main() -> anyhow::Result<()> {
 }
 
 /// Fetch all miners from the DB and broadcast the list to connected WebSocket clients.
-async fn broadcast_miners(
-    pool: &sqlx::SqlitePool,
-    tx: &tokio::sync::broadcast::Sender<String>,
-) {
+async fn broadcast_miners(pool: &sqlx::SqlitePool, tx: &tokio::sync::broadcast::Sender<String>) {
     match miner_api_rs::db::service::get_all(pool).await {
         Ok(miners) => {
             let list: Vec<serde_json::Value> = miners.iter().map(|m| m.to_json()).collect();
@@ -137,7 +139,9 @@ async fn broadcast_miners(
 
 async fn shutdown_signal() {
     let ctrl_c = async {
-        signal::ctrl_c().await.expect("failed to install Ctrl+C handler");
+        signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
     };
 
     #[cfg(unix)]

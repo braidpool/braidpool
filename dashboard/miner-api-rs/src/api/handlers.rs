@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use asic_rs::core::data::hashrate::HashRateUnit;
 use asic_rs::MinerFactory;
 use axum::{
@@ -11,6 +10,7 @@ use axum::{
     Json,
 };
 use serde_json::Value;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{broadcast, Semaphore};
 use tracing::warn;
@@ -41,7 +41,7 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
         }))
         .unwrap_or_default();
         if socket.send(Message::Text(msg)).await.is_err() {
-            return; 
+            return;
         }
     }
 
@@ -70,7 +70,6 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
         }
     }
 }
-
 
 pub async fn health() -> Json<HealthResponse> {
     Json(HealthResponse {
@@ -216,33 +215,50 @@ pub async fn debug_miner(
         })
     }).collect();
 
-    let fans: Vec<Value> = raw_data.fans.iter().chain(raw_data.psu_fans.iter()).map(|f| {
-        serde_json::json!({
-            "position": f.position,
-            "rpm":      f.rpm.map(|r| r.as_rpm().round() as i64),
+    let fans: Vec<Value> = raw_data
+        .fans
+        .iter()
+        .chain(raw_data.psu_fans.iter())
+        .map(|f| {
+            serde_json::json!({
+                "position": f.position,
+                "rpm":      f.rpm.map(|r| r.as_rpm().round() as i64),
+            })
         })
-    }).collect();
+        .collect();
 
-    let pools_raw: Vec<Value> = raw_data.pools.iter().flat_map(|g| {
-        g.pools.iter().map(|p| serde_json::json!({
-            "url":    p.url.as_ref().map(|u| u.to_string()),
-            "user":   p.user,
-            "active": p.active,
-            "alive":  p.alive,
-        }))
-    }).collect();
+    let pools_raw: Vec<Value> = raw_data
+        .pools
+        .iter()
+        .flat_map(|g| {
+            g.pools.iter().map(|p| {
+                serde_json::json!({
+                    "url":    p.url.as_ref().map(|u| u.to_string()),
+                    "user":   p.user,
+                    "active": p.active,
+                    "alive":  p.alive,
+                })
+            })
+        })
+        .collect();
 
-    let raw_hostname          = raw_data.hostname.clone();
-    let raw_firmware          = raw_data.firmware_version.clone();
-    let raw_is_mining         = raw_data.is_mining;
-    let raw_uptime_s          = raw_data.uptime.map(|d| d.as_secs());
-    let raw_hashrate_th       = raw_data.hashrate.as_ref().map(|h| h.clone().as_unit(HashRateUnit::TeraHash).value);
-    let raw_expected_th       = raw_data.expected_hashrate.as_ref().map(|h| h.clone().as_unit(HashRateUnit::TeraHash).value);
-    let raw_wattage_w         = raw_data.wattage.map(|w| w.as_watts());
-    let raw_efficiency        = raw_data.efficiency;          // raw firmware value, unit unspecified
-    let raw_avg_temp_c        = raw_data.average_temperature.map(|t| t.as_celsius());
-    let raw_fluid_temp_c      = raw_data.fluid_temperature.map(|t| t.as_celsius());
-    let raw_total_chips       = raw_data.total_chips;
+    let raw_hostname = raw_data.hostname.clone();
+    let raw_firmware = raw_data.firmware_version.clone();
+    let raw_is_mining = raw_data.is_mining;
+    let raw_uptime_s = raw_data.uptime.map(|d| d.as_secs());
+    let raw_hashrate_th = raw_data
+        .hashrate
+        .as_ref()
+        .map(|h| h.clone().as_unit(HashRateUnit::TeraHash).value);
+    let raw_expected_th = raw_data
+        .expected_hashrate
+        .as_ref()
+        .map(|h| h.clone().as_unit(HashRateUnit::TeraHash).value);
+    let raw_wattage_w = raw_data.wattage.map(|w| w.as_watts());
+    let raw_efficiency = raw_data.efficiency; // raw firmware value, unit unspecified
+    let raw_avg_temp_c = raw_data.average_temperature.map(|t| t.as_celsius());
+    let raw_fluid_temp_c = raw_data.fluid_temperature.map(|t| t.as_celsius());
+    let raw_total_chips = raw_data.total_chips;
 
     let normalized = miner_service::normalize(raw_data);
 
@@ -289,7 +305,8 @@ pub async fn get_miner(
 ) -> impl IntoResponse {
     match service::get_by_id(&state.pool, &id).await {
         Ok(Some(m)) => (
-            StatusCode::OK,            Json(serde_json::json!({ "success": true, "miner": m.to_json() })),
+            StatusCode::OK,
+            Json(serde_json::json!({ "success": true, "miner": m.to_json() })),
         ),
         Ok(None) => (
             StatusCode::NOT_FOUND,
@@ -352,7 +369,11 @@ pub async fn refresh_miner(
     match service::refresh_one(&state.pool, &id, state.config.miner_timeout_secs).await {
         Ok(v) => {
             let not_found = v["not_found"].as_bool().unwrap_or(false);
-            let code = if not_found { StatusCode::NOT_FOUND } else { StatusCode::OK };
+            let code = if not_found {
+                StatusCode::NOT_FOUND
+            } else {
+                StatusCode::OK
+            };
             (code, Json(v))
         }
         Err(e) => (
@@ -363,7 +384,13 @@ pub async fn refresh_miner(
 }
 
 pub async fn refresh_all_miners(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    match service::refresh_all(&state.pool, state.config.miner_timeout_secs, state.config.max_concurrent_probes).await {
+    match service::refresh_all(
+        &state.pool,
+        state.config.miner_timeout_secs,
+        state.config.max_concurrent_probes,
+    )
+    .await
+    {
         Ok(s) => (
             StatusCode::OK,
             Json(serde_json::json!({
@@ -418,7 +445,11 @@ async fn persist_scan_results(
         }
     }
 
-    ScanResponse { found, added, skipped }
+    ScanResponse {
+        found,
+        added,
+        skipped,
+    }
 }
 
 pub async fn scan_lan(State(state): State<Arc<AppState>>) -> impl IntoResponse {

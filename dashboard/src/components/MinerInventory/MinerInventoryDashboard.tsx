@@ -45,6 +45,7 @@ const MinerInventoryDashboard = () => {
             setMiners(data.miners.map((m: any) => mapApiToMiner(m)));
             setLastUpdate(new Date());
           }
+        } catch {
         }
       };
 
@@ -84,7 +85,8 @@ const MinerInventoryDashboard = () => {
         throw new Error(data.error || 'Failed to load miners');
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to fetch miners';
+      const message =
+        err instanceof Error ? err.message : 'Failed to fetch miners';
       console.error('Failed to fetch miners:', err);
       setError(message);
     } finally {
@@ -92,8 +94,9 @@ const MinerInventoryDashboard = () => {
     }
   }, []);
 
-
-  useEffect(() => { fetchMiners(); }, [fetchMiners]);
+  useEffect(() => {
+    fetchMiners();
+  }, [fetchMiners]);
   useEffect(() => {
     if (wsConnected) return;
     const interval = setInterval(fetchMiners, REFRESH_INTERVAL * 1000);
@@ -296,7 +299,8 @@ const MinerInventoryDashboard = () => {
           <div className="text-center py-12 text-gray-400">
             <p className="text-xl">No miners found</p>
             <p className="text-md mt-2">
-              The backend is scanning your LAN automatically, miners will appear here once discovered.
+              The backend is scanning your LAN automatically, miners will appear
+              here once discovered.
             </p>
           </div>
         ) : (

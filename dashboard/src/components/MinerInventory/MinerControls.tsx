@@ -1,7 +1,11 @@
 import React from 'react';
 import { MinerControlsProps } from './Types';
 
-const MinerControls: React.FC<MinerControlsProps> = ({ loading, lastUpdate, wsConnected }) => (
+const MinerControls: React.FC<MinerControlsProps> = ({
+  loading,
+  lastUpdate,
+  wsConnected,
+}) => (
   <div className="mt-4 mb-8 flex items-center justify-center gap-4 text-sm text-gray-400">
     <span className="flex items-center gap-1.5">
       <span
@@ -27,4 +31,3 @@ const MinerControls: React.FC<MinerControlsProps> = ({ loading, lastUpdate, wsCo
 );
 
 export default MinerControls;
-

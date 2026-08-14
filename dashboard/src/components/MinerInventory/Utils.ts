@@ -3,7 +3,7 @@ import { THRESHOLDS } from './Constant';
 const determineStatus = (data: any): 'online' | 'warning' | 'offline' => {
   // Truly offline device not responding on the network
   if (!data.is_online) return 'offline';
-// Online but not mining = thermal protection(overheat mode), error stop, or initialising
+  // Online but not mining = thermal protection(overheat mode), error stop, or initialising
   if (data.is_mining === false || data.is_mining == null) return 'warning';
 
   if (

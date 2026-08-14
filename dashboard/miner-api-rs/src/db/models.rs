@@ -60,10 +60,8 @@ impl MinerDevice {
     pub fn to_json(&self) -> Value {
         let fan_speeds: Value =
             serde_json::from_str(&self.fan_speeds).unwrap_or(Value::Array(vec![]));
-        let errors: Value =
-            serde_json::from_str(&self.errors).unwrap_or(Value::Array(vec![]));
-        let pools: Value =
-            serde_json::from_str(&self.pools).unwrap_or(Value::Array(vec![]));
+        let errors: Value = serde_json::from_str(&self.errors).unwrap_or(Value::Array(vec![]));
+        let pools: Value = serde_json::from_str(&self.pools).unwrap_or(Value::Array(vec![]));
 
         serde_json::json!({
             "id":               self.id,

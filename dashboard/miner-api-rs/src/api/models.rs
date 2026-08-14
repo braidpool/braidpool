@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-//  request models 
+//  request models
 
 #[derive(Debug, Deserialize)]
 pub struct AddMinerRequest {
@@ -18,7 +18,7 @@ pub struct ScanSubnetRequest {
     pub cidr: String,
 }
 
-//  response models 
+//  response models
 
 #[derive(Debug, Serialize)]
 pub struct HealthResponse {

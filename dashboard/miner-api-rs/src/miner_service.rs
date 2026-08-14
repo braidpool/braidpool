@@ -5,7 +5,7 @@ use asic_rs::core::data::hashrate::HashRateUnit;
 use asic_rs::MinerFactory;
 use tracing::{debug, warn};
 
-/// pool info 
+/// pool info
 #[derive(Debug, Clone)]
 pub struct PoolInfo {
     pub url: Option<String>,
@@ -112,14 +112,18 @@ pub async fn probe_ip(ip: IpAddr, timeout_secs: u64) -> Option<NormalizedMinerDa
         Err(_) => {
             warn!(ip = %ip, "get_data timed out, using device_info only");
             let info = miner.get_device_info();
-            return Some(offline_from_make_model(&info.make, &info.model, "get_data timed out"));
+            return Some(offline_from_make_model(
+                &info.make,
+                &info.model,
+                "get_data timed out",
+            ));
         }
     };
 
     Some(normalize(data))
 }
 pub fn normalize(data: asic_rs::core::data::miner::MinerData) -> NormalizedMinerData {
-    //  hashrate 
+    //  hashrate
     let hashrate_current = data
         .hashrate
         .map(|h| round2(h.as_unit(HashRateUnit::TeraHash).value));
@@ -127,7 +131,7 @@ pub fn normalize(data: asic_rs::core::data::miner::MinerData) -> NormalizedMiner
         .expected_hashrate
         .map(|h| round2(h.as_unit(HashRateUnit::TeraHash).value));
 
-    //  temperatures 
+    //  temperatures
     let outlet_temps: Vec<f64> = data
         .hashboards
         .iter()
@@ -140,7 +144,7 @@ pub fn normalize(data: asic_rs::core::data::miner::MinerData) -> NormalizedMiner
         .filter_map(|b| b.intake_temperature.map(|t| t.as_celsius()))
         .collect();
 
-    // temperature_max  
+    // temperature_max
     let temperature_max = outlet_temps
         .iter()
         .cloned()
@@ -164,7 +168,7 @@ pub fn normalize(data: asic_rs::core::data::miner::MinerData) -> NormalizedMiner
         .map(round2)
         .or_else(|| data.fluid_temperature.map(|t| round2(t.as_celsius())));
 
-    // power 
+    // power
     let power_usage = data.wattage.map(|w| w.as_watts().round() as i64);
     let efficiency = data.efficiency.map(round2).or_else(|| {
         if let (Some(p), Some(h)) = (power_usage, hashrate_current) {
@@ -178,7 +182,7 @@ pub fn normalize(data: asic_rs::core::data::miner::MinerData) -> NormalizedMiner
         }
     });
 
-    //  fans 
+    //  fans
     let fan_speeds: Vec<i64> = data
         .fans
         .iter()
@@ -186,7 +190,7 @@ pub fn normalize(data: asic_rs::core::data::miner::MinerData) -> NormalizedMiner
         .filter_map(|f| f.rpm.map(|r| r.as_rpm().round() as i64))
         .collect();
 
-    //  pools 
+    //  pools
     let pools: Vec<PoolInfo> = data
         .pools
         .iter()
@@ -209,14 +213,10 @@ pub fn normalize(data: asic_rs::core::data::miner::MinerData) -> NormalizedMiner
 
     let primary_pool = extract_primary_pool_name(&pools);
 
-    //  errors 
-    let errors: Vec<String> = data
-        .messages
-        .iter()
-        .map(|m| format!("{m:?}"))
-        .collect();
+    //  errors
+    let errors: Vec<String> = data.messages.iter().map(|m| format!("{m:?}")).collect();
 
-    //  misc 
+    //  misc
     let mac = data.mac.as_ref().map(|m| m.to_string());
     let uptime = data.uptime.map(|d| d.as_secs() as i64);
     let chip_count = data.total_chips.map(|c| c as i64);
@@ -228,15 +228,15 @@ pub fn normalize(data: asic_rs::core::data::miner::MinerData) -> NormalizedMiner
         model: Some(data.device_info.model.clone()),
         firmware: data.firmware_version,
         hashrate_current,
-        hashrate_avg: hashrate_current, 
+        hashrate_avg: hashrate_current,
         expected_hashrate,
         temperature,
         temperature_max,
         vr_temperature,
         power_usage,
-        power_limit: None, 
+        power_limit: None,
         efficiency,
-        voltage: None, 
+        voltage: None,
         fan_speeds,
         chip_count,
         is_mining: data.is_mining,
@@ -268,10 +268,7 @@ fn extract_primary_pool_name(pools: &[PoolInfo]) -> String {
     } else {
         format!("stratum+tcp://{url}")
     };
-    let without_scheme = full
-        .split("://")
-        .nth(1)
-        .unwrap_or(&full);
+    let without_scheme = full.split("://").nth(1).unwrap_or(&full);
     let host_port = without_scheme.split('/').next().unwrap_or(without_scheme);
     let host = host_port.split(':').next().unwrap_or(host_port);
 

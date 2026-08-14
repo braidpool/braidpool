@@ -1,15 +1,14 @@
-use std::net::IpAddr;
-use std::sync::Arc;
 use anyhow::{anyhow, Result};
 use serde_json::Value;
 use sqlx::SqlitePool;
+use std::net::IpAddr;
+use std::sync::Arc;
 use tokio::sync::Semaphore;
 use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::db::models::MinerDevice;
 use crate::miner_service::{self, NormalizedMinerData};
-
 
 fn json_str(v: &[Value]) -> String {
     serde_json::to_string(v).unwrap_or_else(|_| "[]".to_string())
@@ -161,7 +160,6 @@ async fn update_telemetry(pool: &SqlitePool, device: &MinerDevice) -> Result<()>
     Ok(())
 }
 
-
 pub async fn add_miner(
     pool: &SqlitePool,
     ip: IpAddr,
@@ -233,25 +231,21 @@ pub async fn get_by_ip(pool: &SqlitePool, ip: &str) -> Result<Option<MinerDevice
 
 pub async fn get_all(pool: &SqlitePool) -> Result<Vec<MinerDevice>> {
     Ok(
-        sqlx::query_as::<_, MinerDevice>(
-            "SELECT * FROM miner_devices ORDER BY created_at DESC",
-        )
-        .fetch_all(pool)
-        .await?,
+        sqlx::query_as::<_, MinerDevice>("SELECT * FROM miner_devices ORDER BY created_at DESC")
+            .fetch_all(pool)
+            .await?,
     )
 }
 
 pub async fn update_name(pool: &SqlitePool, id: &str, name: Option<String>) -> Result<Value> {
     let now = MinerDevice::now_iso();
-    let rows = sqlx::query(
-        "UPDATE miner_devices SET name = ?, updated_at = ? WHERE id = ?",
-    )
-    .bind(&name)
-    .bind(&now)
-    .bind(id)
-    .execute(pool)
-    .await?
-    .rows_affected();
+    let rows = sqlx::query("UPDATE miner_devices SET name = ?, updated_at = ? WHERE id = ?")
+        .bind(&name)
+        .bind(&now)
+        .bind(id)
+        .execute(pool)
+        .await?
+        .rows_affected();
 
     if rows == 0 {
         return Ok(
@@ -278,17 +272,23 @@ pub async fn delete(pool: &SqlitePool, id: &str) -> Result<Value> {
     }
     Ok(serde_json::json!({ "success": true }))
 }
-async fn do_refresh(pool: &SqlitePool, device: MinerDevice, timeout_secs: u64) -> Result<ProbeResult> {
+async fn do_refresh(
+    pool: &SqlitePool,
+    device: MinerDevice,
+    timeout_secs: u64,
+) -> Result<ProbeResult> {
     let ip: IpAddr = device.ip.parse()?;
     let id = device.id.clone();
-    let now = MinerDevice::now_iso(); 
+    let now = MinerDevice::now_iso();
 
     match miner_service::probe_ip(ip, timeout_secs).await {
         Some(data) => {
             let mut d = device;
             apply_normalized(&mut d, &data);
             update_telemetry(pool, &d).await?;
-            let updated = get_by_id(pool, &id).await?.ok_or_else(|| anyhow!("row lost"))?;
+            let updated = get_by_id(pool, &id)
+                .await?
+                .ok_or_else(|| anyhow!("row lost"))?;
             Ok(ProbeResult::Online(updated))
         }
         None => {
@@ -301,8 +301,13 @@ async fn do_refresh(pool: &SqlitePool, device: MinerDevice, timeout_secs: u64) -
             .bind(&id)
             .execute(pool)
             .await?;
-            let updated = get_by_id(pool, &id).await?.ok_or_else(|| anyhow!("row lost"))?;
-            Ok(ProbeResult::Offline { device: updated, error })
+            let updated = get_by_id(pool, &id)
+                .await?
+                .ok_or_else(|| anyhow!("row lost"))?;
+            Ok(ProbeResult::Offline {
+                device: updated,
+                error,
+            })
         }
     }
 }
@@ -310,17 +315,19 @@ async fn do_refresh(pool: &SqlitePool, device: MinerDevice, timeout_secs: u64) -
 pub async fn refresh_one(pool: &SqlitePool, id: &str, timeout_secs: u64) -> Result<Value> {
     let device = match get_by_id(pool, id).await? {
         Some(d) => d,
-        None => return Ok(serde_json::json!({
-            "success":   false,
-            "error":     "Miner not found",
-            "not_found": true,
-        })),
+        None => {
+            return Ok(serde_json::json!({
+                "success":   false,
+                "error":     "Miner not found",
+                "not_found": true,
+            }))
+        }
     };
     match do_refresh(pool, device, timeout_secs).await? {
-        ProbeResult::Online(m) =>
-            Ok(serde_json::json!({ "success": true, "miner": m.to_json() })),
-        ProbeResult::Offline { device: m, error } =>
-            Ok(serde_json::json!({ "success": false, "error": error, "miner": m.to_json() })),
+        ProbeResult::Online(m) => Ok(serde_json::json!({ "success": true, "miner": m.to_json() })),
+        ProbeResult::Offline { device: m, error } => {
+            Ok(serde_json::json!({ "success": false, "error": error, "miner": m.to_json() }))
+        }
     }
 }
 
@@ -370,7 +377,11 @@ pub async fn refresh_all(
             Ok(Ok(v)) => {
                 let ok = v["success"].as_bool().unwrap_or(false);
                 let miner = v["miner"].clone();
-                if ok { success += 1; } else { failed += 1; }
+                if ok {
+                    success += 1;
+                } else {
+                    failed += 1;
+                }
                 results.push(serde_json::json!({ "success": ok, "miner": miner }));
             }
             Ok(Err(e)) => {
@@ -384,7 +395,12 @@ pub async fn refresh_all(
         }
     }
 
-    Ok(RefreshSummary { total, success, failed, miners: results })
+    Ok(RefreshSummary {
+        total,
+        success,
+        failed,
+        miners: results,
+    })
 }
 pub async fn upsert_discovered(
     pool: &SqlitePool,
