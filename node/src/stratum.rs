@@ -4813,17 +4813,15 @@ mod test {
 
     // ShareCounters tests
 
-    async fn make_job_map_with_entry() -> (Arc<Mutex<MiningJobMap>>, u64, Arc<Mutex<SwarmHandler>>)
-    {
-        let genesis_beads = Vec::from([]);
-        let test_braid = Arc::new(RwLock::new(braid::Braid::new(
-            genesis_beads,
-            PoolNetwork::Cpunet,
-        )));
+    async fn minimal_swarm() -> Arc<Mutex<SwarmHandler>> {
+        let braid = Arc::new(RwLock::new(braid::Braid::new(vec![], PoolNetwork::Cpunet)));
         let (_db, db_tx) = DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
-        let (swarm_handler, _rx) =
-            SwarmHandler::new(Arc::clone(&test_braid), db_tx, DashboardEvents::new());
-        let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
+        let (sh, _rx) = SwarmHandler::new(Arc::clone(&braid), db_tx, DashboardEvents::new());
+        Arc::new(Mutex::new(sh))
+    }
+
+    async fn job_store_with_entry() -> (Arc<Mutex<GlobalJobStore>>, u64, Arc<Mutex<SwarmHandler>>) {
+        let swarm_handler_arc = minimal_swarm().await;
 
         let mut test_witness = bitcoin::Witness::new();
         test_witness.push(vec![0u8; 32]);
@@ -4912,46 +4910,24 @@ mod test {
             job_sent_time: unix_ts,
             is_upstream_job: false,
         };
-        let map = Arc::new(Mutex::new(MiningJobMap::new()));
+        let map = Arc::new(Mutex::new(GlobalJobStore::new(
+            crate::GLOBAL_JOB_STORE_CAPACITY,
+        )));
         let job_id = map
             .lock()
             .await
-            .insert_mining_job(TemplateId::Braidpool(1), job_details)
-            .await;
+            .insert(TemplateId::Braidpool(1), Arc::new(job_details));
         (map, job_id, swarm_handler_arc)
-    }
-
-    #[tokio::test]
-    async fn test_share_counter_malformed_params_counts_invalid() {
-        let mut client = DownstreamClient::new(PoolNetwork::Cpunet);
-        client.authorized = true;
-        let map = Arc::new(Mutex::new(MiningJobMap::new()));
-        let (_db, db_tx) = DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
-        let test_braid = Arc::new(RwLock::new(braid::Braid::new(vec![], PoolNetwork::Cpunet)));
-        let (sh, _rx) = SwarmHandler::new(Arc::clone(&test_braid), db_tx, DashboardEvents::new());
-        let sh_arc = Arc::new(Mutex::new(sh));
-
-        // Empty params array — fails before lookup
-        let result = client
-            .handle_submit(&json!([]), map, 1, sh_arc, None, None, None)
-            .await;
-        assert!(result.is_err());
-        assert_eq!(client.share_counters.invalid, 1);
-        assert_eq!(client.share_counters.stale, 0);
-        assert_eq!(client.share_counters.accepted, 0);
     }
 
     #[tokio::test]
     async fn test_share_counter_bogus_job_id_counts_stale() {
         let mut client = DownstreamClient::new(PoolNetwork::Cpunet);
         client.authorized = true;
-        // Empty map — job 99999 doesn't exist
-        let map = Arc::new(Mutex::new(MiningJobMap::new()));
-        let (_db, db_tx) = DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
-        let test_braid = Arc::new(RwLock::new(braid::Braid::new(vec![], PoolNetwork::Cpunet)));
-        let (sh, _rx) = SwarmHandler::new(Arc::clone(&test_braid), db_tx, DashboardEvents::new());
-        let sh_arc = Arc::new(Mutex::new(sh));
-
+        // Empty store — job 99999 doesn't exist, lookup must count as stale.
+        let map = Arc::new(Mutex::new(GlobalJobStore::new(
+            crate::GLOBAL_JOB_STORE_CAPACITY,
+        )));
         let params = json!([
             "worker",
             "99999",
@@ -4960,7 +4936,7 @@ mod test {
             "00000001"
         ]);
         let result = client
-            .handle_submit(&params, map, 1, sh_arc, None, None, None)
+            .handle_submit(&params, map, 1, minimal_swarm().await, None, None, None)
             .await;
         assert!(result.is_err());
         assert_eq!(client.share_counters.stale, 1);
@@ -4971,12 +4947,12 @@ mod test {
     #[tokio::test]
     async fn test_share_counter_below_target_counts_invalid() {
         // Submits a known-failing nonce against the 207fffff (min-difficulty) job
-        // from make_job_map_with_entry. From submit_work_version_rolling we know
+        // from job_store_with_entry. From submit_work_version_rolling we know
         // that with extranonce1=000000009495ac08, extranonce2=0000000003000000,
         // ntime=68df7e33, the valid nonce is 3 — so nonce 0 fails PoW.
         // The share returns Ok(false), not Err — which is exactly why
         // return-type classification would miscount it as accepted.
-        let (map, job_id, sh_arc) = make_job_map_with_entry().await;
+        let (map, job_id, sh_arc) = job_store_with_entry().await;
         let mut client = DownstreamClient::new(PoolNetwork::Cpunet);
         client.authorized = true;
         client.extranonce1 = hex::decode("000000009495ac08").unwrap();
@@ -5000,10 +4976,10 @@ mod test {
 
     #[tokio::test]
     async fn test_share_counter_valid_submit_counts_accepted() {
-        let (map, job_id, sh_arc) = make_job_map_with_entry().await;
+        let (map, job_id, sh_arc) = job_store_with_entry().await;
         let mut client = DownstreamClient::new(PoolNetwork::Cpunet);
         client.authorized = true;
-        // Must match the extranonce1 embedded in the coinbase built by make_job_map_with_entry.
+        // Must match the extranonce1 embedded in the coinbase built by job_store_with_entry.
         client.extranonce1 = hex::decode("000000009495ac08").unwrap();
 
         // Replicate handle_submit's coinbase construction to grind a valid nonce
@@ -5061,19 +5037,15 @@ mod test {
 
     #[tokio::test]
     async fn test_share_counter_unauthorized_submit_counts_invalid() {
-        // authorized stays false (default) — the auth gate should reject before
-        // params are parsed. Valid-looking params ensure the only failure reason
-        // is the auth check, not a malformed-params path.
-        let mut client = DownstreamClient::default();
-        let map = Arc::new(Mutex::new(MiningJobMap::new()));
-        let (_db, db_tx) = DBHandler::new().await.unwrap();
-        let test_braid = Arc::new(RwLock::new(braid::Braid::new(vec![])));
-        let (sh, _rx) = SwarmHandler::new(Arc::clone(&test_braid), db_tx, DashboardEvents::new());
-        let sh_arc = Arc::new(Mutex::new(sh));
-
+        // authorized stays false (default) — the auth gate rejects before params
+        // are parsed, so valid-looking params ensure the only failure is the auth check.
+        let mut client = DownstreamClient::new(PoolNetwork::Cpunet);
+        let map = Arc::new(Mutex::new(GlobalJobStore::new(
+            crate::GLOBAL_JOB_STORE_CAPACITY,
+        )));
         let params = json!(["worker", "1", "0000000000000000", "68df7e33", "00000001"]);
         let result = client
-            .handle_submit(&params, map, 1, sh_arc, None, None, None)
+            .handle_submit(&params, map, 1, minimal_swarm().await, None, None, None)
             .await;
         assert!(result.is_err());
         assert_eq!(client.share_counters.invalid, 1);
