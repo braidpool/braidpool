@@ -45,8 +45,7 @@ const MinerInventoryDashboard = () => {
             setMiners(data.miners.map((m: any) => mapApiToMiner(m)));
             setLastUpdate(new Date());
           }
-        } catch {
-        }
+        } catch {}
       };
 
       ws.onerror = () => {
