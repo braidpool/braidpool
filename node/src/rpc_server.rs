@@ -1081,7 +1081,8 @@ impl RpcServer for RpcServerImpl {
                         .and_then(|v| v.as_u64())
                         .unwrap_or(0);
                     let has_block = tx_data.get("blockhash").is_some();
-                    let (btc_stage, btc_stage_name): (u8, &str) = if has_block && confirmations >= 6 {
+                    let (btc_stage, btc_stage_name): (u8, &str) = if has_block && confirmations >= 6
+                    {
                         (6, "confirmed")
                     } else if has_block {
                         (5, "mined")

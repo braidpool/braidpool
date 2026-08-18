@@ -87,9 +87,7 @@ async fn setup_sqlite_db(db_name: &str, schema_sql: &str) -> Result<SqlitePool, 
                 error: error.to_string(),
             })?;
         // Idempotent startup migration: ensure indices added after initial schema
-        let migrations = [
-            "CREATE INDEX IF NOT EXISTS transactions_txid ON Transactions(txid)",
-        ];
+        let migrations = ["CREATE INDEX IF NOT EXISTS transactions_txid ON Transactions(txid)"];
         for migration in &migrations {
             if let Err(e) = pool.execute(*migration).await {
                 warn!(error = ?e, migration = migration, "Startup migration failed (non-fatal)");
