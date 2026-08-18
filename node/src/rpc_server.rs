@@ -1030,25 +1030,7 @@ impl RpcServer for RpcServerImpl {
     async fn get_transaction_status(&self, txid: String) -> Result<Value, ErrorObjectOwned> {
         info!(txid = %txid, "get_transaction_status request received");
 
-        // Stage 2: txid is in the current block template (staged for next share/block)
-        {
-            let template = self.latest_block.lock().await;
-            let in_template = template
-                .transactions
-                .iter()
-                .skip(1) // skip coinbase
-                .any(|tx| tx.compute_txid().to_string() == txid);
-            if in_template {
-                return Ok(serde_json::json!({
-                    "txid": txid,
-                    "stage": 2,
-                    "stage_name": "staged",
-                    "detail": {}
-                }));
-            }
-        }
-
-        // Stage 3: txid committed in a bead
+        // Parse first so all checks use the canonical Txid type (avoids case mismatch).
         let txid_parsed = txid.parse::<Txid>().map_err(|_| {
             ErrorObjectOwned::owned(
                 1,
@@ -1056,19 +1038,35 @@ impl RpcServer for RpcServerImpl {
                 None::<()>,
             )
         })?;
+        let mut best_stage: u8 = 0;
+        let mut best_stage_name = "unknown";
+        let mut best_detail = serde_json::json!({});
+
+        // Stage 3: txid committed in a bead.
         {
             let braid = self.braid_arc.read().await;
             if let Some(bead_hash) = braid.txid_to_bead.get(&txid_parsed) {
-                return Ok(serde_json::json!({
-                    "txid": txid,
-                    "stage": 3,
-                    "stage_name": "committed",
-                    "detail": { "bead_hash": bead_hash.to_string() }
-                }));
+                best_stage = 3;
+                best_stage_name = "committed";
+                best_detail = serde_json::json!({ "bead_hash": bead_hash.to_string() });
             }
         }
 
-        // Stages 1, 5, 6: query Bitcoin Core via getrawtransaction
+        // Stage 2: txid is in the current block template (staged for next share/block).
+        if best_stage < 2 {
+            let template = self.latest_block.lock().await;
+            let in_template = template
+                .transactions
+                .iter()
+                .skip(1) // skip coinbase
+                .any(|tx| tx.compute_txid() == txid_parsed);
+            if in_template {
+                best_stage = 2;
+                best_stage_name = "staged";
+                best_detail = serde_json::json!({});
+            }
+        }
+
         if let Some(rpc_config) = &self.bitcoin_rpc_config {
             match call_bitcoin_rpc_direct(
                 rpc_config,
@@ -1083,36 +1081,35 @@ impl RpcServer for RpcServerImpl {
                         .and_then(|v| v.as_u64())
                         .unwrap_or(0);
                     let has_block = tx_data.get("blockhash").is_some();
-                    let (stage, stage_name): (u8, &str) = if has_block && confirmations >= 6 {
+                    let (btc_stage, btc_stage_name): (u8, &str) = if has_block && confirmations >= 6 {
                         (6, "confirmed")
                     } else if has_block {
                         (5, "mined")
                     } else {
                         (1, "mempool")
                     };
-                    let mut detail = serde_json::json!({
-                        "fee": tx_data.get("fee"),
-                        "vsize": tx_data.get("vsize"),
-                        "size": tx_data.get("size"),
-                        "weight": tx_data.get("weight"),
-                        "version": tx_data.get("version"),
-                        "locktime": tx_data.get("locktime"),
-                        "vin": tx_data.get("vin"),
-                        "vout": tx_data.get("vout"),
-                    });
-                    if let Some(block_hash) = tx_data.get("blockhash") {
-                        detail["block_hash"] = block_hash.clone();
-                        detail["confirmations"] = serde_json::json!(confirmations);
-                        if let Some(bt) = tx_data.get("blocktime") {
-                            detail["blocktime"] = bt.clone();
+                    if btc_stage > best_stage {
+                        best_stage = btc_stage;
+                        best_stage_name = btc_stage_name;
+                        let mut detail = serde_json::json!({
+                            "fee": tx_data.get("fee"),
+                            "vsize": tx_data.get("vsize"),
+                            "size": tx_data.get("size"),
+                            "weight": tx_data.get("weight"),
+                            "version": tx_data.get("version"),
+                            "locktime": tx_data.get("locktime"),
+                            "vin": tx_data.get("vin"),
+                            "vout": tx_data.get("vout"),
+                        });
+                        if let Some(block_hash) = tx_data.get("blockhash") {
+                            detail["block_hash"] = block_hash.clone();
+                            detail["confirmations"] = serde_json::json!(confirmations);
+                            if let Some(bt) = tx_data.get("blocktime") {
+                                detail["blocktime"] = bt.clone();
+                            }
                         }
+                        best_detail = detail;
                     }
-                    return Ok(serde_json::json!({
-                        "txid": txid,
-                        "stage": stage,
-                        "stage_name": stage_name,
-                        "detail": detail,
-                    }));
                 }
                 Err(e) => {
                     warn!(txid = %txid, error = %e, "getrawtransaction failed in gettransactionstatus");
@@ -1122,9 +1119,9 @@ impl RpcServer for RpcServerImpl {
 
         Ok(serde_json::json!({
             "txid": txid,
-            "stage": 0,
-            "stage_name": "unknown",
-            "detail": {}
+            "stage": best_stage,
+            "stage_name": best_stage_name,
+            "detail": best_detail,
         }))
     }
 
@@ -1167,8 +1164,10 @@ impl RpcServer for RpcServerImpl {
                 };
                 let rbf = entry
                     .get("bip125-replaceable")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s == "yes")
+                    .map(|v| {
+                        v.as_bool()
+                            .unwrap_or_else(|| v.as_str().map(|s| s == "yes").unwrap_or(false))
+                    })
                     .unwrap_or(false);
                 serde_json::json!({
                     "txid": txid,
@@ -1199,30 +1198,30 @@ impl RpcServer for RpcServerImpl {
         page_size: u32,
     ) -> Result<Value, ErrorObjectOwned> {
         info!(page = %page, page_size = %page_size, "get_committed_transactions request received");
+        let page_size_usize = page_size as usize;
+        let start = (page as usize).saturating_mul(page_size_usize);
+        let end = start.saturating_add(page_size_usize);
 
         let braid = self.braid_arc.read().await;
-        let mut all_entries: Vec<serde_json::Value> = Vec::new();
+        let mut total: usize = 0;
+        let mut page_entries: Vec<serde_json::Value> = Vec::new();
 
+        // Iterate once: count total and collect only the requested window.
         for bead in braid.beads.iter().rev() {
             let bead_hash = bead.block_header.block_hash().to_string();
             let timestamp = bead.committed_metadata.start_timestamp.to_consensus_u32();
             for txid in &bead.committed_metadata.transaction_ids.0 {
-                all_entries.push(serde_json::json!({
-                    "txid": txid.to_string(),
-                    "bead_hash": bead_hash,
-                    "timestamp": timestamp,
-                }));
+                if total >= start && total < end {
+                    page_entries.push(serde_json::json!({
+                        "txid": txid.to_string(),
+                        "bead_hash": bead_hash,
+                        "timestamp": timestamp,
+                    }));
+                }
+                total += 1;
             }
         }
-
-        let total = all_entries.len();
-        let start = (page * page_size) as usize;
-        let end = (start + page_size as usize).min(total);
-        let page_entries: Vec<serde_json::Value> = if start < total {
-            all_entries[start..end].to_vec()
-        } else {
-            Vec::new()
-        };
+        drop(braid);
 
         Ok(serde_json::json!({
             "total": total,
@@ -1247,6 +1246,7 @@ impl RpcServer for RpcServerImpl {
             "getblocktemplate",
             "getblockchaininfo",
             "getblock",
+            "getblockhash",
         ];
         if !ALLOWED.contains(&method.as_str()) {
             return Err(ErrorObjectOwned::owned(
