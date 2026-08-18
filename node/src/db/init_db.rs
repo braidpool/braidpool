@@ -53,19 +53,11 @@ async fn setup_sqlite_db(
 
     let pool = if db_exists {
         info!(db_path = %db_path.display(), "Using existing database");
-        let pool = SqlitePool::connect_with(sql_lite_connections)
+        SqlitePool::connect_with(sql_lite_connections)
             .await
             .map_err(|error| DBErrors::ConnectionToSQlitePoolFailed {
                 error: error.to_string(),
-            })?;
-        // Idempotent startup migration: ensure indices added after initial schema
-        let migrations = ["CREATE INDEX IF NOT EXISTS transactions_txid ON Transactions(txid)"];
-        for migration in &migrations {
-            if let Err(e) = pool.execute(*migration).await {
-                warn!(error = ?e, migration = migration, "Startup migration failed (non-fatal)");
-            }
-        }
-        pool
+            })?
     } else {
         info!(db_path = %db_path.display(), "Creating new database");
         if let Err(e) = std::fs::File::create_new(&db_path) {
