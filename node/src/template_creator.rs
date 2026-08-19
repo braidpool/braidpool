@@ -384,18 +384,17 @@ pub fn build_braidpool_coinbase_from_template(
 
     // Create the single payout output for the entire available amount.
     // According to the type of chain/network derive the pubkeyscript
-    let payout_script = if config.is_cpunet {
-        // Use cpunet module for cpunet addresses (tc1... prefix)
-        Cpunet::decode_bech32_address(&config.pool_payout_address)
-            .map_err(|e| CoinbaseError::InvalidBitcoinAddress(e.to_string()))?
-    } else {
+    let payout_script = match config.network {
+        None => Cpunet::decode_bech32_address(&config.pool_payout_address)
+            .map_err(|e| CoinbaseError::InvalidBitcoinAddress(e.to_string()))?,
         // Use standard rust-bitcoin address parsing for other networks
-        let network = config.get_network();
-        let payout_address = Address::from_str(&config.pool_payout_address)
-            .map_err(|e| CoinbaseError::AddressError(e.into()))?
-            .require_network(network)
-            .map_err(|_| CoinbaseError::AddressNetworkMismatch)?;
-        payout_address.script_pubkey()
+        Some(network) => {
+            let payout_address = Address::from_str(&config.pool_payout_address)
+                .map_err(CoinbaseError::AddressError)?
+                .require_network(network)
+                .map_err(|_| CoinbaseError::AddressNetworkMismatch)?;
+            payout_address.script_pubkey()
+        }
     };
 
     let reward_payout = TxOut {

@@ -25,7 +25,7 @@ use node::SwarmHandler;
 use node::{
     bead::{Bead, BeadHashes, BeadRequest, BeadResponse, BeadSyncError},
     behaviour::{self, BEAD_ANNOUNCE_PROTOCOL, BRAIDPOOL_TOPIC},
-    braid, cli,
+    braid, cli, config,
     db::db_handlers::DBHandler,
     ibd_manager::{IBDCommands, IBDManager, IBD_BATCH_SIZE},
     ipc_template_consumer,
@@ -69,23 +69,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
     setup_tracing()?;
     // Parse CLI arguments
     let args = cli::Cli::parse();
-    let mut network_name = args.network.clone().unwrap_or_else(|| "main".to_string());
-    // Validate network
-    let is_cpunet = Cpunet::is_cpunet_name(&network_name);
-    match network_name.as_str() {
-        "main" | "mainnet" | "testnet" | "testnet4" | "signet" | "regtest" | "cpunet" => {
-            info!(network = %network_name, is_cpunet = is_cpunet, "Network selected");
-        }
-        _ => {
-            error!(
-                network = %network_name,
-                valid_networks = "main, testnet, testnet4, signet, regtest, cpunet",
-                "Invalid network specified"
-            );
-            info!(fallback = "regtest", "Using fallback network");
-            network_name = "regtest".to_string();
-        }
+    let network_name = args.network.clone();
+    // Validating network and throwing appropriate error .
+    if let Err(error) = config::parse_network_name(&network_name) {
+        error!(
+            network = %network_name,
+            valid_networks = %config::SUPPORTED_NETWORKS.join(", "),
+            "Invalid network specified"
+        );
+        return Err(Box::<dyn Error>::from(error));
     }
+    let is_cpunet = Cpunet::is_cpunet_name(&network_name);
+    info!(network = %network_name, is_cpunet = is_cpunet, "Network selected");
     let (mut ibd_manager, ibd_command_tx) = IBDManager::new();
     //IBD cache handler
     let _ibd_handler = tokio::spawn(async move {

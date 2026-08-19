@@ -54,9 +54,9 @@ pub struct Cli {
     #[arg(long)]
     pub rpcpass: Option<String>,
 
-    /// Which network to use. Valid options are mainnet, testnet4, signet, cpunet (preferred)
-    #[arg(long, default_value = "main")]
-    pub network: Option<String>,
+    ///Required cli param to be passed during spawning of braidpool-node
+    #[arg(long, required = true)]
+    pub network: String,
 
     /// Use this cookie file for bitcoin RPC
     #[arg(long, default_value = DEFAULT_RPC_COOKIE)]
@@ -106,7 +106,14 @@ mod tests {
 
     #[test]
     fn rpc_bind_parses_socket_address() {
-        let cli = Cli::try_parse_from(["braid", "--rpc-bind", "127.0.0.1:1234"]).unwrap();
+        let cli = Cli::try_parse_from([
+            "braid",
+            "--network",
+            "cpunet",
+            "--rpc-bind",
+            "127.0.0.1:1234",
+        ])
+        .unwrap();
 
         assert_eq!(cli.rpc_bind.ip().to_string(), "127.0.0.1");
         assert_eq!(cli.rpc_bind.port(), 1234);

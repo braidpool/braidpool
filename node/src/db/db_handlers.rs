@@ -88,7 +88,9 @@ impl DBHandler {
     }
 
     #[cfg(test)]
-    pub async fn new_in_memory() -> Result<(Self, Sender<BraidpoolDBTypes>), DBErrors> {
+    pub async fn new_in_memory(
+        network_name: String,
+    ) -> Result<(Self, Sender<BraidpoolDBTypes>), DBErrors> {
         use sqlx::{
             sqlite::{SqliteConnectOptions, SqlitePoolOptions},
             Executor,
@@ -129,6 +131,7 @@ impl DBHandler {
             Self {
                 receiver: db_handler_rx,
                 db_connection_pool,
+                network_name,
             },
             db_handler_tx,
         ))
@@ -878,7 +881,9 @@ pub mod test {
     use std::path::Path;
     #[tokio::test]
     async fn test_batch_insertion_beads() {
-        let (handler, _db_tx) = DBHandler::new_in_memory().await.unwrap();
+        let (handler, _db_tx) = DBHandler::new_in_memory("cpunet".to_string())
+            .await
+            .unwrap();
         let test_pool = handler.db_connection_pool.clone();
         let ancestors = std::env::current_dir().unwrap();
         let ancestors_directory: Vec<&Path> = ancestors.ancestors().collect();

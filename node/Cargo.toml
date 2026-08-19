@@ -32,7 +32,6 @@ strum = { workspace = true }
 if-addrs = { workspace = true }
 anyhow = { workspace = true }
 socket2 = { version = "0.5", features = ["all"] }
-bitcoin-internals = "0.5.0"
 reqwest = { workspace = true }
 braidpool-common = {path = "../braidpool-common"}
 

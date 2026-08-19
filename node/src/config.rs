@@ -1,3 +1,4 @@
+use crate::error::UnsupportedNetworkError;
 use bitcoin::Network;
 use braidpool_common::cpunet::Cpunet;
 use core::panic;
@@ -105,16 +106,51 @@ impl BraidpoolConfig {
     }
 }
 
+/// The set of network names a braidpool node accepts.
+pub const SUPPORTED_NETWORKS: [&str; 6] =
+    ["main", "testnet", "testnet4", "signet", "regtest", "cpunet"];
+
+/// Resolves a network name to its [`Network`] type.
+///
+/// # Arguments
+/// * `network_name` - One of [`SUPPORTED_NETWORKS`], matched exactly
+///
+/// # Returns
+/// `Ok(Some(network))` for networks representable by rust-bitcoin, and `Ok(None)`
+/// for cpunet, which has no `Network` variant and is handled by our own
+/// [`Cpunet`] module.
+///
+/// # Errors
+/// [`UnsupportedNetworkError`] if `network_name` is not in [`SUPPORTED_NETWORKS`].
+pub fn parse_network_name(network_name: &str) -> Result<Option<Network>, UnsupportedNetworkError> {
+    // Cpunet is not representable by `bitcoin::Network`, so it is resolved first.
+    if Cpunet::is_cpunet_name(network_name) {
+        return Ok(None);
+    }
+    let core_arg = match network_name {
+        "main" => "main",
+        "testnet" => "test",
+        "testnet4" => "testnet4",
+        "signet" => "signet",
+        "regtest" => "regtest",
+        _ => {
+            return Err(UnsupportedNetworkError {
+                network_name: network_name.to_string(),
+            })
+        }
+    };
+    Network::from_core_arg(core_arg)
+        .map(Some)
+        .map_err(|_| UnsupportedNetworkError {
+            network_name: network_name.to_string(),
+        })
+}
+
 #[derive(Debug, Clone)]
 pub struct CoinbaseConfig {
-    /// Network name as string (e.g., "main", "testnet4", "signet", "regtest", "cpunet")
-    pub network_name: String,
-    /// The underlying Network type for non-cpunet networks (None for cpunet)
     pub network: Option<Network>,
     pub pool_payout_address: String,
     pub pool_identifier: String,
-    /// Flag indicating whether this is cpunet (uses our custom cpunet module)
-    pub is_cpunet: bool,
 }
 
 impl CoinbaseConfig {
@@ -122,51 +158,33 @@ impl CoinbaseConfig {
     ///
     /// For cpunet, uses our custom cpunet module.
     /// For other networks, uses `Network::from_core_arg()` from rust-bitcoin.
-    pub fn from_network_name(network_name: &str) -> Self {
-        let is_cpunet = Cpunet::is_cpunet_name(network_name);
+    ///
+    /// # Arguments
+    /// * `network_name` - One of [`SUPPORTED_NETWORKS`], matched exactly
+    ///
+    /// # Errors
+    /// [`UnsupportedNetworkError`] if `network_name` is not a supported network.
+    /// The name is never silently coerced onto a default chain, because that
+    /// would produce shares and payout addresses for the wrong chain.
+    pub fn from_network_name(network_name: &str) -> Result<Self, UnsupportedNetworkError> {
+        let network = parse_network_name(network_name)?;
+        let pool_payout_address = match network {
+            None => "tc1qu3cdq9unyhdc3d2hw8mvpfgnnhvp6ucckkl6ft".to_string(),
+            Some(Network::Bitcoin) => "bc1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
+            Some(Network::Regtest) => "bcrt1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
+            Some(_) => "tb1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
+        };
 
-        if is_cpunet {
-            Self {
-                network_name: "cpunet".to_string(),
-                network: None,
-                pool_payout_address: "tc1qu3cdq9unyhdc3d2hw8mvpfgnnhvp6ucckkl6ft".to_string(),
-                pool_identifier: "Braidpool".to_string(),
-                is_cpunet: true,
-            }
-        } else {
-            // Convert network name to core arg format if needed
-            let core_arg = match network_name {
-                "main" | "mainnet" | "bitcoin" => "main",
-                "testnet" | "testnet3" | "test" => "test",
-                "testnet4" => "testnet4",
-                "signet" => "signet",
-                "regtest" => "regtest",
-                other => other,
-            };
-            //Deriving actual type for utilizing the underlying functionality of deriving script_pubkey
-            let network = Network::from_core_arg(core_arg).unwrap_or(Network::Bitcoin);
-            let pool_payout_address = match network {
-                Network::Bitcoin => "bc1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
-                Network::Testnet => "tb1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
-                Network::Signet => "tb1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
-                Network::Regtest => "bcrt1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
-                _ => "tb1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
-            };
-
-            Self {
-                network_name: network_name.to_string(),
-                network: Some(network),
-                pool_payout_address,
-                pool_identifier: "Braidpool".to_string(),
-                is_cpunet: false,
-            }
-        }
+        Ok(Self {
+            network,
+            pool_payout_address,
+            pool_identifier: "Braidpool".to_string(),
+        })
     }
+    /// Returns whether this node is configured for cpunet.
     #[inline]
-    /// Returns the underlying Network type.
-    /// For cpunet, returns Regtest as a fallback for compatibility.
-    pub fn get_network(&self) -> Network {
-        self.network.unwrap_or(Network::Regtest)
+    pub fn is_cpunet(&self) -> bool {
+        self.network.is_none()
     }
 }
 

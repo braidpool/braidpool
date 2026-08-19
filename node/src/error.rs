@@ -557,3 +557,27 @@ impl fmt::Display for CoinbaseError {
     }
 }
 impl std::error::Error for CoinbaseError {}
+
+/// The node was asked to run against a network name that braidpool does not support.
+///
+/// Braidpool deliberately accepts a fixed, exact set of network names
+/// (see [`crate::config::SUPPORTED_NETWORKS`]) with no aliases and no fallback:
+/// silently binding to another chain would let miners produce shares that are
+/// invalid for the chain the operator intended.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnsupportedNetworkError {
+    /// The network name that was supplied by the operator.
+    pub network_name: String,
+}
+
+impl fmt::Display for UnsupportedNetworkError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Unsupported network {:?}, expected one of: {}",
+            self.network_name,
+            crate::config::SUPPORTED_NETWORKS.join(", ")
+        )
+    }
+}
+impl std::error::Error for UnsupportedNetworkError {}
