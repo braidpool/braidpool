@@ -7,7 +7,6 @@ import {
   getLatestTransactions,
   getTxInfo,
 } from '../Utils';
-import { getMempoolRecentUrl, getMempoolTransactionUrl } from '../../../URLs';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -94,34 +93,102 @@ describe('Utility Functions', () => {
   });
 
   describe('getLatestTransactions', () => {
-    it('fetches and returns data', async () => {
-      const data = [{ id: 1 }, { id: 2 }];
-      mockedAxios.get.mockResolvedValueOnce({ data });
-      const result = await getLatestTransactions();
-      expect(mockedAxios.get).toHaveBeenCalledWith(getMempoolRecentUrl());
-      expect(result).toEqual(data);
+    beforeEach(() => {
+      mockedAxios.post.mockReset();
     });
 
-    it('throws error when request fails', async () => {
-      mockedAxios.get.mockRejectedValueOnce(new Error('Network error'));
-      await expect(getLatestTransactions()).rejects.toThrow('Network error');
+    it('fetches and returns transactions from node RPCs', async () => {
+      // getmempoolentries
+      mockedAxios.post.mockResolvedValueOnce({
+        data: {
+          result: [
+            {
+              txid: 'aaaa',
+              fee: 1000,
+              vsize: 200,
+              fee_rate: 5.0,
+              time: 1000,
+              rbf: false,
+            },
+          ],
+          error: null,
+        },
+      });
+      // stagedtransactions
+      mockedAxios.post.mockResolvedValueOnce({
+        data: { result: [], error: null },
+      });
+      // getcommittedtransactions
+      mockedAxios.post.mockResolvedValueOnce({
+        data: { result: { transactions: [] }, error: null },
+      });
+
+      const result = await getLatestTransactions();
+      expect(mockedAxios.post).toHaveBeenCalledTimes(3);
+      expect(Array.isArray(result)).toBe(true);
+      expect(result[0].txid).toBe('aaaa');
+      expect(result[0].stage).toBe('mempool');
+    });
+
+    it('throws when all three RPC calls fail', async () => {
+      mockedAxios.post.mockRejectedValue(new Error('Network error'));
+      await expect(getLatestTransactions()).rejects.toThrow(
+        'Unable to fetch transactions: node unreachable or all RPCs failed'
+      );
     });
   });
 
   describe('getTxInfo', () => {
-    it('fetches and returns tx info', async () => {
-      const txid = 'abc123';
-      const data = { txid, info: 'some info' };
-      mockedAxios.get.mockResolvedValueOnce({ data });
-      const result = await getTxInfo(txid);
-      expect(mockedAxios.get).toHaveBeenCalledWith(
-        getMempoolTransactionUrl(txid)
-      );
-      expect(result).toEqual(data);
+    beforeEach(() => {
+      mockedAxios.post.mockReset();
     });
 
-    it('throws error when request fails', async () => {
-      mockedAxios.get.mockRejectedValueOnce(new Error('Request failed'));
+    it('fetches and returns tx info via gettransactionstatus', async () => {
+      const txid = 'abc123';
+      mockedAxios.post.mockResolvedValueOnce({
+        data: {
+          result: {
+            txid,
+            stage: 1,
+            stage_name: 'mempool',
+            detail: {
+              fee: -0.0001,
+              vsize: 200,
+              size: 220,
+              weight: 800,
+              version: 2,
+              locktime: 0,
+              vin: [],
+              vout: [],
+            },
+          },
+          error: null,
+        },
+      });
+
+      const result = await getTxInfo(txid);
+      expect(mockedAxios.post).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          method: 'gettransactionstatus',
+          params: [txid],
+        }),
+        expect.any(Object)
+      );
+      expect(result.txid).toBe(txid);
+      expect(result.stage).toBe('mempool');
+      expect(result.fee).toBe(10000); // 0.0001 BTC in sats
+    });
+
+    it('throws when the RPC returns an error', async () => {
+      mockedAxios.post.mockResolvedValueOnce({
+        data: { result: null, error: { message: 'Invalid txid' } },
+      });
+      await expect(getTxInfo('bad')).rejects.toThrow('Invalid txid');
+    });
+
+    it('throws when the network request fails', async () => {
+      mockedAxios.post.mockRejectedValueOnce(new Error('Request failed'));
       await expect(getTxInfo('txid')).rejects.toThrow('Request failed');
     });
   });

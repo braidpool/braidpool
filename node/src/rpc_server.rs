@@ -33,7 +33,9 @@ use std::future::Future;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot, watch, RwLock};
-use tracing::{error, info, warn};
+use tower::ServiceBuilder;
+use tower_http::cors::CorsLayer;
+use tracing::{debug, error, info, warn};
 
 #[cfg(test)]
 use {
@@ -1068,13 +1070,16 @@ impl RpcServer for RpcServerImpl {
         }
 
         if let Some(rpc_config) = &self.bitcoin_rpc_config {
-            match call_bitcoin_rpc_direct(
+            // Map the error to String immediately so getrawtx_result is
+            // Result<JsonValue, String> — fully Send — before any further .await.
+            let getrawtx_result = call_bitcoin_rpc_direct(
                 rpc_config,
                 "getrawtransaction",
                 &serde_json::json!([txid, true]),
             )
             .await
-            {
+            .map_err(|e| e.to_string());
+            let needs_wallet_fallback = match getrawtx_result {
                 Ok(tx_data) => {
                     let confirmations = tx_data
                         .get("confirmations")
@@ -1111,9 +1116,66 @@ impl RpcServer for RpcServerImpl {
                         }
                         best_detail = detail;
                     }
+                    false
                 }
                 Err(e) => {
-                    warn!(txid = %txid, error = %e, "getrawtransaction failed in gettransactionstatus");
+                    debug!(txid = %txid, error = %e, "getrawtransaction unavailable; trying gettransaction wallet fallback");
+                    true
+                }
+            };
+            if needs_wallet_fallback {
+                match call_bitcoin_rpc_direct(
+                    rpc_config,
+                    "gettransaction",
+                    &serde_json::json!([txid, true]),
+                )
+                .await
+                {
+                    Ok(wallet_tx) => {
+                        let confirmations = wallet_tx
+                            .get("confirmations")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0);
+                        let has_block = wallet_tx.get("blockhash").is_some();
+                        let (btc_stage, btc_stage_name): (u8, &str) =
+                            if has_block && confirmations >= 6 {
+                                (6, "confirmed")
+                            } else if has_block {
+                                (5, "mined")
+                            } else {
+                                (1, "mempool")
+                            };
+                        if btc_stage > best_stage {
+                            best_stage = btc_stage;
+                            best_stage_name = btc_stage_name;
+                            let mut detail = serde_json::json!({
+                                "fee": wallet_tx.get("fee"),
+                            });
+                            if let Some(block_hash) = wallet_tx.get("blockhash") {
+                                detail["block_hash"] = block_hash.clone();
+                                detail["confirmations"] = serde_json::json!(confirmations);
+                                if let Some(bh) = wallet_tx.get("blockheight") {
+                                    detail["blockheight"] = bh.clone();
+                                }
+                                if let Some(bt) = wallet_tx.get("blocktime") {
+                                    detail["blocktime"] = bt.clone();
+                                }
+                            }
+                            best_detail = detail;
+                        }
+                    }
+                    Err(e2) => {
+                        let e2_str = e2.to_string();
+                        // Connection refused / unreachable = Bitcoin Core not running.
+                        // Log at debug to avoid spam; warn only for unexpected errors.
+                        if e2_str.contains("Connection refused")
+                            || e2_str.contains("error sending request")
+                        {
+                            debug!(txid = %txid, error = %e2_str, "gettransaction wallet fallback failed: Bitcoin Core unreachable");
+                        } else {
+                            warn!(txid = %txid, error = %e2_str, "gettransaction wallet fallback also failed in gettransactionstatus");
+                        }
+                    }
                 }
             }
         }
@@ -1361,8 +1423,10 @@ pub async fn run_rpc_server(
     let rpc_middleware =
         jsonrpsee::server::middleware::rpc::RpcServiceBuilder::new().layer_fn(LoggingMiddleware);
     //building the context/server supporting the http transport and ws
+    let cors = CorsLayer::permissive();
     let server = jsonrpsee::server::Server::builder()
         .set_rpc_middleware(rpc_middleware)
+        .set_http_middleware(ServiceBuilder::new().layer(cors))
         .build(bind_address)
         .await
         .map_err(|e| {

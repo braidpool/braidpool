@@ -71,13 +71,23 @@ const BitcoinPriceTracker: React.FC = () => {
 
   useEffect(() => {
     const fetchTransactions = async () => {
-      const data = await getLatestTransactions();
-      setTransactions(data as any[]);
+      try {
+        const data = await getLatestTransactions();
+        setTransactions(data as any[]);
+      } catch {
+        console.warn(
+          '[TransactionTable] Failed to fetch transactions; node may be unreachable'
+        );
+      }
     };
     fetchTransactions();
     const fetchRbfTransactions = async () => {
-      const data = await latestRBFTransactions();
-      setrbfTransactions(data as any[]);
+      try {
+        const data = await latestRBFTransactions();
+        setrbfTransactions(data as any[]);
+      } catch {
+        console.warn('[RBFTable] Failed to fetch RBF transactions');
+      }
     };
     fetchRbfTransactions();
     const intervalId = setInterval(() => {

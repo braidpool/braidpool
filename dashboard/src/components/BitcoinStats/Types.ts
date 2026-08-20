@@ -33,7 +33,7 @@ export interface RBFTransaction {
   tx: TransactionInfo;
   time: number;
   fullRbf?: boolean;
-  replaces: RBFTransaction[];
+  replaces?: RBFTransaction[];
 }
 
 export interface RBFTransactionRowProps {

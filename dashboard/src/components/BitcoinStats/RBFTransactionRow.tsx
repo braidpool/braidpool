@@ -13,7 +13,7 @@ export const RBFTransactionRow: React.FC<RBFTransactionRowProps> = ({
   const txData = tx.tx;
   const indent = depth * 20;
   const isExpanded = expandedTxs.has(txData.txid);
-  const hasReplacements = tx.replaces && tx.replaces.length > 0;
+  const hasReplacements = tx.replaces != null && tx.replaces.length > 0;
 
   return (
     <>
@@ -53,8 +53,7 @@ export const RBFTransactionRow: React.FC<RBFTransactionRowProps> = ({
       </tr>
 
       {isExpanded &&
-        tx.replaces &&
-        tx.replaces.map((replacedTx, idx) => (
+        tx.replaces?.map((replacedTx, idx) => (
           <RBFTransactionRow
             isReplacement={true}
             key={replacedTx.tx.txid + idx}

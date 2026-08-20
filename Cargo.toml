@@ -52,5 +52,7 @@ strum = { version = "0.26", features = ["derive"] }
 if-addrs = "0.13"
 anyhow = "1.0.100"
 reqwest = { version = "0.11", features = ["json"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors"] }
 
 
