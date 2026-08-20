@@ -1,8 +1,6 @@
 import axios from 'axios';
 import { useState } from 'react';
-import {
-  getBraidpoolNodeRpcUrl,
-} from '../../URLs';
+import { getBraidpoolNodeRpcUrl } from '../../URLs';
 
 const RPC_TIMEOUT = 8000;
 let _rpcId = 0;
@@ -45,30 +43,50 @@ export const shortenAddress = (value: string): string => {
 
 const _upliftCache = new Map<string, 'mined' | 'confirmed'>();
 const _noUpliftCount = new Map<string, number>();
-const NO_UPLIFT_GIVE_UP = 3; 
+const NO_UPLIFT_GIVE_UP = 3;
 
 export const getLatestTransactions = async (): Promise<any> => {
-  const [mempoolResult, stagedResult, committedResult] = await Promise.allSettled([
-    axios.post(
-      getBraidpoolNodeRpcUrl(),
-      { jsonrpc: '2.0', id: nextId(), method: 'getmempoolentries', params: [20] },
-      { timeout: RPC_TIMEOUT }
-    ),
-    axios.post(
-      getBraidpoolNodeRpcUrl(),
-      { jsonrpc: '2.0', id: nextId(), method: 'stagedtransactions', params: [] },
-      { timeout: RPC_TIMEOUT }
-    ),
-    axios.post(
-      getBraidpoolNodeRpcUrl(),
-      { jsonrpc: '2.0', id: nextId(), method: 'getcommittedtransactions', params: [0, 20] },
-      { timeout: RPC_TIMEOUT }
-    ),
-  ]);
+  const [mempoolResult, stagedResult, committedResult] =
+    await Promise.allSettled([
+      axios.post(
+        getBraidpoolNodeRpcUrl(),
+        {
+          jsonrpc: '2.0',
+          id: nextId(),
+          method: 'getmempoolentries',
+          params: [20],
+        },
+        { timeout: RPC_TIMEOUT }
+      ),
+      axios.post(
+        getBraidpoolNodeRpcUrl(),
+        {
+          jsonrpc: '2.0',
+          id: nextId(),
+          method: 'stagedtransactions',
+          params: [],
+        },
+        { timeout: RPC_TIMEOUT }
+      ),
+      axios.post(
+        getBraidpoolNodeRpcUrl(),
+        {
+          jsonrpc: '2.0',
+          id: nextId(),
+          method: 'getcommittedtransactions',
+          params: [0, 20],
+        },
+        { timeout: RPC_TIMEOUT }
+      ),
+    ]);
 
   const txMap = new Map<string, any>();
-  if (committedResult.status === 'fulfilled' && !committedResult.value.data.error) {
-    const entries: any[] = committedResult.value.data.result?.transactions ?? [];
+  if (
+    committedResult.status === 'fulfilled' &&
+    !committedResult.value.data.error
+  ) {
+    const entries: any[] =
+      committedResult.value.data.result?.transactions ?? [];
     for (const tx of entries) {
       txMap.set(tx.txid, {
         txid: tx.txid,
@@ -116,7 +134,9 @@ export const getLatestTransactions = async (): Promise<any> => {
   }
 
   if (txMap.size === 0) {
-    throw new Error('Unable to fetch transactions: node unreachable or all RPCs failed');
+    throw new Error(
+      'Unable to fetch transactions: node unreachable or all RPCs failed'
+    );
   }
   const committedTxids = Array.from(txMap.values())
     .filter((tx) => tx.stage === 'committed')
@@ -129,7 +149,9 @@ export const getLatestTransactions = async (): Promise<any> => {
     }
   }
   const uncachedTxids = committedTxids.filter(
-    (txid) => !_upliftCache.has(txid) && (_noUpliftCount.get(txid) ?? 0) < NO_UPLIFT_GIVE_UP
+    (txid) =>
+      !_upliftCache.has(txid) &&
+      (_noUpliftCount.get(txid) ?? 0) < NO_UPLIFT_GIVE_UP
   );
 
   if (uncachedTxids.length > 0) {
@@ -137,7 +159,12 @@ export const getLatestTransactions = async (): Promise<any> => {
       uncachedTxids.map((txid) =>
         axios.post(
           getBraidpoolNodeRpcUrl(),
-          { jsonrpc: '2.0', id: nextId(), method: 'gettransactionstatus', params: [txid] },
+          {
+            jsonrpc: '2.0',
+            id: nextId(),
+            method: 'gettransactionstatus',
+            params: [txid],
+          },
           { timeout: RPC_TIMEOUT }
         )
       )
@@ -160,10 +187,10 @@ export const getLatestTransactions = async (): Promise<any> => {
   }
   const stageOrder: Record<string, number> = {
     confirmed: 0,
-    mined:     1,
+    mined: 1,
     committed: 2,
-    staged:    3,
-    mempool:   4,
+    staged: 3,
+    mempool: 4,
   };
   return Array.from(txMap.values()).sort((a, b) => {
     const so = (stageOrder[a.stage] ?? 9) - (stageOrder[b.stage] ?? 9);
@@ -172,16 +199,22 @@ export const getLatestTransactions = async (): Promise<any> => {
   });
 };
 
-
 export const getTxInfo = async (txid: string): Promise<any> => {
   try {
     const response = await axios.post(
       getBraidpoolNodeRpcUrl(),
-      { jsonrpc: '2.0', id: nextId(), method: 'gettransactionstatus', params: [txid] },
+      {
+        jsonrpc: '2.0',
+        id: nextId(),
+        method: 'gettransactionstatus',
+        params: [txid],
+      },
       { timeout: RPC_TIMEOUT }
     );
     if (response.data.error) {
-      throw new Error(response.data.error.message ?? 'RPC error from gettransactionstatus');
+      throw new Error(
+        response.data.error.message ?? 'RPC error from gettransactionstatus'
+      );
     }
     const result = response.data.result;
     if (!result) throw new Error('Empty result from gettransactionstatus');
@@ -208,9 +241,7 @@ export const getTxInfo = async (txid: string): Promise<any> => {
       })),
       vout: (detail.vout ?? []).map((out: any) => ({
         scriptpubkey_address:
-          out.scriptPubKey?.address ??
-          out.scriptPubKey?.addresses?.[0] ??
-          null,
+          out.scriptPubKey?.address ?? out.scriptPubKey?.addresses?.[0] ?? null,
         value: Math.round((out.value ?? 0) * 1e8),
       })),
     };
@@ -223,11 +254,18 @@ export const getTxInfo = async (txid: string): Promise<any> => {
 export const latestRBFTransactions = async (): Promise<any[]> => {
   const response = await axios.post(
     getBraidpoolNodeRpcUrl(),
-    { jsonrpc: '2.0', id: nextId(), method: 'getmempoolentries', params: [200] },
+    {
+      jsonrpc: '2.0',
+      id: nextId(),
+      method: 'getmempoolentries',
+      params: [200],
+    },
     { timeout: RPC_TIMEOUT }
   );
   if (response.data.error) {
-    throw new Error(response.data.error.message ?? 'getmempoolentries RPC error');
+    throw new Error(
+      response.data.error.message ?? 'getmempoolentries RPC error'
+    );
   }
   const entries: any[] = response.data.result ?? [];
   return entries

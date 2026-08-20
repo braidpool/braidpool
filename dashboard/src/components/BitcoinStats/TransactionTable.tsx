@@ -7,20 +7,26 @@ import { TransactionTableProps } from './Types';
 const TXID_REGEX = /^[a-fA-F0-9]{64}$/;
 
 const STAGE_BADGE: Record<string, { label: string; color: string }> = {
-  unknown:   { label: 'Unknown',   color: '#6b7280' },
-  mempool:   { label: 'Mempool',   color: '#d97706' },
-  staged:    { label: 'Staged',    color: '#3b82f6' },
+  unknown: { label: 'Unknown', color: '#6b7280' },
+  mempool: { label: 'Mempool', color: '#d97706' },
+  staged: { label: 'Staged', color: '#3b82f6' },
   committed: { label: 'Committed', color: '#8b5cf6' },
-  mined:     { label: 'Mined',     color: '#10b981' },
+  mined: { label: 'Mined', color: '#10b981' },
   confirmed: { label: 'Confirmed', color: '#22c55e' },
 };
 
 function StageBadge({ stage }: { stage?: string }) {
-  const s = stage ? STAGE_BADGE[stage] ?? STAGE_BADGE.unknown : STAGE_BADGE.unknown;
+  const s = stage
+    ? (STAGE_BADGE[stage] ?? STAGE_BADGE.unknown)
+    : STAGE_BADGE.unknown;
   return (
     <span
       className="inline-block px-2 py-0.5 rounded-full text-xs font-medium"
-      style={{ backgroundColor: `${s.color}22`, color: s.color, border: `1px solid ${s.color}55` }}
+      style={{
+        backgroundColor: `${s.color}22`,
+        color: s.color,
+        border: `1px solid ${s.color}55`,
+      }}
     >
       {s.label}
     </span>
@@ -45,9 +51,10 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
     setSelectedTx(txid);
   };
 
-  const visibleTransactions = stageFilter === 'all'
-    ? transactions
-    : transactions.filter((tx: any) => tx.stage === stageFilter);
+  const visibleTransactions =
+    stageFilter === 'all'
+      ? transactions
+      : transactions.filter((tx: any) => tx.stage === stageFilter);
   const stageOptions = ['all', ...Object.keys(STAGE_BADGE)];
 
   return (
@@ -56,8 +63,6 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
       style={{ borderColor: colors.cardAccentSecondary }}
     >
       <div className="mb-3 text-gray-400">Latest Transactions</div>
-     
-        
 
       {/* Manual txid lookup + stage filter */}
       <div className="flex gap-2 mb-3">
@@ -76,7 +81,10 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
           type="text"
           placeholder="Look up txid (64-char hex)…"
           value={lookupInput}
-          onChange={(e) => { setLookupInput(e.target.value); setLookupError(null); }}
+          onChange={(e) => {
+            setLookupInput(e.target.value);
+            setLookupError(null);
+          }}
           onKeyDown={(e) => e.key === 'Enter' && handleLookup()}
           className="flex-1 bg-[#2a2a2a] text-white text-xs rounded px-3 py-2 border border-white/10 focus:outline-none focus:border-white/30 font-mono"
           spellCheck={false}

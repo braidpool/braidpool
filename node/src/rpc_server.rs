@@ -25,8 +25,6 @@ use jsonrpsee::types::Request;
 use jsonrpsee::ConnectionId;
 use jsonrpsee::PendingSubscriptionSink;
 use serde::{Deserialize, Serialize};
-use tower::ServiceBuilder;
-use tower_http::cors::CorsLayer;
 use serde_json;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -35,6 +33,8 @@ use std::future::Future;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot, watch, RwLock};
+use tower::ServiceBuilder;
+use tower_http::cors::CorsLayer;
 use tracing::{debug, error, info, warn};
 
 #[cfg(test)]
@@ -1120,7 +1120,7 @@ impl RpcServer for RpcServerImpl {
                 }
                 Err(e) => {
                     debug!(txid = %txid, error = %e, "getrawtransaction unavailable; trying gettransaction wallet fallback");
-                    true 
+                    true
                 }
             };
             if needs_wallet_fallback {
@@ -1153,8 +1153,7 @@ impl RpcServer for RpcServerImpl {
                             });
                             if let Some(block_hash) = wallet_tx.get("blockhash") {
                                 detail["block_hash"] = block_hash.clone();
-                                detail["confirmations"] =
-                                    serde_json::json!(confirmations);
+                                detail["confirmations"] = serde_json::json!(confirmations);
                                 if let Some(bh) = wallet_tx.get("blockheight") {
                                     detail["blockheight"] = bh.clone();
                                 }

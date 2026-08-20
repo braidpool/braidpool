@@ -20,7 +20,7 @@ export const API_URLS = {
   // API endpoints (mempool api backend for now)
   BRAIDPOOL_API_BASE: 'http://localhost:8999/api/v1',
 
-  // Braidpool node JSON-RPC 2.0 endpoint 
+  // Braidpool node JSON-RPC 2.0 endpoint
   BRAIDPOOL_NODE_RPC: 'http://localhost:6682',
   // Miner Device Api endpoints
   MINER_DEVICE_URL: 'http://localhost:5001',

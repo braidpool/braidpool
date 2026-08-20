@@ -58,7 +58,9 @@ const TransactionDialog = ({
             <div className="text-red-500 py-8 text-center">{error}</div>
           )}
           {!loading && !error && !txInfo && (
-            <div className="text-gray-400 text-center py-8">Transaction not found</div>
+            <div className="text-gray-400 text-center py-8">
+              Transaction not found
+            </div>
           )}
 
           {txInfo && (
@@ -93,14 +95,19 @@ const TransactionDialog = ({
                     </h3>
                     <p className="text-sm mt-1">
                       {txInfo.stage
-                        ? txInfo.stage.charAt(0).toUpperCase() + txInfo.stage.slice(1)
-                        : txInfo.status?.confirmed ? 'Confirmed' : 'Unconfirmed'}
+                        ? txInfo.stage.charAt(0).toUpperCase() +
+                          txInfo.stage.slice(1)
+                        : txInfo.status?.confirmed
+                          ? 'Confirmed'
+                          : 'Unconfirmed'}
                     </p>
                   </div>
                   <div>
                     <h3 className="text-sm font-medium text-gray-400">Fee</h3>
                     <p className="text-sm mt-1">
-                      {txInfo.fee != null ? `${txInfo.fee / 100000000} BTC` : 'N/A'}
+                      {txInfo.fee != null
+                        ? `${txInfo.fee / 100000000} BTC`
+                        : 'N/A'}
                     </p>
                   </div>
                   <div>
@@ -134,7 +141,9 @@ const TransactionDialog = ({
                       <h3 className="text-sm font-medium text-gray-400">
                         Bead Hash
                       </h3>
-                      <p className="text-xs break-all mt-1">{txInfo.bead_hash}</p>
+                      <p className="text-xs break-all mt-1">
+                        {txInfo.bead_hash}
+                      </p>
                     </div>
                   )}
                 </div>
@@ -145,21 +154,25 @@ const TransactionDialog = ({
                   Inputs ({txInfo.vin?.length ?? 0})
                 </h3>
                 <div className="space-y-3">
-                  {txInfo.vin?.length > 0 ? txInfo.vin.map((input: any, index: number) => (
-                    <div key={index} className="bg-[#2a2a2a] rounded p-3">
-                      <p className="text-xs break-all">
-                        <span className="font-medium">From:</span>{' '}
-                        {input.prevout?.scriptpubkey_address || 'Coinbase'}
-                      </p>
-                      <p className="text-xs mt-1">
-                        <span className="font-medium">Amount:</span>{' '}
-                        {input.prevout?.value
-                          ? `${input.prevout.value / 100000000} BTC`
-                          : 'N/A'}
-                      </p>
-                    </div>
-                  )) : (
-                    <p className="text-xs text-gray-500">Not available without Bitcoin Core connection</p>
+                  {txInfo.vin?.length > 0 ? (
+                    txInfo.vin.map((input: any, index: number) => (
+                      <div key={index} className="bg-[#2a2a2a] rounded p-3">
+                        <p className="text-xs break-all">
+                          <span className="font-medium">From:</span>{' '}
+                          {input.prevout?.scriptpubkey_address || 'Coinbase'}
+                        </p>
+                        <p className="text-xs mt-1">
+                          <span className="font-medium">Amount:</span>{' '}
+                          {input.prevout?.value
+                            ? `${input.prevout.value / 100000000} BTC`
+                            : 'N/A'}
+                        </p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-gray-500">
+                      Not available without Bitcoin Core connection
+                    </p>
                   )}
                 </div>
               </div>
@@ -169,19 +182,23 @@ const TransactionDialog = ({
                   Outputs ({txInfo.vout?.length ?? 0})
                 </h3>
                 <div className="space-y-3">
-                  {txInfo.vout?.length > 0 ? txInfo.vout.map((output: any, index: number) => (
-                    <div key={index} className="bg-[#2a2a2a] rounded p-3">
-                      <p className="text-xs break-all">
-                        <span className="font-medium">To:</span>{' '}
-                        {output.scriptpubkey_address}
-                      </p>
-                      <p className="text-xs mt-1">
-                        <span className="font-medium">Amount:</span>{' '}
-                        {output.value / 100000000} BTC
-                      </p>
-                    </div>
-                  )) : (
-                    <p className="text-xs text-gray-500">Not available without Bitcoin Core connection</p>
+                  {txInfo.vout?.length > 0 ? (
+                    txInfo.vout.map((output: any, index: number) => (
+                      <div key={index} className="bg-[#2a2a2a] rounded p-3">
+                        <p className="text-xs break-all">
+                          <span className="font-medium">To:</span>{' '}
+                          {output.scriptpubkey_address}
+                        </p>
+                        <p className="text-xs mt-1">
+                          <span className="font-medium">Amount:</span>{' '}
+                          {output.value / 100000000} BTC
+                        </p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-gray-500">
+                      Not available without Bitcoin Core connection
+                    </p>
                   )}
                 </div>
               </div>

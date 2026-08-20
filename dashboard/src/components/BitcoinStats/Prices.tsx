@@ -75,7 +75,9 @@ const BitcoinPriceTracker: React.FC = () => {
         const data = await getLatestTransactions();
         setTransactions(data as any[]);
       } catch {
-        console.warn('[TransactionTable] Failed to fetch transactions; node may be unreachable');
+        console.warn(
+          '[TransactionTable] Failed to fetch transactions; node may be unreachable'
+        );
       }
     };
     fetchTransactions();
