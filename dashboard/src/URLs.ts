@@ -20,8 +20,8 @@ export const API_URLS = {
   // API endpoints (mempool api backend for now)
   BRAIDPOOL_API_BASE: 'http://localhost:8999/api/v1',
 
-  // Bitcoin mempool API endpoints (blockstream)
-  MEMPOOL_API_BASE: 'http://localhost:3002',
+  // Braidpool node JSON-RPC 2.0 endpoint 
+  BRAIDPOOL_NODE_RPC: 'http://localhost:6682',
   // Miner Device Api endpoints
   MINER_DEVICE_URL: 'http://localhost:5001',
 } as const;
@@ -33,14 +33,7 @@ export const getBraidPoolBlockUrl = (hash: string): string =>
 export const getBraidPoolBlocksUrl = (): string =>
   `${API_URLS.BRAIDPOOL_API_BASE}/blocks`;
 
-export const getBraidPoolReplacementsUrl = (): string =>
-  `${API_URLS.BRAIDPOOL_API_BASE}/replacements`;
-
-export const getMempoolRecentUrl = (): string =>
-  `${API_URLS.MEMPOOL_API_BASE}/mempool/recent`;
-
-export const getMempoolTransactionUrl = (txid: string): string =>
-  `${API_URLS.MEMPOOL_API_BASE}/tx/${txid}`;
+export const getBraidpoolNodeRpcUrl = (): string => API_URLS.BRAIDPOOL_NODE_RPC;
 
 export const EXTERNAL_LINKS = {
   // Project Info
