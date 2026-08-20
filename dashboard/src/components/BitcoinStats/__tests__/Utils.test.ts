@@ -100,7 +100,19 @@ describe('Utility Functions', () => {
     it('fetches and returns transactions from node RPCs', async () => {
       // getmempoolentries
       mockedAxios.post.mockResolvedValueOnce({
-        data: { result: [{ txid: 'aaaa', fee: 1000, vsize: 200, fee_rate: 5.0, time: 1000, rbf: false }], error: null },
+        data: {
+          result: [
+            {
+              txid: 'aaaa',
+              fee: 1000,
+              vsize: 200,
+              fee_rate: 5.0,
+              time: 1000,
+              rbf: false,
+            },
+          ],
+          error: null,
+        },
       });
       // stagedtransactions
       mockedAxios.post.mockResolvedValueOnce({
@@ -139,7 +151,16 @@ describe('Utility Functions', () => {
             txid,
             stage: 1,
             stage_name: 'mempool',
-            detail: { fee: -0.0001, vsize: 200, size: 220, weight: 800, version: 2, locktime: 0, vin: [], vout: [] },
+            detail: {
+              fee: -0.0001,
+              vsize: 200,
+              size: 220,
+              weight: 800,
+              version: 2,
+              locktime: 0,
+              vin: [],
+              vout: [],
+            },
           },
           error: null,
         },
@@ -148,7 +169,10 @@ describe('Utility Functions', () => {
       const result = await getTxInfo(txid);
       expect(mockedAxios.post).toHaveBeenCalledWith(
         expect.any(String),
-        expect.objectContaining({ method: 'gettransactionstatus', params: [txid] }),
+        expect.objectContaining({
+          method: 'gettransactionstatus',
+          params: [txid],
+        }),
         expect.any(Object)
       );
       expect(result.txid).toBe(txid);
