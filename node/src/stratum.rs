@@ -1,6 +1,7 @@
 use crate::config::PoolNetwork;
 use crate::error::StratumErrors;
 use crate::template_creator::calculate_merkle_root;
+use crate::utils::validate;
 use crate::utils::compute_block_hash;
 use crate::{SwarmHandler, TemplateId, EXTRANONCE1_SIZE, EXTRANONCE2_SIZE, EXTRANONCE_SEPARATOR};
 use bitcoin::absolute::Time;
@@ -8,7 +9,7 @@ use bitcoin::consensus::{serialize, Decodable};
 use bitcoin::hashes::Hash;
 use bitcoin::io::Cursor;
 use bitcoin::Transaction;
-use bitcoin::{block::Header as BlockHeader, BlockHash, TxMerkleNode, Txid, Witness};
+use bitcoin::{block::Header as BlockHeader, BlockHash, Network, TxMerkleNode, Txid, Witness};
 use futures::{lock::Mutex, FutureExt};
 use num::ToPrimitive;
 use rand::RngCore;
@@ -127,6 +128,8 @@ pub struct StratumServerConfig {
     pub audit_mode: bool,
     /// Audit mode miner weak difficulty
     pub audit_miner_difficulty: Option<f64>,
+    /// Network name (e.g., "main", "testnet", "cpunet") for network-specific PoW validation
+    pub network_name: Network,
 }
 
 impl Default for StratumServerConfig {
@@ -140,6 +143,7 @@ impl Default for StratumServerConfig {
             solo_address: None,
             audit_mode: false,
             audit_miner_difficulty: None,
+            network_name: Network::CPUNet,
         }
     }
 }
@@ -543,6 +547,19 @@ impl DownstreamClient {
         let worker_name = match worker_name_res {
             Ok(name) => name,
             Err(error) => return Err(error),
+        };
+        //Parsing payout address from worker name
+        let payout_address = match validate(worker_name, self.network_type) {
+            Ok((address, _worker)) => address.to_string(),
+            Err(e) => {
+                error!(
+                    connection_id = %connection_id_hex,
+                    worker = %worker_name,
+                    error = %e,
+                    "Worker payout address validation failed"
+                );
+                return Err(e);
+            }
         };
         debug!(
             connection_id = %connection_id_hex,
@@ -997,7 +1014,7 @@ impl DownstreamClient {
                 extranonce_2_raw_value,
                 &self.downstream_ip,
                 submitted_job.job_sent_time,
-                worker_name,
+                &payout_address,
                 extranonce_1_raw_value,
             )
             .await
@@ -1942,6 +1959,7 @@ impl DownstreamClient {
             is_proxy_mode: false,
             payout_address: None,
             audit_miner_difficulty: None,
+            network_type: Network::CPUNet,
         }
     }
 }
@@ -4562,7 +4580,7 @@ mod test {
         let valid_nonce_hex = format!("{:08x}", valid_nonce);
 
         let test_submit_request_params = json!([
-            "bitaxe",
+            "tc1qu3cdq9unyhdc3d2hw8mvpfgnnhvp6ucckkl6ft.bitaxe",
             numeric_job_id.to_string(),
             "0000000003000000",
             "68df7e33",
@@ -4660,7 +4678,7 @@ mod test {
     async fn non_hex_ntime_returns_err_before_coinbase_work() {
         let (mut client, map, swarm, job_id) = submit_setup().await;
         let params = json!([
-            "miner",
+            "tc1qu3cdq9unyhdc3d2hw8mvpfgnnhvp6ucckkl6ft.worker1",
             job_id.to_string(),
             "0000000000000000", // extranonce2
             "zzzzzzzz",         // invalid ntime — not hex

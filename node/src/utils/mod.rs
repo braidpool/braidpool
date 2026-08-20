@@ -3,6 +3,7 @@ use crate::config::PoolNetwork;
 use crate::{
     bead::Bead,
     committed_metadata::{CommittedMetadata, TimeVec, TxIdVec},
+    error::StratumErrors,
     uncommitted_metadata::UnCommittedMetadata,
 };
 use ::bitcoin::BlockHash;
@@ -40,6 +41,37 @@ use std::{
 /// Computes a bead's block hash under the rules of `network`.
 pub fn compute_block_hash(block_header: &BlockHeader, network: PoolNetwork) -> BlockHash {
     network.block_hash(block_header)
+}
+
+//Validation for usernames and parsing the payout_address for the downstream connected
+pub fn validate(
+    username: &str,
+    network: bitcoin::Network,
+) -> Result<(&str, Option<&str>), StratumErrors> {
+    let parts: Vec<&str> = username.splitn(2, '.').collect();
+    let address_part = parts[0];
+    let address = address_part.parse::<bitcoin::Address<_>>().map_err(|_e| {
+        StratumErrors::UserNameParseError {
+            error: crate::error::UsernameValidationError::InvalidAddress {
+                address: address_part.to_string(),
+            },
+        }
+    })?;
+
+    address
+        .require_network(network)
+        .map_err(|_| StratumErrors::UserNameParseError {
+            error: crate::error::UsernameValidationError::NetworkIncompatibleAddress {
+                network: network.to_string(),
+            },
+        })?;
+
+    // Extract worker name if present
+    if parts.len() > 1 {
+        Ok((address_part, Some(parts[1])))
+    } else {
+        Ok((address_part, None))
+    }
 }
 
 /// Get list of actual local IPv4 addresses for servers binding to 0.0.0.0
@@ -187,6 +219,10 @@ pub fn create_test_bead(nonce: u32, prev_hash: Option<BlockHash>) -> Bead {
 
 #[cfg(test)]
 mod tests {
+    use bitcoin::Network;
+
+    use crate::error::UsernameValidationError;
+
     use super::*;
     fn unique_temp_test_path(label: &str) -> PathBuf {
         let suffix = rand::random::<u8>();
@@ -237,6 +273,58 @@ mod tests {
         let _ = fs::remove_file(&file_path);
     }
 
+    #[test]
+    fn valid_address_with_worker() {
+        let username = "bc1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7.worker1";
+        let result = validate(username, Network::Bitcoin);
+
+        assert!(result.is_ok());
+
+        let (address, worker) = result.unwrap();
+        assert_eq!(address, "bc1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7");
+        assert_eq!(worker, Some("worker1"));
+    }
+
+    #[test]
+    fn invalid_bitcoin_address() {
+        let username = "not_a_valid_address.worker";
+        let result = validate(username, Network::Bitcoin);
+
+        assert!(result.is_err());
+
+        match result {
+            Err(StratumErrors::UserNameParseError { error }) => {
+                assert_eq!(
+                    error,
+                    UsernameValidationError::InvalidAddress {
+                        address: "not_a_valid_address".to_string()
+                    }
+                )
+            }
+            _ => panic!("Expected UserNameParseError for invalid address"),
+        }
+    }
+
+    #[test]
+    fn network_incompatible_address() {
+        // Mainnet address checked against Testnet
+        let username = "bc1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7";
+        let result = validate(username, Network::Testnet(bitcoin::TestnetVersion::V4));
+
+        assert!(result.is_err());
+
+        match result {
+            Err(StratumErrors::UserNameParseError { error }) => {
+                assert_eq!(
+                    error,
+                    UsernameValidationError::NetworkIncompatibleAddress {
+                        network: "testnet4".to_string()
+                    }
+                )
+            }
+            _ => panic!("Expected UserNameParseError for network mismatch"),
+        }
+    }
     #[test]
     fn server_endpoints_returns_single_endpoint_for_specific_host() {
         let result = server_endpoints("127.0.0.1", 8080, "http");
