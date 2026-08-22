@@ -4008,259 +4008,30 @@ mod test {
         println!("Assertion Passed: Target matches expected value for Diff 100.");
     }
 
-    #[tokio::test]
-    pub async fn server_start_test() {
-        let ibd_or_not: AtomicBool = AtomicBool::new(false);
-        let test_ibd_spinlock = Arc::new(ibd_or_not);
-        let genesis_beads = Vec::from([]);
-        let test_braid: Arc<RwLock<braid::Braid>> =
-            Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
+    /// Spins up a stratum server bound to an OS-assigned port.
+    /// Returns the bound address and the shared connection mapping for post-hoc assertions.
+    async fn spawn_test_stratum_server(
+        config: StratumServerConfig,
+    ) -> (SocketAddr, Arc<RwLock<ConnectionMapping>>) {
+        let ibd_spinlock = Arc::new(AtomicBool::new(false));
         let connection_mapping = Arc::new(RwLock::new(ConnectionMapping::new()));
-        let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
+        let test_braid = Arc::new(RwLock::new(braid::Braid::new(vec![])));
+        let mining_job_map = Arc::new(Mutex::new(HashMap::new()));
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
-        let (_test_db_handler, test_db_tx) = DBHandler::new_in_memory().await.unwrap();
-        let (swarm_handler, mut swarm_command_receiver) =
-            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx, DashboardEvents::new());
-        let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
-        let config = StratumServerConfig {
-            hostname: "127.0.0.1".to_string(),
-            ..Default::default()
-        };
-
+        let (_db, db_tx) = DBHandler::new_in_memory().await.unwrap();
+        let (swarm, _rx) =
+            SwarmHandler::new(Arc::clone(&test_braid), db_tx, DashboardEvents::new());
+        let swarm_arc = Arc::new(Mutex::new(swarm));
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let bound_addr = listener.local_addr().unwrap();
-        let addr = bound_addr.to_string();
-
-        let mut server = Server::new(config.clone(), connection_mapping.clone(), None);
-
-        let server_task = tokio::spawn(async move {
-            let _ = server
-                .run_stratum_service(
-                    listener,
-                    mining_job_map,
-                    notify_tx,
-                    swarm_handler_arc,
-                    test_ibd_spinlock.clone(),
-                    None,
-                    None,
-                    None,
-                )
-                .await;
-        });
-        let mut mock_connection_handles = Vec::new();
-        for i in 0..3 {
-            let addr_clone = addr.clone();
-            mock_connection_handles.push(tokio::spawn(async move {
-                let mut stream = TcpStream::connect(&addr_clone).await.unwrap();
-                let msg = format!(
-                    r#"{{"id":{},"method":"mining.subscribe","params":[]}}"#,
-                    i + 1
-                );
-                stream.write_all(msg.as_bytes()).await.unwrap();
-                stream.write_all(b"\n").await.unwrap();
-                stream
-            }));
-        }
-
-        let streams: Vec<TcpStream> = futures::future::join_all(mock_connection_handles)
-            .await
-            .into_iter()
-            .map(|r| r.unwrap())
-            .collect();
-
-        tokio::time::sleep(Duration::from_millis(500)).await;
-
-        let conn_map = connection_mapping.read().await;
-        assert_eq!(conn_map.downstream_channel_mapping.len(), 3);
-        drop(streams);
-        drop(server_task);
-    }
-
-    #[tokio::test]
-    pub async fn server_subscribe_response() {
-        let ibd_or_not: AtomicBool = AtomicBool::new(false);
-        let test_ibd_spinlock = Arc::new(ibd_or_not);
-        let connection_mapping = Arc::new(RwLock::new(ConnectionMapping::new()));
-        let genesis_beads = Vec::from([]);
-        let test_braid: Arc<RwLock<braid::Braid>> =
-            Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
-        let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
-        let (_test_db_handler, test_db_tx) = DBHandler::new_in_memory().await.unwrap();
-        let (swarm_handler, mut swarm_command_receiver) =
-            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx, DashboardEvents::new());
-        let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
-        let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
-
-        let config = StratumServerConfig {
-            hostname: "127.0.0.1".to_string(),
-            ..Default::default()
-        };
-
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let bound_addr = listener.local_addr().unwrap();
-
-        let mut server = Server::new(config.clone(), connection_mapping.clone(), None);
-
-        let server_task = tokio::spawn(async move {
-            let _ = server
-                .run_stratum_service(
-                    listener,
-                    mining_job_map,
-                    notify_tx,
-                    swarm_handler_arc,
-                    test_ibd_spinlock,
-                    None,
-                    None,
-                    None,
-                )
-                .await;
-        });
-
-        let mut stream = TcpStream::connect(bound_addr).await.unwrap();
-
-        let msg = r#"{"id":1,"method":"mining.subscribe","params":[]}"#;
-        stream.write_all(msg.as_bytes()).await.unwrap();
-        stream.write_all(b"\n").await.unwrap();
-
-        let mut reader = BufReader::new(stream);
-        let mut response_line = String::new();
-        reader.read_line(&mut response_line).await.unwrap();
-
-        let parsed: serde_json::Value = serde_json::from_str(response_line.trim()).unwrap();
-        println!("Parsed response: {:?}", parsed);
-    }
-    #[tokio::test]
-    async fn test_mining_authorize_response() {
-        let ibd_or_not: AtomicBool = AtomicBool::new(false);
-        let ibd_spinlock = Arc::new(ibd_or_not);
-        let connection_mapping = Arc::new(RwLock::new(ConnectionMapping::new()));
-        let genesis_beads = Vec::from([]);
-        let test_braid: Arc<RwLock<braid::Braid>> =
-            Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
-        let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
-        let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
-        let (_test_db_handler, test_db_tx) = DBHandler::new_in_memory().await.unwrap();
-        let (swarm_handler, mut swarm_command_receiver) =
-            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx, DashboardEvents::new());
-        let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
-        let config = StratumServerConfig {
-            hostname: "127.0.0.1".to_string(),
-            ..Default::default()
-        };
-
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let bound_addr = listener.local_addr().unwrap();
-
-        let mut server = Server::new(config, connection_mapping, None);
-        tokio::spawn(async move {
-            let _ = server
-                .run_stratum_service(
-                    listener,
-                    mining_job_map,
-                    notify_tx,
-                    swarm_handler_arc,
-                    ibd_spinlock.clone(),
-                    None,
-                    None,
-                    None,
-                )
-                .await;
-        });
-
-        let mut stream = TcpStream::connect(bound_addr).await.unwrap();
-
-        let request = r#"{"id":2,"method":"mining.authorize","params":["satoshi","braidpool"]}"#;
-        stream.write_all(request.as_bytes()).await.unwrap();
-        stream.write_all(b"\n").await.unwrap();
-        let mut reader = BufReader::new(stream);
-
-        let mut line = String::new();
-        reader.read_line(&mut line).await.unwrap();
-        let response: serde_json::Value = serde_json::from_str(line.trim()).unwrap();
-
-        assert_eq!(response["id"], 2);
-        assert!(response["result"].is_boolean());
-        assert_eq!(response["result"], true);
-    }
-    #[tokio::test]
-    async fn test_mining_set_difficulty_response() {
-        let ibd_or_not: AtomicBool = AtomicBool::new(false);
-        let ibd_spinlock = Arc::new(ibd_or_not);
-        let connection_mapping = Arc::new(RwLock::new(ConnectionMapping::new()));
-        let genesis_beads = Vec::from([]);
-        let test_braid: Arc<RwLock<braid::Braid>> =
-            Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
-        let (_test_db_handler, test_db_tx) = DBHandler::new_in_memory().await.unwrap();
-        let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
-        let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
-        let (swarm_handler, mut swarm_command_receiver) =
-            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx, DashboardEvents::new());
-        let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
-        let config = StratumServerConfig {
-            hostname: "127.0.0.1".to_string(),
-            ..Default::default()
-        };
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let bound_addr = listener.local_addr().unwrap();
-
-        let mut server = Server::new(config, connection_mapping, None);
-        tokio::spawn(async move {
-            let _ = server
-                .run_stratum_service(
-                    listener,
-                    mining_job_map,
-                    notify_tx,
-                    swarm_handler_arc,
-                    ibd_spinlock.clone(),
-                    None,
-                    None,
-                    None,
-                )
-                .await;
-        });
-        let mut stream = TcpStream::connect(bound_addr).await.unwrap();
-        let request = r#"{"id":3,"method":"mining.suggest_difficulty","params":[1000]}"#;
-        stream.write_all(request.as_bytes()).await.unwrap();
-        stream.write_all(b"\n").await.unwrap();
-        let mut reader = BufReader::new(stream);
-        let mut line = String::new();
-        reader.read_line(&mut line).await.unwrap();
-        let response: serde_json::Value = serde_json::from_str(line.trim()).unwrap();
-        assert_eq!(response["method"], "mining.set_difficulty");
-    }
-    #[tokio::test]
-    async fn test_invalid_json() {
-        let ibd_or_not: AtomicBool = AtomicBool::new(false);
-        let ibd_spinlock = Arc::new(ibd_or_not);
-        let connection_mapping = Arc::new(RwLock::new(ConnectionMapping::new()));
-        let genesis_beads = Vec::from([]);
-        let test_braid: Arc<RwLock<braid::Braid>> =
-            Arc::new(RwLock::new(braid::Braid::new(genesis_beads)));
-        let (_test_db_handler, test_db_tx) = DBHandler::new_in_memory().await.unwrap();
-        let mining_job_map: Arc<Mutex<HashMap<String, Arc<Mutex<MiningJobMap>>>>> =
-            Arc::new(Mutex::new(HashMap::new()));
-        let (notify_tx, _notify_rx) = mpsc::channel::<NotifyCmd>(32);
-        let (swarm_handler, mut swarm_command_receiver) =
-            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx, DashboardEvents::new());
-        let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
-        let config = StratumServerConfig {
-            hostname: "127.0.0.1".to_string(),
-            ..Default::default()
-        };
-
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let bound_addr = listener.local_addr().unwrap();
-
+        let addr = listener.local_addr().unwrap();
         let mut server = Server::new(config, connection_mapping.clone(), None);
-        let mining_job_map_clone = mining_job_map.clone();
-        let notify_tx_clone = notify_tx.clone();
         tokio::spawn(async move {
             let _ = server
                 .run_stratum_service(
                     listener,
-                    mining_job_map_clone,
-                    notify_tx_clone,
-                    swarm_handler_arc,
+                    mining_job_map,
+                    notify_tx,
+                    swarm_arc,
                     ibd_spinlock,
                     None,
                     None,
@@ -4268,31 +4039,127 @@ mod test {
                 )
                 .await;
         });
+        (addr, connection_mapping)
+    }
 
-        let mut stream = TcpStream::connect(bound_addr).await.unwrap();
+    /// Writes a stratum request line and reads back one parsed JSON response line.
+    async fn send_and_read(stream: &mut TcpStream, msg: &str) -> serde_json::Value {
+        stream
+            .write_all(format!("{msg}\n").as_bytes())
+            .await
+            .unwrap();
+        stream.flush().await.unwrap();
+        let mut reader = BufReader::new(&mut *stream);
+        let mut line = String::new();
+        reader.read_line(&mut line).await.unwrap();
+        serde_json::from_str(line.trim()).unwrap()
+    }
 
+    #[tokio::test]
+    pub async fn server_start_test() {
+        let (addr, connection_mapping) = spawn_test_stratum_server(StratumServerConfig {
+            hostname: "127.0.0.1".to_string(),
+            ..Default::default()
+        })
+        .await;
+
+        let mut streams = Vec::new();
+        for i in 0..3u64 {
+            let mut stream = TcpStream::connect(addr).await.unwrap();
+            let msg = format!(
+                r#"{{"id":{},"method":"mining.subscribe","params":[]}}"#,
+                i + 1
+            );
+            stream
+                .write_all(format!("{msg}\n").as_bytes())
+                .await
+                .unwrap();
+            streams.push(stream);
+        }
+
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        assert_eq!(
+            connection_mapping
+                .read()
+                .await
+                .downstream_channel_mapping
+                .len(),
+            3
+        );
+    }
+
+    #[tokio::test]
+    pub async fn server_subscribe_response() {
+        let (addr, _) = spawn_test_stratum_server(StratumServerConfig {
+            hostname: "127.0.0.1".to_string(),
+            ..Default::default()
+        })
+        .await;
+        let mut stream = TcpStream::connect(addr).await.unwrap();
+        let response = send_and_read(
+            &mut stream,
+            r#"{"id":1,"method":"mining.subscribe","params":[]}"#,
+        )
+        .await;
+        println!("Parsed response: {response:?}");
+    }
+    #[tokio::test]
+    async fn test_mining_authorize_response() {
+        let (addr, _) = spawn_test_stratum_server(StratumServerConfig {
+            hostname: "127.0.0.1".to_string(),
+            ..Default::default()
+        })
+        .await;
+        let mut stream = TcpStream::connect(addr).await.unwrap();
+        let response = send_and_read(
+            &mut stream,
+            r#"{"id":2,"method":"mining.authorize","params":["satoshi","braidpool"]}"#,
+        )
+        .await;
+        assert_eq!(response["id"], 2);
+        assert!(response["result"].is_boolean());
+        assert_eq!(response["result"], true);
+    }
+    #[tokio::test]
+    async fn test_mining_set_difficulty_response() {
+        let (addr, _) = spawn_test_stratum_server(StratumServerConfig {
+            hostname: "127.0.0.1".to_string(),
+            ..Default::default()
+        })
+        .await;
+        let mut stream = TcpStream::connect(addr).await.unwrap();
+        let response = send_and_read(
+            &mut stream,
+            r#"{"id":3,"method":"mining.suggest_difficulty","params":[1000]}"#,
+        )
+        .await;
+        assert_eq!(response["method"], "mining.set_difficulty");
+    }
+    #[tokio::test]
+    async fn test_invalid_json() {
+        let (addr, _) = spawn_test_stratum_server(StratumServerConfig {
+            hostname: "127.0.0.1".to_string(),
+            ..Default::default()
+        })
+        .await;
+        let mut stream = TcpStream::connect(addr).await.unwrap();
+
+        // Two malformed messages — server must survive and keep the connection open.
         stream
             .write_all(b"{\"method\":\"mining.subscribe\", \"params\": [\"test\", 1]\n")
             .await
             .unwrap();
         stream.flush().await.unwrap();
-
         stream.write_all(b"not a json at all\n").await.unwrap();
         stream.flush().await.unwrap();
+        tokio::time::sleep(Duration::from_millis(200)).await;
 
-        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-        let valid_msg = r#"{"id": 1, "method": "mining.subscribe", "params": []}"#;
-        stream
-            .write_all(format!("{}\n", valid_msg).as_bytes())
-            .await
-            .unwrap();
-        stream.flush().await.unwrap();
-
-        let mut reader = BufReader::new(stream);
-        let mut line = String::new();
-        let bytes_read = reader.read_line(&mut line).await.unwrap();
-        let response: serde_json::Value = serde_json::from_str(line.trim()).unwrap();
+        // Valid message after the malformed ones must be processed normally.
+        let response = send_and_read(
+            &mut stream,
+            r#"{"id": 1, "method": "mining.subscribe", "params": []}"#,
+        )
+        .await;
         assert_eq!(response["id"], 1);
     }
 
@@ -4558,7 +4425,7 @@ mod test {
         client.authorized = true;
         client.extranonce1 = vec![0u8; 8];
         let test_braid = Arc::new(RwLock::new(braid::Braid::new(vec![])));
-        let (_db, db_tx) = DBHandler::new().await.unwrap();
+        let (_db, db_tx) = DBHandler::new_in_memory().await.unwrap();
         let (swarm, _rx) = SwarmHandler::new(test_braid, db_tx, DashboardEvents::new());
         let swarm_arc = Arc::new(Mutex::new(swarm));
         (client, map, swarm_arc, job_id)
