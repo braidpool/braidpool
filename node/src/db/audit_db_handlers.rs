@@ -1,5 +1,7 @@
 use crate::bead::Bead;
+use crate::config::PoolNetwork;
 use crate::error::DBErrors;
+use crate::utils::compute_block_hash;
 use bitcoin::{hashes::Hash, BlockHash};
 use sqlx::{Pool, Sqlite};
 #[allow(unused_imports)]
@@ -39,6 +41,7 @@ impl AuditDBHandler {
         bead: &Bead,
         composite_hash: BlockHash,
         miner_ip: String,
+        network: PoolNetwork,
     ) -> Result<i64, DBErrors> {
         let mut tx = match self.db_connection_pool.begin().await {
             Ok(tx) => tx,
@@ -49,7 +52,7 @@ impl AuditDBHandler {
             }
         };
 
-        let block_hash = bead.block_header.block_hash();
+        let block_hash = compute_block_hash(&bead.block_header, network);
         let created_at = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()

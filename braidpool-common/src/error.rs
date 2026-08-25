@@ -1,5 +1,6 @@
-use bitcoin::bech32;
+use bitcoin::{bech32, witness_program};
 use core::fmt;
+
 /// Error type for parsing cpunet from string.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseCpunetError(pub String);
@@ -22,7 +23,7 @@ pub enum CpunetAddressError {
     /// Invalid witness version
     InvalidWitnessVersion(u8),
     /// Invalid witness program
-    InvalidProgram(String),
+    InvalidProgram(witness_program::Error),
 }
 
 impl fmt::Display for CpunetAddressError {
@@ -46,6 +47,7 @@ impl std::error::Error for CpunetAddressError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Bech32(e) => Some(e),
+            Self::InvalidProgram(e) => Some(e),
             _ => None,
         }
     }

@@ -1,4 +1,5 @@
 use crate::bead::Bead;
+use crate::config::PoolNetwork;
 use crate::error::BraidError;
 use crate::utils::{compute_block_hash, BeadHash};
 use num::BigUint;
@@ -36,12 +37,12 @@ pub struct Braid {
     pub genesis_beads: HashSet<usize>,
     pub bead_index_mapping: HashMap<BeadHash, usize>,
     //For computing block_hash accordingly
-    pub network_name: String,
+    pub network: PoolNetwork,
 }
 
 impl Braid {
     ///Initializing the Braid object for keeping track of current state of Braid
-    pub fn new(genesis_beads: Vec<Bead>, network_name: String) -> Self {
+    pub fn new(genesis_beads: Vec<Bead>, network: PoolNetwork) -> Self {
         let mut beads = Vec::new();
         let mut bead_indices = HashSet::new();
         let mut bead_index_mapping = HashMap::new();
@@ -49,7 +50,7 @@ impl Braid {
         for (index, bead) in genesis_beads.into_iter().enumerate() {
             beads.push(bead.clone());
             bead_indices.insert(index);
-            bead_index_mapping.insert(compute_block_hash(&bead.block_header, &network_name), index);
+            bead_index_mapping.insert(compute_block_hash(&bead.block_header, network), index);
         }
         let mut genesis_cohort: Vec<Cohort> = Vec::new();
         if bead_indices.len() != 0 {
@@ -63,13 +64,13 @@ impl Braid {
             orphan_beads: Vec::new(),
             genesis_beads: bead_indices,
             bead_index_mapping,
-            network_name,
+            network,
         }
     }
 
     /// Computes the block hash for a bead using this braid's network configuration
     pub fn compute_bead_hash(&self, bead: &Bead) -> BeadHash {
-        compute_block_hash(&bead.block_header, &self.network_name)
+        compute_block_hash(&bead.block_header, self.network)
     }
 
     pub fn reset(&mut self) {
@@ -91,9 +92,9 @@ impl Braid {
         if self.beads.is_empty() && bead.committed_metadata.parents.is_empty() {
             tracing::debug!(
                 " Genesis BeadHash - {:?}",
-                compute_block_hash(&bead.block_header, &self.network_name)
+                compute_block_hash(&bead.block_header, self.network)
             );
-            *self = Braid::new(vec![bead.clone()], self.network_name.clone());
+            *self = Braid::new(vec![bead.clone()], self.network);
             // Genesis resets the braid, so there is never an existing orphan set
             // to promote here.
             return AddBeadStatus::BeadAdded {
@@ -260,7 +261,7 @@ impl Braid {
                     self.bead_index_mapping
                         .get(parent_hash)
                         .ok_or(BraidError::MissingParent {
-                            bead: compute_block_hash(&bead.block_header, &self.network_name),
+                            bead: compute_block_hash(&bead.block_header, self.network),
                             parent: *parent_hash,
                         })?;
                 Ok((

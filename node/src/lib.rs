@@ -402,8 +402,7 @@ impl SwarmHandler {
         match status {
             AddBeadStatus::BeadAdded { promoted_orphans } => {
                 let new_tips: Vec<_> = braid_data.tips.iter().map(|&idx| idx).collect();
-                let bead_hash =
-                    compute_block_hash(&weak_share.block_header, &braid_data.network_name);
+                let bead_hash = compute_block_hash(&weak_share.block_header, braid_data.network);
                 info!(
                     hash = %bead_hash,
                     new_tips = ?new_tips,

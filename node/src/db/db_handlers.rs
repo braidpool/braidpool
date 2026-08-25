@@ -1,3 +1,4 @@
+use crate::config::PoolNetwork;
 use crate::{
     bead::Bead,
     db::{init_db::init_db, BeadInsertData, BraidpoolDBTypes, InsertTupleTypes},
@@ -61,11 +62,11 @@ pub struct DBHandler {
     receiver: Receiver<BraidpoolDBTypes>,
     //Shared across tasks for accessing DB after contention using `Mutex`
     pub db_connection_pool: Pool<Sqlite>,
-    /// Network name for computing block hashes
-    pub network_name: String,
+    /// Network used for computing bead hashes
+    pub network: PoolNetwork,
 }
 impl DBHandler {
-    pub async fn new(network_name: String) -> Result<(Self, Sender<BraidpoolDBTypes>), DBErrors> {
+    pub async fn new(network: PoolNetwork) -> Result<(Self, Sender<BraidpoolDBTypes>), DBErrors> {
         debug!("Initializing schema for persistent database");
         let db_connection_pool = match init_db().await {
             Ok(conn) => conn,
@@ -81,7 +82,7 @@ impl DBHandler {
             Self {
                 receiver: db_handler_rx,
                 db_connection_pool,
-                network_name,
+                network,
             },
             db_handler_tx,
         ))
@@ -89,7 +90,7 @@ impl DBHandler {
 
     #[cfg(test)]
     pub async fn new_in_memory(
-        network_name: String,
+        network: PoolNetwork,
     ) -> Result<(Self, Sender<BraidpoolDBTypes>), DBErrors> {
         use sqlx::{
             sqlite::{SqliteConnectOptions, SqlitePoolOptions},
@@ -131,7 +132,7 @@ impl DBHandler {
             Self {
                 receiver: db_handler_rx,
                 db_connection_pool,
-                network_name,
+                network,
             },
             db_handler_tx,
         ))
@@ -186,7 +187,7 @@ impl DBHandler {
             let bead_id = data.bead_id;
 
             let (txs, relatives, parent_ts) = Self::prepare_bead_tuple_values(data);
-            let block_hash_bytes = compute_block_hash(&bead.block_header, &self.network_name)
+            let block_hash_bytes = compute_block_hash(&bead.block_header, self.network)
                 .to_byte_array()
                 .to_vec();
             all_bead_data.push(json!({
@@ -881,9 +882,7 @@ pub mod test {
     use std::path::Path;
     #[tokio::test]
     async fn test_batch_insertion_beads() {
-        let (handler, _db_tx) = DBHandler::new_in_memory("cpunet".to_string())
-            .await
-            .unwrap();
+        let (handler, _db_tx) = DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
         let test_pool = handler.db_connection_pool.clone();
         let ancestors = std::env::current_dir().unwrap();
         let ancestors_directory: Vec<&Path> = ancestors.ancestors().collect();
@@ -963,16 +962,16 @@ pub mod test {
 
         // Beads were inserted under the `cpunet` network, so their stored `hash` column is
         // network-scoped. Lookups and assertions must use the same network-scoped hash.
-        let network_name = "cpunet".to_string();
+        let network = PoolNetwork::Cpunet;
         for bead in current_file_braid.beads.iter() {
-            let bead_hash = compute_block_hash(&bead.block_header, &network_name);
+            let bead_hash = compute_block_hash(&bead.block_header, network);
             let fetched = fetch_bead_by_bead_hash(&test_pool, bead_hash)
                 .await
                 .unwrap()
                 .unwrap_or_else(|| panic!("Bead not found: {}", bead_hash));
 
             assert_eq!(
-                compute_block_hash(&fetched.block_header, &network_name).to_string(),
+                compute_block_hash(&fetched.block_header, network).to_string(),
                 bead_hash.to_string()
             );
 

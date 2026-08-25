@@ -1,4 +1,5 @@
 // Bitcoin Imports
+use crate::config::PoolNetwork;
 use crate::{
     bead::Bead,
     committed_metadata::{CommittedMetadata, TimeVec, TxIdVec},
@@ -12,7 +13,6 @@ use bitcoin::{
     hashes::Hash,
     secp256k1, CompactTarget, EcdsaSighashType, TxMerkleNode,
 };
-use braidpool_common::cpunet::Cpunet;
 // Standard Imports
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
@@ -30,13 +30,9 @@ pub(crate) type Relatives = HashSet<BeadHash>;
 
 // Error Definitions
 use std::{collections::HashSet, net::IpAddr, str::FromStr};
-//Utility function to check and compute block_hash according to the network_type
-pub fn compute_block_hash(block_header: &BlockHeader, network_type: &String) -> BlockHash {
-    if network_type == "cpunet" {
-        Cpunet::block_hash(*block_header)
-    } else {
-        block_header.block_hash()
-    }
+/// Computes a bead's block hash under the rules of `network`.
+pub fn compute_block_hash(block_header: &BlockHeader, network: PoolNetwork) -> BlockHash {
+    network.block_hash(block_header)
 }
 
 /// Get list of actual local IPv4 addresses for servers binding to 0.0.0.0

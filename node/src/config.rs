@@ -1,9 +1,11 @@
 use crate::error::UnsupportedNetworkError;
-use bitcoin::Network;
-use braidpool_common::cpunet::Cpunet;
+use bitcoin::{block::Header, BlockHash, Network};
+use braidpool_common::cpunet::{Cpunet, CPUNET_NAME};
+use core::fmt;
 use core::panic;
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::str::FromStr;
 #[derive(Deserialize, Serialize, Clone)]
 pub struct NetworkConfig {
     //Address to which the current braidpool node will bind to
@@ -105,86 +107,132 @@ impl BraidpoolConfig {
         self
     }
 }
+// Supporting network types and their aliases
+pub const MAINNET_NAME: &str = "mainnet";
+pub const TESTNET_NAME: &str = "testnet";
+pub const TESTNET4_NAME: &str = "testnet4";
+pub const SIGNET_NAME: &str = "signet";
+pub const REGTEST_NAME: &str = "regtest";
 
 /// The set of network names a braidpool node accepts.
-pub const SUPPORTED_NETWORKS: [&str; 6] =
-    ["main", "testnet", "testnet4", "signet", "regtest", "cpunet"];
+pub const SUPPORTED_NETWORKS: [&str; 6] = [
+    MAINNET_NAME,
+    TESTNET_NAME,
+    TESTNET4_NAME,
+    SIGNET_NAME,
+    REGTEST_NAME,
+    CPUNET_NAME,
+];
 
-/// Resolves a network name to its [`Network`] type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum PoolNetwork {
+    /// The cpunet test network, whose block hash is computed by [`Cpunet::block_hash`].
+    Cpunet,
+    /// A network other than native rust-bitcoin
+    Bitcoin(Network),
+}
+
+impl PoolNetwork {
+    /// Resolves a network name to a [`PoolNetwork`].
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name {
+            CPUNET_NAME => Some(Self::Cpunet),
+            MAINNET_NAME => Some(Self::Bitcoin(Network::Bitcoin)),
+            TESTNET_NAME => Some(Self::Bitcoin(Network::Testnet)),
+            TESTNET4_NAME => Some(Self::Bitcoin(Network::Testnet4)),
+            SIGNET_NAME => Some(Self::Bitcoin(Network::Signet)),
+            REGTEST_NAME => Some(Self::Bitcoin(Network::Regtest)),
+            _ => None,
+        }
+    }
+
+    /// Returns the network name, round-tripping with [`PoolNetwork::from_name`].
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Cpunet => CPUNET_NAME,
+            Self::Bitcoin(Network::Bitcoin) => MAINNET_NAME,
+            Self::Bitcoin(Network::Testnet) => TESTNET_NAME,
+            Self::Bitcoin(Network::Testnet4) => TESTNET4_NAME,
+            Self::Bitcoin(Network::Signet) => SIGNET_NAME,
+            Self::Bitcoin(Network::Regtest) => REGTEST_NAME,
+        }
+    }
+
+    /// Returns whether this is the cpunet network.
+    pub const fn is_cpunet(&self) -> bool {
+        matches!(self, Self::Cpunet)
+    }
+
+    /// Computes the block hash of `header` under this network's rules.
+    pub fn block_hash(&self, header: &Header) -> BlockHash {
+        match self {
+            Self::Cpunet => Cpunet::block_hash(header),
+            Self::Bitcoin(_) => header.block_hash(),
+        }
+    }
+}
+
+impl fmt::Display for PoolNetwork {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
+impl FromStr for PoolNetwork {
+    type Err = UnsupportedNetworkError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        parse_network_name(s)
+    }
+}
+
+/// Resolves a network name to its [`PoolNetwork`].
 ///
 /// # Arguments
 /// * `network_name` - One of [`SUPPORTED_NETWORKS`], matched exactly
 ///
 /// # Returns
-/// `Ok(Some(network))` for networks representable by rust-bitcoin, and `Ok(None)`
-/// for cpunet, which has no `Network` variant and is handled by our own
-/// [`Cpunet`] module.
+/// The [`PoolNetwork`] the name denotes. Cpunet has no `bitcoin::Network` variant and is carried
+/// as [`PoolNetwork::Cpunet`].
 ///
 /// # Errors
 /// [`UnsupportedNetworkError`] if `network_name` is not in [`SUPPORTED_NETWORKS`].
-pub fn parse_network_name(network_name: &str) -> Result<Option<Network>, UnsupportedNetworkError> {
-    // Cpunet is not representable by `bitcoin::Network`, so it is resolved first.
-    if Cpunet::is_cpunet_name(network_name) {
-        return Ok(None);
-    }
-    let core_arg = match network_name {
-        "main" => "main",
-        "testnet" => "test",
-        "testnet4" => "testnet4",
-        "signet" => "signet",
-        "regtest" => "regtest",
-        _ => {
-            return Err(UnsupportedNetworkError {
-                network_name: network_name.to_string(),
-            })
-        }
-    };
-    Network::from_core_arg(core_arg)
-        .map(Some)
-        .map_err(|_| UnsupportedNetworkError {
-            network_name: network_name.to_string(),
-        })
+pub fn parse_network_name(network_name: &str) -> Result<PoolNetwork, UnsupportedNetworkError> {
+    PoolNetwork::from_name(network_name).ok_or_else(|| UnsupportedNetworkError {
+        network_name: network_name.to_string(),
+    })
 }
 
 #[derive(Debug, Clone)]
 pub struct CoinbaseConfig {
-    pub network: Option<Network>,
+    pub network: PoolNetwork,
     pub pool_payout_address: String,
     pub pool_identifier: String,
 }
 
 impl CoinbaseConfig {
-    /// Creates CoinbaseConfig from a network name string.
+    /// Creates CoinbaseConfig for an already-resolved [`PoolNetwork`].
     ///
-    /// For cpunet, uses our custom cpunet module.
-    /// For other networks, uses `Network::from_core_arg()` from rust-bitcoin.
-    ///
-    /// # Arguments
-    /// * `network_name` - One of [`SUPPORTED_NETWORKS`], matched exactly
-    ///
-    /// # Errors
-    /// [`UnsupportedNetworkError`] if `network_name` is not a supported network.
-    /// The name is never silently coerced onto a default chain, because that
-    /// would produce shares and payout addresses for the wrong chain.
-    pub fn from_network_name(network_name: &str) -> Result<Self, UnsupportedNetworkError> {
-        let network = parse_network_name(network_name)?;
+    /// The payout address is chosen from the network, so it can never be
+    /// silently coerced onto a default chain, which would produce shares and
+    /// payout addresses for the wrong chain.
+    pub fn from_network(network: PoolNetwork) -> Self {
         let pool_payout_address = match network {
-            None => "tc1qu3cdq9unyhdc3d2hw8mvpfgnnhvp6ucckkl6ft".to_string(),
-            Some(Network::Bitcoin) => "bc1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
-            Some(Network::Regtest) => "bcrt1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
-            Some(_) => "tb1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
+            PoolNetwork::Cpunet => "tc1qu3cdq9unyhdc3d2hw8mvpfgnnhvp6ucckkl6ft".to_string(),
+            PoolNetwork::Bitcoin(Network::Bitcoin) => {
+                "bc1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string()
+            }
+            PoolNetwork::Bitcoin(Network::Regtest) => {
+                "bcrt1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string()
+            }
+            PoolNetwork::Bitcoin(_) => "tb1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
         };
 
-        Ok(Self {
+        Self {
             network,
             pool_payout_address,
             pool_identifier: "Braidpool".to_string(),
-        })
-    }
-    /// Returns whether this node is configured for cpunet.
-    #[inline]
-    pub fn is_cpunet(&self) -> bool {
-        self.network.is_none()
+        }
     }
 }
 
@@ -196,7 +244,20 @@ mod test {
 
     use crate::config::{BraidRpcConfig, MinerConfig};
 
-    use super::{BitcoinConfig, BraidDirectoryConfig, BraidpoolConfig, NetworkConfig};
+    use super::{
+        BitcoinConfig, BraidDirectoryConfig, BraidpoolConfig, NetworkConfig, PoolNetwork,
+        SUPPORTED_NETWORKS,
+    };
+
+    #[test]
+    fn every_supported_name_round_trips() {
+        for name in SUPPORTED_NETWORKS {
+            let network = PoolNetwork::from_name(name)
+                .unwrap_or_else(|| panic!("'{}' should be a supported network", name));
+            assert_eq!(network.name(), name);
+            assert_eq!(network.to_string(), name);
+        }
+    }
     #[test]
     pub fn config_building() {
         let cwd = std::env::current_dir()

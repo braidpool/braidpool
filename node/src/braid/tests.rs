@@ -14,6 +14,7 @@ use crate::braid::consensus_functions::reverse;
 use crate::braid::consensus_functions::tips;
 use crate::braid::consensus_functions::updating_ancestors;
 use crate::braid::Cohort;
+use crate::config::PoolNetwork;
 use crate::utils::compute_block_hash;
 use crate::utils::test_utils::test_utility_functions::loading_braid_from_file;
 use crate::utils::test_utils::test_utility_functions::*;
@@ -36,10 +37,10 @@ pub fn test_extend_functionality() {
         cohorts: vec![Cohort(HashSet::from([0]))],
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([(
-            compute_block_hash(&test_bead_0.block_header, &"cpunet".to_string()),
+            compute_block_hash(&test_bead_0.block_header, PoolNetwork::Cpunet),
             0,
         )]),
-        network_name: "cpunet".to_string(),
+        network: PoolNetwork::Cpunet,
     };
     assert_eq!(
         test_braid.cohorts,
@@ -55,7 +56,7 @@ pub fn test_extend_functionality() {
         .parents
         .push(compute_block_hash(
             &test_bead_0.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
 
     test_braid.extend(&test_bead_1);
@@ -72,7 +73,7 @@ pub fn test_extend_functionality() {
         .parents
         .push(compute_block_hash(
             &test_bead_1.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_braid.extend(&test_bead_2);
 
@@ -107,7 +108,7 @@ pub fn test_extend_functionality() {
         .parents
         .push(compute_block_hash(
             &test_bead_2.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_braid.extend(&test_bead_3);
 
@@ -118,7 +119,7 @@ pub fn test_extend_functionality() {
         .parents
         .push(compute_block_hash(
             &test_bead_2.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_braid.extend(&test_bead_4);
 
@@ -129,7 +130,7 @@ pub fn test_extend_functionality() {
         .parents
         .push(compute_block_hash(
             &test_bead_2.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_braid.extend(&test_bead_5);
 
@@ -151,7 +152,7 @@ pub fn test_extend_functionality() {
         .parents
         .push(compute_block_hash(
             &test_bead_4.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_braid.extend(&test_bead_6);
 
@@ -161,7 +162,7 @@ pub fn test_extend_functionality() {
         .parents
         .push(compute_block_hash(
             &test_bead_6.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_braid.extend(&test_bead_7);
 
@@ -171,7 +172,7 @@ pub fn test_extend_functionality() {
         .parents
         .push(compute_block_hash(
             &test_bead_7.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_braid.extend(&test_bead_8);
 
@@ -192,7 +193,7 @@ pub fn test_extend_functionality() {
         .parents
         .push(compute_block_hash(
             &test_bead_5.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_braid.extend(&test_bead_9);
 
@@ -202,7 +203,7 @@ pub fn test_extend_functionality() {
         .parents
         .push(compute_block_hash(
             &test_bead_9.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_braid.extend(&test_bead_10);
 
@@ -212,7 +213,7 @@ pub fn test_extend_functionality() {
         .parents
         .push(compute_block_hash(
             &test_bead_10.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_braid.extend(&test_bead_11);
 
@@ -232,21 +233,21 @@ pub fn test_extend_functionality() {
         .parents
         .push(compute_block_hash(
             &test_bead_8.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_bead_12
         .committed_metadata
         .parents
         .push(compute_block_hash(
             &test_bead_11.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_bead_12
         .committed_metadata
         .parents
         .push(compute_block_hash(
             &test_bead_3.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_braid.extend(&test_bead_12);
 
@@ -267,7 +268,7 @@ pub fn test_extend_functionality() {
         .parents
         .push(compute_block_hash(
             &test_bead_12.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_braid.extend(&test_bead_13);
     assert_eq!(
@@ -295,10 +296,10 @@ pub fn test_orphan_beads_functinality() {
         cohorts: vec![Cohort(HashSet::from([0]))],
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([(
-            compute_block_hash(&test_bead_0.block_header, &"cpunet".to_string()),
+            compute_block_hash(&test_bead_0.block_header, PoolNetwork::Cpunet),
             0,
         )]),
-        network_name: "cpunet".to_string(),
+        network: PoolNetwork::Cpunet,
     };
     assert_eq!(
         test_braid.cohorts,
@@ -314,7 +315,7 @@ pub fn test_orphan_beads_functinality() {
         .parents
         .push(compute_block_hash(
             &test_bead_2.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
 
     test_braid.extend(&test_bead_1);
@@ -329,7 +330,7 @@ pub fn test_orphan_beads_functinality() {
         .parents
         .push(compute_block_hash(
             &test_bead_0.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_braid.extend(&test_bead_2);
 
@@ -359,14 +360,14 @@ pub fn test_genesis1() {
         .parents
         .push(compute_block_hash(
             &test_bead_0.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_bead_2
         .committed_metadata
         .parents
         .push(compute_block_hash(
             &test_bead_1.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
 
     test_bead_3
@@ -374,7 +375,7 @@ pub fn test_genesis1() {
         .parents
         .push(compute_block_hash(
             &test_bead_2.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
 
     let test_braid = Braid {
@@ -391,23 +392,23 @@ pub fn test_genesis1() {
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
             (
-                compute_block_hash(&test_bead_0.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_0.block_header, PoolNetwork::Cpunet),
                 0,
             ),
             (
-                compute_block_hash(&test_bead_1.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_1.block_header, PoolNetwork::Cpunet),
                 1,
             ),
             (
-                compute_block_hash(&test_bead_2.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_2.block_header, PoolNetwork::Cpunet),
                 2,
             ),
             (
-                compute_block_hash(&test_bead_3.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_3.block_header, PoolNetwork::Cpunet),
                 3,
             ),
         ]),
-        network_name: "cpunet".to_string(),
+        network: PoolNetwork::Cpunet,
     };
 
     //mapping of the indices with set of indices representing its parents
@@ -454,23 +455,23 @@ pub fn test_genesis2() {
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
             (
-                compute_block_hash(&test_bead_0.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_0.block_header, PoolNetwork::Cpunet),
                 0,
             ),
             (
-                compute_block_hash(&test_bead_1.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_1.block_header, PoolNetwork::Cpunet),
                 1,
             ),
             (
-                compute_block_hash(&test_bead_2.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_2.block_header, PoolNetwork::Cpunet),
                 2,
             ),
             (
-                compute_block_hash(&test_bead_3.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_3.block_header, PoolNetwork::Cpunet),
                 3,
             ),
         ]),
-        network_name: "cpunet".to_string(),
+        network: PoolNetwork::Cpunet,
     };
     //mapping of the indices with set of indices representing its parents
     //where the key represents the ith indexed bead from self.beads which contains all the beads
@@ -500,14 +501,14 @@ pub fn test_genesis3() {
         .parents
         .push(compute_block_hash(
             &test_bead_1.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_bead_4
         .committed_metadata
         .parents
         .push(compute_block_hash(
             &test_bead_0.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
 
     let test_braid = Braid {
@@ -525,27 +526,27 @@ pub fn test_genesis3() {
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
             (
-                compute_block_hash(&test_bead_0.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_0.block_header, PoolNetwork::Cpunet),
                 0,
             ),
             (
-                compute_block_hash(&test_bead_1.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_1.block_header, PoolNetwork::Cpunet),
                 1,
             ),
             (
-                compute_block_hash(&test_bead_2.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_2.block_header, PoolNetwork::Cpunet),
                 2,
             ),
             (
-                compute_block_hash(&test_bead_3.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_3.block_header, PoolNetwork::Cpunet),
                 3,
             ),
             (
-                compute_block_hash(&test_bead_4.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_4.block_header, PoolNetwork::Cpunet),
                 4,
             ),
         ]),
-        network_name: "cpunet".to_string(),
+        network: PoolNetwork::Cpunet,
     };
     //mapping of the indices with set of indices representing its parents
     //where the key represents the ith indexed bead from self.beads which contains all the beads
@@ -606,14 +607,14 @@ pub fn test_tips1() {
         .parents
         .push(compute_block_hash(
             &test_bead_0.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_bead_2
         .committed_metadata
         .parents
         .push(compute_block_hash(
             &test_bead_1.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
 
     test_bead_3
@@ -621,7 +622,7 @@ pub fn test_tips1() {
         .parents
         .push(compute_block_hash(
             &test_bead_2.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
 
     let test_braid = Braid {
@@ -638,23 +639,23 @@ pub fn test_tips1() {
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
             (
-                compute_block_hash(&test_bead_0.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_0.block_header, PoolNetwork::Cpunet),
                 0,
             ),
             (
-                compute_block_hash(&test_bead_1.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_1.block_header, PoolNetwork::Cpunet),
                 1,
             ),
             (
-                compute_block_hash(&test_bead_2.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_2.block_header, PoolNetwork::Cpunet),
                 2,
             ),
             (
-                compute_block_hash(&test_bead_3.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_3.block_header, PoolNetwork::Cpunet),
                 3,
             ),
         ]),
-        network_name: "cpunet".to_string(),
+        network: PoolNetwork::Cpunet,
     };
 
     //mapping of the indices with set of indices representing its parents
@@ -684,14 +685,14 @@ pub fn test_tips2() {
         .parents
         .push(compute_block_hash(
             &test_bead_0.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_bead_2
         .committed_metadata
         .parents
         .push(compute_block_hash(
             &test_bead_1.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
 
     test_bead_3
@@ -699,7 +700,7 @@ pub fn test_tips2() {
         .parents
         .push(compute_block_hash(
             &test_bead_1.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
 
     let test_braid = Braid {
@@ -716,23 +717,23 @@ pub fn test_tips2() {
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
             (
-                compute_block_hash(&test_bead_0.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_0.block_header, PoolNetwork::Cpunet),
                 0,
             ),
             (
-                compute_block_hash(&test_bead_1.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_1.block_header, PoolNetwork::Cpunet),
                 1,
             ),
             (
-                compute_block_hash(&test_bead_2.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_2.block_header, PoolNetwork::Cpunet),
                 2,
             ),
             (
-                compute_block_hash(&test_bead_3.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_3.block_header, PoolNetwork::Cpunet),
                 3,
             ),
         ]),
-        network_name: "cpunet".to_string(),
+        network: PoolNetwork::Cpunet,
     };
 
     //mapping of the indices with set of indices representing its parents
@@ -766,63 +767,63 @@ pub fn test_tips3() {
         .parents
         .push(compute_block_hash(
             &test_bead_0.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_bead_3
         .committed_metadata
         .parents
         .push(compute_block_hash(
             &test_bead_1.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_bead_3
         .committed_metadata
         .parents
         .push(compute_block_hash(
             &test_bead_2.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_bead_4
         .committed_metadata
         .parents
         .push(compute_block_hash(
             &test_bead_0.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_bead_4
         .committed_metadata
         .parents
         .push(compute_block_hash(
             &test_bead_1.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_bead_4
         .committed_metadata
         .parents
         .push(compute_block_hash(
             &test_bead_2.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_bead_5
         .committed_metadata
         .parents
         .push(compute_block_hash(
             &test_bead_0.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_bead_5
         .committed_metadata
         .parents
         .push(compute_block_hash(
             &test_bead_1.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_bead_5
         .committed_metadata
         .parents
         .push(compute_block_hash(
             &test_bead_2.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     let test_braid = Braid {
         beads: vec![
@@ -840,31 +841,31 @@ pub fn test_tips3() {
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
             (
-                compute_block_hash(&test_bead_0.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_0.block_header, PoolNetwork::Cpunet),
                 0,
             ),
             (
-                compute_block_hash(&test_bead_1.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_1.block_header, PoolNetwork::Cpunet),
                 1,
             ),
             (
-                compute_block_hash(&test_bead_2.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_2.block_header, PoolNetwork::Cpunet),
                 2,
             ),
             (
-                compute_block_hash(&test_bead_3.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_3.block_header, PoolNetwork::Cpunet),
                 3,
             ),
             (
-                compute_block_hash(&test_bead_4.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_4.block_header, PoolNetwork::Cpunet),
                 4,
             ),
             (
-                compute_block_hash(&test_bead_5.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_5.block_header, PoolNetwork::Cpunet),
                 5,
             ),
         ]),
-        network_name: "cpunet".to_string(),
+        network: PoolNetwork::Cpunet,
     };
     //mapping of the indices with set of indices representing its parents
     //where the key represents the ith indexed bead from self.beads which contains all the beads
@@ -900,63 +901,63 @@ pub fn test_reverse() {
         .parents
         .push(compute_block_hash(
             &test_bead_0.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_bead_3
         .committed_metadata
         .parents
         .push(compute_block_hash(
             &test_bead_1.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_bead_3
         .committed_metadata
         .parents
         .push(compute_block_hash(
             &test_bead_2.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_bead_4
         .committed_metadata
         .parents
         .push(compute_block_hash(
             &test_bead_0.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_bead_4
         .committed_metadata
         .parents
         .push(compute_block_hash(
             &test_bead_1.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_bead_4
         .committed_metadata
         .parents
         .push(compute_block_hash(
             &test_bead_2.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_bead_5
         .committed_metadata
         .parents
         .push(compute_block_hash(
             &test_bead_0.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_bead_5
         .committed_metadata
         .parents
         .push(compute_block_hash(
             &test_bead_1.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_bead_5
         .committed_metadata
         .parents
         .push(compute_block_hash(
             &test_bead_2.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     let test_braid = Braid {
         beads: vec![
@@ -974,31 +975,31 @@ pub fn test_reverse() {
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
             (
-                compute_block_hash(&test_bead_0.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_0.block_header, PoolNetwork::Cpunet),
                 0,
             ),
             (
-                compute_block_hash(&test_bead_1.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_1.block_header, PoolNetwork::Cpunet),
                 1,
             ),
             (
-                compute_block_hash(&test_bead_2.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_2.block_header, PoolNetwork::Cpunet),
                 2,
             ),
             (
-                compute_block_hash(&test_bead_3.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_3.block_header, PoolNetwork::Cpunet),
                 3,
             ),
             (
-                compute_block_hash(&test_bead_4.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_4.block_header, PoolNetwork::Cpunet),
                 4,
             ),
             (
-                compute_block_hash(&test_bead_5.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_5.block_header, PoolNetwork::Cpunet),
                 5,
             ),
         ]),
-        network_name: "cpunet".to_string(),
+        network: PoolNetwork::Cpunet,
     };
     //mapping of the indices with set of indices representing its parents
     //where the key represents the ith indexed bead from self.beads which contains all the beads
@@ -1045,7 +1046,7 @@ pub fn test_all_ancestors() {
         for bead_index in current_braid_parents.clone() {
             let current_bead_hash = compute_block_hash(
                 &current_file_braid.beads[bead_index.0].block_header,
-                &"cpunet".to_string(),
+                PoolNetwork::Cpunet,
             );
             let mut d1_compute: HashMap<usize, HashSet<usize>> = HashMap::new();
             get_all_ancestors(
@@ -1081,14 +1082,14 @@ pub fn test_cohorts_parents_1() {
         .parents
         .push(compute_block_hash(
             &test_bead_0.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_bead_2
         .committed_metadata
         .parents
         .push(compute_block_hash(
             &test_bead_1.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
 
     test_bead_3
@@ -1096,7 +1097,7 @@ pub fn test_cohorts_parents_1() {
         .parents
         .push(compute_block_hash(
             &test_bead_2.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
 
     let test_braid = Braid {
@@ -1113,23 +1114,23 @@ pub fn test_cohorts_parents_1() {
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
             (
-                compute_block_hash(&test_bead_0.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_0.block_header, PoolNetwork::Cpunet),
                 0,
             ),
             (
-                compute_block_hash(&test_bead_1.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_1.block_header, PoolNetwork::Cpunet),
                 1,
             ),
             (
-                compute_block_hash(&test_bead_2.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_2.block_header, PoolNetwork::Cpunet),
                 2,
             ),
             (
-                compute_block_hash(&test_bead_3.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_3.block_header, PoolNetwork::Cpunet),
                 3,
             ),
         ]),
-        network_name: "cpunet".to_string(),
+        network: PoolNetwork::Cpunet,
     };
 
     //mapping of the indices with set of indices representing its parents
@@ -1247,14 +1248,14 @@ pub fn test_highest_work_path_1() {
         .parents
         .push(compute_block_hash(
             &test_bead_0.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_bead_2
         .committed_metadata
         .parents
         .push(compute_block_hash(
             &test_bead_1.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
 
     test_bead_3
@@ -1262,7 +1263,7 @@ pub fn test_highest_work_path_1() {
         .parents
         .push(compute_block_hash(
             &test_bead_2.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
 
     let test_braid = Braid {
@@ -1279,23 +1280,23 @@ pub fn test_highest_work_path_1() {
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
             (
-                compute_block_hash(&test_bead_0.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_0.block_header, PoolNetwork::Cpunet),
                 0,
             ),
             (
-                compute_block_hash(&test_bead_1.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_1.block_header, PoolNetwork::Cpunet),
                 1,
             ),
             (
-                compute_block_hash(&test_bead_2.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_2.block_header, PoolNetwork::Cpunet),
                 2,
             ),
             (
-                compute_block_hash(&test_bead_3.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_3.block_header, PoolNetwork::Cpunet),
                 3,
             ),
         ]),
-        network_name: "cpunet".to_string(),
+        network: PoolNetwork::Cpunet,
     };
 
     //mapping of the indices with set of indices representing its parents
@@ -1328,35 +1329,35 @@ pub fn test_diamond_path_highest_work() {
         .parents
         .push(compute_block_hash(
             &test_bead_0.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_bead_2
         .committed_metadata
         .parents
         .push(compute_block_hash(
             &test_bead_0.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_bead_3
         .committed_metadata
         .parents
         .push(compute_block_hash(
             &test_bead_1.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_bead_3
         .committed_metadata
         .parents
         .push(compute_block_hash(
             &test_bead_2.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
     test_bead_4
         .committed_metadata
         .parents
         .push(compute_block_hash(
             &test_bead_3.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         ));
 
     let test_braid = Braid {
@@ -1374,27 +1375,27 @@ pub fn test_diamond_path_highest_work() {
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
             (
-                compute_block_hash(&test_bead_0.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_0.block_header, PoolNetwork::Cpunet),
                 0,
             ),
             (
-                compute_block_hash(&test_bead_1.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_1.block_header, PoolNetwork::Cpunet),
                 1,
             ),
             (
-                compute_block_hash(&test_bead_2.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_2.block_header, PoolNetwork::Cpunet),
                 2,
             ),
             (
-                compute_block_hash(&test_bead_3.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_3.block_header, PoolNetwork::Cpunet),
                 3,
             ),
             (
-                compute_block_hash(&test_bead_4.block_header, &"cpunet".to_string()),
+                compute_block_hash(&test_bead_4.block_header, PoolNetwork::Cpunet),
                 4,
             ),
         ]),
-        network_name: "cpunet".to_string(),
+        network: PoolNetwork::Cpunet,
     };
     //mapping of the indices with set of indices representing its parents
     //where the key represents the ith indexed bead from self.beads which contains all the beads
@@ -1702,7 +1703,7 @@ fn test_extend_function() {
                 if let Some(parent_bead) = index_to_bead.get(&parent_idx) {
                     hashes.push(compute_block_hash(
                         &parent_bead.block_header,
-                        &"cpunet".to_string(),
+                        PoolNetwork::Cpunet,
                     ));
                 }
             }
@@ -1736,7 +1737,7 @@ fn test_extend_function() {
                 genesis_beads.push(bead.clone());
                 genesis_set.insert(idx);
                 bead_index_mapping.insert(
-                    compute_block_hash(&bead.block_header, &"cpunet".to_string()),
+                    compute_block_hash(&bead.block_header, PoolNetwork::Cpunet),
                     idx,
                 );
             }
@@ -1750,7 +1751,7 @@ fn test_extend_function() {
             orphan_beads: Vec::new(),
             genesis_beads: genesis_set,
             bead_index_mapping,
-            network_name: "cpunet".to_string(),
+            network: PoolNetwork::Cpunet,
         };
 
         // Extend braid with remaining beads in order of index
@@ -1778,7 +1779,7 @@ fn test_extend_function() {
             let mut cohort_hashes = HashSet::new();
             for &bead_idx in cohort {
                 if let Some(bead) = index_to_bead.get(&bead_idx) {
-                    let bead_hash = compute_block_hash(&bead.block_header, &"cpunet".to_string());
+                    let bead_hash = compute_block_hash(&bead.block_header, PoolNetwork::Cpunet);
                     cohort_hashes.insert(bead_hash);
                 }
             }
@@ -1816,7 +1817,7 @@ fn test_get_beads_after() {
         for &parent_idx in parents {
             hashes.push(compute_block_hash(
                 &beads[parent_idx].block_header,
-                &"cpunet".to_string(),
+                PoolNetwork::Cpunet,
             ));
         }
         parent_hashes.insert(*index, hashes);
@@ -1833,7 +1834,7 @@ fn test_get_beads_after() {
     let genesis_set = HashSet::from([0]);
     let mut bead_index_mapping = HashMap::new();
     bead_index_mapping.insert(
-        compute_block_hash(&beads[0].block_header, &"cpunet".to_string()),
+        compute_block_hash(&beads[0].block_header, PoolNetwork::Cpunet),
         0,
     );
 
@@ -1845,7 +1846,7 @@ fn test_get_beads_after() {
         orphan_beads: Vec::new(),
         genesis_beads: genesis_set,
         bead_index_mapping,
-        network_name: "cpunet".to_string(),
+        network: PoolNetwork::Cpunet,
     };
 
     // Extend braid with remaining beads
@@ -1854,7 +1855,7 @@ fn test_get_beads_after() {
     }
 
     // Test 1: Get beads after genesis (should return beads 1, 2, 3)
-    let genesis_hash = compute_block_hash(&beads[0].block_header, &"cpunet".to_string());
+    let genesis_hash = compute_block_hash(&beads[0].block_header, PoolNetwork::Cpunet);
     let result = test_braid.get_beads_after(vec![genesis_hash]);
     assert!(result.is_some());
     let returned_beads = result.unwrap();
@@ -1869,42 +1870,42 @@ fn test_get_beads_after() {
     // Verify the returned beads contain the expected hashes
     let returned_hashes: HashSet<_> = returned_beads
         .iter()
-        .map(|b| compute_block_hash(&b.block_header, &"cpunet".to_string()))
+        .map(|b| compute_block_hash(&b.block_header, PoolNetwork::Cpunet))
         .collect();
     assert!(returned_hashes.contains(&compute_block_hash(
         &beads[1].block_header,
-        &"cpunet".to_string()
+        PoolNetwork::Cpunet
     )));
     assert!(returned_hashes.contains(&compute_block_hash(
         &beads[2].block_header,
-        &"cpunet".to_string()
+        PoolNetwork::Cpunet
     )));
     assert!(returned_hashes.contains(&compute_block_hash(
         &beads[3].block_header,
-        &"cpunet".to_string()
+        PoolNetwork::Cpunet
     )));
 
     // Test 2: Get beads after bead1 (should return beads 2, 3)
-    let bead1_hash = compute_block_hash(&beads[1].block_header, &"cpunet".to_string());
+    let bead1_hash = compute_block_hash(&beads[1].block_header, PoolNetwork::Cpunet);
     let result = test_braid.get_beads_after(vec![bead1_hash]);
     assert!(result.is_some());
     let returned_beads = result.unwrap();
 
     let returned_hashes: HashSet<_> = returned_beads
         .iter()
-        .map(|b| compute_block_hash(&b.block_header, &"cpunet".to_string()))
+        .map(|b| compute_block_hash(&b.block_header, PoolNetwork::Cpunet))
         .collect();
     assert!(returned_hashes.contains(&compute_block_hash(
         &beads[2].block_header,
-        &"cpunet".to_string()
+        PoolNetwork::Cpunet
     )));
     assert!(returned_hashes.contains(&compute_block_hash(
         &beads[3].block_header,
-        &"cpunet".to_string()
+        PoolNetwork::Cpunet
     )));
 
     // Test 3: Get beads after the last bead (should return empty or just that bead)
-    let last_hash = compute_block_hash(&beads[3].block_header, &"cpunet".to_string());
+    let last_hash = compute_block_hash(&beads[3].block_header, PoolNetwork::Cpunet);
     let result = test_braid.get_beads_after(vec![last_hash]);
     assert!(result.is_none());
 
@@ -1941,7 +1942,7 @@ fn test_get_beads_after_diamond_structure() {
         for &parent_idx in parents {
             hashes.push(compute_block_hash(
                 &beads[parent_idx].block_header,
-                &"cpunet".to_string(),
+                PoolNetwork::Cpunet,
             ));
         }
         parent_hashes.insert(*index, hashes);
@@ -1958,7 +1959,7 @@ fn test_get_beads_after_diamond_structure() {
     let genesis_set = HashSet::from([0]);
     let mut bead_index_mapping = HashMap::new();
     bead_index_mapping.insert(
-        compute_block_hash(&beads[0].block_header, &"cpunet".to_string()),
+        compute_block_hash(&beads[0].block_header, PoolNetwork::Cpunet),
         0,
     );
 
@@ -1970,7 +1971,7 @@ fn test_get_beads_after_diamond_structure() {
         orphan_beads: Vec::new(),
         genesis_beads: genesis_set,
         bead_index_mapping,
-        network_name: "cpunet".to_string(),
+        network: PoolNetwork::Cpunet,
     };
 
     // Extend braid with remaining beads
@@ -1979,7 +1980,7 @@ fn test_get_beads_after_diamond_structure() {
     }
 
     // Test 1: Get beads after genesis
-    let genesis_hash = compute_block_hash(&beads[0].block_header, &"cpunet".to_string());
+    let genesis_hash = compute_block_hash(&beads[0].block_header, PoolNetwork::Cpunet);
     let result = test_braid.get_beads_after(vec![genesis_hash]);
     assert!(result.is_some());
     let returned_beads = result.unwrap();
@@ -1987,35 +1988,35 @@ fn test_get_beads_after_diamond_structure() {
     // Should include all beads after genesis
     let returned_hashes: HashSet<_> = returned_beads
         .iter()
-        .map(|b| compute_block_hash(&b.block_header, &"cpunet".to_string()))
+        .map(|b| compute_block_hash(&b.block_header, PoolNetwork::Cpunet))
         .collect();
     assert!(returned_hashes.contains(&compute_block_hash(
         &beads[1].block_header,
-        &"cpunet".to_string()
+        PoolNetwork::Cpunet
     )));
     assert!(returned_hashes.contains(&compute_block_hash(
         &beads[2].block_header,
-        &"cpunet".to_string()
+        PoolNetwork::Cpunet
     )));
     assert!(returned_hashes.contains(&compute_block_hash(
         &beads[3].block_header,
-        &"cpunet".to_string()
+        PoolNetwork::Cpunet
     )));
 
     // Test 2: Get beads after both middle beads (should return bead3)
-    let bead1_hash = compute_block_hash(&beads[1].block_header, &"cpunet".to_string());
-    let bead2_hash = compute_block_hash(&beads[2].block_header, &"cpunet".to_string());
+    let bead1_hash = compute_block_hash(&beads[1].block_header, PoolNetwork::Cpunet);
+    let bead2_hash = compute_block_hash(&beads[2].block_header, PoolNetwork::Cpunet);
     let result = test_braid.get_beads_after(vec![bead1_hash, bead2_hash]);
     assert!(result.is_some());
     let returned_beads = result.unwrap();
 
     let returned_hashes: HashSet<_> = returned_beads
         .iter()
-        .map(|b| compute_block_hash(&b.block_header, &"cpunet".to_string()))
+        .map(|b| compute_block_hash(&b.block_header, PoolNetwork::Cpunet))
         .collect();
     assert!(returned_hashes.contains(&compute_block_hash(
         &beads[3].block_header,
-        &"cpunet".to_string()
+        PoolNetwork::Cpunet
     )));
 
     println!("Diamond structure tests passed");
@@ -2057,7 +2058,7 @@ fn test_get_beads_after_complex_braid() {
         for &parent_idx in parents {
             hashes.push(compute_block_hash(
                 &beads[parent_idx].block_header,
-                &"cpunet".to_string(),
+                PoolNetwork::Cpunet,
             ));
         }
         parent_hashes.insert(*index, hashes);
@@ -2074,7 +2075,7 @@ fn test_get_beads_after_complex_braid() {
     let genesis_set = HashSet::from([0]);
     let mut bead_index_mapping = HashMap::new();
     bead_index_mapping.insert(
-        compute_block_hash(&beads[0].block_header, &"cpunet".to_string()),
+        compute_block_hash(&beads[0].block_header, PoolNetwork::Cpunet),
         0,
     );
 
@@ -2086,7 +2087,7 @@ fn test_get_beads_after_complex_braid() {
         orphan_beads: Vec::new(),
         genesis_beads: genesis_set,
         bead_index_mapping,
-        network_name: "cpunet".to_string(),
+        network: PoolNetwork::Cpunet,
     };
 
     // Extend braid with remaining beads
@@ -2095,7 +2096,7 @@ fn test_get_beads_after_complex_braid() {
     }
 
     // Test 1: Get beads after genesis (should return all other beads)
-    let genesis_hash = compute_block_hash(&beads[0].block_header, &"cpunet".to_string());
+    let genesis_hash = compute_block_hash(&beads[0].block_header, PoolNetwork::Cpunet);
     let result = test_braid.get_beads_after(vec![genesis_hash]);
     assert!(result.is_some());
     let returned_beads = result.unwrap();
@@ -2105,47 +2106,47 @@ fn test_get_beads_after_complex_braid() {
     );
 
     // Test 2: Get beads after first cohort (B1, B2, B3)
-    let b1_hash = compute_block_hash(&beads[1].block_header, &"cpunet".to_string());
+    let b1_hash = compute_block_hash(&beads[1].block_header, PoolNetwork::Cpunet);
     let result = test_braid.get_beads_after(vec![b1_hash]);
     assert!(result.is_some());
     let returned_beads = result.unwrap();
 
     let returned_hashes: HashSet<_> = returned_beads
         .iter()
-        .map(|b| compute_block_hash(&b.block_header, &"cpunet".to_string()))
+        .map(|b| compute_block_hash(&b.block_header, PoolNetwork::Cpunet))
         .collect();
 
     // Should include beads from the cohort containing B1 onwards
     assert!(
         returned_hashes.contains(&compute_block_hash(
             &beads[4].block_header,
-            &"cpunet".to_string()
+            PoolNetwork::Cpunet
         )) || returned_hashes.contains(&compute_block_hash(
             &beads[5].block_header,
-            &"cpunet".to_string()
+            PoolNetwork::Cpunet
         )) || returned_hashes.contains(&compute_block_hash(
             &beads[6].block_header,
-            &"cpunet".to_string()
+            PoolNetwork::Cpunet
         )) || returned_hashes.contains(&compute_block_hash(
             &beads[7].block_header,
-            &"cpunet".to_string()
+            PoolNetwork::Cpunet
         ))
     );
 
     // Test 3: Get beads after multiple tips from second level
-    let b4_hash = compute_block_hash(&beads[4].block_header, &"cpunet".to_string());
-    let b5_hash = compute_block_hash(&beads[5].block_header, &"cpunet".to_string());
+    let b4_hash = compute_block_hash(&beads[4].block_header, PoolNetwork::Cpunet);
+    let b5_hash = compute_block_hash(&beads[5].block_header, PoolNetwork::Cpunet);
     let result = test_braid.get_beads_after(vec![b4_hash, b5_hash]);
     assert!(result.is_some());
     let returned_beads = result.unwrap();
 
     let returned_hashes: HashSet<_> = returned_beads
         .iter()
-        .map(|b| compute_block_hash(&b.block_header, &"cpunet".to_string()))
+        .map(|b| compute_block_hash(&b.block_header, PoolNetwork::Cpunet))
         .collect();
     assert!(returned_hashes.contains(&compute_block_hash(
         &beads[7].block_header,
-        &"cpunet".to_string()
+        PoolNetwork::Cpunet
     )));
 
     println!("Complex braid tests passed");
@@ -2163,15 +2164,15 @@ fn test_get_beads_after_edge_cases() {
 
     // Simple chain: Genesis -> Bead1 -> Bead2
     // Collect parent hashes first to avoid borrowing issues
-    let parent0_hash = compute_block_hash(&beads[0].block_header, &"cpunet".to_string());
-    let parent1_hash = compute_block_hash(&beads[1].block_header, &"cpunet".to_string());
+    let parent0_hash = compute_block_hash(&beads[0].block_header, PoolNetwork::Cpunet);
+    let parent1_hash = compute_block_hash(&beads[1].block_header, PoolNetwork::Cpunet);
     beads[1].committed_metadata.parents.push(parent0_hash);
     beads[2].committed_metadata.parents.push(parent1_hash);
 
     let genesis_set = HashSet::from([0]);
     let mut bead_index_mapping = HashMap::new();
     bead_index_mapping.insert(
-        compute_block_hash(&beads[0].block_header, &"cpunet".to_string()),
+        compute_block_hash(&beads[0].block_header, PoolNetwork::Cpunet),
         0,
     );
 
@@ -2183,7 +2184,7 @@ fn test_get_beads_after_edge_cases() {
         orphan_beads: Vec::new(),
         genesis_beads: genesis_set,
         bead_index_mapping,
-        network_name: "cpunet".to_string(),
+        network: PoolNetwork::Cpunet,
     };
 
     test_braid.extend(&beads[1]);
@@ -2201,7 +2202,7 @@ fn test_get_beads_after_edge_cases() {
     // Should handle non-existent hash gracefully
 
     // Test 3: Mix of valid and invalid hashes
-    let genesis_hash = compute_block_hash(&beads[0].block_header, &"cpunet".to_string());
+    let genesis_hash = compute_block_hash(&beads[0].block_header, PoolNetwork::Cpunet);
     let result = test_braid.get_beads_after(vec![genesis_hash, fake_hash]);
     assert!(result.is_some());
     let returned_beads = result.unwrap();
@@ -2209,20 +2210,20 @@ fn test_get_beads_after_edge_cases() {
     // Should still work with valid hash and ignore invalid one
     let returned_hashes: HashSet<_> = returned_beads
         .iter()
-        .map(|b| compute_block_hash(&b.block_header, &"cpunet".to_string()))
+        .map(|b| compute_block_hash(&b.block_header, PoolNetwork::Cpunet))
         .collect();
     assert!(
         returned_hashes.contains(&compute_block_hash(
             &beads[1].block_header,
-            &"cpunet".to_string()
+            PoolNetwork::Cpunet
         )) || returned_hashes.contains(&compute_block_hash(
             &beads[2].block_header,
-            &"cpunet".to_string()
+            PoolNetwork::Cpunet
         ))
     );
 
     // Test 4: Get beads after the tip (last bead)
-    let tip_hash = compute_block_hash(&beads[2].block_header, &"cpunet".to_string());
+    let tip_hash = compute_block_hash(&beads[2].block_header, PoolNetwork::Cpunet);
     let result = test_braid.get_beads_after(vec![tip_hash]);
     assert!(result.is_none());
     // Should return at least the tip bead itself or beads from its cohort
@@ -2262,7 +2263,7 @@ fn test_get_beads_after_multiple_tips() {
         for &parent_idx in parents {
             hashes.push(compute_block_hash(
                 &beads[parent_idx].block_header,
-                &"cpunet".to_string(),
+                PoolNetwork::Cpunet,
             ));
         }
         parent_hashes.insert(*index, hashes);
@@ -2279,7 +2280,7 @@ fn test_get_beads_after_multiple_tips() {
     let genesis_set = HashSet::from([0]);
     let mut bead_index_mapping = HashMap::new();
     bead_index_mapping.insert(
-        compute_block_hash(&beads[0].block_header, &"cpunet".to_string()),
+        compute_block_hash(&beads[0].block_header, PoolNetwork::Cpunet),
         0,
     );
 
@@ -2291,7 +2292,7 @@ fn test_get_beads_after_multiple_tips() {
         orphan_beads: Vec::new(),
         genesis_beads: genesis_set,
         bead_index_mapping,
-        network_name: "cpunet".to_string(),
+        network: PoolNetwork::Cpunet,
     };
 
     for i in 1..6 {
@@ -2299,8 +2300,8 @@ fn test_get_beads_after_multiple_tips() {
     }
 
     // Test: Get beads after multiple tips with different indices
-    let b3_hash = compute_block_hash(&beads[3].block_header, &"cpunet".to_string()); // Index 3
-    let b5_hash = compute_block_hash(&beads[5].block_header, &"cpunet".to_string()); // Index 5
+    let b3_hash = compute_block_hash(&beads[3].block_header, PoolNetwork::Cpunet); // Index 3
+    let b5_hash = compute_block_hash(&beads[5].block_header, PoolNetwork::Cpunet); // Index 5
 
     let result = test_braid.get_beads_after(vec![b3_hash, b5_hash]);
     assert!(result.is_some());
@@ -2328,13 +2329,13 @@ fn test_get_beads_after_multiple_tips() {
 #[test]
 fn test_extend_without_orphans_promotes_nothing() {
     let genesis = emit_bead();
-    let mut braid = Braid::new(vec![genesis.clone()], "cpunet".to_string());
+    let mut braid = Braid::new(vec![genesis.clone()], PoolNetwork::Cpunet);
 
     let mut child = emit_bead();
-    child.committed_metadata.parents.push(compute_block_hash(
-        &genesis.block_header,
-        &braid.network_name,
-    ));
+    child
+        .committed_metadata
+        .parents
+        .push(compute_block_hash(&genesis.block_header, braid.network));
 
     match braid.extend(&child) {
         AddBeadStatus::BeadAdded { promoted_orphans } => {
@@ -2352,19 +2353,19 @@ fn test_extend_without_orphans_promotes_nothing() {
 #[test]
 fn test_extend_reports_promoted_orphan() {
     let genesis = emit_bead();
-    let mut braid = Braid::new(vec![genesis.clone()], "cpunet".to_string());
+    let mut braid = Braid::new(vec![genesis.clone()], PoolNetwork::Cpunet);
 
     let mut child = emit_bead();
-    child.committed_metadata.parents.push(compute_block_hash(
-        &genesis.block_header,
-        &braid.network_name,
-    ));
+    child
+        .committed_metadata
+        .parents
+        .push(compute_block_hash(&genesis.block_header, braid.network));
 
     let mut grandchild = emit_bead();
     grandchild
         .committed_metadata
         .parents
-        .push(compute_block_hash(&child.block_header, &braid.network_name));
+        .push(compute_block_hash(&child.block_header, braid.network));
 
     // Grandchild arrives before its parent `child` -> parked as an orphan.
     assert!(
@@ -2381,8 +2382,8 @@ fn test_extend_reports_promoted_orphan() {
         AddBeadStatus::BeadAdded { promoted_orphans } => {
             assert_eq!(promoted_orphans.len(), 1, "grandchild should be promoted");
             assert_eq!(
-                compute_block_hash(&promoted_orphans[0].block_header, &braid.network_name),
-                compute_block_hash(&grandchild.block_header, &braid.network_name)
+                compute_block_hash(&promoted_orphans[0].block_header, braid.network),
+                compute_block_hash(&grandchild.block_header, braid.network)
             );
         }
         other => panic!("expected BeadAdded, got {:?}", other),
@@ -2398,21 +2399,20 @@ fn test_extend_reports_promoted_orphan() {
 #[test]
 fn test_extend_promotes_transitive_orphan_chain() {
     let genesis = emit_bead();
-    let mut braid = Braid::new(vec![genesis.clone()], "cpunet".to_string());
+    let mut braid = Braid::new(vec![genesis.clone()], PoolNetwork::Cpunet);
 
     let mut a = emit_bead();
-    a.committed_metadata.parents.push(compute_block_hash(
-        &genesis.block_header,
-        &braid.network_name,
-    ));
+    a.committed_metadata
+        .parents
+        .push(compute_block_hash(&genesis.block_header, braid.network));
     let mut b = emit_bead();
     b.committed_metadata
         .parents
-        .push(compute_block_hash(&a.block_header, &braid.network_name));
+        .push(compute_block_hash(&a.block_header, braid.network));
     let mut c = emit_bead();
     c.committed_metadata
         .parents
-        .push(compute_block_hash(&b.block_header, &braid.network_name));
+        .push(compute_block_hash(&b.block_header, braid.network));
 
     // `c` and `b` arrive before `a`; both are parked.
     assert!(matches!(
@@ -2436,14 +2436,10 @@ fn test_extend_promotes_transitive_orphan_chain() {
             );
             let promoted_hashes: HashSet<_> = promoted_orphans
                 .iter()
-                .map(|bead| compute_block_hash(&bead.block_header, &braid.network_name))
+                .map(|bead| compute_block_hash(&bead.block_header, braid.network))
                 .collect();
-            assert!(
-                promoted_hashes.contains(&compute_block_hash(&b.block_header, &braid.network_name))
-            );
-            assert!(
-                promoted_hashes.contains(&compute_block_hash(&c.block_header, &braid.network_name))
-            );
+            assert!(promoted_hashes.contains(&compute_block_hash(&b.block_header, braid.network)));
+            assert!(promoted_hashes.contains(&compute_block_hash(&c.block_header, braid.network)));
         }
         other => panic!("expected BeadAdded, got {:?}", other),
     }

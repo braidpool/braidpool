@@ -7,6 +7,8 @@ use crate::committed_metadata::CommittedMetadata;
 #[cfg(test)]
 pub use crate::committed_metadata::TimeVec;
 #[cfg(test)]
+use crate::config::PoolNetwork;
+#[cfg(test)]
 use crate::uncommitted_metadata::UnCommittedMetadata;
 #[cfg(test)]
 use bitcoin::block::Header as BlockHeader;
@@ -65,10 +67,7 @@ pub mod test_utility_functions {
         for bead_idx in file_braid.clone().parents {
             let random_test_bead = emit_bead();
             test_braid_vector_bead_mapping.insert(
-                compute_block_hash(
-                    &random_test_bead.clone().block_header,
-                    &"cpunet".to_string(),
-                ),
+                compute_block_hash(&random_test_bead.clone().block_header, PoolNetwork::Cpunet),
                 bead_idx.0,
             );
             beads_to_idx.insert(bead_idx.0, random_test_bead.clone());
@@ -81,7 +80,7 @@ pub mod test_utility_functions {
                 for parent_bead_idx in current_bead_parents {
                     let parent_bead_block_hash = compute_block_hash(
                         &beads_to_idx[parent_bead_idx].block_header,
-                        &"cpunet".to_string(),
+                        PoolNetwork::Cpunet,
                     );
                     current_bead
                         .committed_metadata
@@ -126,7 +125,7 @@ pub mod test_utility_functions {
                 cohorts: current_bead_cohorots,
                 cohort_tips: vec![HashSet::new()], // Cohorts tips are only used in extend(), so we can skip them here.
                 orphan_beads: Vec::new(),
-                network_name: "cpunet".to_string(),
+                network: PoolNetwork::Cpunet,
             },
             file_braid.clone(),
         )

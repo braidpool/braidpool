@@ -1,3 +1,5 @@
+#[cfg(test)]
+use crate::config::PoolNetwork;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use tokio::{
@@ -1524,7 +1526,7 @@ mod tests {
         let (audit_log_tx, _audit_log_rx) = mpsc::channel(10);
         let braid_arc = Arc::new(tokio::sync::RwLock::new(Braid::new(
             vec![],
-            "mainnet".to_string(),
+            PoolNetwork::Bitcoin(bitcoin::Network::Bitcoin),
         )));
         let audit_dag_arc = Arc::new(futures::lock::Mutex::new(crate::audit::AuditDAG::new(
             braid_arc,

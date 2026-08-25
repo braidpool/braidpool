@@ -1,8 +1,11 @@
 use crate::bead::Bead;
 use crate::braid::{AddBeadStatus, Braid};
 use crate::committed_metadata::CommittedMetadata;
+#[cfg(test)]
+use crate::config::PoolNetwork;
 use crate::db::audit_db_handlers::AuditDBHandler;
 use crate::uncommitted_metadata::UnCommittedMetadata;
+use crate::utils::compute_block_hash;
 use crate::{TimeVec, TxIdVec};
 use bitcoin::consensus::serialize;
 use bitcoin::hashes::{sha256d, Hash};
@@ -454,6 +457,7 @@ impl AuditDAG {
         })
     }
     pub async fn load_from_db(&mut self) -> Result<Option<BlockHash>, String> {
+        let network = self.braid.read().await.network;
         if self.db_handler.is_none() {
             info!("No database handler available, starting from genesis");
             return Ok(None);
@@ -469,7 +473,8 @@ impl AuditDAG {
 
                     // Create genesis bead in memory
                     let genesis_bead = create_genesis_bead_for_audit()?;
-                    let genesis_block_hash = genesis_bead.block_header.block_hash();
+                    let genesis_block_hash =
+                        compute_block_hash(&genesis_bead.block_header, network);
                     let genesis_composite_hash = compute_audit_bead_hash(&genesis_bead);
                     let genesis_timestamp = genesis_bead.committed_metadata.start_timestamp;
 
@@ -486,6 +491,7 @@ impl AuditDAG {
                                 &genesis_bead,
                                 genesis_composite_hash,
                                 "system".to_string(),
+                                network,
                             )
                             .await
                         {
@@ -508,10 +514,7 @@ impl AuditDAG {
 
                     {
                         let mut braid = self.braid.write().await;
-                        *braid = crate::braid::Braid::new(
-                            vec![genesis_bead.clone()],
-                            "mainnet".to_string(),
-                        );
+                        *braid = crate::braid::Braid::new(vec![genesis_bead.clone()], network);
                     }
 
                     self.active_parents = vec![(
@@ -539,7 +542,7 @@ impl AuditDAG {
                         // the database then the in-memory bead will start from the genesis.
                         let mut braid = self.braid.write().await;
                         let only_beads: Vec<Bead> = beads.iter().map(|(b, _)| b.clone()).collect();
-                        *braid = crate::braid::Braid::new(only_beads, "mainnet".to_string());
+                        *braid = crate::braid::Braid::new(only_beads, network);
                     }
 
                     self.active_parents = beads
@@ -547,7 +550,7 @@ impl AuditDAG {
                         .map(|(bead, hash)| {
                             (
                                 hash,
-                                bead.block_header.block_hash(),
+                                compute_block_hash(&bead.block_header, network),
                                 bead.committed_metadata.start_timestamp,
                             )
                         })
@@ -672,6 +675,7 @@ impl AuditDAG {
         let mut bead_added = false;
         {
             let mut braid = self.braid.write().await;
+            let network = braid.network;
             let status = braid.extend(&bead);
             match status {
                 AddBeadStatus::BeadAdded { .. } => {
@@ -679,7 +683,7 @@ impl AuditDAG {
 
                     if let Some(ref db_handler) = self.db_handler {
                         match db_handler
-                            .insert_bead(&bead, composite_hash, miner_ip.clone())
+                            .insert_bead(&bead, composite_hash, miner_ip.clone(), network)
                             .await
                         {
                             Ok(_bead_id) => {}
@@ -693,12 +697,12 @@ impl AuditDAG {
                         }
                     }
                     let start_time = bead.committed_metadata.start_timestamp;
-                    let block_hash = bead.block_header.block_hash();
+                    let block_hash = compute_block_hash(&bead.block_header, network);
                     self.current_siblings
                         .push((composite_hash, block_hash, start_time));
 
                     info!(
-                        block_hash = %bead.block_header.block_hash(),
+                        block_hash = %block_hash,
                         composite_hash = %composite_hash,
                         parents = ?bead.committed_metadata.parents,
                         sibling_count = self.current_siblings.len(),
@@ -1136,7 +1140,10 @@ mod tests {
     #[test]
     /// Verify a new connected miner is assigned with a new dedicated memory space
     fn test_audit_dag_register_miner() {
-        let braid = Arc::new(RwLock::new(Braid::new(vec![], "mainnet".to_string())));
+        let braid = Arc::new(RwLock::new(Braid::new(
+            vec![],
+            PoolNetwork::Bitcoin(bitcoin::Network::Bitcoin),
+        )));
         let mut audit_dag = AuditDAG::new(braid);
 
         let miner_ip = "192.168.1.100".to_string();
@@ -1154,7 +1161,10 @@ mod tests {
     #[test]
     /// Verify the share acceptance, rejection and stats calculation logic.
     fn test_miner_stats_calculations() {
-        let braid = Arc::new(RwLock::new(Braid::new(vec![], "mainnet".to_string())));
+        let braid = Arc::new(RwLock::new(Braid::new(
+            vec![],
+            PoolNetwork::Bitcoin(bitcoin::Network::Bitcoin),
+        )));
         let mut audit_dag = AuditDAG::new(braid);
         let miner_ip = "192.168.1.100".to_string();
 

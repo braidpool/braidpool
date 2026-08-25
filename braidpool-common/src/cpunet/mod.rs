@@ -23,7 +23,7 @@ pub struct Cpunet;
 
 impl Cpunet {
     #[inline]
-    pub fn is_cpunet_name(name: &str) -> bool {
+    fn is_cpunet_name(name: &str) -> bool {
         name.eq_ignore_ascii_case(CPUNET_NAME)
     }
 
@@ -59,12 +59,12 @@ impl Cpunet {
         let witness_version = bitcoin::WitnessVersion::try_from(version.to_u8())
             .map_err(|_| CpunetAddressError::InvalidWitnessVersion(version.to_u8()))?;
         let witness_program = WitnessProgram::new(witness_version, &data)
-            .map_err(|e| CpunetAddressError::InvalidProgram(e.to_string()))?;
+            .map_err(CpunetAddressError::InvalidProgram)?;
 
         Ok(ScriptBuf::new_witness_program(&witness_program))
     }
     /// Returns the block hash.
-    pub fn block_hash(header: Header) -> BlockHash {
+    pub fn block_hash(header: &Header) -> BlockHash {
         let mut engine = sha256d::Hash::engine();
         engine.input(&header.version.to_consensus().to_le_bytes());
         engine.input(header.prev_blockhash.as_byte_array());
@@ -150,7 +150,7 @@ mod tests {
             188, 141, 147, 51, 119, 165, 255, 187, 0, 0, 0, 0,
         ];
         assert_eq!(
-            Cpunet::block_hash(cpunet_genesis_block.header).as_byte_array(),
+            Cpunet::block_hash(&cpunet_genesis_block.header).as_byte_array(),
             header_hash_bytes
         );
     }

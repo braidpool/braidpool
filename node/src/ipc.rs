@@ -1,5 +1,6 @@
 //! Listens for block notifications and fetches new block templates via IPC
 use crate::config::CoinbaseConfig;
+use crate::config::PoolNetwork;
 use crate::error::CoinbaseError;
 use crate::error::{classify_error, ErrorKind};
 use crate::rpc_server::RpcProxyCommand;
@@ -31,7 +32,7 @@ const MAX_BACKOFF: u64 = 300;
 pub async fn ipc_block_listener(
     ipc_socket_path: String,
     block_template_tx: Sender<Arc<client::BlockTemplate>>,
-    network_name: String,
+    network: PoolNetwork,
     template_cache: Arc<tokio::sync::Mutex<HashMap<TemplateId, Arc<client::BlockTemplate>>>>,
     mut block_submission_rx: tokio::sync::mpsc::UnboundedReceiver<
         crate::stratum::BlockSubmissionRequest,
@@ -40,7 +41,7 @@ pub async fn ipc_block_listener(
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!(
         socket = %ipc_socket_path,
-        network = %network_name,
+        network = %network,
         "IPC block listener started"
     );
     let local = tokio::task::LocalSet::new();
@@ -49,7 +50,7 @@ pub async fn ipc_block_listener(
             let mut health_check_interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
             let mut detailed_stats_interval = tokio::time::interval(tokio::time::Duration::from_secs(100));
             let mut backoff_seconds = 1;
-            let mut shared_client = match SharedBitcoinClient::new(&ipc_socket_path,network_name.clone()).await {
+            let mut shared_client = match SharedBitcoinClient::new(&ipc_socket_path,network).await {
                 Ok(client) => {
                     info!(socket = %ipc_socket_path, "IPC connection established");
                     client
@@ -122,7 +123,7 @@ pub async fn ipc_block_listener(
                     RequestPriority::High,
                     "initial template",
                     tip_height,
-                    &network_name,
+                    network,
                 ).await {
                     Ok(template) => {
                         if let Err(e) = block_template_tx.send(Arc::new(template)).await {
@@ -182,7 +183,7 @@ pub async fn ipc_block_listener(
                                                 RequestPriority::High,
                                                 &format!("block {}", height),
                                                 height,
-                                                &network_name,
+                                                network,
                                             ).await {
                                                 Ok(template) => {
                                                     if let Err(e) = block_template_tx.send(Arc::new(template)).await {
@@ -256,7 +257,7 @@ pub async fn ipc_block_listener(
                             header,
                             coinbase_transaction,
                         } = submission;
-                        let block_hash = compute_block_hash(&header, &network_name);
+                        let block_hash = compute_block_hash(&header, network);
                         let template_opt = template_cache.lock().await.get(&template_id).cloned();
 
                         if let Some(ipc_template) = template_opt {
@@ -431,18 +432,18 @@ pub async fn ipc_block_listener(
 /// * `priority` - Request priority affecting queue position
 /// * `context` - Context for logging
 /// * `block_height` - The height of the block for which the template is requested
-/// * `network_name` - The network name as string slice which will be later converted to either `Cpunet` or `Network` types respectively
+/// * `network` - The network this node runs on, deciding address encoding and bead hashing
 async fn get_template(
     client: &mut SharedBitcoinClient,
     priority: RequestPriority,
     context: &str,
     block_height: u32,
-    network_name: &str,
+    network: PoolNetwork,
 ) -> Result<client::BlockTemplate, Box<dyn std::error::Error>> {
     const MIN_TRANSACTION_COUNT: u64 = 1;
     const NONCE: u32 = 0;
 
-    let config = CoinbaseConfig::from_network_name(network_name)?;
+    let config = CoinbaseConfig::from_network(network);
 
     let components = client
         .get_block_template_components(None, Some(priority))

@@ -1,5 +1,4 @@
 use bitcoin::{consensus::encode::deserialize, hashes::Hash};
-use braidpool_common::cpunet::Cpunet;
 use clap::Parser;
 use futures::lock::Mutex;
 use futures::StreamExt;
@@ -69,18 +68,29 @@ async fn main() -> Result<(), Box<dyn Error>> {
     setup_tracing()?;
     // Parse CLI arguments
     let args = cli::Cli::parse();
-    let network_name = args.network.clone();
-    // Validating network and throwing appropriate error .
-    if let Err(error) = config::parse_network_name(&network_name) {
+    let network = match config::parse_network_name(&args.network) {
+        Ok(network) => network,
+        Err(error) => {
+            error!(
+                network = %args.network,
+                valid_networks = %config::SUPPORTED_NETWORKS.join(", "),
+                "Invalid network specified"
+            );
+            return Err(Box::<dyn Error>::from(error));
+        }
+    };
+    info!(network = %network, is_cpunet = network.is_cpunet(), "Network selected");
+    // Audit mode requires mainnet for the verification to be passed so early error
+    // will allow user to verify that .
+    if args.audit && network != config::PoolNetwork::Bitcoin(bitcoin::Network::Bitcoin) {
         error!(
-            network = %network_name,
-            valid_networks = %config::SUPPORTED_NETWORKS.join(", "),
-            "Invalid network specified"
+            network = %network,
+            "Audit mode requires --network mainnet"
         );
-        return Err(Box::<dyn Error>::from(error));
+        return Err(Box::<dyn Error>::from(
+            "audit mode requires --network mainnet",
+        ));
     }
-    let is_cpunet = Cpunet::is_cpunet_name(&network_name);
-    info!(network = %network_name, is_cpunet = is_cpunet, "Network selected");
     let (mut ibd_manager, ibd_command_tx) = IBDManager::new();
     //IBD cache handler
     let _ibd_handler = tokio::spawn(async move {
@@ -95,16 +105,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let ibd_spinlock = Arc::new(ibd_or_not);
     // Initializing the braid object with read write lock
     //for supporting concurrent readers and single writer
-    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(
-        Vec::from([]),
-        network_name.clone(),
-    )));
+    let braid: Arc<RwLock<braid::Braid>> =
+        Arc::new(RwLock::new(braid::Braid::new(Vec::from([]), network)));
     let mut optional_db_pool = None;
     let db_tx;
 
     if !args.audit {
         //Initializing DB and db command handler
-        let (mut db_handler, tx) = DBHandler::new(network_name.clone()).await.map_err(|e| {
+        let (mut db_handler, tx) = DBHandler::new(network).await.map_err(|e| {
             std::io::Error::new(
                 std::io::ErrorKind::Other,
                 format!("Database initialization failed: {:?}", e),
@@ -123,7 +131,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let braid_ref = braid.clone();
         // FIXME instead we should look 144 blocks back from the bitcoin tip (1 day) and load beads
         // starting from that block as genesis
-        let network_ref = network_name.clone();
+        let network_ref = network;
         let initial_bead_fetch_handle = tokio::spawn(async move {
             let mut guard = braid_ref.write().await;
             let fetched_beads =
@@ -132,7 +140,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             for bead in &fetched_beads {
                 let curr_bead_status = guard.extend(&bead);
                 debug!(
-                    hash = ?compute_block_hash(&bead.block_header,&network_ref),
+                    hash = ?compute_block_hash(&bead.block_header,network_ref),
                     status = ?curr_bead_status,
                     "Bead inserted"
                 );
@@ -183,7 +191,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let notification_tx_for_ipc = notification_tx.clone();
     let latest_template_for_ipc = latest_template.clone();
     let latest_template_merkle_branch_for_ipc = latest_template_merkle_branch.clone();
-    let network_name_for_ipc = network_name.clone();
+    let network_for_ipc = network;
 
     //Connection mapping for all the downstream connection connected to the stratum server
     let connection_mapping = Arc::new(tokio::sync::RwLock::new(ConnectionMapping::new()));
@@ -290,7 +298,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         stratum_config,
         connection_mapping.clone(),
         Some(block_submission_tx),
-        network_name.clone(),
+        network,
     );
 
     let (main_shutdown_tx, _main_shutdown_rx) =
@@ -1021,14 +1029,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         let ipc_socket_path = ipc_socket_path_for_blocking.clone();
                         let ipc_template_tx = ipc_template_tx.clone();
                         let template_cache = template_cache_for_listener.clone();
-                        let network_name = network_name_for_ipc.clone();
+                        let network = network_for_ipc;
                         let rpc_command_rx = rpc_proxy_rx;
 
                         async move {
                             match node::ipc::ipc_block_listener(
                                 ipc_socket_path,
                                 ipc_template_tx,
-                                network_name,
+                                network,
                                 template_cache,
                                 block_submission_rx,
                                 rpc_command_rx,
@@ -1157,7 +1165,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                               let result_bead: Result<Bead, bitcoin::consensus::encode::Error> = deserialize(&message.data);
                               match result_bead {
                                   Ok(bead) => {
-                                     info!(bead = ?bead, hash = %bead.block_header.block_hash(), "Received bead");
                                       // Handle the received bead here
                                       let mut braid_data = braid.write().await;
                                       let bead_hash = braid_data.compute_bead_hash(&bead);
@@ -1212,7 +1219,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                          } else if let braid::AddBeadStatus::BeadAdded { promoted_orphans}= &status {
                                             if !args.audit {
                                                 if let Err(error) = node::db::persist_added_bead(&braid_data, &bead, promoted_orphans.iter(), &db_tx).await {
-                                                    error!(error = %error, bead_hash = ?compute_block_hash(&bead.block_header, &braid_data.network_name), "Failed to persist bead");
+                                                    error!(error = %error, bead_hash = ?compute_block_hash(&bead.block_header, braid_data.network), "Failed to persist bead");
                                                     continue;
                                                 }
                                                 {
@@ -1307,7 +1314,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                         }
                                     } else if let braid::AddBeadStatus::BeadAdded { promoted_orphans } = &status {
                                         if let Err(error) = node::db::persist_added_bead(&braid_data, &bead, promoted_orphans.iter(), &db_tx).await {
-                                            error!(error = %error, bead_hash = ?compute_block_hash(&bead.block_header, &braid_data.network_name), "Failed to persist bead (GetAllBeads)");
+                                            error!(error = %error, bead_hash = ?compute_block_hash(&bead.block_header, braid_data.network), "Failed to persist bead (GetAllBeads)");
                                             continue;
                                         }
                                         // update score of the peer

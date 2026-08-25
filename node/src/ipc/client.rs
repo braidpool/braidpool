@@ -1,3 +1,4 @@
+use crate::config::PoolNetwork;
 use crate::error::BraidpoolError;
 use crate::init_capnp::init::Client as InitClient;
 use crate::proxy_capnp::thread::Client as ThreadClient;
@@ -675,21 +676,21 @@ pub struct SharedBitcoinClient {
     shutdown_sender: Option<mpsc::UnboundedSender<()>>,
     tip_shutdown_sender: Option<mpsc::UnboundedSender<()>>,
     metrics: Arc<QueueMetrics>,
-    _network_type: String,
+    _network: PoolNetwork,
 }
 
 impl SharedBitcoinClient {
     pub async fn new(
         socket_path: &str,
-        network_type: String,
+        network: PoolNetwork,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        Self::new_with_config(socket_path, ClientConfig::default(), network_type).await
+        Self::new_with_config(socket_path, ClientConfig::default(), network).await
     }
 
     pub async fn new_with_config(
         socket_path: &str,
         config: ClientConfig,
-        network_type: String,
+        network: PoolNetwork,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let (request_sender, mut request_receiver) = mpsc::unbounded_channel::<QueuedRequest>();
         let (notification_sender, mut internal_notification_receiver) = mpsc::unbounded_channel();
@@ -757,7 +758,7 @@ impl SharedBitcoinClient {
                 }
             }
         });
-        let outer_network_ref = network_type.clone();
+        let outer_network_ref = network;
 
         let processor_task = tokio::task::spawn_local({
             let socket_path = socket_path.to_string();
@@ -787,7 +788,7 @@ impl SharedBitcoinClient {
                     tokio::time::interval(Duration::from_secs(config.metrics_interval_secs));
 
                 loop {
-                    let inner_network_ref = network_type.clone();
+                    let inner_network_ref = network;
 
                     tokio::select! {
                         _ = shutdown_receiver.recv() => {
@@ -816,7 +817,7 @@ impl SharedBitcoinClient {
                                 // Process all queued requests
                                 while let Some(next_request) = priority_queue.dequeue() {
                                     let processing_start = Instant::now();
-                                    let n = inner_network_ref.clone();
+                                    let n = inner_network_ref;
                                     Self::process_single_request(&bitcoin_client, next_request,n).await;
                                     let total_time = enqueue_time.elapsed();
                                     let processing_time = processing_start.elapsed();
@@ -887,14 +888,14 @@ impl SharedBitcoinClient {
             shutdown_sender: Some(shutdown_sender),
             tip_shutdown_sender: Some(tip_shutdown_sender),
             metrics,
-            _network_type: outer_network_ref.clone(),
+            _network: outer_network_ref,
         })
     }
 
     async fn process_single_request(
         bitcoin_client: &BitcoinRpcClient,
         request: BitcoinRequest,
-        network_type: String,
+        network: PoolNetwork,
     ) {
         let processing_start = Instant::now();
         match request {
@@ -993,7 +994,7 @@ impl SharedBitcoinClient {
                 response,
                 ..
             } => {
-                let block_hash = compute_block_hash(&header, &network_type);
+                let block_hash = compute_block_hash(&header, network);
                 let version = header.version.to_consensus() as u32;
                 let timestamp = header.time;
                 let nonce = header.nonce;

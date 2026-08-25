@@ -9,6 +9,7 @@ use super::Beads;
 use super::CommittedMetadata;
 use super::UnCommittedMetadata;
 use crate::committed_metadata::TimeVec;
+use crate::config::PoolNetwork;
 use crate::utils::compute_block_hash;
 use crate::utils::create_test_bead;
 use crate::utils::test_utils::test_utility_functions::*;
@@ -332,7 +333,7 @@ fn test_bead_response_codec() {
         BeadResponse::GetAllBeads(Beads(vec![test_bead.clone(), test_bead.clone()])),
         BeadResponse::GetBeadsAfter(BeadHashes(vec![compute_block_hash(
             &test_bead.block_header,
-            &"cpunet".to_string(),
+            PoolNetwork::Cpunet,
         )])),
         BeadResponse::Error(BeadSyncError::GenesisMismatch),
         BeadResponse::Error(BeadSyncError::BeadHashNotFound),

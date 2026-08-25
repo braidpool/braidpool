@@ -1,3 +1,4 @@
+use crate::config::PoolNetwork;
 use crate::error::StratumErrors;
 use crate::template_creator::calculate_merkle_root;
 use crate::utils::compute_block_hash;
@@ -8,7 +9,6 @@ use bitcoin::hashes::Hash;
 use bitcoin::io::Cursor;
 use bitcoin::Transaction;
 use bitcoin::{block::Header as BlockHeader, BlockHash, TxMerkleNode, Txid, Witness};
-use braidpool_common::cpunet::Cpunet;
 use futures::{lock::Mutex, FutureExt};
 use num::ToPrimitive;
 use rand::RngCore;
@@ -245,8 +245,8 @@ pub struct DownstreamClient {
     pub payout_address: Option<String>,
     // Refers to the miner difficulty in audit mode
     pub audit_miner_difficulty: Option<f64>,
-    /// Network name (e.g., "main", "testnet", "cpunet") for network-specific PoW validation
-    pub network_name: String,
+    /// Network this connection mines on, deciding which block hash proof-of-work is checked against
+    pub network: PoolNetwork,
 }
 impl DownstreamClient {
     /// A helper function to keep connection_id immutable after assignment
@@ -833,12 +833,12 @@ impl DownstreamClient {
         let target = bitcoin::Target::from_compact(compact_target);
         debug!(
             connection_id = %connection_id_hex,
-            target = %hex::encode(target.to_le_bytes()),
+            target = %hex::encode(target.to_be_bytes()),
             "Mining target"
         );
         debug!(
             connection_id = %connection_id_hex,
-            block_hash = %compute_block_hash(&header,&self.network_name),
+            block_hash = %compute_block_hash(&header,self.network),
             "Block hash computed"
         );
 
@@ -901,10 +901,9 @@ impl DownstreamClient {
             txdata: block_transactions,
         };
         // For cpunet, use custom block_hash calculation; otherwise use standard validate_pow
-        let is_cpunet = Cpunet::is_cpunet_name(&self.network_name);
-        let pow_result = if is_cpunet {
+        let pow_result = if self.network.is_cpunet() {
             // Cpunet uses a modified block hash with "cpunet\0" suffix
-            let block_hash = Cpunet::block_hash(header);
+            let block_hash = self.network.block_hash(&header);
             if target.is_met_by(block_hash) {
                 Ok(block_hash)
             } else {
@@ -920,7 +919,7 @@ impl DownstreamClient {
                     connection_id = %connection_id_hex,
                     target = %target,
                     hash = %block_hash,
-                    is_cpunet = is_cpunet,
+                    is_cpunet = self.network.is_cpunet(),
                     "Header meets target"
                 );
 
@@ -1910,8 +1909,8 @@ impl DownstreamClient {
 
 static NEXT_CONNECTION_ID: AtomicU32 = AtomicU32::new(0);
 
-impl Default for DownstreamClient {
-    fn default() -> Self {
+impl DownstreamClient {
+    pub fn new(network: PoolNetwork) -> Self {
         //ExtraNonce1. - Hex-encoded, per-connection unique string which will be used for creating generation transactions later.
         //4 bytes
         let connection_id = NEXT_CONNECTION_ID.fetch_add(1, Ordering::SeqCst);
@@ -1939,7 +1938,7 @@ impl Default for DownstreamClient {
             miner_extranonce2_size: EXTRANONCE2_SIZE,
             monitor_target: None,
             block_submission_tx: None,
-            network_name: String::new(),
+            network,
             is_proxy_mode: false,
             payout_address: None,
             audit_miner_difficulty: None,
@@ -1959,8 +1958,8 @@ pub struct Server {
     stratum_config: StratumServerConfig,
     downstream_connection_mapping: Arc<RwLock<ConnectionMapping>>,
     block_submission_tx: Option<mpsc::UnboundedSender<BlockSubmissionRequest>>,
-    /// Network name (e.g., "main", "testnet", "cpunet") used for network-specific behavior
-    network_name: String,
+    /// Network this server runs on, propagated to every downstream connection
+    network: PoolNetwork,
 }
 ///Types for the `mining.notify` jobs to be sent to the fellow connected downstream nodes
 /// `SendToAll` broadcasts the most recently received `job` to the downstream nodes .
@@ -3413,15 +3412,15 @@ impl Server {
         server_config: StratumServerConfig,
         connection_mapping_arc: Arc<RwLock<ConnectionMapping>>,
         block_submission_tx: Option<mpsc::UnboundedSender<BlockSubmissionRequest>>,
-        network_name: String,
+        network: PoolNetwork,
     ) -> Self {
-        debug!(config = ?server_config, network = %network_name, "Initializing stratum server");
+        debug!(config = ?server_config, network = %network, "Initializing stratum server");
 
         Self {
             stratum_config: server_config,
             downstream_connection_mapping: connection_mapping_arc,
             block_submission_tx,
-            network_name,
+            network,
         }
     }
     /// Starts and runs the Stratum server, handling incoming miner connections.
@@ -3472,13 +3471,12 @@ impl Server {
                         }
                         else{
                  //shared ownership across all tasks and spawning a seperate downstream for each new connection
-                 let self_ = Arc::new(Mutex::new(DownstreamClient::default()));
+                 let self_ = Arc::new(Mutex::new(DownstreamClient::new(self.network)));
                         let (connection_id, connection_id_hex) = {
                             let mut client = self_.lock().await;
                     if let Some(ref submission_tx) = self.block_submission_tx {
                          client.block_submission_tx = Some(submission_tx.clone());
                      }
-                            client.network_name = self.network_name.clone();
                             let id = client.connection_id;
                             (id, format!("{:x}", id))
                         };
@@ -3611,7 +3609,7 @@ impl Server {
                                 is_proxy_mode: is_proxy,
                                 payout_address: None,
                                 audit_miner_difficulty: self.stratum_config.audit_miner_difficulty,
-                                network_name:self.network_name.clone()
+                                network:self.network
 
                             }));
 
@@ -4052,14 +4050,13 @@ mod test {
         let genesis_beads = Vec::from([]);
         let test_braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(
             genesis_beads,
-            "cpunet".to_string(),
+            PoolNetwork::Cpunet,
         )));
         let connection_mapping = Arc::new(RwLock::new(ConnectionMapping::new()));
         let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
-        let (_test_db_handler, test_db_tx) = DBHandler::new_in_memory("cpunet".to_string())
-            .await
-            .unwrap();
+        let (_test_db_handler, test_db_tx) =
+            DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
         let (swarm_handler, mut swarm_command_receiver) =
             SwarmHandler::new(Arc::clone(&test_braid), test_db_tx, DashboardEvents::new());
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
@@ -4076,7 +4073,7 @@ mod test {
             config.clone(),
             connection_mapping.clone(),
             None,
-            "cpunet".to_string(),
+            PoolNetwork::Cpunet,
         );
 
         let server_task = tokio::spawn(async move {
@@ -4130,12 +4127,11 @@ mod test {
         let genesis_beads = Vec::from([]);
         let test_braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(
             genesis_beads,
-            "cpunet".to_string(),
+            PoolNetwork::Cpunet,
         )));
         let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
-        let (_test_db_handler, test_db_tx) = DBHandler::new_in_memory("cpunet".to_string())
-            .await
-            .unwrap();
+        let (_test_db_handler, test_db_tx) =
+            DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
         let (swarm_handler, mut swarm_command_receiver) =
             SwarmHandler::new(Arc::clone(&test_braid), test_db_tx, DashboardEvents::new());
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
@@ -4153,7 +4149,7 @@ mod test {
             config.clone(),
             connection_mapping.clone(),
             None,
-            "cpunet".to_string(),
+            PoolNetwork::Cpunet,
         );
 
         let server_task = tokio::spawn(async move {
@@ -4192,13 +4188,12 @@ mod test {
         let genesis_beads = Vec::from([]);
         let test_braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(
             genesis_beads,
-            "cpunet".to_string(),
+            PoolNetwork::Cpunet,
         )));
         let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
-        let (_test_db_handler, test_db_tx) = DBHandler::new_in_memory("cpunet".to_string())
-            .await
-            .unwrap();
+        let (_test_db_handler, test_db_tx) =
+            DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
         let (swarm_handler, mut swarm_command_receiver) =
             SwarmHandler::new(Arc::clone(&test_braid), test_db_tx, DashboardEvents::new());
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
@@ -4210,7 +4205,7 @@ mod test {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let bound_addr = listener.local_addr().unwrap();
 
-        let mut server = Server::new(config, connection_mapping, None, "cpunet".to_string());
+        let mut server = Server::new(config, connection_mapping, None, PoolNetwork::Cpunet);
         tokio::spawn(async move {
             let _ = server
                 .run_stratum_service(
@@ -4249,11 +4244,10 @@ mod test {
         let genesis_beads = Vec::from([]);
         let test_braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(
             genesis_beads,
-            "cpunet".to_string(),
+            PoolNetwork::Cpunet,
         )));
-        let (_test_db_handler, test_db_tx) = DBHandler::new_in_memory("cpunet".to_string())
-            .await
-            .unwrap();
+        let (_test_db_handler, test_db_tx) =
+            DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
         let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
         let (swarm_handler, mut swarm_command_receiver) =
@@ -4266,7 +4260,7 @@ mod test {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let bound_addr = listener.local_addr().unwrap();
 
-        let mut server = Server::new(config, connection_mapping, None, "cpunet".to_string());
+        let mut server = Server::new(config, connection_mapping, None, PoolNetwork::Cpunet);
         tokio::spawn(async move {
             let _ = server
                 .run_stratum_service(
@@ -4299,11 +4293,10 @@ mod test {
         let genesis_beads = Vec::from([]);
         let test_braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(
             genesis_beads,
-            "cpunet".to_string(),
+            PoolNetwork::Cpunet,
         )));
-        let (_test_db_handler, test_db_tx) = DBHandler::new_in_memory("cpunet".to_string())
-            .await
-            .unwrap();
+        let (_test_db_handler, test_db_tx) =
+            DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
         let mining_job_map: Arc<Mutex<HashMap<String, Arc<Mutex<MiningJobMap>>>>> =
             Arc::new(Mutex::new(HashMap::new()));
         let (notify_tx, _notify_rx) = mpsc::channel::<NotifyCmd>(32);
@@ -4322,7 +4315,7 @@ mod test {
             config,
             connection_mapping.clone(),
             None,
-            "cpunet".to_string(),
+            PoolNetwork::Cpunet,
         );
         let mining_job_map_clone = mining_job_map.clone();
         let notify_tx_clone = notify_tx.clone();
@@ -4370,7 +4363,7 @@ mod test {
 
     #[tokio::test]
     async fn submit_work_no_version_rolling() {
-        use super::Cpunet;
+        use crate::config::PoolNetwork;
         // Tests BIP310 version rolling end-to-end: configure mask, construct job,
         // grind a valid nonce, submit, assert accepted.
         // Uses bits=207fffff (minimum difficulty) so the nonce grind terminates
@@ -4401,11 +4394,10 @@ mod test {
         let genesis_beads = Vec::from([]);
         let test_braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(
             genesis_beads,
-            "cpunet".to_string(),
+            PoolNetwork::Cpunet,
         )));
-        let (_test_db_handler, test_db_tx) = DBHandler::new_in_memory("cpunet".to_string())
-            .await
-            .unwrap();
+        let (_test_db_handler, test_db_tx) =
+            DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
         let (swarm_handler, mut swarm_command_receiver) =
             SwarmHandler::new(Arc::clone(&test_braid), test_db_tx, DashboardEvents::new());
         let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
@@ -4479,7 +4471,7 @@ mod test {
         let current_system_time = std::time::SystemTime::now();
         let duration_since_epoch = current_system_time.duration_since(UNIX_EPOCH).unwrap();
         let unix_timestamp = duration_since_epoch.as_secs().to_u32().unwrap();
-        let mut mock_downstream_handler = DownstreamClient::default();
+        let mut mock_downstream_handler = DownstreamClient::new(PoolNetwork::Cpunet);
         mock_downstream_handler.authorized = true;
         let mock_mining_job_map: Arc<Mutex<MiningJobMap>> =
             Arc::new(Mutex::new(MiningJobMap::new()));
@@ -4508,7 +4500,7 @@ mod test {
         ]);
         let test_extranonce_1 = hex::decode("000000009495ac08").unwrap();
         mock_downstream_handler.extranonce1 = test_extranonce_1;
-        mock_downstream_handler.network_name = "cpunet".to_string();
+        mock_downstream_handler.network = PoolNetwork::Cpunet;
         let configure_response = mock_downstream_handler
             .handle_configure(&configure_test_request, 1, None)
             .await
@@ -4562,7 +4554,7 @@ mod test {
                 bits: grind_bits,
                 nonce,
             };
-            if grind_target.is_met_by(compute_block_hash(&grind_header, &"cpunet".to_string())) {
+            if grind_target.is_met_by(compute_block_hash(&grind_header, PoolNetwork::Cpunet)) {
                 valid_nonce = nonce;
                 break;
             }
@@ -4654,11 +4646,11 @@ mod test {
             .await
             .insert_mining_job(TemplateId::Braidpool(1), job_details)
             .await;
-        let mut client = DownstreamClient::default();
+        let mut client = DownstreamClient::new(PoolNetwork::Cpunet);
         client.authorized = true;
         client.extranonce1 = vec![0u8; 8];
-        let test_braid = Arc::new(RwLock::new(braid::Braid::new(vec![], "cpunet".to_string())));
-        let (_db, db_tx) = DBHandler::new("cpunet".to_string()).await.unwrap();
+        let test_braid = Arc::new(RwLock::new(braid::Braid::new(vec![], PoolNetwork::Cpunet)));
+        let (_db, db_tx) = DBHandler::new(PoolNetwork::Cpunet).await.unwrap();
         let (swarm, _rx) = SwarmHandler::new(test_braid, db_tx, DashboardEvents::new());
         let swarm_arc = Arc::new(Mutex::new(swarm));
         (client, map, swarm_arc, job_id)
@@ -4752,9 +4744,9 @@ mod test {
 
     #[test]
     fn test_unique_extranonce1_per_connection() {
-        let client1 = DownstreamClient::default();
-        let client2 = DownstreamClient::default();
-        let client3 = DownstreamClient::default();
+        let client1 = DownstreamClient::new(PoolNetwork::Cpunet);
+        let client2 = DownstreamClient::new(PoolNetwork::Cpunet);
+        let client3 = DownstreamClient::new(PoolNetwork::Cpunet);
 
         // connection_ids must be strictly increasing
         assert!(client2.connection_id() > client1.connection_id());
