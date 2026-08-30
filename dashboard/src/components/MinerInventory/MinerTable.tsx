@@ -1,6 +1,5 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { MinerTableProps } from './Types';
-import { THRESHOLDS } from './Constant';
 import colors from '@/theme/colors';
 
 function formatUptime(s: number): string {
@@ -66,9 +65,12 @@ const MinerTable: React.FC<MinerTableProps> = ({
               >
                 <div>
                   <div className="font-medium text-white truncate">
-                    {miner.make || miner.model
-                      ? [miner.make, miner.model].filter(Boolean).join(' ')
-                      : 'Unknown'}
+                    {[miner.make, miner.model]
+                      .filter((v) => v && v !== 'Unknown')
+                      .join(' ') ||
+                      (miner.hostname !== 'Unknown'
+                        ? miner.hostname
+                        : 'Unknown')}
                   </div>
                 </div>
 
@@ -156,7 +158,8 @@ const MinerTable: React.FC<MinerTableProps> = ({
                   {miner.primary_pool && miner.primary_pool !== 'No Pool' ? (
                     <>
                       <div className="text-sm text-gray-200">
-                        {miner.primary_pool} | {pool.user}
+                        {miner.primary_pool}
+                        {pool?.user ? ` | ${pool.user}` : ''}
                       </div>
                     </>
                   ) : (

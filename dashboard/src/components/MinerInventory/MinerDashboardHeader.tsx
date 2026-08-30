@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { MinerDashboardHeaderProps } from './Types';
 
 const MinerDashboardHeader: React.FC<MinerDashboardHeaderProps> = ({

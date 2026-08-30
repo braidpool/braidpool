@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS miner_devices (
     api_version TEXT,
 
     -- Connection status
-    is_online  INTEGER NOT NULL DEFAULT 1,
+    is_online  INTEGER NOT NULL DEFAULT 0,
     last_error TEXT,
 
     -- Timestamps

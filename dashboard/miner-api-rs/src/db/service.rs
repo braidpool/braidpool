@@ -360,7 +360,7 @@ pub async fn refresh_all(
                 let _permit = sem
                     .acquire_owned()
                     .await
-                    .expect("semaphore should not be closed during refresh");
+                    .map_err(|_| anyhow!("semaphore closed"))?;
                 match do_refresh(&pool, d, timeout_secs).await {
                     Ok(ProbeResult::Online(m)) =>
                         Ok(serde_json::json!({ "success": true, "miner": m.to_json() })),

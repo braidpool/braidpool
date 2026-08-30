@@ -37,12 +37,13 @@ async fn main() -> anyhow::Result<()> {
 
     let router = api::build_router(Arc::clone(&state));
 
-    // ── background periodic refresh ──────────────────────────────────────────
+    //  background periodic refresh
     {
         let pool = pool.clone();
         let tx = broadcast_tx.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(refresh_secs));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             interval.tick().await; // skip first immediate tick
 
             loop {
@@ -78,6 +79,7 @@ async fn main() -> anyhow::Result<()> {
             tokio::time::sleep(std::time::Duration::from_secs(10)).await;
 
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(scan_secs));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
             loop {
                 interval.tick().await;
@@ -109,7 +111,7 @@ async fn main() -> anyhow::Result<()> {
         });
     }
 
-    // ── bind and serve
+    //  bind and serve
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     info!(addr = %addr, "listening");
 

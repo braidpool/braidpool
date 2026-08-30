@@ -45,7 +45,9 @@ const MinerInventoryDashboard = () => {
             setMiners(data.miners.map((m: any) => mapApiToMiner(m)));
             setLastUpdate(new Date());
           }
-        } catch {}
+        } catch (err) {
+          console.warn('WS message parse error:', err);
+        }
       };
 
       ws.onerror = () => {
