@@ -225,7 +225,7 @@ pub fn create_test_bead(nonce: u32, prev_hash: Option<BlockHash>) -> Bead {
 #[cfg(test)]
 mod tests {
     use super::*;
-#[test]
+    #[test]
     fn server_endpoints_returns_single_endpoint_for_specific_host() {
         let result = server_endpoints("127.0.0.1", 8080, "http");
         assert_eq!(result, vec!["http://127.0.0.1:8080"]);
