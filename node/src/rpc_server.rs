@@ -766,19 +766,35 @@ impl RpcServer for RpcServerImpl {
             ));
         }
 
-        if limit == 0 {
+        let requested_limit = limit as usize;
+
+        // Validate that limit is greater than zero
+        if requested_limit == 0 {
             return Err(ErrorObjectOwned::owned(
                 6,
-                "Invalid limit: must be at least 1.",
+                format!(
+                    "Invalid limit: {} is too low. Limit must be between 1 and {} (the maximum available count in highest work path).",
+                    0, available_count
+                ),
                 None::<()>,
             ));
         }
 
-        let effective_limit = (limit as usize).min(available_count);
-        let skip_count = available_count.saturating_sub(effective_limit);
+        // Validate that the requested limit doesn't exceed available beads
+        if requested_limit > available_count {
+            return Err(ErrorObjectOwned::owned(
+                6,
+                format!(
+                    "Requested limit ({}) exceeds available beads in highest work path. The maximum available count is {}. Please use a limit between 1 and {}. You can use 'getbeadcount' to check the total number of beads in the braid.",
+                    requested_limit, available_count, available_count
+                ),
+                None::<()>,
+            ));
+        }
+
         let hw_path_hashes: Vec<String> = bead_list
             .iter()
-            .skip(skip_count)
+            .take(requested_limit)
             .map(|&index| {
                 braid_data
                     .compute_bead_hash(&braid_data.beads[index])
