@@ -1,6 +1,7 @@
 use sqlx::{sqlite::SqliteConnectOptions, Executor, SqlitePool};
 use std::{fs, path::Path, str::FromStr};
 
+use crate::config::PoolNetwork;
 use crate::error::DBErrors;
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
@@ -8,13 +9,42 @@ static SCHEMA_SQL: &str = include_str!("schema.sql");
 static AUDIT_SCHEMA_SQL: &str = include_str!("audit_schema.sql");
 
 /// Initializes the braid database inside the node's data directory.
-pub async fn init_db(datadir: &Path) -> Result<SqlitePool, DBErrors> {
-    setup_sqlite_db(datadir, "braidpool.db", SCHEMA_SQL).await
+/// Initializes the sqlite pool for a network-scoped data directory.
+pub async fn init_db(
+    network_datadir: PathBuf,
+    network: PoolNetwork,
+datadir: &Path) -> Result<SqlitePool, DBErrors> {
+    warn_on_legacy_db(&network_datadir, network);
+    setup_sqlite_db(&network_datadir, datadir, "braidpool.db", SCHEMA_SQL).await
 }
 
 /// Initializes the audit database inside the node's data directory.
 pub async fn init_audit_db(datadir: &Path) -> Result<SqlitePool, DBErrors> {
     setup_sqlite_db(datadir, "audit.db", AUDIT_SCHEMA_SQL).await
+}
+
+async fn setup_sqlite_db(
+    db_dir: &Path,
+    db_name: &str,
+    schema_sql: &str,
+) -> Result<SqlitePool, DBErrors> {
+/// Warns once if a pre-network-scoping database is still present in the legacy
+/// platform data directory. It is no longer read from or written to.
+fn warn_on_legacy_db(network_datadir: &Path, network: PoolNetwork) {
+    let Ok(legacy_dir) = get_data_dir() else {
+        return;
+    };
+    let legacy_path = legacy_dir.join("braidpool.db");
+    let new_path = network_datadir.join("braidpool.db");
+    if legacy_path.exists() && legacy_path != new_path && !new_path.exists() {
+        warn!(
+            legacy = %legacy_path.display(),
+            new = %new_path.display(),
+            network = %network,
+            "Legacy braidpool DB found outside the network-scoped data directory. \
+             It is no longer used; move or delete it to silence this warning."
+        );
+    }
 }
 
 async fn setup_sqlite_db(
