@@ -221,7 +221,6 @@ const NodeHealth: React.FC = () => {
           <h1 className="text-2xl font-bold text-white tracking-tight">
             Node Health Dashboard
           </h1>
-         
         </div>
         <div className="flex items-center gap-1.5 text-sm text-gray-500">
           <Clock className="w-3.5 h-3.5" />
