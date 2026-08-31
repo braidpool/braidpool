@@ -3,6 +3,7 @@ use crate::stratum::{BlockTemplate, JobDetails};
 use crate::utils::BeadHash;
 use crate::TemplateId;
 use bitcoin::address::ParseError as AddressParseError;
+use braidpool_common::error::CpunetAddressError;
 use std::{fmt, path::PathBuf};
 use tokio::sync::oneshot;
 
@@ -165,8 +166,17 @@ impl fmt::Display for DBErrors {
 }
 #[derive(Debug, PartialEq)]
 pub enum UsernameValidationError {
-    NetworkIncompatibleAddress { network: String },
-    InvalidAddress { address: String },
+    NetworkIncompatibleAddress {
+        network: String,
+    },
+    InvalidAddress {
+        address: String,
+    },
+    /// The payout address decoded as bech32 but is not a valid cpunet address.
+    InvalidCpunetAddress {
+        address: String,
+        error: CpunetAddressError,
+    },
 }
 
 #[derive(Debug)]
@@ -267,6 +277,13 @@ impl fmt::Display for StratumErrors {
                 }
                 UsernameValidationError::InvalidAddress { address } => {
                     write!(f,"The provided payout address could not be parsed into a valid bitcoin payout address - {}",address)
+                }
+                UsernameValidationError::InvalidCpunetAddress { address, error } => {
+                    write!(
+                        f,
+                        "The provided payout address {} could not be parsed into a valid cpunet payout address - {}",
+                        address, error
+                    )
                 }
             },
             StratumErrors::ErrorFetchingCurrentUNIXTimestamp { error } => {

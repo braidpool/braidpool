@@ -1,15 +1,15 @@
 use crate::config::PoolNetwork;
 use crate::error::StratumErrors;
 use crate::template_creator::calculate_merkle_root;
-use crate::utils::validate;
 use crate::utils::compute_block_hash;
+use crate::utils::validate;
 use crate::{SwarmHandler, TemplateId, EXTRANONCE1_SIZE, EXTRANONCE2_SIZE, EXTRANONCE_SEPARATOR};
 use bitcoin::absolute::Time;
 use bitcoin::consensus::{serialize, Decodable};
 use bitcoin::hashes::Hash;
 use bitcoin::io::Cursor;
 use bitcoin::Transaction;
-use bitcoin::{block::Header as BlockHeader, BlockHash, Network, TxMerkleNode, Txid, Witness};
+use bitcoin::{block::Header as BlockHeader, BlockHash, TxMerkleNode, Txid, Witness};
 use futures::{lock::Mutex, FutureExt};
 use num::ToPrimitive;
 use rand::RngCore;
@@ -128,8 +128,6 @@ pub struct StratumServerConfig {
     pub audit_mode: bool,
     /// Audit mode miner weak difficulty
     pub audit_miner_difficulty: Option<f64>,
-    /// Network name (e.g., "main", "testnet", "cpunet") for network-specific PoW validation
-    pub network_name: Network,
 }
 
 impl Default for StratumServerConfig {
@@ -143,7 +141,6 @@ impl Default for StratumServerConfig {
             solo_address: None,
             audit_mode: false,
             audit_miner_difficulty: None,
-            network_name: Network::CPUNet,
         }
     }
 }
@@ -549,7 +546,7 @@ impl DownstreamClient {
             Err(error) => return Err(error),
         };
         //Parsing payout address from worker name
-        let payout_address = match validate(worker_name, self.network_type) {
+        let payout_address = match validate(worker_name, self.network) {
             Ok((address, _worker)) => address.to_string(),
             Err(e) => {
                 error!(
@@ -1959,7 +1956,6 @@ impl DownstreamClient {
             is_proxy_mode: false,
             payout_address: None,
             audit_miner_difficulty: None,
-            network_type: Network::CPUNet,
         }
     }
 }

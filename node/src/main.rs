@@ -271,7 +271,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let stratum_config = StratumServerConfig {
         audit_mode: args.audit,
         audit_miner_difficulty: args.miner_difficulty,
-        network_name: network,
         ..Default::default()
     };
     let (block_submission_tx, block_submission_rx) =
