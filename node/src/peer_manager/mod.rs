@@ -1,4 +1,5 @@
-use libp2p::PeerId;
+use libp2p::core::multiaddr::Protocol;
+use libp2p::{Multiaddr, PeerId};
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
 use std::net::IpAddr;
@@ -63,12 +64,45 @@ impl PeerInfo {
     }
 }
 
+/// A connection that has been established but whose protocol negotiation has
+/// not yet completed.
+///
+/// Braidpool scopes its libp2p protocol IDs by network, so a peer on a different
+/// network can still open a transport connection but will fail to negotiate any
+/// substream. Connections are parked here until the Identify exchange proves the
+/// peer speaks this node's protocols, and only then promoted into `peers` - which
+/// keeps foreign-network peers out of peer selection and scoring entirely.
+#[derive(Debug, Clone)]
+pub struct PendingPeer {
+    /// Remote address the connection was established on
+    pub remote_addr: Multiaddr,
+    /// Whether the local node dialed the peer, rather than being dialed by it
+    pub is_dialer: bool,
+}
+
+impl PendingPeer {
+    /// Extracts the peer's IP address from its remote multiaddr, if it has one.
+    ///
+    /// # Returns
+    /// The first `Ip4`/`Ip6` component of the address, or `None` for addresses
+    /// that carry no literal IP (a DNS multiaddr, for example).
+    pub fn remote_ip(&self) -> Option<IpAddr> {
+        self.remote_addr.iter().find_map(|p| match p {
+            Protocol::Ip4(ip) => Some(IpAddr::V4(ip)),
+            Protocol::Ip6(ip) => Some(IpAddr::V6(ip)),
+            _ => None,
+        })
+    }
+}
+
 /// Manager for peer connections and selection
 pub struct PeerManager {
     /// Table of all known peers
     peers: HashMap<PeerId, PeerInfo>,
     /// Set of currently connected peers
     connected_peers: HashSet<PeerId>,
+    /// Connections established but not yet cleared by protocol negotiation
+    pending_peers: HashMap<PeerId, PendingPeer>,
     /// Maximum number of peers to maintain
     max_peers: usize,
     /// Minimum acceptable peer score
@@ -85,6 +119,7 @@ impl PeerManager {
         Self {
             peers: HashMap::new(),
             connected_peers: HashSet::new(),
+            pending_peers: HashMap::new(),
             max_peers,
             min_acceptable_score: -100.0,
             idle_penalty: 0.1,
@@ -112,11 +147,71 @@ impl PeerManager {
     }
 
     /// Remove a peer
+    ///
+    /// Also discards any pending entry for `peer_id`, so a connection that drops
+    /// before protocol negotiation completes leaves nothing behind.
     pub fn remove_peer(&mut self, peer_id: &PeerId) {
         if let Some(peer) = self.peers.get_mut(peer_id) {
             peer.connected = false;
         }
         self.connected_peers.remove(peer_id);
+        self.pending_peers.remove(peer_id);
+    }
+
+    /// Records a freshly established connection awaiting protocol negotiation.
+    ///
+    /// The peer takes no part in propagation or scoring until
+    /// [`PeerManager::promote_pending_peer`] accepts it.
+    ///
+    /// # Arguments
+    /// * `peer_id` - The peer that connected
+    /// * `remote_addr` - Address the connection was established on
+    /// * `is_dialer` - Whether the local node dialed the peer
+    pub fn add_pending_peer(&mut self, peer_id: PeerId, remote_addr: Multiaddr, is_dialer: bool) {
+        self.pending_peers.insert(
+            peer_id,
+            PendingPeer {
+                remote_addr,
+                is_dialer,
+            },
+        );
+    }
+
+    /// Discards a pending connection that failed protocol negotiation.
+    ///
+    /// # Arguments
+    /// * `peer_id` - The peer to discard
+    ///
+    /// # Returns
+    /// The discarded entry, or `None` if the peer was not pending.
+    pub fn drop_pending_peer(&mut self, peer_id: &PeerId) -> Option<PendingPeer> {
+        self.pending_peers.remove(peer_id)
+    }
+
+    /// Promotes a pending connection into a tracked peer after its protocol
+    /// negotiation succeeded.
+    ///
+    /// The peer's IP is taken from the address the connection was established on,
+    /// and `inbound` from whether the remote dialed us.
+    ///
+    /// # Arguments
+    /// * `peer_id` - The peer to promote
+    ///
+    /// # Returns
+    /// `true` if a pending entry existed and was promoted, `false` otherwise -
+    /// a `false` return means the connection closed before Identify completed.
+    pub fn promote_pending_peer(&mut self, peer_id: &PeerId) -> bool {
+        let Some(pending) = self.pending_peers.remove(peer_id) else {
+            return false;
+        };
+        let ip = pending.remote_ip();
+        self.add_peer(*peer_id, !pending.is_dialer, ip);
+        true
+    }
+
+    /// Returns the number of connections awaiting protocol negotiation.
+    pub fn num_pending_peers(&self) -> usize {
+        self.pending_peers.len()
     }
 
     /// Update the latency measurement for a peer
@@ -414,6 +509,111 @@ mod tests {
 
         manager.remove_peer(&peer_id);
         assert_eq!(manager.num_connected_peers(), 0);
+    }
+
+    fn test_multiaddr(s: &str) -> Multiaddr {
+        s.parse().expect("valid multiaddr literal")
+    }
+
+    #[test]
+    fn pending_peer_is_not_connected_until_promoted() {
+        let mut manager = PeerManager::new(10);
+        let peer_id = generate_peer_id();
+
+        manager.add_pending_peer(
+            peer_id,
+            test_multiaddr("/ip4/74.50.123.158/udp/6680/quic-v1"),
+            false,
+        );
+        // A peer awaiting protocol negotiation takes no part in peer selection.
+        assert_eq!(manager.num_pending_peers(), 1);
+        assert_eq!(manager.num_connected_peers(), 0);
+        assert!(manager.get_top_k_peers_for_propagation(5).is_empty());
+
+        assert!(manager.promote_pending_peer(&peer_id));
+        assert_eq!(manager.num_pending_peers(), 0);
+        assert_eq!(manager.num_connected_peers(), 1);
+    }
+
+    #[test]
+    fn promoting_records_ip_and_inbound_from_the_connection() {
+        let mut manager = PeerManager::new(10);
+        let inbound_peer = generate_peer_id();
+        let outbound_peer = generate_peer_id();
+
+        // is_dialer == false means the remote dialed us, so the peer is inbound.
+        manager.add_pending_peer(
+            inbound_peer,
+            test_multiaddr("/ip4/74.50.123.158/udp/6680/quic-v1"),
+            false,
+        );
+        manager.add_pending_peer(
+            outbound_peer,
+            test_multiaddr("/ip6/2001:4860:4860::8888/udp/6680/quic-v1"),
+            true,
+        );
+        assert!(manager.promote_pending_peer(&inbound_peer));
+        assert!(manager.promote_pending_peer(&outbound_peer));
+
+        let inbound = manager.peers.get(&inbound_peer).unwrap();
+        assert!(inbound.inbound);
+        assert_eq!(
+            inbound.ip_addr,
+            Some(IpAddr::V4(Ipv4Addr::new(74, 50, 123, 158)))
+        );
+
+        let outbound = manager.peers.get(&outbound_peer).unwrap();
+        assert!(!outbound.inbound);
+        assert_eq!(
+            outbound.ip_addr,
+            Some(IpAddr::V6(Ipv6Addr::new(
+                0x2001, 0x4860, 0x4860, 0, 0, 0, 0, 0x8888
+            )))
+        );
+    }
+
+    #[test]
+    fn failed_negotiation_drops_the_pending_peer() {
+        let mut manager = PeerManager::new(10);
+        let peer_id = generate_peer_id();
+
+        manager.add_pending_peer(
+            peer_id,
+            test_multiaddr("/ip4/74.50.123.158/udp/6680/quic-v1"),
+            true,
+        );
+        let dropped = manager.drop_pending_peer(&peer_id);
+        assert!(dropped.is_some());
+        assert!(dropped.unwrap().is_dialer);
+        assert_eq!(manager.num_pending_peers(), 0);
+
+        // A peer that never negotiated must not be promotable afterwards.
+        assert!(!manager.promote_pending_peer(&peer_id));
+        assert_eq!(manager.num_connected_peers(), 0);
+    }
+
+    #[test]
+    fn closing_a_connection_clears_its_pending_entry() {
+        let mut manager = PeerManager::new(10);
+        let peer_id = generate_peer_id();
+
+        manager.add_pending_peer(
+            peer_id,
+            test_multiaddr("/ip4/74.50.123.158/udp/6680/quic-v1"),
+            false,
+        );
+        manager.remove_peer(&peer_id);
+        assert_eq!(manager.num_pending_peers(), 0);
+        assert!(!manager.promote_pending_peer(&peer_id));
+    }
+
+    #[test]
+    fn pending_peer_without_literal_ip_has_no_ip() {
+        let pending = PendingPeer {
+            remote_addr: test_multiaddr("/dns4/example.com/udp/6680/quic-v1"),
+            is_dialer: true,
+        };
+        assert_eq!(pending.remote_ip(), None);
     }
 
     #[test]
