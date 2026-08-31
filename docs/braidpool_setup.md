@@ -66,6 +66,32 @@ You can find all available command-line arguments in [node/src/cli.rs](https://g
 
 -   `--ipc-socket <PATH>`: Specifies the path to the UNIX domain socket file (should be the same as bitcoin node).
 -   `--network <NETWORK>`: Sets the network. Valid options are `mainnet`, `testnet4`, `signet`, and `cpunet`. The default is `mainnet`.
+-   `--datadir <PATH>`: Parent directory for all on-disk state.
+
+#### Data directory layout
+
+State is persisted under a per-network subdirectory of `--datadir`, so several
+networks can be run side by side from one `--datadir` without sharing beads or
+identity:
+
+```
+<datadir>/
+└── <network>/            # e.g. cpunet, signet, regtest
+    ├── braidpool.db      # beads and braid state
+    ├── audit.db          # audit mode records
+    └── keystore          # node keypair -> PeerID
+```
+
+Networks are also isolated on the wire: libp2p protocol IDs and the floodsub
+topic are scoped by network name (`/braidpool/<network>/kad/1.0.0`,
+`/braidpool/<network>/bead-sync/1.0.0`, `/braidpool/<network>/identify/1.0.0`,
+`braidpool_channel/<network>`), so peers on different networks cannot negotiate
+a substream with each other.
+
+If you ran a node before network scoping existed, its database lives at the old
+unscoped location (`~/.braidpool/braidpool.db` on Linux). That file is no longer
+read; the node logs a warning pointing at it. Move it into
+`<datadir>/<network>/braidpool.db` to keep the beads, or delete it.
 
 ## For probing current braidpool-node 
 - `braidpool-cli` crate can be utilized for accessing current braid-state including information about the `bead-count`,`bead-by-beadhash`,`tips` etc.
