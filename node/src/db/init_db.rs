@@ -1,21 +1,21 @@
 use sqlx::{sqlite::SqliteConnectOptions, Executor, SqlitePool};
-use std::{fs, path::Path, str::FromStr};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
 use crate::config::PoolNetwork;
 use crate::error::DBErrors;
-#[allow(unused_imports)]
-use tracing::{debug, error, info, trace, warn};
+use std::env;
+use tracing::{error, info, warn};
 static SCHEMA_SQL: &str = include_str!("schema.sql");
 static AUDIT_SCHEMA_SQL: &str = include_str!("audit_schema.sql");
 
-/// Initializes the braid database inside the node's data directory.
 /// Initializes the sqlite pool for a network-scoped data directory.
-pub async fn init_db(
-    network_datadir: PathBuf,
-    network: PoolNetwork,
-datadir: &Path) -> Result<SqlitePool, DBErrors> {
-    warn_on_legacy_db(&network_datadir, network);
-    setup_sqlite_db(&network_datadir, datadir, "braidpool.db", SCHEMA_SQL).await
+pub async fn init_db(datadir: &Path, network: PoolNetwork) -> Result<SqlitePool, DBErrors> {
+    warn_on_legacy_db(&datadir, network);
+    setup_sqlite_db(&datadir, "braidpool.db", SCHEMA_SQL).await
 }
 
 /// Initializes the audit database inside the node's data directory.
@@ -23,15 +23,42 @@ pub async fn init_audit_db(datadir: &Path) -> Result<SqlitePool, DBErrors> {
     setup_sqlite_db(datadir, "audit.db", AUDIT_SCHEMA_SQL).await
 }
 
-async fn setup_sqlite_db(
-    db_dir: &Path,
-    db_name: &str,
-    schema_sql: &str,
-) -> Result<SqlitePool, DBErrors> {
+/// Gets the braidpool legacy data directory in a cross-platform manner.
+fn get_legacy_data_dir() -> Result<PathBuf, DBErrors> {
+    #[cfg(target_os = "linux")]
+    {
+        let home = env::var("HOME").map_err(|error| DBErrors::EnvVariableNotFetched {
+            error: error.to_string(),
+            var: "HOME".to_string(),
+        })?;
+        Ok(Path::new(&home).join(".braidpool"))
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let home = env::var("HOME").map_err(|error| DBErrors::EnvVariableNotFetched {
+            error: error.to_string(),
+            var: "HOME".to_string(),
+        })?;
+        Ok(Path::new(&home)
+            .join("Library")
+            .join("Application Support")
+            .join("braidpool"))
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        Err(DBErrors::EnvVariableNotFetched {
+            error: "this platform is not supported yet".to_string(),
+            var: std::env::consts::OS.to_string(),
+        })
+    }
+}
+
 /// Warns once if a pre-network-scoping database is still present in the legacy
 /// platform data directory. It is no longer read from or written to.
 fn warn_on_legacy_db(network_datadir: &Path, network: PoolNetwork) {
-    let Ok(legacy_dir) = get_data_dir() else {
+    let Ok(legacy_dir) = get_legacy_data_dir() else {
         return;
     };
     let legacy_path = legacy_dir.join("braidpool.db");
