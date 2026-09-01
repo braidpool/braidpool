@@ -2088,9 +2088,12 @@ impl GlobalJobStore {
         let job_id = self.next_job_id;
         debug!(job_id = %job_id, template_id = %template_id, "Inserting job into GlobalJobStore");
 
-        // Evict oldest job_id when at capacity; only free template data if unreferenced
+        // Evict oldest job_id when at capacity; only free template data if unreferenced.
+        // Use the actual minimum key rather than (next_job_id - capacity) because
+        // clear_upstream_jobs() can create holes in job_id_to_template that would
+        // cause the arithmetic approach to miss the eviction target entirely.
         if self.job_id_to_template.len() >= self.capacity {
-            if let Some(oldest_id) = job_id.checked_sub(self.capacity as u64) {
+            if let Some(oldest_id) = self.job_id_to_template.keys().min().copied() {
                 if let Some(old_template_id) = self.job_id_to_template.remove(&oldest_id) {
                     let still_referenced = self
                         .job_id_to_template
@@ -2891,9 +2894,9 @@ impl Notifier {
 
                     let miner_count = downstream_channel_mapping.len();
                     if miner_count == 0 {
-                        info!(
-                            "No miners connected, caching job {} for future connections",
-                            job_notification.job_id
+                        debug!(
+                            job_id = %job_notification.job_id,
+                            "No miners connected, skipping upstream job broadcast"
                         );
                         continue;
                     }
@@ -2932,7 +2935,13 @@ impl Notifier {
                         ]
                     });
                     let job_notification_str =
-                        serde_json::to_string(&job_notification_response).unwrap_or_default();
+                        match serde_json::to_string(&job_notification_response) {
+                            Ok(s) => s,
+                            Err(e) => {
+                                error!(error = %e, "Failed to serialize upstream job notification");
+                                continue;
+                            }
+                        };
                     for (peer_addr, downstream_channel) in &downstream_channel_mapping {
                         if let Err(e) = downstream_channel
                             .sender
