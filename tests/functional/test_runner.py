@@ -17,10 +17,16 @@ import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Iterator, Sequence
 
 from test_framework.cleanup_manager import terminate_process_group
-from test_framework.constants import STDERR_LOG_NAME, STDOUT_LOG_NAME, TEST_EXIT_PASSED, TEST_EXIT_SKIPPED
+from test_framework.constants import (
+    LOG_NAMES,
+    STDERR_LOG_NAME,
+    STDOUT_LOG_NAME,
+    TEST_EXIT_PASSED,
+    TEST_EXIT_SKIPPED,
+)
 from test_framework.logging_utils import configure_stream_logger, log_duration, log_event, log_exception
 from test_framework.report_manager import ReportManager
 
@@ -84,8 +90,8 @@ class RunningJob:
     testdir: Path
     stdout_path: Path
     stderr_path: Path
-    #if the test fails, we want to make sure we have a summary.json file for it, so we can use this fallback report manager to finalize it if needed
-    fallback_report: ReportManager | None = None 
+    # If the test fails, ensure we still emit reports/summary.json by finalizing a fallback ReportManager when needed.
+    fallback_report: ReportManager | None = None
     timed_out: bool = False
 
     @property
@@ -331,6 +337,29 @@ def tail_file(path: Path, lines: int) -> str:
     return "\n".join(data.decode("utf8", errors="replace").splitlines()[-lines:])
 
 
+def iter_combined_logs(result: TestResult) -> Iterator[tuple[str, Path]]:
+    """Yield framework, test, and component log files for a test result."""
+    seen: set[Path] = set()
+    for log_name in LOG_NAMES:
+        path = result.testdir / log_name
+        if path.exists():
+            seen.add(path)
+            yield log_name, path
+
+    for path in sorted(result.testdir.rglob("*")):
+        if not path.is_file() or path.name not in LOG_NAMES or path in seen:
+            continue
+        yield path.relative_to(result.testdir).as_posix(), path
+
+
+def print_combined_log_tails(result: TestResult, lines: int) -> None:
+    """Print the tail of each relevant log file for a failed test."""
+    for label, path in iter_combined_logs(result):
+        tail = tail_file(path, lines)
+        if tail:
+            print(f"\n{label} tail:\n" + tail)
+
+
 def print_results(results: list[TestResult], runtime: float) -> None:
     max_name = max(len(result.name) for result in results) if results else 4
     print("\n{} | STATUS  | DURATION".format("TEST".ljust(max_name)))
@@ -421,12 +450,7 @@ def main() -> int:
                     all_passed = False
                     print(f"\n{result.name} failed after {result.duration:.3f}s")
                     if args.combinedlogslen:
-                        stdout_tail = tail_file(result.stdout_path, args.combinedlogslen)
-                        stderr_tail = tail_file(result.stderr_path, args.combinedlogslen)
-                        if stdout_tail:
-                            print("\nstdout tail:\n" + stdout_tail)
-                        if stderr_tail:
-                            print("\nstderr tail:\n" + stderr_tail)
+                        print_combined_log_tails(result, args.combinedlogslen)
     except KeyboardInterrupt:
         all_passed = False
         log_event(logger, "runner_interrupted", level=logging.WARNING)
