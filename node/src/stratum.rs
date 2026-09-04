@@ -4650,7 +4650,7 @@ mod test {
         client.authorized = true;
         client.extranonce1 = vec![0u8; 8];
         let test_braid = Arc::new(RwLock::new(braid::Braid::new(vec![], PoolNetwork::Cpunet)));
-        let (_db, db_tx) = DBHandler::new(PoolNetwork::Cpunet).await.unwrap();
+        let (_db, db_tx) = DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
         let (swarm, _rx) = SwarmHandler::new(test_braid, db_tx, DashboardEvents::new());
         let swarm_arc = Arc::new(Mutex::new(swarm));
         (client, map, swarm_arc, job_id)

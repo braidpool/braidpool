@@ -440,8 +440,11 @@ impl AuditDAG {
         }
     }
 
-    pub async fn new_with_db(braid: Arc<RwLock<Braid>>) -> Result<Self, String> {
-        let db_handler = AuditDBHandler::new()
+    pub async fn new_with_db(
+        braid: Arc<RwLock<Braid>>,
+        datadir: &std::path::Path,
+    ) -> Result<Self, String> {
+        let db_handler = AuditDBHandler::new(datadir)
             .await
             .map_err(|e| format!("Failed to initialize audit database: {}", e))?;
 

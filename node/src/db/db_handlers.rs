@@ -11,6 +11,7 @@ use bitcoin::{
 };
 use serde_json::json;
 use sqlx::{Pool, Row, Sqlite};
+use std::path::Path;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tracing::{debug, error, trace};
 pub const DB_CHANNEL_CAPACITY: usize = 1024;
@@ -66,9 +67,12 @@ pub struct DBHandler {
     pub network: PoolNetwork,
 }
 impl DBHandler {
-    pub async fn new(network: PoolNetwork) -> Result<(Self, Sender<BraidpoolDBTypes>), DBErrors> {
+    pub async fn new(
+        datadir: &Path,
+        network: PoolNetwork,
+    ) -> Result<(Self, Sender<BraidpoolDBTypes>), DBErrors> {
         debug!("Initializing schema for persistent database");
-        let db_connection_pool = match init_db().await {
+        let db_connection_pool = match init_db(datadir).await {
             Ok(conn) => conn,
             Err(error) => {
                 error!(error = ?error, "Failed to initialize database connection");
