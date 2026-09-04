@@ -66,9 +66,12 @@ pub struct DBHandler {
     pub network: PoolNetwork,
 }
 impl DBHandler {
-    pub async fn new(network: PoolNetwork) -> Result<(Self, Sender<BraidpoolDBTypes>), DBErrors> {
+    pub async fn new(
+        datadir: Option<std::path::PathBuf>,
+        network: PoolNetwork,
+    ) -> Result<(Self, Sender<BraidpoolDBTypes>), DBErrors> {
         debug!("Initializing schema for persistent database");
-        let db_connection_pool = match init_db().await {
+        let db_connection_pool = match init_db(datadir).await {
             Ok(conn) => conn,
             Err(error) => {
                 error!(error = ?error, "Failed to initialize database connection");

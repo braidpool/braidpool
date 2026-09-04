@@ -22,8 +22,8 @@ pub struct AuditDBHandler {
 }
 
 impl AuditDBHandler {
-    pub async fn new() -> Result<Self, DBErrors> {
-        let connection = match crate::db::init_db::init_audit_db().await {
+    pub async fn new(datadir: Option<std::path::PathBuf>) -> Result<Self, DBErrors> {
+        let connection = match crate::db::init_db::init_audit_db(datadir).await {
             Ok(conn) => conn,
             Err(error) => {
                 error!(error = ?error, "Failed to initialize audit database connection");

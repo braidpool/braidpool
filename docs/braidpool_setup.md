@@ -66,6 +66,19 @@ You can find all available command-line arguments in [node/src/cli.rs](https://g
 
 -   `--ipc-socket <PATH>`: Specifies the path to the UNIX domain socket file (should be the same as bitcoin node).
 -   `--network <NETWORK>`: Sets the network. Valid options are `mainnet`, `testnet4`, `signet`, and `cpunet`. The default is `mainnet`.
+-   `--datadir <PATH>`: Directory holding all on-disk state. Defaults to `~/.braidpool/` on Linux and `~/Library/Application Support/braidpool/` on macOS.
+
+#### Data directory layout
+
+Everything the node persists lives under `--datadir`, so pointing two nodes at
+different directories keeps their state fully isolated:
+
+```
+<datadir>/
+├── braidpool.db      # beads and braid state
+├── audit.db          # audit mode records
+└── keystore          # node keypair -> PeerID
+```
 
 ## For probing current braidpool-node 
 - `braidpool-cli` crate can be utilized for accessing current braid-state including information about the `bead-count`,`bead-by-beadhash`,`tips` etc.

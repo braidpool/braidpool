@@ -39,17 +39,51 @@ fn get_data_dir() -> Result<PathBuf, DBErrors> {
     }
 }
 
-pub async fn init_db() -> Result<SqlitePool, DBErrors> {
-    setup_sqlite_db("braidpool.db", SCHEMA_SQL).await
+/// Initializes the bead database pool.
+///
+/// # Arguments
+/// * `datadir` - Directory the database lives in, as resolved from `--datadir`.
+///   When `None`, the platform default data directory is used.
+///
+/// # Returns
+/// A connection pool to `<datadir>/braidpool.db`, creating the file and schema
+/// if it does not exist yet.
+///
+/// # Errors
+/// Returns a [`DBErrors`] when the data directory cannot be resolved or created,
+/// or when the connection or schema initialization fails.
+pub async fn init_db(datadir: Option<PathBuf>) -> Result<SqlitePool, DBErrors> {
+    setup_sqlite_db(datadir, "braidpool.db", SCHEMA_SQL).await
 }
 
-pub async fn init_audit_db() -> Result<SqlitePool, DBErrors> {
-    setup_sqlite_db("audit.db", AUDIT_SCHEMA_SQL).await
+/// Initializes the audit database pool.
+///
+/// # Arguments
+/// * `datadir` - Directory the database lives in, as resolved from `--datadir`.
+///   When `None`, the platform default data directory is used.
+///
+/// # Returns
+/// A connection pool to `<datadir>/audit.db`, creating the file and schema if it
+/// does not exist yet.
+///
+/// # Errors
+/// Returns a [`DBErrors`] when the data directory cannot be resolved or created,
+/// or when the connection or schema initialization fails.
+pub async fn init_audit_db(datadir: Option<PathBuf>) -> Result<SqlitePool, DBErrors> {
+    setup_sqlite_db(datadir, "audit.db", AUDIT_SCHEMA_SQL).await
 }
 
-async fn setup_sqlite_db(db_name: &str, schema_sql: &str) -> Result<SqlitePool, DBErrors> {
-    // Fetching the data directory
-    let db_dir = get_data_dir()?;
+async fn setup_sqlite_db(
+    datadir: Option<PathBuf>,
+    db_name: &str,
+    schema_sql: &str,
+) -> Result<SqlitePool, DBErrors> {
+    // Honour `--datadir` when the caller resolved one, otherwise fall back to
+    // the platform default data directory.
+    let db_dir = match datadir {
+        Some(dir) => dir,
+        None => get_data_dir()?,
+    };
     let db_path = db_dir.join(db_name);
     let dir_exists = db_dir.exists();
 
@@ -60,7 +94,7 @@ async fn setup_sqlite_db(db_name: &str, schema_sql: &str) -> Result<SqlitePool, 
             path: db_path,
         });
     } else if !dir_exists {
-        info!("DB directory created successfully");
+        info!(path = %db_dir.display(), "DB directory created successfully");
     }
 
     let db_exists = db_path.exists();
@@ -130,4 +164,99 @@ async fn setup_sqlite_db(db_name: &str, schema_sql: &str) -> Result<SqlitePool, 
     };
 
     Ok(pool)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    /// Builds a unique, non-existent path under the system temp directory so
+    /// concurrently running tests never share a database.
+    fn unique_temp_dir(tag: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock before UNIX epoch")
+            .as_nanos();
+        env::temp_dir().join(format!(
+            "braidpool-{}-{}-{}",
+            tag,
+            std::process::id(),
+            nanos
+        ))
+    }
+
+    #[tokio::test]
+    async fn init_db_uses_supplied_datadir() {
+        let datadir = unique_temp_dir("init-db");
+        let pool = init_db(Some(datadir.clone()))
+            .await
+            .expect("database initialization failed");
+
+        assert!(
+            datadir.join("braidpool.db").exists(),
+            "braidpool.db was not created inside the supplied datadir"
+        );
+        assert_ne!(
+            datadir,
+            get_data_dir().expect("default data dir not resolved"),
+            "test datadir must not collide with the platform default"
+        );
+
+        pool.close().await;
+        let _ = fs::remove_dir_all(&datadir);
+    }
+
+    #[tokio::test]
+    async fn init_audit_db_uses_supplied_datadir() {
+        let datadir = unique_temp_dir("init-audit-db");
+        let pool = init_audit_db(Some(datadir.clone()))
+            .await
+            .expect("audit database initialization failed");
+
+        assert!(
+            datadir.join("audit.db").exists(),
+            "audit.db was not created inside the supplied datadir"
+        );
+
+        pool.close().await;
+        let _ = fs::remove_dir_all(&datadir);
+    }
+
+    #[tokio::test]
+    async fn init_db_creates_missing_nested_datadir() {
+        let root = unique_temp_dir("init-db-nested");
+        let datadir = root.join("nested").join("state");
+        let pool = init_db(Some(datadir.clone()))
+            .await
+            .expect("database initialization failed");
+
+        assert!(
+            datadir.join("braidpool.db").exists(),
+            "nested datadir was not created"
+        );
+
+        pool.close().await;
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    /// With no datadir supplied the platform default (HOME-derived) is used.
+    #[test]
+    fn absent_datadir_falls_back_to_platform_default() {
+        let home = env::var("HOME").expect("HOME must be set for this test");
+
+        #[cfg(target_os = "linux")]
+        let expected = Path::new(&home).join(".braidpool");
+
+        #[cfg(target_os = "macos")]
+        let expected = Path::new(&home)
+            .join("Library")
+            .join("Application Support")
+            .join("braidpool");
+
+        assert_eq!(
+            get_data_dir().expect("default data dir not resolved"),
+            expected
+        );
+    }
 }

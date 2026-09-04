@@ -103,6 +103,33 @@ async fn main() -> Result<(), Box<dyn Error>> {
         AtomicBool::new(true)
     };
     let ibd_spinlock = Arc::new(ibd_or_not);
+    // Resolve `--datadir` before anything touches disk so the databases and the
+    // keystore all land under the directory the operator asked for.
+    let datadir_str = args.datadir.to_str().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Invalid datadir path encoding",
+        )
+    })?;
+    let datadir = shellexpand::full(datadir_str).map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("Shell expansion failed: {}", e),
+        )
+    })?;
+    let datadir_path = Path::new(&*datadir).to_path_buf();
+    match fs::metadata(&datadir_path) {
+        Ok(m) => {
+            if !m.is_dir() {
+                error!(datadir = %datadir, "Data directory exists but is not a directory");
+            }
+            info!(datadir = %datadir, "Using existing data directory");
+        }
+        Err(_) => {
+            info!(datadir = %datadir, "Creating data directory");
+            fs::create_dir_all(&datadir_path)?;
+        }
+    }
     // Initializing the braid object with read write lock
     //for supporting concurrent readers and single writer
     let braid: Arc<RwLock<braid::Braid>> =
@@ -112,12 +139,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     if !args.audit {
         //Initializing DB and db command handler
-        let (mut db_handler, tx) = DBHandler::new(network).await.map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Database initialization failed: {:?}", e),
-            )
-        })?;
+        let (mut db_handler, tx) = DBHandler::new(Some(datadir_path.clone()), network)
+            .await
+            .map_err(|e| {
+                std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Database initialization failed: {:?}", e),
+                )
+            })?;
         db_tx = tx;
         optional_db_pool = Some(db_handler.db_connection_pool.clone());
         //Reconstructing local braid upon startup
@@ -330,7 +359,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
         );
 
         // Initialize audit records
-        let audit_dag = match audit::AuditDAG::new_with_db(Arc::clone(&braid)).await {
+        let audit_dag = match audit::AuditDAG::new_with_db(
+            Arc::clone(&braid),
+            Some(datadir_path.clone()),
+        )
+        .await
+        {
             Ok(dag) => Arc::new(Mutex::new(dag)),
             Err(e) => {
                 error!("Failed to initialize audit DAG with database: {}", e);
@@ -843,32 +877,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .await;
     });
 
-    let datadir_str = args.datadir.to_str().ok_or_else(|| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "Invalid datadir path encoding",
-        )
-    })?;
-    let datadir = shellexpand::full(datadir_str).map_err(|e| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("Shell expansion failed: {}", e),
-        )
-    })?;
-    match fs::metadata(&*datadir) {
-        Ok(m) => {
-            if !m.is_dir() {
-                error!(datadir = %datadir, "Data directory exists but is not a directory");
-            }
-            info!(datadir = %datadir, "Using existing data directory");
-        }
-        Err(_) => {
-            info!(datadir = %datadir, "Creating data directory");
-            fs::create_dir_all(&*datadir)?;
-        }
-    }
-
-    let datadir_path = Path::new(&*datadir);
     let keystore_path = datadir_path.join("keystore");
     #[cfg(unix)]
     {
