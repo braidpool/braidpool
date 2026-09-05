@@ -1,7 +1,7 @@
-use crate::bead::Bead;
 use crate::config::PoolNetwork;
 use crate::error::DBErrors;
 use crate::utils::compute_block_hash;
+use crate::{bead::Bead, utils::timestamp::MicrosecondTimestamp};
 use bitcoin::{hashes::Hash, BlockHash};
 use sqlx::{Pool, Sqlite};
 use std::path::Path;
@@ -72,18 +72,14 @@ impl AuditDBHandler {
             .bind(bead.block_header.bits.to_consensus() as i64)
             .bind(bead.block_header.nonce as i64)
             .bind(&bead.committed_metadata.payout_address)
-            .bind(bead.committed_metadata.start_timestamp.to_consensus_u32() as i64)
+            .bind(bead.committed_metadata.start_timestamp.as_micros() as i64)
             .bind(bead.committed_metadata.comm_pub_key.to_bytes())
             .bind(bead.committed_metadata.min_target.to_consensus() as i64)
             .bind(bead.committed_metadata.weak_target.to_consensus() as i64)
             .bind(miner_ip)
             .bind(extranonce1)
             .bind(extranonce2)
-            .bind(
-                bead.uncommitted_metadata
-                    .broadcast_timestamp
-                    .to_consensus_u32() as i64,
-            )
+            .bind(bead.uncommitted_metadata.broadcast_timestamp.as_micros() as i64)
             .bind(bead.uncommitted_metadata.signature.to_vec())
             .bind(created_at)
             .execute(&mut *tx)
@@ -108,7 +104,7 @@ impl AuditDBHandler {
             qb.push_values(parents, |mut b, (parent_hash, parent_timestamp)| {
                 b.push_bind(bead_id)
                     .push_bind(parent_hash.as_byte_array().as_slice())
-                    .push_bind(parent_timestamp.to_consensus_u32() as i64);
+                    .push_bind(parent_timestamp.as_micros() as i64);
             });
             qb.build()
                 .execute(&mut *tx)
@@ -179,11 +175,7 @@ impl AuditDBHandler {
         // Committed metadata
         let payout_address = row.get::<String, _>("payout_address");
         let start_timestamp =
-            bitcoin::absolute::Time::from_consensus(row.get::<i64, _>("start_timestamp") as u32)
-                .map_err(|e| DBErrors::TupleAttributeParsingError {
-                    error: e.to_string(),
-                    attribute: "start_timestamp".to_string(),
-                })?;
+            MicrosecondTimestamp::from_micros(row.get::<i64, _>("start_timestamp") as u64);
 
         let comm_pub_key_bytes: Vec<u8> = row.get("comm_pub_key");
         let comm_pub_key = bitcoin::PublicKey::from_slice(&comm_pub_key_bytes).map_err(|e| {
@@ -213,13 +205,8 @@ impl AuditDBHandler {
                     attribute: "extranonce2".to_string(),
                 }
             })?;
-        let broadcast_timestamp = bitcoin::absolute::Time::from_consensus(
-            row.get::<i64, _>("broadcast_timestamp") as u32,
-        )
-        .map_err(|e| DBErrors::TupleAttributeParsingError {
-            error: e.to_string(),
-            attribute: "broadcast_timestamp".to_string(),
-        })?;
+        let broadcast_timestamp =
+            MicrosecondTimestamp::from_micros(row.get::<i64, _>("broadcast_timestamp") as u64);
         let signature_bytes: Vec<u8> = row.get("signature");
         let signature = bitcoin::ecdsa::Signature::from_slice(&signature_bytes).map_err(|e| {
             DBErrors::TupleAttributeParsingError {
@@ -239,7 +226,7 @@ impl AuditDBHandler {
             error: format!("Failed to fetch parents for bead id {}: {}", bead_id, e),
         })?;
 
-        let mut parent_pairs: Vec<(BlockHash, bitcoin::absolute::Time)> = Vec::new();
+        let mut parent_pairs: Vec<(BlockHash, MicrosecondTimestamp)> = Vec::new();
 
         for p_row in parent_rows {
             let p_hash: Vec<u8> = p_row.get("parent_block_hash");
@@ -249,13 +236,8 @@ impl AuditDBHandler {
                     attribute: "parent_block_hash".to_string(),
                 }
             })?);
-            let time = bitcoin::absolute::Time::from_consensus(
-                p_row.get::<i64, _>("parent_timestamp") as u32,
-            )
-            .map_err(|e| DBErrors::TupleAttributeParsingError {
-                error: e.to_string(),
-                attribute: "parent_timestamp".to_string(),
-            })?;
+            let time =
+                MicrosecondTimestamp::from_micros(p_row.get::<i64, _>("parent_timestamp") as u64);
             parent_pairs.push((hash, time));
         }
         parent_pairs.sort_by_key(|(hash, _)| *hash);
