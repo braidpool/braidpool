@@ -33,9 +33,9 @@ pub mod test_utility_functions {
     use rand::{rngs::OsRng, RngCore};
     use serde::{Deserialize, Serialize};
 
+    use crate::utils::timestamp::MicrosecondTimestamp;
     #[cfg(test)]
     use crate::{braid::Braid, utils::compute_block_hash};
-    use crate::utils::timestamp::MicrosecondTimestamp;
 
     pub use super::*;
     #[derive(Clone, Debug, Serialize, Deserialize)]

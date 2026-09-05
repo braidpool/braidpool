@@ -7,7 +7,6 @@ use crate::{
 };
 use ::bitcoin::BlockHash;
 use bitcoin::{
-    absolute::Time,
     block::{Header as BlockHeader, Version as BlockVersion},
     ecdsa::Signature,
     hashes::Hash,

@@ -2,21 +2,19 @@ use crate::config::PoolNetwork;
 use crate::error::StratumErrors;
 use crate::template_creator::calculate_merkle_root;
 use crate::utils::compute_block_hash;
+use crate::utils::timestamp::MicrosecondTimestamp;
 use crate::{SwarmHandler, TemplateId, EXTRANONCE1_SIZE, EXTRANONCE2_SIZE, EXTRANONCE_SEPARATOR};
-use bitcoin::absolute::Time;
 use bitcoin::consensus::{serialize, Decodable};
 use bitcoin::hashes::Hash;
 use bitcoin::io::Cursor;
 use bitcoin::Transaction;
 use bitcoin::{block::Header as BlockHeader, BlockHash, TxMerkleNode, Txid, Witness};
 use futures::{lock::Mutex, FutureExt};
-use num::ToPrimitive;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::time::UNIX_EPOCH;
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use tokio::{
     io::{AsyncWriteExt, BufReader},
@@ -1217,7 +1215,7 @@ impl DownstreamClient {
 
                     if let Some(ref dag_mutex) = audit_dag {
                         let dag = dag_mutex.lock().await;
-                        let mut pairs: Vec<(crate::utils::BeadHash, bitcoin::absolute::Time)> = dag
+                        let mut pairs: Vec<(crate::utils::BeadHash, MicrosecondTimestamp)> = dag
                             .active_parents
                             .iter()
                             .map(|&(_, block_hash, parent_time)| {
@@ -1251,22 +1249,10 @@ impl DownstreamClient {
                     "020202020202020202020202020202020202020202020202020202020202020202"
                         .parse::<bitcoin::PublicKey>()
                         .unwrap();
-                let job_time = bitcoin::absolute::Time::from_consensus(submitted_job.job_sent_time)
-                    .map_err(|e| {
-                        error!(
-                            worker = %worker_name,
-                            error = %e,
-                            "Invalid job timestamp"
-                        );
-                        StratumErrors::InvalidMethodParams {
-                            method: format!("mining.submit: invalid job timestamp: {}", e),
-                        }
-                    })?;
-
                 let committed_metadata = crate::committed_metadata::CommittedMetadata {
                     comm_pub_key: public_key,
                     miner_ip: self.downstream_ip.clone(),
-                    start_timestamp: job_time,
+                    start_timestamp: submitted_job.job_sent_time,
                     transaction_ids: crate::committed_metadata::TxIdVec(Vec::new()),
                     parents: parent_hash_set,
                     parent_bead_timestamps: time_hash_set,
@@ -1275,17 +1261,12 @@ impl DownstreamClient {
                     weak_target,
                 };
 
-                let broadcast_time = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map_err(|e| e.to_string())
-                    .and_then(|d| {
-                        let ts: u32 = d
-                            .as_secs()
-                            .try_into()
-                            .map_err(|e: std::num::TryFromIntError| e.to_string())?;
-                        Time::from_consensus(ts).map_err(|e| e.to_string())
-                    })
-                    .map_err(|e| StratumErrors::ErrorFetchingCurrentUNIXTimestamp { error: e })?;
+                let broadcast_time = MicrosecondTimestamp::from_system_time(
+                    std::time::SystemTime::now(),
+                )
+                .map_err(|e| StratumErrors::ErrorFetchingCurrentUNIXTimestamp {
+                    error: e.to_string(),
+                })?;
 
                 let (extranonce_1_raw_value, extranonce_2_raw_value) = {
                     let upstream_bytes = &used_extranonce1[..upstream_ext1_size];
@@ -2023,8 +2004,9 @@ pub struct JobDetails {
     pub coinbase2: String,
     pub coinbase_merkle_path: Vec<String>,
     pub coinbase_witness_commitment: Option<Witness>,
-    //Unix timestamp at which current job was sent to downstream miner
-    pub job_sent_time: u32,
+    //Microsecond resolution: mining hardware holds a header for 10-60s before
+    //returning it, so this is the only usable measure of when mining started.
+    pub job_sent_time: MicrosecondTimestamp,
     pub is_upstream_job: bool,
 }
 
@@ -2421,7 +2403,7 @@ impl Notifier {
                 coinbase2: job_notification.coinbase2.clone(),
                 coinbase_merkle_path: job_notification.merkle_branches.clone(),
                 coinbase_witness_commitment: job_notification.coinbase_witness_commitment.clone(),
-                job_sent_time: unix_timestamp,
+                job_sent_time: MicrosecondTimestamp::now(),
                 is_upstream_job: true,
             };
             job_store_guard.insert(template_id, Arc::new(job_details));
@@ -2473,7 +2455,7 @@ impl Notifier {
     fn build_local_job_details(
         template: &BlockTemplate,
         notification: &JobNotification,
-        unix_timestamp: u32,
+        unix_timestamp: MicrosecondTimestamp,
     ) -> Arc<JobDetails> {
         let mut t = template.clone();
         t.transactions.remove(0);
@@ -2545,23 +2527,7 @@ impl Notifier {
                         }
                     };
 
-                    let unix_timestamp = {
-                        let current_system_time = std::time::SystemTime::now();
-                        match current_system_time.duration_since(UNIX_EPOCH) {
-                            Ok(duration) => match duration.as_secs().to_u32() {
-                                Some(ts) => ts,
-                                None => {
-                                    error!("System timestamp overflow");
-                                    continue;
-                                }
-                            },
-                            Err(error) => {
-                                return Err(StratumErrors::ErrorFetchingCurrentUNIXTimestamp {
-                                    error: error.to_string(),
-                                })
-                            }
-                        }
-                    };
+                    let unix_timestamp = MicrosecondTimestamp::now();
 
                     let job_details =
                         Self::build_local_job_details(&template, &job_notification, unix_timestamp);
@@ -2745,23 +2711,7 @@ impl Notifier {
                                     None => {
                                         // Template was never stored — broadcast arrived while
                                         // no miners were connected. Build and insert now.
-                                        let unix_timestamp = {
-                                            let current_system_time = std::time::SystemTime::now();
-                                            match current_system_time.duration_since(UNIX_EPOCH) {
-                                                Ok(duration) => match duration.as_secs().to_u32() {
-                                                    Some(ts) => ts,
-                                                    None => {
-                                                        error!("System timestamp overflow for new miner notification");
-                                                        continue;
-                                                    }
-                                                },
-                                                Err(error) => {
-                                                    return Err(StratumErrors::ErrorFetchingCurrentUNIXTimestamp {
-                                                        error: error.to_string(),
-                                                    })
-                                                }
-                                            }
-                                        };
+                                        let unix_timestamp = MicrosecondTimestamp::now();
                                         let job_details = Self::build_local_job_details(
                                             &latest_template,
                                             &job,
@@ -2865,10 +2815,6 @@ impl Notifier {
                             continue;
                         }
                     };
-                    let current_system_time = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .map(|d| d.as_secs() as u32)
-                        .unwrap_or(0);
                     base_template.curtime = unix_timestamp;
 
                     let downstream_channel_mapping = downstream_connection_map
@@ -2895,7 +2841,7 @@ impl Notifier {
                         coinbase_witness_commitment: job_notification
                             .coinbase_witness_commitment
                             .clone(),
-                        job_sent_time: current_system_time,
+                        job_sent_time: MicrosecondTimestamp::now(),
                         is_upstream_job: true,
                     });
                     self.job_store.lock().await.insert(template_id, job_details);
@@ -3930,7 +3876,7 @@ mod test {
             coinbase2: "test_coinbase2".to_string(),
             coinbase_merkle_path: vec![],
             coinbase_witness_commitment: None,
-            job_sent_time: 1234567890,
+            job_sent_time: MicrosecondTimestamp::from_secs(1234567890),
             is_upstream_job: false,
         };
 
@@ -3965,7 +3911,7 @@ mod test {
             coinbase2: "upstream_coinbase2".to_string(),
             coinbase_merkle_path: vec![],
             coinbase_witness_commitment: None,
-            job_sent_time: 1234567890,
+            job_sent_time: MicrosecondTimestamp::from_secs(1234567890),
             is_upstream_job: true,
         };
 
@@ -4448,9 +4394,6 @@ mod test {
             constructed_test_notification
         );
         let constructed_test_notification_ref = constructed_test_notification.clone();
-        let current_system_time = std::time::SystemTime::now();
-        let duration_since_epoch = current_system_time.duration_since(UNIX_EPOCH).unwrap();
-        let unix_timestamp = duration_since_epoch.as_secs().to_u32().unwrap();
         let mut mock_downstream_handler = DownstreamClient::new(PoolNetwork::Cpunet);
         mock_downstream_handler.authorized = true;
         let mock_global_job_store: Arc<Mutex<GlobalJobStore>> = Arc::new(Mutex::new(
@@ -4463,7 +4406,7 @@ mod test {
             coinbase2: constructed_test_notification_ref.clone().coinbase2.clone(),
             coinbase_merkle_path: vec![],
             coinbase_witness_commitment: Some(test_witness),
-            job_sent_time: unix_timestamp,
+            job_sent_time: MicrosecondTimestamp::now(),
             is_upstream_job: false,
         };
         let numeric_job_id = mock_global_job_store
@@ -4617,7 +4560,7 @@ mod test {
             coinbase2: String::new(),
             coinbase_merkle_path: vec![],
             coinbase_witness_commitment: None,
-            job_sent_time: 0,
+            job_sent_time: MicrosecondTimestamp::default(),
             is_upstream_job: false,
         });
         let store = Arc::new(Mutex::new(GlobalJobStore::new(
@@ -4756,7 +4699,7 @@ mod global_job_store_tests {
             coinbase2: String::new(),
             coinbase_merkle_path: vec![],
             coinbase_witness_commitment: None,
-            job_sent_time: 0,
+            job_sent_time: MicrosecondTimestamp::from_secs(0),
             is_upstream_job: false,
         })
     }

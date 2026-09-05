@@ -1,12 +1,12 @@
-//! Custom timestamp type for microseconds since epoch
-
 use bitcoin::consensus::encode::Decodable;
 use bitcoin::consensus::encode::Encodable;
-use bitcoin::io::{self, BufRead, Write};
+use bitcoin::io::{self, Read, Write};
 use serde::Deserialize;
 use serde::Serialize;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
+
+pub const MICROS_PER_SEC: u64 = 1_000_000;
 
 /// A timestamp representing microseconds since the Unix epoch
 #[repr(transparent)]
@@ -24,33 +24,25 @@ impl MicrosecondTimestamp {
         self.0
     }
 
-    /// Get the timestamp as seconds since epoch (truncated)
-    pub fn as_secs(self) -> u32 {
-        (self.0 / 1_000_000) as u32
-    }
-
-    /// Get the timestamp as seconds since epoch (truncated) - method for compatibility
-    pub fn to_u32(self) -> u32 {
-        self.as_secs()
-    }
-
-    /// Create a timestamp from seconds since epoch
     pub fn from_secs(secs: u32) -> Self {
-        Self(secs as u64 * 1_000_000)
+        Self(secs as u64 * MICROS_PER_SEC)
     }
 
-    /// Get the current timestamp
+    pub fn as_secs(self) -> u32 {
+        (self.0 / MICROS_PER_SEC) as u32
+    }
+
     pub fn now() -> Self {
         let micros = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_micros() as u64;
+            .map(|d| d.as_micros() as u64)
+            .unwrap_or(0);
         Self(micros)
     }
 
     /// Convert to SystemTime
     pub fn to_system_time(self) -> SystemTime {
-        UNIX_EPOCH + std::time::Duration::from_micros(self.0 as u64)
+        UNIX_EPOCH + std::time::Duration::from_micros(self.0)
     }
 
     /// Convert from SystemTime
@@ -62,7 +54,7 @@ impl MicrosecondTimestamp {
 
 impl Default for MicrosecondTimestamp {
     fn default() -> Self {
-        Self::from_secs(0) // Unix epoch
+        Self(0)
     }
 }
 
@@ -84,24 +76,6 @@ impl From<MicrosecondTimestamp> for i64 {
     }
 }
 
-impl From<u32> for MicrosecondTimestamp {
-    fn from(secs: u32) -> Self {
-        Self::from_secs(secs)
-    }
-}
-
-impl From<MicrosecondTimestamp> for u32 {
-    fn from(timestamp: MicrosecondTimestamp) -> Self {
-        timestamp.as_secs()
-    }
-}
-
-impl From<SystemTime> for MicrosecondTimestamp {
-    fn from(time: SystemTime) -> Self {
-        Self::from_system_time(time).expect("SystemTime should be after Unix epoch")
-    }
-}
-
 impl From<MicrosecondTimestamp> for SystemTime {
     fn from(timestamp: MicrosecondTimestamp) -> Self {
         timestamp.to_system_time()
@@ -116,7 +90,9 @@ impl Encodable for MicrosecondTimestamp {
 }
 
 impl Decodable for MicrosecondTimestamp {
-    fn consensus_decode<R: BufRead + ?Sized>(r: &mut R) -> Result<Self, bitcoin::consensus::Error> {
+    fn consensus_decode<R: Read + ?Sized>(
+        r: &mut R,
+    ) -> Result<Self, bitcoin::consensus::encode::Error> {
         let value = u64::consensus_decode(r)?;
         Ok(value.into())
     }
@@ -125,17 +101,8 @@ impl Decodable for MicrosecondTimestamp {
 // Display formatting
 impl std::fmt::Display for MicrosecondTimestamp {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}μs", self.0)
+        write!(f, "{}us", self.0)
     }
-}
-
-// Utility functions for common conversions
-pub fn secs_to_micros(secs: u32) -> u64 {
-    secs as u64 * 1_000_000
-}
-
-pub fn micros_to_secs(micros: u64) -> u32 {
-    (micros / 1_000_000) as u32
 }
 
 #[cfg(test)]
@@ -162,7 +129,8 @@ mod tests {
         let timestamp = MicrosecondTimestamp::from_micros(original_micros);
 
         assert_eq!(u64::from(timestamp), original_micros);
-        assert_eq!(u32::from(timestamp), 1653195600);
+        assert_eq!(i64::from(timestamp), original_micros as i64);
+        assert_eq!(timestamp.as_secs(), 1653195600);
     }
 
     #[test]
@@ -175,13 +143,20 @@ mod tests {
             .as_micros() as u64;
 
         // Allow small difference (less than 1 second)
-        assert!(timestamp.as_micros().abs_diff(expected) < 1_000_000);
+        assert!(timestamp.as_micros().abs_diff(expected) < MICROS_PER_SEC);
+    }
+
+    #[test]
+    fn test_now_has_sub_second_precision() {
+        let any_sub_second =
+            (0..1000).any(|_| MicrosecondTimestamp::now().as_micros() % MICROS_PER_SEC != 0);
+        assert!(any_sub_second, "now() is only producing whole seconds");
     }
 
     #[test]
     fn test_system_time_conversion() {
         let system_time = SystemTime::now();
-        let timestamp = MicrosecondTimestamp::from(system_time);
+        let timestamp = MicrosecondTimestamp::from_system_time(system_time).unwrap();
         let converted_back = SystemTime::from(timestamp);
 
         // Should be very close
@@ -189,7 +164,7 @@ mod tests {
             .duration_since(system_time)
             .unwrap_or_else(|_| system_time.duration_since(converted_back).unwrap());
 
-        assert!(duration.as_micros() < 1000); // Less than 1ms difference
+        assert!(duration.as_micros() < 1000);
     }
 
     #[test]
@@ -199,6 +174,8 @@ mod tests {
         // Encode
         let mut encoded = Vec::new();
         original.consensus_encode(&mut encoded).unwrap();
+
+        assert_eq!(encoded.len(), 8);
 
         // Decode
         let decoded = MicrosecondTimestamp::consensus_decode(&mut encoded.as_slice()).unwrap();
@@ -212,16 +189,11 @@ mod tests {
         assert_eq!(timestamp.as_micros(), 0);
         assert_eq!(timestamp.as_secs(), 0);
     }
-
     #[test]
-    fn test_display() {
-        let timestamp = MicrosecondTimestamp::from_micros(1_653_195_600_123_456);
-        assert_eq!(format!("{}", timestamp), "1653195600123456μs");
-    }
-
-    #[test]
-    fn test_utility_functions() {
-        assert_eq!(secs_to_micros(1653195600), 1_653_195_600_000_000);
-        assert_eq!(micros_to_secs(1_653_195_600_123_456), 1653195600);
+    fn test_ordering_is_sub_second() {
+        let a = MicrosecondTimestamp::from_micros(1_653_195_600_000_000);
+        let b = MicrosecondTimestamp::from_micros(1_653_195_600_001_000);
+        assert!(a < b);
+        assert_eq!(a.as_secs(), b.as_secs());
     }
 }
