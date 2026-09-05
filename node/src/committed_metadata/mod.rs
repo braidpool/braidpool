@@ -97,8 +97,6 @@ impl Default for CommittedMetadata {
 impl Encodable for CommittedMetadata {
     fn consensus_encode<W: Write + ?Sized>(&self, w: &mut W) -> Result<usize, io::Error> {
         let mut len = 0;
-        let mut parent_hashes: Vec<BeadHash> = self.parents.iter().cloned().collect();
-        parent_hashes.sort(); // for deterministic ordering
         len += self.transaction_ids.consensus_encode(w)?;
         len += self.parents.consensus_encode(w)?;
         len += self.parent_bead_timestamps.consensus_encode(w)?;
@@ -120,9 +118,15 @@ impl Decodable for CommittedMetadata {
         let parent_bead_timestamps = TimeVec::consensus_decode(r)?;
         let payout_address = String::consensus_decode(r)?;
         let start_timestamp = MicrosecondTimestamp::consensus_decode(r)?;
-        let comm_pub_key = PublicKey::from_slice(&Vec::<u8>::consensus_decode(r).unwrap()).unwrap();
-        let min_target = CompactTarget::consensus_decode(r).unwrap();
-        let weak_target = CompactTarget::consensus_decode(r).unwrap();
+        let comm_pub_key =
+            PublicKey::from_slice(&Vec::<u8>::consensus_decode(r)?).map_err(|_| {
+                Error::from(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "invalid comm_pub_key in CommittedMetadata",
+                ))
+            })?;
+        let min_target = CompactTarget::consensus_decode(r)?;
+        let weak_target = CompactTarget::consensus_decode(r)?;
         let miner_ip = String::consensus_decode(r)?;
         Ok(CommittedMetadata {
             transaction_ids,

@@ -10,7 +10,8 @@ pub mod init_db;
 pub struct BeadInsertData {
     pub bead: Bead,
     pub bead_id: usize,
-    pub parent_refs: Vec<(u64, u32)>,
+    /// `(parent braid index, parent start timestamp in MICROseconds since epoch)`
+    pub parent_refs: Vec<(u64, u64)>,
 }
 
 impl BeadInsertData {
