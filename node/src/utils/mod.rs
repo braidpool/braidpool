@@ -188,6 +188,55 @@ pub fn create_test_bead(nonce: u32, prev_hash: Option<BlockHash>) -> Bead {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn unique_temp_test_path(label: &str) -> PathBuf {
+        let suffix = rand::random::<u8>();
+        std::env::temp_dir().join(format!(
+            "braidpool-test-{}-{}-{:02x}",
+            label,
+            std::process::id(),
+            suffix
+        ))
+    }
+
+    #[test]
+    fn resolve_datadir_creates_missing_directory() {
+        let root = unique_temp_test_path("test_create");
+        let nested = root.join("test_nested").join("datadir");
+
+        let resolved = resolve_datadir(&nested).expect("Missing directory creation failed.");
+
+        assert_eq!(resolved, nested);
+        assert!(nested.is_dir());
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn resolve_datadir_accepts_existing_directory() {
+        let dir = unique_temp_test_path("test_existing");
+        fs::create_dir_all(&dir).expect("Test directory creation failed.");
+
+        let resolved = resolve_datadir(&dir).expect("Existing directory not resolved.");
+
+        assert_eq!(resolved, dir);
+        assert!(dir.is_dir());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn resolve_datadir_rejects_path_that_is_not_a_directory() {
+        let file_path = unique_temp_test_path("test_file");
+        fs::write(&file_path, b"not a directory").expect("Test file creation failed.");
+
+        let error = resolve_datadir(&file_path).expect_err("a file must not be accepted");
+
+        assert_eq!(error.kind(), ErrorKind::InvalidInput);
+        assert!(file_path.is_file());
+
+        let _ = fs::remove_file(&file_path);
+    }
+
     #[test]
     fn server_endpoints_returns_single_endpoint_for_specific_host() {
         let result = server_endpoints("127.0.0.1", 8080, "http");
