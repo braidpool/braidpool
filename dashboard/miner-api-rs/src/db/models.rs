@@ -102,3 +102,38 @@ impl MinerDevice {
         Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()
     }
 }
+
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct CpuMiner {
+    pub id: String,
+    pub api_url: String,
+    pub label: Option<String>,
+
+    pub is_online: bool,
+    pub last_stats: Option<String>,
+    pub last_seen: Option<String>,
+
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl CpuMiner {
+    pub fn stats_json(&self) -> Option<Value> {
+        self.last_stats
+            .as_deref()
+            .and_then(|s| serde_json::from_str(s).ok())
+    }
+
+    pub fn to_json(&self) -> Value {
+        serde_json::json!({
+            "id":         self.id,
+            "api_url":    self.api_url,
+            "label":      self.label,
+            "is_online":  self.is_online,
+            "last_seen":  self.last_seen,
+            "stats":      self.stats_json(),
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        })
+    }
+}
