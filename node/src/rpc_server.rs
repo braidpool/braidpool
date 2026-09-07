@@ -13,10 +13,10 @@ use crate::stratum::BlockTemplate;
 #[cfg(test)]
 use crate::utils::compute_block_hash;
 use crate::utils::BeadHash;
-use bitcoin::Transaction;
-use bitcoin::Txid;
 #[cfg(test)]
 use bitcoin::hashes::Hash;
+use bitcoin::Transaction;
+use bitcoin::Txid;
 use futures::lock::Mutex;
 use jsonrpsee::core::async_trait;
 use jsonrpsee::core::middleware::Batch;
