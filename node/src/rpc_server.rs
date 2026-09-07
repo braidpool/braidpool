@@ -13,7 +13,10 @@ use crate::stratum::BlockTemplate;
 #[cfg(test)]
 use crate::utils::compute_block_hash;
 use crate::utils::BeadHash;
+#[cfg(test)]
+use bitcoin::hashes::Hash;
 use bitcoin::Transaction;
+use bitcoin::Txid;
 use futures::lock::Mutex;
 use jsonrpsee::core::async_trait;
 use jsonrpsee::core::middleware::Batch;
@@ -110,6 +113,23 @@ pub trait Rpc {
 
     #[method(name = "unstagetransactions")]
     async fn unstage_transactions(&self, txid: String) -> Result<bool, ErrorObjectOwned>;
+
+    /// Returns which of the 6 confirmation stages a given txid is currently in:
+    /// 0=unknown, 1=mempool, 2=staged, 3=committed, 4=mined, 5=confirmed.
+    #[method(name = "gettransactionstatus")]
+    async fn get_transaction_status(&self, txid: String) -> Result<Value, ErrorObjectOwned>;
+
+    /// Returns the most recent mempool entries from Bitcoin Core, sorted newest-first.
+    #[method(name = "getmempoolentries")]
+    async fn get_mempool_entries(&self, limit: u32) -> Result<Value, ErrorObjectOwned>;
+
+    /// Returns paginated list of txids committed across all beads.
+    #[method(name = "getcommittedtransactions")]
+    async fn get_committed_transactions(
+        &self,
+        page: u32,
+        page_size: u32,
+    ) -> Result<Value, ErrorObjectOwned>;
 
     #[method(name = "bitcoinproxy")]
     async fn bitcoin_proxy(
@@ -1008,12 +1028,272 @@ impl RpcServer for RpcServerImpl {
         }
     }
 
+    async fn get_transaction_status(&self, txid: String) -> Result<Value, ErrorObjectOwned> {
+        info!(txid = %txid, "get_transaction_status request received");
+
+        // Parse first so all checks use the canonical Txid type (avoids case mismatch).
+        let txid_parsed = txid.parse::<Txid>().map_err(|_| {
+            ErrorObjectOwned::owned(
+                1,
+                "Invalid txid: expected 64-character hex string",
+                None::<()>,
+            )
+        })?;
+        let mut best_stage: u8 = 0;
+        let mut best_stage_name = "unknown";
+        let mut best_detail = serde_json::json!({});
+
+        // Stage 3: txid committed in a bead (looked up via the persisted Transactions index).
+        {
+            let (responder, receiver) = oneshot::channel();
+            let query_sent = self
+                .db_tx
+                .send(BraidpoolDBTypes::FetchBeadHashByTxid {
+                    txid: txid_parsed,
+                    responder,
+                })
+                .await
+                .is_ok();
+            if query_sent {
+                if let Ok(Some(bead_hash)) = receiver.await {
+                    best_stage = 3;
+                    best_stage_name = "committed";
+                    best_detail = serde_json::json!({ "bead_hash": bead_hash.to_string() });
+                }
+            }
+        }
+
+        // Stage 2: txid is in the current block template (staged for next share/block).
+        if best_stage < 2 {
+            let template = self.latest_block.lock().await;
+            let in_template = template
+                .transactions
+                .iter()
+                .skip(1) // skip coinbase
+                .any(|tx| tx.compute_txid() == txid_parsed);
+            if in_template {
+                best_stage = 2;
+                best_stage_name = "staged";
+                best_detail = serde_json::json!({});
+            }
+        }
+
+        if let Some(rpc_config) = &self.bitcoin_rpc_config {
+            match call_bitcoin_rpc_direct(
+                rpc_config,
+                "getrawtransaction",
+                &serde_json::json!([txid, true]),
+            )
+            .await
+            {
+                Ok(tx_data) => {
+                    let confirmations = tx_data
+                        .get("confirmations")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
+                    let has_block = tx_data.get("blockhash").is_some();
+                    let (btc_stage, btc_stage_name): (u8, &str) = if has_block && confirmations >= 6
+                    {
+                        (5, "confirmed")
+                    } else if has_block {
+                        (4, "mined")
+                    } else {
+                        (1, "mempool")
+                    };
+                    if btc_stage > best_stage {
+                        best_stage = btc_stage;
+                        best_stage_name = btc_stage_name;
+                        let mut detail = serde_json::json!({
+                            "fee": tx_data.get("fee"),
+                            "vsize": tx_data.get("vsize"),
+                            "size": tx_data.get("size"),
+                            "weight": tx_data.get("weight"),
+                            "version": tx_data.get("version"),
+                            "locktime": tx_data.get("locktime"),
+                            "vin": tx_data.get("vin"),
+                            "vout": tx_data.get("vout"),
+                        });
+                        if let Some(block_hash) = tx_data.get("blockhash") {
+                            detail["block_hash"] = block_hash.clone();
+                            detail["confirmations"] = serde_json::json!(confirmations);
+                            if let Some(bt) = tx_data.get("blocktime") {
+                                detail["blocktime"] = bt.clone();
+                            }
+                        }
+                        best_detail = detail;
+                    }
+                }
+                Err(e) => {
+                    warn!(txid = %txid, error = %e, "getrawtransaction failed in gettransactionstatus");
+                }
+            }
+        }
+
+        Ok(serde_json::json!({
+            "txid": txid,
+            "stage": best_stage,
+            "stage_name": best_stage_name,
+            "detail": best_detail,
+        }))
+    }
+
+    async fn get_mempool_entries(&self, limit: u32) -> Result<Value, ErrorObjectOwned> {
+        info!(limit = %limit, "get_mempool_entries request received");
+        const MAX_MEMPOOL_ENTRIES_LIMIT: u32 = 1000;
+        let limit = limit.min(MAX_MEMPOOL_ENTRIES_LIMIT);
+
+        let rpc_config = self.bitcoin_rpc_config.as_ref().ok_or_else(|| {
+            ErrorObjectOwned::owned(
+                5,
+                "Bitcoin RPC not configured. Provide --rpcuser/--rpcpass to enable mempool queries.",
+                None::<()>,
+            )
+        })?;
+
+        let raw = call_bitcoin_rpc_direct(rpc_config, "getrawmempool", &serde_json::json!([true]))
+            .await
+            .map_err(|e| {
+                ErrorObjectOwned::owned(6, format!("Bitcoin RPC error: {}", e), None::<()>)
+            })?;
+
+        let obj = raw.as_object().ok_or_else(|| {
+            ErrorObjectOwned::owned(2, "Unexpected getrawmempool response", None::<()>)
+        })?;
+
+        let mut by_time: Vec<(&String, u64)> = obj
+            .iter()
+            .map(|(txid, entry)| {
+                let time = entry.get("time").and_then(|v| v.as_u64()).unwrap_or(0);
+                (txid, time)
+            })
+            .collect();
+        by_time.sort_by(|a, b| b.1.cmp(&a.1));
+        by_time.truncate(limit as usize);
+
+        let entries: Vec<serde_json::Value> = by_time
+            .into_iter()
+            .map(|(txid, time)| {
+                let entry = &obj[txid];
+                let fee_btc = entry
+                    .get("fees")
+                    .and_then(|f| f.get("base"))
+                    .and_then(|v| v.as_f64())
+                    .or_else(|| entry.get("fee").and_then(|v| v.as_f64()))
+                    .unwrap_or(0.0);
+                let fee_sats = (fee_btc * 1e8).round() as u64;
+                let vsize = entry.get("vsize").and_then(|v| v.as_u64()).unwrap_or(0);
+                let fee_rate = if vsize > 0 {
+                    (fee_sats as f64 / vsize as f64 * 100.0).round() / 100.0
+                } else {
+                    0.0
+                };
+                let rbf = entry
+                    .get("bip125-replaceable")
+                    .map(|v| {
+                        v.as_bool()
+                            .unwrap_or_else(|| v.as_str().map(|s| s == "yes").unwrap_or(false))
+                    })
+                    .unwrap_or(false);
+                serde_json::json!({
+                    "txid": txid,
+                    "fee": fee_sats,
+                    "vsize": vsize,
+                    "fee_rate": fee_rate,
+                    "time": time,
+                    "rbf": rbf,
+                })
+            })
+            .collect();
+
+        serde_json::to_value(entries).map_err(|e| {
+            ErrorObjectOwned::owned(2, format!("Serialization error: {}", e), None::<()>)
+        })
+    }
+
+    async fn get_committed_transactions(
+        &self,
+        page: u32,
+        page_size: u32,
+    ) -> Result<Value, ErrorObjectOwned> {
+        info!(page = %page, page_size = %page_size, "get_committed_transactions request received");
+        let page_size = page_size.clamp(1, crate::db::db_handlers::MAX_COMMITTED_TX_PAGE_SIZE);
+
+        let (responder, receiver) = oneshot::channel();
+        self.db_tx
+            .send(BraidpoolDBTypes::FetchCommittedTransactionsPage {
+                page,
+                page_size,
+                responder,
+            })
+            .await
+            .map_err(|_| {
+                ErrorObjectOwned::owned(
+                    5,
+                    "Database channel closed - DB handler is not running",
+                    None::<()>,
+                )
+            })?;
+
+        let page_result = receiver.await.map_err(|_| {
+            ErrorObjectOwned::owned(
+                5,
+                "Database handler dropped the response - is the database available?",
+                None::<()>,
+            )
+        })?;
+
+        let page_data = page_result.map_err(|e| {
+            ErrorObjectOwned::owned(
+                2,
+                format!("Failed to fetch committed transactions: {}", e),
+                None::<()>,
+            )
+        })?;
+
+        let transactions: Vec<serde_json::Value> = page_data
+            .entries
+            .iter()
+            .map(|entry| {
+                serde_json::json!({
+                    "txid": entry.txid.to_string(),
+                    "bead_hash": entry.bead_hash.to_string(),
+                    "timestamp": entry.timestamp,
+                })
+            })
+            .collect();
+
+        Ok(serde_json::json!({
+            "total": page_data.total,
+            "page": page,
+            "page_size": page_size,
+            "transactions": transactions,
+        }))
+    }
+
     async fn bitcoin_proxy(
         &self,
         method: String,
         params: serde_json::Value,
     ) -> Result<serde_json::Value, ErrorObjectOwned> {
         info!(method = %method, "bitcoin_proxy request received");
+
+        const ALLOWED: &[&str] = &[
+            "getrawmempool",
+            "getrawtransaction",
+            "getblockcount",
+            "getmempoolentry",
+            "getblocktemplate",
+            "getblockchaininfo",
+            "getblock",
+            "getblockhash",
+        ];
+        if !ALLOWED.contains(&method.as_str()) {
+            return Err(ErrorObjectOwned::owned(
+                7,
+                format!("bitcoinproxy: method '{}' is not permitted", method),
+                None::<()>,
+            ));
+        }
 
         let rpc_config = self.bitcoin_rpc_config.as_ref().ok_or_else(|| {
             ErrorObjectOwned::owned(
@@ -1234,6 +1514,7 @@ fn test_db_tx() -> mpsc::Sender<BraidpoolDBTypes> {
     tokio::spawn(async move { while rx.recv().await.is_some() {} });
     tx
 }
+
 #[tokio::test]
 pub async fn test_extend_rpc() {
     let test_bead1 = create_test_bead(1, None);
@@ -2558,4 +2839,147 @@ pub async fn test_subscribe_bead_rpc() {
             panic!("Notification not received !");
         }
     }
+}
+
+#[tokio::test]
+pub async fn test_get_committed_transactions_rpc() {
+    use crate::committed_metadata::TxIdVec;
+    use crate::db::db_handlers::{DBHandler, MAX_COMMITTED_TX_PAGE_SIZE};
+    use crate::db::BeadInsertData;
+
+    let (mut db_handler, db_tx) = DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
+
+    // Seed 3 genesis-style beads with 1, 2, 1 committed txids respectively (4 total).
+    let txid = |b: u8| bitcoin::Txid::from_byte_array([b; 32]);
+    let beads: Vec<_> = [vec![txid(1)], vec![txid(2), txid(3)], vec![txid(4)]]
+        .into_iter()
+        .enumerate()
+        .map(|(i, txids)| {
+            let mut bead = create_test_bead(i as u32, None);
+            bead.committed_metadata.transaction_ids = TxIdVec(txids);
+            bead
+        })
+        .collect();
+    let seed_braid = braid::Braid::new(beads, PoolNetwork::Cpunet);
+    let bead_data = BeadInsertData::resolve_many(&seed_braid, seed_braid.beads.iter()).unwrap();
+    db_handler
+        .insert_beads_batch(bead_data, Vec::new())
+        .await
+        .unwrap();
+    tokio::spawn(async move {
+        db_handler.insert_query_handler().await;
+    });
+
+    let braid: Arc<RwLock<braid::Braid>> =
+        Arc::new(RwLock::new(braid::Braid::new(vec![], PoolNetwork::Cpunet)));
+    let (proxy_tx, _) = mpsc::unbounded_channel();
+    let (server_addr, _) = run_rpc_server(
+        braid,
+        "127.0.0.1:0",
+        Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
+        Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
+        Arc::new(Mutex::new(stratum::BlockTemplate::default())),
+        proxy_tx,
+        None,
+        db_tx,
+    )
+    .await
+    .unwrap();
+    let client: HttpClient = HttpClient::builder()
+        .build(format!("http://{}", server_addr))
+        .unwrap();
+    let mut params = ArrayParams::new();
+    params.insert(0u32).unwrap();
+    params.insert(2u32).unwrap();
+    let response: Value = client
+        .request("getcommittedtransactions", params)
+        .await
+        .unwrap();
+    assert_eq!(response["total"], 4);
+    assert_eq!(response["page_size"], 2);
+    assert_eq!(response["transactions"].as_array().unwrap().len(), 2);
+    assert_eq!(response["transactions"][0]["txid"], txid(4).to_string());
+    let mut oversized_params = ArrayParams::new();
+    oversized_params.insert(0u32).unwrap();
+    oversized_params.insert(u32::MAX).unwrap();
+    let oversized_response: Value = client
+        .request("getcommittedtransactions", oversized_params)
+        .await
+        .unwrap();
+    assert_eq!(oversized_response["page_size"], MAX_COMMITTED_TX_PAGE_SIZE);
+    assert_eq!(
+        oversized_response["transactions"].as_array().unwrap().len(),
+        4
+    );
+}
+
+#[tokio::test]
+pub async fn test_get_transaction_status_rpc_committed_stage() {
+    use crate::committed_metadata::TxIdVec;
+    use crate::db::db_handlers::DBHandler;
+    use crate::db::BeadInsertData;
+
+    let (mut db_handler, db_tx) = DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
+
+    let committed_txid = bitcoin::Txid::from_byte_array([5u8; 32]);
+    let mut bead = create_test_bead(1, None);
+    bead.committed_metadata.transaction_ids = TxIdVec(vec![committed_txid]);
+    let seed_braid = braid::Braid::new(vec![bead], PoolNetwork::Cpunet);
+    let bead_data = BeadInsertData::resolve_many(&seed_braid, seed_braid.beads.iter()).unwrap();
+    db_handler
+        .insert_beads_batch(bead_data, Vec::new())
+        .await
+        .unwrap();
+
+    tokio::spawn(async move {
+        db_handler.insert_query_handler().await;
+    });
+
+    let braid: Arc<RwLock<braid::Braid>> =
+        Arc::new(RwLock::new(braid::Braid::new(vec![], PoolNetwork::Cpunet)));
+    let (proxy_tx, _) = mpsc::unbounded_channel();
+    // No bitcoin_rpc_config: keeps the test deterministic by skipping the bitcoind lookup,
+    // so only the DB-backed "committed" check and the in-template check are exercised.
+    let (server_addr, _) = run_rpc_server(
+        braid,
+        "127.0.0.1:0",
+        Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
+        Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
+        Arc::new(Mutex::new(stratum::BlockTemplate::default())),
+        proxy_tx,
+        None,
+        db_tx,
+    )
+    .await
+    .unwrap();
+    let client: HttpClient = HttpClient::builder()
+        .build(format!("http://{}", server_addr))
+        .unwrap();
+
+    // A txid committed in a bead must resolve to stage 3 via the DB lookup.
+    let mut params = ArrayParams::new();
+    params.insert(committed_txid.to_string()).unwrap();
+    let response: Value = client
+        .request("gettransactionstatus", params)
+        .await
+        .unwrap();
+    assert_eq!(response["stage"], 3);
+    assert_eq!(response["stage_name"], "committed");
+    assert_eq!(
+        response["detail"]["bead_hash"],
+        seed_braid
+            .compute_bead_hash(&seed_braid.beads[0])
+            .to_string()
+    );
+
+    // An unrelated txid, with no bitcoind configured and no staged template, stays "unknown".
+    let unknown_txid = bitcoin::Txid::from_byte_array([6u8; 32]);
+    let mut unknown_params = ArrayParams::new();
+    unknown_params.insert(unknown_txid.to_string()).unwrap();
+    let unknown_response: Value = client
+        .request("gettransactionstatus", unknown_params)
+        .await
+        .unwrap();
+    assert_eq!(unknown_response["stage"], 0);
+    assert_eq!(unknown_response["stage_name"], "unknown");
 }
