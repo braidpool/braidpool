@@ -22,6 +22,7 @@ use crate::api::AppState;
 use crate::db::{models::MinerDevice, service};
 use crate::miner_service;
 use crate::scanner;
+use uuid;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -474,4 +475,96 @@ pub async fn scan_subnet(
 
     let summary = persist_scan_results(&miners, &state).await;
     (StatusCode::OK, Json(serde_json::json!(summary)))
+}
+
+//  CPU miner handlers
+
+pub async fn register_cpu_miner(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<crate::api::models::RegisterCpuMinerRequest>,
+) -> impl IntoResponse {
+    let api_url = req.api_url.trim().to_string();
+    if api_url.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": "api_url is required" })),
+        );
+    }
+    if let Err(error) = crate::cpu_miner::validate_api_url(&api_url) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": error })),
+        );
+    }
+    // Reject registering a miner already known under an equivalent host
+    let normalized = crate::cpu_miner::normalize_api_url(&api_url);
+    let existing = service::cpu_miner_list(&state.pool).await.unwrap_or_default();
+    if existing
+        .iter()
+        .any(|m| crate::cpu_miner::normalize_api_url(&m.api_url) == normalized)
+    {
+        return (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({ "error": "api_url already registered" })),
+        );
+    }
+    let id = uuid::Uuid::new_v4().to_string();
+    match service::cpu_miner_insert(&state.pool, &id, &api_url, req.label.as_deref()).await {
+        Ok(_) => (
+            StatusCode::CREATED,
+            Json(serde_json::json!({ "id": id, "api_url": api_url })),
+        ),
+        Err(e) if e.to_string().contains("UNIQUE") => (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({ "error": "api_url already registered" })),
+        ),
+        Err(e) => {
+            warn!(error = %e, "register_cpu_miner failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": "internal error" })),
+            )
+        }
+    }
+}
+
+pub async fn list_cpu_miners(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    match service::cpu_miner_list(&state.pool).await {
+        Ok(miners) => {
+            let list: Vec<serde_json::Value> = miners.iter().map(|m| m.to_json()).collect();
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({ "cpu_miners": list })),
+            )
+        }
+        Err(e) => {
+            warn!(error = %e, "list_cpu_miners failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": "internal error" })),
+            )
+        }
+    }
+}
+
+pub async fn delete_cpu_miner(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    match service::cpu_miner_delete(&state.pool, &id).await {
+        Ok(true) => StatusCode::NO_CONTENT.into_response(),
+        Ok(false) => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "not found" })),
+        )
+            .into_response(),
+        Err(e) => {
+            warn!(error = %e, "delete_cpu_miner failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": "internal error" })),
+            )
+                .into_response()
+        }
+    }
 }

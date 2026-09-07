@@ -1,32 +1,39 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { Miner, HistoryPoint } from './Types';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { Miner, HistoryPoint, UnifiedMiner ,CpuMiner} from './Types';
 import { API_URLS, WEBSOCKET_URLS } from '../../URLs';
 import AnalyticsCharts from './AnalyticsCharts';
 import MinerTable from './MinerTable';
+import MinerDetailsDialog from './MinerDetailsDialog';
 import MinerDashboardHeader from './MinerDashboardHeader';
 import MinerControls from './MinerControls';
 import { HISTORY_POINTS, REFRESH_INTERVAL } from './Constant';
-import { mapApiToMiner, getAlerts } from './Utils';
+import { mapApiToMiner, mapAsicToUnified, mapCpuToUnified } from './Utils';
 
 const MAX_HISTORY_POINTS = HISTORY_POINTS;
 
 const MinerInventoryDashboard = () => {
   const [miners, setMiners] = useState<Miner[]>([]);
+  const [cpuMiners, setCpuMiners] = useState<CpuMiner[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<
-    'all' | 'efficiency' | 'hashrate' | 'power' | 'temperature'
+    'all' | 'efficiency' | 'hashrate' | 'power'
   >('all');
   const [statusFilter, setStatusFilter] = useState<
     'all' | 'online' | 'warning' | 'offline'
   >('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'asic' | 'cpu'>('all');
+  const [selectedMiner, setSelectedMiner] = useState<UnifiedMiner | null>(
+    null
+  );
 
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const [fleetHistory, setFleetHistory] = useState<HistoryPoint[]>([]);
+  const [cpuBackendDown, setCpuBackendDown] = useState(false);
   useEffect(() => {
     let cancelled = false;
     const connect = () => {
@@ -98,66 +105,108 @@ const MinerInventoryDashboard = () => {
   useEffect(() => {
     fetchMiners();
   }, [fetchMiners]);
+
+  // Poll CPU miners every 5s alongside ASIC miners.
+  useEffect(() => {
+    let consecutiveFailures = 0;
+    const load = async () => {
+      try {
+        const r = await fetch(API_URLS.CPU_MINERS_URL);
+        if (r.ok) {
+          const d = await r.json();
+          setCpuMiners(d.cpu_miners ?? []);
+          consecutiveFailures = 0;
+          setCpuBackendDown(false);
+        } else {
+          throw new Error(`HTTP ${r.status}`);
+        }
+      } catch {
+        consecutiveFailures += 1;
+        // Only surface a warning after a few failed polls, so a single blip doesn't flash the UI.
+        if (consecutiveFailures >= 3) setCpuBackendDown(true);
+      }
+    };
+    load();
+    const t = setInterval(load, 5000);
+    return () => clearInterval(t);
+  }, []);
   useEffect(() => {
     if (wsConnected) return;
     const interval = setInterval(fetchMiners, REFRESH_INTERVAL * 1000);
     return () => clearInterval(interval);
   }, [wsConnected, fetchMiners]);
 
-  useEffect(() => {
-    if (miners.length === 0) return;
-    const timestamp = Date.now();
-    const totalHashrateNow = miners.reduce(
-      (sum, m) =>
-        m.status === 'online' || m.status === 'warning'
-          ? sum + (m.hashrate_current || 0)
-          : sum,
-      0
-    );
-    const totalExpectedNow = miners.reduce(
-      (sum, m) =>
-        m.status === 'online' || m.status === 'warning'
-          ? sum + (m.expected_hashrate || 0)
-          : sum,
-      0
-    );
-    const activeMiners = miners.filter(
+  const unifiedMiners = useMemo<UnifiedMiner[]>(
+    () => [...miners.map(mapAsicToUnified), ...cpuMiners.map(mapCpuToUnified)],
+    [miners, cpuMiners]
+  );
+
+  const activeUnifiedMiners = useMemo(
+    () =>
+      unifiedMiners.filter(
+        (m) => m.status === 'online' || m.status === 'warning'
+      ),
+    [unifiedMiners]
+  );
+
+  const fleetMetrics = useMemo(() => {
+    const activeAsicMiners = miners.filter(
       (m) => m.status === 'online' || m.status === 'warning'
     );
+    const efficiencyMiners = activeUnifiedMiners.filter(
+      (m) => m.efficiency !== null
+    );
 
-    const avgEfficiencyNow =
-      activeMiners.length > 0
-        ? activeMiners.reduce((sum, m) => sum + (m.efficiency || 0), 0) /
-          activeMiners.length
-        : 0;
-    const avgTempNow =
-      activeMiners.length > 0
-        ? activeMiners.reduce((sum, m) => sum + (m.temperature || 0), 0) /
-          activeMiners.length
-        : 0;
-    const avgVrTempNow =
-      activeMiners.length > 0
-        ? activeMiners.reduce((sum, m) => sum + (m.vr_temperature || 0), 0) /
-          activeMiners.length
-        : 0;
+    return {
+      totalHashrate: activeUnifiedMiners.reduce(
+        (sum, m) => sum + m.hashrateTHs,
+        0
+      ),
+      totalExpectedHashrate: activeAsicMiners.reduce(
+        (sum, m) => sum + (m.expected_hashrate || 0),
+        0
+      ),
+      averageEfficiency:
+        efficiencyMiners.length > 0
+          ? efficiencyMiners.reduce((sum, m) => sum + (m.efficiency || 0), 0) /
+            efficiencyMiners.length
+          : 0,
+      averageTemperature:
+        activeAsicMiners.length > 0
+          ? activeAsicMiners.reduce((sum, m) => sum + (m.temperature || 0), 0) /
+            activeAsicMiners.length
+          : 0,
+      averageVrTemperature:
+        activeAsicMiners.length > 0
+          ? activeAsicMiners.reduce(
+              (sum, m) => sum + (m.vr_temperature || 0),
+              0
+            ) / activeAsicMiners.length
+          : 0,
+    };
+  }, [miners, activeUnifiedMiners]);
+
+  useEffect(() => {
+    if (unifiedMiners.length === 0) return;
+    const timestamp = Date.now();
 
     setFleetHistory((prev) => {
       const next = [
         ...prev,
         {
           timestamp,
-          totalHashrate: totalHashrateNow,
-          expectedHashrate: totalExpectedNow,
-          efficiency: avgEfficiencyNow,
-          temperature: avgTempNow,
-          vrTemperature: avgVrTempNow,
+          totalHashrate: fleetMetrics.totalHashrate,
+          expectedHashrate: fleetMetrics.totalExpectedHashrate,
+          efficiency: fleetMetrics.averageEfficiency,
+          temperature: fleetMetrics.averageTemperature,
+          vrTemperature: fleetMetrics.averageVrTemperature,
         },
       ];
       return next.slice(-MAX_HISTORY_POINTS);
     });
-  }, [miners]);
+  }, [unifiedMiners.length, fleetMetrics]);
 
-  const deleteMiner = async (minerId: string) => {
+  const deleteAsicMiner = async (minerId: string) => {
     try {
       const response = await fetch(
         `${API_URLS.MINER_DEVICE_URL}/api/miners/${minerId}`,
@@ -187,56 +236,69 @@ const MinerInventoryDashboard = () => {
     }
   };
 
+  const deleteCpuMiner = async (minerId: string) => {
+    try {
+      const response = await fetch(`${API_URLS.CPU_MINERS_URL}/${minerId}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      setCpuMiners((prev) => prev.filter((m) => m.id !== minerId));
+    } catch (err) {
+      console.error('Error deleting CPU miner:', err);
+      setError('Failed to delete miner');
+    }
+  };
+
+  const handleUnifiedDelete = (miner: UnifiedMiner) => {
+    if (miner.type === 'asic') deleteAsicMiner(miner.id);
+    else deleteCpuMiner(miner.id);
+    if (selectedMiner?.id === miner.id) setSelectedMiner(null);
+  };
+
   const handleSearch = () => setSearchQuery(searchInput.trim());
   const clearSearch = () => {
     setSearchInput('');
     setSearchQuery('');
   };
 
-  const totalMiners = miners.length;
-  const onlineMiners = miners.filter((m) => m.status === 'online').length;
-  const warningMiners = miners.filter((m) => m.status === 'warning').length;
-  const offlineMiners = miners.filter((m) => m.status === 'offline').length;
-  const totalHashrate = miners.reduce(
-    (sum, m) =>
-      m.status === 'online' || m.status === 'warning'
-        ? sum + (m.hashrate_current || 0)
-        : sum,
+  const totalMiners = unifiedMiners.length;
+  const onlineMiners = unifiedMiners.filter(
+    (m) => m.status === 'online'
+  ).length;
+  const warningMiners = unifiedMiners.filter(
+    (m) => m.status === 'warning'
+  ).length;
+  const offlineMiners = unifiedMiners.filter(
+    (m) => m.status === 'offline'
+  ).length;
+  const totalHashrate = fleetMetrics.totalHashrate;
+  const totalPower = activeUnifiedMiners.reduce(
+    (sum, m) => sum + (m.power || 0),
     0
   );
-  const totalPower = miners.reduce(
-    (sum, m) =>
-      m.status === 'online' || m.status === 'warning'
-        ? sum + (m.power_usage || 0)
-        : sum,
-    0
-  );
-  const activeMiners = miners.filter(
-    (m) => m.status === 'online' || m.status === 'warning'
-  );
-
-  const avgEfficiency =
-    activeMiners.length > 0
-      ? activeMiners.reduce((sum, m) => sum + (m.efficiency || 0), 0) /
-        activeMiners.length
-      : 0;
+  const avgEfficiency = fleetMetrics.averageEfficiency;
 
   const displayedMiners =
     !searchQuery || searchQuery.length === 0
-      ? miners
-      : miners.filter((m) => {
+      ? unifiedMiners
+      : unifiedMiners.filter((m) => {
           const q = searchQuery.toLowerCase();
-          return (
-            (m.ip || '').toLowerCase().includes(q) ||
-            (m.hostname || '').toLowerCase().includes(q)
-          );
+          return m.name.toLowerCase().includes(q);
         });
+
+  // Apply type filter
+  const filteredByType =
+    typeFilter === 'all'
+      ? displayedMiners
+      : displayedMiners.filter((m) => m.type === typeFilter);
 
   // Apply status filter
   const filteredByStatus =
     statusFilter === 'all'
-      ? displayedMiners
-      : displayedMiners.filter((m) => m.status === statusFilter);
+      ? filteredByType
+      : filteredByType.filter((m) => m.status === statusFilter);
 
   // Apply sorting to the filtered list
   const sortedDisplayedMiners = (() => {
@@ -248,11 +310,9 @@ const MinerInventoryDashboard = () => {
         case 'efficiency':
           return (b.efficiency || 0) - (a.efficiency || 0);
         case 'hashrate':
-          return (b.hashrate_current || 0) - (a.hashrate_current || 0);
+          return (b.hashrateTHs || 0) - (a.hashrateTHs || 0);
         case 'power':
-          return (b.power_usage || 0) - (a.power_usage || 0);
-        case 'temperature':
-          return (b.temperature || 0) - (a.temperature || 0);
+          return (b.power || 0) - (a.power || 0);
         default:
           return 0;
       }
@@ -276,6 +336,15 @@ const MinerInventoryDashboard = () => {
             </div>
           )}
 
+          {cpuBackendDown && (
+            <div className="text-yellow-400 border border-yellow-500 px-4 py-3 rounded max-w-md mx-auto mb-4">
+              <strong className="font-bold">Warning: </strong>
+              <span className="block sm:inline">
+                CPU miner backend is unreachable. Retrying in the background…
+              </span>
+            </div>
+          )}
+
           <MinerControls
             loading={loading}
             lastUpdate={lastUpdate}
@@ -290,13 +359,13 @@ const MinerInventoryDashboard = () => {
           />
         </div>
 
-        {miners.length > 0 && (
+        {miners.length > 0 || cpuMiners.length > 0 ? (
           <div className="mb-6">
             <AnalyticsCharts fleetHistory={fleetHistory} />
           </div>
-        )}
+        ) : null}
 
-        {miners.length === 0 ? (
+        {unifiedMiners.length === 0 ? (
           <div className="text-center py-12 text-gray-400">
             <p className="text-xl">No miners found</p>
             <p className="text-md mt-2">
@@ -373,6 +442,19 @@ const MinerInventoryDashboard = () => {
                 </div>
 
                 <select
+                  value={typeFilter}
+                  onChange={(e) =>
+                    setTypeFilter(e.target.value as 'all' | 'asic' | 'cpu')
+                  }
+                  aria-label="Filter by miner type"
+                  className="px-3 py-2 text-sm border border-gray-600 bg-gray-800 rounded text-white focus:outline-none focus:ring-1 focus:ring-gray-500"
+                >
+                  <option value="all">All Types</option>
+                  <option value="asic">ASIC</option>
+                  <option value="cpu">CPU</option>
+                </select>
+
+                <select
                   value={sortBy}
                   onChange={(e) =>
                     setSortBy(
@@ -381,7 +463,6 @@ const MinerInventoryDashboard = () => {
                         | 'efficiency'
                         | 'hashrate'
                         | 'power'
-                        | 'temperature'
                     )
                   }
                   aria-label="Sort miners"
@@ -391,7 +472,6 @@ const MinerInventoryDashboard = () => {
                   <option value="efficiency">Efficiency (W/TH)</option>
                   <option value="hashrate">Hashrate (TH/s)</option>
                   <option value="power">Power (W)</option>
-                  <option value="temperature">Temperature (°C)</option>
                 </select>
               </div>
             </div>
@@ -404,11 +484,18 @@ const MinerInventoryDashboard = () => {
             ) : (
               <MinerTable
                 miners={sortedDisplayedMiners}
-                getAlerts={getAlerts}
-                onDelete={deleteMiner}
+                onSelect={setSelectedMiner}
+                onDelete={handleUnifiedDelete}
               />
             )}
           </>
+        )}
+
+        {selectedMiner && (
+          <MinerDetailsDialog
+            miner={selectedMiner}
+            onClose={() => setSelectedMiner(null)}
+          />
         )}
       </div>
     </div>
