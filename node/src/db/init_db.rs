@@ -1,5 +1,5 @@
 use sqlx::{sqlite::SqliteConnectOptions, Executor, SqlitePool};
-use std::{env, fs, path::Path, path::PathBuf, str::FromStr};
+use std::{fs, path::Path, str::FromStr};
 
 use crate::error::DBErrors;
 #[allow(unused_imports)]
@@ -7,60 +7,32 @@ use tracing::{debug, error, info, trace, warn};
 static SCHEMA_SQL: &str = include_str!("schema.sql");
 static AUDIT_SCHEMA_SQL: &str = include_str!("audit_schema.sql");
 
-/// Gets the braidpool data directory in a cross-platform manner.
-fn get_data_dir() -> Result<PathBuf, DBErrors> {
-    #[cfg(target_os = "linux")]
-    {
-        let home = env::var("HOME").map_err(|error| DBErrors::EnvVariableNotFetched {
-            error: error.to_string(),
-            var: "HOME".to_string(),
-        })?;
-        Ok(Path::new(&home).join(".braidpool"))
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        let home = env::var("HOME").map_err(|error| DBErrors::EnvVariableNotFetched {
-            error: error.to_string(),
-            var: "HOME".to_string(),
-        })?;
-        Ok(Path::new(&home)
-            .join("Library")
-            .join("Application Support")
-            .join("braidpool"))
-    }
-
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-    {
-        Err(DBErrors::EnvVariableNotFetched {
-            error: "this platform is not supported yet".to_string(),
-            var: std::env::consts::OS.to_string(),
-        })
-    }
+/// Initializes the braid database inside the node's data directory.
+pub async fn init_db(datadir: &Path) -> Result<SqlitePool, DBErrors> {
+    setup_sqlite_db(datadir, "braidpool.db", SCHEMA_SQL).await
 }
 
-pub async fn init_db() -> Result<SqlitePool, DBErrors> {
-    setup_sqlite_db("braidpool.db", SCHEMA_SQL).await
+/// Initializes the audit database inside the node's data directory.
+pub async fn init_audit_db(datadir: &Path) -> Result<SqlitePool, DBErrors> {
+    setup_sqlite_db(datadir, "audit.db", AUDIT_SCHEMA_SQL).await
 }
 
-pub async fn init_audit_db() -> Result<SqlitePool, DBErrors> {
-    setup_sqlite_db("audit.db", AUDIT_SCHEMA_SQL).await
-}
-
-async fn setup_sqlite_db(db_name: &str, schema_sql: &str) -> Result<SqlitePool, DBErrors> {
-    // Fetching the data directory
-    let db_dir = get_data_dir()?;
+async fn setup_sqlite_db(
+    db_dir: &Path,
+    db_name: &str,
+    schema_sql: &str,
+) -> Result<SqlitePool, DBErrors> {
     let db_path = db_dir.join(db_name);
     let dir_exists = db_dir.exists();
 
     // Create db directory if it doesn't exist
-    if let Err(error) = fs::create_dir_all(&db_dir) {
+    if let Err(error) = fs::create_dir_all(db_dir) {
         return Err(DBErrors::DBDirectoryNotCreated {
             error: error.to_string(),
             path: db_path,
         });
     } else if !dir_exists {
-        info!("DB directory created successfully");
+        info!(path = %db_dir.display(), "DB directory created successfully");
     }
 
     let db_exists = db_path.exists();

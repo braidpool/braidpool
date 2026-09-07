@@ -4,6 +4,7 @@ use crate::error::DBErrors;
 use crate::utils::compute_block_hash;
 use bitcoin::{hashes::Hash, BlockHash};
 use sqlx::{Pool, Sqlite};
+use std::path::Path;
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
 
@@ -22,8 +23,9 @@ pub struct AuditDBHandler {
 }
 
 impl AuditDBHandler {
-    pub async fn new() -> Result<Self, DBErrors> {
-        let connection = match crate::db::init_db::init_audit_db().await {
+    /// Creates a handler backed by the audit database inside `datadir`.
+    pub async fn new(datadir: &Path) -> Result<Self, DBErrors> {
+        let connection = match crate::db::init_db::init_audit_db(datadir).await {
             Ok(conn) => conn,
             Err(error) => {
                 error!(error = ?error, "Failed to initialize audit database connection");

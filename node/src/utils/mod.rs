@@ -29,7 +29,14 @@ pub type Bytes = Vec<Byte>;
 pub(crate) type Relatives = HashSet<BeadHash>;
 
 // Error Definitions
-use std::{collections::HashSet, net::IpAddr, str::FromStr};
+use std::{
+    collections::HashSet,
+    fs,
+    io::ErrorKind,
+    net::IpAddr,
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 /// Computes a bead's block hash under the rules of `network`.
 pub fn compute_block_hash(block_header: &BlockHeader, network: PoolNetwork) -> BlockHash {
     network.block_hash(block_header)
@@ -76,6 +83,52 @@ pub fn server_endpoints(bind_host: &str, port: u16, protocol: &str) -> Vec<Strin
     } else {
         vec![format!("{}://{}:{}", protocol, bind_host, port)]
     }
+}
+/// Resolves the node's data directory, creating it if it does not exist yet.
+pub fn resolve_datadir(datadir: &Path) -> std::io::Result<PathBuf> {
+    let datadir_str = datadir.to_str().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Invalid datadir path encoding",
+        )
+    })?;
+    let expanded = shellexpand::full(datadir_str).map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("Shell expansion failed: {}", e),
+        )
+    })?;
+    let datadir_path = PathBuf::from(&*expanded);
+
+    match fs::metadata(&datadir_path) {
+        Ok(metadata) => {
+            if !metadata.is_dir() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!(
+                        "Data directory exists but is not a directory: {}",
+                        datadir_path.display()
+                    ),
+                ));
+            }
+            info!(datadir = %datadir_path.display(), "Using existing data directory");
+        }
+
+        Err(error) if error.kind() == ErrorKind::NotFound => {
+            info!(datadir = %datadir_path.display(), "Creating new data directory");
+            fs::create_dir_all(&datadir_path)?;
+        }
+        Err(error) => {
+            error!(
+                datadir = %datadir_path.display(),
+                error = %error,
+                "Failed to read data directory metadata"
+            );
+            return Err(error);
+        }
+    }
+
+    Ok(datadir_path)
 }
 
 // Helper function to create test beads
@@ -135,6 +188,55 @@ pub fn create_test_bead(nonce: u32, prev_hash: Option<BlockHash>) -> Bead {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn unique_temp_test_path(label: &str) -> PathBuf {
+        let suffix = rand::random::<u8>();
+        std::env::temp_dir().join(format!(
+            "braidpool-test-{}-{}-{:02x}",
+            label,
+            std::process::id(),
+            suffix
+        ))
+    }
+
+    #[test]
+    fn resolve_datadir_creates_missing_directory() {
+        let root = unique_temp_test_path("test_create");
+        let nested = root.join("test_nested").join("datadir");
+
+        let resolved = resolve_datadir(&nested).expect("Missing directory creation failed.");
+
+        assert_eq!(resolved, nested);
+        assert!(nested.is_dir());
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn resolve_datadir_accepts_existing_directory() {
+        let dir = unique_temp_test_path("test_existing");
+        fs::create_dir_all(&dir).expect("Test directory creation failed.");
+
+        let resolved = resolve_datadir(&dir).expect("Existing directory not resolved.");
+
+        assert_eq!(resolved, dir);
+        assert!(dir.is_dir());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn resolve_datadir_rejects_path_that_is_not_a_directory() {
+        let file_path = unique_temp_test_path("test_file");
+        fs::write(&file_path, b"not a directory").expect("Test file creation failed.");
+
+        let error = resolve_datadir(&file_path).expect_err("a file must not be accepted");
+
+        assert_eq!(error.kind(), ErrorKind::InvalidInput);
+        assert!(file_path.is_file());
+
+        let _ = fs::remove_file(&file_path);
+    }
+
     #[test]
     fn server_endpoints_returns_single_endpoint_for_specific_host() {
         let result = server_endpoints("127.0.0.1", 8080, "http");

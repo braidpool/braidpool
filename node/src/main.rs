@@ -19,6 +19,7 @@ use node::db::db_handlers::FETCH_BEAD_BATCH_SIZE;
 use node::ibd_manager::{IBD_TRIGGER_AFTER, MAX_IBD_INCOMING_THRESHOLD, MAX_IBD_RETRIES};
 use node::upstream_pool;
 use node::utils::compute_block_hash;
+use node::utils::resolve_datadir;
 use node::utils::BeadHash;
 use node::SwarmHandler;
 use node::{
@@ -37,7 +38,6 @@ use node::{
 use std::collections::HashSet;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
-use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -103,6 +103,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         AtomicBool::new(true)
     };
     let ibd_spinlock = Arc::new(ibd_or_not);
+
+    // Resolving datadir or the default datadir if not provided .
+    let datadir_path = resolve_datadir(&args.datadir)?;
     // Initializing the braid object with read write lock
     //for supporting concurrent readers and single writer
     let braid: Arc<RwLock<braid::Braid>> =
@@ -112,7 +115,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     if !args.audit {
         //Initializing DB and db command handler
-        let (mut db_handler, tx) = DBHandler::new(network).await.map_err(|e| {
+        let (mut db_handler, tx) = DBHandler::new(&datadir_path, network).await.map_err(|e| {
             std::io::Error::new(
                 std::io::ErrorKind::Other,
                 format!("Database initialization failed: {:?}", e),
@@ -330,7 +333,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         );
 
         // Initialize audit records
-        let audit_dag = match audit::AuditDAG::new_with_db(Arc::clone(&braid)).await {
+        let audit_dag = match audit::AuditDAG::new_with_db(Arc::clone(&braid), &datadir_path).await
+        {
             Ok(dag) => Arc::new(Mutex::new(dag)),
             Err(e) => {
                 error!("Failed to initialize audit DAG with database: {}", e);
@@ -843,32 +847,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .await;
     });
 
-    let datadir_str = args.datadir.to_str().ok_or_else(|| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "Invalid datadir path encoding",
-        )
-    })?;
-    let datadir = shellexpand::full(datadir_str).map_err(|e| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("Shell expansion failed: {}", e),
-        )
-    })?;
-    match fs::metadata(&*datadir) {
-        Ok(m) => {
-            if !m.is_dir() {
-                error!(datadir = %datadir, "Data directory exists but is not a directory");
-            }
-            info!(datadir = %datadir, "Using existing data directory");
-        }
-        Err(_) => {
-            info!(datadir = %datadir, "Creating data directory");
-            fs::create_dir_all(&*datadir)?;
-        }
-    }
-
-    let datadir_path = Path::new(&*datadir);
     let keystore_path = datadir_path.join("keystore");
     #[cfg(unix)]
     {
