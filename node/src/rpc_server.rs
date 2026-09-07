@@ -2965,7 +2965,9 @@ pub async fn test_get_transaction_status_rpc_committed_stage() {
     assert_eq!(response["stage_name"], "committed");
     assert_eq!(
         response["detail"]["bead_hash"],
-        seed_braid.compute_bead_hash(&seed_braid.beads[0]).to_string()
+        seed_braid
+            .compute_bead_hash(&seed_braid.beads[0])
+            .to_string()
     );
 
     // An unrelated txid, with no bitcoind configured and no staged template, stays "unknown".
