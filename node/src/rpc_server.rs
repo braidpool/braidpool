@@ -2896,7 +2896,7 @@ pub async fn test_get_committed_transactions_rpc() {
     use crate::db::db_handlers::{DBHandler, MAX_COMMITTED_TX_PAGE_SIZE};
     use crate::db::BeadInsertData;
 
-    let (mut db_handler, db_tx) = DBHandler::new_in_memory().await.unwrap();
+    let (mut db_handler, db_tx) = DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
 
     // Seed 3 genesis-style beads with 1, 2, 1 committed txids respectively (4 total).
     let txid = |b: u8| bitcoin::Txid::from_byte_array([b; 32]);
@@ -2909,7 +2909,7 @@ pub async fn test_get_committed_transactions_rpc() {
             bead
         })
         .collect();
-    let seed_braid = braid::Braid::new(beads);
+    let seed_braid = braid::Braid::new(beads, PoolNetwork::Cpunet);
     let bead_data = BeadInsertData::resolve_many(&seed_braid, seed_braid.beads.iter()).unwrap();
     db_handler
         .insert_beads_batch(bead_data, Vec::new())
@@ -2919,7 +2919,8 @@ pub async fn test_get_committed_transactions_rpc() {
         db_handler.insert_query_handler().await;
     });
 
-    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(vec![])));
+    let braid: Arc<RwLock<braid::Braid>> =
+        Arc::new(RwLock::new(braid::Braid::new(vec![], PoolNetwork::Cpunet)));
     let (proxy_tx, _) = mpsc::unbounded_channel();
     let (server_addr, _) = run_rpc_server(
         braid,
@@ -2967,12 +2968,12 @@ pub async fn test_get_transaction_status_rpc_committed_stage() {
     use crate::db::db_handlers::DBHandler;
     use crate::db::BeadInsertData;
 
-    let (mut db_handler, db_tx) = DBHandler::new_in_memory().await.unwrap();
+    let (mut db_handler, db_tx) = DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
 
     let committed_txid = bitcoin::Txid::from_byte_array([5u8; 32]);
     let mut bead = create_test_bead(1, None);
     bead.committed_metadata.transaction_ids = TxIdVec(vec![committed_txid]);
-    let seed_braid = braid::Braid::new(vec![bead]);
+    let seed_braid = braid::Braid::new(vec![bead], PoolNetwork::Cpunet);
     let bead_data = BeadInsertData::resolve_many(&seed_braid, seed_braid.beads.iter()).unwrap();
     db_handler
         .insert_beads_batch(bead_data, Vec::new())
@@ -2983,7 +2984,8 @@ pub async fn test_get_transaction_status_rpc_committed_stage() {
         db_handler.insert_query_handler().await;
     });
 
-    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(vec![])));
+    let braid: Arc<RwLock<braid::Braid>> =
+        Arc::new(RwLock::new(braid::Braid::new(vec![], PoolNetwork::Cpunet)));
     let (proxy_tx, _) = mpsc::unbounded_channel();
     // No bitcoin_rpc_config: keeps the test deterministic by skipping the bitcoind lookup,
     // so only the DB-backed "committed" check and the in-template check are exercised.
@@ -3014,7 +3016,7 @@ pub async fn test_get_transaction_status_rpc_committed_stage() {
     assert_eq!(response["stage_name"], "committed");
     assert_eq!(
         response["detail"]["bead_hash"],
-        seed_braid.beads[0].block_header.block_hash().to_string()
+        seed_braid.compute_bead_hash(&seed_braid.beads[0]).to_string()
     );
 
     // An unrelated txid, with no bitcoind configured and no staged template, stays "unknown".

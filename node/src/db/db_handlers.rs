@@ -1125,7 +1125,7 @@ pub mod test {
             })
             .collect();
 
-        let test_braid = braid::Braid::new(beads);
+        let test_braid = braid::Braid::new(beads, PoolNetwork::Cpunet);
         let bead_data = BeadInsertData::resolve_many(&test_braid, test_braid.beads.iter())
             .expect("resolve_many failed for seeded genesis beads");
         handler
@@ -1141,7 +1141,7 @@ pub mod test {
 
     #[tokio::test]
     async fn test_fetch_committed_transactions_page_pagination() {
-        let (handler, _db_tx) = DBHandler::new_in_memory().await.unwrap();
+        let (handler, _db_tx) = DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
         let test_pool = handler.db_connection_pool.clone();
 
         // bead 0: 1 tx, bead 1: 2 txs, bead 2: 1 tx -> 4 committed txs total.
@@ -1180,7 +1180,7 @@ pub mod test {
 
     #[tokio::test]
     async fn test_fetch_committed_transactions_page_clamps_page_size() {
-        let (handler, _db_tx) = DBHandler::new_in_memory().await.unwrap();
+        let (handler, _db_tx) = DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
         let test_pool = handler.db_connection_pool.clone();
 
         seed_committed_transactions(&handler, &[vec![txid_from_byte(9)]]).await;
@@ -1196,11 +1196,11 @@ pub mod test {
 
     #[tokio::test]
     async fn test_fetch_bead_hash_by_txid() {
-        let (handler, _db_tx) = DBHandler::new_in_memory().await.unwrap();
+        let (handler, _db_tx) = DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
         let test_pool = handler.db_connection_pool.clone();
 
         let test_braid = seed_committed_transactions(&handler, &[vec![txid_from_byte(7)]]).await;
-        let expected_hash = test_braid.beads[0].block_header.block_hash();
+        let expected_hash = test_braid.compute_bead_hash(&test_braid.beads[0]);
 
         let found = fetch_bead_hash_by_txid(&test_pool, txid_from_byte(7))
             .await
