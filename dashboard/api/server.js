@@ -186,4 +186,8 @@ setInterval(() => {
   sendBeadInfo();
 }, 30000); // 30-second interval
 
+// Fetch mempool data immediately on start so the first connecting client
+// doesn't have to wait a full 30 seconds for the cache to populate.
+sendMempoolData();
+
 console.log(`WebSocket server running on ws://localhost:${PORT}`);

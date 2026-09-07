@@ -3,6 +3,15 @@ export const currencyColors: Record<string, string> = {
   usd: '#4ade80',
   eur: '#3b82f6',
   jpy: '#ef4444',
+  gbp: '#8b5cf6',
+  cad: '#f59e0b',
+  aud: '#06b6d4',
+  chf: '#e11d48',
+  inr: '#f97316',
+  krw: '#10b981',
+  brl: '#22d3ee',
+  hkd: '#ec4899',
+  sgd: '#6366f1',
 };
 
 export const currencyLabels: Record<string, string> = {
@@ -10,4 +19,29 @@ export const currencyLabels: Record<string, string> = {
   usd: 'USD',
   eur: 'EUR',
   jpy: 'JPY',
+  gbp: 'GBP',
+  cad: 'CAD',
+  aud: 'AUD',
+  chf: 'CHF',
+  inr: 'INR',
+  krw: 'KRW',
+  brl: 'BRL',
+  hkd: 'HKD',
+  sgd: 'SGD',
+};
+
+export const currencyFullNames: Record<string, string> = {
+  btc: 'Bitcoin',
+  usd: 'US Dollar',
+  eur: 'Euro',
+  jpy: 'Japanese Yen',
+  gbp: 'British Pound',
+  cad: 'Canadian Dollar',
+  aud: 'Australian Dollar',
+  chf: 'Swiss Franc',
+  inr: 'Indian Rupee',
+  krw: 'South Korean Won',
+  brl: 'Brazilian Real',
+  hkd: 'Hong Kong Dollar',
+  sgd: 'Singapore Dollar',
 };
