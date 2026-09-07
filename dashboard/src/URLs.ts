@@ -25,8 +25,6 @@ export const API_URLS = {
   MEMPOOL_API_BASE: 'http://localhost:3002',
   // Miner Device Api endpoints
   MINER_DEVICE_URL: 'http://localhost:5001',
-  // CPU miner inventory
-  CPU_MINERS_URL: 'http://localhost:5001/api/cpu-miners',
 } as const;
 
 // Specific API endpoint functions for better type safety
