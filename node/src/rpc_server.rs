@@ -1293,14 +1293,6 @@ impl RpcServer for RpcServerImpl {
             ));
         }
 
-        if let Err(reason) = validate_bitcoin_proxy_params(&method, &params) {
-            return Err(ErrorObjectOwned::owned(
-                7,
-                format!("bitcoinproxy: {}", reason),
-                None::<()>,
-            ));
-        }
-
         let rpc_config = self.bitcoin_rpc_config.as_ref().ok_or_else(|| {
             ErrorObjectOwned::owned(
                 5,
@@ -1450,25 +1442,6 @@ pub async fn run_rpc_server(
     );
     Ok((addr, dashboard_notification_ref))
 }
-fn validate_bitcoin_proxy_params(method: &str, params: &serde_json::Value) -> Result<(), String> {
-    const MAX_PARAMS: usize = 4;
-    let array = params
-        .as_array()
-        .ok_or_else(|| "params must be a JSON array".to_string())?;
-    if array.len() > MAX_PARAMS {
-        return Err(format!("too many params (max {})", MAX_PARAMS));
-    }
-    if method == "getblock" {
-        if let Some(verbosity) = array.get(1).and_then(|v| v.as_u64()) {
-            if verbosity > 1 {
-                return Err(
-                    "getblock verbosity=2 (full transaction data) is not permitted".to_string(),
-                );
-            }
-        }
-    }
-    Ok(())
-}
 
 /// Call Bitcoin RPC method directly using HTTP JSON-RPC
 async fn call_bitcoin_rpc_direct(
@@ -1538,30 +1511,6 @@ fn test_db_tx() -> mpsc::Sender<BraidpoolDBTypes> {
         mpsc::channel::<BraidpoolDBTypes>(crate::db::db_handlers::DB_CHANNEL_CAPACITY);
     tokio::spawn(async move { while rx.recv().await.is_some() {} });
     tx
-}
-
-#[test]
-fn test_validate_bitcoin_proxy_params() {
-    // Non-array params are rejected.
-    assert!(validate_bitcoin_proxy_params("getblockcount", &serde_json::json!({})).is_err());
-
-    // Empty/short param lists for normal methods are fine.
-    assert!(validate_bitcoin_proxy_params("getblockcount", &serde_json::json!([])).is_ok());
-    assert!(
-        validate_bitcoin_proxy_params("getrawtransaction", &serde_json::json!(["abcd", true]))
-            .is_ok()
-    );
-
-    // Too many params is rejected regardless of method.
-    assert!(
-        validate_bitcoin_proxy_params("getblockcount", &serde_json::json!([1, 2, 3, 4, 5]))
-            .is_err()
-    );
-
-    // getblock verbosity=2 (full tx data) is rejected; 0/1 are fine.
-    assert!(validate_bitcoin_proxy_params("getblock", &serde_json::json!(["hash", 2])).is_err());
-    assert!(validate_bitcoin_proxy_params("getblock", &serde_json::json!(["hash", 1])).is_ok());
-    assert!(validate_bitcoin_proxy_params("getblock", &serde_json::json!(["hash"])).is_ok());
 }
 
 #[tokio::test]
