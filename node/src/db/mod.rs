@@ -1,8 +1,9 @@
 #![allow(non_snake_case)]
 use crate::bead::Bead;
 use crate::braid::Braid;
-use crate::error::BraidError;
-use crate::utils::compute_block_hash;
+use crate::error::{BraidError, DBErrors};
+use crate::utils::{compute_block_hash, BeadHash};
+use bitcoin::Txid;
 pub mod audit_db_handlers;
 pub mod db_handlers;
 pub mod init_db;
