@@ -46,7 +46,6 @@ impl Braid {
         let mut beads = Vec::new();
         let mut bead_indices = HashSet::new();
         let mut bead_index_mapping = HashMap::new();
-        let mut txid_to_bead: HashMap<Txid, BeadHash> = HashMap::new();
 
         for (index, bead) in genesis_beads.into_iter().enumerate() {
             beads.push(bead.clone());
@@ -82,7 +81,6 @@ impl Braid {
         self.orphan_beads.clear();
         self.genesis_beads.clear();
         self.bead_index_mapping.clear();
-        self.txid_to_bead.clear();
     }
 }
 #[allow(unused)]
@@ -134,9 +132,6 @@ impl Braid {
         self.beads.push(bead.clone());
         let new_bead_index = self.beads.len() - 1;
         self.bead_index_mapping.insert(bead_hash, new_bead_index);
-        for txid in &bead.committed_metadata.transaction_ids.0 {
-            self.txid_to_bead.insert(*txid, bead_hash);
-        }
 
         // Find earliest parent of bead in cohorts and nuke all cohorts after that
         let mut found_parent_indices = HashSet::new();
