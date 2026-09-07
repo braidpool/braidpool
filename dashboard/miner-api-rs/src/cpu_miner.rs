@@ -42,16 +42,28 @@ fn is_valid_stats(body: &str) -> bool {
         return false;
     };
     object.get("minerVersion").is_some()
-        && object.get("uptimeSeconds").and_then(|v| v.as_u64()).is_some()
+        && object
+            .get("uptimeSeconds")
+            .and_then(|v| v.as_u64())
+            .is_some()
         && object
             .get("hashrate")
             .and_then(|v| v.get("currentKhashS"))
             .and_then(|v| v.as_f64())
             .is_some()
         && object.get("shares").and_then(|v| v.as_object()).is_some()
-        && object.get("connection").and_then(|v| v.as_object()).is_some()
-        && object.get("workerThreads").and_then(|v| v.as_array()).is_some()
-        && object.get("recentShares").and_then(|v| v.as_array()).is_some()
+        && object
+            .get("connection")
+            .and_then(|v| v.as_object())
+            .is_some()
+        && object
+            .get("workerThreads")
+            .and_then(|v| v.as_array())
+            .is_some()
+        && object
+            .get("recentShares")
+            .and_then(|v| v.as_array())
+            .is_some()
 }
 
 pub struct CpuMinerService {
@@ -88,9 +100,18 @@ impl CpuMinerService {
     async fn auto_discover(&self) {
         for &port in DEFAULT_PORTS {
             let url = format!("http://127.0.0.1:{}/api/v1/health", port);
-            if self.http.get(&url).send().await.map(|r| r.status().is_success()).unwrap_or(false) {
+            if self
+                .http
+                .get(&url)
+                .send()
+                .await
+                .map(|r| r.status().is_success())
+                .unwrap_or(false)
+            {
                 let api_url = format!("http://127.0.0.1:{}", port);
-                let existing = service::cpu_miner_list(&self.pool).await.unwrap_or_default();
+                let existing = service::cpu_miner_list(&self.pool)
+                    .await
+                    .unwrap_or_default();
                 // Compare on normalized host (localhost == 127.0.0.1) so a miner
                 // registered under either form isn't auto-discovered as a duplicate.
                 if existing
@@ -100,7 +121,9 @@ impl CpuMinerService {
                     continue;
                 }
                 let id = Uuid::new_v4().to_string();
-                match service::cpu_miner_insert(&self.pool, &id, &api_url, Some("Local CPU Miner")).await {
+                match service::cpu_miner_insert(&self.pool, &id, &api_url, Some("Local CPU Miner"))
+                    .await
+                {
                     Ok(_) => info!(port, "auto-registered cpu miner"),
                     Err(e) => warn!(port, error = %e, "auto-register failed"),
                 }
@@ -135,15 +158,13 @@ impl CpuMinerService {
                     }
                     Ok(_) => {
                         warn!(id = %miner.id, "cpu miner poll: non-JSON response");
-                        let _ =
-                            service::cpu_miner_update_stats(&self.pool, &miner.id, false, None)
-                                .await;
+                        let _ = service::cpu_miner_update_stats(&self.pool, &miner.id, false, None)
+                            .await;
                     }
                     Err(e) => {
                         warn!(id = %miner.id, error = %e, "cpu miner poll: read body failed");
-                        let _ =
-                            service::cpu_miner_update_stats(&self.pool, &miner.id, false, None)
-                                .await;
+                        let _ = service::cpu_miner_update_stats(&self.pool, &miner.id, false, None)
+                            .await;
                     }
                 },
                 Ok(resp) => {

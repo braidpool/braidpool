@@ -498,7 +498,9 @@ pub async fn register_cpu_miner(
     }
     // Reject registering a miner already known under an equivalent host
     let normalized = crate::cpu_miner::normalize_api_url(&api_url);
-    let existing = service::cpu_miner_list(&state.pool).await.unwrap_or_default();
+    let existing = service::cpu_miner_list(&state.pool)
+        .await
+        .unwrap_or_default();
     if existing
         .iter()
         .any(|m| crate::cpu_miner::normalize_api_url(&m.api_url) == normalized)
