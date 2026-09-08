@@ -271,7 +271,7 @@ impl DownstreamClient {
     pub async fn handle_client_to_server_request(
         &mut self,
         client_request: StandardRequest,
-        mining_job_map: Arc<Mutex<MiningJobMap>>,
+        global_job_store: Arc<Mutex<GlobalJobStore>>,
         response_message_sender: mpsc::Sender<String>,
         notification_sender: mpsc::Sender<NotifyCmd>,
         peer_addr: String,
@@ -310,7 +310,7 @@ impl DownstreamClient {
                 Self::handle_submit(
                     self,
                     &req_params,
-                    mining_job_map,
+                    global_job_store,
                     client_request_id,
                     swarm_handler,
                     audit_dag,
@@ -485,7 +485,7 @@ impl DownstreamClient {
     ///
     /// Validates the submitted share by:
     /// 1. Extracting and parsing worker name, job ID, extranonce2, ntime, and nonce.
-    /// 2. Looking up the corresponding mining job from the shared `MiningJobMap`.
+    /// 2. Looking up the corresponding mining job from the shared `GlobalJobStore`.
     /// 3. Rebuilding the coinbase transaction and computing the updated Merkle root.
     /// 4. Constructing the block header from the submitted values.
     /// 5. Verifying the header against the required PoW target.
@@ -508,7 +508,7 @@ impl DownstreamClient {
     pub async fn handle_submit(
         &mut self,
         submit_work_params: &Value,
-        mining_job_map: Arc<Mutex<MiningJobMap>>,
+        global_job_store: Arc<Mutex<GlobalJobStore>>,
         client_request_id: u64,
         swarm_handler: Arc<Mutex<SwarmHandler>>,
         audit_dag: Option<Arc<Mutex<crate::audit::AuditDAG>>>,
@@ -640,7 +640,7 @@ impl DownstreamClient {
 
         //Acquiring lock on the mining map and fetching the submitted job from the memory
         let (submitted_job, template_id) = {
-            let job_mapping = mining_job_map.lock().await;
+            let job_mapping = global_job_store.lock().await;
 
             // Try string lookup first (upstream jobs)
             if let Ok((job, tid)) = job_mapping.get_by_string_job_id(job_id_str) {
@@ -649,7 +649,7 @@ impl DownstreamClient {
                     mode = "upstream",
                     "Found job by string ID"
                 );
-                (job.clone(), tid.clone())
+                (job, tid)
             } else {
                 // Fall back to numeric parsing (Braidpool jobs)
                 let numeric_job_id = match job_id_str.parse::<u64>() {
@@ -671,7 +671,7 @@ impl DownstreamClient {
                     mode = "braidpool",
                     "Found job by numeric ID"
                 );
-                let job = job_mapping.get_by_job_id(numeric_job_id)?.clone();
+                let job = job_mapping.get_by_job_id(numeric_job_id)?;
                 let templateid = job_mapping
                     .template_id_from_job_id(numeric_job_id)
                     .ok_or_else(|| StratumErrors::MiningJobNotFound {
@@ -2027,144 +2027,169 @@ pub struct JobDetails {
     pub job_sent_time: u32,
     pub is_upstream_job: bool,
 }
-///Struct storing all the jobs mapped accroding to the job id
-/// it will serve the purpose for maintaining the details received from the downstream as well as other
-/// jobs that is required for reconstruction of the `Bead` or `WeakShare` according to the values received from the
-/// downstream nodes .
-///Declaring as `Arc` object for shared reference across different tasks due to
-/// multiple threads serving requests according to the new process of serving requests .
-pub struct MiningJobMap {
-    // template_id to job details
-    mining_jobs: HashMap<TemplateId, JobDetails>,
-    // numeric job_id to template_id
+
+/// Global job store shared across all miner connections.
+///
+/// Templates are stored once as `Arc<JobDetails>` and shared by pointer — no per-miner
+/// cloning of `BlockTemplate` data. At 10k miners and 150ms bead rate, this brings
+/// per-template memory from ~5GB (cloned) down to ~500KB (one allocation + pointers).
+///
+/// Eviction: when `capacity` is reached, the oldest job_id entry is removed. Template
+/// data is only freed once no remaining job_id references that template_id, which
+/// prevents `get` from returning stale entries for in-flight submits.
+pub struct GlobalJobStore {
+    jobs: HashMap<TemplateId, Arc<JobDetails>>,
     job_id_to_template: HashMap<u64, TemplateId>,
-    // Generate sequential numeric job IDs for miners
     next_job_id: u64,
-    // Store upstream jobs by their original string ID
-    string_job_id_map: HashMap<String, (TemplateId, JobDetails)>,
+    capacity: usize,
 }
-impl MiningJobMap {
-    pub fn new() -> Self {
+
+impl GlobalJobStore {
+    pub fn new(capacity: usize) -> Self {
         Self {
-            mining_jobs: HashMap::new(),
+            jobs: HashMap::new(),
             job_id_to_template: HashMap::new(),
             next_job_id: 0,
-            string_job_id_map: HashMap::new(),
+            capacity: capacity.max(1),
         }
     }
+
     pub fn clear_upstream_jobs(&mut self) {
-        if self.string_job_id_map.is_empty() {
-            return;
-        }
-        info!(
-            count = %self.string_job_id_map.len(),
-            "Clearing stale upstream jobs from map due to disconnect"
-        );
-        let stale_template_ids: Vec<TemplateId> = self
-            .string_job_id_map
+        let upstream_template_ids: Vec<TemplateId> = self
+            .job_id_to_template
             .values()
-            .map(|(tid, _)| tid.clone())
+            .filter(|tid| matches!(tid, TemplateId::Upstream(_)))
+            .cloned()
             .collect();
 
-        self.string_job_id_map.clear();
-        for tid in stale_template_ids {
-            self.mining_jobs.remove(&tid);
+        if upstream_template_ids.is_empty() {
+            return;
+        }
+
+        info!(
+            count = %upstream_template_ids.len(),
+            "Clearing stale upstream jobs from store due to disconnect"
+        );
+
+        self.job_id_to_template
+            .retain(|_, tid| !matches!(tid, TemplateId::Upstream(_)));
+        for tid in upstream_template_ids {
+            self.jobs.remove(&tid);
         }
     }
 
-    ///Inserting a suitable mining job which has been passed to the downstream being constructed from a suitable block template .
-    pub async fn insert_mining_job(
-        &mut self,
-        template_id: TemplateId,
-        job_details: JobDetails,
-    ) -> u64 {
-        let numeric_job_id = self.next_job_id;
+    /// Insert a job into the store. Returns the assigned numeric job_id.
+    ///
+    /// Uses `entry().or_insert()` so if `template_id` already exists (e.g. a newly
+    /// connected miner receiving the same template), the existing `Arc` is reused
+    /// instead of creating a duplicate allocation. The new job_id still lets the
+    /// miner reference that template independently via `mining.submit`.
+    pub fn insert(&mut self, template_id: TemplateId, job: Arc<JobDetails>) -> u64 {
+        let job_id = self.next_job_id;
+        debug!(job_id = %job_id, template_id = %template_id, "Inserting job into GlobalJobStore");
 
-        debug!(job_id = %numeric_job_id, template_id = %template_id, "Inserting mining job into MiningJobMap");
+        // Evict oldest job_id when at capacity; only free template data if unreferenced.
+        // Use the actual minimum key rather than (next_job_id - capacity) because
+        // clear_upstream_jobs() can create holes in job_id_to_template that would
+        // cause the arithmetic approach to miss the eviction target entirely.
+        if self.job_id_to_template.len() >= self.capacity {
+            if let Some(oldest_id) = self.job_id_to_template.keys().min().copied() {
+                if let Some(old_template_id) = self.job_id_to_template.remove(&oldest_id) {
+                    let still_referenced = self
+                        .job_id_to_template
+                        .values()
+                        .any(|tid| tid == &old_template_id);
+                    if !still_referenced {
+                        self.jobs.remove(&old_template_id);
+                        debug!(template_id = %old_template_id, "Evicted template from GlobalJobStore");
+                    }
+                }
+            }
+        }
 
-        // Store job by template_id
-        self.mining_jobs.insert(template_id.clone(), job_details);
-
-        // Map numeric job_id to template_id for reverse lookup
-        self.job_id_to_template.insert(numeric_job_id, template_id);
+        self.jobs.entry(template_id.clone()).or_insert(job);
+        self.job_id_to_template.insert(job_id, template_id);
         self.next_job_id += 1;
-        numeric_job_id
+        job_id
     }
 
-    pub async fn insert_upstream_job(
-        &mut self,
-        upstream_job_id: String,
-        template_id: TemplateId,
-        jobdetails: JobDetails,
-    ) -> String {
-        debug!(
-            upstream_job_id = %upstream_job_id,
-            templateid = %template_id,
-            "Inserting upstream job into MiningJobMap"
-        );
-
-        // Store by original string ID
-        self.string_job_id_map.insert(
-            upstream_job_id.clone(),
-            (template_id.clone(), jobdetails.clone()),
-        );
-
-        // Also store in main map for consistency
-        self.mining_jobs.insert(template_id, jobdetails);
-        upstream_job_id
-    }
-
+    /// Looks up an upstream job by its original string ID.
+    /// Returns an `Arc` clone so callers can drop the store lock before accessing data.
     pub fn get_by_string_job_id(
         &self,
         job_id_str: &str,
-    ) -> Result<(&JobDetails, &TemplateId), StratumErrors> {
-        if let Some((template_id, jobdetails)) = self.string_job_id_map.get(job_id_str) {
-            return Ok((jobdetails, template_id));
-        }
-
-        Err(StratumErrors::MiningJobNotFound {
-            job_id: None,
-            template_id: None,
-        })
+    ) -> Result<(Arc<JobDetails>, TemplateId), StratumErrors> {
+        let tid = TemplateId::Upstream(job_id_str.to_string());
+        self.jobs
+            .get(&tid)
+            .cloned()
+            .map(|job| (job, tid))
+            .ok_or_else(|| StratumErrors::MiningJobNotFound {
+                job_id: None,
+                template_id: None,
+            })
     }
-    /// Get job by template_id which is used internally by server
+
+    /// Get job by template_id.
     pub fn get_by_template_id(
         &self,
         template_id: &TemplateId,
-    ) -> Result<&JobDetails, StratumErrors> {
-        self.mining_jobs
-            .get(&template_id)
+    ) -> Result<Arc<JobDetails>, StratumErrors> {
+        self.jobs
+            .get(template_id)
+            .cloned()
             .ok_or_else(|| StratumErrors::MiningJobNotFound {
                 job_id: None,
                 template_id: Some(template_id.clone()),
             })
     }
 
-    /// Get job by numeric job_id which is used by miners in mining.submit
-    pub fn get_by_job_id(&self, job_id: u64) -> Result<&JobDetails, StratumErrors> {
+    /// Returns an `Arc` clone for the job, allowing callers to drop the store lock
+    /// before accessing template data.
+    pub fn get_by_job_id(&self, job_id: u64) -> Result<Arc<JobDetails>, StratumErrors> {
         let template_id = self.job_id_to_template.get(&job_id).ok_or_else(|| {
             StratumErrors::MiningJobNotFound {
                 job_id: Some(job_id),
                 template_id: None,
             }
         })?;
-
-        self.get_by_template_id(template_id)
+        let job = self.jobs.get(template_id).cloned().ok_or_else(|| {
+            StratumErrors::MiningJobNotFound {
+                job_id: Some(job_id),
+                template_id: Some(template_id.clone()),
+            }
+        })?;
+        Ok(job)
     }
 
-    /// Get template_id from numeric job_id for mining.submit validation
+    /// Get template_id from numeric job_id for mining.submit validation.
     pub fn template_id_from_job_id(&self, job_id: u64) -> Option<TemplateId> {
         self.job_id_to_template.get(&job_id).cloned()
     }
+
+    /// Returns the highest job_id currently mapped to `template_id`, or `None` if no
+    /// live entry exists for that template.
+    ///
+    /// Used by the resend path to reuse an existing job_id for a reconnecting miner
+    /// instead of minting a new one. Minting would advance `next_job_id`, eventually
+    /// evicting the job_id that already-connected miners are submitting against.
+    pub fn latest_job_id_for(&self, template_id: &TemplateId) -> Option<u64> {
+        self.job_id_to_template
+            .iter()
+            .filter(|(_, tid)| **tid == *template_id)
+            .map(|(&id, _)| id)
+            .max()
+    }
 }
+
 ///`Notifier` that will serve the purpose of notifying the downstream nodes with the lates available jobs
 /// for mining to take place via `mining.notify`.
 ///
 pub struct Notifier {
     ///`IpcGBT` notification receiver whenever new `template` is fethced or tip is updated .
     notification_receiver: mpsc::Receiver<NotifyCmd>,
-    ///`JobMap` associated with each `peer_addr` and the jobs associated with it .
-    pub job_map_arc: Arc<Mutex<HashMap<String, Arc<Mutex<MiningJobMap>>>>>,
+    /// Global job store shared across all miner connections.
+    pub job_store: Arc<Mutex<GlobalJobStore>>,
 }
 ///Since the prev_block_hash received in `gbt` is in BigEndian format it must be converted to `Little endian`.
 fn _to_little_endian(hex_str: &str) -> String {
@@ -2198,11 +2223,11 @@ impl Notifier {
     ///Spawning a new notifier instance .
     pub fn new(
         notification_rx: mpsc::Receiver<NotifyCmd>,
-        job_map_arc: Arc<Mutex<HashMap<String, Arc<Mutex<MiningJobMap>>>>>,
+        job_store: Arc<Mutex<GlobalJobStore>>,
     ) -> Self {
         Self {
             notification_receiver: notification_rx,
-            job_map_arc: job_map_arc,
+            job_store,
         }
     }
     ///Constructing the mining.notify template following the corrsponding attributes to be sent as a job to the downstream miner for
@@ -2329,9 +2354,9 @@ impl Notifier {
         peer_addr: &str,
         connection_entry: &ConnectionInfo,
         job_notification: &crate::stratum::JobNotification,
-        mining_job_map: &Arc<Mutex<MiningJobMap>>,
+        job_store: &Arc<Mutex<GlobalJobStore>>,
     ) -> Result<(), StratumErrors> {
-        let mut curr_peer_mining_job_map = mining_job_map.lock().await;
+        let mut job_store_guard = job_store.lock().await;
         let compact_bits = match job_notification.parsed_bits {
             Some(bits) => bits,
             None => {
@@ -2398,13 +2423,9 @@ impl Notifier {
             job_sent_time: unix_timestamp,
             is_upstream_job: true,
         };
-        let upstream_job_id = curr_peer_mining_job_map
-            .insert_upstream_job(
-                job_notification.job_id.clone(),
-                template_id.clone(),
-                job_details,
-            )
-            .await;
+        job_store_guard.insert(template_id, Arc::new(job_details));
+        // Wire job_id sent to the miner is the upstream's original string — unchanged
+        let upstream_job_id = &job_notification.job_id;
         let job_notification_response = serde_json::json!({
             "method": "mining.notify",
             "params": [
@@ -2441,17 +2462,41 @@ impl Notifier {
         Ok(())
     }
 
+    /// Builds an `Arc<JobDetails>` for a Braidpool-originated job.
+    ///
+    /// Strips the coinbase placeholder (index 0) from `template`, then wraps the
+    /// result with wire fields from `notification` and the supplied timestamp.
+    /// Both the broadcast path and the resend path use this so `is_upstream_job`
+    /// and the construction logic live in one place.
+    fn make_braidpool_job(
+        template: &BlockTemplate,
+        notification: &JobNotification,
+        unix_timestamp: u32,
+    ) -> Arc<JobDetails> {
+        let mut t = template.clone();
+        t.transactions.remove(0);
+        Arc::new(JobDetails {
+            blocktemplate: t,
+            coinbase1: notification.coinbase1.clone(),
+            coinbase2: notification.coinbase2.clone(),
+            coinbase_merkle_path: notification.merkle_branches.clone(),
+            coinbase_witness_commitment: notification.coinbase_witness_commitment.clone(),
+            job_sent_time: unix_timestamp,
+            is_upstream_job: false,
+        })
+    }
+
     /// Runs the Stratum notifier task that handles broadcasting mining jobs to downstream miners.
     ///
     /// This asynchronous function continuously listens for notification commands and performs
     /// one of the following actions:
     /// 1. **Broadcast a new template to all connected miners**:
     ///    - Constructs a new mining job from the latest `BlockTemplate`.
-    ///    - Updates the `JobMap` for each downstream connection with the new job details.
+    ///    - Inserts the job once into the `GlobalJobStore` as an `Arc<JobDetails>`.
     ///    - Serializes the `JobNotification` and sends it to each miner via their respective channels.
     /// 2. **Send the latest available template to a newly connected miner**:
     ///    - Constructs a mining job from the current latest template.
-    ///    - Updates the `JobMap` for the newly authorized and subscribed miner.
+    ///    - Inserts into the `GlobalJobStore` (reuses the existing `Arc` if the template is already present).
     ///    - Sends the serialized `JobNotification` to the new miner's channel.
     ///
     /// # Returns
@@ -2485,85 +2530,62 @@ impl Notifier {
                         .await
                         .downstream_channel_mapping
                         .clone();
-                    //We will receive the template from the IPC channel and construct a valid job
-                    //from the provided template and pass onto the message_reciver in the handle connection for
-                    // downstream communication to take place.
-                    for (peer_adr, mining_job_arc) in self.job_map_arc.lock().await.iter() {
-                        let connection_info = match connection_snapshot.get(peer_adr) {
-                            Some(info) => info,
-                            None => {
-                                warn!(
-                                    template_id = %template_id,
-                                    peer = %peer_adr,
-                                    "Peer not found in connection mapping during job notification - skipping notification"
-                                );
-                                continue;
-                            }
-                        };
-                        let connection_id_hex = format!("{:x}", connection_info.connection_id);
-                        let mut template_for_job = template.clone();
-                        template_for_job.transactions.remove(0);
 
-                        let mut curr_peer_mining_job_map = mining_job_arc.lock().await;
-                        // Clean Jobs. If true, miners should abort their current work and immediately use the new job,
-                        // even if it degrades hashrate in the short term. If false, they can still use the current job,
-                        // but should move to the new one as soon as possible without impacting hashrate.
-                        let clean_job = false;
-                        let job_notification = match Self::construct_job_notification(
-                            clean_job,
-                            template.clone(),
-                            template_id.clone(),
-                            merkle_branch_coinbase.clone(),
-                        )
-                        .await
-                        {
-                            Ok(job) => job,
-                            Err(e) => {
-                                error!(
-                                    connection_id = %connection_id_hex,
-                                    template_id = %template_id,
-                                    peer = %peer_adr,
-                                    error = %e,
-                                    reason = "job_construction_failed",
-                                    "Failed to construct job for peer"
-                                );
-                                continue; // Skip this peer but continue with others
-                            }
-                        };
+                    if connection_snapshot.is_empty() {
+                        debug!("No miners connected, skipping job notification");
+                        continue;
+                    }
+
+                    // Build job once — all connected miners share the same Arc<JobDetails>
+                    let clean_job = false;
+                    let job_notification = match Self::construct_job_notification(
+                        clean_job,
+                        template.clone(),
+                        template_id.clone(),
+                        merkle_branch_coinbase.clone(),
+                    )
+                    .await
+                    {
+                        Ok(job) => job,
+                        Err(e) => {
+                            error!(
+                                template_id = %template_id,
+                                error = %e,
+                                "Failed to construct job notification"
+                            );
+                            continue;
+                        }
+                    };
+
+                    let unix_timestamp = {
                         let current_system_time = std::time::SystemTime::now();
-                        let duration_since_epoch =
-                            match current_system_time.duration_since(UNIX_EPOCH) {
-                                Ok(duration) => duration,
-                                Err(error) => {
-                                    return Err(StratumErrors::ErrorFetchingCurrentUNIXTimestamp {
-                                        error: error.to_string(),
-                                    })
+                        match current_system_time.duration_since(UNIX_EPOCH) {
+                            Ok(duration) => match duration.as_secs().to_u32() {
+                                Some(ts) => ts,
+                                None => {
+                                    error!("System timestamp overflow");
+                                    continue;
                                 }
-                            };
-
-                        let unix_timestamp = match duration_since_epoch.as_secs().to_u32() {
-                            Some(ts) => ts,
-                            None => {
-                                error!("System timestamp overflow");
-                                continue;
+                            },
+                            Err(error) => {
+                                return Err(StratumErrors::ErrorFetchingCurrentUNIXTimestamp {
+                                    error: error.to_string(),
+                                })
                             }
-                        };
+                        }
+                    };
 
-                        let job_details = JobDetails {
-                            blocktemplate: template_for_job,
-                            coinbase1: job_notification.coinbase1.clone(),
-                            coinbase2: job_notification.coinbase2.clone(),
-                            coinbase_merkle_path: job_notification.merkle_branches.clone(),
-                            coinbase_witness_commitment: job_notification
-                                .coinbase_witness_commitment,
-                            job_sent_time: unix_timestamp,
-                            is_upstream_job: false,
-                        };
+                    let job_details =
+                        Self::make_braidpool_job(&template, &job_notification, unix_timestamp);
 
-                        let numeric_job_id = curr_peer_mining_job_map
-                            .insert_mining_job(template_id.clone(), job_details)
-                            .await;
+                    // Insert once; all miners reference the same allocation
+                    let numeric_job_id =
+                        self.job_store.lock().await.insert(template_id, job_details);
 
+                    // Notify each connected miner with the shared job_id
+                    for (peer_adr, connection_info) in &connection_snapshot {
+                        let connection_id_hex = format!("{:x}", connection_info.connection_id);
+                        let job_notification = job_notification.clone();
                         let job_notification_response = JobNotificationResponse {
                             method: "mining.notify".to_string(),
                             params: json!([
@@ -2625,19 +2647,12 @@ impl Notifier {
                                     .cloned()
                             };
 
-                            let mining_job_map = {
-                                let global_map = self.job_map_arc.lock().await;
-                                global_map.get(&new_downstream_addr).cloned()
-                            };
-
-                            if let (Some(connection_entry), Some(map)) =
-                                (connection_entry, mining_job_map)
-                            {
+                            if let Some(connection_entry) = connection_entry {
                                 match Self::send_upstream_job_notification_to_miner(
                                     &new_downstream_addr,
                                     &connection_entry,
                                     &job_notification,
-                                    &map,
+                                    &self.job_store,
                                 )
                                 .await
                                 {
@@ -2658,7 +2673,7 @@ impl Notifier {
                             } else {
                                 warn!(
                                     peer = %new_downstream_addr,
-                                    "Connection or job map not found for new downstream"
+                                    "Connection not found for new downstream"
                                 );
                             }
                             continue;
@@ -2696,7 +2711,14 @@ impl Notifier {
                         );
                         continue; // Skip but keep notifier running
                     }
-                    let latest_template = latest_template_arc.lock().await.to_owned();
+
+                    // Hold both locks simultaneously (same order as ipc_template_consumer)
+                    // so the (template, merkle-branch) pair is always consistent.
+                    let (latest_template, latest_template_merkle_branch) = {
+                        let template_guard = latest_template_arc.lock().await;
+                        let merkle_guard = latest_template_merkle_branch_arc.lock().await;
+                        (template_guard.clone(), merkle_guard.clone())
+                    };
                     if latest_template.transactions.is_empty() {
                         warn!(
                             "Empty template for {}, will receive next upstream job",
@@ -2705,30 +2727,13 @@ impl Notifier {
                         continue;
                     }
                     info!(
-                        "Sending template {} to new miner {}",
-                        current_template_id, new_downstream_addr
-                    );
-
-                    let latest_template_merkle_branch =
-                        latest_template_merkle_branch_arc.lock().await.to_owned();
-                    info!(
                         connection_id = %connection_id_hex,
                         template_id = %current_template_id,
                         "Sending existing latest template to new miner"
                     );
-                    let global_peer_mining_job_map_arc = self.job_map_arc.lock().await;
-                    let current_peer_mining_job_map_arc =
-                        match global_peer_mining_job_map_arc.get(&new_downstream_addr) {
-                            Some(map) => map,
-                            None => {
-                                error!(peer = %new_downstream_addr, "No job map found for peer");
-                                continue;
-                            }
-                        };
-                    let mut curr_peer_mining_job_map = current_peer_mining_job_map_arc.lock().await;
 
-                    // Clean Jobs. If true, miners should abort their current work and immediately use the new job, even if it degrades hashrate in the short term.
-                    // If false, they can still use the current job, but should move to the new one as soon as possible without impacting hashrate.
+                    // construct_job_notification is needed in both branches below for the
+                    // wire fields (prevhash, coinbase1/2, etc.) even when reusing a job_id.
                     let clean_job = false;
                     let job_notification = Self::construct_job_notification(
                         clean_job,
@@ -2737,44 +2742,52 @@ impl Notifier {
                         latest_template_merkle_branch,
                     )
                     .await;
-                    let current_system_time = std::time::SystemTime::now();
-                    let duration_since_epoch = match current_system_time.duration_since(UNIX_EPOCH)
-                    {
-                        Ok(duration) => duration,
-                        Err(error) => {
-                            return Err(StratumErrors::ErrorFetchingCurrentUNIXTimestamp {
-                                error: error.to_string(),
-                            })
-                        }
-                    };
 
-                    let unix_timestamp = match duration_since_epoch.as_secs().to_u32() {
-                        Some(ts) => ts,
-                        None => {
-                            error!("System timestamp overflow for new miner notification");
-                            continue;
-                        }
-                    };
+                    // Reuse the existing job_id if this template is already in the store.
+                    // Minting a new job_id on every reconnect would advance next_job_id and
+                    // eventually evict the id that already-connected miners are submitting.
+                    let existing_job_id = self
+                        .job_store
+                        .lock()
+                        .await
+                        .latest_job_id_for(&current_template_id);
+
                     let serialized_notification: Result<String, StratumErrors> =
                         match job_notification {
                             Ok(job) => {
-                                //Updating the existing `JobMap` with the new job constructed from the newly generated
-                                //template received from IPC .
-                                //Removing stale coinbase
-                                let mut latest_template_ref = latest_template.clone();
-                                latest_template_ref.transactions.remove(0);
-                                let job_details = JobDetails {
-                                    blocktemplate: latest_template_ref,
-                                    coinbase1: job.coinbase1.clone(),
-                                    coinbase2: job.coinbase2.clone(),
-                                    coinbase_merkle_path: job.merkle_branches.clone(),
-                                    coinbase_witness_commitment: job.coinbase_witness_commitment,
-                                    job_sent_time: unix_timestamp,
-                                    is_upstream_job: false,
+                                let numeric_job_id = match existing_job_id {
+                                    Some(id) => id,
+                                    None => {
+                                        // Template was never stored — broadcast arrived while
+                                        // no miners were connected. Build and insert now.
+                                        let unix_timestamp = {
+                                            let current_system_time = std::time::SystemTime::now();
+                                            match current_system_time.duration_since(UNIX_EPOCH) {
+                                                Ok(duration) => match duration.as_secs().to_u32() {
+                                                    Some(ts) => ts,
+                                                    None => {
+                                                        error!("System timestamp overflow for new miner notification");
+                                                        continue;
+                                                    }
+                                                },
+                                                Err(error) => {
+                                                    return Err(StratumErrors::ErrorFetchingCurrentUNIXTimestamp {
+                                                        error: error.to_string(),
+                                                    })
+                                                }
+                                            }
+                                        };
+                                        let job_details = Self::make_braidpool_job(
+                                            &latest_template,
+                                            &job,
+                                            unix_timestamp,
+                                        );
+                                        self.job_store
+                                            .lock()
+                                            .await
+                                            .insert(current_template_id, job_details)
+                                    }
                                 };
-                                let numeric_job_id = curr_peer_mining_job_map
-                                    .insert_mining_job(current_template_id.clone(), job_details)
-                                    .await;
                                 let job_notification_response = JobNotificationResponse {
                                     method: "mining.notify".to_string(),
                                     params: json!([
@@ -2881,71 +2894,66 @@ impl Notifier {
 
                     let miner_count = downstream_channel_mapping.len();
                     if miner_count == 0 {
-                        info!(
-                            "No miners connected, caching job {} for future connections",
-                            job_notification.job_id
+                        debug!(
+                            job_id = %job_notification.job_id,
+                            "No miners connected, skipping upstream job broadcast"
                         );
                         continue;
                     }
 
+                    // Build job once — all connected miners share the same Arc<JobDetails>
+                    let template_id = TemplateId::from_upstream_string(&job_notification.job_id);
+                    let job_details = Arc::new(crate::stratum::JobDetails {
+                        blocktemplate: base_template,
+                        coinbase1: job_notification.coinbase1.clone(),
+                        coinbase2: job_notification.coinbase2.clone(),
+                        coinbase_merkle_path: job_notification.merkle_branches.clone(),
+                        coinbase_witness_commitment: job_notification
+                            .coinbase_witness_commitment
+                            .clone(),
+                        job_sent_time: current_system_time,
+                        is_upstream_job: true,
+                    });
+                    self.job_store.lock().await.insert(template_id, job_details);
+
+                    // Wire job_id sent to miners is the upstream's original string — unchanged
+                    let upstream_job_id = &job_notification.job_id;
+
                     // Broadcast to all connected miners
-                    for (peer_addr, mining_job_arc) in self.job_map_arc.lock().await.iter() {
-                        let mut curr_peer_mining_job_map = mining_job_arc.lock().await;
-                        let template = base_template.clone();
-                        let template_id =
-                            TemplateId::from_upstream_string(&job_notification.job_id);
-
-                        // Store job details
-                        let job_details = crate::stratum::JobDetails {
-                            blocktemplate: template,
-                            coinbase1: job_notification.coinbase1.clone(),
-                            coinbase2: job_notification.coinbase2.clone(),
-                            coinbase_merkle_path: job_notification.merkle_branches.clone(),
-                            coinbase_witness_commitment: job_notification
-                                .coinbase_witness_commitment
-                                .clone(),
-                            job_sent_time: current_system_time,
-                            is_upstream_job: true,
-                        };
-
-                        let upstream_job_id = curr_peer_mining_job_map
-                            .insert_upstream_job(
-                                job_notification.job_id.clone(),
-                                template_id.clone(),
-                                job_details,
-                            )
-                            .await;
-
-                        let job_notification_response = serde_json::json!({
-                            "method": "mining.notify",
-                            "params": [
-                                upstream_job_id,
-                                job_notification.prevhash,
-                                job_notification.coinbase1,
-                                job_notification.coinbase2,
-                                job_notification.merkle_branches,
-                                job_notification.version,
-                                job_notification.nbits,
-                                job_notification.ntime,
-                                job_notification.clean_jobs
-                            ]
-                        });
-
-                        // Send this to miner
-                        if let Some(downstream_channel) = downstream_channel_mapping.get(peer_addr)
-                        {
-                            if let Err(e) = downstream_channel
-                                .sender
-                                .send(serde_json::to_string(&job_notification_response).unwrap())
-                                .await
-                            {
-                                error!("Failed to send upstream job to {}: {}", peer_addr, e);
-                            } else {
-                                info!(
-                                    "Sent upstream job {} to {} (bits: {})",
-                                    upstream_job_id, peer_addr, job_notification.nbits
-                                );
+                    let job_notification_response = serde_json::json!({
+                        "method": "mining.notify",
+                        "params": [
+                            upstream_job_id,
+                            job_notification.prevhash,
+                            job_notification.coinbase1,
+                            job_notification.coinbase2,
+                            job_notification.merkle_branches,
+                            job_notification.version,
+                            job_notification.nbits,
+                            job_notification.ntime,
+                            job_notification.clean_jobs
+                        ]
+                    });
+                    let job_notification_str =
+                        match serde_json::to_string(&job_notification_response) {
+                            Ok(s) => s,
+                            Err(e) => {
+                                error!(error = %e, "Failed to serialize upstream job notification");
+                                continue;
                             }
+                        };
+                    for (peer_addr, downstream_channel) in &downstream_channel_mapping {
+                        if let Err(e) = downstream_channel
+                            .sender
+                            .send(job_notification_str.clone())
+                            .await
+                        {
+                            error!("Failed to send upstream job to {}: {}", peer_addr, e);
+                        } else {
+                            info!(
+                                "Sent upstream job {} to {} (bits: {})",
+                                upstream_job_id, peer_addr, job_notification.nbits
+                            );
                         }
                     }
                 }
@@ -3435,7 +3443,7 @@ impl Server {
     pub async fn run_stratum_service(
         &mut self,
         listener: TcpListener,
-        mining_job_map: Arc<Mutex<HashMap<String, Arc<Mutex<MiningJobMap>>>>>,
+        global_job_store: Arc<Mutex<GlobalJobStore>>,
         notification_sender: mpsc::Sender<NotifyCmd>,
         swarm_handler: Arc<Mutex<SwarmHandler>>,
         ibd_or_not: Arc<AtomicBool>,
@@ -3480,8 +3488,6 @@ impl Server {
                             let id = client.connection_id;
                             (id, format!("{:x}", id))
                         };
-                 //downstream miner mapping for associated jobs for a specific channel for downstream
-                 let self_mining_map = Arc::new(Mutex::new(MiningJobMap::new()));
                  match event{
                      Ok((stream,peer_addr))=>{
                          let (reader, writer) = stream.into_split();
@@ -3617,8 +3623,6 @@ impl Server {
                          let notification_sender = notification_sender.clone();
                          //Communication bridge between swarm and stratum service
                          let swarm_handler_arc_ref = Arc::clone(&swarm_handler);
-                         //Adding the downstream mining map to global mapper
-                         mining_job_map.lock().await.insert(peer_addr.to_string(), self_mining_map.clone());
                          //downstream channel for server2client communication to take place
                          let (downstream_tx,mut downstream_rx) = mpsc::channel(1024);
                          let (control_tx, control_rx) = mpsc::channel(10);
@@ -3635,30 +3639,28 @@ impl Server {
                          self_.lock().await.downstream_ip = peer_addr.to_string();
 
                          let connection_mapping_clone = Arc::clone(&self.downstream_connection_mapping);
-                         let mining_job_map_clone = Arc::clone(&mining_job_map);
+                         let global_job_store_clone = Arc::clone(&global_job_store);
                          let peer_addr_string = peer_addr.to_string();
 
-                            let connection_mapping_for_cleanup = Arc::clone(&self.downstream_connection_mapping);
-                            let audit_dag_clone = audit_dag.clone();
-                            let upstream_share_tx_clone = upstream_share_tx.clone();
-                            let upstream_configure_tx_clone = upstream_configure_tx.clone();
+                         let connection_mapping_for_cleanup = Arc::clone(&self.downstream_connection_mapping);
+                         let audit_dag_clone = audit_dag.clone();
+                         let upstream_share_tx_clone = upstream_share_tx.clone();
+                         let upstream_configure_tx_clone = upstream_configure_tx.clone();
 
-                            // catering each new connection as seperate process
-                            tokio::spawn(async move{
-                                let _=  Self::handle_connection(downstream_client.clone(),peer_addr,reader,writer,&mut downstream_rx,self_mining_map.clone(),downstream_tx,notification_sender,swarm_handler_arc_ref,audit_dag_clone,upstream_share_tx_clone,connection_mapping_clone,upstream_configure_tx_clone,control_rx,).await;
-                                debug!("Cleaning up disconnected miner: {}", peer_addr_string);
+                         // catering each new connection as seperate process
+                         tokio::spawn(async move{
+                             let _=  Self::handle_connection(downstream_client.clone(),peer_addr,reader,writer,&mut downstream_rx,global_job_store_clone,downstream_tx,notification_sender,swarm_handler_arc_ref,audit_dag_clone,upstream_share_tx_clone,connection_mapping_clone,upstream_configure_tx_clone,control_rx,).await;
+                             debug!(
+                                        connection_id = %connection_id_hex,
+                                        peer = %peer_addr_string,
+                                        "Cleaning up disconnected miner"
+                                    );
 
                              // cleanup after connection closes, remove from connection mapping
                              connection_mapping_for_cleanup
                                      .write()
                                      .await
                                      .remove_peer(&peer_addr_string);
-
-                             // Remove from job mapping
-                                 mining_job_map_clone
-                                     .lock()
-                                     .await
-                                     .remove(&peer_addr_string);
 
                                     debug!(
                                         connection_id = %connection_id_hex,
@@ -3705,7 +3707,7 @@ impl Server {
         stream_reader: OwnedReadHalf,
         mut stream_writer: OwnedWriteHalf,
         downstream_receiver: &mut mpsc::Receiver<String>,
-        mining_job_map: Arc<Mutex<MiningJobMap>>,
+        global_job_store: Arc<Mutex<GlobalJobStore>>,
         downstream_message_sender: mpsc::Sender<String>,
         notification_sender: mpsc::Sender<NotifyCmd>,
         swarm_handler: Arc<Mutex<SwarmHandler>>,
@@ -3793,7 +3795,7 @@ impl Server {
                                     let server_request_res = downstream_client.lock().await
                                         .handle_client_to_server_request(
                                             request,
-                                            mining_job_map.clone(),
+                                            global_job_store.clone(),
                                             downstream_message_sender.clone(),
                                             notification_sender.clone(),
                                             peer_addr.to_string(),
@@ -3873,7 +3875,7 @@ mod test {
         braid,
         db::db_handlers::DBHandler,
         rpc_server::DashboardEvents,
-        stratum::{ConnectionMapping, MiningJobMap, NotifyCmd, Server, StratumServerConfig},
+        stratum::{ConnectionMapping, GlobalJobStore, NotifyCmd, Server, StratumServerConfig},
     };
     use bitcoin::{
         absolute::LockTime, block::Version as BlockVersion, Amount, BlockHash, OutPoint, ScriptBuf,
@@ -3934,11 +3936,10 @@ mod test {
         assert_eq!(prefix1, prefix2, "Should reuse released prefix");
     }
 
-    #[tokio::test]
-    async fn test_mining_job_map_operations() {
-        let mut job_map = MiningJobMap::new();
+    #[test]
+    fn test_global_job_store_operations() {
+        let mut store = GlobalJobStore::new(10);
 
-        // Create test job details
         let template = BlockTemplate::default();
         let job_details = JobDetails {
             blocktemplate: template,
@@ -3951,32 +3952,28 @@ mod test {
         };
 
         // Insert Braidpool job
-        let job_id = job_map
-            .insert_mining_job(TemplateId::Braidpool(1), job_details.clone())
-            .await;
+        let job_id = store.insert(TemplateId::Braidpool(1), Arc::new(job_details.clone()));
         assert_eq!(job_id, 0, "First job ID should be 0");
 
         // Retrieve by job_id
-        let retrieved = job_map.get_by_job_id(job_id);
+        let retrieved = store.get_by_job_id(job_id);
         assert!(retrieved.is_ok(), "Should retrieve inserted job");
 
         // Retrieve by template_id
-        let retrieved_by_template = job_map.get_by_template_id(&TemplateId::Braidpool(1));
+        let retrieved_by_template = store.get_by_template_id(&TemplateId::Braidpool(1));
         assert!(
             retrieved_by_template.is_ok(),
             "Should retrieve by template_id"
         );
 
-        // Insert another job
-        let job_id_2 = job_map
-            .insert_mining_job(TemplateId::Braidpool(2), job_details.clone())
-            .await;
+        // Insert another job — different template_id, next numeric slot
+        let job_id_2 = store.insert(TemplateId::Braidpool(2), Arc::new(job_details.clone()));
         assert_eq!(job_id_2, 1, "Second job ID should be 1");
     }
 
-    #[tokio::test]
-    async fn test_upstream_job_storage() {
-        let mut job_map = MiningJobMap::new();
+    #[test]
+    fn test_upstream_job_storage() {
+        let mut store = GlobalJobStore::new(10);
 
         let template = BlockTemplate::default();
         let job_details = JobDetails {
@@ -3989,29 +3986,20 @@ mod test {
             is_upstream_job: true,
         };
 
-        // Insert upstream job with string ID
         let upstream_id = "upstream_job_abc123";
-        let returned_id = job_map
-            .insert_upstream_job(
-                upstream_id.to_string(),
-                TemplateId::from_upstream_string(upstream_id),
-                job_details.clone(),
-            )
-            .await;
-
-        assert_eq!(
-            returned_id, upstream_id,
-            "Should return same upstream job ID"
+        store.insert(
+            TemplateId::Upstream(upstream_id.to_string()),
+            Arc::new(job_details),
         );
 
-        // Retrieve by string job_id
-        let retrieved = job_map.get_by_string_job_id(upstream_id);
+        // Retrieve by original string job_id
+        let retrieved = store.get_by_string_job_id(upstream_id);
         assert!(
             retrieved.is_ok(),
             "Should retrieve upstream job by string ID"
         );
 
-        let (retrieved_job, retrieved_template_id) = retrieved.unwrap();
+        let (retrieved_job, _template_id) = retrieved.unwrap();
         assert!(
             retrieved_job.is_upstream_job,
             "Job should be marked as upstream"
@@ -4053,7 +4041,9 @@ mod test {
             PoolNetwork::Cpunet,
         )));
         let connection_mapping = Arc::new(RwLock::new(ConnectionMapping::new()));
-        let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
+        let job_store = Arc::new(Mutex::new(GlobalJobStore::new(
+            crate::GLOBAL_JOB_STORE_CAPACITY,
+        )));
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
         let (_test_db_handler, test_db_tx) =
             DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
@@ -4080,7 +4070,7 @@ mod test {
             let _ = server
                 .run_stratum_service(
                     listener,
-                    mining_job_map,
+                    job_store,
                     notify_tx,
                     swarm_handler_arc,
                     test_ibd_spinlock.clone(),
@@ -4129,7 +4119,9 @@ mod test {
             genesis_beads,
             PoolNetwork::Cpunet,
         )));
-        let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
+        let job_store = Arc::new(Mutex::new(GlobalJobStore::new(
+            crate::GLOBAL_JOB_STORE_CAPACITY,
+        )));
         let (_test_db_handler, test_db_tx) =
             DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
         let (swarm_handler, mut swarm_command_receiver) =
@@ -4156,7 +4148,7 @@ mod test {
             let _ = server
                 .run_stratum_service(
                     listener,
-                    mining_job_map,
+                    job_store,
                     notify_tx,
                     swarm_handler_arc,
                     test_ibd_spinlock,
@@ -4190,7 +4182,9 @@ mod test {
             genesis_beads,
             PoolNetwork::Cpunet,
         )));
-        let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
+        let job_store = Arc::new(Mutex::new(GlobalJobStore::new(
+            crate::GLOBAL_JOB_STORE_CAPACITY,
+        )));
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
         let (_test_db_handler, test_db_tx) =
             DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
@@ -4210,7 +4204,7 @@ mod test {
             let _ = server
                 .run_stratum_service(
                     listener,
-                    mining_job_map,
+                    job_store,
                     notify_tx,
                     swarm_handler_arc,
                     ibd_spinlock.clone(),
@@ -4248,7 +4242,9 @@ mod test {
         )));
         let (_test_db_handler, test_db_tx) =
             DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
-        let mining_job_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
+        let job_store = Arc::new(Mutex::new(GlobalJobStore::new(
+            crate::GLOBAL_JOB_STORE_CAPACITY,
+        )));
         let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
         let (swarm_handler, mut swarm_command_receiver) =
             SwarmHandler::new(Arc::clone(&test_braid), test_db_tx, DashboardEvents::new());
@@ -4265,7 +4261,7 @@ mod test {
             let _ = server
                 .run_stratum_service(
                     listener,
-                    mining_job_map,
+                    job_store,
                     notify_tx,
                     swarm_handler_arc,
                     ibd_spinlock.clone(),
@@ -4297,8 +4293,9 @@ mod test {
         )));
         let (_test_db_handler, test_db_tx) =
             DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
-        let mining_job_map: Arc<Mutex<HashMap<String, Arc<Mutex<MiningJobMap>>>>> =
-            Arc::new(Mutex::new(HashMap::new()));
+        let job_store = Arc::new(Mutex::new(GlobalJobStore::new(
+            crate::GLOBAL_JOB_STORE_CAPACITY,
+        )));
         let (notify_tx, _notify_rx) = mpsc::channel::<NotifyCmd>(32);
         let (swarm_handler, mut swarm_command_receiver) =
             SwarmHandler::new(Arc::clone(&test_braid), test_db_tx, DashboardEvents::new());
@@ -4317,13 +4314,13 @@ mod test {
             None,
             PoolNetwork::Cpunet,
         );
-        let mining_job_map_clone = mining_job_map.clone();
+        let job_store_clone = job_store.clone();
         let notify_tx_clone = notify_tx.clone();
         tokio::spawn(async move {
             let _ = server
                 .run_stratum_service(
                     listener,
-                    mining_job_map_clone,
+                    job_store_clone,
                     notify_tx_clone,
                     swarm_handler_arc,
                     ibd_spinlock,
@@ -4473,8 +4470,9 @@ mod test {
         let unix_timestamp = duration_since_epoch.as_secs().to_u32().unwrap();
         let mut mock_downstream_handler = DownstreamClient::new(PoolNetwork::Cpunet);
         mock_downstream_handler.authorized = true;
-        let mock_mining_job_map: Arc<Mutex<MiningJobMap>> =
-            Arc::new(Mutex::new(MiningJobMap::new()));
+        let mock_global_job_store: Arc<Mutex<GlobalJobStore>> = Arc::new(Mutex::new(
+            GlobalJobStore::new(crate::GLOBAL_JOB_STORE_CAPACITY),
+        ));
         test_template.transactions.remove(0);
         let job_details = JobDetails {
             blocktemplate: test_template,
@@ -4485,11 +4483,10 @@ mod test {
             job_sent_time: unix_timestamp,
             is_upstream_job: false,
         };
-        let numeric_job_id = mock_mining_job_map
+        let numeric_job_id = mock_global_job_store
             .lock()
             .await
-            .insert_mining_job(TemplateId::Braidpool(1), job_details.clone())
-            .await;
+            .insert(TemplateId::Braidpool(1), Arc::new(job_details.clone()));
         let configure_test_request = json!([
             [
                 "version-rolling"
@@ -4572,7 +4569,7 @@ mod test {
         let submit_response: StratumResponses = mock_downstream_handler
             .handle_submit(
                 &test_submit_request_params,
-                mock_mining_job_map.clone(),
+                mock_global_job_store.clone(),
                 2,
                 swarm_handler_arc,
                 None,
@@ -4623,7 +4620,7 @@ mod test {
     /// Minimal job+client setup used by the ntime/nonce fast-fail tests.
     async fn submit_setup() -> (
         DownstreamClient,
-        Arc<Mutex<MiningJobMap>>,
+        Arc<Mutex<GlobalJobStore>>,
         Arc<Mutex<SwarmHandler>>,
         u64,
     ) {
@@ -4631,7 +4628,7 @@ mod test {
             bits: bitcoin::pow::CompactTarget::from_unprefixed_hex("207fffff").unwrap(),
             ..BlockTemplate::default()
         };
-        let job_details = JobDetails {
+        let job_details = Arc::new(JobDetails {
             blocktemplate: template,
             coinbase1: String::new(),
             coinbase2: String::new(),
@@ -4639,13 +4636,14 @@ mod test {
             coinbase_witness_commitment: None,
             job_sent_time: 0,
             is_upstream_job: false,
-        };
-        let map = Arc::new(Mutex::new(MiningJobMap::new()));
-        let job_id = map
+        });
+        let store = Arc::new(Mutex::new(GlobalJobStore::new(
+            crate::GLOBAL_JOB_STORE_CAPACITY,
+        )));
+        let job_id = store
             .lock()
             .await
-            .insert_mining_job(TemplateId::Braidpool(1), job_details)
-            .await;
+            .insert(TemplateId::Braidpool(1), job_details);
         let mut client = DownstreamClient::new(PoolNetwork::Cpunet);
         client.authorized = true;
         client.extranonce1 = vec![0u8; 8];
@@ -4653,7 +4651,7 @@ mod test {
         let (_db, db_tx) = DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
         let (swarm, _rx) = SwarmHandler::new(test_braid, db_tx, DashboardEvents::new());
         let swarm_arc = Arc::new(Mutex::new(swarm));
-        (client, map, swarm_arc, job_id)
+        (client, store, swarm_arc, job_id)
     }
 
     #[tokio::test]
@@ -4761,5 +4759,103 @@ mod test {
         assert_eq!(client1.extranonce1.len(), UPSTREAM_EXTRANONCE1_SIZE);
         assert_eq!(client2.extranonce1.len(), UPSTREAM_EXTRANONCE1_SIZE);
         assert_eq!(client3.extranonce1.len(), UPSTREAM_EXTRANONCE1_SIZE);
+    }
+}
+
+#[cfg(test)]
+mod global_job_store_tests {
+    use super::*;
+
+    fn dummy_job() -> Arc<JobDetails> {
+        Arc::new(JobDetails {
+            blocktemplate: BlockTemplate::default(),
+            coinbase1: String::new(),
+            coinbase2: String::new(),
+            coinbase_merkle_path: vec![],
+            coinbase_witness_commitment: None,
+            job_sent_time: 0,
+            is_upstream_job: false,
+        })
+    }
+
+    #[test]
+    fn eviction_at_capacity() {
+        let mut store = GlobalJobStore::new(3);
+        let j0 = store.insert(TemplateId::Braidpool(1), dummy_job());
+        let j1 = store.insert(TemplateId::Braidpool(2), dummy_job());
+        let j2 = store.insert(TemplateId::Braidpool(3), dummy_job());
+        // Fourth insert evicts j0; template 1 has no other references so it is freed.
+        let j3 = store.insert(TemplateId::Braidpool(4), dummy_job());
+        assert!(
+            store.get_by_job_id(j0).is_err(),
+            "evicted job_id should not resolve"
+        );
+        assert!(store.get_by_job_id(j1).is_ok());
+        assert!(store.get_by_job_id(j2).is_ok());
+        assert!(store.get_by_job_id(j3).is_ok());
+    }
+
+    #[test]
+    fn still_referenced_template_survives_eviction() {
+        let mut store = GlobalJobStore::new(3);
+        // Two job_ids pointing at the same template_id.
+        let j0 = store.insert(TemplateId::Braidpool(1), dummy_job()); // job_id 0 → template 1
+        let j1 = store.insert(TemplateId::Braidpool(1), dummy_job()); // job_id 1 → template 1 (Arc reused)
+        let j2 = store.insert(TemplateId::Braidpool(2), dummy_job()); // job_id 2 → template 2
+                                                                      // Fourth insert evicts j0; template 1 is still referenced by j1, so it stays.
+        let j3 = store.insert(TemplateId::Braidpool(3), dummy_job());
+        assert!(
+            store.get_by_job_id(j0).is_err(),
+            "evicted job_id should not resolve"
+        );
+        assert!(
+            store.get_by_job_id(j1).is_ok(),
+            "template referenced by j1 must survive"
+        );
+        assert!(store.get_by_job_id(j2).is_ok());
+        assert!(store.get_by_job_id(j3).is_ok());
+    }
+
+    #[test]
+    fn arc_reuse_on_duplicate_template_id() {
+        let mut store = GlobalJobStore::new(5);
+        let original = dummy_job();
+        let j0 = store.insert(TemplateId::Braidpool(1), Arc::clone(&original));
+        let j1 = store.insert(TemplateId::Braidpool(1), dummy_job()); // same template_id, different Arc offered
+        let job0 = store.get_by_job_id(j0).unwrap();
+        let job1 = store.get_by_job_id(j1).unwrap();
+        assert!(
+            Arc::ptr_eq(&job0, &job1),
+            "both job_ids must point to the same Arc allocation"
+        );
+    }
+
+    #[test]
+    fn evicted_id_returns_not_found() {
+        let mut store = GlobalJobStore::new(1);
+        let j0 = store.insert(TemplateId::Braidpool(1), dummy_job());
+        let _j1 = store.insert(TemplateId::Braidpool(2), dummy_job()); // evicts j0
+        assert!(store.get_by_job_id(j0).is_err());
+    }
+
+    #[test]
+    fn latest_job_id_for_returns_max_id() {
+        let mut store = GlobalJobStore::new(10);
+        store.insert(TemplateId::Braidpool(1), dummy_job()); // job_id 0
+        store.insert(TemplateId::Braidpool(1), dummy_job()); // job_id 1
+        store.insert(TemplateId::Braidpool(1), dummy_job()); // job_id 2
+        assert_eq!(store.latest_job_id_for(&TemplateId::Braidpool(1)), Some(2));
+        assert_eq!(store.latest_job_id_for(&TemplateId::Braidpool(99)), None);
+    }
+
+    #[test]
+    fn latest_job_id_for_absent_after_eviction() {
+        let mut store = GlobalJobStore::new(2);
+        store.insert(TemplateId::Braidpool(1), dummy_job()); // job_id 0 → template 1
+        store.insert(TemplateId::Braidpool(2), dummy_job()); // job_id 1 → template 2
+        store.insert(TemplateId::Braidpool(3), dummy_job()); // job_id 2 → template 3; evicts j0, template 1 freed
+                                                             // Template 1 has no remaining job_id, so latest_job_id_for returns None.
+        assert_eq!(store.latest_job_id_for(&TemplateId::Braidpool(1)), None);
+        assert_eq!(store.latest_job_id_for(&TemplateId::Braidpool(2)), Some(1));
     }
 }
