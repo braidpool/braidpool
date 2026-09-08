@@ -32,6 +32,9 @@ use tokio_util::codec::{FramedRead, LinesCodec};
 use tracing::{debug, error, info, trace, warn};
 
 pub const DISCONNECT_SIGNAL: &str = "!!!_INTERNAL_DISCONNECT_SIGNAL_!!!";
+/// Bounded capacity of each miner's outbound channel.
+/// Referenced at both channel-creation and queue-depth calculation sites so they stay in sync.
+const DOWNSTREAM_CHANNEL_CAPACITY: usize = 1024;
 const PREFIX_EXHAUSTION_WARNING_THRESHOLD: u16 = 60000;
 const PREFIX_MAX_VALUE: u16 = u16::MAX; // Maximum prefix value in audit mode
 const PREFIX_BYTES_SIZE: usize = 2; // Size of prefix in bytes
@@ -1970,6 +1973,7 @@ pub enum NotifyCmd {
         template: BlockTemplate,
         merkle_branch_coinbase: Vec<Vec<u8>>,
         template_id: TemplateId,
+        template_ready_at: std::time::Instant,
     },
     SendLatestTemplateToNewDownstream {
         new_downstream_addr: String,
@@ -2475,6 +2479,7 @@ impl Notifier {
                     template,
                     merkle_branch_coinbase,
                     template_id,
+                    template_ready_at,
                 } => {
                     debug!(
                         template_id = %template_id,
@@ -2587,6 +2592,16 @@ impl Notifier {
                                     continue;
                                 }
                             };
+                        let latency_us = template_ready_at.elapsed().as_micros();
+                        let queue_depth =
+                            DOWNSTREAM_CHANNEL_CAPACITY - connection_info.sender.capacity();
+                        debug!(
+                            connection_id = %connection_id_hex,
+                            peer = %peer_adr,
+                            latency_us = %latency_us,
+                            queue_depth = %queue_depth,
+                            "job_dispatch"
+                        );
                         if let Err(e) = connection_info.sender.send(job_notification_json).await {
                             error!(
                                 connection_id = %connection_id_hex,
@@ -3620,7 +3635,7 @@ impl Server {
                          //Adding the downstream mining map to global mapper
                          mining_job_map.lock().await.insert(peer_addr.to_string(), self_mining_map.clone());
                          //downstream channel for server2client communication to take place
-                         let (downstream_tx,mut downstream_rx) = mpsc::channel(1024);
+                         let (downstream_tx,mut downstream_rx) = mpsc::channel(DOWNSTREAM_CHANNEL_CAPACITY);
                          let (control_tx, control_rx) = mpsc::channel(10);
                          //adding the new connection to the connection map
                          self.downstream_connection_mapping
@@ -3866,7 +3881,7 @@ impl Server {
 #[cfg(test)]
 //Unit tests specific to stratum service
 mod test {
-    use std::{collections::HashMap, str::FromStr, sync::Arc, time::Duration};
+    use std::{collections::HashMap, str::FromStr, sync::Arc, time::Duration, time::Instant};
 
     use super::*;
     use crate::{
@@ -4761,5 +4776,33 @@ mod test {
         assert_eq!(client1.extranonce1.len(), UPSTREAM_EXTRANONCE1_SIZE);
         assert_eq!(client2.extranonce1.len(), UPSTREAM_EXTRANONCE1_SIZE);
         assert_eq!(client3.extranonce1.len(), UPSTREAM_EXTRANONCE1_SIZE);
+    }
+
+    /// `template_ready_at` must survive the `NotifyCmd` channel hop unchanged — if it were
+    /// re-captured after receipt instead of passed through, latency measurements would
+    /// silently exclude time spent queued in the channel.
+    #[tokio::test]
+    async fn template_ready_at_survives_channel_hop() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<NotifyCmd>(1);
+        let sent_at = Instant::now();
+        tx.send(NotifyCmd::SendToAll {
+            template: BlockTemplate::default(),
+            merkle_branch_coinbase: vec![],
+            template_id: TemplateId::default(),
+            template_ready_at: sent_at,
+        })
+        .await
+        .unwrap();
+
+        let NotifyCmd::SendToAll {
+            template_ready_at, ..
+        } = rx.recv().await.unwrap()
+        else {
+            panic!("unexpected variant");
+        };
+        assert_eq!(
+            template_ready_at, sent_at,
+            "instant must not be re-derived after the channel hop"
+        );
     }
 }
