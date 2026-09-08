@@ -44,26 +44,16 @@ export function TrendsTab({ timeRange }: { timeRange: string }) {
         </nav>
       </div>
 
-      <div style={{ display: activeSubTab === 'hashrate' ? 'block' : 'none' }}>
-        <HashrateTab timeRange={timeRange} />
-      </div>
-      <div style={{ display: activeSubTab === 'latency' ? 'block' : 'none' }}>
-        <LatencyTab timeRange={timeRange} />
-      </div>
-      <div
-        style={{ display: activeSubTab === 'transactions' ? 'block' : 'none' }}
-      >
+      {activeSubTab === 'hashrate' && <HashrateTab timeRange={timeRange} />}
+      {activeSubTab === 'latency' && <LatencyTab timeRange={timeRange} />}
+      {activeSubTab === 'transactions' && (
         <TransactionsTab
           chartHovered={chartHovered}
           setChartHovered={setChartHovered}
           timeRange={timeRange}
         />
-      </div>
-      <div
-        style={{ display: activeSubTab === 'difficulty' ? 'block' : 'none' }}
-      >
-        <Difficulty />
-      </div>
+      )}
+      {activeSubTab === 'difficulty' && <Difficulty />}
     </div>
   );
 }

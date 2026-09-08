@@ -72,11 +72,8 @@ describe('<TrendsTab />', () => {
     render(<TrendsTab timeRange="24h" />);
     const hashrateTab = screen.getByTestId('hashrate-tab');
     expect(hashrateTab).toBeInTheDocument();
-    expect(hashrateTab.parentElement).toHaveStyle('display: block');
-    const latencyTab = screen.getByTestId('latency-tab');
-    const transactionsTab = screen.getByTestId('transactions-tab');
-    expect(latencyTab.parentElement).toHaveStyle('display: none');
-    expect(transactionsTab.parentElement).toHaveStyle('display: none');
+    expect(screen.queryByTestId('latency-tab')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('transactions-tab')).not.toBeInTheDocument();
   });
 
   it('switches to latency tab when clicked', () => {
@@ -86,12 +83,8 @@ describe('<TrendsTab />', () => {
 
     const latencyTab = screen.getByTestId('latency-tab');
     expect(latencyTab).toBeInTheDocument();
-    expect(latencyTab.parentElement).toHaveStyle('display: block');
-
-    const hashrateTab = screen.getByTestId('hashrate-tab');
-    const transactionsTab = screen.getByTestId('transactions-tab');
-    expect(hashrateTab.parentElement).toHaveStyle('display: none');
-    expect(transactionsTab.parentElement).toHaveStyle('display: none');
+    expect(screen.queryByTestId('hashrate-tab')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('transactions-tab')).not.toBeInTheDocument();
   });
 
   it('switches to transactions tab and passes props', () => {
