@@ -1,34 +1,15 @@
-import React, { useEffect, useRef, useState } from 'react';
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  CartesianGrid,
-} from 'recharts';
+import React, { useEffect, useState } from 'react';
 import { calculateRewardAnalytics } from '../lib/Utils';
 import { RewardPoint } from '../lib/Types';
 import { StatCard } from './RewardStats';
 import { WEBSOCKET_URLS } from '@/URLs';
-import { downloadSvgFromContainer } from '../../../utils/downloadSvg';
-import { Download } from 'lucide-react';
+import MultiLineChart from '@/components/common/charts/MultiLineChart';
 
 export function RewardsDashboard() {
   const [rewardHistory, setRewardHistory] = useState<RewardPoint[]>([]);
-  const wsRef = useRef<WebSocket | null>(null);
-  const rewardsChartRef = useRef<HTMLDivElement | null>(null);
-
-  const handleDownloadRewardsChart = () => {
-    if (!rewardsChartRef.current) return;
-    downloadSvgFromContainer(rewardsChartRef.current, 'block-rewards-chart');
-  };
 
   useEffect(() => {
     const ws = new WebSocket(WEBSOCKET_URLS.MAIN_WEBSOCKET);
-    wsRef.current = ws;
     let isMounted = true;
 
     ws.onopen = () => {
@@ -131,97 +112,35 @@ export function RewardsDashboard() {
         )}
       </div>
 
-      {/* Chart */}
-      <div className="w-full h-[400px] p-6 rounded-xl border border-gray-700 relative">
-        <div className="flex justify-between items-center mb-4">
-          <div className="flex items-center gap-2">
+      {rewardHistory.length === 0 ? (
+        <div className="w-full h-[400px] p-6 rounded-xl border border-gray-700">
+          <div className="flex justify-between items-center mb-4">
             <h2 className="text-white text-lg font-semibold">Block Rewards</h2>
-            <button
-              onClick={handleDownloadRewardsChart}
-              className="p-1.5 rounded text-gray-500 hover:text-gray-300 hover:bg-gray-800 transition-colors"
-              aria-label="Download Reward chart"
-            >
-              <Download className="w-4 h-4" />
-            </button>
+            <span className="text-gray-400 text-sm">(0 blocks)</span>
           </div>
-          <span className="text-gray-400 pt-2 text-sm">
-            ({rewardHistory.length} blocks)
-          </span>
-        </div>
-
-        {rewardHistory.length === 0 ? (
-          <div className="flex items-center justify-center h-full">
+          <div className="flex items-center justify-center h-[90%]">
             <div className="text-gray-400">Waiting for block data...</div>
           </div>
-        ) : (
-          <div ref={rewardsChartRef} className="w-full h-[90%]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={rewardHistory}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                <XAxis dataKey="height" stroke="#aaa" />
-                <YAxis
-                  yAxisId="left"
-                  stroke="#fbbf24"
-                  domain={['auto', 'auto']}
-                />
-                <YAxis
-                  yAxisId="right"
-                  orientation="right"
-                  stroke="#60a5fa"
-                  domain={['auto', 'auto']}
-                />
-                <Tooltip
-                  content={({ active, payload, label }) => {
-                    if (active && payload && payload.length) {
-                      const timestamp = payload[0]?.payload?.timestamp;
-                      const formattedTime = timestamp
-                        ? new Date(timestamp).toLocaleTimeString()
-                        : 'N/A';
-
-                      return (
-                        <div className=" bg-[#1a1a1a] text-gray-400 sm:text-xs md:text-base border border-xl border-gray-500 p-2 rounded-sm">
-                          <p>Height: {label}</p>
-                          <p>Time: {formattedTime}</p>
-                          {payload.map((item, index) => {
-                            const value =
-                              typeof item.value === 'number'
-                                ? item.value.toFixed(2)
-                                : item.value;
-                            return (
-                              <p key={index}>
-                                {item.name}: {value}
-                              </p>
-                            );
-                          })}
-                        </div>
-                      );
-                    }
-                    return null;
-                  }}
-                />
-
-                <Legend />
-                <Line
-                  yAxisId="left"
-                  type="monotone"
-                  dataKey="rewardBTC"
-                  stroke="#fbbf24"
-                  name="BTC Reward"
-                  dot={false}
-                />
-                <Line
-                  yAxisId="right"
-                  type="monotone"
-                  dataKey="rewardUSD"
-                  stroke="#60a5fa"
-                  name="USD Reward"
-                  dot={false}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        <MultiLineChart
+          data={rewardHistory}
+          xAxisKey="height"
+          series={[
+            { dataKey: 'rewardBTC', label: 'BTC Reward', color: '#fbbf24' },
+            {
+              dataKey: 'rewardUSD',
+              label: 'USD Reward',
+              color: '#60a5fa',
+              yAxisId: 'right',
+            },
+          ]}
+          title="Block Rewards"
+          description={`(${rewardHistory.length} blocks)`}
+          downloadFileName="block-rewards-chart"
+          showLegend
+        />
+      )}
     </div>
   );
 }
