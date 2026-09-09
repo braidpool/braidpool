@@ -15,7 +15,9 @@ export default function AdvancedChart({
     <MultiLineChart
       data={data}
       xAxisKey="timestamp"
-      series={[{ dataKey: 'value', label: yLabel ?? 'Value', color: lineColor }]}
+      series={[
+        { dataKey: 'value', label: yLabel ?? 'Value', color: lineColor },
+      ]}
       unit={unit}
       title={title}
       description={description}

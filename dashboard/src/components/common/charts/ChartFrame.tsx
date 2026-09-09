@@ -1,8 +1,7 @@
-import {  useRef } from 'react';
+import { useRef } from 'react';
 import { Download } from 'lucide-react';
 import { downloadSvgFromContainer } from '../../../utils/downloadSvg';
 import type { ChartFrameProps } from './Type';
-
 
 const ChartFrame = ({
   children,

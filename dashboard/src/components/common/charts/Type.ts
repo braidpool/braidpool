@@ -1,5 +1,5 @@
- import type { ReactNode } from 'react';
- export type BarChartProps = {
+import type { ReactNode } from 'react';
+export type BarChartProps = {
   data: unknown[];
   xAxisKey: string;
   dataKey: string;

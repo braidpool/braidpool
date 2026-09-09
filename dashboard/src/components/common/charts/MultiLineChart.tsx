@@ -11,7 +11,6 @@ import {
 import ChartFrame from './ChartFrame';
 import type { MultiLineChartProps } from './Type';
 
-
 const MultiLineChart = ({
   data,
   xAxisKey,

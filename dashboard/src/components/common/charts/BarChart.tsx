@@ -11,7 +11,6 @@ import {
 import ChartFrame from './ChartFrame';
 import type { BarChartProps } from './Type';
 
-
 const BarChart = ({
   data,
   xAxisKey,
