@@ -2,27 +2,16 @@ import { useEffect, useState, useRef } from 'react';
 import colors from '../../theme/colors';
 import AnimatedStatCard from '../BeadsTab/AnimatedStatCard';
 import {
-  LineChart,
-  Line,
-  Legend,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  CartesianGrid,
-} from 'recharts';
-import {
   Fee,
   BlockFeeHistoryItem,
   MempoolData,
   FeeDistributionItem,
 } from './Types';
-import { currencyLabels, currencyColors } from './Constants';
+import { currencyColors } from './Constants';
 import { WEBSOCKET_URLS } from '@/URLs';
-import { Loader, Download } from 'lucide-react';
-import { downloadSvgFromContainer } from '../../utils/downloadSvg';
+import { Loader } from 'lucide-react';
+import UnifiedBarChart from '../common/charts/BarChart';
+import MultiLineChart from '../common/charts/MultiLineChart';
 
 const MempoolLatencyStats = () => {
   const wsRef = useRef<WebSocket | null>(null);
@@ -35,21 +24,6 @@ const MempoolLatencyStats = () => {
     []
   );
   const [wsConnected, setWsConnected] = useState(false);
-  const feeDistChartRef = useRef<HTMLDivElement | null>(null);
-  const blockFeeChartRef = useRef<HTMLDivElement | null>(null);
-
-  const handleDownloadFeeDist = () => {
-    if (!feeDistChartRef.current) return;
-    downloadSvgFromContainer(
-      feeDistChartRef.current,
-      'mempool-fee-distribution'
-    );
-  };
-
-  const handleDownloadBlockFees = () => {
-    if (!blockFeeChartRef.current) return;
-    downloadSvgFromContainer(blockFeeChartRef.current, 'mempool-block-fees');
-  };
 
   useEffect(() => {
     const ws = new WebSocket(WEBSOCKET_URLS.MAIN_WEBSOCKET);
@@ -207,148 +181,82 @@ const MempoolLatencyStats = () => {
 
         {/* --- Fee Rate Distribution --- */}
         <div className="shadow p-6 relative">
-          <div className="absolute right-3 top-3 z-10">
-            <button
-              onClick={handleDownloadFeeDist}
-              className="p-1.5 rounded text-gray-500 hover:text-gray-300 hover:bg-gray-800 transition-colors"
-              aria-label="Download fee distribution chart"
-            >
-              <Download className="w-4 h-4" />
-            </button>
-          </div>
-          <h3 className="text-lg font-semibold text-center mb-4">
-            Live Fee Rate Distribution
-          </h3>
-          <div className="h-64" ref={feeDistChartRef}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={feeDistChartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis dataKey="name" stroke="#9ca3af" />
-                <YAxis stroke="#9ca3af" />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#1f2937',
-                    borderRadius: '8px',
-                    border: 'none',
-                    color: '#ffffff',
-                    padding: '10px',
-                    fontSize: '14px',
-                  }}
-                />
-                <Bar dataKey="value" fill={colors.primary} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          <UnifiedBarChart
+            data={feeDistChartData}
+            xAxisKey="name"
+            dataKey="value"
+            label="Fee rate"
+            color={colors.primary}
+            title="Live Fee Rate Distribution"
+            downloadFileName="mempool-fee-distribution"
+            height={256}
+          />
         </div>
       </section>
 
       {/* --- Block Fee Chart --- */}
       <section className="shadow p-6 relative">
-        <div className="absolute right-3 top-0 z-10">
-          <button
-            onClick={handleDownloadBlockFees}
-            className="p-1.5 rounded text-gray-500 hover:text-gray-300 hover:bg-gray-800 transition-colors"
-            aria-label="Download block fees chart"
-          >
-            <Download className="w-4 h-4" />
-          </button>
-        </div>
-        <div className="flex justify-between items-center mb-4 flex-wrap pt-4">
-          <h2 className="text-lg font-semibold">Live Block Fees</h2>
-
-          <select
-            value={selectedView}
-            onChange={(e) =>
-              setSelectedView(e.target.value as typeof selectedView)
-            }
-            className="px-4 py-2 bg-[#1a1a1a] text-gray-300 rounded-md shadow-md border border-white"
-          >
-            <option value={selectedView} hidden disabled>
-              {selectedView.toUpperCase()}
-            </option>
-            {(['btc', 'usd', 'eur', 'jpy', 'all'] as const)
-              .filter((view) => view !== selectedView)
-              .map((view) => (
+        <MultiLineChart
+          data={blockFeeChartData}
+          xAxisKey="time"
+          title="Live Block Fees"
+          headerRight={
+            <select
+              value={selectedView}
+              onChange={(e) =>
+                setSelectedView(e.target.value as typeof selectedView)
+              }
+              className="px-4 py-2 bg-[#1a1a1a] text-gray-300 rounded-md shadow-md border border-white"
+            >
+              {(['btc', 'usd', 'eur', 'jpy', 'all'] as const).map((view) => (
                 <option key={view} value={view}>
                   {view.toUpperCase()}
                 </option>
               ))}
-          </select>
-        </div>
-
-        <div ref={blockFeeChartRef}>
-          <ResponsiveContainer width="100%" height={400}>
-            <LineChart data={blockFeeChartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis dataKey="time" stroke="#9ca3af" />
-              <YAxis stroke="#9ca3af" />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#1f2937',
-                  borderRadius: '8px',
-                  border: 'none',
-                  color: '#ffffff',
-                  padding: '15px',
-                  fontSize: '14px',
-                }}
-                formatter={(value: number, name: string) => [
-                  name === 'btc'
-                    ? `${Number(value).toFixed(6)} BTC`
-                    : name === 'jpy'
-                      ? `¥${Number(value).toFixed(0)}`
-                      : name === 'eur'
-                        ? `€${Number(value).toFixed(2)}`
-                        : name === 'usd'
-                          ? `${Number(value).toFixed(2)}`
-                          : `${Number(value).toFixed(2)}`,
-                  currencyLabels[name] || name,
-                ]}
-              />
-              <Legend />
-
-              {(selectedView === 'btc' || selectedView === 'all') && (
-                <Line
-                  type="monotone"
-                  dataKey="btc"
-                  stroke={currencyColors.btc}
-                  strokeWidth={2}
-                  dot={{ r: 4 }}
-                  name="BTC"
-                />
-              )}
-              {(selectedView === 'usd' || selectedView === 'all') && (
-                <Line
-                  type="monotone"
-                  dataKey="usd"
-                  stroke={currencyColors.usd}
-                  strokeWidth={2}
-                  dot={{ r: 4 }}
-                  name="USD"
-                />
-              )}
-              {(selectedView === 'eur' || selectedView === 'all') && (
-                <Line
-                  type="monotone"
-                  dataKey="eur"
-                  stroke={currencyColors.eur}
-                  strokeWidth={2}
-                  dot={{ r: 4 }}
-                  name="EUR"
-                />
-              )}
-              {(selectedView === 'jpy' || selectedView === 'all') && (
-                <Line
-                  type="monotone"
-                  dataKey="jpy"
-                  stroke={currencyColors.jpy}
-                  strokeWidth={2}
-                  dot={{ r: 4 }}
-                  name="JPY"
-                />
-              )}
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
+            </select>
+          }
+          series={[
+            {
+              dataKey: 'btc',
+              label: 'BTC',
+              color: currencyColors.btc,
+              visible: selectedView === 'btc' || selectedView === 'all',
+              dot: { r: 4 },
+            },
+            {
+              dataKey: 'usd',
+              label: 'USD',
+              color: currencyColors.usd,
+              visible: selectedView === 'usd' || selectedView === 'all',
+              dot: { r: 4 },
+            },
+            {
+              dataKey: 'eur',
+              label: 'EUR',
+              color: currencyColors.eur,
+              visible: selectedView === 'eur' || selectedView === 'all',
+              dot: { r: 4 },
+            },
+            {
+              dataKey: 'jpy',
+              label: 'JPY',
+              color: currencyColors.jpy,
+              visible: selectedView === 'jpy' || selectedView === 'all',
+              dot: { r: 4 },
+            },
+          ]}
+          downloadFileName="mempool-block-fees"
+          height={400}
+          tooltipValueFormatter={(value, dataKey) =>
+            dataKey === 'btc'
+              ? `${Number(value).toFixed(6)} BTC`
+              : dataKey === 'jpy'
+                ? `¥${Number(value).toFixed(0)}`
+                : dataKey === 'eur'
+                  ? `€${Number(value).toFixed(2)}`
+                  : `${Number(value).toFixed(2)}`
+          }
+        />
       </section>
     </div>
   );
