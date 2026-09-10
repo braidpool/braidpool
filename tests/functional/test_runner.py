@@ -17,17 +17,26 @@ import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Iterator, Sequence
 
 from test_framework.cleanup_manager import terminate_process_group
-from test_framework.constants import STDERR_LOG_NAME, STDOUT_LOG_NAME, TEST_EXIT_PASSED, TEST_EXIT_SKIPPED
+from test_framework.constants import (
+    LOG_NAMES,
+    STDERR_LOG_NAME,
+    STDOUT_LOG_NAME,
+    TEST_EXIT_PASSED,
+    TEST_EXIT_SKIPPED,
+)
 from test_framework.logging_utils import configure_stream_logger, log_duration, log_event, log_exception
+from test_framework.report_manager import ReportManager
 
 
 logger = logging.getLogger(__name__)
 
 # Set of test scripts to run, in order. Extended tests are optional.
 BASE_SCRIPTS = [
+    "feature_framework_lifecycle.py",
+    "feature_framework_skip.py",
 ]
 
 EXTENDED_SCRIPTS: list[str] = []
@@ -81,6 +90,8 @@ class RunningJob:
     testdir: Path
     stdout_path: Path
     stderr_path: Path
+    # If the test fails, ensure we still emit reports/summary.json by finalizing a fallback ReportManager when needed.
+    fallback_report: ReportManager | None = None
     timed_out: bool = False
 
     @property
@@ -111,6 +122,12 @@ class RunningJob:
             status = "Skipped"
         else:
             status = "Failed"
+        if (
+            status == "Failed"
+            and self.fallback_report is not None
+            and not self.fallback_report.summary_path.exists()
+        ):
+            self.fallback_report.finalize(passed=False)
         return TestResult(
             name=self.name,
             status=status,
@@ -172,10 +189,9 @@ class TestHandler:
                     self.running.remove(job)
                     finished.append(job.to_result())
 
-            self._fill_available_slots()
-
             if finished:
                 return finished
+            self._fill_available_slots()
             if self.done():
                 return []
             time.sleep(0.1)
@@ -202,6 +218,11 @@ class TestHandler:
         testdir.mkdir(parents=True, exist_ok=True)
         stdout_path = testdir / STDOUT_LOG_NAME
         stderr_path = testdir / STDERR_LOG_NAME
+        fallback_report = ReportManager(
+            test_base,
+            f"{test_base}-{testdir.name}",
+            testdir / "reports",
+        )
         args = [
             sys.executable,
             str(self.tests_dir / script_name),
@@ -248,6 +269,7 @@ class TestHandler:
                 testdir=testdir,
                 stdout_path=stdout_path,
                 stderr_path=stderr_path,
+                fallback_report=fallback_report,
             )
         )
         log_event(logger, "runner_test_started", test=scheduled.display_name, pid=proc.pid, port_seed=scheduled.port_seed)
@@ -291,8 +313,6 @@ def schedule_tests(test_list: list[str]) -> list[ScheduledTest]:
     return scheduled
 
 
-
-
 # Read last N lines of a file efficiently without loading the whole file, used for printing combined logs on failure with a specified line limit.
 def tail_file(path: Path, lines: int) -> str:
     """Return the last *lines* lines without loading the whole file."""
@@ -315,6 +335,29 @@ def tail_file(path: Path, lines: int) -> str:
 
     data = b"".join(reversed(chunks))
     return "\n".join(data.decode("utf8", errors="replace").splitlines()[-lines:])
+
+
+def iter_combined_logs(result: TestResult) -> Iterator[tuple[str, Path]]:
+    """Yield framework, test, and component log files for a test result."""
+    seen: set[Path] = set()
+    for log_name in LOG_NAMES:
+        path = result.testdir / log_name
+        if path.exists():
+            seen.add(path)
+            yield log_name, path
+
+    for path in sorted(result.testdir.rglob("*")):
+        if not path.is_file() or path.name not in LOG_NAMES or path in seen:
+            continue
+        yield path.relative_to(result.testdir).as_posix(), path
+
+
+def print_combined_log_tails(result: TestResult, lines: int) -> None:
+    """Print the tail of each relevant log file for a failed test."""
+    for label, path in iter_combined_logs(result):
+        tail = tail_file(path, lines)
+        if tail:
+            print(f"\n{label} tail:\n" + tail)
 
 
 def print_results(results: list[TestResult], runtime: float) -> None:
@@ -407,12 +450,7 @@ def main() -> int:
                     all_passed = False
                     print(f"\n{result.name} failed after {result.duration:.3f}s")
                     if args.combinedlogslen:
-                        stdout_tail = tail_file(result.stdout_path, args.combinedlogslen)
-                        stderr_tail = tail_file(result.stderr_path, args.combinedlogslen)
-                        if stdout_tail:
-                            print("\nstdout tail:\n" + stdout_tail)
-                        if stderr_tail:
-                            print("\nstderr tail:\n" + stderr_tail)
+                        print_combined_log_tails(result, args.combinedlogslen)
     except KeyboardInterrupt:
         all_passed = False
         log_event(logger, "runner_interrupted", level=logging.WARNING)
