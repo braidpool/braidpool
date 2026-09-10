@@ -39,6 +39,4 @@ class NetworkConfig:
 
     #Logging config
     log_level: str = "INFO"
-    keep_logs_on_success: bool = False
     random_seed: int = 42
-
