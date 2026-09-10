@@ -21,9 +21,8 @@ _LOGGER = logging.getLogger(__name__)
 class CleanupManager:
     """Register and run cleanup callbacks for a functional test process.
 
-    Instances install ``atexit``, ``SIGTERM``, and ``SIGINT`` hooks during
-    initialization. Construct this class from the main thread; CPython only
-    allows signal handlers to be installed there.
+    Call :meth:`install_signal_handlers` from the main thread when the manager
+    should own ``atexit``, ``SIGTERM``, and ``SIGINT`` cleanup.
     """
 
     def __init__(
@@ -34,6 +33,7 @@ class CleanupManager:
         self._stack: list[tuple[str, Callable[[], None]]] = []
         self._lock = threading.RLock()
         self._ran = False
+        self._hooks_installed = False
         self._previous_handlers: dict[int, signal.Handlers] = {}
 
     # The cleanup manager is a registrable that is attached to different modules
@@ -66,6 +66,9 @@ class CleanupManager:
                 return
             self._ran = True
             stack = list(self._stack)
+            # Release callback closures and anything they capture as soon as
+            # cleanup completes instead of retaining them until process exit.
+            self._stack.clear()
 
         for name, fn in reversed(stack):
             try:
@@ -84,7 +87,9 @@ class CleanupManager:
                 # Not the main thread, or signal already changed — skip.
                 pass
         self._previous_handlers.clear()
-        atexit.unregister(self.run_all)
+        if self._hooks_installed:
+            atexit.unregister(self.run_all)
+            self._hooks_installed = False
 
     def managed_process(
         self,
@@ -112,18 +117,27 @@ class CleanupManager:
     # terminated due to signals it can gracefully exit after running all the
     # cleanup callbacks.
     def install_signal_handlers(self) -> None:
+        """Install process cleanup hooks exactly once."""
+        if self._hooks_installed:
+            return
         atexit.register(self.run_all)
         for signum in (signal.SIGTERM, signal.SIGINT):
             self._previous_handlers[signum] = signal.getsignal(signum)
             signal.signal(signum, self._signal_handler)
+        self._hooks_installed = True
 
     def _signal_handler(self, signum: int, frame: FrameType | None) -> None:
         log_event(self._logger, "cleanup_signal_received", signal=signum)
-        self.run_all()
-        self._delegate_signal(signum, frame)
-
-    def _delegate_signal(self, signum: int, frame: FrameType | None) -> None:
         previous = self._previous_handlers.get(signum, signal.SIG_DFL)
+        self.run_all()
+        self._delegate_signal(signum, frame, previous)
+
+    def _delegate_signal(
+        self,
+        signum: int,
+        frame: FrameType | None,
+        previous: signal.Handlers,
+    ) -> None:
         if previous == signal.SIG_IGN:
             return
         if callable(previous):
