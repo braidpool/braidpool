@@ -19,6 +19,39 @@ use libp2p::{Multiaddr, Swarm, SwarmBuilder};
 use std::str::FromStr;
 use tokio::time::timeout;
 
+#[test]
+fn network_scoped_protocol_names_are_distinct_per_network() {
+    const CPUNET: PoolNetwork = PoolNetwork::Cpunet;
+    const REGTEST: PoolNetwork = PoolNetwork::Bitcoin(bitcoin::Network::Regtest);
+    const SIGNET: PoolNetwork = PoolNetwork::Bitcoin(bitcoin::Network::Signet);
+    const MAINNET: PoolNetwork = PoolNetwork::Bitcoin(bitcoin::Network::Bitcoin);
+
+    // The whole point of network scoping is that cpunet and regtest peers
+    // cannot negotiate any substream with each other. Lock that in.
+    assert_ne!(
+        super::bead_sync_protocol(CPUNET),
+        super::bead_sync_protocol(REGTEST),
+    );
+    assert_ne!(super::kad_protocol(CPUNET), super::kad_protocol(SIGNET));
+    assert_ne!(
+        super::identify_protocol(CPUNET),
+        super::identify_protocol(MAINNET),
+    );
+    assert_ne!(
+        super::braidpool_topic(CPUNET),
+        super::braidpool_topic(REGTEST),
+    );
+    // Same network -> stable name (idempotent).
+    assert_eq!(
+        super::bead_sync_protocol(CPUNET),
+        super::bead_sync_protocol(CPUNET),
+    );
+    // Sanity check: the network name actually appears in the protocol id.
+    assert!(super::bead_sync_protocol(CPUNET)
+        .as_ref()
+        .contains(CPUNET.name()));
+}
+
 // Helper function to create a test bead
 fn create_test_bead() -> Bead {
     let _address = String::from("127.0.0.1:8888");
@@ -78,7 +111,9 @@ fn build_swarm() -> (Swarm<BraidPoolBehaviour>, PeerId) {
         .with_quic()
         .with_dns()
         .unwrap()
-        .with_behaviour(|local_key| BraidPoolBehaviour::new(local_key).unwrap())
+        .with_behaviour(|local_key| {
+            BraidPoolBehaviour::new(local_key, PoolNetwork::Cpunet).unwrap()
+        })
         .unwrap()
         .build();
     (swarm, peer_id)

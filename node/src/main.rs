@@ -19,12 +19,13 @@ use node::db::db_handlers::FETCH_BEAD_BATCH_SIZE;
 use node::ibd_manager::{IBD_TRIGGER_AFTER, MAX_IBD_INCOMING_THRESHOLD, MAX_IBD_RETRIES};
 use node::upstream_pool;
 use node::utils::compute_block_hash;
+use node::utils::is_routable_multiaddr;
 use node::utils::resolve_datadir;
 use node::utils::BeadHash;
 use node::SwarmHandler;
 use node::{
     bead::{Bead, BeadHashes, BeadRequest, BeadResponse, BeadSyncError},
-    behaviour::{self, BEAD_ANNOUNCE_PROTOCOL, BRAIDPOOL_TOPIC},
+    behaviour::{self, bead_sync_protocol, braidpool_topic, kad_protocol},
     braid, cli, config,
     db::db_handlers::DBHandler,
     ibd_manager::{IBDCommands, IBDManager, IBD_BATCH_SIZE},
@@ -49,15 +50,9 @@ use tracing::{debug, error, info, trace, warn};
 
 use behaviour::{BraidPoolBehaviour, BraidPoolBehaviourEvent};
 
-use crate::behaviour::KADPROTOCOLNAME;
 const LATENCY_ALPHA: u64 = 10; // seconds
-                               //boot nodes peerIds
-const BOOTNODES: [&str; 1] = ["12D3KooWG9z8TziaNuYyEcc9FeUC3FTtrEf2XSnSdDpLvx4Jh2w3"];
-//dns NS
-const SEED_DNS: &str = "/dnsaddr/french.braidpool.net";
-//combined addr for dns resolution and dialing of boot for peer discovery
-const ADDR_REFRENCE: &str =
-    "/dnsaddr/french.braidpool.net/p2p/12D3KooWG9z8TziaNuYyEcc9FeUC3FTtrEf2XSnSdDpLvx4Jh2w3";
+                               //dns NS
+const SEED_DNS: [&str; 1] = ["/dnsaddr/french.braidpool.net"];
 use tokio::sync::{
     mpsc::{self},
     RwLock,
@@ -894,7 +889,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //result in same peerID leading to OutgoingConnectionError
     // let keypair = identity::Keypair::generate_ed25519();
     //creating a main topic subscribing to the current test topic
-    let current_broadcast_topic: floodsub::Topic = floodsub::Topic::new(BRAIDPOOL_TOPIC);
+    let current_broadcast_topic: floodsub::Topic = floodsub::Topic::new(braidpool_topic(network));
 
     let swarm_builder = libp2p::SwarmBuilder::with_existing_identity(keypair)
         .with_tokio()
@@ -907,9 +902,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             )
         })?;
     // Note: with_behaviour closure must return behaviour directly (not Result), using expect for clear error message
+    let behaviour_network = network;
     let mut swarm = swarm_builder
-        .with_behaviour(|local_key| {
-            BraidPoolBehaviour::new(local_key).expect(
+        .with_behaviour(move |local_key| {
+            BraidPoolBehaviour::new(local_key, behaviour_network).expect(
                 "Failed to create BraidPoolBehaviour - check keypair and network configuration",
             )
         })?
@@ -947,36 +943,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if !args.audit {
         //adding the boot nodes for peer discovery
         swarm.listen_on(multi_addr.clone())?;
-        for boot_peer in BOOTNODES {
-            let peer_id = match boot_peer.parse::<PeerId>() {
-                Ok(id) => id,
-                Err(e) => {
-                    error!(boot_peer = %boot_peer, error = %e, "Failed to parse boot peer ID, skipping");
-                    continue;
-                }
-            };
-            let seed_addr = match SEED_DNS.parse::<Multiaddr>() {
-                Ok(addr) => addr,
-                Err(e) => {
-                    error!(seed_dns = %SEED_DNS, error = %e, "Failed to parse seed DNS, skipping");
-                    continue;
-                }
-            };
-            swarm
-                .behaviour_mut()
-                .kademlia
-                .add_address(&peer_id, seed_addr);
+        for boot_peer in SEED_DNS {
+            let boot_addr: Multiaddr = boot_peer.parse().map_err(|e| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("Failed to parse boot address: {}", e),
+                )
+            })?;
+            swarm.dial(boot_addr)?;
+            info!(address = %boot_peer, "Dialed boot node");
         }
-
-        info!(boot_node_count = %BOOTNODES.len(), "Boot nodes added to DHT");
-        let boot_addr: Multiaddr = ADDR_REFRENCE.parse().map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("Failed to parse boot address: {}", e),
-            )
-        })?;
-        swarm.dial(boot_addr)?;
-        info!(address = %ADDR_REFRENCE, "Dialed boot node");
     }
     //IPC(inter process communication) based `getblocktemplate` and `notification` to send to the downstream via the `cmempoold` architecture
     info!(socket = %args.ipc_socket, "IPC socket path");
@@ -1083,10 +1059,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
         };
     }
     let peer_manager_arc_for_swarm = peer_manager_arc.clone();
+    let swarm_network = network;
     let swarm_handle = if !args.audit {
         tokio::spawn(async move {
             let braid = std::sync::Arc::clone(&braid);
             let peer_manager_arc = peer_manager_arc_for_swarm;
+            let network = swarm_network;
+            let local_kad_protocol = kad_protocol(network);
+            let local_bead_sync_protocol = bead_sync_protocol(network);
             loop {
                 tokio::select! {
                   swarm_event = swarm.select_next_some()=>{
@@ -1320,32 +1300,64 @@ async fn main() -> Result<(), Box<dyn Error>> {
                           SwarmEvent::Behaviour(BraidPoolBehaviourEvent::Identify(
                               identify::Event::Received { peer_id, info,  .. },
                           )) => {
-                              let info_reference = info.clone();
                               info!(
                                   peer = ?peer_id,
-                                  address_count = %info_reference.listen_addrs.len(),
+                                  address_count = %info.listen_addrs.len(),
                                   "Received listen addresses"
                               );
-                              if info.protocols.iter().any(|p| *p == KADPROTOCOLNAME) {
-                                  for addr in info.listen_addrs {
-                                      info!(address = %addr, "Received address via identify");
-                                  }
-                              } else {
-                                  info!(peer = ?peer_id, "Peer does not support Kademlia");
-                              }
-                              if info_reference
-                                  .clone()
+                              let supports_bead_sync = info
                                   .protocols
                                   .iter()
-                                  .any(|p| *p != BEAD_ANNOUNCE_PROTOCOL)
-                              {
-
-                                  info!(
-                                      peer_address = ?info_reference.observed_addr,
-                                      "Peer does not support floodsub"
+                                  .any(|p| p == &local_bead_sync_protocol);
+                              let supports_kad = info
+                                  .protocols
+                                  .iter()
+                                  .any(|p| p == &local_kad_protocol);
+                              if !supports_bead_sync {
+                                  warn!(
+                                      peer = %peer_id,
+                                      peer_protocols = ?info.protocols,
+                                      expected = %local_bead_sync_protocol,
+                                      network = %network,
+                                      "Peer protocol negotiation failed - beadsync, closing the connection stream"
                                   );
+                                  {
+                                      let mut peer_manager = peer_manager_arc.write().await;
+                                      peer_manager.drop_pending_peer(&peer_id);
+                                  }
+                                  let _ = swarm.disconnect_peer_id(peer_id);
+                              } else {
+                                  if supports_kad {
+                                      for addr in &info.listen_addrs {
+                                          if is_routable_multiaddr(addr) {
+                                              info!(peer = %peer_id, address = %addr, "Adding peer address to DHT via identify");
+                                              swarm
+                                                  .behaviour_mut()
+                                                  .kademlia
+                                                  .add_address(&peer_id, addr.clone());
+                                          } else {
+                                              trace!(peer = %peer_id, address = %addr, "Skipping non-routable listen address");
+                                          }
+                                      }
+                                  } else {
+                                      info!(peer = ?peer_id, "Peer kademlia protocol negotiation failed.");
+                                  }
+                                  swarm
+                                      .behaviour_mut()
+                                      .bead_announce
+                                      .add_node_to_partial_view(peer_id);
+                                  info!(peer = %peer_id, "Peer added to floodsub mesh");
+                                  {
+                                      let mut peer_manager = peer_manager_arc.write().await;
+                                      if !peer_manager.promote_pending_peer(&peer_id) {
+                                          debug!(
+                                              peer = %peer_id,
+                                              "No pending connection to promote; it closed before identify completed"
+                                          );
+                                      }
+                                  }
                               }
-                              debug!(info = ?info_reference, "Received peer info");
+                              debug!(info = ?info, "Received peer info");
                           }
                           SwarmEvent::Behaviour(BraidPoolBehaviourEvent::Kademlia(
                               kad::Event::OutboundQueryProgressed { result, .. },
@@ -1401,35 +1413,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
                           SwarmEvent::ConnectionEstablished {
                               peer_id, endpoint, ..
                           } => {
-
-                              // Add the peer to the peer manager
-                              let remote_addr = endpoint.get_remote_address();
-                              swarm.behaviour_mut().kademlia.add_address(&peer_id,remote_addr.clone());
-                              info!(address = ?remote_addr, "DHT updated with peer address");
-                              swarm.behaviour_mut()
-                              .bead_announce
-                              .add_node_to_partial_view(peer_id);
-
-                              info!(peer = %peer_id, "Peer added to floodsub mesh");
-                              let ip = remote_addr.iter().find_map(|p| match p {
-                                  libp2p::core::multiaddr::Protocol::Ip4(ip) => {
-                                      Some(std::net::IpAddr::V4(ip))
-                                  }
-                                  libp2p::core::multiaddr::Protocol::Ip6(ip) => {
-                                      Some(std::net::IpAddr::V6(ip))
-                                  }
-                                  _ => None,
-                              });
-                                {
-                                    let mut peer_manager = peer_manager_arc.write().await;
-                                    peer_manager.add_peer(peer_id, !endpoint.is_dialer(), ip);
-                                }
+                              // Hold the connection metadata until the Identify exchange proves the
+                              // peer speaks this network's protocols; only then is it registered.
+                              let remote_addr = endpoint.get_remote_address().clone();
+                              let is_dialer = endpoint.is_dialer();
+                              {
+                                  let mut peer_manager = peer_manager_arc.write().await;
+                                  peer_manager.add_pending_peer(peer_id, remote_addr.clone(), is_dialer);
+                              }
                               info!(
                                  peer_id = ?peer_id,
                                  remote_addr = ?remote_addr,
-                                 "Connection established to peer"
+                                 "Connection established to peer protocol negotiation pending"
                              );
-
                           }
                           SwarmEvent::ConnectionClosed {
                               peer_id,
@@ -1439,15 +1435,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
                               cause,
                           } => {
                               info!(peer = %peer_id, connection_id = %connection_id, address = %endpoint.get_remote_address(), established = %num_established, cause = ?cause, "Connection closed");
-                              // Remove the peer from the peer manager
+                              // Remove the peer from the peer manager; this also drops
+                              // any pending entry that never got verified.
                               {
                                  let mut peer_manager = peer_manager_arc.write().await;
                                  peer_manager.remove_peer(&peer_id);
                               }
-                              swarm
-                                  .behaviour_mut()
-                                  .kademlia
-                                  .remove_address(&peer_id, endpoint.get_remote_address());
                           }
                           SwarmEvent::Behaviour(BraidPoolBehaviourEvent::BeadSync(
                          request_response::Event::Message {
