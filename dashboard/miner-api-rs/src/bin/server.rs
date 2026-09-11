@@ -21,6 +21,9 @@ async fn main() -> anyhow::Result<()> {
 
     let pool = db::init_db(&config.db_path).await?;
     let port = config.port;
+
+    // Start CPU miner background poller before anything else that needs the pool.
+    miner_api_rs::cpu_miner::CpuMinerService::new(pool.clone()).start();
     let refresh_secs = config.refresh_interval_secs;
     let scan_secs = config.scan_interval_secs;
     let timeout_secs = config.miner_timeout_secs;
