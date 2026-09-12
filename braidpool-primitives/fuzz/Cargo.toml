@@ -1,0 +1,32 @@
+# Standalone workspace so the fuzz crate is not pulled into the root
+# braidpool workspace build (cargo-fuzz convention).
+[workspace]
+
+[package]
+name = "braidpool-primitives-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+bitcoin = { git = "https://github.com/braidpool/rust-bitcoin.git", features = ["serde"] }
+
+[dependencies.braidpool-primitives]
+path = ".."
+
+# Each fuzz target is its own binary.
+[[bin]]
+name = "merkle_path_proof"
+path = "fuzz_targets/merkle_path_proof.rs"
+test = false
+doc = false
+bench = false
+
+# Fuzzers need debug info for useful crash reports, but still optimised.
+[profile.release]
+debug = 1
