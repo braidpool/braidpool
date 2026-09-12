@@ -1,6 +1,8 @@
 use super::AddBeadStatus;
 use super::Bead;
 use super::Braid;
+use super::OrphanPool;
+use super::MAX_ORPHAN_BEADS;
 use crate::braid::consensus_functions::check_cohort;
 use crate::braid::consensus_functions::cohort;
 use crate::braid::consensus_functions::cohort_head;
@@ -33,7 +35,7 @@ pub fn test_extend_functionality() {
         beads: vec![test_bead_0.clone()],
         genesis_beads: HashSet::from([0]),
         tips: HashSet::from([0]),
-        orphan_beads: Vec::new(),
+        orphan_beads: OrphanPool::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([(
@@ -292,7 +294,7 @@ pub fn test_orphan_beads_functinality() {
         beads: vec![test_bead_0.clone()],
         genesis_beads: HashSet::from([0]),
         tips: HashSet::from([0]),
-        orphan_beads: Vec::new(),
+        orphan_beads: OrphanPool::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([(
@@ -387,7 +389,7 @@ pub fn test_genesis1() {
         ],
         genesis_beads: HashSet::from([0]),
         tips: HashSet::from([3]),
-        orphan_beads: Vec::new(),
+        orphan_beads: OrphanPool::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
@@ -450,7 +452,7 @@ pub fn test_genesis2() {
         ],
         genesis_beads: HashSet::from([0]),
         tips: HashSet::from([3]),
-        orphan_beads: Vec::new(),
+        orphan_beads: OrphanPool::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
@@ -521,7 +523,7 @@ pub fn test_genesis3() {
         ],
         genesis_beads: HashSet::from([0, 1, 2]),
         tips: HashSet::from([3]),
-        orphan_beads: Vec::new(),
+        orphan_beads: OrphanPool::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
@@ -634,7 +636,7 @@ pub fn test_tips1() {
         ],
         genesis_beads: HashSet::from([0]),
         tips: HashSet::from([3]),
-        orphan_beads: Vec::new(),
+        orphan_beads: OrphanPool::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
@@ -712,7 +714,7 @@ pub fn test_tips2() {
         ],
         genesis_beads: HashSet::from([0]),
         tips: HashSet::from([3]),
-        orphan_beads: Vec::new(),
+        orphan_beads: OrphanPool::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
@@ -836,7 +838,7 @@ pub fn test_tips3() {
         ],
         genesis_beads: HashSet::from([0, 1, 2]),
         tips: HashSet::from([3, 4, 5]),
-        orphan_beads: Vec::new(),
+        orphan_beads: OrphanPool::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
@@ -970,7 +972,7 @@ pub fn test_reverse() {
         ],
         genesis_beads: HashSet::from([0, 1, 2]),
         tips: HashSet::from([3, 4, 5]),
-        orphan_beads: Vec::new(),
+        orphan_beads: OrphanPool::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
@@ -1109,7 +1111,7 @@ pub fn test_cohorts_parents_1() {
         ],
         genesis_beads: HashSet::from([0]),
         tips: HashSet::from([3]),
-        orphan_beads: Vec::new(),
+        orphan_beads: OrphanPool::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
@@ -1275,7 +1277,7 @@ pub fn test_highest_work_path_1() {
         ],
         genesis_beads: HashSet::from([0]),
         tips: HashSet::from([3]),
-        orphan_beads: Vec::new(),
+        orphan_beads: OrphanPool::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
@@ -1370,7 +1372,7 @@ pub fn test_diamond_path_highest_work() {
         ],
         genesis_beads: HashSet::from([0]),
         tips: HashSet::from([3]),
-        orphan_beads: Vec::new(),
+        orphan_beads: OrphanPool::new(),
         cohorts: vec![Cohort(HashSet::from([0]))],
         cohort_tips: vec![HashSet::from([0])],
         bead_index_mapping: std::collections::HashMap::from([
@@ -1748,7 +1750,7 @@ fn test_extend_function() {
             tips: genesis_set.clone(),
             cohorts: vec![Cohort(genesis_set.clone())],
             cohort_tips: vec![genesis_set.clone()],
-            orphan_beads: Vec::new(),
+            orphan_beads: OrphanPool::new(),
             genesis_beads: genesis_set,
             bead_index_mapping,
             network: PoolNetwork::Cpunet,
@@ -1843,7 +1845,7 @@ fn test_get_beads_after() {
         tips: genesis_set.clone(),
         cohorts: vec![Cohort(genesis_set.clone())],
         cohort_tips: vec![genesis_set.clone()],
-        orphan_beads: Vec::new(),
+        orphan_beads: OrphanPool::new(),
         genesis_beads: genesis_set,
         bead_index_mapping,
         network: PoolNetwork::Cpunet,
@@ -1968,7 +1970,7 @@ fn test_get_beads_after_diamond_structure() {
         tips: genesis_set.clone(),
         cohorts: vec![Cohort(genesis_set.clone())],
         cohort_tips: vec![genesis_set.clone()],
-        orphan_beads: Vec::new(),
+        orphan_beads: OrphanPool::new(),
         genesis_beads: genesis_set,
         bead_index_mapping,
         network: PoolNetwork::Cpunet,
@@ -2084,7 +2086,7 @@ fn test_get_beads_after_complex_braid() {
         tips: genesis_set.clone(),
         cohorts: vec![Cohort(genesis_set.clone())],
         cohort_tips: vec![genesis_set.clone()],
-        orphan_beads: Vec::new(),
+        orphan_beads: OrphanPool::new(),
         genesis_beads: genesis_set,
         bead_index_mapping,
         network: PoolNetwork::Cpunet,
@@ -2181,7 +2183,7 @@ fn test_get_beads_after_edge_cases() {
         tips: genesis_set.clone(),
         cohorts: vec![Cohort(genesis_set.clone())],
         cohort_tips: vec![genesis_set.clone()],
-        orphan_beads: Vec::new(),
+        orphan_beads: OrphanPool::new(),
         genesis_beads: genesis_set,
         bead_index_mapping,
         network: PoolNetwork::Cpunet,
@@ -2289,7 +2291,7 @@ fn test_get_beads_after_multiple_tips() {
         tips: genesis_set.clone(),
         cohorts: vec![Cohort(genesis_set.clone())],
         cohort_tips: vec![genesis_set.clone()],
-        orphan_beads: Vec::new(),
+        orphan_beads: OrphanPool::new(),
         genesis_beads: genesis_set,
         bead_index_mapping,
         network: PoolNetwork::Cpunet,
@@ -2447,4 +2449,297 @@ fn test_extend_promotes_transitive_orphan_chain() {
         braid.orphan_beads.is_empty(),
         "all transitively-connectable orphans should be drained"
     );
+}
+
+/// The crash from #532: a long chain of parked orphans used to be promoted by
+/// mutual recursion between `extend` and `process_orphan_beads`, one stack
+/// frame per bead. Sending the chain child-first and then the root connected
+/// the whole thing in a single `extend` and overflowed the stack, aborting the
+/// process. Promotion is iterative now, so depth costs heap, not stack.
+#[test]
+fn test_long_orphan_chain_does_not_overflow_the_stack() {
+    // Comfortably past the ~1500 that aborted the node, and past the 1000 that
+    // was reported as still surviving.
+    const CHAIN_LEN: usize = 5000;
+
+    let genesis = emit_bead();
+    let mut braid = Braid::new(vec![genesis.clone()], PoolNetwork::Cpunet);
+    // Give the pool room for the whole chain: this test is about promotion
+    // depth, not about the capacity bound, which is covered separately below.
+    braid.orphan_beads = OrphanPool::with_capacity(CHAIN_LEN * 2);
+
+    // Build a linear chain genesis <- chain[0] <- chain[1] <- ...
+    let mut chain = Vec::with_capacity(CHAIN_LEN);
+    let mut parent_hash = compute_block_hash(&genesis.block_header, braid.network);
+    for _ in 0..CHAIN_LEN {
+        let mut bead = emit_bead();
+        bead.committed_metadata.parents.push(parent_hash);
+        parent_hash = compute_block_hash(&bead.block_header, braid.network);
+        chain.push(bead);
+    }
+
+    // Deliver child-first, so every bead but the root parks as an orphan.
+    for bead in chain.iter().skip(1).rev() {
+        assert!(matches!(
+            braid.extend(bead),
+            AddBeadStatus::ParentsNotYetReceived
+        ));
+    }
+    assert_eq!(braid.orphan_beads.len(), CHAIN_LEN - 1);
+
+    // The root connects everything in one call.
+    match braid.extend(&chain[0]) {
+        AddBeadStatus::BeadAdded { promoted_orphans } => {
+            assert_eq!(
+                promoted_orphans.len(),
+                CHAIN_LEN - 1,
+                "every parked bead in the chain should be promoted"
+            );
+        }
+        other => panic!("expected BeadAdded, got {:?}", other),
+    }
+    assert!(braid.orphan_beads.is_empty());
+    assert_eq!(braid.beads.len(), CHAIN_LEN + 1, "genesis plus the chain");
+}
+
+/// Re-sending the same orphan used to append a fresh copy every time, because
+/// the missing-parent branch returned before the "already seen" check. The pool
+/// is keyed by bead hash now, so replays collapse onto one slot.
+#[test]
+fn test_replayed_orphan_is_not_duplicated() {
+    let genesis = emit_bead();
+    let mut braid = Braid::new(vec![genesis.clone()], PoolNetwork::Cpunet);
+
+    let mut child = emit_bead();
+    child
+        .committed_metadata
+        .parents
+        .push(compute_block_hash(&genesis.block_header, braid.network));
+
+    let mut grandchild = emit_bead();
+    grandchild
+        .committed_metadata
+        .parents
+        .push(compute_block_hash(&child.block_header, braid.network));
+
+    for _ in 0..1000 {
+        assert!(matches!(
+            braid.extend(&grandchild),
+            AddBeadStatus::ParentsNotYetReceived
+        ));
+    }
+    assert_eq!(
+        braid.orphan_beads.len(),
+        1,
+        "a bead replayed 1000 times should occupy one orphan slot"
+    );
+
+    // The single parked copy is still promoted exactly once.
+    match braid.extend(&child) {
+        AddBeadStatus::BeadAdded { promoted_orphans } => {
+            assert_eq!(promoted_orphans.len(), 1);
+        }
+        other => panic!("expected BeadAdded, got {:?}", other),
+    }
+    assert!(braid.orphan_beads.is_empty());
+}
+
+/// A bead already connected to the braid is rejected outright rather than being
+/// parked as an orphan again.
+#[test]
+fn test_replayed_connected_bead_is_not_parked() {
+    let genesis = emit_bead();
+    let mut braid = Braid::new(vec![genesis.clone()], PoolNetwork::Cpunet);
+
+    let mut child = emit_bead();
+    child
+        .committed_metadata
+        .parents
+        .push(compute_block_hash(&genesis.block_header, braid.network));
+
+    assert!(matches!(
+        braid.extend(&child),
+        AddBeadStatus::BeadAdded { .. }
+    ));
+    assert!(matches!(
+        braid.extend(&child),
+        AddBeadStatus::DagAlreadyContainsBead
+    ));
+    assert!(
+        braid.orphan_beads.is_empty(),
+        "a bead already in the braid must not be parked"
+    );
+}
+
+/// Orphans whose parent never arrives used to sit in an unbounded `Vec`. The
+/// pool now has a fixed capacity and evicts the oldest entry to make room.
+#[test]
+fn test_orphan_pool_is_bounded_and_evicts_oldest_first() {
+    let mut pool = OrphanPool::with_capacity(4);
+
+    // Park more distinct orphans than the pool can hold. Each waits on a parent
+    // hash that will never arrive.
+    let mut parked = Vec::new();
+    for _ in 0..10 {
+        let mut bead = emit_bead();
+        let missing_parent = compute_block_hash(&emit_bead().block_header, PoolNetwork::Cpunet);
+        bead.committed_metadata.parents.push(missing_parent);
+        let bead_hash = compute_block_hash(&bead.block_header, PoolNetwork::Cpunet);
+        pool.park(bead_hash, bead, missing_parent);
+        parked.push((bead_hash, missing_parent));
+        assert!(pool.len() <= 4, "pool must never exceed its capacity");
+    }
+
+    assert_eq!(pool.len(), 4);
+
+    // The four most recent survive; the first six were evicted.
+    for (bead_hash, _) in &parked[..6] {
+        assert!(
+            !pool.contains(bead_hash),
+            "oldest entries should be evicted"
+        );
+    }
+    for (bead_hash, missing_parent) in &parked[6..] {
+        assert!(
+            pool.contains(bead_hash),
+            "newest entries should be retained"
+        );
+        // An evicted bead leaves no dangling index behind, and a retained one is
+        // still reachable through the parent it waits on.
+        assert_eq!(pool.take_waiting_on(missing_parent).len(), 1);
+    }
+    assert!(
+        pool.is_empty(),
+        "taking every survivor should drain the pool"
+    );
+}
+
+/// Replaying a bead that is already parked must not evict other orphans: it
+/// updates the existing entry rather than claiming a second slot.
+#[test]
+fn test_replaying_a_parked_orphan_does_not_evict_others() {
+    let mut pool = OrphanPool::with_capacity(2);
+
+    let mut first = emit_bead();
+    let first_parent = compute_block_hash(&emit_bead().block_header, PoolNetwork::Cpunet);
+    first.committed_metadata.parents.push(first_parent);
+    let first_hash = compute_block_hash(&first.block_header, PoolNetwork::Cpunet);
+
+    let mut second = emit_bead();
+    let second_parent = compute_block_hash(&emit_bead().block_header, PoolNetwork::Cpunet);
+    second.committed_metadata.parents.push(second_parent);
+    let second_hash = compute_block_hash(&second.block_header, PoolNetwork::Cpunet);
+
+    pool.park(first_hash, first.clone(), first_parent);
+    pool.park(second_hash, second.clone(), second_parent);
+
+    for _ in 0..100 {
+        pool.park(second_hash, second.clone(), second_parent);
+    }
+
+    assert_eq!(pool.len(), 2);
+    assert!(
+        pool.contains(&first_hash),
+        "replaying one orphan must not push another out"
+    );
+}
+
+/// An orphan missing several parents stays parked until the last one arrives,
+/// re-registering against each parent that is still absent.
+#[test]
+fn test_orphan_waiting_on_multiple_parents_is_held_until_all_arrive() {
+    let genesis = emit_bead();
+    let mut braid = Braid::new(vec![genesis.clone()], PoolNetwork::Cpunet);
+    let genesis_hash = compute_block_hash(&genesis.block_header, braid.network);
+
+    let mut parent_a = emit_bead();
+    parent_a.committed_metadata.parents.push(genesis_hash);
+    let mut parent_b = emit_bead();
+    parent_b.committed_metadata.parents.push(genesis_hash);
+
+    let mut child = emit_bead();
+    child
+        .committed_metadata
+        .parents
+        .push(compute_block_hash(&parent_a.block_header, braid.network));
+    child
+        .committed_metadata
+        .parents
+        .push(compute_block_hash(&parent_b.block_header, braid.network));
+
+    assert!(matches!(
+        braid.extend(&child),
+        AddBeadStatus::ParentsNotYetReceived
+    ));
+
+    // First parent arrives: the child is still blocked on the second.
+    match braid.extend(&parent_a) {
+        AddBeadStatus::BeadAdded { promoted_orphans } => assert!(
+            promoted_orphans.is_empty(),
+            "child still has a missing parent"
+        ),
+        other => panic!("expected BeadAdded, got {:?}", other),
+    }
+    assert_eq!(braid.orphan_beads.len(), 1, "child stays parked");
+
+    // Second parent arrives: the child is promoted.
+    match braid.extend(&parent_b) {
+        AddBeadStatus::BeadAdded { promoted_orphans } => {
+            assert_eq!(promoted_orphans.len(), 1, "child should now be promoted");
+            assert_eq!(
+                compute_block_hash(&promoted_orphans[0].block_header, braid.network),
+                compute_block_hash(&child.block_header, braid.network)
+            );
+        }
+        other => panic!("expected BeadAdded, got {:?}", other),
+    }
+    assert!(braid.orphan_beads.is_empty());
+}
+
+/// The orphan pool is bounded at the braid level too: a chain longer than
+/// [`MAX_ORPHAN_BEADS`] parks only up to the cap, evicting oldest-first. In
+/// child-first delivery the surviving entries are the ones nearest the root, so
+/// the prefix that can actually connect is what is kept.
+#[test]
+fn test_orphan_chain_longer_than_capacity_is_capped() {
+    let over_capacity = MAX_ORPHAN_BEADS + 500;
+
+    let genesis = emit_bead();
+    let mut braid = Braid::new(vec![genesis.clone()], PoolNetwork::Cpunet);
+
+    let mut chain = Vec::with_capacity(over_capacity);
+    let mut parent_hash = compute_block_hash(&genesis.block_header, braid.network);
+    for _ in 0..over_capacity {
+        let mut bead = emit_bead();
+        bead.committed_metadata.parents.push(parent_hash);
+        parent_hash = compute_block_hash(&bead.block_header, braid.network);
+        chain.push(bead);
+    }
+
+    for bead in chain.iter().skip(1).rev() {
+        assert!(matches!(
+            braid.extend(bead),
+            AddBeadStatus::ParentsNotYetReceived
+        ));
+        assert!(
+            braid.orphan_beads.len() <= MAX_ORPHAN_BEADS,
+            "the orphan pool must never exceed its cap"
+        );
+    }
+    assert_eq!(braid.orphan_beads.len(), MAX_ORPHAN_BEADS);
+
+    // The root connects the surviving prefix. The evicted tail stays
+    // disconnected, which is the intended trade: a bounded buffer cannot hold
+    // an unbounded backlog, and those beads can be re-requested.
+    match braid.extend(&chain[0]) {
+        AddBeadStatus::BeadAdded { promoted_orphans } => {
+            assert_eq!(
+                promoted_orphans.len(),
+                MAX_ORPHAN_BEADS,
+                "every retained orphan chains from the root and should promote"
+            );
+        }
+        other => panic!("expected BeadAdded, got {:?}", other),
+    }
+    assert!(braid.orphan_beads.is_empty());
 }
