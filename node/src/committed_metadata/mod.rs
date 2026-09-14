@@ -31,7 +31,12 @@ impl Decodable for TimeVec {
         let mut vec = Vec::with_capacity(len as usize);
         for _ in 0..len {
             let time_u32 = u32::consensus_decode(r)?;
-            let time = Time::from_consensus(time_u32).unwrap();
+            let time = Time::from_consensus(time_u32).map_err(|_| {
+                Error::from(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "invalid parent bead timestamp in TimeVec",
+                ))
+            })?;
             vec.push(time);
         }
         Ok(TimeVec(vec))
