@@ -4,8 +4,7 @@ use bitcoin::{
     consensus::encode::deserialize, ecdsa::Signature, BlockHash, CompactTarget, EcdsaSighashType,
     Txid,
 };
-use num::ToPrimitive;
-use std::{collections::HashMap, str::FromStr, sync::Arc, time::UNIX_EPOCH};
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use futures::lock::Mutex;
 use tokio::sync::mpsc::{self, Receiver, Sender};
@@ -28,6 +27,7 @@ use crate::{
     error::{IPCtemplateError, StratumErrors},
     stratum::{BlockTemplate, NotifyCmd},
     uncommitted_metadata::UnCommittedMetadata,
+    utils::timestamp::MicrosecondTimestamp,
 };
 use std::error::Error;
 #[macro_use]
@@ -310,7 +310,7 @@ impl SwarmHandler {
         candidate_block: bitcoin::Block,
         extranonce_2_raw_value: u64,
         downstream_client_ip: &str,
-        job_sent_timestamp: u32,
+        job_sent_timestamp: MicrosecondTimestamp,
         downstream_payout_addr: &str,
         //TODO: Will be used as seperate entity after altering `uncommitted_metadata`
         extranonce_1_raw_value: u64,
@@ -328,7 +328,7 @@ impl SwarmHandler {
             .parse::<bitcoin::PublicKey>()
             .unwrap();
         let mut braid_data = self.braid_arc.write().await;
-        let mut pairs: Vec<(BlockHash, bitcoin::absolute::Time)> = braid_data
+        let mut pairs: Vec<(BlockHash, MicrosecondTimestamp)> = braid_data
             .tips
             .iter()
             .map(|&idx| {
@@ -354,9 +354,7 @@ impl SwarmHandler {
         //Mindiff
         let min_target = CompactTarget::from_unprefixed_hex("1d00ffff").unwrap();
         //Job sent time before downstream starts mining
-        let job_notification_time_val =
-            bitcoin::blockdata::locktime::absolute::Time::from_consensus(job_sent_timestamp)
-                .unwrap();
+        let job_notification_time_val = job_sent_timestamp;
         let candidate_block_bead_committed_metadata = CommittedMetadata {
             comm_pub_key: public_key,
             transaction_ids: TxIdVec(transaction_ids),
@@ -374,21 +372,16 @@ impl SwarmHandler {
             signature: bitcoin::secp256k1::ecdsa::Signature::from_str(hex).unwrap(),
             sighash_type: EcdsaSighashType::All,
         };
-        //Current UNIX timestamp during broadcast of bead
-        let current_system_time = std::time::SystemTime::now();
-        let duration_since_epoch = match current_system_time.duration_since(UNIX_EPOCH) {
-            Ok(duration) => duration,
-            Err(error) => {
-                return Err(StratumErrors::ErrorFetchingCurrentUNIXTimestamp {
-                    error: error.to_string(),
-                });
-            }
-        };
-
-        let unix_timestamp = duration_since_epoch.as_secs().to_u32().unwrap();
+        //Current UNIX timestamp during broadcast of bead, at microsecond resolution
+        let broadcast_timestamp = MicrosecondTimestamp::from_system_time(
+            std::time::SystemTime::now(),
+        )
+        .map_err(|error| StratumErrors::ErrorFetchingCurrentUNIXTimestamp {
+            error: error.to_string(),
+        })?;
 
         let candidate_block_bead_uncommitted_metadata = UnCommittedMetadata {
-            broadcast_timestamp: bitcoin::absolute::Time::from_consensus(unix_timestamp).unwrap(),
+            broadcast_timestamp,
             extra_nonce_1: extranonce_1_raw_value,
             extra_nonce_2: extranonce_2_raw_value,
             signature: sig,
