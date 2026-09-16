@@ -1,3 +1,5 @@
+use super::check_bounded;
+use super::read_bounded;
 use super::Bead;
 use super::BeadCodec;
 use super::BeadHash;
@@ -8,6 +10,7 @@ use super::BeadSyncError;
 use super::Beads;
 use super::CommittedMetadata;
 use super::UnCommittedMetadata;
+use super::MAX_BEAD_SYNC_REQUEST_BYTES;
 use crate::committed_metadata::TimeVec;
 use crate::config::PoolNetwork;
 use crate::utils::compute_block_hash;
@@ -31,6 +34,7 @@ use bitcoin::{block::Header as BlockHeader, block::Version as BlockVersion};
 use futures::executor::block_on;
 use libp2p::request_response::Codec;
 use std::io::Cursor;
+use std::io::ErrorKind;
 use std::str::FromStr;
 #[test]
 
@@ -272,6 +276,40 @@ fn test_codec_response_roundtrip() {
 }
 
 #[test]
+fn test_read_bounded_rejects_only_streams_over_max() {
+    let read = |bytes: Vec<u8>, max: u64| {
+        block_on(read_bounded(
+            &mut futures::io::AllowStdIo::new(Cursor::new(bytes)),
+            max,
+        ))
+    };
+
+    assert_eq!(read(vec![0u8; 3], 4).unwrap().len(), 3);
+    assert_eq!(read(vec![0u8; 4], 4).unwrap().len(), 4);
+    let err = read(vec![0u8; 5], 4).unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::InvalidData);
+}
+
+#[test]
+fn test_codec_request_over_cap_is_rejected_even_if_prefix_decodes() {
+    // A valid GetTips is one byte; pad the stream past the cap. Plain
+    // truncation would decode the prefix and accept it; the bounded read
+    // must reject on size instead.
+    let mut codec = BeadCodec::default();
+    let mut buffer = Vec::new();
+    BeadRequest::GetTips.consensus_encode(&mut buffer).unwrap();
+    buffer.resize(MAX_BEAD_SYNC_REQUEST_BYTES as usize + 1, 0);
+
+    let protocol = libp2p::StreamProtocol::new("/braidpool/1.0.0");
+    let err = block_on(codec.read_request(
+        &protocol,
+        &mut futures::io::AllowStdIo::new(Cursor::new(buffer)),
+    ))
+    .unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::InvalidData);
+}
+
+#[test]
 fn test_get_beads_after_serialization() {
     let mut codec = BeadCodec::default();
     let request =
@@ -379,4 +417,22 @@ fn test_bead_sync_error_codec() {
     let mut cursor = Cursor::new(invalid_buffer);
     let result = BeadSyncError::consensus_decode(&mut cursor);
     assert!(result.is_err(), "Should fail to decode invalid error type");
+}
+
+#[test]
+fn test_write_request_over_cap_is_refused() {
+    // The reader rejects anything over the cap, so the writer must not emit it:
+    // the peer would otherwise see an unexplained decode failure.
+    assert!(check_bounded(
+        &vec![0u8; MAX_BEAD_SYNC_REQUEST_BYTES as usize],
+        MAX_BEAD_SYNC_REQUEST_BYTES
+    )
+    .is_ok());
+
+    let err = check_bounded(
+        &vec![0u8; MAX_BEAD_SYNC_REQUEST_BYTES as usize + 1],
+        MAX_BEAD_SYNC_REQUEST_BYTES,
+    )
+    .unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::InvalidData);
 }
