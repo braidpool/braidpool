@@ -3,6 +3,7 @@ use bitcoin::absolute::Time;
 use bitcoin::consensus::encode::Decodable;
 use bitcoin::consensus::encode::Encodable;
 use bitcoin::consensus::encode::Error;
+use bitcoin::consensus::encode::MAX_VEC_SIZE;
 use bitcoin::io::{self, Read, Write};
 use bitcoin::CompactTarget;
 use bitcoin::PublicKey;
@@ -28,7 +29,11 @@ impl Encodable for TimeVec {
 impl Decodable for TimeVec {
     fn consensus_decode<R: Read + ?Sized>(r: &mut R) -> Result<Self, Error> {
         let len = u64::consensus_decode(r)?;
-        let mut vec = Vec::with_capacity(len as usize);
+        // `len` comes from the peer. Cap the preallocation the same way
+        // rust-bitcoin's Vec<T> decoder does and let the loop fail on
+        // end-of-input, rather than trusting the prefix up front.
+        let max_capacity = MAX_VEC_SIZE / 4 / core::mem::size_of::<Time>();
+        let mut vec = Vec::with_capacity(core::cmp::min(len as usize, max_capacity));
         for _ in 0..len {
             let time_u32 = u32::consensus_decode(r)?;
             let time = Time::from_consensus(time_u32).unwrap();
@@ -52,7 +57,9 @@ impl Encodable for TxIdVec {
 impl Decodable for TxIdVec {
     fn consensus_decode<R: Read + ?Sized>(r: &mut R) -> Result<Self, Error> {
         let len = u64::consensus_decode(r)?;
-        let mut vec = Vec::with_capacity(len as usize);
+        // Same peer-supplied length cap as TimeVec above.
+        let max_capacity = MAX_VEC_SIZE / 4 / core::mem::size_of::<Txid>();
+        let mut vec = Vec::with_capacity(core::cmp::min(len as usize, max_capacity));
         for _ in 0..len {
             vec.push(Txid::consensus_decode(r)?);
         }
