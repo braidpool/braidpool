@@ -1,13 +1,14 @@
 use crate::config::PoolNetwork;
 use crate::{
+    bead::sign::{parse_schnorr_signature, parse_xonly_pubkey},
     bead::Bead,
     db::{init_db::init_db, BeadInsertData, BraidpoolDBTypes, InsertTupleTypes},
     error::DBErrors,
     utils::compute_block_hash,
 };
 use bitcoin::{
-    absolute::Time, block::Version as BlockVersion, ecdsa::Signature, hashes::Hash, BlockHash,
-    CompactTarget, PublicKey, TxMerkleNode, Txid,
+    absolute::Time, block::Version as BlockVersion, hashes::Hash, BlockHash, CompactTarget,
+    TxMerkleNode, Txid,
 };
 use serde_json::json;
 use sqlx::{Pool, Row, Sqlite};
@@ -205,14 +206,14 @@ impl DBHandler {
                 "nNonce": bead.block_header.nonce,
                 "payout_address": hex::encode(bead.committed_metadata.payout_address.as_bytes()),
                 "start_timestamp": bead.committed_metadata.start_timestamp.to_consensus_u32(),
-                "comm_pub_key": hex::encode(bead.committed_metadata.comm_pub_key.to_bytes()),
+                "comm_pub_key": hex::encode(bead.committed_metadata.comm_pub_key.serialize()),
                 "min_target": bead.committed_metadata.min_target.to_consensus(),
                 "weak_target": bead.committed_metadata.weak_target.to_consensus(),
                 "miner_ip": bead.committed_metadata.miner_ip.clone(),
                 "extranonce1": hex::encode(bead.uncommitted_metadata.extra_nonce_1.to_be_bytes()),
                 "extranonce2": hex::encode(bead.uncommitted_metadata.extra_nonce_2.to_be_bytes()),
                 "broadcast_timestamp": bead.uncommitted_metadata.broadcast_timestamp.to_consensus_u32(),
-                "signature": hex::encode(bead.uncommitted_metadata.signature.to_vec()),
+                "signature": hex::encode(bead.uncommitted_metadata.signature.as_ref()),
             }));
             all_txs_json_parts.extend(txs);
             all_relatives_json_parts.extend(relatives);
@@ -607,7 +608,7 @@ fn build_bead_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<Bead, DBErrors> 
         })?;
 
     bead.committed_metadata.comm_pub_key =
-        PublicKey::from_slice(&row.get::<Vec<u8>, _>("comm_pub_key")).map_err(|e| {
+        parse_xonly_pubkey(&row.get::<Vec<u8>, _>("comm_pub_key")).map_err(|e| {
             DBErrors::TupleAttributeParsingError {
                 error: format!("Invalid comm_pub_key: {}", e),
                 attribute: "comm_pub_key".into(),
@@ -650,7 +651,7 @@ fn build_bead_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<Bead, DBErrors> 
         })?;
 
     bead.uncommitted_metadata.signature =
-        Signature::from_slice(&row.get::<Vec<u8>, _>("signature")).map_err(|e| {
+        parse_schnorr_signature(&row.get::<Vec<u8>, _>("signature")).map_err(|e| {
             DBErrors::TupleAttributeParsingError {
                 error: format!("Invalid signature: {}", e),
                 attribute: "signature".into(),
@@ -707,7 +708,7 @@ pub async fn fetch_bead_by_bead_hash(
                 }
             })?;
             let pub_key =
-                PublicKey::from_slice(&row.get::<Vec<u8>, _>("comm_pub_key")).map_err(|e| {
+                parse_xonly_pubkey(&row.get::<Vec<u8>, _>("comm_pub_key")).map_err(|e| {
                     DBErrors::TupleAttributeParsingError {
                         error: format!("Invalid public key: {}", e),
                         attribute: "comm_pub_key".to_string(),
@@ -734,7 +735,7 @@ pub async fn fetch_bead_by_bead_hash(
                     }
                 })?;
             let signature =
-                Signature::from_slice(&row.get::<Vec<u8>, _>("signature")).map_err(|e| {
+                parse_schnorr_signature(&row.get::<Vec<u8>, _>("signature")).map_err(|e| {
                     DBErrors::TupleAttributeParsingError {
                         error: e.to_string(),
                         attribute: "signature".to_string(),

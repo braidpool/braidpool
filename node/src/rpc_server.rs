@@ -1,3 +1,4 @@
+use crate::bead::sign::extend_verified;
 use crate::bead::Bead;
 use crate::braid::consensus_functions;
 use crate::braid::consensus_functions::highest_work_path;
@@ -335,7 +336,7 @@ impl RpcServer for RpcServerImpl {
             hash = %bead_hash,
             "Add bead request received"
         );
-        let success_status = braid_data.extend(&bead);
+        let success_status = extend_verified(&mut braid_data, &bead);
 
         match success_status {
             AddBeadStatus::BeadAdded { promoted_orphans } => {
@@ -468,7 +469,7 @@ impl RpcServer for RpcServerImpl {
                         format!(
                             "Invalid parameters: {}. Expected JSON object with at least one of: \
                             public_keys (array of hex-encoded strings) or miner_ips (array of strings). \
-                            Example: {{\"public_keys\": [\"0202...\"]}} or {{\"miner_ips\": [\"192.168.1.1\"]}}",
+                            Example: {{\"public_keys\": [\"79be667e...\"]}} or {{\"miner_ips\": [\"192.168.1.1\"]}}",
                             e
                         ),
                         None::<()>,
@@ -479,7 +480,7 @@ impl RpcServer for RpcServerImpl {
                 return Err(ErrorObjectOwned::owned(
                     2,
                     "Parameters required. Please provide at least one filter: public_keys or miner_ips. \
-                    Example: {\"public_keys\": [\"020202020202020202020202020202020202020202020202020202020202020202\"]}",
+                    Example: {\"public_keys\": [\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\"]}",
                     None::<()>,
                 ));
             }
@@ -2408,7 +2409,7 @@ pub async fn test_get_mining_info_rpc() {
 
     // Test 2: Filter by non-matching public key - should match 0 beads
     let params2_obj = json!({
-        "public_keys": ["030303030303030303030303030303030303030303030303030303030303030303"]
+        "public_keys": ["c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"]
     });
     let mut array_params2 = ArrayParams::new();
     array_params2.insert(params2_obj).unwrap();
@@ -2447,7 +2448,7 @@ pub async fn test_get_mining_info_rpc() {
 
     // Test 5: Multiple public keys (key rotation scenario)
     let params5_obj = json!({
-        "public_keys": [test_public_key.clone(), "030303030303030303030303030303030303030303030303030303030303030303"]
+        "public_keys": [test_public_key.clone(), "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"]
     });
     let mut array_params5 = ArrayParams::new();
     array_params5.insert(params5_obj).unwrap();

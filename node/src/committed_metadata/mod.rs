@@ -5,11 +5,21 @@ use bitcoin::consensus::encode::Encodable;
 use bitcoin::consensus::encode::Error;
 use bitcoin::io::{self, Read, Write};
 use bitcoin::CompactTarget;
-use bitcoin::PublicKey;
 use bitcoin::Txid;
+use bitcoin::XOnlyPublicKey;
 use serde::Deserialize;
 use serde::Serialize;
 use std::str::FromStr;
+
+/// secp256k1 generator G as a BIP340 x-only pubkey (even y). Used only as a
+/// deterministic `Default` so tests have a valid 32-byte key.
+pub const DEFAULT_XONLY_PUBKEY_HEX: &str =
+    "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
+
+/// Parse the default x-only miner identity used in fixtures.
+pub fn default_xonly_pubkey() -> XOnlyPublicKey {
+    XOnlyPublicKey::from_str(DEFAULT_XONLY_PUBKEY_HEX).expect("generator G is a valid x-only key")
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct TimeVec(pub Vec<Time>);
@@ -60,8 +70,7 @@ impl Decodable for TxIdVec {
     }
 }
 
-//Changing the existing atrributes type mapping for inherit implementation of serializable and
-//deserializable trait
+/// Metadata committed in a bead's proof-of-work.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CommittedMetadata {
     pub transaction_ids: TxIdVec,
@@ -69,11 +78,9 @@ pub struct CommittedMetadata {
     pub parent_bead_timestamps: TimeVec,
     pub payout_address: String,
     pub start_timestamp: Time,
-    pub comm_pub_key: PublicKey,
-    //minimum possible target > which will be the weak target
+    /// BIP340 x-only secp256k1 miner identity (exactly 32 bytes on the wire).
+    pub comm_pub_key: XOnlyPublicKey,
     pub min_target: CompactTarget,
-    //the weaker target locally apart from mainnet target ranging between the mainnet target and
-    //minimum possible target
     pub weak_target: CompactTarget,
     pub miner_ip: String,
 }
@@ -85,10 +92,7 @@ impl Default for CommittedMetadata {
             parent_bead_timestamps: TimeVec(Vec::new()),
             payout_address: "bc1".to_string(),
             start_timestamp: Time::MIN,
-            comm_pub_key: PublicKey::from_str(
-                "020202020202020202020202020202020202020202020202020202020202020202",
-            )
-            .unwrap(),
+            comm_pub_key: default_xonly_pubkey(),
             min_target: CompactTarget::from_consensus(486604799),
             weak_target: CompactTarget::from_consensus(486604799),
             miner_ip: "127.0.0.1".to_string(),
@@ -106,8 +110,9 @@ impl Encodable for CommittedMetadata {
             .start_timestamp
             .to_consensus_u32()
             .consensus_encode(w)?;
-        let pubkey_bytes = self.comm_pub_key.to_bytes();
-        len += pubkey_bytes.consensus_encode(w)?;
+        let pubkey_bytes = self.comm_pub_key.serialize();
+        w.write_all(&pubkey_bytes)?;
+        len += pubkey_bytes.len();
         len += self.min_target.consensus_encode(w)?;
         len += self.weak_target.consensus_encode(w)?;
         len += self.miner_ip.consensus_encode(w)?;
@@ -127,13 +132,14 @@ impl Decodable for CommittedMetadata {
                 "invalid start_timestamp in CommittedMetadata",
             ))
         })?;
-        let comm_pub_key =
-            PublicKey::from_slice(&Vec::<u8>::consensus_decode(r)?).map_err(|_| {
-                Error::from(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "invalid comm_pub_key in CommittedMetadata",
-                ))
-            })?;
+        let mut pubkey_bytes = [0u8; 32];
+        r.read_exact(&mut pubkey_bytes).map_err(Error::from)?;
+        let comm_pub_key = XOnlyPublicKey::from_slice(&pubkey_bytes).map_err(|_| {
+            Error::from(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "invalid x-only comm_pub_key in CommittedMetadata",
+            ))
+        })?;
         let min_target = CompactTarget::consensus_decode(r)?;
         let weak_target = CompactTarget::consensus_decode(r)?;
         let miner_ip = String::consensus_decode(r)?;

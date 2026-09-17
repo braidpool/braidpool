@@ -1,11 +1,8 @@
 //These implementations must be defined under lib.rs as they are required for intergration tests
 use crate::{rpc_server::DashboardEvents, utils::compute_block_hash};
-use bitcoin::{
-    consensus::encode::deserialize, ecdsa::Signature, BlockHash, CompactTarget, EcdsaSighashType,
-    Txid,
-};
+use bitcoin::{consensus::encode::deserialize, BlockHash, CompactTarget, Txid};
 use num::ToPrimitive;
-use std::{collections::HashMap, str::FromStr, sync::Arc, time::UNIX_EPOCH};
+use std::{collections::HashMap, sync::Arc, time::UNIX_EPOCH};
 
 use futures::lock::Mutex;
 use tokio::sync::mpsc::{self, Receiver, Sender};
@@ -26,6 +23,7 @@ use crate::{
     committed_metadata::{CommittedMetadata, TimeVec, TxIdVec},
     db::BraidpoolDBTypes,
     error::{IPCtemplateError, StratumErrors},
+    miner_identity::MinerIdentity,
     stratum::{BlockTemplate, NotifyCmd},
     uncommitted_metadata::UnCommittedMetadata,
 };
@@ -43,6 +41,7 @@ pub mod db;
 pub mod error;
 pub mod ibd_manager;
 pub mod ipc;
+pub mod miner_identity;
 pub mod peer_manager;
 pub mod rpc_server;
 pub mod stratum;
@@ -286,12 +285,28 @@ pub struct SwarmHandler {
     braid_arc: Arc<tokio::sync::RwLock<Braid>>,
     db_command_sender: tokio::sync::mpsc::Sender<BraidpoolDBTypes>,
     dashboard_notification_sender: Arc<DashboardEvents>,
+    miner_identity: Arc<MinerIdentity>,
 }
 impl SwarmHandler {
     pub fn new(
         braid_arc: Arc<tokio::sync::RwLock<Braid>>,
         db_command_sender: tokio::sync::mpsc::Sender<BraidpoolDBTypes>,
         dashboard_notification_sender: Arc<DashboardEvents>,
+    ) -> (Self, Receiver<SwarmCommand>) {
+        Self::new_with_identity(
+            braid_arc,
+            db_command_sender,
+            dashboard_notification_sender,
+            Arc::new(MinerIdentity::generate()),
+        )
+    }
+
+    /// Construct a swarm handler that signs locally mined beads with `miner_identity`.
+    pub fn new_with_identity(
+        braid_arc: Arc<tokio::sync::RwLock<Braid>>,
+        db_command_sender: tokio::sync::mpsc::Sender<BraidpoolDBTypes>,
+        dashboard_notification_sender: Arc<DashboardEvents>,
+        miner_identity: Arc<MinerIdentity>,
     ) -> (Self, Receiver<SwarmCommand>) {
         let (swarm_stratum_bridge_tx, swarm_stratum_bridge_rx) =
             mpsc::channel::<SwarmCommand>(1024);
@@ -301,9 +316,15 @@ impl SwarmHandler {
                 braid_arc: Arc::clone(&braid_arc),
                 db_command_sender,
                 dashboard_notification_sender,
+                miner_identity,
             },
             swarm_stratum_bridge_rx,
         )
+    }
+
+    /// X-only miner identity used on beads this node forms.
+    pub fn miner_identity(&self) -> Arc<MinerIdentity> {
+        Arc::clone(&self.miner_identity)
     }
     pub async fn propagate_valid_bead(
         &mut self,
@@ -323,10 +344,6 @@ impl SwarmHandler {
             .collect();
         let transaction_ids: Vec<Txid> = Vec::from(ids);
         debug!("Broadcasting bead via floodsub");
-        //TODO:Currently temprorary placeholder will be replaced in upcoming PRs
-        let public_key = "020202020202020202020202020202020202020202020202020202020202020202"
-            .parse::<bitcoin::PublicKey>()
-            .unwrap();
         let mut braid_data = self.braid_arc.write().await;
         let mut pairs: Vec<(BlockHash, bitcoin::absolute::Time)> = braid_data
             .tips
@@ -357,8 +374,18 @@ impl SwarmHandler {
         let job_notification_time_val =
             bitcoin::blockdata::locktime::absolute::Time::from_consensus(job_sent_timestamp)
                 .unwrap();
+        let unix_timestamp = std::time::SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|error| StratumErrors::ErrorFetchingCurrentUNIXTimestamp {
+                error: error.to_string(),
+            })?
+            .as_secs()
+            .to_u32()
+            .ok_or_else(|| StratumErrors::ErrorFetchingCurrentUNIXTimestamp {
+                error: "UNIX timestamp overflowed u32".to_string(),
+            })?;
         let candidate_block_bead_committed_metadata = CommittedMetadata {
-            comm_pub_key: public_key,
+            comm_pub_key: self.miner_identity.xonly(),
             transaction_ids: TxIdVec(transaction_ids),
             parents: parent_hash_set,
             parent_bead_timestamps: time_hash_set,
@@ -369,35 +396,22 @@ impl SwarmHandler {
             miner_ip: downstream_client_ip.to_string(),
         };
         //TODO:This will be either be generated via the `Pubkey` from config parameter from `~/.braidpool`
-        let hex = "3046022100839c1fbc5304de944f697c9f4b1d01d1faeba32d751c0f7acb21ac8a0f436a72022100e89bd46bb3a5a62adc679f659b7ce876d83ee297c7a5587b2011c4fcc72eab45";
-        let sig = Signature {
-            signature: bitcoin::secp256k1::ecdsa::Signature::from_str(hex).unwrap(),
-            sighash_type: EcdsaSighashType::All,
-        };
-        //Current UNIX timestamp during broadcast of bead
-        let current_system_time = std::time::SystemTime::now();
-        let duration_since_epoch = match current_system_time.duration_since(UNIX_EPOCH) {
-            Ok(duration) => duration,
-            Err(error) => {
-                return Err(StratumErrors::ErrorFetchingCurrentUNIXTimestamp {
-                    error: error.to_string(),
-                });
-            }
-        };
-
-        let unix_timestamp = duration_since_epoch.as_secs().to_u32().unwrap();
-
         let candidate_block_bead_uncommitted_metadata = UnCommittedMetadata {
             broadcast_timestamp: bitcoin::absolute::Time::from_consensus(unix_timestamp).unwrap(),
             extra_nonce_1: extranonce_1_raw_value,
             extra_nonce_2: extranonce_2_raw_value,
-            signature: sig,
+            signature: UnCommittedMetadata::default().signature,
         };
-        let weak_share = Bead {
+        let mut weak_share = Bead {
             committed_metadata: candidate_block_bead_committed_metadata,
             block_header: candidate_block_header,
             uncommitted_metadata: candidate_block_bead_uncommitted_metadata,
         };
+        self.miner_identity
+            .sign_bead(&mut weak_share)
+            .map_err(|e| StratumErrors::InvalidShare {
+                reason: e.to_string(),
+            })?;
         let status = braid_data.extend(&weak_share);
         match status {
             AddBeadStatus::BeadAdded { promoted_orphans } => {

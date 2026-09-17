@@ -97,7 +97,7 @@ The `BraidpoolMetadata` struct is:
 | -----           | -----------                                                     |
 | `parents`       | [[BeadHash, Timestamp], ... ]                                   |
 | `payout_address`| P2TR address for this miner's payout                            |
-| `comm_pubkey`   | secp256k1 pubkey for encrypted DH communication with this miner |
+| `comm_pubkey`   | BIP340 x-only secp256k1 pubkey (32 bytes) identifying this miner |
 | `miner IP`      | IP address of this miner                                        |
 | `timestamp`     | Timestamp when this bead was created                            |
 | `transactions`  | List of serialized transactions                                 |
@@ -109,11 +109,37 @@ mining process. It contains:
 | Field             | Description |
 | -----             | ----------- |
 | `timestamp`       | timestamp when this bead was broadcast                                |
-| `signature`       | Signature on the `Uncommitted Metadata` block using the `comm_pubkey` |
+| `signature`       | BIP340 Schnorr signature (64 bytes) over the uncommitted fields using `comm_pubkey` |
 | `extranonce`      | 64-bit extranonce field                                               |
-| `timestamp`       | timestamp when this bead was broadcast                        |
-| `signature`       | Signature on the `Uncommitted Metadata` block using the `comm_pubkey` |
-| `extranonce`    | 64-bit extranonce field                                         |
+
+### Miner identity encoding (BIP340)
+
+`comm_pubkey` is **not** an arbitrary Bitcoin `PublicKey`. Nodes MUST encode it as
+a BIP340 **x-only** secp256k1 public key: exactly 32 bytes (the x-coordinate).
+The corresponding y-coordinate is the even (quadratic residue) lift specified
+by BIP340 `lift_x`. Compressed (`02`/`03` + x), uncompressed, and DER encodings
+are invalid.
+
+`signature` in uncommitted metadata is a BIP340 Schnorr signature: exactly 64
+bytes. ECDSA DER signatures are invalid. The signed message is a tagged hash
+with tag `Braidpool/bead/uncommitted/v1` over:
+
+1. the consensus encoding of `extra_nonce_1`, `extra_nonce_2`, and
+   `broadcast_timestamp`;
+2. the consensus encoding of the block header;
+3. the consensus encoding of committed metadata.
+
+Binding the header and committed metadata prevents copying a valid signature
+onto a different bead. Each node persists a secp256k1 miner secret next to its
+libp2p identity; every bead it forms uses that node's x-only key. The swarm
+PeerId may remain ed25519; the two keys identify the same process, not the
+same curve.
+
+ECIES / ECDH between miners is **not implemented**. A Taproot x-only key is
+compatible with ECIES because `lift_x` reconstructs a unique secp256k1 point
+(`PublicKey::from_x_only_public_key(xonly, Parity::Even)`). Using the same key
+for signing and encryption is a future POC tradeoff (cross-protocol risk) and
+is out of scope here.
 
 The purpose of the timestamps is to gather higher resolution timestamps than are
 possible if the timestamp was committed, in order to measure (in a non-consensus
