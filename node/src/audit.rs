@@ -121,7 +121,7 @@ fn compare_hash(a: &BlockHash, b: &BlockHash) -> Ordering {
 }
 
 /// Computes a deterministic generation hash by concatenating all current DAG tips using compare_hash function.
-/// This is used for calculating the current commitment by combining the composite hash of the current briad tips,
+/// This is used for calculating the current commitment by combining the composite hash of the current braid tips,
 /// by doing this we are commiting to the entire set of tips in a variable interval. Now future beads will
 /// point/contain this commitment.
 pub fn compute_generation_hash(

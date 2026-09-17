@@ -14,6 +14,7 @@ use bitcoin::XOnlyPublicKey;
 use std::fmt;
 
 /// Domain-separation tag for uncommitted-metadata Schnorr signatures.
+/// REVIEW: Schnorr requires a unique tag for different message types, but we use the same tag for all beads.
 pub const UNCOMMITTED_SIGHASH_TAG: &[u8] = b"Braidpool/bead/uncommitted/v1";
 
 /// Errors while signing or verifying a bead's uncommitted Schnorr signature.
@@ -143,7 +144,7 @@ mod tests {
         let identity = MinerIdentity::generate();
         let mut bead = create_test_bead(1, None);
         bead.committed_metadata.comm_pub_key = identity.xonly();
-        sign_uncommitted_metadata(&mut bead, identity.secret()).unwrap();
+        sign_uncommitted_metadata(&mut bead, identity.secret_for_tests()).unwrap();
         verify_uncommitted_signature(&bead).unwrap();
     }
 
@@ -153,7 +154,7 @@ mod tests {
         let other = MinerIdentity::generate();
         let mut bead = create_test_bead(1, None);
         bead.committed_metadata.comm_pub_key = other.xonly();
-        sign_uncommitted_metadata(&mut bead, signer.secret()).unwrap();
+        sign_uncommitted_metadata(&mut bead, signer.secret_for_tests()).unwrap();
         assert_eq!(
             verify_uncommitted_signature(&bead),
             Err(BeadSignError::InvalidSignature)
@@ -165,7 +166,7 @@ mod tests {
         let identity = MinerIdentity::generate();
         let mut bead_a = create_test_bead(1, None);
         bead_a.committed_metadata.comm_pub_key = identity.xonly();
-        sign_uncommitted_metadata(&mut bead_a, identity.secret()).unwrap();
+        sign_uncommitted_metadata(&mut bead_a, identity.secret_for_tests()).unwrap();
 
         let mut bead_b = create_test_bead(2, None);
         bead_b.committed_metadata.comm_pub_key = identity.xonly();
@@ -214,7 +215,7 @@ mod tests {
         let identity = MinerIdentity::generate();
         let mut bead = create_test_bead(1, None);
         bead.committed_metadata.comm_pub_key = identity.xonly();
-        sign_uncommitted_metadata(&mut bead, identity.secret()).unwrap();
+        sign_uncommitted_metadata(&mut bead, identity.secret_for_tests()).unwrap();
         let bytes = serialize(&bead);
         let decoded: Bead = deserialize(&bytes).unwrap();
         assert_eq!(decoded, bead);

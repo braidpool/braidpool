@@ -1,4 +1,3 @@
-
 # Braidpool Specification
 
 Herein we present the specification for a decentralized mining pool we name
@@ -15,18 +14,20 @@ will build upon.
 ## Table of Contents
 
 1. [Shares and Weak Blocks](#shares-and-weak-blocks)
-    1. [Metadata Commitments](#metadata-commitments)
-    2. [Share Value](#share-value)
+  1. [Metadata Commitments](#metadata-commitments)
+  2. [Share Value](#share-value)
 2. [Braid Consensus Mechansim](#braid-consensus-mechanism)
-    1. [Simple Sum of Descendant Work](#simple-sum-of-descendant-work)
-    2. [Difficulty Retarget Algorithm](#difficulty-retarget-algorithm)
-    3. [Miner-Selected Difficulty](#miner-selected-difficulty)
+  1. [Simple Sum of Descendant Work](#simple-sum-of-descendant-work)
+  2. [Difficulty Retarget Algorithm](#difficulty-retarget-algorithm)
+  3. [Miner-Selected Difficulty](#miner-selected-difficulty)
 3. [Payout Update](#payout-commitment)
-    1. [Unspent Hasher Payment Output](#unspent-hasher-payment-output)
+  1. [Unspent Hasher Payment Output](#unspent-hasher-payment-output)
 4. [Payout Update and Settlement Signing](#payout-update-and-settlement-signing)
 5. [Transaction Selection](#transaction-selection)
 6. [Attacks](#attacks)
 7. [Active Research and Future Directions](#active-research-and-future-directions)
+
+
 
 # Shares and Weak Blocks
 
@@ -50,11 +51,13 @@ paid all members of the pool in such a way that all other hashers are paid.
 A Braidpool "share" or "bead" is a data structure containing a bitcoin block
 header, the coinbase transaction, and metadata:
 
-| Field      | Description |
-| ---------- | ----------- |
+
+| Field         | Description                                                           |
+| ------------- | --------------------------------------------------------------------- |
 | `blockheader` | `Version, Previous Block Hash, Merkle Root, Timestamp, Target, Nonce` |
-| `metadata`    | `BraidpoolMetadata` (see below) |
-| `un_metadata` | `UncommittedMetadata` (see below) |
+| `metadata`    | `BraidpoolMetadata` (see below)                                       |
+| `un_metadata` | `UncommittedMetadata` (see below)                                     |
+
 
 The `blockheader` is a standard Bitcoin block header. The metadata is serialized
 from the data above and communicated to peer nodes. The `metadata` field is
@@ -66,11 +69,13 @@ computed.
 The coinbase transaction is a standard transaction having no inputs, and must
 have an `OP_RETURN` and one output for each miner receiving rewards this round:
 
-    OutPoint(Value:0, scriptPubKey OP_RETURN <BraidpoolCommitment>+<extranonce>)
-    OutPoint(Value:<miner_1_payout>, scriptPubKey <miner_1_address>)
-    OutPoint(Value:<miner_2_payout>, scriptPubKey <miner_2_address>)
-    ...
-    OutPoint(Value:<miner_N_payout>, scriptPubKey <miner_N_address>)
+```
+OutPoint(Value:0, scriptPubKey OP_RETURN <BraidpoolCommitment>+<extranonce>)
+OutPoint(Value:<miner_1_payout>, scriptPubKey <miner_1_address>)
+OutPoint(Value:<miner_2_payout>, scriptPubKey <miner_2_address>)
+...
+OutPoint(Value:<miner_N_payout>, scriptPubKey <miner_N_address>)
+```
 
 This is a PPLNS payout mechanism, similar to the [TIDES mechanism](https://ocean.xyz/docs/tides)
 used by [OCEAN](https://ocean.xyz/).  Here is an [example of a block with such a
@@ -93,53 +98,49 @@ the Merkle root in the block header.
 
 The `BraidpoolMetadata` struct is:
 
-| Field           | Description                                                     |
-| -----           | -----------                                                     |
-| `parents`       | [[BeadHash, Timestamp], ... ]                                   |
-| `payout_address`| P2TR address for this miner's payout                            |
-| `comm_pubkey`   | BIP340 x-only secp256k1 pubkey (32 bytes) identifying this miner |
-| `miner IP`      | IP address of this miner                                        |
-| `timestamp`     | Timestamp when this bead was created                            |
-| `transactions`  | List of serialized transactions                                 |
-| `transaction_cnt`| Count of the transactions added for construction of bead       |
+
+| Field             | Description                                                      |
+| ----------------- | ---------------------------------------------------------------- |
+| `parents`         | [[BeadHash, Timestamp], ... ]                                    |
+| `payout_address`  | P2TR address for this miner's payout                             |
+| `comm_pubkey`     | BIP340 x-only secp256k1 pubkey (32 bytes) identifying this miner |
+| `miner IP`        | IP address of this miner                                         |
+| `timestamp`       | Timestamp when this bead was created                             |
+| `transactions`    | List of serialized transactions                                  |
+| `transaction_cnt` | Count of the transactions added for construction of bead         |
+
 
 The `Uncommitted Metadata` block is intentionally not committed to in the PoW
 mining process. It contains:
 
-| Field             | Description |
-| -----             | ----------- |
-| `timestamp`       | timestamp when this bead was broadcast                                |
-| `signature`       | BIP340 Schnorr signature (64 bytes) over the uncommitted fields using `comm_pubkey` |
-| `extranonce`      | 64-bit extranonce field                                               |
+
+| Field        | Description                                                                         |
+| ------------ | ----------------------------------------------------------------------------------- |
+| `timestamp`  | timestamp when this bead was broadcast                                              |
+| `signature`  | BIP340 Schnorr signature (64 bytes) over the uncommitted fields using `comm_pubkey` |
+| `extranonce` | 64-bit extranonce field                                                             |
+
+
+
 
 ### Miner identity encoding (BIP340)
 
-`comm_pubkey` is **not** an arbitrary Bitcoin `PublicKey`. Nodes MUST encode it as
+`comm_pub_key` is **not** an arbitrary Bitcoin `PublicKey`. Nodes MUST encode it as
 a BIP340 **x-only** secp256k1 public key: exactly 32 bytes (the x-coordinate).
 The corresponding y-coordinate is the even (quadratic residue) lift specified
-by BIP340 `lift_x`. Compressed (`02`/`03` + x), uncompressed, and DER encodings
-are invalid.
+by BIP340 `lift_x`. `Compressed (02/03 + x), uncompressed, and DER encodings
+are invalid.`
 
 `signature` in uncommitted metadata is a BIP340 Schnorr signature: exactly 64
 bytes. ECDSA DER signatures are invalid. The signed message is a tagged hash
 with tag `Braidpool/bead/uncommitted/v1` over:
 
 1. the consensus encoding of `extra_nonce_1`, `extra_nonce_2`, and
-   `broadcast_timestamp`;
+  `broadcast_timestamp`;
 2. the consensus encoding of the block header;
 3. the consensus encoding of committed metadata.
 
-Binding the header and committed metadata prevents copying a valid signature
-onto a different bead. Each node persists a secp256k1 miner secret next to its
-libp2p identity; every bead it forms uses that node's x-only key. The swarm
-PeerId may remain ed25519; the two keys identify the same process, not the
-same curve.
-
-ECIES / ECDH between miners is **not implemented**. A Taproot x-only key is
-compatible with ECIES because `lift_x` reconstructs a unique secp256k1 point
-(`PublicKey::from_x_only_public_key(xonly, Parity::Even)`). Using the same key
-for signing and encryption is a future POC tradeoff (cross-protocol risk) and
-is out of scope here.
+Binding the header and committed metadata prevents copying a valid signature onto a different bead. Each node persists a secp256k1 miner secret next to its libp2p identity; every bead it forms uses that node's x-only key.
 
 The purpose of the timestamps is to gather higher resolution timestamps than are
 possible if the timestamp was committed, in order to measure (in a non-consensus
@@ -340,16 +341,17 @@ which has many similarities to ours and should be read by implementors. We
 reject it for the following reasons:
 
 1. The k-width heuristic is somewhat analogous to our cohorts, but has the
-   property that it improperly penalizes naturally occurring beads. If for
+  property that it improperly penalizes naturally occurring beads. If for
    example we target the bead rate such that 40% of the cohorts have 2 or more
    beads, this means that approximately 2.5% of cohorts would have 4 or more
    beads. The red/blue algorithm of PHANTOM would improperly penalize all but
    the first three of the beads in this cohort.
-
 2. It is impossible in practice to reliably identify "honest" and "attacking"
-   nodes. There is only latency, which we can measure and take account of. Even
+  nodes. There is only latency, which we can measure and take account of. Even
    in the absence of attackers, cohorts exceeding the k-width happen naturally
    and cannot be prevented.
+
+
 
 ## Simple Sum of Descendant Work
 
@@ -410,12 +412,15 @@ function](https://en.wikipedia.org/wiki/Lambert_W_function).
 
 Given a starting value for $x$, we can measure these parameters directly from
 the braid within a time window corresponding to a retarget epoch:
-| Parameter   | Description |
-| ----------- | ----------- |
-| $N_B$       | Number of beads   |
-| $N_C$       | Number of cohorts |
-| $T_C$       | Cohort time |
-| $T_B$       | Bead time |
+
+
+| Parameter | Description       |
+| --------- | ----------------- |
+| $N_B$     | Number of beads   |
+| $N_C$     | Number of cohorts |
+| $T_C$     | Cohort time       |
+| $T_B$     | Bead time         |
+
 
 This function has a minimum at
 
@@ -478,9 +483,11 @@ block is mined.  In other words, it must represent and commit to the consensus
 of the decentralized mining pool's share accounting. This transaction has two
 inputs and one output
 
-    Input (1): <existing Braidpool payout update UTXO>
-    Input (2): <block N-100 coinbase output>
-    Outputs (1): <new Braidpool payout update UTXO>
+```
+Input (1): <existing Braidpool payout update UTXO>
+Input (2): <block N-100 coinbase output>
+Outputs (1): <new Braidpool payout update UTXO>
+```
 
 Validating the output of the [consensus mechanism](#consensus-mechanism) is well
 beyond the capability of bitcoin script. Therefore generally one must find a
@@ -635,7 +642,7 @@ pool to support private contract derivative instruments are:
 
 1. The ability to send shares to another party
 2. The ability to settle shares into BTC at a well defined point in time with
-   respect to the difficulty adjustment (for instance after the adjustment, for
+  respect to the difficulty adjustment (for instance after the adjustment, for
    the previous epoch)
 3. The ability transact shares across two difficulty adjustment windows.
 
@@ -748,6 +755,8 @@ coinbase and metadata structure.
 
 # Attacks
 
+
+
 ## Block Withholding
 
 A [Block Withholding Attack (BWA)](https://arxiv.org/abs/1112.4980) is an attack
@@ -783,9 +792,9 @@ $$
 
 where $n$ is the number of miners participating in the signing process and $f$
 is the fraction of the pools hashrate controlled by the attacking miner. For
-$n=50$ and $f=20\%$ this is about 7e-8, rising quickly as $f$ increases.
+$n=50$ and $f=20$ this is about 7e-8, rising quickly as $f$ increases.
 
-This is a standard 51\% attack, which we fundamentally can't prevent and if any
+This is a standard 51 attack, which we fundamentally can't prevent and if any
 miner gains too much hashrate. We can mitigate it somewhat by requiring the
 signing nodes to be distinct, but miners can run multiple independent Braidpool
 instances and appear to be independent miners (a Sybil attack) and we
@@ -839,5 +848,3 @@ could allow hashers 1000000x smaller to participate. A pool could in principle
 dynamically create and destroy sub-pools, moving miners between the sub-pools
 and main pool dependent on their observed hashrate, so as to target a constant
 variance for all hashers.
-
-

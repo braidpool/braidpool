@@ -8,6 +8,7 @@ use crate::bead::Bead;
 use bitcoin::secp256k1::{Secp256k1, SecretKey};
 use bitcoin::XOnlyPublicKey;
 use rand::rngs::OsRng;
+use std::fmt;
 use std::fs;
 use std::io::{self, ErrorKind};
 use std::path::{Path, PathBuf};
@@ -18,10 +19,18 @@ pub const MINER_SECP256K1_FILENAME: &str = "miner_secp256k1";
 
 /// secp256k1 key used as `CommittedMetadata.comm_pub_key` and to Schnorr-sign
 /// uncommitted metadata.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct MinerIdentity {
     secret: SecretKey,
     xonly: XOnlyPublicKey,
+}
+
+impl fmt::Debug for MinerIdentity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MinerIdentity")
+            .field("xonly", &self.xonly)
+            .finish_non_exhaustive()
+    }
 }
 
 impl MinerIdentity {
@@ -104,8 +113,9 @@ impl MinerIdentity {
         self.xonly
     }
 
-    /// Secret key used to Schnorr-sign uncommitted metadata.
-    pub fn secret(&self) -> &SecretKey {
+    /// Secret for tests that must sign without setting `comm_pub_key`.
+    #[cfg(test)]
+    pub(crate) fn secret_for_tests(&self) -> &SecretKey {
         &self.secret
     }
 
@@ -152,6 +162,15 @@ mod tests {
             MinerIdentity::test_fixture().xonly(),
             MinerIdentity::test_fixture().xonly()
         );
+    }
+
+    #[test]
+    fn debug_omits_secret() {
+        let identity = MinerIdentity::test_fixture();
+        let debug = format!("{:?}", identity);
+        assert!(debug.contains("xonly"));
+        assert!(!debug.contains("secret"));
+        assert!(!debug.contains(&hex::encode(identity.secret_for_tests().secret_bytes())));
     }
 
     #[test]
