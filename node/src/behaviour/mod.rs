@@ -103,11 +103,26 @@ impl BraidPoolBehaviour {
         self.bead_sync.send_request(&peer, BeadRequest::GetGenesis)
     }
 
+    /// Sends a bead sync response, logging instead of panicking if the peer is
+    /// already gone.
+    ///
+    /// `send_response` only fails when the response channel has been closed by
+    /// a timeout or a disconnect, which a remote peer can cause at will, so it
+    /// must not take the swarm task down. The failed response is not logged:
+    /// it can be a full batch of beads.
+    fn send_bead_response(
+        &mut self,
+        channel: ResponseChannel<BeadResponse>,
+        response: BeadResponse,
+    ) {
+        if self.bead_sync.send_response(channel, response).is_err() {
+            tracing::warn!("bead sync response channel closed before the reply was sent");
+        }
+    }
+
     // Respond to a bead request
     pub fn respond_with_beads(&mut self, channel: ResponseChannel<BeadResponse>, beads: Vec<Bead>) {
-        self.bead_sync
-            .send_response(channel, BeadResponse::Beads(crate::bead::Beads(beads)))
-            .expect("Failed to send response");
+        self.send_bead_response(channel, BeadResponse::Beads(crate::bead::Beads(beads)));
     }
     //Respond with `GetBeadsAfter` beadhashes request
     pub fn respond_with_beadhashes(
@@ -115,12 +130,10 @@ impl BraidPoolBehaviour {
         channel: ResponseChannel<BeadResponse>,
         bead_hashes: Vec<BeadHash>,
     ) {
-        self.bead_sync
-            .send_response(
-                channel,
-                BeadResponse::GetBeadsAfter(BeadHashes(bead_hashes)),
-            )
-            .expect("Failed to send response");
+        self.send_bead_response(
+            channel,
+            BeadResponse::GetBeadsAfter(BeadHashes(bead_hashes)),
+        );
     }
     // Respond to a tips request
     pub fn respond_with_tips(
@@ -128,9 +141,7 @@ impl BraidPoolBehaviour {
         channel: ResponseChannel<BeadResponse>,
         tips: Vec<BeadHash>,
     ) {
-        self.bead_sync
-            .send_response(channel, BeadResponse::Tips(BeadHashes(tips)))
-            .expect("Failed to send response");
+        self.send_bead_response(channel, BeadResponse::Tips(BeadHashes(tips)));
     }
 
     // Respond to a genesis request
@@ -139,9 +150,7 @@ impl BraidPoolBehaviour {
         channel: ResponseChannel<BeadResponse>,
         genesis: Vec<BeadHash>,
     ) {
-        self.bead_sync
-            .send_response(channel, BeadResponse::Genesis(BeadHashes(genesis)))
-            .expect("Failed to send response");
+        self.send_bead_response(channel, BeadResponse::Genesis(BeadHashes(genesis)));
     }
 
     // Respond with an error
@@ -150,9 +159,7 @@ impl BraidPoolBehaviour {
         channel: ResponseChannel<BeadResponse>,
         error: BeadSyncError,
     ) {
-        self.bead_sync
-            .send_response(channel, BeadResponse::Error(error))
-            .expect("Failed to send response");
+        self.send_bead_response(channel, BeadResponse::Error(error));
     }
 }
 
