@@ -5,7 +5,7 @@ use bitcoin::{
     Txid,
 };
 use num::ToPrimitive;
-use std::{collections::HashMap, str::FromStr, sync::Arc, time::UNIX_EPOCH};
+use std::{collections::HashMap, str::FromStr, sync::Arc, time::Instant, time::UNIX_EPOCH};
 
 use futures::lock::Mutex;
 use tokio::sync::mpsc::{self, Receiver, Sender};
@@ -221,32 +221,37 @@ pub async fn ipc_template_consumer(
                 ..Default::default()
             };
 
-            let mut latest_template = latest_template_arc.lock().await;
-            latest_template.version = template.version;
-            latest_template.rules = template.rules.clone();
-            latest_template.vbavailable = template.vbavailable.clone();
-            latest_template.vbrequired = template.vbrequired;
-            latest_template.previousblockhash = template.previousblockhash.clone();
-            latest_template.transactions = template.transactions.clone();
-            latest_template.coinbaseaux = template.coinbaseaux.clone();
-            latest_template.coinbasevalue = template.coinbasevalue;
-            latest_template.longpollid = template.longpollid.clone();
-            latest_template.target = template.target.clone();
-            latest_template.mintime = template.mintime;
-            latest_template.mutable = template.mutable.clone();
-            latest_template.noncerange = template.noncerange.clone();
-            latest_template.sigoplimit = template.sigoplimit;
-            latest_template.sizelimit = template.sizelimit;
-            latest_template.weightlimit = template.weightlimit;
-            latest_template.curtime = template.curtime;
-            latest_template.bits = template.bits;
-            latest_template.height = template.height;
-            latest_template.default_witness_commitment =
-                template.default_witness_commitment.clone();
-            let mut latest_template_merkle_branch = latest_template_merkle_branch_arc.lock().await;
-            latest_template_merkle_branch.clear();
-            for branch in merkle_branch_coinbase.iter() {
-                latest_template_merkle_branch.push(branch.clone());
+            {
+                let mut latest_template = latest_template_arc.lock().await;
+                latest_template.version = template.version;
+                latest_template.rules = template.rules.clone();
+                latest_template.vbavailable = template.vbavailable.clone();
+                latest_template.vbrequired = template.vbrequired;
+                latest_template.previousblockhash = template.previousblockhash.clone();
+                latest_template.transactions = template.transactions.clone();
+                latest_template.coinbaseaux = template.coinbaseaux.clone();
+                latest_template.coinbasevalue = template.coinbasevalue;
+                latest_template.longpollid = template.longpollid.clone();
+                latest_template.target = template.target.clone();
+                latest_template.mintime = template.mintime;
+                latest_template.mutable = template.mutable.clone();
+                latest_template.noncerange = template.noncerange.clone();
+                latest_template.sigoplimit = template.sigoplimit;
+                latest_template.sizelimit = template.sizelimit;
+                latest_template.weightlimit = template.weightlimit;
+                latest_template.curtime = template.curtime;
+                latest_template.bits = template.bits;
+                latest_template.height = template.height;
+                latest_template.default_witness_commitment =
+                    template.default_witness_commitment.clone();
+            }
+            {
+                let mut latest_template_merkle_branch =
+                    latest_template_merkle_branch_arc.lock().await;
+                latest_template_merkle_branch.clear();
+                for branch in merkle_branch_coinbase.iter() {
+                    latest_template_merkle_branch.push(branch.clone());
+                }
             }
             info!(
                 template_id = %template_id,
@@ -254,11 +259,17 @@ pub async fn ipc_template_consumer(
                 "New block template"
             );
 
+            // Capture after both guards have dropped — this is the moment the template
+            // is ready to broadcast. Threaded into SendToAll so the notifier can measure
+            // per-miner delivery latency against this reference point.
+            let template_ready_at = Instant::now();
+
             let notification_sent_or_not = notifier_tx
                 .send(NotifyCmd::SendToAll {
                     template: template,
                     merkle_branch_coinbase,
                     template_id: template_id.clone(),
+                    template_ready_at,
                 })
                 .await;
             match notification_sent_or_not {
