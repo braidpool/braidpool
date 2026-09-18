@@ -2080,10 +2080,8 @@ impl GlobalJobStore {
 
     /// Insert a job into the store. Returns the assigned numeric job_id.
     ///
-    /// Uses `entry().or_insert()` so if `template_id` already exists (e.g. a newly
-    /// connected miner receiving the same template), the existing `Arc` is reused
-    /// instead of creating a duplicate allocation. The new job_id still lets the
-    /// miner reference that template independently via `mining.submit`.
+    /// Uses `entry().or_insert()` so if `template_id` already exists the existing
+    /// `Arc` is reused instead of creating a duplicate allocation.
     pub fn insert(&mut self, template_id: TemplateId, job: Arc<JobDetails>) -> u64 {
         let job_id = self.next_job_id;
         debug!(job_id = %job_id, template_id = %template_id, "Inserting job into GlobalJobStore");
@@ -2414,16 +2412,20 @@ impl Notifier {
         });
         template.curtime = unix_timestamp;
         let template_id = TemplateId::from_upstream_string(&job_notification.job_id);
-        let job_details = crate::stratum::JobDetails {
-            blocktemplate: template,
-            coinbase1: job_notification.coinbase1.clone(),
-            coinbase2: job_notification.coinbase2.clone(),
-            coinbase_merkle_path: job_notification.merkle_branches.clone(),
-            coinbase_witness_commitment: job_notification.coinbase_witness_commitment.clone(),
-            job_sent_time: unix_timestamp,
-            is_upstream_job: true,
-        };
-        job_store_guard.insert(template_id, Arc::new(job_details));
+        // Skip insert if already cached — re-inserting burns a job_id slot
+        // without adding data, exhausting capacity under frequent reconnects.
+        if job_store_guard.get_by_template_id(&template_id).is_err() {
+            let job_details = crate::stratum::JobDetails {
+                blocktemplate: template,
+                coinbase1: job_notification.coinbase1.clone(),
+                coinbase2: job_notification.coinbase2.clone(),
+                coinbase_merkle_path: job_notification.merkle_branches.clone(),
+                coinbase_witness_commitment: job_notification.coinbase_witness_commitment.clone(),
+                job_sent_time: unix_timestamp,
+                is_upstream_job: true,
+            };
+            job_store_guard.insert(template_id, Arc::new(job_details));
+        }
         // Wire job_id sent to the miner is the upstream's original string — unchanged
         let upstream_job_id = &job_notification.job_id;
         let job_notification_response = serde_json::json!({
@@ -2468,7 +2470,7 @@ impl Notifier {
     /// result with wire fields from `notification` and the supplied timestamp.
     /// Both the broadcast path and the resend path use this so `is_upstream_job`
     /// and the construction logic live in one place.
-    fn make_braidpool_job(
+    fn build_local_job_details(
         template: &BlockTemplate,
         notification: &JobNotification,
         unix_timestamp: u32,
@@ -2486,23 +2488,10 @@ impl Notifier {
         })
     }
 
-    /// Runs the Stratum notifier task that handles broadcasting mining jobs to downstream miners.
+    /// Broadcasts mining jobs to downstream miners.
     ///
-    /// This asynchronous function continuously listens for notification commands and performs
-    /// one of the following actions:
-    /// 1. **Broadcast a new template to all connected miners**:
-    ///    - Constructs a new mining job from the latest `BlockTemplate`.
-    ///    - Inserts the job once into the `GlobalJobStore` as an `Arc<JobDetails>`.
-    ///    - Serializes the `JobNotification` and sends it to each miner via their respective channels.
-    /// 2. **Send the latest available template to a newly connected miner**:
-    ///    - Constructs a mining job from the current latest template.
-    ///    - Inserts into the `GlobalJobStore` (reuses the existing `Arc` if the template is already present).
-    ///    - Sends the serialized `JobNotification` to the new miner's channel.
-    ///
-    /// # Returns
-    /// * `Ok(())` on successful completion (runs indefinitely unless an error occurs).
-    /// * `Err(StratumErrors)` if an error occurs while constructing or sending a job notification.
-    ///
+    /// Handles two commands: new template → broadcast to all connected miners;
+    /// miner reconnect → send current template to the reconnecting miner only.
     pub async fn run_notifier(
         &mut self,
         downstream_connection_map: Arc<RwLock<ConnectionMapping>>,
@@ -2536,7 +2525,6 @@ impl Notifier {
                         continue;
                     }
 
-                    // Build job once — all connected miners share the same Arc<JobDetails>
                     let clean_job = false;
                     let job_notification = match Self::construct_job_notification(
                         clean_job,
@@ -2576,13 +2564,11 @@ impl Notifier {
                     };
 
                     let job_details =
-                        Self::make_braidpool_job(&template, &job_notification, unix_timestamp);
+                        Self::build_local_job_details(&template, &job_notification, unix_timestamp);
 
-                    // Insert once; all miners reference the same allocation
                     let numeric_job_id =
                         self.job_store.lock().await.insert(template_id, job_details);
 
-                    // Notify each connected miner with the shared job_id
                     for (peer_adr, connection_info) in &connection_snapshot {
                         let connection_id_hex = format!("{:x}", connection_info.connection_id);
                         let job_notification = job_notification.clone();
@@ -2743,9 +2729,8 @@ impl Notifier {
                     )
                     .await;
 
-                    // Reuse the existing job_id if this template is already in the store.
-                    // Minting a new job_id on every reconnect would advance next_job_id and
-                    // eventually evict the id that already-connected miners are submitting.
+                    // Reuse the existing job_id for this template so reconnects don't
+                    // evict slots that already-connected miners are actively submitting.
                     let existing_job_id = self
                         .job_store
                         .lock()
@@ -2777,7 +2762,7 @@ impl Notifier {
                                                 }
                                             }
                                         };
-                                        let job_details = Self::make_braidpool_job(
+                                        let job_details = Self::build_local_job_details(
                                             &latest_template,
                                             &job,
                                             unix_timestamp,
@@ -2901,7 +2886,6 @@ impl Notifier {
                         continue;
                     }
 
-                    // Build job once — all connected miners share the same Arc<JobDetails>
                     let template_id = TemplateId::from_upstream_string(&job_notification.job_id);
                     let job_details = Arc::new(crate::stratum::JobDetails {
                         blocktemplate: base_template,
@@ -3647,7 +3631,6 @@ impl Server {
                          let upstream_share_tx_clone = upstream_share_tx.clone();
                          let upstream_configure_tx_clone = upstream_configure_tx.clone();
 
-                         // catering each new connection as seperate process
                          tokio::spawn(async move{
                              let _=  Self::handle_connection(downstream_client.clone(),peer_addr,reader,writer,&mut downstream_rx,global_job_store_clone,downstream_tx,notification_sender,swarm_handler_arc_ref,audit_dag_clone,upstream_share_tx_clone,connection_mapping_clone,upstream_configure_tx_clone,control_rx,).await;
                              debug!(
