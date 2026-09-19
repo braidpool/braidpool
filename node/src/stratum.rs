@@ -2506,6 +2506,24 @@ impl Notifier {
                         .await
                         .downstream_channel_mapping
                         .clone();
+
+                    // Prune state for peers that disconnected without hitting the
+                    // jobs-dropped threshold (clean disconnect, no Closed error observed).
+                    // Prevents stale jobs_dropped / flagged state from carrying over on reconnect.
+                    self.miner_states.retain(|addr, state| {
+                        if connection_snapshot.contains_key(addr) {
+                            return true;
+                        }
+                        if state.jobs_dropped > 0 {
+                            info!(
+                                peer = %addr,
+                                jobs_dropped = state.jobs_dropped,
+                                "Discarding state for cleanly disconnected miner"
+                            );
+                        }
+                        false
+                    });
+
                     //We will receive the template from the IPC channel and construct a valid job
                     //from the provided template and pass onto the message_reciver in the handle connection for
                     // downstream communication to take place.
@@ -2877,29 +2895,21 @@ impl Notifier {
                     };
                     // Fresh connection — queue should always be empty. try_send
                     // avoids blocking the Notifier task on a pathological new peer.
+                    // Failures here are per-miner; log and continue so one bad
+                    // new connection cannot kill notifications for everyone else.
                     match connection_entry.sender.try_send(job_notification) {
                         Ok(_) => {}
-                        Err(mpsc::error::TrySendError::Full(msg)) => {
+                        Err(mpsc::error::TrySendError::Full(_)) => {
                             warn!(
                                 peer = %new_downstream_addr,
-                                "New miner queue unexpectedly full on initial job send"
+                                "New miner queue unexpectedly full on initial job send — skipping"
                             );
-                            return Err(StratumErrors::NotifyMessageNotSent {
-                                error: "channel full".to_string(),
-                                msg,
-                                msg_type: "LatestTemplateSent".to_string(),
-                            });
                         }
-                        Err(mpsc::error::TrySendError::Closed(msg)) => {
+                        Err(mpsc::error::TrySendError::Closed(_)) => {
                             warn!(
                                 peer = %new_downstream_addr,
-                                "New miner disconnected before receiving initial job"
+                                "New miner disconnected before receiving initial job — skipping"
                             );
-                            return Err(StratumErrors::NotifyMessageNotSent {
-                                error: "channel closed".to_string(),
-                                msg,
-                                msg_type: "LatestTemplateSent".to_string(),
-                            });
                         }
                     }
                 }
@@ -3201,14 +3211,25 @@ impl Notifier {
                         .clone();
 
                     for (peer_addr, channel) in downstream_channel_mapping.iter() {
-                        if let Err(e) = channel
+                        match channel
                             .sender
-                            .send(serde_json::to_string(&set_difficulty_msg).unwrap())
-                            .await
+                            .try_send(serde_json::to_string(&set_difficulty_msg).unwrap())
                         {
-                            error!("Failed to send difficulty to {}: {}", peer_addr, e);
-                        } else {
-                            info!("Sent difficulty {} to {}", difficulty, peer_addr);
+                            Ok(_) => {
+                                info!("Sent difficulty {} to {}", difficulty, peer_addr);
+                            }
+                            Err(mpsc::error::TrySendError::Full(_)) => {
+                                warn!(
+                                    peer = %peer_addr,
+                                    "Difficulty update dropped — miner queue full"
+                                );
+                            }
+                            Err(mpsc::error::TrySendError::Closed(_)) => {
+                                warn!(
+                                    peer = %peer_addr,
+                                    "Difficulty update dropped — miner disconnected"
+                                );
+                            }
                         }
                     }
                 }
