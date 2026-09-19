@@ -1,4 +1,5 @@
 use crate::committed_metadata::CommittedMetadata;
+use crate::ibd_manager::IBD_BATCH_SIZE;
 use crate::uncommitted_metadata::UnCommittedMetadata;
 use crate::utils::BeadHash;
 use async_trait::async_trait;
@@ -6,6 +7,7 @@ use bitcoin::block::Header as BlockHeader;
 use bitcoin::block::Version as BlockVersion;
 use bitcoin::consensus::encode::Decodable;
 use bitcoin::consensus::encode::Encodable;
+use bitcoin::consensus::encode::MAX_VEC_SIZE;
 use bitcoin::hashes::Hash;
 use bitcoin::{BlockHash, CompactTarget, TxMerkleNode};
 use libp2p::futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
@@ -124,6 +126,39 @@ braidpool_protocol! {
     }
 }
 
+/// Largest bead sync request a peer may send, in bytes.
+///
+/// Requests carry hash lists. The largest one the client builds is a `GetBeads`
+/// of `IBD_BATCH_SIZE` hashes (16 KiB), so 1 MiB leaves ample headroom while
+/// bounding what an unsolicited peer can make the node buffer.
+pub const MAX_BEAD_SYNC_REQUEST_BYTES: u64 = 1024 * 1024;
+
+/// Largest bead sync response a peer may send, in bytes.
+///
+/// One IBD batch of beads, each of which the consensus decoder already refuses
+/// to read past `MAX_VEC_SIZE`. Derived from those two existing limits so the
+/// cap can never reject a response the decoder would have accepted.
+pub const MAX_BEAD_SYNC_RESPONSE_BYTES: u64 = IBD_BATCH_SIZE as u64 * MAX_VEC_SIZE as u64;
+
+/// Reads the whole stream into memory, failing if it holds more than `max` bytes.
+///
+/// Reads `max + 1` so an oversized stream is reported as an error instead of
+/// being silently truncated to a prefix that might still decode.
+async fn read_bounded<T>(io: &mut T, max: u64) -> IoResult<Vec<u8>>
+where
+    T: AsyncRead + Unpin + Send,
+{
+    let mut buf = Vec::new();
+    io.take(max + 1).read_to_end(&mut buf).await?;
+    if buf.len() as u64 > max {
+        return Err(IoError::new(
+            ErrorKind::InvalidData,
+            format!("bead sync message exceeds {max} bytes"),
+        ));
+    }
+    Ok(buf)
+}
+
 /// Codec for encoding/decoding bead sync messages over libp2p.
 ///
 /// Implements the `libp2p::request_response::Codec` trait to handle serialization
@@ -141,8 +176,7 @@ impl Codec for BeadCodec {
     where
         T: AsyncRead + Unpin + Send,
     {
-        let mut buf = Vec::new();
-        io.read_to_end(&mut buf).await?;
+        let buf = read_bounded(io, MAX_BEAD_SYNC_REQUEST_BYTES).await?;
         BeadRequest::consensus_decode(&mut buf.as_slice())
             .map_err(|e| IoError::new(ErrorKind::InvalidData, e))
     }
@@ -151,8 +185,7 @@ impl Codec for BeadCodec {
     where
         T: AsyncRead + Unpin + Send,
     {
-        let mut buf = Vec::new();
-        io.read_to_end(&mut buf).await?;
+        let buf = read_bounded(io, MAX_BEAD_SYNC_RESPONSE_BYTES).await?;
         BeadResponse::consensus_decode(&mut buf.as_slice())
             .map_err(|e| IoError::new(ErrorKind::InvalidData, e))
     }
