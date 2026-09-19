@@ -9,9 +9,8 @@ use ::bitcoin::BlockHash;
 use bitcoin::{
     absolute::Time,
     block::{Header as BlockHeader, Version as BlockVersion},
-    ecdsa::Signature,
     hashes::Hash,
-    secp256k1, CompactTarget, EcdsaSighashType, TxMerkleNode,
+    CompactTarget, TxMerkleNode,
 };
 // Standard Imports
 #[allow(unused_imports)]
@@ -35,7 +34,6 @@ use std::{
     io::ErrorKind,
     net::IpAddr,
     path::{Path, PathBuf},
-    str::FromStr,
 };
 /// Computes a bead's block hash under the rules of `network`.
 pub fn compute_block_hash(block_header: &BlockHeader, network: PoolNetwork) -> BlockHash {
@@ -133,9 +131,7 @@ pub fn resolve_datadir(datadir: &Path) -> std::io::Result<PathBuf> {
 
 // Helper function to create test beads
 pub fn create_test_bead(nonce: u32, prev_hash: Option<BlockHash>) -> Bead {
-    let public_key = "020202020202020202020202020202020202020202020202020202020202020202"
-        .parse::<bitcoin::PublicKey>()
-        .unwrap();
+    let identity = crate::miner_identity::MinerIdentity::test_fixture();
     let time_hash_set = TimeVec(Vec::new());
     let mut parent_hash_set: Vec<BlockHash> = Vec::new();
     if let Some(hash) = prev_hash {
@@ -145,44 +141,43 @@ pub fn create_test_bead(nonce: u32, prev_hash: Option<BlockHash>) -> Bead {
     let min_target = CompactTarget::from_consensus(486604799);
     let time_val = Time::from_consensus(1653195600).unwrap();
     let test_committed_metadata: CommittedMetadata = CommittedMetadata {
-        comm_pub_key: public_key,
-        min_target: min_target,
+        comm_pub_key: identity.xonly(),
+        min_target,
         miner_ip: "".to_string(),
         transaction_ids: TxIdVec(vec![]),
         parents: parent_hash_set,
         parent_bead_timestamps: time_hash_set,
         payout_address: String::from(""),
         start_timestamp: time_val,
-        weak_target: weak_target,
+        weak_target,
     };
     let extra_nonce_1 = rand::random::<u64>();
     let extra_nonce_2 = rand::random::<u64>();
 
-    let hex = "3046022100839c1fbc5304de944f697c9f4b1d01d1faeba32d751c0f7acb21ac8a0f436a72022100e89bd46bb3a5a62adc679f659b7ce876d83ee297c7a5587b2011c4fcc72eab45";
-    let sig = Signature {
-        signature: secp256k1::ecdsa::Signature::from_str(hex).unwrap(),
-        sighash_type: EcdsaSighashType::All,
-    };
     let test_uncommitted_metadata = UnCommittedMetadata {
         broadcast_timestamp: time_val,
-        extra_nonce_1: extra_nonce_1,
-        extra_nonce_2: extra_nonce_2,
-        signature: sig,
+        extra_nonce_1,
+        extra_nonce_2,
+        signature: UnCommittedMetadata::default().signature,
     };
     let test_bytes: [u8; 32] = [0u8; 32];
     let test_block_header = BlockHeader {
         version: BlockVersion::TWO,
         prev_blockhash: prev_hash.unwrap_or(BlockHash::from_byte_array(test_bytes)),
         bits: CompactTarget::from_consensus(486604799),
-        nonce: nonce,
+        nonce,
         time: 8328429,
         merkle_root: TxMerkleNode::from_byte_array(test_bytes),
     };
-    Bead {
+    let mut bead = Bead {
         block_header: test_block_header,
         committed_metadata: test_committed_metadata,
         uncommitted_metadata: test_uncommitted_metadata,
-    }
+    };
+    identity
+        .sign_bead(&mut bead)
+        .expect("test bead Schnorr signature");
+    bead
 }
 
 #[cfg(test)]
