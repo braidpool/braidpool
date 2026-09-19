@@ -2538,6 +2538,23 @@ impl Notifier {
                         .downstream_channel_mapping
                         .clone();
 
+                    // Prune state for peers that disconnected without hitting the
+                    // jobs-dropped threshold (clean disconnect, no Closed error observed).
+                    // Prevents stale jobs_dropped / flagged state from carrying over on reconnect.
+                    self.miner_states.retain(|addr, state| {
+                        if connection_snapshot.contains_key(addr) {
+                            return true;
+                        }
+                        if state.jobs_dropped > 0 {
+                            info!(
+                                peer = %addr,
+                                jobs_dropped = state.jobs_dropped,
+                                "Discarding state for cleanly disconnected miner"
+                            );
+                        }
+                        false
+                    });
+
                     if connection_snapshot.is_empty() {
                         debug!("No miners connected, skipping job notification");
                         continue;
@@ -2598,7 +2615,6 @@ impl Notifier {
                         // it abandons stale work on the next successful delivery.
                         let clean_jobs_for_miner =
                             job_notification.clean_jobs || miner_state.needs_clean_jobs;
-
 
                         let job_notification_response = JobNotificationResponse {
                             method: "mining.notify".to_string(),
@@ -2873,29 +2889,21 @@ impl Notifier {
                     };
                     // Fresh connection — queue should always be empty. try_send
                     // avoids blocking the Notifier task on a pathological new peer.
+                    // Failures here are per-miner; log and continue so one bad
+                    // new connection cannot kill notifications for everyone else.
                     match connection_entry.sender.try_send(job_notification) {
                         Ok(_) => {}
-                        Err(mpsc::error::TrySendError::Full(msg)) => {
+                        Err(mpsc::error::TrySendError::Full(_)) => {
                             warn!(
                                 peer = %new_downstream_addr,
-                                "New miner queue unexpectedly full on initial job send"
+                                "New miner queue unexpectedly full on initial job send — skipping"
                             );
-                            return Err(StratumErrors::NotifyMessageNotSent {
-                                error: "channel full".to_string(),
-                                msg,
-                                msg_type: "LatestTemplateSent".to_string(),
-                            });
                         }
-                        Err(mpsc::error::TrySendError::Closed(msg)) => {
+                        Err(mpsc::error::TrySendError::Closed(_)) => {
                             warn!(
                                 peer = %new_downstream_addr,
-                                "New miner disconnected before receiving initial job"
+                                "New miner disconnected before receiving initial job — skipping"
                             );
-                            return Err(StratumErrors::NotifyMessageNotSent {
-                                error: "channel closed".to_string(),
-                                msg,
-                                msg_type: "LatestTemplateSent".to_string(),
-                            });
                         }
                     }
                 }
@@ -3011,7 +3019,10 @@ impl Notifier {
                         };
                     for (peer_addr, downstream_channel) in &downstream_channel_mapping {
                         let miner_state = self.miner_states.entry(peer_addr.clone()).or_default();
-                        match downstream_channel.sender.try_send(job_notification_str.clone()) {
+                        match downstream_channel
+                            .sender
+                            .try_send(job_notification_str.clone())
+                        {
                             Ok(_) => {
                                 miner_state.consecutive_send_failures = 0;
                                 miner_state.needs_clean_jobs = false;
@@ -3180,14 +3191,25 @@ impl Notifier {
                         .clone();
 
                     for (peer_addr, channel) in downstream_channel_mapping.iter() {
-                        if let Err(e) = channel
+                        match channel
                             .sender
-                            .send(serde_json::to_string(&set_difficulty_msg).unwrap())
-                            .await
+                            .try_send(serde_json::to_string(&set_difficulty_msg).unwrap())
                         {
-                            error!("Failed to send difficulty to {}: {}", peer_addr, e);
-                        } else {
-                            info!("Sent difficulty {} to {}", difficulty, peer_addr);
+                            Ok(_) => {
+                                info!("Sent difficulty {} to {}", difficulty, peer_addr);
+                            }
+                            Err(mpsc::error::TrySendError::Full(_)) => {
+                                warn!(
+                                    peer = %peer_addr,
+                                    "Difficulty update dropped — miner queue full"
+                                );
+                            }
+                            Err(mpsc::error::TrySendError::Closed(_)) => {
+                                warn!(
+                                    peer = %peer_addr,
+                                    "Difficulty update dropped — miner disconnected"
+                                );
+                            }
                         }
                     }
                 }
@@ -4935,7 +4957,9 @@ mod test {
     #[tokio::test]
     async fn test_notify_skips_full_queue_miner() {
         let (notify_tx, notify_rx) = mpsc::channel::<NotifyCmd>(8);
-        let job_store = Arc::new(Mutex::new(GlobalJobStore::new(crate::GLOBAL_JOB_STORE_CAPACITY)));
+        let job_store = Arc::new(Mutex::new(GlobalJobStore::new(
+            crate::GLOBAL_JOB_STORE_CAPACITY,
+        )));
         let conn_map = Arc::new(RwLock::new(ConnectionMapping::new()));
 
         let (slow_tx, _slow_rx) = mpsc::channel::<String>(1);
@@ -4987,7 +5011,9 @@ mod test {
     #[tokio::test]
     async fn test_notify_disconnects_after_max_failures() {
         let (notify_tx, notify_rx) = mpsc::channel::<NotifyCmd>(16);
-        let job_store = Arc::new(Mutex::new(GlobalJobStore::new(crate::GLOBAL_JOB_STORE_CAPACITY)));
+        let job_store = Arc::new(Mutex::new(GlobalJobStore::new(
+            crate::GLOBAL_JOB_STORE_CAPACITY,
+        )));
         let conn_map = Arc::new(RwLock::new(ConnectionMapping::new()));
 
         let (miner_tx, _miner_rx) = mpsc::channel::<String>(1);
@@ -5039,7 +5065,9 @@ mod test {
     #[tokio::test]
     async fn test_notify_sets_clean_jobs_after_dropped_job() {
         let (notify_tx, notify_rx) = mpsc::channel::<NotifyCmd>(8);
-        let job_store = Arc::new(Mutex::new(GlobalJobStore::new(crate::GLOBAL_JOB_STORE_CAPACITY)));
+        let job_store = Arc::new(Mutex::new(GlobalJobStore::new(
+            crate::GLOBAL_JOB_STORE_CAPACITY,
+        )));
         let conn_map = Arc::new(RwLock::new(ConnectionMapping::new()));
 
         let (miner_tx, mut miner_rx) = mpsc::channel::<String>(2);
