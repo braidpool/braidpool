@@ -20,6 +20,10 @@ use tracing::{debug, error, info, trace, warn};
 /// growth and ensures efficient resource usage.
 pub const MAX_CACHED_TEMPLATES: usize = 90;
 
+/// Disconnect a miner after this many consecutive job-send failures.
+/// At 150ms bead rate, 5 failures ≈ 750ms of unresponsiveness before eviction.
+pub const MAX_CONSECUTIVE_SEND_FAILURES: u32 = 5;
+
 use crate::{
     bead::Bead,
     braid::{AddBeadStatus, Braid},
