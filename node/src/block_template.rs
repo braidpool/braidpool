@@ -1,4 +1,5 @@
 use bitcoincore_rpc::RpcApi;
+use bitcoincore_rpc_json::bitcoin::BlockHash;
 use bitcoincore_rpc_json::{GetBlockTemplateModes, GetBlockTemplateResult, GetBlockTemplateRules};
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::time::{sleep, Duration};
@@ -57,15 +58,17 @@ pub async fn fetcher(
 
 // dummy placeholder function to consume the received block templates
 pub async fn consumer(mut block_template_rx: Receiver<GetBlockTemplateResult>) {
-    let mut last_block_template_height = 0;
+    let mut last_block_template: Option<(u64, BlockHash)> = None;
     while let Some(block_template) = block_template_rx.recv().await {
-        // if block template is from some outdated exponential backoff RPC, ignore it
-        if block_template.height > last_block_template_height {
+        // Templates arrive in the order they were generated, so anything that isn't a
+        // repeat of the last one is new. Height alone would hide a reorg to the same height.
+        let this_block_template = (block_template.height, block_template.previous_block_hash);
+        if last_block_template != Some(this_block_template) {
             log::info!(
                 "Received new block template via `getblocktemplate` RPC: {:?}",
                 block_template
             );
-            last_block_template_height = block_template.height;
+            last_block_template = Some(this_block_template);
         }
     }
 }
