@@ -51,7 +51,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if let Some(addnode) = args.addnode {
         for node in addnode.iter() {
             //log::info!("Connecting to node: {:?}", node);
-            let stream = TcpStream::connect(node).await.expect("Error connecting");
+            let stream = match TcpStream::connect(node).await {
+                Ok(stream) => stream,
+                Err(e) => {
+                    log::warn!("Error connecting to node {}: {}", node, e);
+                    continue;
+                }
+            };
             let (r, w) = stream.into_split();
             let framed_reader = FramedRead::new(r, LengthDelimitedCodec::new());
             let framed_writer = FramedWrite::new(w, LengthDelimitedCodec::new());
@@ -74,8 +80,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // Asynchronously wait for an inbound TcpStream.
         log::info!("Starting accept");
         match listener.accept().await {
-            Ok((stream, _)) => {
-                let addr = stream.peer_addr()?;
+            Ok((stream, addr)) => {
                 log::info!("Accepted connection from {}", addr);
                 let (r, w) = stream.into_split();
                 let framed_reader = FramedRead::new(r, LengthDelimitedCodec::new());

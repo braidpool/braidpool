@@ -69,7 +69,13 @@ impl Connection {
     async fn message_received(&mut self, message: &Bytes) -> Result<(), &'static str> {
         use futures::SinkExt;
 
-        let message: Message = protocol::Message::from_bytes(message).unwrap();
+        let message: Message = match protocol::Message::from_bytes(message) {
+            Ok(message) => message,
+            Err(e) => {
+                log::warn!("Error deserializing message from peer: {}", e);
+                return Err("Error deserializing: Closing peer connection");
+            }
+        };
         match message.response_for_received() {
             Ok(result) => {
                 if let Some(response) = result {
