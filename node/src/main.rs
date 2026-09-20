@@ -45,8 +45,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let zmq_url = format!("tcp://{}:{}", args.bitcoin, args.zmqhashblockport);
 
     let (block_template_tx, block_template_rx) = mpsc::channel(1);
-    tokio::spawn(zmq::zmq_hashblock_listener(zmq_url, rpc, block_template_tx));
+    let zmq_handle = tokio::spawn(zmq::zmq_hashblock_listener(zmq_url, rpc, block_template_tx));
     tokio::spawn(block_template::consumer(block_template_rx));
+
+    // Without `hashblock` notifications the block template is never refreshed, so
+    // treat the listener exiting as fatal instead of letting the node run on silently.
+    tokio::spawn(async move {
+        match zmq_handle.await {
+            Ok(Ok(())) => log::error!("ZeroMQ `hashblock` listener stopped. Halting."),
+            Ok(Err(e)) => log::error!("ZeroMQ `hashblock` listener failed: {}. Halting.", e),
+            Err(e) => log::error!("ZeroMQ `hashblock` listener panicked: {}. Halting.", e),
+        }
+        std::process::exit(1);
+    });
 
     if let Some(addnode) = args.addnode {
         for node in addnode.iter() {

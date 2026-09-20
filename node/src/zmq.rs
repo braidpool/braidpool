@@ -23,9 +23,13 @@ pub async fn zmq_hashblock_listener(
                     _ => {}
                 };
             }
-            Err(err) => return Err(err),
+            // The socket reconnects on its own, so drop this message and keep listening
+            // rather than ending the subscription for the lifetime of the node.
+            Err(err) => log::warn!("Error on ZeroMQ `hashblock` notification: {}", err),
         }
     }
 
+    // The stream only ends if the subscription is gone. The caller halts the node
+    // rather than let it mine on a block template that is never refreshed.
     Ok(())
 }
