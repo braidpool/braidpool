@@ -660,7 +660,8 @@ fn test_save_load_braid() {
     .cloned()
     .collect();
 
-    let temp_file = TEST_CASE_DIR.to_owned() + "/temp_braid_test.json";
+    // Not in TEST_CASE_DIR: the other tests read that directory while this one runs.
+    let temp_file = std::env::temp_dir().join("temp_braid_test.json");
     let description = "Test braid";
 
     // Save the braid
@@ -681,5 +682,5 @@ fn test_save_load_braid() {
     assert_eq!(loaded_dag.highest_work_path, dag.highest_work_path);
 
     // Clean up
-    std::fs::remove_file(temp_file).unwrap();
+    fs::remove_file(&temp_file).unwrap();
 }
