@@ -1,14 +1,23 @@
 import React, { useRef, useEffect, useState } from 'react';
 import * as d3 from 'd3';
 import { Loader } from 'lucide-react';
-import { GraphData, GraphNode, NodeIdMapping, Position } from './Types';
+import { GraphData, GraphNode, NodeIdMapping, BeadRecord } from './Types';
 import {
   layoutNodes,
   getEllipseEdgePoint,
   animateLinkDirection,
 } from './BraidPoolDAGUtils';
 import { WEBSOCKET_URLS } from '../../URLs';
-import { NODE_RADIUS, PADDING, COLORS } from './Constants';
+import {
+  NODE_RADIUS,
+  PADDING,
+  COLORS,
+  MAX_BEADS_RECORDS,
+  LINK_STROKE_WIDTH,
+  ARROW_WIDTH,
+  ARROW_HEIGHT,
+} from './Constants';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 
 const GraphVisualization: React.FC = () => {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -18,16 +27,13 @@ const GraphVisualization: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState(true);
   const isPlayingRef = useRef(true);
   const width = window.innerWidth - 100;
-  const margin = { top: 0, right: 0, bottom: 0, left: 50 }; // Changed top from 50 to 100
-  const height = window.innerHeight - margin.top - margin.bottom;
+  const margin = { top: 0, right: 0, bottom: 0, left: 50 };
+  const [svgHeight, setSvgHeight] = useState(600);
   const [nodeIdMap, setNodeIdMap] = useState<NodeIdMapping>({});
   const [selectedCohorts, setSelectedCohorts] = useState<number | 'all'>(5);
   const nodeRadius = NODE_RADIUS;
   const tooltipRef = useRef<HTMLDivElement>(null);
-  // var COLUMN_WIDTH = 200;
-  // const VERTICAL_SPACING = 150;
 
-  // New state for the counter and the highlighted bead hash
   const [graphUpdateCounter, setGraphUpdateCounter] = useState(0);
   const [latestBeadHashForHighlight, setLatestBeadHashForHighlight] = useState<
     string | null
@@ -47,6 +53,23 @@ const GraphVisualization: React.FC = () => {
     null
   );
   const zoomTransformRef = useRef<d3.ZoomTransform | null>(null);
+
+  const [consecutiveZoomInCount, setConsecutiveZoomInCount] = useState(0);
+  const [consecutiveZoomOutCount, setConsecutiveZoomOutCount] = useState(0);
+
+  const [beadRecords, setBeadRecords] = useState<BeadRecord[]>([]);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const toggleRowExpansion = (hash: string) => {
+    setExpandedRows((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(hash)) {
+        newSet.delete(hash);
+      } else {
+        newSet.add(hash);
+      }
+      return newSet;
+    });
+  };
 
   useEffect(() => {
     isPlayingRef.current = isPlaying;
@@ -166,6 +189,39 @@ const GraphVisualization: React.FC = () => {
 
         setNodeIdMap(newMapping);
         setGraphData(graphData);
+
+        // Track new beads for the table
+        const hwPathSet = new Set(parsedData.highest_work_path);
+        const newBeads: BeadRecord[] = [];
+
+        if (lastCohortChanged && parsedData?.cohorts?.length > 0) {
+          const lastCohort = parsedData.cohorts[parsedData.cohorts.length - 1];
+          lastCohort.forEach((beadHash: string) => {
+            const parents = parsedData.parents[beadHash] || [];
+            const childrenList = children[beadHash] || [];
+            const cohortIndex = parsedData.cohorts.findIndex((c: string[]) =>
+              c.includes(beadHash)
+            );
+
+            newBeads.push({
+              hash: beadHash,
+              parentHashes: parents,
+              parentCount: parents.length,
+              childHashes: childrenList,
+              childCount: childrenList.length,
+              isHWP: hwPathSet.has(beadHash),
+              timestamp: new Date().toLocaleTimeString(),
+              cohortIndex: cohortIndex,
+            });
+          });
+
+          if (newBeads.length > 0) {
+            setBeadRecords((prev) => {
+              const updated = [...newBeads, ...prev];
+              return updated.slice(0, MAX_BEADS_RECORDS);
+            });
+          }
+        }
 
         // Increment the counter and update the highlighted bead hash
         setGraphUpdateCounter((prevCounter) => {
@@ -294,46 +350,45 @@ const GraphVisualization: React.FC = () => {
     const nextZoom = 0.3;
     setDefaultZoom(nextZoom);
     zoomTransformRef.current = buildZoomTransform(nextZoom);
+
+    setConsecutiveZoomInCount(0);
+    setConsecutiveZoomOutCount(0);
   };
 
   const handleZoomIn = () => {
+    if (consecutiveZoomInCount >= 3) {
+      return;
+    }
+
     setDefaultZoom((prevZoom) => {
       const nextZoom = Math.min(prevZoom + 0.1, 5);
       zoomTransformRef.current = buildZoomTransform(nextZoom);
       return nextZoom;
     });
+    setConsecutiveZoomInCount((prev) => prev + 1);
+    setConsecutiveZoomOutCount(0);
   };
 
   const handleZoomOut = () => {
+    if (consecutiveZoomOutCount >= 3) {
+      return;
+    }
+
     setDefaultZoom((prevZoom) => {
-      const nextZoom = Math.max(prevZoom - 0.1, 0.3);
+      const nextZoom = Math.max(prevZoom - 0.1, 0.1);
       zoomTransformRef.current = buildZoomTransform(nextZoom);
       return nextZoom;
     });
+    setConsecutiveZoomOutCount((prev) => prev + 1);
+    setConsecutiveZoomInCount(0);
   };
-
-  // have not used it YET.. might come in handy in the future
-  const [_svgHeight, setSvgHeight] = useState(height);
 
   useEffect(() => {
     if (!svgRef.current || !graphData) return;
     const filteredCohorts = graphData.cohorts.slice(-selectedCohorts);
     const filteredCohortNodes = new Set(filteredCohorts.flat());
 
-    const tooltip = d3
-      .select(tooltipRef.current)
-      .style('position', 'fixed')
-      .style('visibility', 'hidden')
-      .style('background', '#0077B6')
-      .style('color', 'white')
-      .style('border', '1px solid #FF8500')
-      .style('border-radius', '5px')
-      .style('padding', '10px')
-      .style('box-shadow', '2px 2px 5px rgba(0,0,0,0.2)')
-      .style('pointer-events', 'none')
-      .style('z-index', '10')
-      .style('bottom', '20px') // Position from bottom
-      .style('right', '20px'); // Position from left
+    const tooltip = d3.select(tooltipRef.current).style('visibility', 'hidden');
 
     const svg = d3.select(svgRef.current);
     svg.selectAll('*').remove();
@@ -352,7 +407,8 @@ const GraphVisualization: React.FC = () => {
       .call(zoomBehavior.current)
       .call(
         zoomBehavior.current.transform,
-        zoomTransformRef.current ?? d3.zoomIdentity.scale(defaultZoom)
+        zoomTransformRef.current ??
+          d3.zoomIdentity.translate(0, 50).scale(defaultZoom)
       );
 
     const allNodes = Object.keys(graphData.parents).map((id) => ({
@@ -363,15 +419,15 @@ const GraphVisualization: React.FC = () => {
 
     const hwPath = graphData.highest_work_path;
     const cohorts = graphData.cohorts;
-    const positions = layoutNodes(allNodes, hwPath);
+    const positions = layoutNodes(allNodes, hwPath, {}, svgHeight, {}, margin);
     const hwPathSet = new Set(hwPath);
 
     // Calculate required height based on node positions
     const allY = Object.values(positions).map((pos) => pos.y);
-    // const minY = Math.min(...allY);
-    // const maxY = Math.max(...allY);
-    const padding = PADDING; // Additional padding
-    const dynamicHeight = height / 2 + margin.top + margin.bottom + padding;
+    const minY = Math.min(...allY);
+    const maxY = Math.max(...allY);
+    const padding = PADDING * 2; // Additional padding top and bottom
+    const dynamicHeight = maxY - minY + padding;
     setSvgHeight(dynamicHeight);
 
     // making old nodes invisible
@@ -494,7 +550,7 @@ const GraphVisualization: React.FC = () => {
           ? '#FF8500'
           : '#48CAE4'
       )
-      .attr('stroke-width', 1.5)
+      .attr('stroke-width', LINK_STROKE_WIDTH)
       .attr('marker-end', (d) =>
         hwPathSet.has(d.source) && hwPathSet.has(d.target)
           ? 'url(#arrow-orange)'
@@ -547,22 +603,6 @@ const GraphVisualization: React.FC = () => {
           .select('ellipse, rect')
           .attr('stroke', '#FF8500')
           .attr('stroke-width', 3);
-
-        const cohortIndex = cohortMap.get(d.id);
-        const isHWP = hwPathSet.has(d.id);
-
-        const tooltipContent = `
-                <div><strong>ID:</strong> ${nodeIdMap[d.id] || '?'} (${d.id})</div>
-                <div><strong>Cohort:</strong> ${cohortIndex !== undefined ? cohortIndex : 'N/A'}</div>
-                <div><strong>Highest Work Path:</strong> ${isHWP ? 'Yes' : 'No'}</div>
-                <div><strong>Parents:</strong> ${
-                  d.parents.length > 0
-                    ? d.parents.map((p) => `${nodeIdMap[p] || '?'}`).join(', ')
-                    : 'None'
-                }
-                `;
-
-        tooltip.html(tooltipContent).style('visibility', 'visible');
       })
       .on('mouseout', function () {
         d3.select(this)
@@ -574,23 +614,73 @@ const GraphVisualization: React.FC = () => {
 
     nodes
       .append('text')
-      .attr('dy', 5)
+      .attr('dy', '0.35em')
       .attr('text-anchor', 'middle')
       .text((d) => `${d.id.slice(-4)}`)
       .attr('fill', '#fff')
-      .style('font-size', 25)
+      .style('font-size', 40)
+      .style('font-weight', 'bold')
       .on('mouseover', function (event: MouseEvent, d: GraphNode) {
         const cohortIndex = cohortMap.get(d.id);
         const isHWP = hwPathSet.has(d.id);
+        const hwpPosition = isHWP ? hwPath.indexOf(d.id) + 1 : null;
+
         const tooltipContent = `
-                <div><strong>ID:</strong> ${nodeIdMap[d.id] || '?'} (${d.id})</div>
-                <div><strong>Cohort:</strong> ${cohortIndex !== undefined ? cohortIndex : 'N/A'}</div>
-                <div><strong>Highest Work Path:</strong> ${isHWP ? 'Yes' : 'No'}</div>
-                <div><strong>Parents:</strong> ${
-                  d.parents.length > 0
-                    ? d.parents.map((p) => `${nodeIdMap[p] || '?'}`).join(', ')
-                    : 'None'
-                }
+                <div style="max-width: 400px; font-size: 12px; line-height: 1.6;">
+                  <div style="margin-bottom: 8px; padding-bottom: 8px;">
+                    <strong >Bead Information</strong>
+                  </div>
+                  
+                  <div style="margin-bottom: 4px; word-break: break-all;"><strong> Hash:</strong> <span style="font-family: monospace; font-size: 10px;">${d.id}</span></div>
+                  <div style="margin-bottom: 4px;"><strong>Cohort Index:</strong> ${cohortIndex !== undefined ? cohortIndex : 'N/A'}</div>
+                  <div style="margin-bottom: 4px;"><strong>On HWP:</strong> <span style="color: ${isHWP ? '#4ade80' : '#ef4444'};">${isHWP ? 'Yes' : 'No'}${hwpPosition ? ` (Position: ${hwpPosition})` : ''}</span></div>
+                  
+                  <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #48CAE4;">
+                    <strong>Parents (${d.parents.length}):</strong>
+                    ${
+                      d.parents.length > 0
+                        ? `
+                      <div style="margin-top: 4px; padding-left: 8px;">
+                        ${d.parents
+                          .map(
+                            (p) => `
+                          <div style="margin: 2px 0; font-size: 10px;">
+                            <span style="color: #FF8500;">→</span>
+                            <span style="font-family: monospace; color: #48CAE4;">${p.slice(0, 12)}...${p.slice(-8)}</span>
+                          </div>
+                        `
+                          )
+                          .join('')}
+                      </div>
+                    `
+                        : '<span style="color: #999;"> None (Genesis)</span>'
+                    }
+                  </div>
+                  
+                  <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #48CAE4;">
+                    <strong>Children (${d.children?.length || 0}):</strong>
+                    ${
+                      d.children && d.children.length > 0
+                        ? `
+                      <div style="margin-top: 4px; padding-left: 8px;">
+                        ${d.children
+                          .slice(0, 5)
+                          .map(
+                            (c) => `
+                          <div style="margin: 2px 0; font-size: 10px;">
+                            <span style="color: #4ade80;">→</span> 
+                            <span style="font-family: monospace; color: #48CAE4;">${c.slice(0, 12)}...${c.slice(-8)}</span>
+                          </div>
+                        `
+                          )
+                          .join('')}
+                        ${d.children.length > 5 ? `<div style="margin-top: 2px; color: #999; font-size: 10px;">... and ${d.children.length - 5} more</div>` : ''}
+                      </div>
+                    `
+                        : '<span style="color: #999;"> None (Leaf bead)</span>'
+                    }
+                  </div>
+                </div>
                   `;
 
         tooltip.html(tooltipContent).style('visibility', 'visible');
@@ -618,8 +708,8 @@ const GraphVisualization: React.FC = () => {
       .attr('viewBox', '0 -5 10 10')
       .attr('refX', 10)
       .attr('refY', 0)
-      .attr('markerWidth', 15)
-      .attr('markerHeight', 12)
+      .attr('markerWidth', ARROW_WIDTH)
+      .attr('markerHeight', ARROW_HEIGHT)
       .attr('orient', 'auto')
       .append('path')
       .attr('d', 'M0,-5L10,0L0,5')
@@ -672,80 +762,281 @@ const GraphVisualization: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen p-2 bg-gray">
-      <div className="m-2 relative flex gap-2 items-center">
-        <select
-          value={selectedCohorts}
-          onChange={(e) => {
-            const value = e.target.value;
-            setSelectedCohorts(value === 'all' ? 'all' : Number(value));
-          }}
-          className="px-2 py-1 rounded border border-[#0077B6] bg-gray text-[#0077B6]"
-        >
-          <option value="all">Show all cohorts</option>
-          {[1, 2, 3, 4, 5].map((value) => (
-            <option key={value} value={value}>
-              Show latest {value} cohorts
-            </option>
-          ))}
-        </select>
-        <div className="flex gap-1 ml-auto">
-          <button
-            onClick={handleZoomIn}
-            className="bg-[#0077B6] text-white px-3 py-1 rounded hover:bg-[#005691] transition-colors min-w-[30px]"
-          >
-            +
-          </button>
-          <button
-            onClick={handleZoomOut}
-            className="bg-[#0077B6] text-white px-3 py-1 rounded hover:bg-[#005691] transition-colors min-w-[30px]"
-          >
-            -
-          </button>
-          <button
-            onClick={handleResetZoom}
-            className="bg-[#0077B6] text-white px-3 py-1 rounded hover:bg-[#005691] transition-colors"
-          >
-            Reset Zoom
-          </button>
-          <button
-            onClick={() => setIsPlaying((prev) => !prev)}
-            className="bg-[#0077B6] text-white px-3 py-1 rounded hover:bg-[#005691] transition-colors"
-          >
-            {isPlaying ? 'Pause' : 'Resume'}
-          </button>
-        </div>
-      </div>
-
-      <div className="m-2 relative">
-        <div className="border border-[#FF8500] rounded-lg bg-gray shadow-lg">
-          <svg ref={svgRef} width={width} height={height} />
+    <div>
+      <div>
+        <div className=" h-[650px] border border-gray-600 backdrop-blur-2xl  rounded-lg  shadow-lg overflow-hidden mt-2">
+          <div className="m-2 relative flex gap-2 items-center">
+            <select
+              value={selectedCohorts}
+              onChange={(e) => {
+                const value = e.target.value;
+                setSelectedCohorts(value === 'all' ? 'all' : Number(value));
+              }}
+              className="px-2 py-1 rounded border border-[#0077B6]  text-[#0077B6]"
+            >
+              <option value="all">Show all cohorts</option>
+              {[1, 2, 3, 4, 5].map((value) => (
+                <option key={value} value={value}>
+                  Show latest {value} cohorts
+                </option>
+              ))}
+            </select>
+            <div className="m-2 flex items-center justify-between shadow-lg p-4 ml-[150px]">
+              <div className="flex gap-6 ">
+                <div className="font-medium text-[#0077B6]">
+                  Total Beads:{' '}
+                  <span className="font-normal text-[#FF8500]">
+                    {totalBeads}
+                  </span>
+                </div>
+                <div className="font-medium text-[#0077B6]">
+                  Total Cohorts:{' '}
+                  <span className="font-normal text-[#FF8500]">
+                    {totalCohorts}
+                  </span>
+                </div>
+                <div className="font-medium text-[#0077B6]">
+                  Max Cohort Size:{' '}
+                  <span className="font-normal text-[#FF8500]">
+                    {maxCohortSize}
+                  </span>
+                </div>
+                <div className="font-medium text-[#0077B6]">
+                  HWP Length:{' '}
+                  <span className="font-normal text-[#FF8500]">
+                    {hwpLength}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-1 ml-auto">
+              <button
+                onClick={handleZoomIn}
+                disabled={consecutiveZoomInCount >= 3}
+                className={`px-3 py-1 rounded transition-colors min-w-[30px] ${
+                  consecutiveZoomInCount >= 3
+                    ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                    : 'bg-[#0077B6] text-white hover:bg-[#005691]'
+                }`}
+                title={
+                  consecutiveZoomInCount >= 3
+                    ? 'Zoom out to enable zoom in'
+                    : 'Zoom in'
+                }
+              >
+                +
+              </button>
+              <button
+                onClick={handleZoomOut}
+                disabled={consecutiveZoomOutCount >= 3}
+                className={`px-3 py-1 rounded transition-colors min-w-[30px] ${
+                  consecutiveZoomOutCount >= 3
+                    ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                    : 'bg-[#0077B6] text-white hover:bg-[#005691]'
+                }`}
+                title={
+                  consecutiveZoomOutCount >= 3
+                    ? 'Zoom in to enable zoom out'
+                    : 'Zoom out'
+                }
+              >
+                -
+              </button>
+              <button
+                onClick={handleResetZoom}
+                className="bg-[#0077B6] text-white px-3 py-1 rounded hover:bg-[#005691] transition-colors"
+              >
+                Reset Zoom
+              </button>
+              <button
+                onClick={() => setIsPlaying((prev) => !prev)}
+                className="bg-[#0077B6] text-white px-3 py-1 rounded hover:bg-[#005691] transition-colors"
+              >
+                {isPlaying ? 'Pause' : 'Resume'}
+              </button>
+            </div>
+          </div>
+          <svg
+            ref={svgRef}
+            width={width}
+            height={svgHeight}
+            className="block"
+          />
           <div
             ref={tooltipRef}
-            className="fixed bg-[#0077B6] text-white border border-[#FF8500] rounded p-2 shadow-lg pointer-events-none z-10 bottom-5 right-5"
+            className="fixed bg-gray-800 text-white border rounded p-2 shadow-lg pointer-events-none z-10 bottom-5 right-5 mb-[200px] border-gray-600 backdrop-blur-lg"
           ></div>
         </div>
       </div>
+      {/*  Beads Table */}
+      <div className="m-2 border border-gray-600 backdrop-blur-2xl  rounded-lg  shadow-lg ">
+        <div className="p-4 ">
+          <h3 className="text-xl font-semibold text-white">
+            Incoming Beads ({beadRecords.length})
+          </h3>
+        </div>
+        <div
+          className="overflow-x-auto"
+          style={{ maxHeight: '700px', overflowY: 'auto' }}
+        >
+          <table className="w-full text-sm">
+            <thead className=" text-white ">
+              <tr>
+                <th className="px-3 py-2 text-left font-semibold w-12"></th>
+                <th className="px-3 py-2 text-left font-semibold">Bead Hash</th>
+                <th className="px-3 py-2 text-center font-semibold">
+                  Timestamp
+                </th>
+                <th className="px-3 py-2 text-center font-semibold">
+                  Cohort Index
+                </th>
+                <th className="px-3 py-2 text-center font-semibold">Parents</th>
+                <th className="px-3 py-2 text-center font-semibold">
+                  Children
+                </th>
+                <th className="px-3 py-2 text-center font-semibold">HWP</th>
+              </tr>
+            </thead>
+            <tbody>
+              {beadRecords.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-3 py-8 text-center ">
+                    Waiting for new beads...
+                  </td>
+                </tr>
+              ) : (
+                beadRecords.map((bead, index) => (
+                  <React.Fragment key={`${bead.hash}-${index}`}>
+                    <tr
+                      className={`border-t  border-gray-700 hover:bg-opacity-10 cursor-pointer transition-colors ${
+                        index === 0 ? ' bg-opacity-5' : ''
+                      }`}
+                      onClick={() => toggleRowExpansion(bead.hash)}
+                    >
+                      <td className="px-3 py-3 text-center">
+                        <span className="text-[#0077B6] text-lg">
+                          {expandedRows.has(bead.hash) ? (
+                            <ChevronUp className="h-5 w-5 text-blue-400" />
+                          ) : (
+                            <ChevronDown className="h-5 w-5 text-white" />
+                          )}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="font-mono text-xs "
+                            title={bead.hash}
+                          >
+                            {bead.hash.slice(0, 16)}...{bead.hash.slice(-8)}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 text-center text-xs">
+                        {bead.timestamp}
+                      </td>
+                      <td className="px-3 py-3 text-center">
+                        <span className="inline-block px-2 py-1  bg-opacity-20  rounded text-xs font-semibold">
+                          {bead.cohortIndex !== undefined &&
+                          bead.cohortIndex !== -1
+                            ? bead.cohortIndex
+                            : 'N/A'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 text-center">
+                        <span className="inline-block px-2 py-1  bg-opacity-20  rounded text-xs font-bold">
+                          {bead.parentCount}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 text-center">
+                        <span className="inline-block px-2 py-1  rounded text-xs font-bold">
+                          {bead.childCount}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 text-center">
+                        {bead.isHWP ? (
+                          <span className="inline-block px-3 py-1  text-white rounded text-xs font-semibold shadow">
+                            YES
+                          </span>
+                        ) : (
+                          <span className="inline-block px-3 py-1  text-white rounded text-xs">
+                            NO
+                          </span>
+                        )}
+                      </td>
+                    </tr>
 
-      <div className="m-2 border border-[#0077B6] rounded-lg bg-gray shadow-lg p-4">
-        <h3 className="text-xl font-semibold text-[#FF8500] mb-4">Metrics</h3>
-        <div className="flex flex-col gap-2">
-          <div className="font-medium text-[#0077B6]">
-            Total Beads:{' '}
-            <span className="font-normal text-[#FF8500]">{totalBeads}</span>
-          </div>
-          <div className="font-medium text-[#0077B6]">
-            Total Cohorts:{' '}
-            <span className="font-normal text-[#FF8500]">{totalCohorts}</span>
-          </div>
-          <div className="font-medium text-[#0077B6]">
-            Max Cohort Size:{' '}
-            <span className="font-normal text-[#FF8500]">{maxCohortSize}</span>
-          </div>
-          <div className="font-medium text-[#0077B6]">
-            HWP Length:{' '}
-            <span className="font-normal text-[#FF8500]">{hwpLength}</span>
-          </div>
+                    {/* Parents  & Children Section  */}
+                    {expandedRows.has(bead.hash) && (
+                      <tr className="bg-opacity-5 border-t border-[#48CAE4]">
+                        <td></td>
+                        <td colSpan={6} className="px-4 py-4">
+                          <div className="space-y-3">
+                            <div className="flex items-start gap-2">
+                              <span className="font-semibold text-[#0077B6] min-w-[80px]">
+                                Parents:
+                              </span>
+                              {bead.parentCount === 0 ? (
+                                <span className="text-gray-500 italic">
+                                  None (Genesis Bead)
+                                </span>
+                              ) : (
+                                <div className="flex-1 space-y-1">
+                                  {bead.parentHashes.map((ph, idx) => (
+                                    <div
+                                      key={idx}
+                                      className="font-mono text-xs text-white flex items-center gap-2"
+                                      title={ph}
+                                    >
+                                      <span>
+                                        {ph.slice(0, 16)}...{ph.slice(-12)}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex items-start gap-2">
+                              <span className="font-semibold text-[#0077B6] min-w-[80px]">
+                                Children:
+                              </span>
+                              {bead.childCount === 0 ? (
+                                <span className="text-gray-500 italic">
+                                  None (Leaf Bead)
+                                </span>
+                              ) : (
+                                <div className="flex-1 space-y-1">
+                                  {bead.childHashes
+                                    .slice(0, 5)
+                                    .map((ch, idx) => (
+                                      <div
+                                        key={idx}
+                                        className="font-mono text-xs text-[#48CAE4] flex items-center gap-2"
+                                        title={ch}
+                                      >
+                                        <span>
+                                          {ch.slice(0, 16)}...{ch.slice(-12)}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  {bead.childCount > 5 && (
+                                    <div className="text-white italic text-xs pl-6">
+                                      ... and {bead.childCount - 5} more
+                                      children
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

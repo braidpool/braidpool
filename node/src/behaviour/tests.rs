@@ -1,19 +1,21 @@
 use super::BraidPoolBehaviourEvent as BraidPoolEvent;
 use super::*;
 use crate::bead::{Bead, BeadResponse};
+use crate::config::PoolNetwork;
+use crate::utils::compute_block_hash;
 use crate::utils::test_utils::test_utility_functions::{
     Signature, TestCommittedMetadataBuilder, TestUnCommittedMetadataBuilder, Time, TimeVec,
 };
 use bitcoin::consensus::encode::deserialize;
 use bitcoin::consensus::serialize;
-use bitcoin::BlockVersion;
-use bitcoin::CompactTarget;
-use bitcoin::{BlockHash, BlockHeader, BlockTime, EcdsaSighashType, TxMerkleNode};
+use bitcoin::hashes::Hash;
+use bitcoin::{block::Header as BlockHeader, block::Version as BlockVersion};
+use bitcoin::{secp256k1, CompactTarget};
+use bitcoin::{BlockHash, EcdsaSighashType, TxMerkleNode};
 use futures::StreamExt;
 use libp2p::floodsub::Topic;
 use libp2p::swarm::SwarmEvent;
 use libp2p::{Multiaddr, Swarm, SwarmBuilder};
-use std::collections::HashSet;
 use std::str::FromStr;
 use tokio::time::timeout;
 
@@ -25,7 +27,7 @@ fn create_test_bead() -> Bead {
         .unwrap();
     let socket = String::from("127.0.0.1");
     let time_hash_set = TimeVec(Vec::new());
-    let parent_hash_set: HashSet<BlockHash> = HashSet::new();
+    let parent_hash_set: Vec<BlockHash> = Vec::new();
     let weak_target = CompactTarget::from_consensus(486604799);
     let min_target = CompactTarget::from_consensus(486604799);
     let time_val = Time::from_consensus(1653195600).unwrap();
@@ -40,8 +42,8 @@ fn create_test_bead() -> Bead {
         .weak_target(weak_target)
         .transactions(vec![])
         .build();
-    let extra_nonce_1 = 42;
-    let extra_nonce_2 = 42;
+    let extra_nonce_1: u64 = 42;
+    let extra_nonce_2: u64 = 42;
 
     let hex = "3046022100839c1fbc5304de944f697c9f4b1d01d1faeba32d751c0f7acb21ac8a0f436a72022100e89bd46bb3a5a62adc679f659b7ce876d83ee297c7a5587b2011c4fcc72eab45";
     let sig = Signature {
@@ -59,7 +61,7 @@ fn create_test_bead() -> Bead {
         prev_blockhash: BlockHash::from_byte_array(test_bytes),
         bits: CompactTarget::from_consensus(486604799),
         nonce: 1,
-        time: BlockTime::from_u32(8328429),
+        time: 8328429,
         merkle_root: TxMerkleNode::from_byte_array(test_bytes),
     };
     Bead {
@@ -138,7 +140,7 @@ async fn test_bead_request_handling() {
     let local_peer_id = swarm1.local_peer_id().clone();
     // Connect swarm2 to swarm1
     let test_bead = create_test_bead();
-    let bead_hash = test_bead.block_header.block_hash();
+    let bead_hash = compute_block_hash(&test_bead.block_header, PoolNetwork::Cpunet);
     swarm2.dial(addr.clone()).unwrap();
     // wait for connection to be established
 
@@ -331,7 +333,7 @@ async fn test_floodsub_message_propagation() {
     // Connect swarm2 to swarm1
     let test_bead = create_test_bead();
     let test_bead_ref = test_bead.clone();
-    let bead_hash = test_bead.block_header.block_hash();
+    let bead_hash = compute_block_hash(&test_bead.block_header, PoolNetwork::Cpunet);
 
     let topic = Topic::new("test");
     swarm1
@@ -428,10 +430,10 @@ async fn test_floodsub_message_propagation() {
     });
 
     let result = rx.recv().await.unwrap();
-    let received_bead: Result<Bead, bitcoin::consensus::DeserializeError> = deserialize(&result);
+    let received_bead: Result<Bead, bitcoin::consensus::encode::Error> = deserialize(&result);
     assert_eq!(
-        received_bead.unwrap().block_header.block_hash(),
-        test_bead_ref.clone().block_header.block_hash()
+        compute_block_hash(&received_bead.unwrap().block_header, PoolNetwork::Cpunet),
+        compute_block_hash(&test_bead_ref.clone().block_header, PoolNetwork::Cpunet)
     );
     _ = tokio::time::timeout(
         tokio::time::Duration::from_secs(20),

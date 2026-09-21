@@ -2,7 +2,6 @@ export enum Page {
   DASHBOARD = 'dashboard',
   MINING_INVENTORY = 'mining-inventory',
   MEMPOOL = 'mempool',
-  DAG_VISUALIZATION = 'dag-visualization',
   MINER_STATS = 'miner-stats',
   BITCOIN_STATS = 'bitcoin-stats',
   NODE_HEALTH = 'node-health',

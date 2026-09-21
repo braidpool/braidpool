@@ -22,7 +22,9 @@ describe('NetworkPanel', () => {
 
   it('renders network status and details', () => {
     render(<NetworkPanel network={mockNetwork} />);
-    expect(screen.getByText(/Network Status/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: /Network Status/i })
+    ).toBeInTheDocument();
     expect(screen.getAllByText(/Active/i).length).toBeGreaterThan(0);
 
     expect(screen.getByText(/Protocol Version/i)).toBeInTheDocument();

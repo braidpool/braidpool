@@ -1,9 +1,11 @@
 //! Listens for block notifications and fetches new block templates via IPC
 use crate::config::CoinbaseConfig;
+use crate::config::PoolNetwork;
 use crate::error::CoinbaseError;
 use crate::error::{classify_error, ErrorKind};
 use crate::rpc_server::RpcProxyCommand;
 use crate::template_creator::{create_block_template, FinalTemplate};
+use crate::utils::compute_block_hash;
 use crate::{TemplateId, MAX_CACHED_TEMPLATES};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -11,7 +13,6 @@ use tokio::sync::mpsc::Sender;
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
 pub mod client;
-use bitcoin::Network;
 pub use client::{
     BitcoinNotification, BlockTemplateComponents, CheckBlockResult, RequestPriority,
     SharedBitcoinClient,
@@ -31,7 +32,7 @@ const MAX_BACKOFF: u64 = 300;
 pub async fn ipc_block_listener(
     ipc_socket_path: String,
     block_template_tx: Sender<Arc<client::BlockTemplate>>,
-    network: Network,
+    network: PoolNetwork,
     template_cache: Arc<tokio::sync::Mutex<HashMap<TemplateId, Arc<client::BlockTemplate>>>>,
     mut block_submission_rx: tokio::sync::mpsc::UnboundedReceiver<
         crate::stratum::BlockSubmissionRequest,
@@ -49,7 +50,7 @@ pub async fn ipc_block_listener(
             let mut health_check_interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
             let mut detailed_stats_interval = tokio::time::interval(tokio::time::Duration::from_secs(100));
             let mut backoff_seconds = 1;
-            let mut shared_client = match SharedBitcoinClient::new(&ipc_socket_path).await {
+            let mut shared_client = match SharedBitcoinClient::new(&ipc_socket_path,network).await {
                 Ok(client) => {
                     info!(socket = %ipc_socket_path, "IPC connection established");
                     client
@@ -256,7 +257,7 @@ pub async fn ipc_block_listener(
                             header,
                             coinbase_transaction,
                         } = submission;
-                        let block_hash = header.block_hash();
+                        let block_hash = compute_block_hash(&header, network);
                         let template_opt = template_cache.lock().await.get(&template_id).cloned();
 
                         if let Some(ipc_template) = template_opt {
@@ -265,7 +266,7 @@ pub async fn ipc_block_listener(
                                     ipc_template,
                                     header,
                                     bitcoin::consensus::encode::serialize(&coinbase_transaction),
-                                    template_id,
+                                    template_id.clone(),
                                     Some(RequestPriority::Critical),
                                 )
                                 .await
@@ -424,24 +425,25 @@ pub async fn ipc_block_listener(
 /// This function:
 /// - Accepts templates smaller than 256 bytes
 /// - Propagates errors to caller
+/// - Uses cpunet module for cpunet-specific configuration when network is CPUNet
 ///
 /// # Arguments
 /// * `client` - The shared Bitcoin client for IPC communication
 /// * `priority` - Request priority affecting queue position
 /// * `context` - Context for logging
 /// * `block_height` - The height of the block for which the template is requested
-/// * `network` - The Bitcoin network (e.g., Mainnet, Testnet, Regtest) for which the
-///   template is generated
+/// * `network` - The network this node runs on, deciding address encoding and bead hashing
 async fn get_template(
     client: &mut SharedBitcoinClient,
     priority: RequestPriority,
     context: &str,
     block_height: u32,
-    network: Network,
+    network: PoolNetwork,
 ) -> Result<client::BlockTemplate, Box<dyn std::error::Error>> {
     const MIN_TRANSACTION_COUNT: u64 = 1;
     const NONCE: u32 = 0;
-    let config = CoinbaseConfig::for_network(network);
+
+    let config = CoinbaseConfig::from_network(network);
 
     let components = client
         .get_block_template_components(None, Some(priority))
@@ -450,20 +452,21 @@ async fn get_template(
     let final_template =
         create_braidpool_template(&components.components, &config, block_height, NONCE)?;
 
-    let template_transaction_count = final_template.block_transaction_count();
-
-    let complete_block_bytes = final_template.complete_block_hex;
+    let complete_block_bytes = final_template.complete_block_hex.clone();
     if complete_block_bytes.is_empty() {
         return Err("Received empty template (0 bytes)".into());
     }
-
-    if template_transaction_count < MIN_TRANSACTION_COUNT {
-        warn!(
-            context = %context,
-            transaction_count = %template_transaction_count,
-            min_transaction_count = %MIN_TRANSACTION_COUNT,
-            "Template tx count smaller than minimum - using anyway"
-        );
+    if let Some(template_transaction_count) = final_template.block_transaction_count() {
+        if template_transaction_count < MIN_TRANSACTION_COUNT {
+            warn!(
+                context = %context,
+                transaction_count = %template_transaction_count,
+                min_transaction_count = %MIN_TRANSACTION_COUNT,
+                "Template tx count smaller than minimum - using anyway"
+            );
+        }
+    } else {
+        return Err("An error occurred due to invalid decode of tx count to varint during template formation".into());
     }
 
     let mut processed_template = (*components).clone();

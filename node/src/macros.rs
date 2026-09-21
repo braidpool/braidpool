@@ -63,7 +63,7 @@ macro_rules! braidpool_protocol {
         }
 
         impl bitcoin::consensus::encode::Decodable for $name {
-            fn consensus_decode<R: bitcoin::io::BufRead + ?Sized>(r: &mut R) -> core::result::Result<Self, bitcoin::consensus::Error> {
+            fn consensus_decode<R: bitcoin::io::Read + ?Sized>(r: &mut R) -> core::result::Result<Self, bitcoin::consensus::encode::Error> {
                 let discriminant = u8::consensus_decode(r)?;
                 braidpool_protocol!(@decode discriminant, r, $name, $($variants)*)
             }
@@ -178,7 +178,7 @@ macro_rules! braidpool_protocol {
         }
     };
     (@decode_match $discrim:ident, $r:ident, $name:ident, $($rest:tt)*) => {
-        Err(bitcoin::consensus::Error::from(bitcoin::io::Error::new(
+        Err(bitcoin::consensus::encode::Error::from(bitcoin::io::Error::new(
             bitcoin::io::ErrorKind::InvalidData,
             concat!("Invalid message id for ", stringify!($name)),
         )))
@@ -221,7 +221,7 @@ macro_rules! impl_consensus_encoding {
 
         impl bitcoin::consensus::encode::Decodable for $thing {
             #[inline]
-            fn consensus_decode_from_finite_reader<R: bitcoin::io::BufRead + ?Sized>(
+            fn consensus_decode_from_finite_reader<R: bitcoin::io::Read + ?Sized>(
                 r: &mut R,
             ) -> core::result::Result<$thing, bitcoin::consensus::encode::Error> {
                 Ok($thing {
@@ -230,7 +230,7 @@ macro_rules! impl_consensus_encoding {
             }
 
             #[inline]
-            fn consensus_decode<R: bitcoin::io::BufRead + ?Sized>(
+            fn consensus_decode<R: bitcoin::io::Read + ?Sized>(
                 r: &mut R,
             ) -> core::result::Result<$thing, bitcoin::consensus::encode::Error> {
                 use bitcoin::io::Read;
@@ -306,9 +306,9 @@ macro_rules! impl_vec_wrapper {
                 &self,
                 w: &mut W,
             ) -> core::result::Result<usize, bitcoin::io::Error> {
-                use bitcoin::consensus::WriteExt;
+                use bitcoin::consensus::encode::{VarInt};
                 let mut len = 0;
-                len += w.emit_compact_size(self.0.len())?;
+                 len += VarInt(self.0.len() as u64).consensus_encode(w)?;
                 for c in self.0.iter() {
                     len += c.consensus_encode(w)?;
                 }
@@ -318,12 +318,11 @@ macro_rules! impl_vec_wrapper {
 
         impl bitcoin::consensus::encode::Decodable for $wrapper {
             #[inline]
-            fn consensus_decode_from_finite_reader<R: bitcoin::io::BufRead + ?Sized>(
+            fn consensus_decode_from_finite_reader<R: bitcoin::io::Read + ?Sized>(
                 r: &mut R,
             ) -> core::result::Result<$wrapper, bitcoin::consensus::encode::Error> {
-                use bitcoin::consensus::ReadExt;
-                let len = r.read_compact_size()?;
-                // Limit the initial vec allocation to at most 8,000 bytes, which is
+                use bitcoin::consensus::encode::{VarInt};
+                let len = VarInt::consensus_decode(r)?.0 as usize;                  // Limit the initial vec allocation to at most 8,000 bytes, which is
                 // sufficient for most use cases. We don't allocate more space upfront
                 // than this, since `len` is an untrusted allocation capacity. If the
                 // vector does overflow the initial capacity `push` will just reallocate.
@@ -337,7 +336,7 @@ macro_rules! impl_vec_wrapper {
                 Ok($wrapper(ret))
             }
 
-            fn consensus_decode<R: bitcoin::io::BufRead + ?Sized>(
+            fn consensus_decode<R: bitcoin::io::Read + ?Sized>(
                 r: &mut R,
             ) -> core::result::Result<$wrapper, bitcoin::consensus::encode::Error> {
                 Self::consensus_decode_from_finite_reader(r)

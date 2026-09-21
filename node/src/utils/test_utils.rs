@@ -7,11 +7,13 @@ use crate::committed_metadata::CommittedMetadata;
 #[cfg(test)]
 pub use crate::committed_metadata::TimeVec;
 #[cfg(test)]
+use crate::config::PoolNetwork;
+#[cfg(test)]
 use crate::uncommitted_metadata::UnCommittedMetadata;
 #[cfg(test)]
-pub use bitcoin::ecdsa::Signature;
+use bitcoin::block::Header as BlockHeader;
 #[cfg(test)]
-use bitcoin::BlockHeader;
+pub use bitcoin::ecdsa::Signature;
 #[cfg(test)]
 pub use bitcoin::{absolute::Time, p2p::address::AddrV2, PublicKey, Transaction};
 #[cfg(test)]
@@ -21,18 +23,18 @@ pub mod test_utility_functions {
         str::FromStr,
     };
 
+    use bitcoin::secp256k1::{Message, Secp256k1, SecretKey};
     #[cfg(test)]
     use bitcoin::Txid;
     use bitcoin::{
-        pow::CompactTargetExt, BlockHash, BlockTime, BlockVersion, CompactTarget, EcdsaSighashType,
+        block::Version as BlockVersion, hashes::Hash, BlockHash, CompactTarget, EcdsaSighashType,
         TxMerkleNode,
     };
-    use rand::{rngs::OsRng, thread_rng, RngCore};
-    use secp256k1::{Message, Secp256k1, SecretKey};
+    use rand::{rngs::OsRng, RngCore};
     use serde::{Deserialize, Serialize};
 
     #[cfg(test)]
-    use crate::braid::Braid;
+    use crate::{braid::Braid, utils::compute_block_hash};
 
     pub use super::*;
     #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -65,7 +67,7 @@ pub mod test_utility_functions {
         for bead_idx in file_braid.clone().parents {
             let random_test_bead = emit_bead();
             test_braid_vector_bead_mapping.insert(
-                random_test_bead.clone().block_header.block_hash(),
+                compute_block_hash(&random_test_bead.clone().block_header, PoolNetwork::Cpunet),
                 bead_idx.0,
             );
             beads_to_idx.insert(bead_idx.0, random_test_bead.clone());
@@ -76,12 +78,14 @@ pub mod test_utility_functions {
             let mut parent_idx_set: HashSet<usize> = HashSet::new();
             if let Some(current_bead_parents) = file_braid.parents.get(&idx) {
                 for parent_bead_idx in current_bead_parents {
-                    let parent_bead_block_hash =
-                        beads_to_idx[parent_bead_idx].block_header.block_hash();
+                    let parent_bead_block_hash = compute_block_hash(
+                        &beads_to_idx[parent_bead_idx].block_header,
+                        PoolNetwork::Cpunet,
+                    );
                     current_bead
                         .committed_metadata
                         .parents
-                        .insert(parent_bead_block_hash);
+                        .push(parent_bead_block_hash);
 
                     parent_idx_set.insert(*parent_bead_idx);
                 }
@@ -121,14 +125,15 @@ pub mod test_utility_functions {
                 cohorts: current_bead_cohorots,
                 cohort_tips: vec![HashSet::new()], // Cohorts tips are only used in extend(), so we can skip them here.
                 orphan_beads: Vec::new(),
+                network: PoolNetwork::Cpunet,
             },
             file_braid.clone(),
         )
     }
 
     pub struct TestUnCommittedMetadataBuilder {
-        extra_nonce_1: u32,
-        extra_nonce_2: u32,
+        extra_nonce_1: u64,
+        extra_nonce_2: u64,
         broadcast_timestamp: Option<Time>,
         signature: Option<Signature>,
     }
@@ -144,7 +149,7 @@ pub mod test_utility_functions {
             }
         }
 
-        pub fn extra_nonce(mut self, nonce_1: u32, nonce_2: u32) -> Self {
+        pub fn extra_nonce(mut self, nonce_1: u64, nonce_2: u64) -> Self {
             self.extra_nonce_1 = nonce_1;
             self.extra_nonce_2 = nonce_2;
             self
@@ -174,7 +179,7 @@ pub mod test_utility_functions {
     #[cfg(test)]
     pub struct TestCommittedMetadataBuilder {
         transaction_ids: Vec<Txid>,
-        parents: std::collections::HashSet<BeadHash>,
+        parents: Vec<BeadHash>,
         parent_bead_timestamps: Option<TimeVec>,
         payout_address: Option<String>,
         start_timestamp: Option<Time>,
@@ -189,7 +194,7 @@ pub mod test_utility_functions {
         pub fn new() -> Self {
             Self {
                 transaction_ids: Vec::new(),
-                parents: HashSet::new(),
+                parents: Vec::new(),
                 parent_bead_timestamps: None,
                 payout_address: None,
                 start_timestamp: None,
@@ -205,7 +210,7 @@ pub mod test_utility_functions {
             self
         }
 
-        pub fn parents(mut self, parents: HashSet<BeadHash>) -> Self {
+        pub fn parents(mut self, parents: Vec<BeadHash>) -> Self {
             self.parents = parents;
             self
         }
@@ -307,11 +312,9 @@ pub mod test_utility_functions {
         }
     }
     fn generate_random_public_key_string() -> String {
-        let secp = Secp256k1::new();
-        let mut rng = thread_rng();
-        let secret_key = SecretKey::new(&mut rng);
-        let public_key = PublicKey::new(secret_key.public_key(&secp));
-        public_key.to_string()
+        let secp = &Secp256k1::new();
+        let secret_key = SecretKey::new(&mut rand::thread_rng());
+        hex::encode(secret_key.public_key(secp).serialize())
     }
 
     pub fn emit_bead() -> Bead {
@@ -319,7 +322,7 @@ pub mod test_utility_functions {
 
         let random_public_key = generate_random_public_key_string()
             .parse::<bitcoin::PublicKey>()
-            .unwrap();
+            .expect("An error occurred while generating Secret key rand bytes");
         // Generate a reasonable timestamp (between 2020-01-01 and now)
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -331,7 +334,7 @@ pub mod test_utility_functions {
         let public_key = random_public_key;
         let socket: String = String::from("127.0.0.1");
         let time_hash_set = TimeVec(Vec::new());
-        let parent_hash_set: HashSet<BlockHash> = HashSet::new();
+        let parent_hash_set: Vec<BlockHash> = Vec::new();
         let weak_target = CompactTarget::from_unprefixed_hex("1d00ffff").unwrap();
         let min_target = CompactTarget::from_unprefixed_hex("1d00ffff").unwrap();
         let time_val = current_time;
@@ -348,10 +351,10 @@ pub mod test_utility_functions {
             .transactions(vec![])
             .build();
 
-        let extra_nonce_1 = rand::random::<u32>();
-        let extra_nonce_2 = rand::random::<u32>();
+        let extra_nonce_1 = rand::random::<u64>();
+        let extra_nonce_2 = rand::random::<u64>();
 
-        let secp = Secp256k1::new();
+        let secp = bitcoin::secp256k1::Secp256k1::new();
 
         // Generate random secret key
         let mut rng = OsRng::default();
@@ -370,7 +373,7 @@ pub mod test_utility_functions {
         let hex = hex::encode(der_sig);
 
         let sig = Signature {
-            signature: secp256k1::ecdsa::Signature::from_str(&hex).unwrap(),
+            signature: bitcoin::secp256k1::ecdsa::Signature::from_str(&hex).unwrap(),
             sighash_type: EcdsaSighashType::All,
         };
 
@@ -386,7 +389,7 @@ pub mod test_utility_functions {
             prev_blockhash: BlockHash::from_byte_array(bytes),
             bits: CompactTarget::from_consensus(486604799),
             nonce: rand::random::<u32>(),
-            time: BlockTime::from_u32(0),
+            time: 0,
             merkle_root: TxMerkleNode::from_byte_array(bytes),
         };
 

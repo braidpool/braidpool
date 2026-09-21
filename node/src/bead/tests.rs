@@ -9,27 +9,27 @@ use super::Beads;
 use super::CommittedMetadata;
 use super::UnCommittedMetadata;
 use crate::committed_metadata::TimeVec;
+use crate::config::PoolNetwork;
+use crate::utils::compute_block_hash;
 use crate::utils::create_test_bead;
 use crate::utils::test_utils::test_utility_functions::*;
 use bitcoin::absolute::Time;
 use bitcoin::consensus::encode::deserialize;
 use bitcoin::consensus::encode::Decodable;
 use bitcoin::consensus::encode::Encodable;
+use bitcoin::consensus::encode::Error as DeserializeError;
 use bitcoin::consensus::serialize;
-use bitcoin::consensus::DeserializeError;
 use bitcoin::ecdsa::Signature;
-use bitcoin::pow::CompactTargetExt;
+use bitcoin::hashes::Hash;
+use bitcoin::secp256k1;
 use bitcoin::BlockHash;
-use bitcoin::BlockHeader;
-use bitcoin::BlockTime;
-use bitcoin::BlockVersion;
 use bitcoin::CompactTarget;
 use bitcoin::EcdsaSighashType;
 use bitcoin::TxMerkleNode;
 use bitcoin::Txid;
+use bitcoin::{block::Header as BlockHeader, block::Version as BlockVersion};
 use futures::executor::block_on;
 use libp2p::request_response::Codec;
-use std::collections::HashSet;
 use std::io::Cursor;
 use std::str::FromStr;
 #[test]
@@ -41,7 +41,7 @@ fn test_serialized_committed_metadata() {
         .unwrap();
     let socket = String::from("127.0.0.1");
     let time_val = Time::from_consensus(1653195600).unwrap();
-    let parent_hash_set: HashSet<BlockHash> = HashSet::new();
+    let parent_hash_set: Vec<BlockHash> = Vec::new();
     let time_hash_set = TimeVec(Vec::new());
     let weak_target = CompactTarget::from_unprefixed_hex("1d00ffff").unwrap();
     let min_target = CompactTarget::from_unprefixed_hex("1d00ffff").unwrap();
@@ -79,7 +79,7 @@ fn test_serialized_uncommitted_metadata() {
         sighash_type: EcdsaSighashType::All,
     };
     let time_val = Time::from_consensus(1653195600).unwrap();
-    let extra_nonce = 42;
+    let extra_nonce: u64 = 42;
     let test_uncommitted_metadata = TestUnCommittedMetadataBuilder::new()
         .broadcast_timestamp(time_val)
         .extra_nonce(extra_nonce, extra_nonce)
@@ -109,7 +109,7 @@ fn test_serialized_bead() {
         .unwrap();
     let socket = String::from("127.0.0.1");
     let time_hash_set = TimeVec(Vec::new());
-    let parent_hash_set: HashSet<BlockHash> = HashSet::new();
+    let parent_hash_set: Vec<BlockHash> = Vec::new();
     //Adding test txid
     let test_txid =
         Txid::from_str("8df401c7580ea2491d88d936ed0e16f3e6ea6c3d69eb9d9cf27652696a559e24").unwrap();
@@ -127,7 +127,7 @@ fn test_serialized_bead() {
         .weak_target(weak_target)
         .transactions(vec![test_txid])
         .build();
-    let extra_nonce = 42;
+    let extra_nonce: u64 = 42;
     let hex = "3046022100839c1fbc5304de944f697c9f4b1d01d1faeba32d751c0f7acb21ac8a0f436a72022100e89bd46bb3a5a62adc679f659b7ce876d83ee297c7a5587b2011c4fcc72eab45";
     let sig = Signature {
         signature: secp256k1::ecdsa::Signature::from_str(hex).unwrap(),
@@ -144,7 +144,7 @@ fn test_serialized_bead() {
         prev_blockhash: BlockHash::from_byte_array(test_bytes),
         bits: CompactTarget::from_consensus(32),
         nonce: 1,
-        time: BlockTime::from_u32(8328429),
+        time: 8328429,
         merkle_root: TxMerkleNode::from_byte_array(test_bytes),
     };
     let test_bead = TestBeadBuilder::new()
@@ -182,7 +182,7 @@ fn test_bead_response_serialization() {
         .unwrap();
     let socket = String::from("127.0.0.1");
     let time_hash_set = TimeVec(Vec::new());
-    let parent_hash_set: HashSet<BlockHash> = HashSet::new();
+    let parent_hash_set: Vec<BlockHash> = Vec::new();
     let weak_target = CompactTarget::from_unprefixed_hex("1d00ffff").unwrap();
     let min_target = CompactTarget::from_unprefixed_hex("1d00ffff").unwrap();
     let time_val = Time::from_consensus(1653195600).unwrap();
@@ -197,7 +197,7 @@ fn test_bead_response_serialization() {
         .weak_target(weak_target)
         .transactions(vec![])
         .build();
-    let extra_nonce = 42;
+    let extra_nonce: u64 = 42;
     let hex = "3046022100839c1fbc5304de944f697c9f4b1d01d1faeba32d751c0f7acb21ac8a0f436a72022100e89bd46bb3a5a62adc679f659b7ce876d83ee297c7a5587b2011c4fcc72eab45";
     let sig = Signature {
         signature: secp256k1::ecdsa::Signature::from_str(hex).unwrap(),
@@ -214,7 +214,7 @@ fn test_bead_response_serialization() {
         prev_blockhash: BlockHash::from_byte_array(test_bytes),
         bits: CompactTarget::from_consensus(32),
         nonce: 1,
-        time: BlockTime::from_u32(8328429),
+        time: 8328429,
         merkle_root: TxMerkleNode::from_byte_array(test_bytes),
     };
     let test_bead = TestBeadBuilder::new()
@@ -331,7 +331,10 @@ fn test_bead_response_codec() {
         BeadResponse::Tips(BeadHashes(vec![test_hash, test_hash2])),
         BeadResponse::Genesis(BeadHashes(vec![test_hash])),
         BeadResponse::GetAllBeads(Beads(vec![test_bead.clone(), test_bead.clone()])),
-        BeadResponse::GetBeadsAfter(BeadHashes(vec![test_bead.block_header.block_hash()])),
+        BeadResponse::GetBeadsAfter(BeadHashes(vec![compute_block_hash(
+            &test_bead.block_header,
+            PoolNetwork::Cpunet,
+        )])),
         BeadResponse::Error(BeadSyncError::GenesisMismatch),
         BeadResponse::Error(BeadSyncError::BeadHashNotFound),
     ];

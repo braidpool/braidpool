@@ -1,9 +1,9 @@
 //All braidpool specific errors are defined here
-use std::{fmt, path::PathBuf};
-
 use crate::stratum::{BlockTemplate, JobDetails};
+use crate::utils::BeadHash;
 use crate::TemplateId;
 use bitcoin::address::ParseError as AddressParseError;
+use std::{fmt, path::PathBuf};
 use tokio::sync::oneshot;
 
 #[derive(Debug)]
@@ -11,6 +11,22 @@ use tokio::sync::oneshot;
 pub enum BraidError {
     MissingAncestorWork,
     HighestWorkBeadFetchFailed,
+    /// A bead's committed parent hash is not present in the braid index. This is
+    /// a consensus/DAG invariant violation: a connected bead must have all of
+    /// its parents resolvable.
+    MissingParent {
+        bead: BeadHash,
+        parent: BeadHash,
+    },
+    /// A bead is not present in the braid index when persistence was attempted,
+    /// despite the braid reporting it as added. Indicates a consensus/logic bug.
+    BeadNotIndexed {
+        bead: BeadHash,
+    },
+    /// The bead was resolved but the db channel closed due to an error
+    PersistenceChannelClosed {
+        bead: BeadHash,
+    },
 }
 #[derive(Debug)]
 pub enum BraidRPCError {
@@ -169,6 +185,9 @@ pub enum StratumErrors {
         error: std::io::Error,
     },
     InvalidCoinbase,
+    InvalidShare {
+        reason: String,
+    },
     PeerNotFoundInConnectionMapping {
         peer_addr: String,
     },
@@ -213,6 +232,19 @@ pub enum StratumErrors {
         error: String,
     },
     ErrorFetchingCurrentUNIXTimestamp {
+        error: String,
+    },
+    /// A bead received was not able to get persisted to DB locally
+    BeadPersistenceFailed {
+        error: String,
+    },
+    UpstreamConnectionFailed {
+        error: String,
+    },
+    UpstreamShareForwardFailed {
+        error: String,
+    },
+    UpstreamNotReady {
         error: String,
     },
 }
@@ -305,6 +337,9 @@ impl fmt::Display for StratumErrors {
             StratumErrors::InvalidCoinbase => {
                 write!(f, "Provided coinbase is invalid")
             }
+            StratumErrors::InvalidShare { reason } => {
+                write!(f, "Invalid share: {}", reason)
+            }
             StratumErrors::ResponseWriteError { error } => {
                 write!(f, "{:?}", error)
             }
@@ -342,10 +377,26 @@ impl fmt::Display for StratumErrors {
             StratumErrors::MiningJobInsertError { mining_job } => {
                 write!(f,"An error occurred while inserting the following job into the mining map - {:?}",mining_job)
             }
+            StratumErrors::BeadPersistenceFailed { error } => {
+                write!(
+                    f,
+                    "Self-mined bead added to braid but not persisted to DB - {}",
+                    error
+                )
+            }
+            StratumErrors::UpstreamConnectionFailed { error } => {
+                write!(f, "Failed to connect to upstream pool: {}", error)
+            }
+            StratumErrors::UpstreamShareForwardFailed { error } => {
+                write!(f, "Failed to forward share to upstream: {}", error)
+            }
+            StratumErrors::UpstreamNotReady { error } => {
+                write!(f, "Upstream pool is not ready: {}", error)
+            }
         }
     }
 }
-
+impl std::error::Error for StratumErrors {}
 /// Determines if an error indicates a connection/communication failure
 ///
 /// This function classifies errors to distinguish between:
@@ -436,6 +487,23 @@ impl fmt::Display for BraidError {
             BraidError::HighestWorkBeadFetchFailed => {
                 write!(f, "An error occurred while fetching the highest work bead")
             }
+            BraidError::MissingParent { bead, parent } => {
+                write!(
+                    f,
+                    "Parent {} of bead {} not found in braid index",
+                    parent, bead
+                )
+            }
+            BraidError::BeadNotIndexed { bead } => {
+                write!(f, "Bead {} not found in braid index", bead)
+            }
+            BraidError::PersistenceChannelClosed { bead } => {
+                write!(
+                    f,
+                    "Persistence channel closed; bead {} was not persisted",
+                    bead
+                )
+            }
         }
     }
 }
@@ -488,5 +556,28 @@ impl fmt::Display for CoinbaseError {
         }
     }
 }
-
 impl std::error::Error for CoinbaseError {}
+
+/// The node was asked to run against a network name that braidpool does not support.
+///
+/// Braidpool deliberately accepts a fixed, exact set of network names
+/// (see [`crate::config::SUPPORTED_NETWORKS`]) with no aliases and no fallback:
+/// silently binding to another chain would let miners produce shares that are
+/// invalid for the chain the operator intended.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnsupportedNetworkError {
+    /// The network name that was supplied by the operator.
+    pub network_name: String,
+}
+
+impl fmt::Display for UnsupportedNetworkError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Unsupported network {:?}, expected one of: {}",
+            self.network_name,
+            crate::config::SUPPORTED_NETWORKS.join(", ")
+        )
+    }
+}
+impl std::error::Error for UnsupportedNetworkError {}

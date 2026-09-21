@@ -1,16 +1,11 @@
 //These implementations must be defined under lib.rs as they are required for intergration tests
-use crate::db::db_handlers::prepare_bead_tuple_data;
+use crate::{rpc_server::DashboardEvents, utils::compute_block_hash};
 use bitcoin::{
-    consensus::encode::deserialize, ecdsa::Signature, pow::CompactTargetExt, BlockHash,
-    CompactTarget, EcdsaSighashType, Txid,
+    consensus::encode::deserialize, ecdsa::Signature, BlockHash, CompactTarget, EcdsaSighashType,
+    Txid,
 };
 use num::ToPrimitive;
-use std::{
-    collections::{HashMap, HashSet},
-    str::FromStr,
-    sync::Arc,
-    time::UNIX_EPOCH,
-};
+use std::{collections::HashMap, str::FromStr, sync::Arc, time::UNIX_EPOCH};
 
 use futures::lock::Mutex;
 use tokio::sync::mpsc::{self, Receiver, Sender};
@@ -25,6 +20,14 @@ use tracing::{debug, error, info, trace, warn};
 /// growth and ensures efficient resource usage.
 pub const MAX_CACHED_TEMPLATES: usize = 90;
 
+/// Capacity of the `GlobalJobStore` shared across all miner connections.
+///
+/// The store holds `Arc<JobDetails>` entries; all miners share the same allocation.
+/// When the store reaches this limit, the oldest job_id is evicted. Template data is
+/// freed only once no remaining job_id references it, preventing use-after-eviction.
+/// At bead rate (150ms), 20 slots retain ~3s of history for in-flight submits.
+pub const GLOBAL_JOB_STORE_CAPACITY: usize = 20;
+
 use crate::{
     bead::Bead,
     braid::{AddBeadStatus, Braid},
@@ -37,6 +40,7 @@ use crate::{
 use std::error::Error;
 #[macro_use]
 pub mod macros;
+pub mod audit;
 pub mod bead;
 pub mod behaviour;
 pub mod braid;
@@ -52,7 +56,9 @@ pub mod rpc_server;
 pub mod stratum;
 pub mod template_creator;
 pub mod uncommitted_metadata;
+pub mod upstream_pool;
 pub mod utils;
+use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 //Including the capnp modules after building while compiling the workspace.package
@@ -72,15 +78,41 @@ pub mod init_capnp {
     include!(concat!(env!("OUT_DIR"), "/init_capnp.rs"));
 }
 
-/// Unique identifier assigned to each block template.
-pub type TemplateId = u64;
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum TemplateId {
+    /// Internal Braidpool template (sequential counter)
+    Braidpool(u64),
+    /// Upstream pool template (arbitrary string from upstream)
+    Upstream(String),
+}
+
+impl TemplateId {
+    pub fn from_upstream_string(job_id: &str) -> Self {
+        TemplateId::Upstream(job_id.to_string())
+    }
+}
+
+impl Default for TemplateId {
+    fn default() -> Self {
+        TemplateId::Braidpool(0)
+    }
+}
+
+impl fmt::Display for TemplateId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TemplateId::Braidpool(id) => write!(f, "Braidpool({})", id),
+            TemplateId::Upstream(id) => write!(f, "Upstream({})", id),
+        }
+    }
+}
 
 /// Global template ID counter that persists across the application lifetime
 static GLOBAL_TEMPLATE_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 /// Get the next unique template ID (increments on each call)
 pub fn get_next_template_id() -> TemplateId {
-    GLOBAL_TEMPLATE_COUNTER.fetch_add(1, Ordering::SeqCst)
+    TemplateId::Braidpool(GLOBAL_TEMPLATE_COUNTER.fetch_add(1, Ordering::SeqCst))
 }
 
 /// **Length of the extranonce prefix (in bytes).**
@@ -88,20 +120,20 @@ pub fn get_next_template_id() -> TemplateId {
 /// In Stratum mining, the extranonce is split into two parts:
 /// `EXTRANONCE1` (prefix) and `EXTRANONCE2` (suffix).
 ///
-/// This constant defines the size of `EXTRANONCE1` as **4 bytes**.
+/// This constant defines the size of `EXTRANONCE1` as **8 bytes**.
 /// Typically assigned by the mining pool to uniquely identify a miner generated randomly or can be done via the peer_addr hash.
-pub const EXTRANONCE1_SIZE: usize = 4;
+pub const EXTRANONCE1_SIZE: usize = 8;
 
 /// **Length of the extranonce suffix (in bytes).**
 ///
 ///These are the rollable bits defined under the extanonce,along with nonce and Version which can be worked upon to produce suitable valid share
 /// being submitted by the miner via `mining.submit` .
-pub const EXTRANONCE2_SIZE: usize = 4;
+pub const EXTRANONCE2_SIZE: usize = 8;
 /// **Separator between `EXTRANONCE1` and `EXTRANONCE2`.**
 ///
 /// This is an array of bytes used to clearly delimit the two extranonce parts.
-/// In this testing configuration, the separator length equals
-/// `EXTRANONCE1_SIZE + EXTRANONCE2_SIZE` (8 bytes total),
+/// The separator length equals
+/// `EXTRANONCE1_SIZE + EXTRANONCE2_SIZE` (16 bytes total),
 /// and is filled with the byte value `1u8` for simplicity.
 /// can be changed accordingly as per discussion .
 pub const EXTRANONCE_SEPARATOR: [u8; EXTRANONCE1_SIZE + EXTRANONCE2_SIZE] =
@@ -153,17 +185,17 @@ pub async fn ipc_template_consumer(
             let template_id = get_next_template_id();
             {
                 let mut latest_id = latest_template_id.lock().await;
-                *latest_id = template_id;
+                *latest_id = template_id.clone();
             }
 
             // Cache the IPC template with this new ID
             {
                 let mut cache = template_cache.lock().await;
-                cache.insert(template_id, ipc_template.clone());
+                cache.insert(template_id.clone(), ipc_template.clone());
 
                 // Cleanup old templates
                 if cache.len() > MAX_CACHED_TEMPLATES {
-                    let mut ids: Vec<TemplateId> = cache.keys().copied().collect();
+                    let mut ids: Vec<TemplateId> = cache.keys().cloned().collect();
                     ids.sort_unstable();
 
                     let remove_count = cache.len() - MAX_CACHED_TEMPLATES;
@@ -176,11 +208,15 @@ pub async fn ipc_template_consumer(
 
             let candidate_block: Result<
                 bitcoin::blockdata::block::Block,
-                bitcoin::consensus::DeserializeError,
+                bitcoin::consensus::encode::Error,
             > = deserialize(&template_bytes);
-
             let merkle_branch_coinbase = ipc_template.components.coinbase_merkle_path.clone();
-            let (template_header, template_transactions) = candidate_block.unwrap().into_parts();
+            let (template_header, template_transactions) = match candidate_block {
+                Ok(template) => (template.header, template.txdata),
+                Err(_error) => {
+                    return Err(IPCtemplateError::TemplateConsumeError);
+                }
+            };
             let _coinbase_transaction = template_transactions.get(0);
 
             debug!(template_id = %template_id, template_header = ?template_header, "New block template");
@@ -230,7 +266,7 @@ pub async fn ipc_template_consumer(
                 .send(NotifyCmd::SendToAll {
                     template: template,
                     merkle_branch_coinbase,
-                    template_id,
+                    template_id: template_id.clone(),
                 })
                 .await;
             match notification_sent_or_not {
@@ -257,11 +293,13 @@ pub struct SwarmHandler {
     pub command_sender: Sender<SwarmCommand>,
     braid_arc: Arc<tokio::sync::RwLock<Braid>>,
     db_command_sender: tokio::sync::mpsc::Sender<BraidpoolDBTypes>,
+    dashboard_notification_sender: Arc<DashboardEvents>,
 }
 impl SwarmHandler {
     pub fn new(
         braid_arc: Arc<tokio::sync::RwLock<Braid>>,
         db_command_sender: tokio::sync::mpsc::Sender<BraidpoolDBTypes>,
+        dashboard_notification_sender: Arc<DashboardEvents>,
     ) -> (Self, Receiver<SwarmCommand>) {
         let (swarm_stratum_bridge_tx, swarm_stratum_bridge_rx) =
             mpsc::channel::<SwarmCommand>(1024);
@@ -270,6 +308,7 @@ impl SwarmHandler {
                 command_sender: swarm_stratum_bridge_tx,
                 braid_arc: Arc::clone(&braid_arc),
                 db_command_sender,
+                dashboard_notification_sender,
             },
             swarm_stratum_bridge_rx,
         )
@@ -277,14 +316,15 @@ impl SwarmHandler {
     pub async fn propagate_valid_bead(
         &mut self,
         candidate_block: bitcoin::Block,
-        extranonce_2_raw_value: u32,
+        extranonce_2_raw_value: u64,
         downstream_client_ip: &str,
         job_sent_timestamp: u32,
         downstream_payout_addr: &str,
         //TODO: Will be used as seperate entity after altering `uncommitted_metadata`
-        extranonce_1_raw_value: u32,
+        extranonce_1_raw_value: u64,
     ) -> Result<(), StratumErrors> {
-        let (candidate_block_header, candidate_block_transactions) = candidate_block.into_parts();
+        let candidate_block_header = candidate_block.header;
+        let candidate_block_transactions = candidate_block.txdata;
         let ids: Vec<Txid> = candidate_block_transactions
             .iter()
             .map(|tx| tx.compute_txid())
@@ -295,19 +335,27 @@ impl SwarmHandler {
         let public_key = "020202020202020202020202020202020202020202020202020202020202020202"
             .parse::<bitcoin::PublicKey>()
             .unwrap();
-        let mut time_hash_set = TimeVec(Vec::new());
-        let mut parent_hash_set: HashSet<BlockHash> = HashSet::new();
         let mut braid_data = self.braid_arc.write().await;
-        let tips_index = &braid_data.tips;
-        //Committing parents data in bead
-        for tip_bead in tips_index {
-            let current_tip_bead = braid_data.beads.get(*tip_bead).unwrap();
-            parent_hash_set.insert(current_tip_bead.block_header.block_hash());
-            time_hash_set
-                .0
-                .push(current_tip_bead.committed_metadata.start_timestamp);
+        let mut pairs: Vec<(BlockHash, bitcoin::absolute::Time)> = braid_data
+            .tips
+            .iter()
+            .map(|&idx| {
+                let tip = braid_data.beads.get(idx).unwrap();
+                (
+                    braid_data.compute_bead_hash(tip),
+                    tip.committed_metadata.start_timestamp,
+                )
+            })
+            .collect();
+        pairs.sort_by_key(|(hash, _)| *hash);
+
+        let mut time_hash_set = TimeVec(Vec::new());
+        let mut parent_hash_set: Vec<BlockHash> = Vec::new();
+        for (hash, time) in pairs {
+            parent_hash_set.push(hash);
+            time_hash_set.0.push(time);
         }
-        debug!(tip_indices = ?tips_index, tip_hashes = ?parent_hash_set,
+        debug!(tip_indices = ?braid_data.tips, tip_hashes = ?parent_hash_set,
             "Tips before extending the Braid");
         //TODO:This will be replaced via the allotted `WeakShareDifficulty` after Difficulty adjustment
         let weak_target = CompactTarget::from_unprefixed_hex("1d00ffff").unwrap();
@@ -331,7 +379,7 @@ impl SwarmHandler {
         //TODO:This will be either be generated via the `Pubkey` from config parameter from `~/.braidpool`
         let hex = "3046022100839c1fbc5304de944f697c9f4b1d01d1faeba32d751c0f7acb21ac8a0f436a72022100e89bd46bb3a5a62adc679f659b7ce876d83ee297c7a5587b2011c4fcc72eab45";
         let sig = Signature {
-            signature: secp256k1::ecdsa::Signature::from_str(hex).unwrap(),
+            signature: bitcoin::secp256k1::ecdsa::Signature::from_str(hex).unwrap(),
             sighash_type: EcdsaSighashType::All,
         };
         //Current UNIX timestamp during broadcast of bead
@@ -341,17 +389,14 @@ impl SwarmHandler {
             Err(error) => {
                 return Err(StratumErrors::ErrorFetchingCurrentUNIXTimestamp {
                     error: error.to_string(),
-                })
+                });
             }
         };
 
         let unix_timestamp = duration_since_epoch.as_secs().to_u32().unwrap();
 
         let candidate_block_bead_uncommitted_metadata = UnCommittedMetadata {
-            broadcast_timestamp: bitcoin::blockdata::locktime::absolute::MedianTimePast::from_u32(
-                unix_timestamp,
-            )
-            .unwrap(),
+            broadcast_timestamp: bitcoin::absolute::Time::from_consensus(unix_timestamp).unwrap(),
             extra_nonce_1: extranonce_1_raw_value,
             extra_nonce_2: extranonce_2_raw_value,
             signature: sig,
@@ -363,48 +408,45 @@ impl SwarmHandler {
         };
         let status = braid_data.extend(&weak_share);
         match status {
-            AddBeadStatus::BeadAdded => {
+            AddBeadStatus::BeadAdded { promoted_orphans } => {
                 let new_tips: Vec<_> = braid_data.tips.iter().map(|&idx| idx).collect();
+                let bead_hash = compute_block_hash(&weak_share.block_header, braid_data.network);
                 info!(
-                    hash = %weak_share.block_header.block_hash(),
+                    hash = %bead_hash,
                     new_tips = ?new_tips,
                     "Braid extended successfully"
                 );
-                //Considering the index of the beads in braid will be same as the (insertion ids-1)
-                let bead_id = braid_data
-                    .bead_index_mapping
-                    .get(&weak_share.block_header.block_hash())
-                    .unwrap();
-                let (txs_json, relative_json, parent_timestamp_json) = prepare_bead_tuple_data(
-                    &braid_data.beads,
-                    &braid_data.bead_index_mapping,
+
+                db::persist_added_bead(
+                    &braid_data,
                     &weak_share,
+                    promoted_orphans.iter(),
+                    &self.db_command_sender,
                 )
-                .unwrap();
-                let _db_insertion_command = match self
-                    .db_command_sender
-                    .send(BraidpoolDBTypes::InsertTupleTypes {
-                        query: db::InsertTupleTypes::InsertBeadSequentially {
-                            bead_to_insert: weak_share.clone(),
-                            txs_json: txs_json,
-                            relative_json: relative_json,
-                            parent_timestamp_json: parent_timestamp_json,
-                            bead_id: *bead_id,
-                        },
-                    })
-                    .await
-                {
+                .await
+                .map_err(|error| {
+                    error!(error = %error, hash = %bead_hash, "Failed to persist bead");
+                    StratumErrors::BeadPersistenceFailed {
+                        error: error.to_string(),
+                    }
+                })?;
+                debug!(
+                    hash = %bead_hash,
+                    "InsertBeadsBatch sent to DB thread"
+                );
+                let serialized_weak_share_bytes = bitcoin::consensus::serialize(&weak_share);
+                let res = self
+                    .dashboard_notification_sender
+                    .new_bead
+                    .send(Some(weak_share.clone()));
+                match res {
                     Ok(_) => {
-                        debug!(
-                            hash = %weak_share.block_header.block_hash(),
-                            "InsertBeadSequentially sent to DB thread"
-                        );
+                        debug!("Passing self mined bead to the dashboard notifier");
                     }
                     Err(error) => {
-                        error!(error = ?error, "Database insertion command failed");
+                        debug!("No dashboard subscriber for new bead notification - {error}");
                     }
-                };
-                let serialized_weak_share_bytes = bitcoin::consensus::serialize(&weak_share);
+                }
                 //After validation of the candidate block constructed by the downstream node sending it to swarm for further propogation
                 match self
                     .command_sender
@@ -415,13 +457,13 @@ impl SwarmHandler {
                 {
                     Ok(_) => {
                         info!(
-                            hash = %weak_share.block_header.block_hash(),
+                            hash = %bead_hash,
                             "Bead sent to swarm"
                         );
                     }
                     Err(e) => {
                         error!(
-                            hash = %weak_share.block_header.block_hash(),
+                            hash = %bead_hash,
                             error = %e,
                             "Failed to send candidate block to swarm"
                         );
@@ -432,7 +474,7 @@ impl SwarmHandler {
                 };
             }
             _ => {
-                warn!(status = ?status, hash = %weak_share.block_header.block_hash(),
+                warn!(status = ?status, hash = %braid_data.compute_bead_hash(&weak_share),
                     "Failed to extend Braid")
             }
         }

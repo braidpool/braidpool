@@ -1,8 +1,10 @@
+use crate::config::PoolNetwork;
 use crate::error::BraidpoolError;
 use crate::init_capnp::init::Client as InitClient;
 use crate::proxy_capnp::thread::Client as ThreadClient;
+use crate::utils::compute_block_hash;
 use crate::TemplateId;
-use bitcoin::BlockHeader;
+use bitcoin::block::Header as BlockHeader;
 use capnp_rpc::{rpc_twoparty_capnp, twoparty, RpcSystem};
 use futures::FutureExt;
 use std::collections::VecDeque;
@@ -674,16 +676,21 @@ pub struct SharedBitcoinClient {
     shutdown_sender: Option<mpsc::UnboundedSender<()>>,
     tip_shutdown_sender: Option<mpsc::UnboundedSender<()>>,
     metrics: Arc<QueueMetrics>,
+    _network: PoolNetwork,
 }
 
 impl SharedBitcoinClient {
-    pub async fn new(socket_path: &str) -> Result<Self, Box<dyn std::error::Error>> {
-        Self::new_with_config(socket_path, ClientConfig::default()).await
+    pub async fn new(
+        socket_path: &str,
+        network: PoolNetwork,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::new_with_config(socket_path, ClientConfig::default(), network).await
     }
 
     pub async fn new_with_config(
         socket_path: &str,
         config: ClientConfig,
+        network: PoolNetwork,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let (request_sender, mut request_receiver) = mpsc::unbounded_channel::<QueuedRequest>();
         let (notification_sender, mut internal_notification_receiver) = mpsc::unbounded_channel();
@@ -751,6 +758,7 @@ impl SharedBitcoinClient {
                 }
             }
         });
+        let outer_network_ref = network;
 
         let processor_task = tokio::task::spawn_local({
             let socket_path = socket_path.to_string();
@@ -780,6 +788,8 @@ impl SharedBitcoinClient {
                     tokio::time::interval(Duration::from_secs(config.metrics_interval_secs));
 
                 loop {
+                    let inner_network_ref = network;
+
                     tokio::select! {
                         _ = shutdown_receiver.recv() => {
                             info!("Processor received shutdown signal");
@@ -807,7 +817,8 @@ impl SharedBitcoinClient {
                                 // Process all queued requests
                                 while let Some(next_request) = priority_queue.dequeue() {
                                     let processing_start = Instant::now();
-                                    Self::process_single_request(&bitcoin_client, next_request).await;
+                                    let n = inner_network_ref;
+                                    Self::process_single_request(&bitcoin_client, next_request,n).await;
                                     let total_time = enqueue_time.elapsed();
                                     let processing_time = processing_start.elapsed();
                                     let actual_queue_time = total_time.saturating_sub(processing_time);
@@ -877,10 +888,15 @@ impl SharedBitcoinClient {
             shutdown_sender: Some(shutdown_sender),
             tip_shutdown_sender: Some(tip_shutdown_sender),
             metrics,
+            _network: outer_network_ref,
         })
     }
 
-    async fn process_single_request(bitcoin_client: &BitcoinRpcClient, request: BitcoinRequest) {
+    async fn process_single_request(
+        bitcoin_client: &BitcoinRpcClient,
+        request: BitcoinRequest,
+        network: PoolNetwork,
+    ) {
         let processing_start = Instant::now();
         match request {
             BitcoinRequest::IsInitialBlockDownload { response, .. } => {
@@ -978,9 +994,9 @@ impl SharedBitcoinClient {
                 response,
                 ..
             } => {
-                let block_hash = header.block_hash();
+                let block_hash = compute_block_hash(&header, network);
                 let version = header.version.to_consensus() as u32;
-                let timestamp = header.time.to_u32();
+                let timestamp = header.time;
                 let nonce = header.nonce;
                 match bitcoin_client
                     .submit_solution(

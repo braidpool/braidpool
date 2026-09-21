@@ -2,9 +2,12 @@ use crate::committed_metadata::CommittedMetadata;
 use crate::uncommitted_metadata::UnCommittedMetadata;
 use crate::utils::BeadHash;
 use async_trait::async_trait;
+use bitcoin::block::Header as BlockHeader;
+use bitcoin::block::Version as BlockVersion;
 use bitcoin::consensus::encode::Decodable;
 use bitcoin::consensus::encode::Encodable;
-use bitcoin::{BlockHash, BlockHeader, BlockTime, BlockVersion, CompactTarget, TxMerkleNode};
+use bitcoin::hashes::Hash;
+use bitcoin::{BlockHash, CompactTarget, TxMerkleNode};
 use libp2p::futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use libp2p::request_response::Codec;
 use libp2p::StreamProtocol;
@@ -52,8 +55,8 @@ impl Default for Bead {
                 bits: CompactTarget::from_consensus(1),
                 merkle_root: TxMerkleNode::from_byte_array(empty_merkle_bytes),
                 nonce: 0,
-                prev_blockhash: BlockHash::GENESIS_PREVIOUS_BLOCK_HASH,
-                time: BlockTime::from_u32(0),
+                prev_blockhash: BlockHash::all_zeros(),
+                time: 0,
                 version: BlockVersion::TWO,
             },
             committed_metadata: CommittedMetadata::default(),

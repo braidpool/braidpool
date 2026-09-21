@@ -13,6 +13,7 @@ export const WEBSOCKET_URLS = {
 
   // WebSocket for block viewer updates (mempool)
   BLOCK_VIEWER_WEBSOCKET: 'http://localhost:8080/api/v1/ws',
+  MINER_DEVICE_WS: 'ws://localhost:5001/api/miners/ws',
 } as const;
 
 // HTTP API URLs for data fetching

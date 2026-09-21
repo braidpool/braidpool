@@ -2,11 +2,31 @@ use clap::Parser;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
+/// Default data directory path for Linux
+#[cfg(target_os = "linux")]
+const DEFAULT_DATADIR: &str = "~/.braidpool/";
+
+/// Default data directory path for macOS
+#[cfg(target_os = "macos")]
+const DEFAULT_DATADIR: &str = "~/Library/Application Support/braidpool/";
+
+/// Default Bitcoin RPC cookie path for Linux
+#[cfg(target_os = "linux")]
+const DEFAULT_RPC_COOKIE: &str = "~/.bitcoin/.cookie";
+
+/// Default Bitcoin RPC cookie path for macOS
+#[cfg(target_os = "macos")]
+const DEFAULT_RPC_COOKIE: &str = "~/Library/Application Support/Bitcoin/.cookie";
+
+/// Default IPC socket path for Unix platforms (Linux/macOS) — Unix domain socket
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+const DEFAULT_IPC_SOCKET: &str = "/tmp/bitcoin-cpunet.sock";
+
 #[derive(Parser, Debug, Clone)]
 #[command(name = "braid", about = "Braidpool Node CLI")]
 pub struct Cli {
     /// Braid data directory
-    #[arg(long, default_value = "~/.braidpool/")]
+    #[arg(long, default_value = DEFAULT_DATADIR)]
     pub datadir: PathBuf,
 
     /// Bind to a given address and always listen on it
@@ -34,12 +54,12 @@ pub struct Cli {
     #[arg(long)]
     pub rpcpass: Option<String>,
 
-    /// Which network to use. Valid options are mainnet, testnet4, signet, cpunet (preferred)
-    #[arg(long, default_value = "main")]
-    pub network: Option<String>,
+    ///Required cli param to be passed during spawning of braidpool-node
+    #[arg(long, required = true)]
+    pub network: String,
 
     /// Use this cookie file for bitcoin RPC
-    #[arg(long, default_value = "~/.bitcoin/.cookie")]
+    #[arg(long, default_value = DEFAULT_RPC_COOKIE)]
     pub rpccookie: Option<String>,
 
     /// TCP port for the local Stratum server
@@ -50,9 +70,33 @@ pub struct Cli {
     #[arg(long, default_value = "127.0.0.1:6682")]
     pub rpc_bind: SocketAddr,
 
-    /// Path to Bitcoin Core IPC socket
-    #[arg(long, default_value = "/tmp/bitcoin-cpunet.sock")]
+    /// Path to Bitcoin Core IPC socket (Unix domain socket on Linux/macOS)
+    #[arg(long, default_value = DEFAULT_IPC_SOCKET)]
     pub ipc_socket: String,
+
+    /// Enable audit mode (proxy to upstream pool)
+    #[arg(long, default_value = "false")]
+    pub audit: bool,
+
+    /// Upstream pool hostname (required if audit is enabled)
+    #[arg(long)]
+    pub upstream_host: Option<String>,
+
+    /// Upstream pool port the default is 3334 (for Ocean)
+    #[arg(long, default_value = "3334")]
+    pub upstream_port: u16,
+
+    /// Upstream pool username (Bitcoin address for payout)
+    #[arg(long)]
+    pub upstream_username: Option<String>,
+
+    /// Upstream pool password (default: "x")
+    #[arg(long, default_value = "x")]
+    pub upstream_password: String,
+
+    /// Weak difficulty for the miner in audit mode
+    #[arg(long)]
+    pub miner_difficulty: Option<f64>,
 }
 
 #[cfg(test)]
@@ -62,7 +106,14 @@ mod tests {
 
     #[test]
     fn rpc_bind_parses_socket_address() {
-        let cli = Cli::try_parse_from(["braid", "--rpc-bind", "127.0.0.1:1234"]).unwrap();
+        let cli = Cli::try_parse_from([
+            "braid",
+            "--network",
+            "cpunet",
+            "--rpc-bind",
+            "127.0.0.1:1234",
+        ])
+        .unwrap();
 
         assert_eq!(cli.rpc_bind.ip().to_string(), "127.0.0.1");
         assert_eq!(cli.rpc_bind.port(), 1234);

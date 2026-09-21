@@ -1,16 +1,14 @@
-use crate::utils::{hashset_to_vec_deterministic, vec_to_hashset, BeadHash};
-use bitcoin::absolute::MedianTimePast;
+use crate::utils::BeadHash;
 use bitcoin::absolute::Time;
 use bitcoin::consensus::encode::Decodable;
 use bitcoin::consensus::encode::Encodable;
-use bitcoin::consensus::Error;
-use bitcoin::io::{self, BufRead, Write};
+use bitcoin::consensus::encode::Error;
+use bitcoin::io::{self, Read, Write};
 use bitcoin::CompactTarget;
 use bitcoin::PublicKey;
 use bitcoin::Txid;
 use serde::Deserialize;
 use serde::Serialize;
-use std::collections::HashSet;
 use std::str::FromStr;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -28,7 +26,7 @@ impl Encodable for TimeVec {
 }
 
 impl Decodable for TimeVec {
-    fn consensus_decode<R: BufRead + ?Sized>(r: &mut R) -> Result<Self, Error> {
+    fn consensus_decode<R: Read + ?Sized>(r: &mut R) -> Result<Self, Error> {
         let len = u64::consensus_decode(r)?;
         let mut vec = Vec::with_capacity(len as usize);
         for _ in 0..len {
@@ -52,7 +50,7 @@ impl Encodable for TxIdVec {
     }
 }
 impl Decodable for TxIdVec {
-    fn consensus_decode<R: BufRead + ?Sized>(r: &mut R) -> Result<Self, Error> {
+    fn consensus_decode<R: Read + ?Sized>(r: &mut R) -> Result<Self, Error> {
         let len = u64::consensus_decode(r)?;
         let mut vec = Vec::with_capacity(len as usize);
         for _ in 0..len {
@@ -67,7 +65,7 @@ impl Decodable for TxIdVec {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CommittedMetadata {
     pub transaction_ids: TxIdVec,
-    pub parents: HashSet<BeadHash>,
+    pub parents: Vec<BeadHash>,
     pub parent_bead_timestamps: TimeVec,
     pub payout_address: String,
     pub start_timestamp: Time,
@@ -83,10 +81,10 @@ impl Default for CommittedMetadata {
     fn default() -> Self {
         Self {
             transaction_ids: TxIdVec(Vec::new()),
-            parents: HashSet::new(),
+            parents: Vec::new(),
             parent_bead_timestamps: TimeVec(Vec::new()),
             payout_address: "bc1".to_string(),
-            start_timestamp: MedianTimePast::MIN,
+            start_timestamp: Time::MIN,
             comm_pub_key: PublicKey::from_str(
                 "020202020202020202020202020202020202020202020202020202020202020202",
             )
@@ -101,14 +99,14 @@ impl Encodable for CommittedMetadata {
     fn consensus_encode<W: Write + ?Sized>(&self, w: &mut W) -> Result<usize, io::Error> {
         let mut len = 0;
         len += self.transaction_ids.consensus_encode(w)?;
-        len += hashset_to_vec_deterministic(&self.parents).consensus_encode(w)?;
+        len += self.parents.consensus_encode(w)?;
         len += self.parent_bead_timestamps.consensus_encode(w)?;
         len += self.payout_address.consensus_encode(w)?;
         len += self
             .start_timestamp
             .to_consensus_u32()
             .consensus_encode(w)?;
-        let pubkey_bytes = self.comm_pub_key.to_vec();
+        let pubkey_bytes = self.comm_pub_key.to_bytes();
         len += pubkey_bytes.consensus_encode(w)?;
         len += self.min_target.consensus_encode(w)?;
         len += self.weak_target.consensus_encode(w)?;
@@ -118,15 +116,26 @@ impl Encodable for CommittedMetadata {
 }
 
 impl Decodable for CommittedMetadata {
-    fn consensus_decode<R: BufRead + ?Sized>(r: &mut R) -> Result<Self, Error> {
+    fn consensus_decode<R: Read + ?Sized>(r: &mut R) -> Result<Self, Error> {
         let transaction_ids = TxIdVec::consensus_decode(r)?;
-        let parents = vec_to_hashset(Vec::<BeadHash>::consensus_decode(r)?);
+        let parents = Vec::<BeadHash>::consensus_decode(r)?;
         let parent_bead_timestamps = TimeVec::consensus_decode(r)?;
         let payout_address = String::consensus_decode(r)?;
-        let start_timestamp = Time::from_consensus(u32::consensus_decode(r).unwrap()).unwrap();
-        let comm_pub_key = PublicKey::from_slice(&Vec::<u8>::consensus_decode(r).unwrap()).unwrap();
-        let min_target = CompactTarget::consensus_decode(r).unwrap();
-        let weak_target = CompactTarget::consensus_decode(r).unwrap();
+        let start_timestamp = Time::from_consensus(u32::consensus_decode(r)?).map_err(|_| {
+            Error::from(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "invalid start_timestamp in CommittedMetadata",
+            ))
+        })?;
+        let comm_pub_key =
+            PublicKey::from_slice(&Vec::<u8>::consensus_decode(r)?).map_err(|_| {
+                Error::from(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "invalid comm_pub_key in CommittedMetadata",
+                ))
+            })?;
+        let min_target = CompactTarget::consensus_decode(r)?;
+        let weak_target = CompactTarget::consensus_decode(r)?;
         let miner_ip = String::consensus_decode(r)?;
         Ok(CommittedMetadata {
             transaction_ids,
