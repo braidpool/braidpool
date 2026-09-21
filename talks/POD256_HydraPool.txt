@@ -1,0 +1,6 @@
+Wordpress for mining:
+It's not really possible to "plugin" payout mechanisms or consensus algorithms,
+because each becomes its own pool, which divides the payouts and increases
+everyone's variance. It's better to figure out what the best thing to and then
+do it. When people don't know what to do they try to do everything for everyone,
+and this is always a bad idea that creates confusion and fragmentation.

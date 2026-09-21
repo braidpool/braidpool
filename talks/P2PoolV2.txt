@@ -1,0 +1,16 @@
+Trawling through their code.
+
+How do they use uncles? Are they validating shares?
+
+Is he just passing txids and hoping they're valid?
+    -> 32kb in txid data
+    Not validating that I have the tx?
+    A tx that cannot be propagated by P2P will result in an invalid block
+
+The block creator is a single point of failure. He could be BitAxe and Raspberry
+Pi on a dial-up line. He may be able to upload a 32kb share but uploading a
+block may fail because (a) it's slow, (b) he's behind a censoring firewall
+(GFC), (c) the block is invalid.
+
+Bad block types:
+    Quadratic hashing (fixed by segwit, so has to be a non-segwit tx))
