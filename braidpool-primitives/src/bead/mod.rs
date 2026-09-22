@@ -46,8 +46,14 @@ pub struct Bead {
 }
 
 impl Bead {
+    /// Validates whether this bead satisfies the criteria for being a valid bead.
+    /// A bead that does not become a bitcoin block must still pass this check
+    /// before its transactions can be added to the committed mempool.
+    /// The transactions in a valid bead are required to be included in the
+    /// `committed_metadata` for that bead.
     pub fn is_valid_bead(&self) -> bool {
-        // Check whether the transactions are included in the block
+        // Check whether the transactions are included in the committed_metadata
+        // and that the bead satisfies all consensus validity criteria
         true
     }
     pub fn get_coinbase_transaction(&self) -> Transaction {
