@@ -471,6 +471,7 @@ async fn get_template(
 
     let mut processed_template = (*components).clone();
     processed_template.processed_block_hex = Some(complete_block_bytes);
+    processed_template.components.height = block_height;
 
     Ok(processed_template)
 }

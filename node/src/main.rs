@@ -981,6 +981,27 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //IPC(inter process communication) based `getblocktemplate` and `notification` to send to the downstream via the `cmempoold` architecture
     info!(socket = %args.ipc_socket, "IPC socket path");
 
+    // Set up SV2 template channel if SV2 pool port is configured
+    let sv2_template_tx = args.sv2_pool_port.map(|port| {
+        let (tx, rx) = mpsc::channel::<braidpool_common::template::BraidpoolTemplate>(32);
+        // TODO(sv2-integration/PR5): replace this drain task with the real sv2-apps pool consumer
+        tokio::spawn(async move {
+            let mut template_rx = rx;
+            while let Some(t) = template_rx.recv().await {
+                debug!(
+                    template_id = t.template_id,
+                    height = t.height,
+                    "SV2 template queued (pool wiring pending)"
+                );
+            }
+        });
+        info!(
+            port = port,
+            "SV2 pool mode enabled — template channel created"
+        );
+        tx
+    });
+
     // Spawn IPC handler
     let _ipc_handler = if !args.audit {
         Some(tokio::task::spawn_blocking(move || {
@@ -1040,6 +1061,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                 &mut latest_template_merkle_branch_for_ipc.clone(),
                                 template_cache_for_consumer,
                                 latest_template_id_for_consumer,
+                                sv2_template_tx,
                             )
                             .await
                             {

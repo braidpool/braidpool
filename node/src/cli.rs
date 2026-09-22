@@ -97,6 +97,20 @@ pub struct Cli {
     /// Weak difficulty for the miner in audit mode
     #[arg(long)]
     pub miner_difficulty: Option<f64>,
+
+    /// TCP port for the SV2 pool server. Set to enable SV2 mode.
+    #[arg(long)]
+    pub sv2_pool_port: Option<u16>,
+
+    /// SV2 authority public key (hex-encoded noise public key for the pool).
+    /// Required when --sv2-pool-port is set.
+    #[arg(long)]
+    pub sv2_authority_pubkey: Option<String>,
+
+    /// SV2 authority secret key (hex-encoded noise secret key for the pool).
+    /// Required when --sv2-pool-port is set.
+    #[arg(long)]
+    pub sv2_authority_seckey: Option<String>,
 }
 
 #[cfg(test)]
