@@ -167,6 +167,7 @@ pub async fn ipc_template_consumer(
         tokio::sync::Mutex<HashMap<TemplateId, Arc<crate::ipc::client::BlockTemplate>>>,
     >,
     latest_template_id: Arc<Mutex<TemplateId>>,
+    sv2_template_tx: Option<mpsc::Sender<braidpool_common::template::BraidpoolTemplate>>,
 ) -> Result<(), IPCtemplateError> {
     while let Some(ipc_template) = template_rx.recv().await {
         let template_bytes = match &ipc_template.processed_block_hex {
@@ -261,6 +262,36 @@ pub async fn ipc_template_consumer(
                 tx_count = %template_transactions.len(),
                 "New block template"
             );
+
+            if let Some(ref sv2_tx) = sv2_template_tx {
+                let coinbase_tx = bitcoin::consensus::encode::serialize(&template_transactions[0]);
+                let merkle_path: Vec<[u8; 32]> = ipc_template
+                    .components
+                    .coinbase_merkle_path
+                    .iter()
+                    .filter_map(|b| b.as_slice().try_into().ok())
+                    .collect();
+                let prev_hash: [u8; 32] = {
+                    let b: &[u8] = template_header.prev_blockhash.as_ref();
+                    b.try_into().expect("BlockHash is always 32 bytes")
+                };
+                let braidpool_tmpl = braidpool_common::template::BraidpoolTemplate {
+                    coinbase_tx,
+                    merkle_path,
+                    prev_hash,
+                    nbits: template_header.bits.to_consensus(),
+                    header_timestamp: template_header.time,
+                    version: template_header.version.to_consensus(),
+                    height: ipc_template.components.height,
+                    template_id: match &template_id {
+                        TemplateId::Braidpool(id) => *id,
+                        TemplateId::Upstream(_) => 0,
+                    },
+                };
+                if let Err(e) = sv2_tx.send(braidpool_tmpl).await {
+                    warn!(error = %e, "SV2 template channel closed — disabling SV2 forwarding");
+                }
+            }
 
             let notification_sent_or_not = notifier_tx
                 .send(NotifyCmd::SendToAll {
