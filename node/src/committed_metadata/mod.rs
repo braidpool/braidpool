@@ -65,6 +65,8 @@ impl Decodable for TxIdVec {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CommittedMetadata {
     pub transaction_ids: TxIdVec,
+    /// The 2-5 transactions a miner introduces to the committed mempool
+    pub committed_transactions: TxIdVec,
     pub parents: Vec<BeadHash>,
     pub parent_bead_timestamps: TimeVec,
     pub payout_address: String,
@@ -81,6 +83,7 @@ impl Default for CommittedMetadata {
     fn default() -> Self {
         Self {
             transaction_ids: TxIdVec(Vec::new()),
+            committed_transactions: TxIdVec(Vec::new()),
             parents: Vec::new(),
             parent_bead_timestamps: TimeVec(Vec::new()),
             payout_address: "bc1".to_string(),
@@ -99,6 +102,7 @@ impl Encodable for CommittedMetadata {
     fn consensus_encode<W: Write + ?Sized>(&self, w: &mut W) -> Result<usize, io::Error> {
         let mut len = 0;
         len += self.transaction_ids.consensus_encode(w)?;
+        len += self.committed_transactions.consensus_encode(w)?;
         len += self.parents.consensus_encode(w)?;
         len += self.parent_bead_timestamps.consensus_encode(w)?;
         len += self.payout_address.consensus_encode(w)?;
@@ -118,6 +122,7 @@ impl Encodable for CommittedMetadata {
 impl Decodable for CommittedMetadata {
     fn consensus_decode<R: Read + ?Sized>(r: &mut R) -> Result<Self, Error> {
         let transaction_ids = TxIdVec::consensus_decode(r)?;
+        let committed_transactions = TxIdVec::consensus_decode(r)?;
         let parents = Vec::<BeadHash>::consensus_decode(r)?;
         let parent_bead_timestamps = TimeVec::consensus_decode(r)?;
         let payout_address = String::consensus_decode(r)?;
@@ -139,6 +144,7 @@ impl Decodable for CommittedMetadata {
         let miner_ip = String::consensus_decode(r)?;
         Ok(CommittedMetadata {
             transaction_ids,
+            committed_transactions,
             parents,
             parent_bead_timestamps,
             payout_address,

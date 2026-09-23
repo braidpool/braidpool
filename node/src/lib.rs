@@ -368,6 +368,7 @@ impl SwarmHandler {
         let candidate_block_bead_committed_metadata = CommittedMetadata {
             comm_pub_key: public_key,
             transaction_ids: TxIdVec(transaction_ids),
+            committed_transactions: TxIdVec(Vec::new()),
             parents: parent_hash_set,
             parent_bead_timestamps: time_hash_set,
             payout_address: downstream_payout_addr.to_string(),

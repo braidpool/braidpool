@@ -149,6 +149,7 @@ pub fn create_test_bead(nonce: u32, prev_hash: Option<BlockHash>) -> Bead {
         min_target: min_target,
         miner_ip: "".to_string(),
         transaction_ids: TxIdVec(vec![]),
+        committed_transactions: TxIdVec(vec![]),
         parents: parent_hash_set,
         parent_bead_timestamps: time_hash_set,
         payout_address: String::from(""),
