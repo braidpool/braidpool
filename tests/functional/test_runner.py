@@ -37,6 +37,8 @@ logger = logging.getLogger(__name__)
 BASE_SCRIPTS = [
     "feature_framework_lifecycle.py",
     "feature_framework_skip.py",
+    "feature_framework_unit_tests.py",
+    "feature_node_startup.py",
 ]
 
 EXTENDED_SCRIPTS: list[str] = []
