@@ -1,40 +1,3 @@
-//Beads
-export interface Transaction {
-  id: string;
-  hash: string;
-  timestamp: string;
-  count: number;
-  blockId: string;
-  fee: number;
-  size: number;
-  feePaid: string;
-  feeRate: number;
-  inputs: number;
-  outputs: number;
-}
-export interface TransactionListProps {
-  transactions: Transaction[];
-}
-
-export interface Bead {
-  id: string;
-  name: string;
-  timestamp: string;
-  transactions: number;
-  difficulty: number;
-  parents: string[];
-  details?: Transaction[];
-  reward: number;
-}
-
-export interface BeadRowProps {
-  bead: Bead;
-  isExpanded: boolean;
-  onToggle: (beadId: string) => void;
-  isActive: boolean;
-  transactions: Transaction[];
-}
-
 //annimatedstats
 export interface AnimatedStatCardProps {
   title: string;
@@ -125,17 +88,6 @@ export type TransactionTabProps = {
   setChartHovered: (val: boolean) => void;
   timeRange: string;
 };
-
-export interface BlockData {
-  blockHash: string;
-  timestamp: number;
-  height: number;
-  difficulty: number;
-  txCount: number;
-  reward: number;
-  parent: string;
-  transactions: any[];
-}
 
 export interface AdvancedchartProps {
   data: { value: number; timestamp: number }[];

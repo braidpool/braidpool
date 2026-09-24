@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import AdvancedChart from '../AdvancedChart';
 import AnimatedStatCard from '../AnimatedStatCard';
 import {
@@ -25,7 +25,7 @@ export default function LatencyTab({ timeRange }: { timeRange: string }) {
 
   const latencyHistory = useRef<LatencyHistoryEntry[]>([]);
 
-  // ✅ Process incoming data
+  // Process incoming data
   const processLatencyData = (
     data: LatencyWebSocketMessage['data']
   ): LatencyData => {
