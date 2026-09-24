@@ -120,12 +120,45 @@ jest.mock(
       usd: 'USD',
       eur: 'EUR',
       jpy: 'JPY',
+      gbp: 'GBP',
+      cad: 'CAD',
+      aud: 'AUD',
+      chf: 'CHF',
+      inr: 'INR',
+      krw: 'KRW',
+      brl: 'BRL',
+      hkd: 'HKD',
+      sgd: 'SGD',
     },
     currencyColors: {
       btc: '#f7931a',
       usd: '#4ade80',
       eur: '#3b82f6',
       jpy: '#ef4444',
+      gbp: '#8b5cf6',
+      cad: '#f59e0b',
+      aud: '#06b6d4',
+      chf: '#e11d48',
+      inr: '#f97316',
+      krw: '#10b981',
+      brl: '#22d3ee',
+      hkd: '#ec4899',
+      sgd: '#6366f1',
+    },
+    currencyFullNames: {
+      btc: 'Bitcoin',
+      usd: 'US Dollar',
+      eur: 'Euro',
+      jpy: 'Japanese Yen',
+      gbp: 'British Pound',
+      cad: 'Canadian Dollar',
+      aud: 'Australian Dollar',
+      chf: 'Swiss Franc',
+      inr: 'Indian Rupee',
+      krw: 'South Korean Won',
+      brl: 'Brazilian Real',
+      hkd: 'Hong Kong Dollar',
+      sgd: 'Singapore Dollar',
     },
   }),
   { virtual: true }
@@ -270,6 +303,15 @@ const mockMempoolData: MempoolData = {
     USD: 37000,
     EUR: 34500,
     JPY: 4000000,
+    GBP: 29000,
+    CAD: 50000,
+    AUD: 56000,
+    CHF: 39000,
+    INR: 3000000,
+    KRW: 49000000,
+    BRL: 190000,
+    HKD: 288000,
+    SGD: 50000,
   },
   fee_distribution: {
     min: 5,
@@ -491,7 +533,7 @@ describe('MempoolLatencyStats', () => {
     });
   });
 
-  describe('View Toggle Functionality', () => {
+  describe('Shared Currency Selector', () => {
     beforeEach(async () => {
       render(<MempoolLatencyStats />);
 
@@ -508,20 +550,28 @@ describe('MempoolLatencyStats', () => {
       });
     });
 
-    test('renders currency select dropdown', async () => {
+    test('renders shared currency select dropdown', async () => {
       await waitFor(() => {
-        const selectElement = screen.getByRole('combobox');
+        const selectElement = screen.getByRole('combobox', {
+          name: 'Overview currency',
+        });
         expect(selectElement).toBeInTheDocument();
-        expect(selectElement).toHaveValue('all');
+        expect(selectElement).toHaveValue('btc');
       });
     });
 
     test('contains all currency options in dropdown', async () => {
       await waitFor(() => {
-        expect(screen.getByDisplayValue('ALL')).toBeInTheDocument();
+        expect(
+          screen.getByRole('combobox', {
+            name: 'Overview currency',
+          })
+        ).toBeInTheDocument();
       });
 
-      const selectElement = screen.getByRole('combobox');
+      const selectElement = screen.getByRole('combobox', {
+        name: 'Overview currency',
+      });
 
       // Check all options exist
       const options = selectElement.querySelectorAll('option');
@@ -533,22 +583,93 @@ describe('MempoolLatencyStats', () => {
       expect(optionValues).toContain('usd');
       expect(optionValues).toContain('eur');
       expect(optionValues).toContain('jpy');
-      expect(optionValues).toContain('all');
+      expect(optionValues).not.toContain('all');
     });
 
-    test('changes view when selecting different currency', async () => {
+    test('changes block fee chart currency when selecting different currency', async () => {
       await waitFor(() => {
-        const selectElement = screen.getByRole('combobox');
+        const selectElement = screen.getByRole('combobox', {
+          name: 'Overview currency',
+        });
         fireEvent.change(selectElement, { target: { value: 'usd' } });
         expect(selectElement).toHaveValue('usd');
       });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('line-usd')).toBeInTheDocument();
+        expect(screen.queryByTestId('line-btc')).not.toBeInTheDocument();
+      });
     });
 
-    test('defaults to "all" view initially', async () => {
+    test('defaults to "btc" view initially', async () => {
       await waitFor(() => {
-        const selectElement = screen.getByRole('combobox');
-        expect(selectElement).toHaveValue('all');
+        const selectElement = screen.getByRole('combobox', {
+          name: 'Overview currency',
+        });
+        expect(selectElement).toHaveValue('btc');
       });
+
+      expect(screen.getByTestId('line-btc')).toBeInTheDocument();
+    });
+
+    test('shows placeholder when selected total fee currency is missing', async () => {
+      await waitFor(() => {
+        if (mockWebSocketInstance?.onmessage) {
+          const payloadWithoutUsdTotalFee = {
+            ...mockMempoolData,
+            mempool: { ...mockMempoolData.mempool },
+          } as any;
+          delete payloadWithoutUsdTotalFee.mempool.total_fee_usd;
+
+          const messageEvent = new MessageEvent('message', {
+            data: JSON.stringify({
+              type: 'mempool_update',
+              data: payloadWithoutUsdTotalFee,
+            }),
+          });
+          mockWebSocketInstance.onmessage(messageEvent);
+        }
+      });
+
+      const overviewCurrencySelect = screen.getByRole('combobox', {
+        name: 'Overview currency',
+      });
+
+      fireEvent.change(overviewCurrencySelect, { target: { value: 'usd' } });
+
+      const totalFeesLabel = screen.getByText('Total Fees (USD)');
+      const totalFeesValue = totalFeesLabel.parentElement?.querySelector('h3');
+      expect(totalFeesValue).toHaveTextContent('--');
+    });
+
+    test('does not round tiny non-zero BTC values to zero', async () => {
+      await waitFor(() => {
+        if (mockWebSocketInstance?.onmessage) {
+          const payloadWithTinyBtcFee = {
+            ...mockMempoolData,
+            next_block_fees: {
+              ...mockMempoolData.next_block_fees,
+              fee_btc: 0.000000005,
+            },
+          };
+
+          const messageEvent = new MessageEvent('message', {
+            data: JSON.stringify({
+              type: 'mempool_update',
+              data: payloadWithTinyBtcFee,
+            }),
+          });
+          mockWebSocketInstance.onmessage(messageEvent);
+        }
+      });
+
+      const overviewCurrencySelect = screen.getByRole('combobox', {
+        name: 'Overview currency',
+      });
+      fireEvent.change(overviewCurrencySelect, { target: { value: 'btc' } });
+
+      expect(screen.getByText(/0\.000000005 BTC/)).toBeInTheDocument();
+      expect(screen.queryByText(/0\.00000000 BTC/)).not.toBeInTheDocument();
     });
   });
 

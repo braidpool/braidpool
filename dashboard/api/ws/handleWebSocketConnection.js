@@ -4,6 +4,7 @@ import {
   latestStatsPayload,
 } from '../utils/fetchBlockDetails.js';
 import { fetchAllNodeData } from '../utils/fetchBlockChainInfo.js';
+import { latestMempoolPayload } from '../utils/fetchMempoolStats.js';
 
 const ALLOWED_RPC_METHODS = new Set([
   'getblock',
@@ -24,6 +25,9 @@ export async function handleWebSocketConnection(ws) {
   }
   if (latestStatsPayload) {
     ws.send(JSON.stringify(latestStatsPayload));
+  }
+  if (latestMempoolPayload) {
+    ws.send(JSON.stringify(latestMempoolPayload));
   }
 
   ws.on('message', async (message) => {
