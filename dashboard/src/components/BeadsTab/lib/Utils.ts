@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BlockData, RewardPoint } from './Types';
+import { RewardPoint } from './Types';
 
 export function shortenHash(hash: string, start = 6, end = 6): string {
   if (hash.length <= start + end) return hash;
@@ -39,35 +39,6 @@ export function useCopyToClipboard(timeout = 1500) {
   return { copied, copy };
 }
 
-export function processBlockData(data: BlockData) {
-  const {
-    blockHash,
-    timestamp,
-    height,
-    difficulty,
-    txCount,
-    reward,
-    parent,
-    transactions,
-  } = data;
-  const DIFFICULTY_ONE = 2 ** 32;
-  const workInGH = ((difficulty * DIFFICULTY_ONE) / 1e9).toFixed(2);
-  const formattedTransactions = transactions.map((tx: any) => ({
-    ...tx,
-    timestamp: new Date(parseInt(tx.timestamp)).toISOString(),
-    feePaid: tx.fee.toFixed(8),
-  }));
-  return {
-    blockHash,
-    timestamp: new Date(timestamp).toISOString(),
-    height,
-    work: workInGH,
-    txCount,
-    reward,
-    parent,
-    transactions: formattedTransactions,
-  };
-}
 export function calculateRewardAnalytics(rewardHistory: RewardPoint[]) {
   if (!rewardHistory || rewardHistory.length === 0) {
     return {

@@ -98,6 +98,18 @@ describe('fetchHashrateStats', () => {
     expect(secondDiff).toBe(diff / 1e12);
   });
 
+  it('normalizes hashrate below displayed precision to numeric zero', async () => {
+    rpcWithEnv
+      .mockResolvedValueOnce(65_000_000_000_000) // getdifficulty
+      .mockResolvedValueOnce(4e-7); // getnetworkhashps, converts to 4e-25 EH/s
+
+    await fetchHashrateStats(mockWSS);
+
+    const payload = JSON.parse(mockClient.send.mock.calls[0][0]);
+    expect(payload.data.hashrate).toBe(0);
+    expect(typeof payload.data.hashrate).toBe('number');
+  });
+
   it('should log & skip send on RPC failure', async () => {
     rpcWithEnv.mockRejectedValueOnce(new Error('RPC down'));
 
