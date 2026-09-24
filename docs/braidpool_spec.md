@@ -181,9 +181,10 @@ bitcoind using IPC. Therefore we will leverage all of the mempool validation and
 transaction selection logic in bitcoind, while allowing every node to
 independently construct the block template for validation.
 
-The 2-5 transactions included in a bead are required to be included in the block
-template for that bead. If that bead does not become a bitcoin block, then those
-transactions are added to the committed mempool.
+The 2-5 transactions included in a bead are required to be included in the
+`committed_metadata` for that bead. If that bead does not become a bitcoin block
+but satisfies the criteria for being a valid bead, then those transactions are
+added to the committed mempool.
 
 When computing the block template, we begin at the *head* of a cohort (all beads
 at the head of a cohort have the same parents and ancestors by definition, and
