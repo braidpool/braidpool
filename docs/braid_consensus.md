@@ -263,7 +263,7 @@ descendants) and names them as parents of his new share. He then traverses the
 graph going back a time $T$ to compute $N_B$, and $N_C$. He then computes the parameters $\lambda$ and $a$ (which are different for *each* bead) as
 
 $$
-\lambda = \frac{N_B}{x T}, \qquad a = \frac{T}{N_C} W\left(\frac{N_B}{N_C}-1\right).
+\lambda = \frac{N_B}{x T}, \qquad a = \frac{T}{N_B} W\left(\frac{N_B}{N_C}-1\right).
 $$
 
 The required difficulty for his bead which then given by $x_0$. This difficulty
@@ -409,7 +409,7 @@ $$
 \begin{array}{rcll}
 \bar x       &=& \displaystyle \left(\frac{1}{N_B} \sum_{i \in {\rm beads}} \frac{1}{x_i} \right)^{-1}   & {\rm average\ target} \\
 \bar \lambda &=& \displaystyle \frac{N_B}{\overline x T} & {\rm average\ hashrate} \\
-a                 &=& \displaystyle \max \left(a_{\rm min}, \frac{T}{N_C} W\left(\frac{N_B}{N_C}-1\right)\right) & {\rm latency\ parameter} \\
+a                 &=& \displaystyle \max \left(a_{\rm min}, \frac{T}{N_B} W\left(\frac{N_B}{N_C}-1\right)\right) & {\rm latency\ parameter} \\
 \bar x_1     &=& \displaystyle \left(\frac{1}{N_p} \displaystyle \sum_{p \in {\rm parents}} \frac{1}{x_p}\right)^{-1} & {\rm average\ parental\ target} \\
 x_0               &=& \displaystyle \frac{2 W\left(\frac12\right)}{a \bar \lambda} & {\rm optimal\ target} \\
 x                 &=& \left(\displaystyle x_0 + (\bar x_1 - x_0) e^{-\pi a/T}\right) 2^{-\max(0,N_{PC}-4)} & {\rm damped\ target}
