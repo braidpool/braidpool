@@ -72,7 +72,7 @@ impl DBHandler {
         network: PoolNetwork,
     ) -> Result<(Self, Sender<BraidpoolDBTypes>), DBErrors> {
         debug!("Initializing schema for persistent database");
-        let db_connection_pool = match init_db(datadir).await {
+        let db_connection_pool = match init_db(datadir, network).await {
             Ok(conn) => conn,
             Err(error) => {
                 error!(error = ?error, "Failed to initialize database connection");
