@@ -200,7 +200,7 @@ of $a$ and $\lambda$.
 <a id="11"></a>
 
 $$\tag{11}
-x_0 = x W\left(\frac12\right) W\left(\frac{N_B}{N_C}-1\right)
+x_0 = x \frac{2 W\left(\frac12\right)}{W\left(\frac{N_B}{N_C}-1\right)}
 $$
 
 ## Consensus
