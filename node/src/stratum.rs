@@ -697,6 +697,7 @@ impl DownstreamClient {
                     audit_dag,
                     upstream_share_tx,
                     upstream_difficulty,
+                    swarm_handler,
                 )
                 .await;
         }
@@ -1036,6 +1037,7 @@ impl DownstreamClient {
         audit_dag: Option<Arc<Mutex<crate::audit::AuditDAG>>>,
         upstream_share_tx: Option<mpsc::Sender<crate::upstream_pool::UpstreamShare>>,
         upstream_difficulty: Option<f64>,
+        swarm_handler: Arc<Mutex<SwarmHandler>>,
     ) -> Result<StratumResponses, StratumErrors> {
         let ntime_u32 =
             u32::from_str_radix(ntime, 16).map_err(|e| StratumErrors::InvalidMethodParams {
@@ -1247,10 +1249,6 @@ impl DownstreamClient {
                     upstream_difficulty = ?upstream_difficulty,
                     "Calculated bead difficulty targets"
                 );
-                let public_key =
-                    "020202020202020202020202020202020202020202020202020202020202020202"
-                        .parse::<bitcoin::PublicKey>()
-                        .unwrap();
                 let job_time = bitcoin::absolute::Time::from_consensus(submitted_job.job_sent_time)
                     .map_err(|e| {
                         error!(
@@ -1263,8 +1261,9 @@ impl DownstreamClient {
                         }
                     })?;
 
+                let identity = swarm_handler.lock().await.miner_identity();
                 let committed_metadata = crate::committed_metadata::CommittedMetadata {
-                    comm_pub_key: public_key,
+                    comm_pub_key: identity.xonly(),
                     miner_ip: self.downstream_ip.clone(),
                     start_timestamp: job_time,
                     transaction_ids: crate::committed_metadata::TxIdVec(Vec::new()),
@@ -1326,27 +1325,24 @@ impl DownstreamClient {
                     (extra_nonce_1, extra_nonce_2)
                 };
 
-                let placeholder_sig_bytes = [0u8; 64];
-                let sig = bitcoin::ecdsa::Signature {
-                    signature: bitcoin::secp256k1::ecdsa::Signature::from_compact(
-                        &placeholder_sig_bytes,
-                    )
-                    .expect("Valid placeholder signature"),
-                    sighash_type: bitcoin::EcdsaSighashType::All,
-                };
-
                 let uncommitted_metadata = crate::uncommitted_metadata::UnCommittedMetadata {
                     broadcast_timestamp: broadcast_time,
                     extra_nonce_1: extranonce_1_raw_value,
                     extra_nonce_2: extranonce_2_raw_value,
-                    signature: sig,
+                    signature: crate::uncommitted_metadata::UnCommittedMetadata::default()
+                        .signature,
                 };
 
-                let bead = crate::bead::Bead {
+                let mut bead = crate::bead::Bead {
                     committed_metadata,
                     block_header: header,
                     uncommitted_metadata,
                 };
+                identity
+                    .sign_bead(&mut bead)
+                    .map_err(|e| StratumErrors::InvalidShare {
+                        reason: e.to_string(),
+                    })?;
 
                 debug!(
                     worker = %worker_name,
