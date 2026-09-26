@@ -1,5 +1,7 @@
-import { Miner, MinerAlert as Alert } from './Types';
+import { CpuMiner, Miner, MinerAlert as Alert, UnifiedMiner } from './Types';
 import { THRESHOLDS } from './Constant';
+
+const KHASH_TO_THASH = 1e9;
 const determineStatus = (data: any): 'online' | 'warning' | 'offline' => {
   // Truly offline device not responding on the network
   if (!data.is_online) return 'offline';
@@ -46,7 +48,6 @@ export const mapApiToMiner = (m: any, lastSeenFallback = 'Never'): Miner => ({
   primary_pool: m.primary_pool || 'No Pool',
   pools: m.pools || [],
 });
-
 //alerts from the device
 export const getAlerts = (miner: Miner): Alert[] => {
   if (miner.status === 'offline') return [];
@@ -78,3 +79,35 @@ export const getAlerts = (miner: Miner): Alert[] => {
   }
   return alerts;
 };
+
+export const mapAsicToUnified = (m: Miner): UnifiedMiner => ({
+  id: m.id,
+  type: 'asic',
+  name:
+    [m.make, m.model].filter((v) => v && v !== 'Unknown').join(' ') ||
+    (m.hostname !== 'Unknown' ? m.hostname : m.ip),
+  status: m.status,
+  hashrateTHs: m.hashrate_current || 0,
+  sharesAccepted: null,
+  sharesSubmitted: null,
+  uptime: m.uptime || 0,
+  power: m.power_usage ?? null,
+  efficiency: m.efficiency ?? null,
+  lastSeen: m.lastSeen,
+  raw: m,
+});
+
+export const mapCpuToUnified = (c: CpuMiner): UnifiedMiner => ({
+  id: c.id,
+  type: 'cpu',
+  name: c.label || c.api_url,
+  status: c.is_online ? 'online' : 'offline',
+  hashrateTHs: (c.stats?.hashrate.currentKhashS ?? 0) / KHASH_TO_THASH,
+  sharesAccepted: c.stats?.shares.accepted ?? null,
+  sharesSubmitted: c.stats?.shares.submitted ?? null,
+  uptime: c.stats?.uptimeSeconds ?? 0,
+  power: null,
+  efficiency: null,
+  lastSeen: c.last_seen ? new Date(c.last_seen).toLocaleTimeString() : 'Never',
+  raw: c,
+});
