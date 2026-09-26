@@ -7,7 +7,7 @@ use tokio::sync::Semaphore;
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use crate::db::models::MinerDevice;
+use crate::db::models::{CpuMiner, MinerDevice};
 use crate::miner_service::{self, NormalizedMinerData};
 
 fn json_str(v: &[Value]) -> String {
@@ -432,4 +432,63 @@ pub async fn upsert_discovered(
 
     info!(ip = %ip_str, "discovered miner added");
     Ok(true)
+}
+
+// CPU miner CRUD
+
+pub async fn cpu_miner_insert(
+    pool: &SqlitePool,
+    id: &str,
+    api_url: &str,
+    label: Option<&str>,
+) -> Result<()> {
+    let now = MinerDevice::now_iso();
+    sqlx::query(
+        "INSERT INTO cpu_miners (id, api_url, label, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+    )
+    .bind(id)
+    .bind(api_url)
+    .bind(label)
+    .bind(&now)
+    .bind(&now)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn cpu_miner_list(pool: &SqlitePool) -> Result<Vec<CpuMiner>> {
+    let rows = sqlx::query_as::<_, CpuMiner>("SELECT * FROM cpu_miners ORDER BY created_at ASC")
+        .fetch_all(pool)
+        .await?;
+    Ok(rows)
+}
+
+pub async fn cpu_miner_delete(pool: &SqlitePool, id: &str) -> Result<bool> {
+    let n = sqlx::query("DELETE FROM cpu_miners WHERE id = ?")
+        .bind(id)
+        .execute(pool)
+        .await?
+        .rows_affected();
+    Ok(n > 0)
+}
+
+pub async fn cpu_miner_update_stats(
+    pool: &SqlitePool,
+    id: &str,
+    is_online: bool,
+    last_stats: Option<&str>,
+) -> Result<()> {
+    let now = MinerDevice::now_iso();
+    let last_seen = if is_online { Some(now.as_str()) } else { None };
+    sqlx::query(
+        "UPDATE cpu_miners SET is_online=?, last_stats=?, last_seen=?, updated_at=? WHERE id=?",
+    )
+    .bind(is_online)
+    .bind(last_stats)
+    .bind(last_seen)
+    .bind(&now)
+    .bind(id)
+    .execute(pool)
+    .await?;
+    Ok(())
 }

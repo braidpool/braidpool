@@ -1,5 +1,6 @@
 pub mod api;
 pub mod config;
+pub mod cpu_miner;
 pub mod db;
 pub mod miner_service;
 pub mod network;
