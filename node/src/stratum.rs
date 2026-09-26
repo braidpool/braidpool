@@ -1268,6 +1268,7 @@ impl DownstreamClient {
                     miner_ip: self.downstream_ip.clone(),
                     start_timestamp: job_time,
                     transaction_ids: crate::committed_metadata::TxIdVec(Vec::new()),
+                    committed_transactions: crate::committed_metadata::TxIdVec(Vec::new()),
                     parents: parent_hash_set,
                     parent_bead_timestamps: time_hash_set,
                     payout_address: payout_address,
