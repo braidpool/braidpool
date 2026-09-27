@@ -16,6 +16,10 @@ pub struct MerklePathProof {
 
 impl MerklePathProof {
     pub fn calculate_corresponding_merkle_root(&self) -> MerkleRoot {
+        if self.merkle_path.is_empty() {
+            return TxMerkleNode::from_byte_array(self.transaction_hash.to_byte_array());
+        }
+
         let hashing_order = self.get_merkle_hashing_order();
         let mut concatenated_hashes: Vec<u8> = Vec::new();
         for hash in hashing_order.iter() {
@@ -30,19 +34,23 @@ impl MerklePathProof {
 impl MerklePathProof {
     // All private functions go here!
     fn get_merkle_hashing_order(&self) -> Vec<[u8; 32]> {
+        if self.merkle_path.is_empty() {
+            return vec![self.transaction_hash.to_byte_array()];
+        }
+
         let mut hashing_order: Vec<[u8; 32]> = Vec::new();
         let index_for_starting_the_copy: usize;
         if self.is_right_leaf {
-            hashing_order.push(self.merkle_path[0].as_byte_array().clone());
-            hashing_order.push(self.transaction_hash.as_byte_array().clone());
+            hashing_order.push(self.merkle_path[0].to_byte_array());
+            hashing_order.push(self.transaction_hash.to_byte_array());
             index_for_starting_the_copy = 1;
         } else {
-            hashing_order.push(self.transaction_hash.as_byte_array().clone());
+            hashing_order.push(self.transaction_hash.to_byte_array());
             index_for_starting_the_copy = 0;
         };
 
         for index in index_for_starting_the_copy..self.merkle_path.len() {
-            hashing_order.push(self.merkle_path[index].as_byte_array().clone());
+            hashing_order.push(self.merkle_path[index].to_byte_array());
         }
 
         hashing_order
