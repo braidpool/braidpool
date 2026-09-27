@@ -194,5 +194,7 @@ impl Codec for BeadCodec {
     }
 }
 
+pub mod validate;
+
 #[cfg(test)]
 mod tests;
