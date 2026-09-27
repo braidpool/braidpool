@@ -155,6 +155,33 @@ struct BraidInfo {
     total_work: String,
 }
 
+/// Proof-of-work value zero, without subtracting a header's work from itself.
+fn zero_work() -> bitcoin::Work {
+    bitcoin::Work::from_le_bytes([0u8; 32])
+}
+
+/// Adds two work values, saturating at 2^256 − 1.
+///
+/// `bitcoin::Work` addition panics in debug builds when the sum does not fit in
+/// a `U256`. A header with a tiny compact target (for example `0x03000001`)
+/// has work equal to the maximum `U256`, so a second addition overflows.
+fn saturating_add_work(lhs: bitcoin::Work, rhs: bitcoin::Work) -> bitcoin::Work {
+    let left = lhs.to_le_bytes();
+    let right = rhs.to_le_bytes();
+    let mut sum = [0u8; 32];
+    let mut carry = 0u16;
+    for (index, byte) in sum.iter_mut().enumerate() {
+        let total = u16::from(left[index]) + u16::from(right[index]) + carry;
+        *byte = total as u8;
+        carry = total >> 8;
+    }
+    if carry != 0 {
+        bitcoin::Work::from_le_bytes([0xff; 32])
+    } else {
+        bitcoin::Work::from_le_bytes(sum)
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 struct NodeInfo {
     common_pubkey: String,
@@ -329,6 +356,18 @@ impl RpcServer for RpcServerImpl {
         let bead: Bead = serde_json::from_str(&bead_data).map_err(|e| {
             ErrorObjectOwned::owned(1, format!("Invalid bead data: {}", e), None::<()>)
         })?;
+        let network = self.braid_arc.read().await.network;
+        if let Err(error) = crate::bead::validate::validate_bead(&bead, network) {
+            warn!(
+                error = %error,
+                "Dropping addbead request that failed validation"
+            );
+            return Err(ErrorObjectOwned::owned(
+                4,
+                format!("Invalid bead: {error}"),
+                None::<()>,
+            ));
+        }
         let mut braid_data = self.braid_arc.write().await;
         let bead_hash = braid_data.compute_bead_hash(&bead);
         info!(
@@ -548,17 +587,14 @@ impl RpcServer for RpcServerImpl {
             });
         }
 
-        let first_work = all_beads[0].block_header.work();
-        let zero_work = first_work - first_work;
-
         let mut our_beads_count = 0;
-        let mut our_total_work = zero_work;
-        let mut total_work_in_braid = zero_work;
+        let mut our_total_work = zero_work();
+        let mut total_work_in_braid = zero_work();
         let mut payout_addresses = Vec::new();
 
         for bead in all_beads.iter() {
             let work = bead.block_header.work();
-            total_work_in_braid = total_work_in_braid + work;
+            total_work_in_braid = saturating_add_work(total_work_in_braid, work);
 
             let mut is_ours = false;
 
@@ -582,7 +618,7 @@ impl RpcServer for RpcServerImpl {
 
             if is_ours {
                 our_beads_count += 1;
-                our_total_work = our_total_work + work;
+                our_total_work = saturating_add_work(our_total_work, work);
 
                 let payout_addr = bead.committed_metadata.payout_address.trim();
                 if !payout_addr.is_empty() && !payout_addresses.contains(&payout_addr.to_string()) {
@@ -591,7 +627,7 @@ impl RpcServer for RpcServerImpl {
             }
         }
 
-        let our_work_share_percent = if total_work_in_braid > zero_work {
+        let our_work_share_percent = if total_work_in_braid > zero_work() {
             let our_work_str = our_total_work.to_string();
             let total_work_str = total_work_in_braid.to_string();
 
@@ -876,17 +912,13 @@ impl RpcServer for RpcServerImpl {
             })
             .collect();
 
-        let total_work = if braid_data.beads.is_empty() {
-            "0".to_string()
-        } else {
-            let first_work = braid_data.beads[0].block_header.work();
-            let zero_work = first_work - first_work;
-            braid_data
-                .beads
-                .iter()
-                .fold(zero_work, |acc, bead| acc + bead.block_header.work())
-                .to_string()
-        };
+        let total_work = braid_data
+            .beads
+            .iter()
+            .fold(zero_work(), |acc, bead| {
+                saturating_add_work(acc, bead.block_header.work())
+            })
+            .to_string();
 
         let braid_info = BraidInfo {
             bead_count: braid_data.beads.len(),
@@ -1233,6 +1265,53 @@ fn test_db_tx() -> mpsc::Sender<BraidpoolDBTypes> {
         mpsc::channel::<BraidpoolDBTypes>(crate::db::db_handlers::DB_CHANNEL_CAPACITY);
     tokio::spawn(async move { while rx.recv().await.is_some() {} });
     tx
+}
+
+#[cfg(test)]
+async fn submit_addbead(
+    genesis: crate::bead::Bead,
+    child: &crate::bead::Bead,
+) -> (Result<String, jsonrpsee::core::ClientError>, u64) {
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(
+        vec![genesis],
+        PoolNetwork::Cpunet,
+    )));
+    let (proxy_tx, _) = mpsc::unbounded_channel();
+    let (server_addr, _) = run_rpc_server(
+        Arc::clone(&braid),
+        "127.0.0.1:0",
+        Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
+        Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
+        Arc::new(Mutex::new(stratum::BlockTemplate::default())),
+        proxy_tx,
+        None,
+        test_db_tx(),
+    )
+    .await
+    .unwrap();
+    let client: HttpClient = HttpClient::builder()
+        .build(format!("http://{server_addr}"))
+        .unwrap();
+    let bead_json = serde_json::to_string(child).expect("bead serializes");
+    let mut params = ArrayParams::new();
+    params.insert(bead_json).unwrap();
+    let response = client.request("addbead", params).await;
+    let count: u64 = client
+        .request("getbeadcount", ArrayParams::new())
+        .await
+        .expect("bead count");
+    (response, count)
+}
+
+#[cfg(test)]
+fn assert_addbead_rejected(response: Result<String, jsonrpsee::core::ClientError>, count: u64) {
+    let error = response.expect_err("invalid bead must be rejected");
+    let message = error.to_string();
+    assert!(
+        message.contains("Invalid bead"),
+        "unexpected addbead error: {message}"
+    );
+    assert_eq!(count, 1, "rejected bead must not be added");
 }
 #[tokio::test]
 pub async fn test_extend_rpc() {
@@ -2558,4 +2637,92 @@ pub async fn test_subscribe_bead_rpc() {
             panic!("Notification not received !");
         }
     }
+}
+
+#[tokio::test]
+async fn test_addbead_rejects_bead_without_proof_of_work() {
+    let genesis = create_test_bead(1, None);
+    let parent = compute_block_hash(&genesis.block_header, PoolNetwork::Cpunet);
+    let mut child = create_test_bead(2, Some(parent));
+    child.block_header.bits = bitcoin::CompactTarget::from_consensus(0x03000001);
+    let (response, count) = submit_addbead(genesis, &child).await;
+    assert_addbead_rejected(response, count);
+}
+
+#[tokio::test]
+async fn test_addbead_rejects_duplicate_parents() {
+    let genesis = create_test_bead(1, None);
+    let parent = compute_block_hash(&genesis.block_header, PoolNetwork::Cpunet);
+    let mut child = create_test_bead(2, Some(parent));
+    let timestamp = child.committed_metadata.parent_bead_timestamps.0[0];
+    child.committed_metadata.parents.push(parent);
+    child
+        .committed_metadata
+        .parent_bead_timestamps
+        .0
+        .push(timestamp);
+    let (response, count) = submit_addbead(genesis, &child).await;
+    assert_addbead_rejected(response, count);
+}
+
+#[tokio::test]
+async fn test_addbead_rejects_parent_timestamp_count_mismatch() {
+    let genesis = create_test_bead(1, None);
+    let parent = compute_block_hash(&genesis.block_header, PoolNetwork::Cpunet);
+    let mut child = create_test_bead(2, Some(parent));
+    child.committed_metadata.parent_bead_timestamps.0.clear();
+    let (response, count) = submit_addbead(genesis, &child).await;
+    assert_addbead_rejected(response, count);
+}
+
+#[tokio::test]
+async fn test_addbead_rejects_invalid_payout_address() {
+    let genesis = create_test_bead(1, None);
+    let parent = compute_block_hash(&genesis.block_header, PoolNetwork::Cpunet);
+    let mut child = create_test_bead(2, Some(parent));
+    child.committed_metadata.payout_address = "not-an-address".to_string();
+    let (response, count) = submit_addbead(genesis, &child).await;
+    assert_addbead_rejected(response, count);
+}
+
+#[tokio::test]
+async fn test_work_sums_saturate_for_tiny_targets() {
+    use serde_json::json;
+
+    let mut low_target_a = create_test_bead(1, None);
+    let mut low_target_b = create_test_bead(2, None);
+    low_target_a.block_header.bits = bitcoin::CompactTarget::from_consensus(0x03000001);
+    low_target_b.block_header.bits = bitcoin::CompactTarget::from_consensus(0x03000001);
+    let public_key = low_target_a.committed_metadata.comm_pub_key.to_string();
+    let braid = Arc::new(RwLock::new(braid::Braid::new(
+        vec![low_target_a, low_target_b],
+        PoolNetwork::Cpunet,
+    )));
+    let (proxy_tx, _) = mpsc::unbounded_channel();
+    let server = RpcServerImpl::new(
+        braid,
+        Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
+        Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
+        Arc::new(Mutex::new(stratum::BlockTemplate::default())),
+        proxy_tx,
+        None,
+        test_db_tx(),
+    );
+    let saturated = bitcoin::Work::from_le_bytes([0xff; 32]).to_string();
+
+    let braid_info = server.get_braid_info().await.expect("getbraidinfo");
+    assert_eq!(braid_info["total_work"].as_str(), Some(saturated.as_str()));
+
+    let mining_info = server
+        .get_mining_info(Some(json!({ "public_keys": [public_key] })))
+        .await
+        .expect("getmininginfo");
+    assert_eq!(
+        mining_info["total_work_in_braid"].as_str(),
+        Some(saturated.as_str())
+    );
+    assert_eq!(
+        mining_info["our_total_work"].as_str(),
+        Some(saturated.as_str())
+    );
 }

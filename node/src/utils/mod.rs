@@ -131,12 +131,41 @@ pub fn resolve_datadir(datadir: &Path) -> std::io::Result<PathBuf> {
     Ok(datadir_path)
 }
 
-// Helper function to create test beads
+/// Easiest compact target: exponent `0x20`, mantissa `0x7fffff`.
+///
+/// About half of all header hashes meet it, so test beads can grind a nonce
+/// in a few increments.
+pub(crate) const EASIEST_COMPACT_TARGET: u32 = 0x207fffff;
+
+/// Increments `header.nonce`, starting from its current value, until the header
+/// hash meets `header.bits` under `network`.
+///
+/// The search stops if every nonce has been tried. [`EASIEST_COMPACT_TARGET`]
+/// is met long before that happens.
+pub(crate) fn grind_test_header(header: &mut BlockHeader, network: PoolNetwork) {
+    let target = bitcoin::Target::from_compact(header.bits);
+    let start = header.nonce;
+    loop {
+        if target.is_met_by(network.block_hash(header)) {
+            return;
+        }
+        header.nonce = header.nonce.wrapping_add(1);
+        if header.nonce == start {
+            return;
+        }
+    }
+}
+
+/// Builds a test bead whose header meets [`EASIEST_COMPACT_TARGET`] on cpunet.
+///
+/// `nonce` is the first nonce tried. It is also mixed into the merkle root so
+/// two beads that share `prev_hash` stay distinct after grinding. When
+/// `prev_hash` is set it is the sole parent, with one matching parent timestamp.
+/// The payout address is a valid cpunet address.
 pub fn create_test_bead(nonce: u32, prev_hash: Option<BlockHash>) -> Bead {
     let public_key = "020202020202020202020202020202020202020202020202020202020202020202"
         .parse::<bitcoin::PublicKey>()
         .unwrap();
-    let time_hash_set = TimeVec(Vec::new());
     let mut parent_hash_set: Vec<BlockHash> = Vec::new();
     if let Some(hash) = prev_hash {
         parent_hash_set.push(hash);
@@ -144,14 +173,21 @@ pub fn create_test_bead(nonce: u32, prev_hash: Option<BlockHash>) -> Bead {
     let weak_target = CompactTarget::from_consensus(486604799);
     let min_target = CompactTarget::from_consensus(486604799);
     let time_val = Time::from_consensus(1653195600).unwrap();
+    let parent_bead_timestamps = if prev_hash.is_some() {
+        TimeVec(vec![time_val])
+    } else {
+        TimeVec(Vec::new())
+    };
+    let payout_address =
+        crate::config::CoinbaseConfig::from_network(PoolNetwork::Cpunet).pool_payout_address;
     let test_committed_metadata: CommittedMetadata = CommittedMetadata {
         comm_pub_key: public_key,
         min_target: min_target,
         miner_ip: "".to_string(),
         transaction_ids: TxIdVec(vec![]),
         parents: parent_hash_set,
-        parent_bead_timestamps: time_hash_set,
-        payout_address: String::from(""),
+        parent_bead_timestamps,
+        payout_address,
         start_timestamp: time_val,
         weak_target: weak_target,
     };
@@ -169,15 +205,17 @@ pub fn create_test_bead(nonce: u32, prev_hash: Option<BlockHash>) -> Bead {
         extra_nonce_2: extra_nonce_2,
         signature: sig,
     };
-    let test_bytes: [u8; 32] = [0u8; 32];
-    let test_block_header = BlockHeader {
+    let mut merkle_bytes: [u8; 32] = [0u8; 32];
+    merkle_bytes[..4].copy_from_slice(&nonce.to_le_bytes());
+    let mut test_block_header = BlockHeader {
         version: BlockVersion::TWO,
-        prev_blockhash: prev_hash.unwrap_or(BlockHash::from_byte_array(test_bytes)),
-        bits: CompactTarget::from_consensus(486604799),
-        nonce: nonce,
+        prev_blockhash: prev_hash.unwrap_or(BlockHash::from_byte_array([0u8; 32])),
+        bits: CompactTarget::from_consensus(EASIEST_COMPACT_TARGET),
+        nonce,
         time: 8328429,
-        merkle_root: TxMerkleNode::from_byte_array(test_bytes),
+        merkle_root: TxMerkleNode::from_byte_array(merkle_bytes),
     };
+    grind_test_header(&mut test_block_header, PoolNetwork::Cpunet);
     Bead {
         block_header: test_block_header,
         committed_metadata: test_committed_metadata,
