@@ -339,7 +339,7 @@ select transactions within beads which have more work than other beads for
 transaction conflict resolution.
 
 For conflict resolution, we choose the Simple Sum of Descendant Work (SSDW),
-which is the sum of work among descendants for each bead, disregarding any graph
+which is the sum of the bead's own work plus the work among its descendants, disregarding any graph
 structure. This is the direct analog of Nakamoto's "longest chain/highest work"
 rule.  Graph structure is manipulable at zero cost, therefore we must have a
 conflict resolution algorithm that is independent of graph structure, lest we
@@ -347,10 +347,10 @@ create a game which can be played to give a non-work advantage to an attacking
 miner which he could use to reverse transactions. The SSDW work is:
 
 $$
-    w_{\rm SSDW} = \sum_{i \in \rm descendants} \frac{1}{x_i}
+    w_{\rm SSDW} = \frac{1}{x_{\rm self}} + \sum_{i \in \rm descendants} \frac{1}{x_i}
 $$
 
-where $x_i$ is the target difficulty for descendant $i$, and $1/x$ is
+where $x_{\rm self}$ is the target difficulty for the bead itself, $x_i$ is the target difficulty for descendant $i$, and $1/x$ is
 traditionally called the "work".
 
 The SSDW can be optimized by first applying the Cohort algorithm, since all
