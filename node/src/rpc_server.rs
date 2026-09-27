@@ -2676,16 +2676,6 @@ async fn test_addbead_rejects_parent_timestamp_count_mismatch() {
 }
 
 #[tokio::test]
-async fn test_addbead_rejects_invalid_payout_address() {
-    let genesis = create_test_bead(1, None);
-    let parent = compute_block_hash(&genesis.block_header, PoolNetwork::Cpunet);
-    let mut child = create_test_bead(2, Some(parent));
-    child.committed_metadata.payout_address = "not-an-address".to_string();
-    let (response, count) = submit_addbead(genesis, &child).await;
-    assert_addbead_rejected(response, count);
-}
-
-#[tokio::test]
 async fn test_work_sums_saturate_for_tiny_targets() {
     use serde_json::json;
 

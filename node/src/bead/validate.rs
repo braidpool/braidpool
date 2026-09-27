@@ -6,10 +6,8 @@
 //! separate work and plug into [`validate_bead`] later.
 
 use std::collections::HashSet;
-use std::str::FromStr;
 
-use bitcoin::{Address, Target};
-use braidpool_common::cpunet::Cpunet;
+use bitcoin::Target;
 
 use crate::bead::Bead;
 use crate::config::PoolNetwork;
@@ -19,11 +17,10 @@ use crate::error::BeadValidationError;
 ///
 /// The header hash, under `network`'s rules, must meet `header.bits`. Parents
 /// must be unique, and `parent_bead_timestamps` must have one entry per parent.
-/// `payout_address` must decode as an address for `network`.
 ///
 /// # Arguments
 /// * `bead` - The bead received from gossip, bead-sync, or `addbead`.
-/// * `network` - Network whose block-hash and address rules apply.
+/// * `network` - Network whose block-hash rules apply.
 ///
 /// # Returns
 /// `Ok(())` when every check passes.
@@ -52,36 +49,6 @@ pub fn validate_bead(bead: &Bead, network: PoolNetwork) -> Result<(), BeadValida
         });
     }
 
-    validate_payout_address(&bead.committed_metadata.payout_address, network)
-}
-
-/// Decodes `address` under `network`.
-///
-/// Cpunet addresses use [`Cpunet::decode_bech32_address`]. Other networks use
-/// rust-bitcoin address parsing and must match that network.
-fn validate_payout_address(address: &str, network: PoolNetwork) -> Result<(), BeadValidationError> {
-    match network {
-        PoolNetwork::Cpunet => {
-            Cpunet::decode_bech32_address(address).map_err(|error| {
-                BeadValidationError::InvalidPayoutAddress {
-                    address: address.to_string(),
-                    reason: error.to_string(),
-                }
-            })?;
-        }
-        PoolNetwork::Bitcoin(bitcoin_network) => {
-            Address::from_str(address)
-                .map_err(|error| BeadValidationError::InvalidPayoutAddress {
-                    address: address.to_string(),
-                    reason: error.to_string(),
-                })?
-                .require_network(bitcoin_network)
-                .map_err(|error| BeadValidationError::InvalidPayoutAddress {
-                    address: address.to_string(),
-                    reason: error.to_string(),
-                })?;
-        }
-    }
     Ok(())
 }
 
@@ -146,17 +113,5 @@ mod tests {
                 timestamps: 0,
             },
         );
-    }
-
-    #[test]
-    fn validate_bead_rejects_invalid_payout_address() {
-        let mut bead = create_test_bead(1, None);
-        bead.committed_metadata.payout_address = "not-an-address".to_string();
-        match validate_bead(&bead, PoolNetwork::Cpunet) {
-            Err(BeadValidationError::InvalidPayoutAddress { address, .. }) => {
-                assert_eq!(address, "not-an-address");
-            }
-            other => panic!("expected invalid payout address, got {other:?}"),
-        }
     }
 }

@@ -588,7 +588,9 @@ impl std::error::Error for UnsupportedNetworkError {}
 /// does not increase the sending peer's score.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BeadValidationError {
+    /// The header hash does not meet the compact target stored in `bits`.
     InsufficientProofOfWork,
+    /// The same parent hash is listed more than once.
     DuplicateParents,
     /// `parent_bead_timestamps` and `parents` have different lengths.
     ParentTimestampCountMismatch {
@@ -596,11 +598,6 @@ pub enum BeadValidationError {
         parents: usize,
         /// Number of parent timestamps on the bead.
         timestamps: usize,
-    },
-    /// `payout_address` is not a valid address for the bead's network.
-    InvalidPayoutAddress {
-        address: String,
-        reason: String,
     },
 }
 
@@ -621,9 +618,6 @@ impl fmt::Display for BeadValidationError {
                     f,
                     "bead has {parents} parents but {timestamps} parent timestamps"
                 )
-            }
-            BeadValidationError::InvalidPayoutAddress { address, reason } => {
-                write!(f, "invalid payout address {address}: {reason}")
             }
         }
     }
