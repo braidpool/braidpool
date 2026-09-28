@@ -92,7 +92,7 @@ enum Commands {
     #[command(name = "gethighestworkpathbycount")]
     GetHighestWorkPathByCount {
         /// Limit the number of results returned
-        limit: u8,
+        limit: u64,
     },
 
     /// Get statistics about the IPC connection

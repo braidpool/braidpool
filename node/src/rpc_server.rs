@@ -90,7 +90,7 @@ pub trait Rpc {
     #[method(name = "gethighestworkpathbycount")]
     async fn get_highest_work_path_by_count(
         &self,
-        limit: u8,
+        limit: u64,
     ) -> Result<Vec<String>, ErrorObjectOwned>;
 
     #[method(name = "getipcstats")]
@@ -724,7 +724,7 @@ impl RpcServer for RpcServerImpl {
 
     async fn get_highest_work_path_by_count(
         &self,
-        limit: u8,
+        limit: u64,
     ) -> Result<Vec<String>, ErrorObjectOwned> {
         info!(limit = %limit, "Get highest work path by count request received");
 
@@ -756,7 +756,6 @@ impl RpcServer for RpcServerImpl {
             };
 
         let available_count = bead_list.len();
-        let requested_limit = limit as usize;
 
         // Handle empty braid case
         if available_count == 0 {
@@ -766,6 +765,8 @@ impl RpcServer for RpcServerImpl {
                 None::<()>,
             ));
         }
+
+        let requested_limit = limit as usize;
 
         // Validate that limit is greater than zero
         if requested_limit == 0 {
@@ -779,21 +780,11 @@ impl RpcServer for RpcServerImpl {
             ));
         }
 
-        // Validate that the requested limit doesn't exceed available beads
-        if requested_limit > available_count {
-            return Err(ErrorObjectOwned::owned(
-                6,
-                format!(
-                    "Requested limit ({}) exceeds available beads in highest work path. The maximum available count is {}. Please use a limit between 1 and {}. You can use 'getbeadcount' to check the total number of beads in the braid.",
-                    requested_limit, available_count, available_count
-                ),
-                None::<()>,
-            ));
-        }
-
+        let effective_limit = requested_limit.min(available_count);
+        let skip_count = available_count.saturating_sub(effective_limit);
         let hw_path_hashes: Vec<String> = bead_list
             .iter()
-            .take(requested_limit)
+            .skip(skip_count)
             .map(|&index| {
                 braid_data
                     .compute_bead_hash(&braid_data.beads[index])
@@ -1827,7 +1818,7 @@ pub async fn test_get_hwpath_rpc() {
     let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
 
     let mut params = ArrayParams::new();
-    params.insert(10 as u8).unwrap();
+    params.insert(10 as u64).unwrap();
     let response: Result<Vec<String>, jsonrpsee::core::ClientError> =
         client.request("gethighestworkpathbycount", params).await;
 
@@ -1837,7 +1828,7 @@ pub async fn test_get_hwpath_rpc() {
 
     // Test with limit
     let mut params = ArrayParams::new();
-    params.insert(2 as u8).unwrap();
+    params.insert(2 as u64).unwrap();
     let response: Result<Vec<String>, jsonrpsee::core::ClientError> =
         client.request("gethighestworkpathbycount", params).await;
 
