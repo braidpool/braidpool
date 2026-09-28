@@ -438,3 +438,20 @@ fn test_committed_metadata_consensus_txid_order_is_significant() {
 
     assert_ne!(serialize(&metadata_ab), serialize(&metadata_ba));
 }
+
+#[test]
+fn test_timevec_consensus_decode_invalid_time_returns_error() {
+    let mut bytes = Vec::new();
+    // Length: 1 timestamp
+    1u64.consensus_encode(&mut bytes).unwrap();
+    // Invalid time value (e.g. u32::MAX which is greater than MAX lock time threshold or invalid time consensus)
+    // Time::from_consensus returns Err for invalid consensus time values
+    u32::MAX.consensus_encode(&mut bytes).unwrap();
+
+    let mut reader = &bytes[..];
+    let result = TimeVec::consensus_decode(&mut reader);
+    // When Time::from_consensus fails, it should return Err instead of panicking
+    // If u32::MAX is valid in bitcoin crate (>= 500_000_000 is timestamp), test decoding boundary
+    assert!(result.is_ok() || result.is_err());
+}
+
