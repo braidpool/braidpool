@@ -16,9 +16,7 @@ class NetworkConfig:
 
     #Chain config
     network: str = "regtest"
-    initial_blocks: int = 101
-
-
+    initial_blocks: int | None = None
     bitcoin_rpc_port: int | None = None
     bitcoin_p2p_port: int | None = None
     bitcoin_ipc_socket: Path | None = None
@@ -40,3 +38,10 @@ class NetworkConfig:
     #Logging config
     log_level: str = "INFO"
     random_seed: int = 42
+
+    def __post_init__(self) -> None:
+        if self.initial_blocks is None:
+            if self.network == "cpunet":
+                self.initial_blocks = 0
+            else:
+                self.initial_blocks = 101

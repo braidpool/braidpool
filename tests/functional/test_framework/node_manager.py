@@ -92,8 +92,7 @@ class NodeManager:
             ]
             
             if i > 0:
-                extra_args.append(f"--addnode=127.0.0.1:{self.nodes[0].p2p_port}")
-                
+                extra_args.append(f"--addnode=/ip4/127.0.0.1/udp/{self.nodes[0].p2p_port}/quic-v1")
             node.start(extra_args=extra_args)   # registers managed_process internally
             node.wait_for_rpc_connection()
             

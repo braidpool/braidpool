@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 def find_braidpool_bin(repo_root: Path | None = None) -> Path:
     """Find the braidpool-node binary."""
     return find_binary(
-        "braidpool-node",
+        "node",
         "BRAIDPOOL_BIN_PATH",
         ["target/debug/node", "target/release/node", "node"],
         repo_root=repo_root,

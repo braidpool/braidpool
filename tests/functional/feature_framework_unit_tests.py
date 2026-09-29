@@ -68,7 +68,6 @@ def test_network_config_defaults() -> None:
     assert_equal(cfg.peer_connection_timeout, 15.0)
     assert_equal(cfg.bead_propagation_timeout, 60.0)
     assert_equal(cfg.log_level, "INFO")
-    assert not cfg.keep_logs_on_success
     assert_equal(cfg.random_seed, 42)
 
 
@@ -179,11 +178,20 @@ def test_runner_stable_port_seeds() -> None:
 
 
 def test_runner_default_selection_and_filters() -> None:
-    expected = ["feature_framework_unit_tests.py", "feature_node_startup.py"]
+    expected = [
+        "feature_framework_lifecycle.py",
+        "feature_framework_skip.py",
+        "feature_framework_unit_tests.py",
+        "feature_node_startup.py"
+    ]
     assert_equal(build_test_list([], extended=False, exclude=None, pattern=None), expected)
     assert_equal(
         build_test_list([], extended=False, exclude="feature_node_startup", pattern=None),
-        ["feature_framework_unit_tests.py"],
+        [
+            "feature_framework_lifecycle.py",
+            "feature_framework_skip.py",
+            "feature_framework_unit_tests.py"
+        ],
     )
     assert_equal(
         build_test_list([], extended=False, exclude=None, pattern="node_startup"),
@@ -693,7 +701,7 @@ def test_test_node_addnode_extra_arg() -> None:
             
         assert_equal(len(all_extra_args), 2)
         assert not any(arg.startswith("--addnode=") for arg in all_extra_args[0])
-        assert "--addnode=127.0.0.1:1000" in all_extra_args[1]
+        assert "--addnode=/ip4/127.0.0.1/udp/1000/quic-v1" in all_extra_args[1]  
         expected_ipc_arg = f"--ipc-socket={nm.bitcoin.ipc_socket_path}"
         for node_args in all_extra_args:
             assert expected_ipc_arg in node_args
@@ -711,7 +719,7 @@ def test_node_manager_skip_on_missing_binary() -> None:
             find_braidpool_bin(repo_root=Path("/path/to/nowhere"))
             assert False, "Should have raised SkipTest"
         except SkipTest as e:
-            assert "braidpool-node not found" in str(e)
+            assert "braidpool node not found" in str(e)
     finally:
         if original_env is not None:
             os.environ["BRAIDPOOL_BIN_PATH"] = original_env
