@@ -1,3 +1,4 @@
+use super::cap_sync_response;
 use super::check_bounded;
 use super::read_bounded;
 use super::Bead;
@@ -10,11 +11,14 @@ use super::BeadSyncError;
 use super::Beads;
 use super::CommittedMetadata;
 use super::UnCommittedMetadata;
+use super::MAX_BEADS_PER_SYNC_RESPONSE;
 use super::MAX_BEAD_SYNC_REQUEST_BYTES;
+use super::MAX_BEAD_SYNC_RESPONSE_BYTES;
 use crate::committed_metadata::TimeVec;
 use crate::config::PoolNetwork;
 use crate::utils::compute_block_hash;
 use crate::utils::create_test_bead;
+use crate::utils::test_utils::test_utility_functions::emit_bead;
 use crate::utils::test_utils::test_utility_functions::*;
 use bitcoin::absolute::Time;
 use bitcoin::consensus::encode::deserialize;
@@ -435,4 +439,49 @@ fn test_write_request_over_cap_is_refused() {
     )
     .unwrap_err();
     assert_eq!(err.kind(), ErrorKind::InvalidData);
+}
+
+#[test]
+fn test_cap_sync_response_trims_to_the_batch_size() {
+    let bead = emit_bead();
+    let mut beads = vec![bead.clone(); MAX_BEADS_PER_SYNC_RESPONSE + 3];
+
+    let dropped = cap_sync_response(&mut beads);
+
+    assert_eq!(dropped, 3);
+    assert_eq!(beads.len(), MAX_BEADS_PER_SYNC_RESPONSE);
+    assert_eq!(beads[0], bead);
+}
+
+#[test]
+fn test_cap_sync_response_leaves_a_response_within_the_cap_alone() {
+    let mut beads = vec![emit_bead(), emit_bead()];
+    let before = beads.clone();
+
+    assert_eq!(cap_sync_response(&mut beads), 0);
+    assert_eq!(beads, before);
+
+    let mut empty: Vec<Bead> = Vec::new();
+    assert_eq!(cap_sync_response(&mut empty), 0);
+    assert!(empty.is_empty());
+}
+
+#[test]
+fn test_a_capped_response_encodes_within_the_byte_cap() {
+    // The two caps have to agree: a response the sender is allowed to build has
+    // to be one the reader is allowed to accept, or honest sync stalls.
+    let mut beads = vec![emit_bead(); MAX_BEADS_PER_SYNC_RESPONSE + 10];
+    cap_sync_response(&mut beads);
+
+    let mut buffer = Vec::new();
+    BeadResponse::Beads(Beads(beads))
+        .consensus_encode(&mut buffer)
+        .expect("a capped response encodes");
+
+    assert!(
+        buffer.len() as u64 <= MAX_BEAD_SYNC_RESPONSE_BYTES,
+        "a capped response is {} bytes, over the {} byte cap the reader enforces",
+        buffer.len(),
+        MAX_BEAD_SYNC_RESPONSE_BYTES
+    );
 }

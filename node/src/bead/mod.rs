@@ -133,6 +133,24 @@ pub const MAX_BEAD_SYNC_REQUEST_BYTES: u64 = 1024 * 1024;
 /// IBD batch at `MAX_VEC_SIZE` per bead; nothing below this bounds a single bead.
 pub const MAX_BEAD_SYNC_RESPONSE_BYTES: u64 = IBD_BATCH_SIZE as u64 * MAX_VEC_SIZE as u64;
 
+/// The most beads a node puts in one sync response.
+///
+/// The byte cap above is a ceiling on the encoded message, so a node that
+/// assembles a bigger response than this fails to send it at all rather than
+/// answering with what it can. Capping the count where the response is built
+/// keeps an honest node inside the reader's bound, and an IBD requester already
+/// asks for beads one `IBD_BATCH_SIZE` slice at a time, so nothing honest is
+/// asking for more than this.
+pub const MAX_BEADS_PER_SYNC_RESPONSE: usize = IBD_BATCH_SIZE;
+
+/// Caps `beads` at [`MAX_BEADS_PER_SYNC_RESPONSE`] in place, returning how many
+/// were dropped so the caller can say so in its log.
+pub fn cap_sync_response(beads: &mut Vec<Bead>) -> usize {
+    let dropped = beads.len().saturating_sub(MAX_BEADS_PER_SYNC_RESPONSE);
+    beads.truncate(MAX_BEADS_PER_SYNC_RESPONSE);
+    dropped
+}
+
 /// Refuses to hand a peer a message the other side is required to reject.
 ///
 /// The reader caps what it will accept, so the same cap belongs on the writer:
