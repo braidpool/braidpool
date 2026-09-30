@@ -128,6 +128,26 @@ enum Commands {
         tx_id: String,
     },
 
+    /// Get the most recent mempool entries from Bitcoin Core, sorted newest-first
+    #[command(name = "getmempoolentries")]
+    GetMempoolEntries {
+        #[arg(default_value_t = 20)]
+        limit: u32,
+    },
+
+    /// Look up which of the 6 confirmation stages a given txid is currently in
+    #[command(name = "gettransactionstatus")]
+    GetTransactionStatus { txid: String },
+
+    /// List txids committed across all beads, paginated (newest-first)
+    #[command(name = "getcommittedtransactions")]
+    GetCommittedTransactions {
+        #[arg(default_value_t = 0)]
+        page: u32,
+        #[arg(default_value_t = 50)]
+        page_size: u32,
+    },
+
     /// Proxy a Bitcoin RPC call to bitcoind
     /// Example: braidpool-cli bitcoin getblockchaininfo
     #[command(name = "bitcoin")]
@@ -320,6 +340,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::GetPeerInfo => ("getpeerinfo", json!([])),
         Commands::StagedTransactions => ("stagedtransactions", json!([])),
         Commands::UnstageTransactions { tx_id } => ("unstagetransactions", json!([tx_id])),
+        Commands::GetMempoolEntries { limit } => ("getmempoolentries", json!([limit])),
+        Commands::GetTransactionStatus { txid } => ("gettransactionstatus", json!([txid])),
+        Commands::GetCommittedTransactions { page, page_size } => {
+            ("getcommittedtransactions", json!([page, page_size]))
+        }
         Commands::Bitcoin { method, params } => {
             let params_value: serde_json::Value =
                 serde_json::from_str(params).unwrap_or_else(|_| json!([]));
