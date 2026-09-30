@@ -102,7 +102,7 @@ impl Braid {
             };
         }
         // No parents: bad block i.e. the extend will add beads after the genesis
-        //bead is done and the extension of genesis beads to Braid shall be done via Braid::new
+        // bead is done and the extension of genesis beads to Braid shall be done via Braid::new
         if bead.committed_metadata.parents.is_empty() {
             return AddBeadStatus::InvalidBead;
         }

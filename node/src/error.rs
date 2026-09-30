@@ -581,3 +581,46 @@ impl fmt::Display for UnsupportedNetworkError {
     }
 }
 impl std::error::Error for UnsupportedNetworkError {}
+
+/// A received bead failed a check that must pass before it can enter the braid.
+///
+/// Callers drop the bead: it is not parked as an orphan, not persisted, and it
+/// does not increase the sending peer's score.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BeadValidationError {
+    /// The header hash does not meet the compact target stored in `bits`.
+    InsufficientProofOfWork,
+    /// The same parent hash is listed more than once.
+    DuplicateParents,
+    /// `parent_bead_timestamps` and `parents` have different lengths.
+    ParentTimestampCountMismatch {
+        /// Number of parent hashes on the bead.
+        parents: usize,
+        /// Number of parent timestamps on the bead.
+        timestamps: usize,
+    },
+}
+
+impl fmt::Display for BeadValidationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BeadValidationError::InsufficientProofOfWork => {
+                write!(f, "bead proof of work does not meet the header target")
+            }
+            BeadValidationError::DuplicateParents => {
+                write!(f, "bead parents contain a duplicate")
+            }
+            BeadValidationError::ParentTimestampCountMismatch {
+                parents,
+                timestamps,
+            } => {
+                write!(
+                    f,
+                    "bead has {parents} parents but {timestamps} parent timestamps"
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for BeadValidationError {}

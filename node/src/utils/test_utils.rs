@@ -330,7 +330,8 @@ pub mod test_utility_functions {
             .as_secs() as u32;
         let current_time = bitcoin::absolute::Time::from_consensus(now).unwrap();
 
-        let _address = String::from("127.0.0.1:8888");
+        let _address =
+            crate::config::CoinbaseConfig::from_network(PoolNetwork::Cpunet).pool_payout_address;
         let public_key = random_public_key;
         let socket: String = String::from("127.0.0.1");
         let time_hash_set = TimeVec(Vec::new());
@@ -382,16 +383,18 @@ pub mod test_utility_functions {
             .extra_nonce(extra_nonce_1, extra_nonce_2)
             .signature(sig)
             .build();
-        let bytes: [u8; 32] = [0u8; 32];
-
-        let test_block_header = BlockHeader {
+        let mut merkle_bytes = [0u8; 32];
+        OsRng.fill_bytes(&mut merkle_bytes);
+        let bits = CompactTarget::from_consensus(crate::utils::EASIEST_COMPACT_TARGET);
+        let mut test_block_header = BlockHeader {
             version: BlockVersion::TWO,
-            prev_blockhash: BlockHash::from_byte_array(bytes),
-            bits: CompactTarget::from_consensus(486604799),
+            prev_blockhash: BlockHash::from_byte_array([0u8; 32]),
+            bits,
             nonce: rand::random::<u32>(),
             time: 0,
-            merkle_root: TxMerkleNode::from_byte_array(bytes),
+            merkle_root: TxMerkleNode::from_byte_array(merkle_bytes),
         };
+        crate::utils::grind_test_header(&mut test_block_header, PoolNetwork::Cpunet);
 
         let test_bead = TestBeadBuilder::new()
             .block_header(test_block_header)

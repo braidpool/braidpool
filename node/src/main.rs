@@ -23,7 +23,7 @@ use node::utils::resolve_datadir;
 use node::utils::BeadHash;
 use node::SwarmHandler;
 use node::{
-    bead::{Bead, BeadHashes, BeadRequest, BeadResponse, BeadSyncError},
+    bead::{validate::validate_bead, Bead, BeadHashes, BeadRequest, BeadResponse, BeadSyncError},
     behaviour::{self, BEAD_ANNOUNCE_PROTOCOL, BRAIDPOOL_TOPIC},
     braid, cli, config,
     db::db_handlers::DBHandler,
@@ -1143,6 +1143,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
                               let result_bead: Result<Bead, bitcoin::consensus::encode::Error> = deserialize(&message.data);
                               match result_bead {
                                   Ok(bead) => {
+                                      let network = braid.read().await.network;
+                                      if let Err(error) = validate_bead(&bead, network) {
+                                          warn!(
+                                              error = %error,
+                                              source = ?message.source,
+                                              "Dropping gossip bead that failed validation"
+                                          );
+                                          continue;
+                                      }
                                       // Handle the received bead here
                                       let mut braid_data = braid.write().await;
                                       let bead_hash = braid_data.compute_bead_hash(&bead);
@@ -1590,6 +1599,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                         }
                                     };
                                     for bead in beads.into_iter() {
+                                        let network = braid.read().await.network;
+                                        if let Err(error) = validate_bead(&bead, network) {
+                                            warn!(
+                                                error = %error,
+                                                peer = %peer,
+                                                "Dropping sync bead that failed validation"
+                                            );
+                                            continue;
+                                        }
                                         let mut braid_data = braid.write().await;
                                         let bead_hash = braid_data.compute_bead_hash(&bead);
                                         let status = braid_data.extend(&bead);
