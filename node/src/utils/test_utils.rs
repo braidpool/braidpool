@@ -33,6 +33,7 @@ pub mod test_utility_functions {
     use rand::{rngs::OsRng, RngCore};
     use serde::{Deserialize, Serialize};
 
+    use crate::utils::timestamp::MicrosecondTimestamp;
     #[cfg(test)]
     use crate::{braid::Braid, utils::compute_block_hash};
 
@@ -134,7 +135,7 @@ pub mod test_utility_functions {
     pub struct TestUnCommittedMetadataBuilder {
         extra_nonce_1: u64,
         extra_nonce_2: u64,
-        broadcast_timestamp: Option<Time>,
+        broadcast_timestamp: Option<MicrosecondTimestamp>,
         signature: Option<Signature>,
     }
 
@@ -155,7 +156,7 @@ pub mod test_utility_functions {
             self
         }
 
-        pub fn broadcast_timestamp(mut self, time: Time) -> Self {
+        pub fn broadcast_timestamp(mut self, time: MicrosecondTimestamp) -> Self {
             self.broadcast_timestamp = Some(time);
             self
         }
@@ -182,7 +183,7 @@ pub mod test_utility_functions {
         parents: Vec<BeadHash>,
         parent_bead_timestamps: Option<TimeVec>,
         payout_address: Option<String>,
-        start_timestamp: Option<Time>,
+        start_timestamp: Option<MicrosecondTimestamp>,
         comm_pub_key: Option<PublicKey>,
         min_target: Option<CompactTarget>,
         weak_target: Option<CompactTarget>,
@@ -225,7 +226,7 @@ pub mod test_utility_functions {
             self
         }
 
-        pub fn start_timestamp(mut self, time: Time) -> Self {
+        pub fn start_timestamp(mut self, time: MicrosecondTimestamp) -> Self {
             self.start_timestamp = Some(time);
             self
         }
@@ -328,7 +329,7 @@ pub mod test_utility_functions {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs() as u32;
-        let current_time = bitcoin::absolute::Time::from_consensus(now).unwrap();
+        let current_time = MicrosecondTimestamp::from_secs(now);
 
         let _address = String::from("127.0.0.1:8888");
         let public_key = random_public_key;
