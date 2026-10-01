@@ -28,6 +28,10 @@ pub const MAX_CACHED_TEMPLATES: usize = 90;
 /// At bead rate (150ms), 20 slots retain ~3s of history for in-flight submits.
 pub const GLOBAL_JOB_STORE_CAPACITY: usize = 20;
 
+/// Disconnect a miner after this many consecutive job-send failures.
+/// At 150ms bead rate, 5 failures ≈ 750ms of unresponsiveness before eviction.
+pub const MAX_CONSECUTIVE_SEND_FAILURES: u32 = 5;
+
 use crate::{
     bead::Bead,
     braid::{AddBeadStatus, Braid},

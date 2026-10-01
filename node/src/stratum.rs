@@ -2179,6 +2179,21 @@ impl GlobalJobStore {
             .max()
     }
 }
+/// Per-miner backpressure state owned by the Notifier task.
+///
+/// Keyed by peer_addr in `Notifier::miner_states`. Lives across `SendToAll`
+/// invocations, unlike `ConnectionInfo` which is cloned from the snapshot each round
+/// and would silently reset any counters written to it.
+#[derive(Debug, Default)]
+struct MinerState {
+    /// Consecutive job-send failures since the last successful send.
+    consecutive_send_failures: u32,
+    /// If true, the next successful send must carry `clean_jobs=true`
+    /// so the miner abandons stale work immediately.
+    needs_clean_jobs: bool,
+    /// Lifetime count of jobs dropped for this miner due to queue backpressure.
+    jobs_dropped: u64,
+}
 
 ///`Notifier` that will serve the purpose of notifying the downstream nodes with the lates available jobs
 /// for mining to take place via `mining.notify`.
@@ -2188,6 +2203,8 @@ pub struct Notifier {
     notification_receiver: mpsc::Receiver<NotifyCmd>,
     /// Global job store shared across all miner connections.
     pub job_store: Arc<Mutex<GlobalJobStore>>,
+    /// Persistent per-miner backpressure state, keyed by peer_addr.
+    miner_states: HashMap<String, MinerState>,
 }
 ///Since the prev_block_hash received in `gbt` is in BigEndian format it must be converted to `Little endian`.
 fn _to_little_endian(hex_str: &str) -> String {
@@ -2226,6 +2243,7 @@ impl Notifier {
         Self {
             notification_receiver: notification_rx,
             job_store,
+            miner_states: HashMap::new(),
         }
     }
     ///Constructing the mining.notify template following the corrsponding attributes to be sent as a job to the downstream miner for
@@ -2520,6 +2538,23 @@ impl Notifier {
                         .downstream_channel_mapping
                         .clone();
 
+                    // Prune state for peers that disconnected without hitting the
+                    // jobs-dropped threshold (clean disconnect, no Closed error observed).
+                    // Prevents stale jobs_dropped / flagged state from carrying over on reconnect.
+                    self.miner_states.retain(|addr, state| {
+                        if connection_snapshot.contains_key(addr) {
+                            return true;
+                        }
+                        if state.jobs_dropped > 0 {
+                            info!(
+                                peer = %addr,
+                                jobs_dropped = state.jobs_dropped,
+                                "Discarding state for cleanly disconnected miner"
+                            );
+                        }
+                        false
+                    });
+
                     if connection_snapshot.is_empty() {
                         debug!("No miners connected, skipping job notification");
                         continue;
@@ -2572,6 +2607,15 @@ impl Notifier {
                     for (peer_adr, connection_info) in &connection_snapshot {
                         let connection_id_hex = format!("{:x}", connection_info.connection_id);
                         let job_notification = job_notification.clone();
+                        // Per-miner state persists across SendToAll rounds.
+                        // ConnectionInfo is a snapshot clone and cannot hold this.
+                        let miner_state = self.miner_states.entry(peer_adr.clone()).or_default();
+
+                        // If this miner missed jobs, force a clean restart so
+                        // it abandons stale work on the next successful delivery.
+                        let clean_jobs_for_miner =
+                            job_notification.clean_jobs || miner_state.needs_clean_jobs;
+
                         let job_notification_response = JobNotificationResponse {
                             method: "mining.notify".to_string(),
                             params: json!([
@@ -2583,7 +2627,7 @@ impl Notifier {
                                 job_notification.version,
                                 job_notification.nbits,
                                 job_notification.ntime,
-                                job_notification.clean_jobs
+                                clean_jobs_for_miner,
                             ]),
                         };
 
@@ -2595,20 +2639,58 @@ impl Notifier {
                                     continue;
                                 }
                             };
-                        if let Err(e) = connection_info.sender.send(job_notification_json).await {
-                            error!(
-                                connection_id = %connection_id_hex,
-                                peer = %peer_adr,
-                                error = %e,
-                                "Failed to send job to peer"
-                            );
-                        } else {
-                            trace!(
-                                connection_id = %connection_id_hex,
-                                peer = %peer_adr,
-                                job_id = %numeric_job_id,
-                                "Dispatched job to peer"
-                            );
+
+                        match connection_info.sender.try_send(job_notification_json) {
+                            Ok(_) => {
+                                miner_state.consecutive_send_failures = 0;
+                                miner_state.needs_clean_jobs = false;
+                                trace!(
+                                    connection_id = %connection_id_hex,
+                                    peer = %peer_adr,
+                                    job_id = %numeric_job_id,
+                                    "Dispatched job to peer"
+                                );
+                            }
+                            Err(mpsc::error::TrySendError::Full(_)) => {
+                                miner_state.consecutive_send_failures += 1;
+                                miner_state.needs_clean_jobs = true;
+                                miner_state.jobs_dropped += 1;
+                                warn!(
+                                    connection_id = %connection_id_hex,
+                                    peer = %peer_adr,
+                                    consecutive_failures = miner_state.consecutive_send_failures,
+                                    jobs_dropped = miner_state.jobs_dropped,
+                                    "Job dropped — miner outbound queue full"
+                                );
+                                if miner_state.consecutive_send_failures
+                                    >= crate::MAX_CONSECUTIVE_SEND_FAILURES
+                                {
+                                    warn!(
+                                        connection_id = %connection_id_hex,
+                                        peer = %peer_adr,
+                                        jobs_dropped = miner_state.jobs_dropped,
+                                        "Disconnecting slow miner after {} consecutive failures",
+                                        crate::MAX_CONSECUTIVE_SEND_FAILURES
+                                    );
+                                    // Use control_tx — a separate low-traffic channel (cap 10) that
+                                    // lands even when the data queue (cap 1024) is full.
+                                    let _ =
+                                        connection_info.control_tx.try_send(ControlMsg::Disconnect);
+                                    self.miner_states.remove(peer_adr);
+                                }
+                            }
+                            Err(mpsc::error::TrySendError::Closed(_)) => {
+                                if let Some(state) = self.miner_states.remove(peer_adr) {
+                                    if state.jobs_dropped > 0 {
+                                        info!(
+                                            peer = %peer_adr,
+                                            jobs_dropped = state.jobs_dropped,
+                                            "Miner channel closed — lifetime jobs dropped"
+                                        );
+                                    }
+                                }
+                                debug!(peer = %peer_adr, "Miner channel closed during notify");
+                            }
                         }
                     }
                 }
@@ -2805,14 +2887,23 @@ impl Notifier {
                             return Err(error);
                         }
                     };
-                    match connection_entry.sender.send(job_notification).await {
+                    // Fresh connection — queue should always be empty. try_send
+                    // avoids blocking the Notifier task on a pathological new peer.
+                    // Failures here are per-miner; log and continue so one bad
+                    // new connection cannot kill notifications for everyone else.
+                    match connection_entry.sender.try_send(job_notification) {
                         Ok(_) => {}
-                        Err(error) => {
-                            return Err(StratumErrors::NotifyMessageNotSent {
-                                error: error.to_string(),
-                                msg: error.0,
-                                msg_type: "LatestTemplateSent".to_string(),
-                            })
+                        Err(mpsc::error::TrySendError::Full(_)) => {
+                            warn!(
+                                peer = %new_downstream_addr,
+                                "New miner queue unexpectedly full on initial job send — skipping"
+                            );
+                        }
+                        Err(mpsc::error::TrySendError::Closed(_)) => {
+                            warn!(
+                                peer = %new_downstream_addr,
+                                "New miner disconnected before receiving initial job — skipping"
+                            );
                         }
                     }
                 }
@@ -2927,17 +3018,56 @@ impl Notifier {
                             }
                         };
                     for (peer_addr, downstream_channel) in &downstream_channel_mapping {
-                        if let Err(e) = downstream_channel
+                        let miner_state = self.miner_states.entry(peer_addr.clone()).or_default();
+                        match downstream_channel
                             .sender
-                            .send(job_notification_str.clone())
-                            .await
+                            .try_send(job_notification_str.clone())
                         {
-                            error!("Failed to send upstream job to {}: {}", peer_addr, e);
-                        } else {
-                            info!(
-                                "Sent upstream job {} to {} (bits: {})",
-                                upstream_job_id, peer_addr, job_notification.nbits
-                            );
+                            Ok(_) => {
+                                miner_state.consecutive_send_failures = 0;
+                                miner_state.needs_clean_jobs = false;
+                                info!(
+                                    peer = %peer_addr,
+                                    job_id = %upstream_job_id,
+                                    "Sent upstream job to miner"
+                                );
+                            }
+                            Err(mpsc::error::TrySendError::Full(_)) => {
+                                miner_state.consecutive_send_failures += 1;
+                                miner_state.needs_clean_jobs = true;
+                                miner_state.jobs_dropped += 1;
+                                warn!(
+                                    peer = %peer_addr,
+                                    consecutive_failures = miner_state.consecutive_send_failures,
+                                    jobs_dropped = miner_state.jobs_dropped,
+                                    "Upstream job dropped — miner outbound queue full"
+                                );
+                                if miner_state.consecutive_send_failures
+                                    >= crate::MAX_CONSECUTIVE_SEND_FAILURES
+                                {
+                                    warn!(
+                                        peer = %peer_addr,
+                                        jobs_dropped = miner_state.jobs_dropped,
+                                        "Disconnecting slow miner after {} consecutive failures",
+                                        crate::MAX_CONSECUTIVE_SEND_FAILURES
+                                    );
+                                    let _ = downstream_channel
+                                        .control_tx
+                                        .try_send(ControlMsg::Disconnect);
+                                    self.miner_states.remove(peer_addr);
+                                }
+                            }
+                            Err(mpsc::error::TrySendError::Closed(_)) => {
+                                if let Some(state) = self.miner_states.remove(peer_addr) {
+                                    if state.jobs_dropped > 0 {
+                                        info!(
+                                            peer = %peer_addr,
+                                            jobs_dropped = state.jobs_dropped,
+                                            "Miner channel closed during upstream notify — lifetime jobs dropped"
+                                        );
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -3061,14 +3191,25 @@ impl Notifier {
                         .clone();
 
                     for (peer_addr, channel) in downstream_channel_mapping.iter() {
-                        if let Err(e) = channel
+                        match channel
                             .sender
-                            .send(serde_json::to_string(&set_difficulty_msg).unwrap())
-                            .await
+                            .try_send(serde_json::to_string(&set_difficulty_msg).unwrap())
                         {
-                            error!("Failed to send difficulty to {}: {}", peer_addr, e);
-                        } else {
-                            info!("Sent difficulty {} to {}", difficulty, peer_addr);
+                            Ok(_) => {
+                                info!("Sent difficulty {} to {}", difficulty, peer_addr);
+                            }
+                            Err(mpsc::error::TrySendError::Full(_)) => {
+                                warn!(
+                                    peer = %peer_addr,
+                                    "Difficulty update dropped — miner queue full"
+                                );
+                            }
+                            Err(mpsc::error::TrySendError::Closed(_)) => {
+                                warn!(
+                                    peer = %peer_addr,
+                                    "Difficulty update dropped — miner disconnected"
+                                );
+                            }
                         }
                     }
                 }
@@ -3095,6 +3236,9 @@ impl PrefixStats {
 }
 pub enum ControlMsg {
     UpdateExtranonce(Vec<u8>),
+    /// Force-close the miner's connection. Sent via the low-traffic control
+    /// channel so it lands even when the data channel (capacity 1024) is full.
+    Disconnect,
 }
 
 ///Connection information associated with each downstream peer associated along with the mapped `Sender_channel` for sending downstream responses and communication.
@@ -3754,6 +3898,10 @@ impl Server {
 
                             client.extranonce1 = new_bytes;
                             debug!("Internal state updated, extranonce1 changed via control msg");
+                        }
+                        Some(ControlMsg::Disconnect) => {
+                            info!(peer = %peer_addr, "Received disconnect control message — evicting slow miner");
+                            break;
                         }
                         None => {
                         }
@@ -4742,6 +4890,243 @@ mod test {
         assert_eq!(client1.extranonce1.len(), UPSTREAM_EXTRANONCE1_SIZE);
         assert_eq!(client2.extranonce1.len(), UPSTREAM_EXTRANONCE1_SIZE);
         assert_eq!(client3.extranonce1.len(), UPSTREAM_EXTRANONCE1_SIZE);
+    }
+
+    // scriptSig: BIP-34 height (02 611e) + 16 × 0x01 (EXTRANONCE_SEPARATOR) + pool_id
+    fn make_test_template() -> BlockTemplate {
+        let mut witness = bitcoin::Witness::new();
+        witness.push(vec![0u8; 32]);
+        let coinbase = bitcoin::Transaction {
+            version: bitcoin::transaction::Version::TWO,
+            input: vec![bitcoin::TxIn {
+                previous_output: bitcoin::OutPoint::null(),
+                script_sig: bitcoin::ScriptBuf::from_hex(
+                    "02611e1001010101010101010101010101010101094272616964706f6f6c",
+                )
+                .unwrap(),
+                sequence: bitcoin::Sequence::MAX,
+                witness,
+            }],
+            output: vec![
+                bitcoin::TxOut {
+                    value: bitcoin::Amount::from_btc(50.0).unwrap(),
+                    script_pubkey: bitcoin::ScriptBuf::from_hex(
+                        "0014e470d0179325db88b55771f6c0a5139dd81d7318",
+                    )
+                    .unwrap(),
+                },
+                bitcoin::TxOut {
+                    value: bitcoin::Amount::from_sat(0),
+                    script_pubkey: bitcoin::ScriptBuf::from_hex(
+                        "6a24aa21a9ede2f61c3f71d1defd3fa999dfa36953755c690689799962b48bebd836974e8cf9",
+                    )
+                    .unwrap(),
+                },
+            ],
+            lock_time: bitcoin::locktime::absolute::LockTime::ZERO,
+        };
+        BlockTemplate {
+            version: bitcoin::block::Version::from_consensus(536870912),
+            previousblockhash: bitcoin::BlockHash::from_str(
+                "000000004357ac765395ad29220608af219e3090d75076f160bae2a195b3ebe6",
+            )
+            .unwrap(),
+            transactions: vec![coinbase],
+            curtime: 1759477299,
+            bits: bitcoin::pow::CompactTarget::from_unprefixed_hex("207fffff").unwrap(),
+            ..Default::default()
+        }
+    }
+
+    async fn insert_test_peer(
+        conn_map: &Arc<RwLock<ConnectionMapping>>,
+        peer: &str,
+        sender: mpsc::Sender<String>,
+        control_tx: mpsc::Sender<ControlMsg>,
+    ) {
+        conn_map.write().await.downstream_channel_mapping.insert(
+            peer.to_string(),
+            ConnectionInfo {
+                connection_id: 0,
+                sender,
+                control_tx,
+            },
+        );
+    }
+
+    #[tokio::test]
+    async fn test_notify_skips_full_queue_miner() {
+        let (notify_tx, notify_rx) = mpsc::channel::<NotifyCmd>(8);
+        let job_store = Arc::new(Mutex::new(GlobalJobStore::new(
+            crate::GLOBAL_JOB_STORE_CAPACITY,
+        )));
+        let conn_map = Arc::new(RwLock::new(ConnectionMapping::new()));
+
+        let (slow_tx, _slow_rx) = mpsc::channel::<String>(1);
+        let (slow_ctrl_tx, _slow_ctrl_rx) = mpsc::channel::<ControlMsg>(10);
+        slow_tx.try_send("prefilled".to_string()).unwrap();
+
+        let (fast_tx, mut fast_rx) = mpsc::channel::<String>(16);
+        let (fast_ctrl_tx, _fast_ctrl_rx) = mpsc::channel::<ControlMsg>(10);
+
+        insert_test_peer(&conn_map, "slow", slow_tx, slow_ctrl_tx).await;
+        insert_test_peer(&conn_map, "fast", fast_tx, fast_ctrl_tx).await;
+
+        let mut notifier = Notifier::new(notify_rx, job_store);
+        let conn_map_clone = Arc::clone(&conn_map);
+        tokio::spawn(async move {
+            let mut latest_template = Arc::new(Mutex::new(BlockTemplate::default()));
+            let mut latest_merkle = Arc::new(Mutex::new(vec![]));
+            let latest_id = Arc::new(Mutex::new(TemplateId::Braidpool(1)));
+            let _ = notifier
+                .run_notifier(
+                    conn_map_clone,
+                    &mut latest_template,
+                    &mut latest_merkle,
+                    latest_id,
+                    None,
+                    None,
+                )
+                .await;
+        });
+
+        notify_tx
+            .send(NotifyCmd::SendToAll {
+                template: make_test_template(),
+                merkle_branch_coinbase: vec![],
+                template_id: TemplateId::Braidpool(1),
+            })
+            .await
+            .unwrap();
+
+        let received = tokio::time::timeout(std::time::Duration::from_millis(200), fast_rx.recv())
+            .await
+            .expect("timed out — notify loop blocked on slow miner")
+            .expect("channel closed");
+
+        let parsed: serde_json::Value = serde_json::from_str(&received).unwrap();
+        assert_eq!(parsed["method"], "mining.notify");
+    }
+
+    #[tokio::test]
+    async fn test_notify_disconnects_after_max_failures() {
+        let (notify_tx, notify_rx) = mpsc::channel::<NotifyCmd>(16);
+        let job_store = Arc::new(Mutex::new(GlobalJobStore::new(
+            crate::GLOBAL_JOB_STORE_CAPACITY,
+        )));
+        let conn_map = Arc::new(RwLock::new(ConnectionMapping::new()));
+
+        let (miner_tx, _miner_rx) = mpsc::channel::<String>(1);
+        let (ctrl_tx, mut ctrl_rx) = mpsc::channel::<ControlMsg>(10);
+        miner_tx.try_send("prefilled".to_string()).unwrap();
+
+        insert_test_peer(&conn_map, "slow", miner_tx, ctrl_tx).await;
+
+        let mut notifier = Notifier::new(notify_rx, job_store);
+        let conn_map_clone = Arc::clone(&conn_map);
+        tokio::spawn(async move {
+            let mut latest_template = Arc::new(Mutex::new(BlockTemplate::default()));
+            let mut latest_merkle = Arc::new(Mutex::new(vec![]));
+            let latest_id = Arc::new(Mutex::new(TemplateId::Braidpool(1)));
+            let _ = notifier
+                .run_notifier(
+                    conn_map_clone,
+                    &mut latest_template,
+                    &mut latest_merkle,
+                    latest_id,
+                    None,
+                    None,
+                )
+                .await;
+        });
+
+        for _ in 0..crate::MAX_CONSECUTIVE_SEND_FAILURES {
+            notify_tx
+                .send(NotifyCmd::SendToAll {
+                    template: make_test_template(),
+                    merkle_branch_coinbase: vec![],
+                    template_id: TemplateId::Braidpool(1),
+                })
+                .await
+                .unwrap();
+        }
+
+        let ctrl_msg = tokio::time::timeout(std::time::Duration::from_millis(500), ctrl_rx.recv())
+            .await
+            .expect("timed out — disconnect not sent")
+            .expect("control channel closed");
+
+        assert!(
+            matches!(ctrl_msg, ControlMsg::Disconnect),
+            "expected ControlMsg::Disconnect"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_notify_sets_clean_jobs_after_dropped_job() {
+        let (notify_tx, notify_rx) = mpsc::channel::<NotifyCmd>(8);
+        let job_store = Arc::new(Mutex::new(GlobalJobStore::new(
+            crate::GLOBAL_JOB_STORE_CAPACITY,
+        )));
+        let conn_map = Arc::new(RwLock::new(ConnectionMapping::new()));
+
+        let (miner_tx, mut miner_rx) = mpsc::channel::<String>(2);
+        let (ctrl_tx, _ctrl_rx) = mpsc::channel::<ControlMsg>(10);
+        miner_tx.try_send("prefilled".to_string()).unwrap();
+        miner_tx.try_send("prefilled2".to_string()).unwrap();
+
+        insert_test_peer(&conn_map, "miner", miner_tx, ctrl_tx).await;
+
+        let mut notifier = Notifier::new(notify_rx, job_store);
+        let conn_map_clone = Arc::clone(&conn_map);
+        tokio::spawn(async move {
+            let mut latest_template = Arc::new(Mutex::new(BlockTemplate::default()));
+            let mut latest_merkle = Arc::new(Mutex::new(vec![]));
+            let latest_id = Arc::new(Mutex::new(TemplateId::Braidpool(1)));
+            let _ = notifier
+                .run_notifier(
+                    conn_map_clone,
+                    &mut latest_template,
+                    &mut latest_merkle,
+                    latest_id,
+                    None,
+                    None,
+                )
+                .await;
+        });
+
+        notify_tx
+            .send(NotifyCmd::SendToAll {
+                template: make_test_template(),
+                merkle_branch_coinbase: vec![],
+                template_id: TemplateId::Braidpool(1),
+            })
+            .await
+            .unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        let _ = miner_rx.try_recv();
+        let _ = miner_rx.try_recv();
+
+        notify_tx
+            .send(NotifyCmd::SendToAll {
+                template: make_test_template(),
+                merkle_branch_coinbase: vec![],
+                template_id: TemplateId::Braidpool(1),
+            })
+            .await
+            .unwrap();
+
+        let job_json = tokio::time::timeout(std::time::Duration::from_millis(200), miner_rx.recv())
+            .await
+            .expect("timed out waiting for job after queue drained")
+            .expect("channel closed");
+
+        let parsed: serde_json::Value = serde_json::from_str(&job_json).unwrap();
+        let clean_jobs = parsed["params"][8]
+            .as_bool()
+            .expect("clean_jobs must be bool");
+        assert!(clean_jobs, "clean_jobs must be true after a dropped job");
     }
 }
 
