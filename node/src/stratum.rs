@@ -2660,16 +2660,6 @@ impl Notifier {
                                     continue;
                                 }
                             };
-                        let latency_us = template_ready_at.elapsed().as_micros();
-                        let queue_depth =
-                            DOWNSTREAM_CHANNEL_CAPACITY - connection_info.sender.capacity();
-                        debug!(
-                            connection_id = %connection_id_hex,
-                            peer = %peer_adr,
-                            latency_us = %latency_us,
-                            queue_depth = %queue_depth,
-                            "job_dispatch"
-                        );
                         if let Err(e) = connection_info.sender.send(job_notification_json).await {
                             error!(
                                 connection_id = %connection_id_hex,
@@ -2678,6 +2668,16 @@ impl Notifier {
                                 "Failed to send job to peer"
                             );
                         } else {
+                            let latency_us = template_ready_at.elapsed().as_micros();
+                            let queue_depth =
+                                DOWNSTREAM_CHANNEL_CAPACITY - connection_info.sender.capacity();
+                            debug!(
+                                connection_id = %connection_id_hex,
+                                peer = %peer_adr,
+                                latency_us = %latency_us,
+                                queue_depth = %queue_depth,
+                                "job_dispatch"
+                            );
                             trace!(
                                 connection_id = %connection_id_hex,
                                 peer = %peer_adr,
@@ -2880,8 +2880,19 @@ impl Notifier {
                             return Err(error);
                         }
                     };
+                    let dispatch_at = std::time::Instant::now();
                     match connection_entry.sender.send(job_notification).await {
-                        Ok(_) => {}
+                        Ok(_) => {
+                            let latency_us = dispatch_at.elapsed().as_micros();
+                            let queue_depth =
+                                DOWNSTREAM_CHANNEL_CAPACITY - connection_entry.sender.capacity();
+                            debug!(
+                                peer = %new_downstream_addr,
+                                latency_us = %latency_us,
+                                queue_depth = %queue_depth,
+                                "job_dispatch_new_miner"
+                            );
+                        }
                         Err(error) => {
                             return Err(StratumErrors::NotifyMessageNotSent {
                                 error: error.to_string(),
