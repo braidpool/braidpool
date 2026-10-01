@@ -2600,16 +2600,8 @@ impl Notifier {
                                     continue;
                                 }
                             };
-                        let latency_us = template_ready_at.elapsed().as_micros();
                         let queue_depth =
                             DOWNSTREAM_CHANNEL_CAPACITY - connection_info.sender.capacity();
-                        debug!(
-                            connection_id = %connection_id_hex,
-                            peer = %peer_adr,
-                            latency_us = %latency_us,
-                            queue_depth = %queue_depth,
-                            "job_dispatch"
-                        );
                         if let Err(e) = connection_info.sender.send(job_notification_json).await {
                             error!(
                                 connection_id = %connection_id_hex,
@@ -2618,6 +2610,14 @@ impl Notifier {
                                 "Failed to send job to peer"
                             );
                         } else {
+                            let latency_us = template_ready_at.elapsed().as_micros();
+                            debug!(
+                                connection_id = %connection_id_hex,
+                                peer = %peer_adr,
+                                latency_us = %latency_us,
+                                queue_depth = %queue_depth,
+                                "job_dispatch"
+                            );
                             trace!(
                                 connection_id = %connection_id_hex,
                                 peer = %peer_adr,
@@ -4759,9 +4759,7 @@ mod test {
         assert_eq!(client3.extranonce1.len(), UPSTREAM_EXTRANONCE1_SIZE);
     }
 
-    /// `template_ready_at` must survive the `NotifyCmd` channel hop unchanged — if it were
-    /// re-captured after receipt instead of passed through, latency measurements would
-    /// silently exclude time spent queued in the channel.
+    /// `template_ready_at` must survive the `NotifyCmd` channel hop unchanged.
     #[tokio::test]
     async fn template_ready_at_survives_channel_hop() {
         let (tx, mut rx) = tokio::sync::mpsc::channel::<NotifyCmd>(1);
