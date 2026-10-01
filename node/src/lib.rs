@@ -267,14 +267,11 @@ pub async fn ipc_template_consumer(
                 "New block template"
             );
 
-            // Capture after both guards have dropped — this is the moment the template
-            // is ready to broadcast. Threaded into SendToAll so the notifier can measure
-            // per-miner delivery latency against this reference point.
             let template_ready_at = Instant::now();
 
             let notification_sent_or_not = notifier_tx
                 .send(NotifyCmd::SendToAll {
-                    template: template,
+                    template,
                     merkle_branch_coinbase,
                     template_id: template_id.clone(),
                     template_ready_at,
