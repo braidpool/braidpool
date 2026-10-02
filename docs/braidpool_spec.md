@@ -256,7 +256,7 @@ that he generates an orphan and reduces the profit of the pool.
 Summing it all up, the number of shares $s$ for a given bead is given by:
 
 $$
-s = \frac{1}{x (1-P_{\ge 2})}
+s = \frac{(1-P_{\ge 2})}{x}
 $$
 
 Where $x_b \le x \le x_0$ is the [miner-selected
