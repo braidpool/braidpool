@@ -270,6 +270,7 @@ impl AuditDBHandler {
             block_header,
             committed_metadata: crate::committed_metadata::CommittedMetadata {
                 transaction_ids: crate::TxIdVec(Vec::new()),
+                committed_transactions: crate::TxIdVec(Vec::new()),
                 parents,
                 parent_bead_timestamps: crate::TimeVec(parent_timestamps),
                 payout_address,
