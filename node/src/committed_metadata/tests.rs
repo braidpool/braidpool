@@ -1,5 +1,5 @@
 use super::*;
-use crate::utils::test_utils::test_utility_functions::TestCommittedMetadataBuilder;
+use crate::utils::test_utils::TestCommittedMetadataBuilder;
 use bitcoin::consensus::encode::deserialize;
 use bitcoin::consensus::serialize;
 use bitcoin::BlockHash;

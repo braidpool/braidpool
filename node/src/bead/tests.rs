@@ -12,7 +12,7 @@ use crate::committed_metadata::TimeVec;
 use crate::config::PoolNetwork;
 use crate::utils::compute_block_hash;
 use crate::utils::create_test_bead;
-use crate::utils::test_utils::test_utility_functions::*;
+use crate::utils::test_utils::*;
 use crate::utils::timestamp::MicrosecondTimestamp;
 use bitcoin::consensus::encode::deserialize;
 use bitcoin::consensus::encode::Decodable;

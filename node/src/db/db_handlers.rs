@@ -842,9 +842,7 @@ pub mod test {
     use super::*;
     use crate::{
         braid,
-        utils::test_utils::test_utility_functions::{
-            emit_bead, loading_braid_from_file, BRAIDTESTDIRECTORY,
-        },
+        utils::test_utils::{emit_bead, loading_braid_from_file, BRAIDTESTDIRECTORY},
     };
     use serde_json::json;
     use std::collections::{HashMap, HashSet};

@@ -3,7 +3,7 @@ use super::*;
 use crate::bead::{Bead, BeadResponse};
 use crate::config::PoolNetwork;
 use crate::utils::compute_block_hash;
-use crate::utils::test_utils::test_utility_functions::{
+use crate::utils::test_utils::{
     Signature, TestCommittedMetadataBuilder, TestUnCommittedMetadataBuilder, TimeVec,
 };
 use crate::utils::timestamp::MicrosecondTimestamp;
