@@ -12,6 +12,7 @@ use super::Beads;
 use super::CommittedMetadata;
 use super::UnCommittedMetadata;
 use super::MAX_BEADS_PER_SYNC_RESPONSE;
+use super::MAX_BEAD_HASHES_PER_MESSAGE;
 use super::MAX_BEAD_SYNC_REQUEST_BYTES;
 use super::MAX_BEAD_SYNC_RESPONSE_BYTES;
 use crate::committed_metadata::TimeVec;
@@ -484,4 +485,64 @@ fn test_a_capped_response_encodes_within_the_byte_cap() {
         buffer.len(),
         MAX_BEAD_SYNC_RESPONSE_BYTES
     );
+}
+
+/// A sender picks the element count on the wire, and the decode loop reads that
+/// many. A byte cap on the whole message does not bound it, because small
+/// elements fit in huge numbers, so the count itself has to be refused.
+#[test]
+fn test_beads_length_over_the_cap_is_refused_before_reading() {
+    use bitcoin::consensus::encode::{deserialize, VarInt};
+
+    let mut bytes = Vec::new();
+    VarInt((MAX_BEADS_PER_SYNC_RESPONSE + 1) as u64)
+        .consensus_encode(&mut bytes)
+        .unwrap();
+    // Nothing follows the length: a decoder that trusted it would run out of
+    // input, and one that checks it first refuses without reading an element.
+    let err = deserialize::<Beads>(&bytes).expect_err("an over-long count must not decode");
+    assert!(
+        format!("{err:?}").contains("length exceeds the protocol maximum"),
+        "refused for the wrong reason: {err:?}"
+    );
+
+    let mut at_cap = Vec::new();
+    VarInt(MAX_BEADS_PER_SYNC_RESPONSE as u64)
+        .consensus_encode(&mut at_cap)
+        .unwrap();
+    let err = deserialize::<Beads>(&at_cap).expect_err("no elements follow, so this still fails");
+    assert!(
+        !format!("{err:?}").contains("length exceeds the protocol maximum"),
+        "a count at the cap must be allowed through to the element reads: {err:?}"
+    );
+}
+
+#[test]
+fn test_bead_hashes_length_over_the_cap_is_refused() {
+    use bitcoin::consensus::encode::{deserialize, VarInt};
+
+    let mut bytes = Vec::new();
+    VarInt((MAX_BEAD_HASHES_PER_MESSAGE + 1) as u64)
+        .consensus_encode(&mut bytes)
+        .unwrap();
+    let err = deserialize::<BeadHashes>(&bytes).expect_err("an over-long count must not decode");
+    assert!(
+        format!("{err:?}").contains("length exceeds the protocol maximum"),
+        "refused for the wrong reason: {err:?}"
+    );
+}
+
+#[test]
+fn test_bead_hashes_longer_than_a_request_still_decode() {
+    use bitcoin::consensus::encode::{deserialize, VarInt};
+
+    // A GetBeadsAfter answer can list the whole braid, so it may hold more hashes
+    // than fit in a request and still has to decode.
+    let count = MAX_BEAD_SYNC_REQUEST_BYTES as usize / 32 + 1;
+    let mut bytes = Vec::new();
+    VarInt(count as u64).consensus_encode(&mut bytes).unwrap();
+    bytes.resize(bytes.len() + count * 32, 0);
+
+    let hashes = deserialize::<BeadHashes>(&bytes).expect("a long sync answer must decode");
+    assert_eq!(hashes.len(), count);
 }

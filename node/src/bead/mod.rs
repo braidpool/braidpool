@@ -22,7 +22,7 @@ use std::io::{Error as IoError, ErrorKind, Result as IoResult};
 /// and convenient iteration methods. Used to work around Rust's orphan rule.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Beads(pub Vec<Bead>);
-impl_vec_wrapper!(Beads, Bead);
+impl_vec_wrapper!(Beads, Bead, MAX_BEADS_PER_SYNC_RESPONSE);
 
 /// Collection of bead hashes.
 ///
@@ -30,7 +30,7 @@ impl_vec_wrapper!(Beads, Bead);
 /// and convenient iteration methods. Used for requesting and responding with bead identifiers.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct BeadHashes(pub Vec<BeadHash>);
-impl_vec_wrapper!(BeadHashes, BeadHash);
+impl_vec_wrapper!(BeadHashes, BeadHash, MAX_BEAD_HASHES_PER_MESSAGE);
 
 /// A bead in the Braidpool DAG structure.
 ///
@@ -132,6 +132,13 @@ pub const MAX_BEAD_SYNC_REQUEST_BYTES: u64 = 1024 * 1024;
 /// Largest bead sync response a peer may send, in bytes. A coarse ceiling of one
 /// IBD batch at `MAX_VEC_SIZE` per bead; nothing below this bounds a single bead.
 pub const MAX_BEAD_SYNC_RESPONSE_BYTES: u64 = IBD_BATCH_SIZE as u64 * MAX_VEC_SIZE as u64;
+
+/// The most bead hashes one message can carry.
+///
+/// `BeadHashes` is also the answer to `GetBeadsAfter`, which lists every hash after
+/// the requester's tips and can be the whole braid, so this follows the response
+/// byte cap. A request is still held to its own byte cap by `read_bounded`.
+pub const MAX_BEAD_HASHES_PER_MESSAGE: usize = (MAX_BEAD_SYNC_RESPONSE_BYTES / 32) as usize;
 
 /// The most beads a node puts in one sync response.
 ///
