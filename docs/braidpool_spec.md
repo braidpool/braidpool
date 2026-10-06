@@ -375,7 +375,7 @@ $$
 where $a$ is a latency parameter and $\lambda$ is a rate parameter given by
 
 $$
-a = T_C W\left(\frac{T_C}{T_B} - 1 \right); \qquad
+a = T_B W\left(\frac{T_C}{T_B} - 1 \right); \qquad
 \lambda = \frac{N_B}{x T_C N_C},
 $$
 
