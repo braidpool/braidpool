@@ -1,8 +1,7 @@
 //! Checks applied to beads received from peers or RPC before they enter the braid.
 //!
-//! Timestamp ordering and transaction conflicts are intentionally not checked
-//! here: consensus ordering stays timestamp-independent. Target-range / difficulty
-//! adjustment, gossipsub policy, genesis policy, and Schnorr signatures are
+//! Timestamp values are not used to accept or reject beads: consensus stays timestamp-independent
+//! Target-range / difficulty adjustment, gossipsub policy, genesis policy, and Schnorr signatures are
 //! separate work and plug into [`validate_bead`] later.
 
 use std::collections::HashSet;
