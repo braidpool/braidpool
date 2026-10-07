@@ -48,7 +48,8 @@ const BULK_INSERT_TRANSACTIONS: &str = "INSERT INTO Transactions (bead_id, txid)
     SELECT json_extract(value, '$.bead_id'), unhex(json_extract(value, '$.txid')) 
     FROM json_each(?);";
 
-const BULK_INSERT_COMMITTED_TRANSACTIONS: &str = "INSERT INTO CommittedTransactions (bead_id, txid) 
+const BULK_INSERT_COMMITTED_TRANSACTIONS: &str =
+    "INSERT INTO CommittedTransactions (bead_id, txid) 
     SELECT json_extract(value, '$.bead_id'), unhex(json_extract(value, '$.txid')) 
     FROM json_each(?);";
 
@@ -184,7 +185,12 @@ impl DBHandler {
                 "bead_id": bead_id,
             }));
         }
-        (txs_values, committed_txs_values, relatives_values, parent_ts_values)
+        (
+            txs_values,
+            committed_txs_values,
+            relatives_values,
+            parent_ts_values,
+        )
     }
 
     /// Inserting chunks for bulk insertions
@@ -553,20 +559,19 @@ pub async fn fetch_beads_in_batch(
         for id in &ids {
             committed_tx_query = committed_tx_query.bind(id);
         }
-        let committed_tx_rows = committed_tx_query
-            .fetch_all(db_pool)
-            .await
-            .map_err(|e| DBErrors::TupleNotFetched {
-                error: e.to_string(),
-            })?;
+        let committed_tx_rows =
+            committed_tx_query
+                .fetch_all(db_pool)
+                .await
+                .map_err(|e| DBErrors::TupleNotFetched {
+                    error: e.to_string(),
+                })?;
         for row in committed_tx_rows {
             let bead_id: i64 = row.get("bead_id");
             let idx = ids
                 .binary_search(&bead_id)
                 .map_err(|_| DBErrors::TupleNotFetched {
-                    error: format!(
-                        "CommittedTransaction references unknown bead_id {bead_id}"
-                    ),
+                    error: format!("CommittedTransaction references unknown bead_id {bead_id}"),
                 })?;
             let tx_bytes: Vec<u8> = row.get("txid");
             let arr: [u8; 32] =
@@ -860,20 +865,19 @@ pub async fn fetch_bead_by_bead_hash(
                 });
             }
         };
-    let committed_tx_rows = match sqlx::query(
-        "SELECT txid, bead_id FROM CommittedTransactions WHERE bead_id = ?",
-    )
-    .bind(bead_id)
-    .fetch_all(&*db_connection_arc)
-    .await
-    {
-        Ok(rows) => rows,
-        Err(error) => {
-            return Err(DBErrors::TupleNotFetched {
-                error: error.to_string(),
-            });
-        }
-    };
+    let committed_tx_rows =
+        match sqlx::query("SELECT txid, bead_id FROM CommittedTransactions WHERE bead_id = ?")
+            .bind(bead_id)
+            .fetch_all(&*db_connection_arc)
+            .await
+        {
+            Ok(rows) => rows,
+            Err(error) => {
+                return Err(DBErrors::TupleNotFetched {
+                    error: error.to_string(),
+                });
+            }
+        };
     //Fetching parent timestamps from DB
     let parent_timestamp_rows =
         match sqlx::query("SELECT  parent,child,timestamp FROM ParentTimestamps WHERE child = ?")
