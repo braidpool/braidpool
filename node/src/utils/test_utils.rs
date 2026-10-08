@@ -323,12 +323,9 @@ pub mod test_utility_functions {
         let random_public_key = generate_random_public_key_string()
             .parse::<bitcoin::PublicKey>()
             .expect("An error occurred while generating Secret key rand bytes");
-        // Generate a reasonable timestamp (between 2020-01-01 and now)
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as u32;
-        let current_time = bitcoin::absolute::Time::from_consensus(now).unwrap();
+        // Fixed timestamp keeps fixtures deterministic; see `TEST_START_TIMESTAMP`.
+        let current_time =
+            bitcoin::absolute::Time::from_consensus(crate::utils::TEST_START_TIMESTAMP).unwrap();
 
         let _address =
             crate::config::CoinbaseConfig::from_network(PoolNetwork::Cpunet).pool_payout_address;

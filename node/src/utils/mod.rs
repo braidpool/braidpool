@@ -137,6 +137,10 @@ pub fn resolve_datadir(datadir: &Path) -> std::io::Result<PathBuf> {
 /// in a few increments.
 pub(crate) const EASIEST_COMPACT_TARGET: u32 = 0x207fffff;
 
+/// `start_timestamp` shared by every test bead, so fixtures stay deterministic
+/// and a child can copy its parents' timestamps without looking them up.
+pub(crate) const TEST_START_TIMESTAMP: u32 = 1653195600;
+
 /// Increments `header.nonce`, starting from its current value, until the header
 /// hash meets `header.bits` under `network`.
 ///
@@ -172,7 +176,7 @@ pub fn create_test_bead(nonce: u32, prev_hash: Option<BlockHash>) -> Bead {
     }
     let weak_target = CompactTarget::from_consensus(486604799);
     let min_target = CompactTarget::from_consensus(486604799);
-    let time_val = Time::from_consensus(1653195600).unwrap();
+    let time_val = Time::from_consensus(TEST_START_TIMESTAMP).unwrap();
     let parent_bead_timestamps = if prev_hash.is_some() {
         TimeVec(vec![time_val])
     } else {

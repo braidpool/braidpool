@@ -4,7 +4,7 @@
 //! Target-range / difficulty adjustment, gossipsub policy, genesis policy, and Schnorr signatures are
 //! separate work and plug into [`validate_bead`] later.
 
-use std::collections::HashSet;
+use std::cmp::Ordering;
 
 use bitcoin::Target;
 
@@ -15,7 +15,8 @@ use crate::error::BeadValidationError;
 /// Checks a received bead before it is added to the braid.
 ///
 /// The header hash, under `network`'s rules, must meet `header.bits`. Parents
-/// must be unique, and `parent_bead_timestamps` must have one entry per parent.
+/// must be unique and in strictly ascending hash order, and
+/// `parent_bead_timestamps` must have one entry per parent.
 ///
 /// # Arguments
 /// * `bead` - The bead received from gossip, bead-sync, or `addbead`.
@@ -34,10 +35,15 @@ pub fn validate_bead(bead: &Bead, network: PoolNetwork) -> Result<(), BeadValida
         return Err(BeadValidationError::InsufficientProofOfWork);
     }
 
+    // Producers sort parents by hash before broadcasting (`propagate_valid_bead`,
+    // the audit path in `stratum`), so the canonical layout is strictly ascending.
     let parents = &bead.committed_metadata.parents;
-    let mut seen_parents = HashSet::with_capacity(parents.len());
-    if parents.iter().any(|parent| !seen_parents.insert(parent)) {
-        return Err(BeadValidationError::DuplicateParents);
+    for pair in parents.windows(2) {
+        match pair[0].cmp(&pair[1]) {
+            Ordering::Less => {}
+            Ordering::Equal => return Err(BeadValidationError::DuplicateParents),
+            Ordering::Greater => return Err(BeadValidationError::ParentsNotSorted),
+        }
     }
 
     let timestamps = bead.committed_metadata.parent_bead_timestamps.0.len();
@@ -55,7 +61,7 @@ pub fn validate_bead(bead: &Bead, network: PoolNetwork) -> Result<(), BeadValida
 mod tests {
     use super::*;
     use crate::utils::create_test_bead;
-    use bitcoin::CompactTarget;
+    use bitcoin::{BlockHash, CompactTarget};
 
     fn assert_variant(result: Result<(), BeadValidationError>, expected: &BeadValidationError) {
         match result {
@@ -95,6 +101,42 @@ mod tests {
         assert_variant(
             validate_bead(&bead, PoolNetwork::Cpunet),
             &BeadValidationError::DuplicateParents,
+        );
+    }
+
+    /// Two parent hashes, plus a child of both with a timestamp per parent.
+    fn child_of_two() -> (BlockHash, BlockHash, Bead) {
+        let first = PoolNetwork::Cpunet.block_hash(&create_test_bead(1, None).block_header);
+        let second = PoolNetwork::Cpunet.block_hash(&create_test_bead(2, None).block_header);
+        let (low, high) = if first < second {
+            (first, second)
+        } else {
+            (second, first)
+        };
+        let mut child = create_test_bead(3, Some(low));
+        let timestamp = child.committed_metadata.parent_bead_timestamps.0[0];
+        child
+            .committed_metadata
+            .parent_bead_timestamps
+            .0
+            .push(timestamp);
+        (low, high, child)
+    }
+
+    #[test]
+    fn validate_bead_accepts_parents_in_ascending_order() {
+        let (low, high, mut child) = child_of_two();
+        child.committed_metadata.parents = vec![low, high];
+        assert!(validate_bead(&child, PoolNetwork::Cpunet).is_ok());
+    }
+
+    #[test]
+    fn validate_bead_rejects_parents_out_of_order() {
+        let (low, high, mut child) = child_of_two();
+        child.committed_metadata.parents = vec![high, low];
+        assert_variant(
+            validate_bead(&child, PoolNetwork::Cpunet),
+            &BeadValidationError::ParentsNotSorted,
         );
     }
 
