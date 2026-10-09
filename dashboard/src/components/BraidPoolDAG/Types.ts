@@ -13,7 +13,9 @@ export interface GraphData {
   parents: Record<string, string[]>;
   children: Record<string, string[]>;
   cohorts: string[][];
+  cohort_start_index: number;
   bead_count: number;
+  timestamps?: Record<string, number | null>;
 }
 
 export interface Position {
@@ -27,7 +29,7 @@ export interface BeadRecord {
   parentCount: number;
   childHashes: string[];
   childCount: number;
-  isHWP: boolean;
-  timestamp: string;
+  isHWP: boolean | null;
+  timestamp: number | null;
   cohortIndex: number;
 }
