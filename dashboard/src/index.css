@@ -13,3 +13,28 @@ code {
   font-family:
     source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
 }
+
+.braidpool-scrollbar {
+  scrollbar-color: #0077b6 #252a30;
+  scrollbar-width: thin;
+}
+
+.braidpool-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.braidpool-scrollbar::-webkit-scrollbar-track {
+  background: #252a30;
+  border-radius: 9999px;
+}
+
+.braidpool-scrollbar::-webkit-scrollbar-thumb {
+  background: #0077b6;
+  border: 2px solid #252a30;
+  border-radius: 9999px;
+}
+
+.braidpool-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #48cae4;
+}
