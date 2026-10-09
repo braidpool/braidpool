@@ -1,7 +1,10 @@
 use crate::config::PoolNetwork;
 use crate::{
     bead::Bead,
-    db::{init_db::init_db, BeadInsertData, BraidpoolDBTypes, InsertTupleTypes},
+    db::{
+        init_db::init_db, BeadInsertData, BraidpoolDBTypes, CommittedTransactionsPage,
+        CommittedTxEntry, InsertTupleTypes,
+    },
     error::DBErrors,
     utils::compute_block_hash,
 };
@@ -297,7 +300,7 @@ impl DBHandler {
     }
 
     /// Inserts a batch of beads, batches that are larger than BATCH_INSERT_THRESHOLD are split into bulk chunks of that size .
-    async fn insert_beads_batch(
+    pub(crate) async fn insert_beads_batch(
         &self,
         beads: Vec<BeadInsertData>,
         orphans: Vec<BeadInsertData>,
@@ -394,6 +397,31 @@ impl DBHandler {
                             );
                         }
                     }
+                }
+                BraidpoolDBTypes::FetchBeadHashByTxid { txid, responder } => {
+                    let result = fetch_bead_hash_by_txid(&self.db_connection_pool, txid)
+                        .await
+                        .unwrap_or_else(|error| {
+                            error!(error = ?error, txid = %txid, "Failed to fetch bead hash by txid");
+                            None
+                        });
+                    let _ = responder.send(result);
+                }
+                BraidpoolDBTypes::FetchCommittedTransactionsPage {
+                    page,
+                    page_size,
+                    responder,
+                } => {
+                    let result = fetch_committed_transactions_page(
+                        &self.db_connection_pool,
+                        page,
+                        page_size,
+                    )
+                    .await;
+                    if let Err(error) = &result {
+                        error!(error = ?error, page = %page, page_size = %page_size, "Failed to fetch committed transactions page");
+                    }
+                    let _ = responder.send(result);
                 }
             }
         }
@@ -871,6 +899,99 @@ pub async fn fetch_bead_by_bead_hash(
 
     Ok(Some(fetched_bead))
 }
+pub async fn fetch_bead_hash_by_txid(
+    db_connection_arc: &Pool<Sqlite>,
+    txid: Txid,
+) -> Result<Option<BlockHash>, DBErrors> {
+    let row = sqlx::query(
+        "SELECT b.hash AS hash FROM Bead b \
+         JOIN Transactions t ON t.bead_id = b.id \
+         WHERE t.txid = ? LIMIT 1",
+    )
+    .bind(txid.to_byte_array().to_vec())
+    .fetch_optional(db_connection_arc)
+    .await
+    .map_err(|e| DBErrors::TupleNotFetched {
+        error: e.to_string(),
+    })?;
+
+    match row {
+        Some(row) => {
+            let hash_bytes: Vec<u8> = row.get("hash");
+            let bead_hash = hash_bytes
+                .try_into()
+                .map(BlockHash::from_byte_array)
+                .map_err(|_| DBErrors::TupleAttributeParsingError {
+                    error: "Invalid hash length".to_string(),
+                    attribute: "hash".to_string(),
+                })?;
+            Ok(Some(bead_hash))
+        }
+        None => Ok(None),
+    }
+}
+pub const MAX_COMMITTED_TX_PAGE_SIZE: u32 = 500;
+pub async fn fetch_committed_transactions_page(
+    db_connection_arc: &Pool<Sqlite>,
+    page: u32,
+    page_size: u32,
+) -> Result<CommittedTransactionsPage, DBErrors> {
+    let page_size = page_size.clamp(1, MAX_COMMITTED_TX_PAGE_SIZE);
+    let offset = (page as i64).saturating_mul(page_size as i64);
+
+    let total: i64 = sqlx::query("SELECT COUNT(*) AS row_cnt FROM Transactions")
+        .fetch_one(db_connection_arc)
+        .await
+        .map_err(|e| DBErrors::TupleNotFetched {
+            error: e.to_string(),
+        })?
+        .get("row_cnt");
+
+    let rows = sqlx::query(
+        "SELECT t.txid AS txid, b.hash AS hash, b.start_timestamp AS start_timestamp \
+         FROM Transactions t \
+         JOIN Bead b ON b.id = t.bead_id \
+         ORDER BY b.id DESC \
+         LIMIT ? OFFSET ?",
+    )
+    .bind(page_size as i64)
+    .bind(offset)
+    .fetch_all(db_connection_arc)
+    .await
+    .map_err(|e| DBErrors::TupleNotFetched {
+        error: e.to_string(),
+    })?;
+
+    let mut entries = Vec::with_capacity(rows.len());
+    for row in rows {
+        let txid_bytes: Vec<u8> = row.get("txid");
+        let txid_arr: [u8; 32] =
+            txid_bytes
+                .try_into()
+                .map_err(|_| DBErrors::TupleAttributeParsingError {
+                    error: "Invalid txid length".to_string(),
+                    attribute: "txid".to_string(),
+                })?;
+        let hash_bytes: Vec<u8> = row.get("hash");
+        let hash_arr: [u8; 32] =
+            hash_bytes
+                .try_into()
+                .map_err(|_| DBErrors::TupleAttributeParsingError {
+                    error: "Invalid hash length".to_string(),
+                    attribute: "hash".to_string(),
+                })?;
+        entries.push(CommittedTxEntry {
+            txid: Txid::from_byte_array(txid_arr),
+            bead_hash: BlockHash::from_byte_array(hash_arr),
+            timestamp: row.get::<u32, _>("start_timestamp"),
+        });
+    }
+
+    Ok(CommittedTransactionsPage {
+        total: total.max(0) as u64,
+        entries,
+    })
+}
 #[cfg(test)]
 #[allow(unused)]
 pub mod test {
@@ -986,5 +1107,109 @@ pub mod test {
                 bead_hash
             );
         }
+    }
+    async fn seed_committed_transactions(
+        handler: &DBHandler,
+        txids_per_bead: &[Vec<Txid>],
+    ) -> braid::Braid {
+        use crate::committed_metadata::TxIdVec;
+        use crate::utils::create_test_bead;
+
+        let beads: Vec<Bead> = txids_per_bead
+            .iter()
+            .enumerate()
+            .map(|(i, txids)| {
+                let mut bead = create_test_bead(i as u32, None);
+                bead.committed_metadata.transaction_ids = TxIdVec(txids.clone());
+                bead
+            })
+            .collect();
+
+        let test_braid = braid::Braid::new(beads, PoolNetwork::Cpunet);
+        let bead_data = BeadInsertData::resolve_many(&test_braid, test_braid.beads.iter())
+            .expect("resolve_many failed for seeded genesis beads");
+        handler
+            .insert_beads_batch(bead_data, Vec::new())
+            .await
+            .expect("Seed insertion failed");
+        test_braid
+    }
+
+    fn txid_from_byte(b: u8) -> Txid {
+        Txid::from_byte_array([b; 32])
+    }
+
+    #[tokio::test]
+    async fn test_fetch_committed_transactions_page_pagination() {
+        let (handler, _db_tx) = DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
+        let test_pool = handler.db_connection_pool.clone();
+
+        // bead 0: 1 tx, bead 1: 2 txs, bead 2: 1 tx -> 4 committed txs total.
+        seed_committed_transactions(
+            &handler,
+            &[
+                vec![txid_from_byte(1)],
+                vec![txid_from_byte(2), txid_from_byte(3)],
+                vec![txid_from_byte(4)],
+            ],
+        )
+        .await;
+
+        // Newest-first (highest bead id first), page_size smaller than total.
+        let page0 = fetch_committed_transactions_page(&test_pool, 0, 2)
+            .await
+            .unwrap();
+        assert_eq!(page0.total, 4);
+        assert_eq!(page0.entries.len(), 2);
+        assert_eq!(page0.entries[0].txid, txid_from_byte(4));
+
+        let page1 = fetch_committed_transactions_page(&test_pool, 1, 2)
+            .await
+            .unwrap();
+        assert_eq!(page1.total, 4);
+        assert_eq!(page1.entries.len(), 2);
+        assert_eq!(page1.entries[1].txid, txid_from_byte(1));
+
+        // Page past the end returns an empty window but the correct total.
+        let page_empty = fetch_committed_transactions_page(&test_pool, 5, 2)
+            .await
+            .unwrap();
+        assert_eq!(page_empty.total, 4);
+        assert!(page_empty.entries.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_fetch_committed_transactions_page_clamps_page_size() {
+        let (handler, _db_tx) = DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
+        let test_pool = handler.db_connection_pool.clone();
+
+        seed_committed_transactions(&handler, &[vec![txid_from_byte(9)]]).await;
+
+        // A page_size far above MAX_COMMITTED_TX_PAGE_SIZE must not panic or overflow,
+        // and must still return the (small) real dataset.
+        let page = fetch_committed_transactions_page(&test_pool, 0, u32::MAX)
+            .await
+            .unwrap();
+        assert_eq!(page.total, 1);
+        assert_eq!(page.entries.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_fetch_bead_hash_by_txid() {
+        let (handler, _db_tx) = DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
+        let test_pool = handler.db_connection_pool.clone();
+
+        let test_braid = seed_committed_transactions(&handler, &[vec![txid_from_byte(7)]]).await;
+        let expected_hash = test_braid.compute_bead_hash(&test_braid.beads[0]);
+
+        let found = fetch_bead_hash_by_txid(&test_pool, txid_from_byte(7))
+            .await
+            .unwrap();
+        assert_eq!(found, Some(expected_hash));
+
+        let missing = fetch_bead_hash_by_txid(&test_pool, txid_from_byte(99))
+            .await
+            .unwrap();
+        assert_eq!(missing, None);
     }
 }
