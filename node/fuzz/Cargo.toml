@@ -1,0 +1,46 @@
+# Standalone workspace so the fuzz crate is not pulled into the root
+# braidpool workspace build (cargo-fuzz convention).
+[workspace]
+
+[package]
+name = "node-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+bitcoin = { version = "0.32.5", features = ["serde", "std", "rand"] }
+
+[dependencies.node]
+path = ".."
+
+# One binary per network-facing decoder. Each mirrors the call shape used by
+# BeadCodec, which hands peer-supplied bytes to consensus_decode unmodified.
+[[bin]]
+name = "bead_decode"
+path = "fuzz_targets/bead_decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "bead_request_decode"
+path = "fuzz_targets/bead_request_decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "bead_response_decode"
+path = "fuzz_targets/bead_response_decode.rs"
+test = false
+doc = false
+bench = false
+
+# Fuzzers need debug info for useful crash reports, but still optimised.
+[profile.release]
+debug = 1
