@@ -1,6 +1,6 @@
 use crate::bead::Bead;
 use crate::config::PoolNetwork;
-use crate::error::BraidError;
+use crate::error::{BeadValidationError, BraidError};
 use crate::utils::{compute_block_hash, BeadHash};
 use num::BigUint;
 use serde::{Deserialize, Serialize};
@@ -102,7 +102,7 @@ impl Braid {
             };
         }
         // No parents: bad block i.e. the extend will add beads after the genesis
-        //bead is done and the extension of genesis beads to Braid shall be done via Braid::new
+        // bead is done and the extension of genesis beads to Braid shall be done via Braid::new
         if bead.committed_metadata.parents.is_empty() {
             return AddBeadStatus::InvalidBead;
         }
@@ -126,6 +126,13 @@ impl Braid {
             .any(|b| self.compute_bead_hash(b) == bead_hash)
         {
             return AddBeadStatus::DagAlreadyContainsBead;
+        }
+
+        // Every parent is present now (directly or on orphan promotion), so the
+        // timestamps the bead carries can be checked against the parents themselves.
+        if let Err(error) = self.check_parent_timestamps(bead) {
+            tracing::warn!(hash = %bead_hash, error = %error, "Rejecting bead with inconsistent parent timestamps");
+            return AddBeadStatus::InvalidBead;
         }
 
         // Insert bead into beads vector
@@ -252,6 +259,47 @@ impl Braid {
         }
         promoted
     }
+    /// Checks that `parent_bead_timestamps[i]` is the `start_timestamp` of `parents[i]`.
+    ///
+    /// The timestamps are a copy of data the parents already carry, so a bead whose
+    /// copy disagrees with its parents is malformed. Timestamp values are only
+    /// compared, never used to order or weigh beads.
+    ///
+    /// # Arguments
+    /// * `bead` - A bead whose parents are all present in this braid.
+    ///
+    /// # Errors
+    /// [`BeadValidationError::ParentTimestampCountMismatch`] when the two lists differ
+    /// in length, [`BeadValidationError::MissingParent`] when a parent is not in the
+    /// braid, and [`BeadValidationError::ParentTimestampMismatch`] for the first
+    /// timestamp that differs from its parent's `start_timestamp`.
+    pub fn check_parent_timestamps(&self, bead: &Bead) -> Result<(), BeadValidationError> {
+        let parents = &bead.committed_metadata.parents;
+        let timestamps = &bead.committed_metadata.parent_bead_timestamps.0;
+        if parents.len() != timestamps.len() {
+            return Err(BeadValidationError::ParentTimestampCountMismatch {
+                parents: parents.len(),
+                timestamps: timestamps.len(),
+            });
+        }
+        for (parent_hash, claimed) in parents.iter().zip(timestamps) {
+            let &parent_index = self.bead_index_mapping.get(parent_hash).ok_or(
+                BeadValidationError::MissingParent {
+                    parent: *parent_hash,
+                },
+            )?;
+            let actual = self.beads[parent_index].committed_metadata.start_timestamp;
+            if *claimed != actual {
+                return Err(BeadValidationError::ParentTimestampMismatch {
+                    parent: *parent_hash,
+                    claimed: claimed.to_consensus_u32(),
+                    actual: actual.to_consensus_u32(),
+                });
+            }
+        }
+        Ok(())
+    }
+
     pub fn resolve_parents(&self, bead: &Bead) -> Result<Vec<(u64, u32)>, BraidError> {
         bead.committed_metadata
             .parents
