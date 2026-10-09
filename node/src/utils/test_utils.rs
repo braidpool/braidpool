@@ -15,7 +15,7 @@ use bitcoin::block::Header as BlockHeader;
 #[cfg(test)]
 pub use bitcoin::ecdsa::Signature;
 #[cfg(test)]
-pub use bitcoin::{absolute::Time, p2p::address::AddrV2, PublicKey, Transaction};
+pub use bitcoin::{p2p::address::AddrV2, PublicKey, Transaction};
 #[cfg(test)]
 pub mod test_utility_functions {
     use std::{

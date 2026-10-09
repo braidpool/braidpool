@@ -2455,7 +2455,7 @@ impl Notifier {
     fn build_local_job_details(
         template: &BlockTemplate,
         notification: &JobNotification,
-        unix_timestamp: MicrosecondTimestamp,
+        job_sent_time: MicrosecondTimestamp,
     ) -> Arc<JobDetails> {
         let mut t = template.clone();
         t.transactions.remove(0);
@@ -2465,7 +2465,7 @@ impl Notifier {
             coinbase2: notification.coinbase2.clone(),
             coinbase_merkle_path: notification.merkle_branches.clone(),
             coinbase_witness_commitment: notification.coinbase_witness_commitment.clone(),
-            job_sent_time: unix_timestamp,
+            job_sent_time,
             is_upstream_job: false,
         })
     }
@@ -2527,10 +2527,10 @@ impl Notifier {
                         }
                     };
 
-                    let unix_timestamp = MicrosecondTimestamp::now();
+                    let job_sent_time = MicrosecondTimestamp::now();
 
                     let job_details =
-                        Self::build_local_job_details(&template, &job_notification, unix_timestamp);
+                        Self::build_local_job_details(&template, &job_notification, job_sent_time);
 
                     let numeric_job_id =
                         self.job_store.lock().await.insert(template_id, job_details);
@@ -2711,11 +2711,11 @@ impl Notifier {
                                     None => {
                                         // Template was never stored — broadcast arrived while
                                         // no miners were connected. Build and insert now.
-                                        let unix_timestamp = MicrosecondTimestamp::now();
+                                        let job_sent_time = MicrosecondTimestamp::now();
                                         let job_details = Self::build_local_job_details(
                                             &latest_template,
                                             &job,
-                                            unix_timestamp,
+                                            job_sent_time,
                                         );
                                         self.job_store
                                             .lock()

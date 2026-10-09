@@ -58,27 +58,11 @@ impl Default for MicrosecondTimestamp {
     }
 }
 
-impl From<u64> for MicrosecondTimestamp {
-    fn from(micros: u64) -> Self {
-        Self(micros)
-    }
-}
-
-impl From<MicrosecondTimestamp> for u64 {
-    fn from(timestamp: MicrosecondTimestamp) -> Self {
-        timestamp.0
-    }
-}
-
+// SQLite has no unsigned 64-bit column type: its INTEGER is a signed 64-bit
+// value, so `sqlx` can only bind an `i64`.
 impl From<MicrosecondTimestamp> for i64 {
     fn from(timestamp: MicrosecondTimestamp) -> Self {
         timestamp.0 as i64
-    }
-}
-
-impl From<MicrosecondTimestamp> for SystemTime {
-    fn from(timestamp: MicrosecondTimestamp) -> Self {
-        timestamp.to_system_time()
     }
 }
 
@@ -94,7 +78,7 @@ impl Decodable for MicrosecondTimestamp {
         r: &mut R,
     ) -> Result<Self, bitcoin::consensus::encode::Error> {
         let value = u64::consensus_decode(r)?;
-        Ok(value.into())
+        Ok(Self::from_micros(value))
     }
 }
 
@@ -109,6 +93,8 @@ impl std::fmt::Display for MicrosecondTimestamp {
 mod tests {
     use super::*;
 
+    // A timestamp built from microseconds returns the same microsecond value
+    // and truncates to the matching whole second.
     #[test]
     fn test_microsecond_timestamp_basic() {
         let timestamp = MicrosecondTimestamp::from_micros(1_653_195_600_000_000);
@@ -116,6 +102,8 @@ mod tests {
         assert_eq!(timestamp.as_secs(), 1653195600);
     }
 
+    // Building from whole seconds scales the value up to microseconds, and
+    // converting back to seconds round-trips.
     #[test]
     fn test_from_secs() {
         let timestamp = MicrosecondTimestamp::from_secs(1653195600);
@@ -123,16 +111,19 @@ mod tests {
         assert_eq!(timestamp.as_secs(), 1653195600);
     }
 
+    // The `i64` conversion used for SQLite storage preserves the microsecond
+    // value, and `as_secs` drops the sub-second part.
     #[test]
     fn test_conversions() {
         let original_micros: u64 = 1_653_195_600_123_456;
         let timestamp = MicrosecondTimestamp::from_micros(original_micros);
 
-        assert_eq!(u64::from(timestamp), original_micros);
         assert_eq!(i64::from(timestamp), original_micros as i64);
         assert_eq!(timestamp.as_secs(), 1653195600);
     }
 
+    // `now()` reports the current wall-clock time, within one second of the
+    // system clock read directly.
     #[test]
     fn test_now() {
         let timestamp = MicrosecondTimestamp::now();
@@ -146,6 +137,8 @@ mod tests {
         assert!(timestamp.as_micros().abs_diff(expected) < MICROS_PER_SEC);
     }
 
+    // `now()` carries sub-second precision: across many samples at least one
+    // must not land on an exact second boundary.
     #[test]
     fn test_now_has_sub_second_precision() {
         let any_sub_second =
@@ -153,11 +146,13 @@ mod tests {
         assert!(any_sub_second, "now() is only producing whole seconds");
     }
 
+    // Converting a `SystemTime` to a timestamp and back loses at most the
+    // sub-microsecond part.
     #[test]
     fn test_system_time_conversion() {
         let system_time = SystemTime::now();
         let timestamp = MicrosecondTimestamp::from_system_time(system_time).unwrap();
-        let converted_back = SystemTime::from(timestamp);
+        let converted_back = timestamp.to_system_time();
 
         // Should be very close
         let duration = converted_back
@@ -167,6 +162,8 @@ mod tests {
         assert!(duration.as_micros() < 1000);
     }
 
+    // Consensus encoding writes the timestamp as 8 bytes and decoding yields
+    // the original value.
     #[test]
     fn test_consensus_encoding() {
         let original = MicrosecondTimestamp::from_micros(1_653_195_600_123_456);
@@ -183,12 +180,16 @@ mod tests {
         assert_eq!(decoded, original);
     }
 
+    // The default timestamp is the Unix epoch.
     #[test]
     fn test_default() {
         let timestamp = MicrosecondTimestamp::default();
         assert_eq!(timestamp.as_micros(), 0);
         assert_eq!(timestamp.as_secs(), 0);
     }
+
+    // Two timestamps inside the same second still order by their microsecond
+    // component.
     #[test]
     fn test_ordering_is_sub_second() {
         let a = MicrosecondTimestamp::from_micros(1_653_195_600_000_000);

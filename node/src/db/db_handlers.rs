@@ -204,14 +204,14 @@ impl DBHandler {
                 "nBits": bead.block_header.bits.to_consensus(),
                 "nNonce": bead.block_header.nonce,
                 "payout_address": hex::encode(bead.committed_metadata.payout_address.as_bytes()),
-                "start_timestamp": bead.committed_metadata.start_timestamp.as_micros() as i64,
+                "start_timestamp": i64::from(bead.committed_metadata.start_timestamp),
                 "comm_pub_key": hex::encode(bead.committed_metadata.comm_pub_key.to_bytes()),
                 "min_target": bead.committed_metadata.min_target.to_consensus(),
                 "weak_target": bead.committed_metadata.weak_target.to_consensus(),
                 "miner_ip": bead.committed_metadata.miner_ip.clone(),
                 "extranonce1": hex::encode(bead.uncommitted_metadata.extra_nonce_1.to_be_bytes()),
                 "extranonce2": hex::encode(bead.uncommitted_metadata.extra_nonce_2.to_be_bytes()),
-                "broadcast_timestamp": bead.uncommitted_metadata.broadcast_timestamp.as_micros() as i64,
+                "broadcast_timestamp": i64::from(bead.uncommitted_metadata.broadcast_timestamp),
                 "signature": hex::encode(bead.uncommitted_metadata.signature.to_vec()),
             }));
             all_txs_json_parts.extend(txs);
