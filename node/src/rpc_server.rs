@@ -102,6 +102,9 @@ pub trait Rpc {
     #[method(name = "getnodeinfo")]
     async fn get_node_info(&self, bead_hash: String) -> Result<Value, ErrorObjectOwned>;
 
+    #[method(name = "getworkbybead")]
+    async fn get_work_by_bead(&self, bead_hash: String) -> Result<BeadWorkInfo, ErrorObjectOwned>;
+
     #[method(name = "getpeerinfo")]
     async fn get_peer_info(&self) -> Result<Value, ErrorObjectOwned>;
 
@@ -161,6 +164,17 @@ struct NodeInfo {
     miner_ip: String,
     payout_address: String,
     minimum_target: String,
+}
+
+/// Cumulative work for one bead: its own intrinsic work plus the work of
+/// every unique descendant. Matches the decimal string format of
+/// `getbraidinfo` total_work so clients can compare values directly.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct BeadWorkInfo {
+    /// Canonical bead hash that was queried.
+    pub bead_hash: String,
+    /// Accumulated work as a decimal string.
+    pub work: String,
 }
 
 /// Per-tx entry returned by stagedtransactions. Includes txid so callers can pass it to unstagetransactions.
@@ -930,6 +944,56 @@ impl RpcServer for RpcServerImpl {
 
         serde_json::to_value(&node_info)
             .map_err(|_| ErrorObjectOwned::owned(2, "Internal Server Error", None::<()>))
+    }
+
+    async fn get_work_by_bead(&self, bead_hash: String) -> Result<BeadWorkInfo, ErrorObjectOwned> {
+        let hash = bead_hash
+            .parse::<BeadHash>()
+            .map_err(|_| ErrorObjectOwned::owned(1, "Invalid bead hash format", None::<()>))?;
+
+        let braid_data = self.braid_arc.read().await;
+
+        let bead_index = match braid_data.bead_index_mapping.get(&hash) {
+            Some(&index) => index,
+            None => return Err(ErrorObjectOwned::owned(3, "Bead not found", None::<()>)),
+        };
+
+        // Child map over the same bead universe getbraidinfo sums over.
+        let mut parents_map: HashMap<usize, HashSet<usize>> = HashMap::new();
+        for (index, bead) in braid_data.beads.iter().enumerate() {
+            let parent_indices: HashSet<usize> = bead
+                .committed_metadata
+                .parents
+                .iter()
+                .filter_map(|p_hash| braid_data.bead_index_mapping.get(p_hash).copied())
+                .collect();
+            parents_map.insert(index, parent_indices);
+        }
+        let children_map = consensus_functions::reverse(&braid_data, &parents_map);
+
+        // Every unique descendant, so shared descendants count once.
+        let mut descendants: HashSet<usize> = HashSet::new();
+        let mut stack: Vec<usize> = vec![bead_index];
+        while let Some(index) = stack.pop() {
+            if let Some(children) = children_map.get(&index) {
+                for &child in children {
+                    if descendants.insert(child) {
+                        stack.push(child);
+                    }
+                }
+            }
+        }
+
+        let own_work = braid_data.beads[bead_index].block_header.work();
+        let cumulative = descendants.iter().fold(own_work, |acc, &index| {
+            acc + braid_data.beads[index].block_header.work()
+        });
+
+        info!(bead = %bead_hash, work = %cumulative, "Get work by bead request received");
+        Ok(BeadWorkInfo {
+            bead_hash: hash.to_string(),
+            work: cumulative.to_string(),
+        })
     }
 
     async fn get_peer_info(&self) -> Result<Value, ErrorObjectOwned> {
@@ -1924,6 +1988,98 @@ pub async fn test_get_node_info_rpc() {
         node_info.payout_address,
         test_bead1.committed_metadata.payout_address
     );
+}
+
+#[tokio::test]
+pub async fn test_get_work_by_bead_rpc() {
+    let test_bead1 = create_test_bead(1, None);
+    let test_bead2 = create_test_bead(
+        2,
+        Some(compute_block_hash(
+            &test_bead1.block_header,
+            PoolNetwork::Cpunet,
+        )),
+    );
+    let test_bead3 = create_test_bead(
+        3,
+        Some(compute_block_hash(
+            &test_bead2.block_header,
+            PoolNetwork::Cpunet,
+        )),
+    );
+    let genesis_beads = vec![test_bead1.clone()];
+
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(
+        genesis_beads,
+        PoolNetwork::Cpunet,
+    )));
+    {
+        let mut braid_guard = braid.write().await;
+        braid_guard.extend(&test_bead2);
+        braid_guard.extend(&test_bead3);
+    }
+
+    let (proxy_tx, _) = mpsc::unbounded_channel();
+
+    let (server_addr, _) = run_rpc_server(
+        Arc::clone(&braid),
+        "127.0.0.1:0",
+        Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
+        Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
+        Arc::new(Mutex::new(stratum::BlockTemplate::default())),
+        proxy_tx,
+        None,
+        test_db_tx(),
+    )
+    .await
+    .unwrap();
+    let target_uri = format!("http://{}", server_addr);
+    let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
+
+    let request_work = |hash: String| async {
+        let mut params = ArrayParams::new();
+        params.insert(hash).unwrap();
+        let response: Result<BeadWorkInfo, jsonrpsee::core::ClientError> =
+            client.request("getworkbybead", params).await;
+        response
+    };
+
+    let bead1_hash = compute_block_hash(&test_bead1.block_header, PoolNetwork::Cpunet).to_string();
+    let bead2_hash = compute_block_hash(&test_bead2.block_header, PoolNetwork::Cpunet).to_string();
+    let bead3_hash = compute_block_hash(&test_bead3.block_header, PoolNetwork::Cpunet).to_string();
+
+    // Tip accumulates only its own work.
+    let tip_info = request_work(bead3_hash.clone()).await.unwrap();
+    assert_eq!(tip_info.bead_hash, bead3_hash);
+    assert_eq!(tip_info.work, test_bead3.block_header.work().to_string());
+
+    // Middle bead accumulates its own work plus its descendant's.
+    let middle_info = request_work(bead2_hash.clone()).await.unwrap();
+    assert_eq!(middle_info.bead_hash, bead2_hash);
+    assert_eq!(
+        middle_info.work,
+        (test_bead2.block_header.work() + test_bead3.block_header.work()).to_string()
+    );
+
+    // Genesis accumulates the whole braid, matching getbraidinfo total_work.
+    let genesis_info = request_work(bead1_hash.clone()).await.unwrap();
+    assert_eq!(genesis_info.bead_hash, bead1_hash);
+    let total: Value = client
+        .request("getbraidinfo", ArrayParams::new())
+        .await
+        .unwrap();
+    assert_eq!(genesis_info.work, total["total_work"].as_str().unwrap());
+
+    // Invalid hash format is rejected.
+    assert!(request_work("not-a-hash".to_string()).await.is_err());
+
+    // Unknown hash reports bead not found.
+    let unknown = compute_block_hash(&create_test_bead(9, None).block_header, PoolNetwork::Cpunet)
+        .to_string();
+    assert_ne!(unknown, bead1_hash);
+    assert_ne!(unknown, bead2_hash);
+    assert_ne!(unknown, bead3_hash);
+    assert!(request_work(unknown).await.is_err());
 }
 
 #[tokio::test]
