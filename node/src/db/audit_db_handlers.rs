@@ -72,14 +72,14 @@ impl AuditDBHandler {
             .bind(bead.block_header.bits.to_consensus() as i64)
             .bind(bead.block_header.nonce as i64)
             .bind(&bead.committed_metadata.payout_address)
-            .bind(bead.committed_metadata.start_timestamp.as_micros() as i64)
+            .bind(i64::from(bead.committed_metadata.start_timestamp))
             .bind(bead.committed_metadata.comm_pub_key.to_bytes())
             .bind(bead.committed_metadata.min_target.to_consensus() as i64)
             .bind(bead.committed_metadata.weak_target.to_consensus() as i64)
             .bind(miner_ip)
             .bind(extranonce1)
             .bind(extranonce2)
-            .bind(bead.uncommitted_metadata.broadcast_timestamp.as_micros() as i64)
+            .bind(i64::from(bead.uncommitted_metadata.broadcast_timestamp))
             .bind(bead.uncommitted_metadata.signature.to_vec())
             .bind(created_at)
             .execute(&mut *tx)
@@ -104,7 +104,7 @@ impl AuditDBHandler {
             qb.push_values(parents, |mut b, (parent_hash, parent_timestamp)| {
                 b.push_bind(bead_id)
                     .push_bind(parent_hash.as_byte_array().as_slice())
-                    .push_bind(parent_timestamp.as_micros() as i64);
+                    .push_bind(i64::from(*parent_timestamp));
             });
             qb.build()
                 .execute(&mut *tx)
