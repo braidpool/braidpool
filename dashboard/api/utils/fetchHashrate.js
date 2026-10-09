@@ -2,6 +2,7 @@ import { rpcWithEnv } from './rpcWithEnv.js';
 
 let lastDifficulty = null;
 let lastDiffTime = 0;
+const MIN_DISPLAYABLE_HASHRATE_EH = 0.005;
 
 export async function fetchHashrateStats(wss) {
   try {
@@ -15,12 +16,14 @@ export async function fetchHashrateStats(wss) {
 
     const hashrate = await rpcWithEnv({ method: 'getnetworkhashps' });
     const hashrateEH = hashrate / 1e18;
+    const normalizedHashrateEH =
+      hashrateEH < MIN_DISPLAYABLE_HASHRATE_EH ? 0 : hashrateEH;
     const timestamp = now;
 
     const payload = {
       type: 'hashrate_data',
       data: {
-        hashrate: hashrateEH,
+        hashrate: normalizedHashrateEH,
         timestamp: timestamp,
         networkDifficulty: lastDifficulty / 1e12,
       },
