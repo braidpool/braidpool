@@ -1,4 +1,5 @@
 use crate::bead::{Bead, BeadCodec, BeadHashes, BeadRequest, BeadResponse, BeadSyncError};
+use crate::config::PoolNetwork;
 use crate::utils::BeadHash;
 use libp2p::floodsub;
 use libp2p::{
@@ -12,12 +13,30 @@ use libp2p::{
 };
 use std::{error::Error, time::Duration};
 
-// Protocol names
-pub const KADPROTOCOLNAME: StreamProtocol = StreamProtocol::new("/braidpool/kad/1.0.0");
-pub const IDENTIFYPROTOCOLNAME: StreamProtocol = StreamProtocol::new("/braidpool/identify/1.0.0");
-pub const BEAD_SYNC_PROTOCOL: StreamProtocol = StreamProtocol::new("/braidpool/bead-sync/1.0.0");
-pub const BEAD_ANNOUNCE_PROTOCOL: StreamProtocol = StreamProtocol::new("/floodsub/1.0.0");
-pub const BRAIDPOOL_TOPIC: &str = "braidpool_channel";
+// Protocol IDs or names to be negotiated during the connection establishment
+// for network specific communication to be established.
+pub fn kad_protocol(network: PoolNetwork) -> StreamProtocol {
+    let name = network.name();
+    StreamProtocol::try_from_owned(format!("/braidpool/{name}/kad/1.0.0"))
+        .expect("network name produces invalid StreamProtocol")
+}
+
+/// Returns the identify protocol ID for `network`.
+pub fn identify_protocol(network: PoolNetwork) -> String {
+    format!("/braidpool/{}/identify/1.0.0", network.name())
+}
+
+/// Returns the bead-sync request/response protocol ID for `network`.
+pub fn bead_sync_protocol(network: PoolNetwork) -> StreamProtocol {
+    let name = network.name();
+    StreamProtocol::try_from_owned(format!("/braidpool/{name}/bead-sync/1.0.0"))
+        .expect("network name produces invalid StreamProtocol")
+}
+
+/// Returns the floodsub topic beads are announced on for `network`.
+pub fn braidpool_topic(network: PoolNetwork) -> String {
+    format!("braidpool_channel/{}", network.name())
+}
 
 // Configuration for the request-response protocol
 #[derive(Debug, Clone)]
@@ -44,11 +63,15 @@ pub struct BraidPoolBehaviour {
     pub bead_announce: floodsub::Floodsub,
 }
 impl BraidPoolBehaviour {
-    pub fn new(local_key: &Keypair) -> Result<BraidPoolBehaviour, Box<dyn Error>> {
+    /// Builds the composed network behaviour with every protocol scoped to `network`.
+    pub fn new(
+        local_key: &Keypair,
+        network: PoolNetwork,
+    ) -> Result<BraidPoolBehaviour, Box<dyn Error>> {
         //initializing the store for kademlia based DHT
         let store = MemoryStore::new(local_key.public().to_peer_id());
-        //custom kademlia protocol
-        let mut kad_config = kad::Config::new(KADPROTOCOLNAME);
+        //custom kademlia protocol, scoped by Bitcoin network
+        let mut kad_config = kad::Config::new(kad_protocol(network));
         kad_config.set_query_timeout(tokio::time::Duration::from_secs(60));
         //Querying the boot node for finding the neareast neigbor set up for 10 minutes
         //dynamic value can be changed not to small though
@@ -56,19 +79,21 @@ impl BraidPoolBehaviour {
         //custom kad configuration
         let kademlia_behaviour =
             kad::Behaviour::with_config(local_key.public().to_peer_id(), store, kad_config);
-        //identify protocol configuration
-        let identify_config =
-            identify::Config::new(IDENTIFYPROTOCOLNAME.to_string(), local_key.public());
+        //identify protocol configuration, scoped by Bitcoin network
+        let identify_config = identify::Config::new(identify_protocol(network), local_key.public());
         let identify_behaviour = identify::Behaviour::new(identify_config);
         let ping_config = ping::Config::default()
             .with_timeout(Duration::from_secs(3600))
             .with_interval(Duration::from_secs(5));
         let ping_behaviour = ping::Behaviour::new(ping_config.clone());
 
-        // Initialize bead download behaviour
+        // Initialize bead download behaviour, scoped by Bitcoin network
         let bead_sync_config = BeadSyncConfig::default();
         let bead_sync = request_response::Behaviour::new(
-            [(BEAD_SYNC_PROTOCOL, request_response::ProtocolSupport::Full)],
+            [(
+                bead_sync_protocol(network),
+                request_response::ProtocolSupport::Full,
+            )],
             request_response::Config::default()
                 .with_request_timeout(bead_sync_config.request_timeout)
                 .with_max_concurrent_streams(bead_sync_config.max_concurrent_requests),
