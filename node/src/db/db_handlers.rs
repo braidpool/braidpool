@@ -22,7 +22,8 @@ pub const FETCH_BEAD_BATCH_SIZE: u32 = 50;
 const BULK_INSERT_BEADS: &str =
     "INSERT INTO bead (id, hash, nVersion, hashPrevBlock, hashMerkleRoot, nTime, 
         nBits, nNonce, payout_address, start_timestamp, comm_pub_key, min_target, 
-        weak_target, miner_ip, fee_total_sats, extranonce1, extranonce2, broadcast_timestamp, signature) 
+        weak_target, miner_ip, fee_total_sats, verified_fee_sats, coinbase_tx, extranonce1, extranonce2,
+        broadcast_timestamp, signature) 
     SELECT 
         json_extract(value, '$.id'), 
         unhex(json_extract(value, '$.hash')), 
@@ -39,15 +40,23 @@ const BULK_INSERT_BEADS: &str =
         json_extract(value, '$.weak_target'), 
         json_extract(value, '$.miner_ip'),
         json_extract(value, '$.fee_total_sats'), 
+        json_extract(value, '$.verified_fee_sats'), 
+        unhex(json_extract(value, '$.coinbase_tx')), 
         json_extract(value, '$.extranonce1'), 
         json_extract(value, '$.extranonce2'), 
         json_extract(value, '$.broadcast_timestamp'), 
         unhex(json_extract(value, '$.signature')) 
     FROM json_each(?);";
 //Separating into sub-queries
-const BULK_INSERT_TRANSACTIONS: &str = "INSERT INTO Transactions (bead_id, txid) 
-    SELECT json_extract(value, '$.bead_id'), unhex(json_extract(value, '$.txid')) 
+const BULK_INSERT_TRANSACTIONS: &str = "INSERT INTO Transactions (bead_id, txid, kind, position) 
+    SELECT json_extract(value, '$.bead_id'), unhex(json_extract(value, '$.txid')),
+        json_extract(value, '$.kind'), json_extract(value, '$.position')
     FROM json_each(?);";
+
+/// `Transactions.kind` of a txid in the bead's template.
+const TX_KIND_COMMITTED: i64 = 0;
+/// `Transactions.kind` of a txid the bead proposes for later beads.
+const TX_KIND_TO_BE_ADDED: i64 = 1;
 
 const BULK_INSERT_RELATIVES: &str = "INSERT INTO Relatives (child, parent) 
     SELECT json_extract(value, '$.child'), json_extract(value, '$.parent') 
@@ -164,13 +173,21 @@ impl DBHandler {
             }));
             debug!("Parent found with id - {:?}", parent_id);
         }
+        let metadata = &data.bead.committed_metadata;
         let mut txs_values =
-            Vec::with_capacity(data.bead.committed_metadata.transaction_ids.0.len());
-        for tx in &data.bead.committed_metadata.transaction_ids.0 {
-            txs_values.push(json!({
-                "txid": hex::encode(tx.to_byte_array()),
-                "bead_id": bead_id,
-            }));
+            Vec::with_capacity(metadata.committed_txs.0.len() + metadata.to_be_added.0.len());
+        for (kind, txids) in [
+            (TX_KIND_COMMITTED, &metadata.committed_txs.0),
+            (TX_KIND_TO_BE_ADDED, &metadata.to_be_added.0),
+        ] {
+            for (position, tx) in txids.iter().enumerate() {
+                txs_values.push(json!({
+                    "txid": hex::encode(tx.to_byte_array()),
+                    "bead_id": bead_id,
+                    "kind": kind,
+                    "position": position,
+                }));
+            }
         }
         (txs_values, relatives_values, parent_ts_values)
     }
@@ -211,6 +228,10 @@ impl DBHandler {
                 "weak_target": bead.committed_metadata.weak_target.to_consensus(),
                 "miner_ip": bead.committed_metadata.miner_ip.clone(),
                 "fee_total_sats": bead.committed_metadata.fee_total_sats,
+                "verified_fee_sats": data.verified_fee_sats,
+                "coinbase_tx": hex::encode(bitcoin::consensus::serialize(
+                    &bead.committed_metadata.coinbase_transaction,
+                )),
                 "extranonce1": hex::encode(bead.uncommitted_metadata.extra_nonce_1.to_be_bytes()),
                 "extranonce2": hex::encode(bead.uncommitted_metadata.extra_nonce_2.to_be_bytes()),
                 "broadcast_timestamp": bead.uncommitted_metadata.broadcast_timestamp.to_consensus_u32(),
@@ -443,6 +464,7 @@ pub async fn fetch_beads_in_batch(
                 b.weak_target         AS weak_target,
                 b.miner_ip            AS miner_ip,
                 b.fee_total_sats      AS fee_total_sats,
+                b.coinbase_tx         AS coinbase_tx,
                 b.start_timestamp     AS start_timestamp,
                 b.broadcast_timestamp AS broadcast_timestamp,
                 b.extranonce1         AS extranonce1,
@@ -480,8 +502,11 @@ pub async fn fetch_beads_in_batch(
         let placeholders = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
 
         // Transactions for every bead in the batch.
-        let tx_sql =
-            format!("SELECT bead_id, txid FROM Transactions WHERE bead_id IN ({placeholders})");
+        // Ordered so each bead's lists come back in the order they were committed.
+        let tx_sql = format!(
+            "SELECT bead_id, txid, kind FROM Transactions WHERE bead_id IN ({placeholders})
+             ORDER BY bead_id, kind, position"
+        );
         let mut tx_query = sqlx::query(&tx_sql);
         for id in &ids {
             tx_query = tx_query.bind(id);
@@ -507,11 +532,13 @@ pub async fn fetch_beads_in_batch(
                         error: "Invalid txid length".into(),
                         attribute: "txid".into(),
                     })?;
-            batch[idx]
-                .committed_metadata
-                .transaction_ids
-                .0
-                .push(Txid::from_byte_array(arr));
+            let metadata = &mut batch[idx].committed_metadata;
+            let txids = if row.get::<i64, _>("kind") == TX_KIND_TO_BE_ADDED {
+                &mut metadata.to_be_added
+            } else {
+                &mut metadata.committed_txs
+            };
+            txids.0.push(Txid::from_byte_array(arr));
         }
 
         let pt_sql = format!(
@@ -575,6 +602,46 @@ pub async fn fetch_beads_in_batch(
     Ok(all_beads)
 }
 
+/// Decodes the `coinbase_tx` column of a `Bead` row.
+fn coinbase_from_column(bytes: &[u8]) -> Result<bitcoin::Transaction, DBErrors> {
+    bitcoin::consensus::deserialize(bytes).map_err(|e| DBErrors::TupleAttributeParsingError {
+        error: format!("Invalid coinbase_tx: {e}"),
+        attribute: "coinbase_tx".into(),
+    })
+}
+
+/// Loads the fee total this node verified for each bead, keyed by bead hash.
+///
+/// Beads whose fee claim was never verified are absent from the map.
+pub async fn fetch_verified_fees(
+    db_pool: &sqlx::SqlitePool,
+) -> Result<std::collections::HashMap<BlockHash, u64>, DBErrors> {
+    let rows =
+        sqlx::query("SELECT hash, verified_fee_sats FROM Bead WHERE verified_fee_sats IS NOT NULL")
+            .fetch_all(db_pool)
+            .await
+            .map_err(|e| DBErrors::TupleNotFetched {
+                error: e.to_string(),
+            })?;
+    let mut verified = std::collections::HashMap::with_capacity(rows.len());
+    for row in rows {
+        let hash_bytes: [u8; 32] = row.get::<Vec<u8>, _>("hash").try_into().map_err(|_| {
+            DBErrors::TupleAttributeParsingError {
+                error: "Invalid bead hash length".into(),
+                attribute: "hash".into(),
+            }
+        })?;
+        let fee_sats = u64::try_from(row.get::<i64, _>("verified_fee_sats")).map_err(|_| {
+            DBErrors::TupleAttributeParsingError {
+                error: "Negative verified_fee_sats".into(),
+                attribute: "verified_fee_sats".into(),
+            }
+        })?;
+        verified.insert(BlockHash::from_byte_array(hash_bytes), fee_sats);
+    }
+    Ok(verified)
+}
+
 /// Reconstructs a [`Bead`] from a single `Bead` table row.
 fn build_bead_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<Bead, DBErrors> {
     let mut bead = Bead::default();
@@ -627,6 +694,8 @@ fn build_bead_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<Bead, DBErrors> 
             error: "Negative fee_total_sats".into(),
             attribute: "fee_total_sats".into(),
         })?;
+    bead.committed_metadata.coinbase_transaction =
+        coinbase_from_column(&row.get::<Vec<u8>, _>("coinbase_tx"))?;
 
     let start_ts = row.get::<u32, _>("start_timestamp");
     bead.committed_metadata.start_timestamp =
@@ -766,6 +835,8 @@ pub async fn fetch_bead_by_bead_hash(
             fetched_bead.committed_metadata.comm_pub_key = pub_key;
             fetched_bead.committed_metadata.miner_ip = miner_ip;
             fetched_bead.committed_metadata.fee_total_sats = fee_total_sats;
+            fetched_bead.committed_metadata.coinbase_transaction =
+                coinbase_from_column(&row.get::<Vec<u8>, _>("coinbase_tx"))?;
             fetched_bead.committed_metadata.min_target = min_target;
             fetched_bead.committed_metadata.start_timestamp = start_timestamp;
             fetched_bead.committed_metadata.weak_target = weak_target;
@@ -791,19 +862,20 @@ pub async fn fetch_bead_by_bead_hash(
             });
         }
     };
-    let rows =
-        match sqlx::query("SELECT  txid as txid, bead_id FROM Transactions WHERE bead_id = ?")
-            .bind(bead_id)
-            .fetch_all(&*db_connection_arc)
-            .await
-        {
-            Ok(rows) => rows,
-            Err(error) => {
-                return Err(DBErrors::TupleNotFetched {
-                    error: error.to_string(),
-                });
-            }
-        };
+    let rows = match sqlx::query(
+        "SELECT txid, kind FROM Transactions WHERE bead_id = ? ORDER BY kind, position",
+    )
+    .bind(bead_id)
+    .fetch_all(&*db_connection_arc)
+    .await
+    {
+        Ok(rows) => rows,
+        Err(error) => {
+            return Err(DBErrors::TupleNotFetched {
+                error: error.to_string(),
+            });
+        }
+    };
     //Fetching parent timestamps from DB
     let parent_timestamp_rows =
         match sqlx::query("SELECT  parent,child,timestamp FROM ParentTimestamps WHERE child = ?")
@@ -878,11 +950,13 @@ pub async fn fetch_bead_by_bead_hash(
                 });
             }
         };
-        fetched_bead
-            .committed_metadata
-            .transaction_ids
-            .0
-            .push(raw_tx_id);
+        let metadata = &mut fetched_bead.committed_metadata;
+        let txids = if tx_row.get::<i64, _>("kind") == TX_KIND_TO_BE_ADDED {
+            &mut metadata.to_be_added
+        } else {
+            &mut metadata.committed_txs
+        };
+        txids.0.push(raw_tx_id);
     }
 
     Ok(Some(fetched_bead))
@@ -900,6 +974,98 @@ pub mod test {
     use serde_json::json;
     use std::collections::{HashMap, HashSet};
     use std::path::Path;
+    // The coinbase, both transaction lists in their committed order, and the
+    // verified fee total all survive an insert and a reload.
+    #[tokio::test]
+    async fn test_coinbase_tx_order_and_verified_fee_roundtrip() {
+        use crate::committed_metadata::{placeholder_coinbase, TxIdVec};
+        use crate::edca::BeadValidator;
+
+        let network = PoolNetwork::Cpunet;
+        let (handler, _db_tx) = DBHandler::new_in_memory(network).await.unwrap();
+        let pool = handler.db_connection_pool.clone();
+        let txid = |byte: u8| Txid::from_byte_array([byte; 32]);
+
+        let mut coinbase = placeholder_coinbase();
+        coinbase.output.push(bitcoin::TxOut {
+            value: bitcoin::Amount::from_sat(5_000_001_400),
+            script_pubkey: bitcoin::ScriptBuf::new(),
+        });
+
+        let genesis = Bead::default();
+        let mut child = Bead::default();
+        child.block_header.nonce = 7;
+        child.committed_metadata.parents = vec![compute_block_hash(&genesis.block_header, network)];
+        child.committed_metadata.parent_bead_timestamps =
+            crate::committed_metadata::TimeVec(vec![genesis.committed_metadata.start_timestamp]);
+        child.committed_metadata.coinbase_transaction = coinbase.clone();
+        // Deliberately not in sorted order, so a reload that sorts would fail.
+        child.committed_metadata.committed_txs = TxIdVec(vec![txid(9), txid(2), txid(5)]);
+        child.committed_metadata.to_be_added = TxIdVec(vec![txid(8), txid(1)]);
+        child.committed_metadata.fee_total_sats = 1_400;
+
+        let mut braid = braid::Braid::new(vec![genesis.clone()], network);
+        assert!(matches!(
+            braid.extend(&child),
+            braid::AddBeadStatus::BeadAdded { .. }
+        ));
+
+        let child_hash = compute_block_hash(&child.block_header, network);
+        let mut verdicts = BeadValidator::new(network);
+        verdicts.restore_verified(child_hash, 1_400);
+
+        let beads = BeadInsertData::resolve_many(&braid, braid.beads.iter(), Some(&verdicts))
+            .expect("both beads are indexed in the braid");
+        handler
+            .insert_beads_batch(beads, Vec::new())
+            .await
+            .expect("insert succeeds");
+
+        // Batch reload, as used at startup.
+        let reloaded = fetch_beads_in_batch(&pool, FETCH_BEAD_BATCH_SIZE)
+            .await
+            .expect("reload succeeds");
+        let reloaded_child = reloaded
+            .iter()
+            .find(|bead| compute_block_hash(&bead.block_header, network) == child_hash)
+            .expect("child is reloaded");
+        assert_eq!(
+            reloaded_child.committed_metadata.coinbase_transaction,
+            coinbase
+        );
+        assert_eq!(
+            reloaded_child.committed_metadata.committed_txs,
+            child.committed_metadata.committed_txs
+        );
+        assert_eq!(
+            reloaded_child.committed_metadata.to_be_added,
+            child.committed_metadata.to_be_added
+        );
+
+        // Single-bead fetch.
+        let fetched_child = fetch_bead_by_bead_hash(&pool, child_hash)
+            .await
+            .expect("fetch succeeds")
+            .expect("child exists");
+        assert_eq!(
+            fetched_child.committed_metadata.coinbase_transaction,
+            coinbase
+        );
+        assert_eq!(
+            fetched_child.committed_metadata.committed_txs,
+            child.committed_metadata.committed_txs
+        );
+        assert_eq!(
+            fetched_child.committed_metadata.to_be_added,
+            child.committed_metadata.to_be_added
+        );
+
+        // Only the verified bead has a stored fee.
+        let verified = fetch_verified_fees(&pool).await.expect("query succeeds");
+        assert_eq!(verified.len(), 1);
+        assert_eq!(verified.get(&child_hash), Some(&1_400));
+    }
+
     #[tokio::test]
     async fn test_batch_insertion_beads() {
         let (handler, _db_tx) = DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
@@ -912,9 +1078,12 @@ pub mod test {
         let (current_file_braid, _file_braid) =
             loading_braid_from_file(file_path.to_str().unwrap());
 
-        let mut bead_insert_data =
-            BeadInsertData::resolve_many(&current_file_braid, current_file_braid.beads.iter())
-                .expect("resolve_many failed: a bead or parent was missing from the braid index");
+        let mut bead_insert_data = BeadInsertData::resolve_many(
+            &current_file_braid,
+            current_file_braid.beads.iter(),
+            None,
+        )
+        .expect("resolve_many failed: a bead or parent was missing from the braid index");
         assert_eq!(
             bead_insert_data.len(),
             current_file_braid.beads.len(),
@@ -937,7 +1106,10 @@ pub mod test {
         let expected_txs: usize = current_file_braid
             .beads
             .iter()
-            .map(|b| b.committed_metadata.transaction_ids.0.len())
+            .map(|b| {
+                b.committed_metadata.committed_txs.0.len()
+                    + b.committed_metadata.to_be_added.0.len()
+            })
             .sum();
         // Relatives and ParentTimestamps are both produced from `resolve_parents`,
         // so they share the same expected cardinality.

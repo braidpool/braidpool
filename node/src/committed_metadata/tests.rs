@@ -2,6 +2,7 @@ use super::*;
 use crate::utils::test_utils::test_utility_functions::TestCommittedMetadataBuilder;
 use bitcoin::consensus::encode::deserialize;
 use bitcoin::consensus::serialize;
+use bitcoin::hashes::Hash;
 use bitcoin::BlockHash;
 use serde::Deserialize;
 use std::fs;
@@ -171,7 +172,9 @@ fn test_committed_metadata_default() {
     let data = test_data();
     let metadata = CommittedMetadata::default();
 
-    assert_eq!(metadata.transaction_ids, TxIdVec(Vec::new()));
+    assert_eq!(metadata.coinbase_transaction, placeholder_coinbase());
+    assert_eq!(metadata.committed_txs, TxIdVec(Vec::new()));
+    assert_eq!(metadata.to_be_added, TxIdVec(Vec::new()));
     assert!(metadata.parents.is_empty());
     assert_eq!(metadata.parent_bead_timestamps, TimeVec(Vec::new()));
     assert_eq!(
@@ -318,8 +321,11 @@ fn test_committed_metadata_consensus_field_order_decode() {
     ];
     parents.sort();
 
+    let to_be_added = vec![parse_txid(&data.txids.third)];
+
     let metadata = TestCommittedMetadataBuilder::new()
         .transactions(txids.clone())
+        .to_be_added(to_be_added.clone())
         .parents(parents.clone())
         .parent_bead_timestamps(TimeVec(vec![
             parse_time(data.timestamps.first),
@@ -338,7 +344,9 @@ fn test_committed_metadata_consensus_field_order_decode() {
     let bytes = serialize(&metadata);
     let mut reader = &bytes[..];
 
+    let decoded_coinbase = Transaction::consensus_decode(&mut reader).unwrap();
     let decoded_txids = TxIdVec::consensus_decode(&mut reader).unwrap();
+    let decoded_to_be_added = TxIdVec::consensus_decode(&mut reader).unwrap();
     let decoded_parents = Vec::<BeadHash>::consensus_decode(&mut reader).unwrap();
     let decoded_parent_times = TimeVec::consensus_decode(&mut reader).unwrap();
     let decoded_payout = String::consensus_decode(&mut reader).unwrap();
@@ -351,7 +359,9 @@ fn test_committed_metadata_consensus_field_order_decode() {
     let decoded_miner_ip = String::consensus_decode(&mut reader).unwrap();
     let decoded_fee_total_sats = u64::consensus_decode(&mut reader).unwrap();
 
+    assert_eq!(decoded_coinbase, placeholder_coinbase());
     assert_eq!(decoded_txids, TxIdVec(txids));
+    assert_eq!(decoded_to_be_added, TxIdVec(to_be_added));
     assert_eq!(decoded_parents, parents);
     assert_eq!(
         decoded_parent_times,
@@ -400,6 +410,8 @@ fn test_committed_metadata_consensus_parents_are_canonical() {
 
     let bytes = serialize(&metadata);
     let mut reader = &bytes[..];
+    let _ = Transaction::consensus_decode(&mut reader).unwrap();
+    let _ = TxIdVec::consensus_decode(&mut reader).unwrap();
     let _ = TxIdVec::consensus_decode(&mut reader).unwrap();
     let decoded_parents = Vec::<BeadHash>::consensus_decode(&mut reader).unwrap();
 
@@ -440,4 +452,116 @@ fn test_committed_metadata_consensus_txid_order_is_significant() {
         .build();
 
     assert_ne!(serialize(&metadata_ab), serialize(&metadata_ba));
+}
+
+/// A coinbase with one output, distinct from the placeholder.
+fn sample_coinbase() -> Transaction {
+    let mut coinbase = placeholder_coinbase();
+    coinbase.input[0].script_sig = bitcoin::ScriptBuf::from_bytes(vec![0x01, 0x64]);
+    coinbase.output.push(bitcoin::TxOut {
+        value: bitcoin::Amount::from_sat(5_000_000_000),
+        script_pubkey: bitcoin::ScriptBuf::new(),
+    });
+    coinbase
+}
+
+/// A txid whose first four bytes are `value`.
+fn numbered_txid(value: u32) -> Txid {
+    let mut bytes = [0u8; 32];
+    bytes[..4].copy_from_slice(&value.to_le_bytes());
+    Txid::from_byte_array(bytes)
+}
+
+// The coinbase and both transaction lists survive a consensus round trip, and
+// the two lists are kept apart.
+#[test]
+fn test_committed_metadata_roundtrip_coinbase_and_tx_lists() {
+    let data = test_data();
+    let original = CommittedMetadata {
+        coinbase_transaction: sample_coinbase(),
+        committed_txs: TxIdVec(vec![
+            parse_txid(&data.txids.genesis),
+            parse_txid(&data.txids.second),
+        ]),
+        to_be_added: TxIdVec(vec![parse_txid(&data.txids.third)]),
+        ..CommittedMetadata::default()
+    };
+
+    let decoded: CommittedMetadata = deserialize(&serialize(&original)).unwrap();
+
+    assert_eq!(decoded, original);
+    assert_eq!(decoded.coinbase_transaction, sample_coinbase());
+    assert_eq!(decoded.committed_txs.0.len(), 2);
+    assert_eq!(
+        decoded.to_be_added,
+        TxIdVec(vec![parse_txid(&data.txids.third)])
+    );
+}
+
+// A bead may propose at most MAX_TO_BE_ADDED_TXS transactions; one more is
+// refused by the decoder.
+#[test]
+fn test_committed_metadata_rejects_too_many_to_be_added() {
+    let at_limit = CommittedMetadata {
+        to_be_added: TxIdVec((0..MAX_TO_BE_ADDED_TXS as u32).map(numbered_txid).collect()),
+        ..CommittedMetadata::default()
+    };
+    let over_limit = CommittedMetadata {
+        to_be_added: TxIdVec(
+            (0..=MAX_TO_BE_ADDED_TXS as u32)
+                .map(numbered_txid)
+                .collect(),
+        ),
+        ..CommittedMetadata::default()
+    };
+
+    assert!(deserialize::<CommittedMetadata>(&serialize(&at_limit)).is_ok());
+    assert!(deserialize::<CommittedMetadata>(&serialize(&over_limit)).is_err());
+}
+
+// A txid repeated within either transaction list is refused by the decoder.
+#[test]
+fn test_committed_metadata_rejects_duplicate_txids() {
+    let duplicate_committed = CommittedMetadata {
+        committed_txs: TxIdVec(vec![numbered_txid(1), numbered_txid(2), numbered_txid(1)]),
+        ..CommittedMetadata::default()
+    };
+    let duplicate_to_be_added = CommittedMetadata {
+        to_be_added: TxIdVec(vec![numbered_txid(1), numbered_txid(1)]),
+        ..CommittedMetadata::default()
+    };
+
+    assert!(deserialize::<CommittedMetadata>(&serialize(&duplicate_committed)).is_err());
+    assert!(deserialize::<CommittedMetadata>(&serialize(&duplicate_to_be_added)).is_err());
+}
+
+// A declared length beyond the limit is refused before anything is allocated
+// or read, so a tiny message cannot reserve memory.
+#[test]
+fn test_txidvec_rejects_oversized_declared_length() {
+    let bytes = serialize(&u64::MAX);
+
+    assert!(TxIdVec::consensus_decode(&mut &bytes[..]).is_err());
+    assert!(TxIdVec::consensus_decode_bounded(&mut &bytes[..], MAX_TO_BE_ADDED_TXS).is_err());
+}
+
+// A declared length within the limit but with no elements behind it fails on
+// the missing data instead of allocating for the declared count.
+#[test]
+fn test_txidvec_rejects_truncated_list() {
+    let bytes = serialize(&(MAX_COMMITTED_TXS as u64));
+
+    assert!(TxIdVec::consensus_decode(&mut &bytes[..]).is_err());
+}
+
+// A parent timestamp that is not a valid block time is a decode error, not a
+// panic, and a huge declared length does not allocate.
+#[test]
+fn test_timevec_rejects_invalid_timestamp_and_oversized_length() {
+    let mut invalid_time = serialize(&1u64);
+    invalid_time.extend(serialize(&0u32));
+    let oversized = serialize(&u64::MAX);
+
+    assert!(TimeVec::consensus_decode(&mut &invalid_time[..]).is_err());
+    assert!(TimeVec::consensus_decode(&mut &oversized[..]).is_err());
 }

@@ -737,8 +737,6 @@ impl std::error::Error for EdcaError {}
 pub enum FeeProofError {
     /// The transaction supplied as the coinbase is not a coinbase transaction.
     NotCoinbase,
-    /// The bead commits to no transactions, so it has no coinbase txid.
-    NoTransactions,
     /// A template's transaction fees sum past `MAX_MONEY`.
     FeeTotalOverflow,
     /// A merkle branch sibling was not 32 bytes.
@@ -748,15 +746,10 @@ pub enum FeeProofError {
     },
     /// The coinbase does not hash to the first committed txid.
     CoinbaseTxidMismatch {
-        /// The first txid in the bead's `transaction_ids`.
+        /// The coinbase txid the bead committed to.
         committed: bitcoin::Txid,
         /// The txid of the supplied coinbase.
         computed: bitcoin::Txid,
-    },
-    /// A txid appears more than once in the bead's `transaction_ids`.
-    DuplicateTxid {
-        /// The repeated txid.
-        txid: bitcoin::Txid,
     },
     /// The bead builds on a different block than the state it was checked
     /// against.
@@ -770,23 +763,27 @@ pub enum FeeProofError {
     MerkleRootMismatch {
         /// The merkle root in the bead's header.
         header: bitcoin::TxMerkleNode,
-        /// The merkle root computed from `transaction_ids`.
+        /// The merkle root computed from the bead's transactions.
         computed: bitcoin::TxMerkleNode,
-    },
-    /// The coinbase does not carry a valid BIP34 block height.
-    InvalidBip34Height {
-        /// Why the height could not be read.
-        error: String,
     },
     /// The coinbase outputs sum past `MAX_MONEY`.
     CoinbaseValueOverflow,
-    /// The coinbase pays out less than the block subsidy, so it implies a
-    /// negative fee total.
-    CoinbaseBelowSubsidy {
+    /// The coinbase pays out more than the subsidy plus the template's fees.
+    CoinbaseOverpays {
         /// Sum of the coinbase outputs, in satoshis.
-        coinbase_value_sats: u64,
-        /// The subsidy at the committed height, in satoshis.
-        subsidy_sats: u64,
+        coinbase_output_sats: u64,
+        /// The most the coinbase may pay, in satoshis.
+        allowed_sats: u64,
+    },
+    /// The bead's committed transactions are not the state derived from its
+    /// ancestors.
+    CommittedTransactionsMismatch,
+    /// A template's fee list does not have one fee per transaction.
+    FeeCountMismatch {
+        /// Transactions in the template, coinbase excluded.
+        transactions: usize,
+        /// Fees supplied for them.
+        fees: usize,
     },
     /// The claimed fee total differs from `coinbase value - subsidy`.
     FeeCommitmentMismatch {
@@ -794,46 +791,6 @@ pub enum FeeProofError {
         claimed_fee_sats: u64,
         /// The fee total implied by the coinbase.
         derived_fee_sats: u64,
-    },
-    /// Every committed transaction's fee is known, and together they pay less
-    /// than the bead claims.
-    FeeExceedsTransactions {
-        /// The fee total the bead claims, in satoshis.
-        claimed_fee_sats: u64,
-        /// The fees its transactions actually pay, in satoshis.
-        actual_fee_sats: u64,
-    },
-    /// A coinbase transaction was passed where a fee-paying transaction was
-    /// required.
-    CoinbaseHasNoFee,
-    /// An input's spent output is unknown to this node, so the transaction's
-    /// fee cannot be computed.
-    MissingPrevout {
-        /// The transaction being priced.
-        txid: bitcoin::Txid,
-        /// The outpoint whose output is unknown.
-        outpoint: bitcoin::OutPoint,
-    },
-    /// A transaction's outputs exceed its inputs, so it could never be valid.
-    NegativeFee {
-        /// The offending transaction.
-        txid: bitcoin::Txid,
-        /// Sum of the resolved input values, in satoshis.
-        input_sats: u64,
-        /// Sum of the output values, in satoshis.
-        output_sats: u64,
-    },
-    /// A transaction's values or fee left the valid money range.
-    FeeOutOfRange {
-        /// The offending transaction.
-        txid: bitcoin::Txid,
-    },
-    /// Two transactions in one block spend the same output.
-    DuplicateSpend {
-        /// The second transaction to spend it.
-        txid: bitcoin::Txid,
-        /// The outpoint spent twice.
-        outpoint: bitcoin::OutPoint,
     },
 }
 
@@ -843,12 +800,26 @@ impl fmt::Display for FeeProofError {
             FeeProofError::NotCoinbase => {
                 write!(f, "Supplied transaction is not a coinbase transaction")
             }
-            FeeProofError::NoTransactions => {
-                write!(f, "Bead commits to no transactions")
-            }
             FeeProofError::FeeTotalOverflow => {
                 write!(f, "Template transaction fees sum past MAX_MONEY")
             }
+            FeeProofError::CoinbaseOverpays {
+                coinbase_output_sats,
+                allowed_sats,
+            } => write!(
+                f,
+                "Coinbase pays {coinbase_output_sats} sats, more than the {allowed_sats} sats its template allows"
+            ),
+            FeeProofError::CommittedTransactionsMismatch => {
+                write!(
+                    f,
+                    "Committed transactions are not the state derived from the bead's ancestors"
+                )
+            }
+            FeeProofError::FeeCountMismatch { transactions, fees } => write!(
+                f,
+                "Template has {transactions} transactions but {fees} fees"
+            ),
             FeeProofError::InvalidMerkleBranch { length } => {
                 write!(f, "Merkle branch sibling is {} bytes, expected 32", length)
             }
@@ -865,28 +836,14 @@ impl fmt::Display for FeeProofError {
                 "Coinbase txid {} does not match committed txid {}",
                 computed, committed
             ),
-            FeeProofError::DuplicateTxid { txid } => {
-                write!(f, "Bead commits to txid {} more than once", txid)
-            }
             FeeProofError::MerkleRootMismatch { header, computed } => write!(
                 f,
                 "Committed txids produce merkle root {}, header has {}",
                 computed, header
             ),
-            FeeProofError::InvalidBip34Height { error } => {
-                write!(f, "Coinbase has no valid BIP34 height: {}", error)
-            }
             FeeProofError::CoinbaseValueOverflow => {
                 write!(f, "Coinbase outputs sum past MAX_MONEY")
             }
-            FeeProofError::CoinbaseBelowSubsidy {
-                coinbase_value_sats,
-                subsidy_sats,
-            } => write!(
-                f,
-                "Coinbase pays {} satoshis, below the {} satoshi subsidy",
-                coinbase_value_sats, subsidy_sats
-            ),
             FeeProofError::FeeCommitmentMismatch {
                 claimed_fee_sats,
                 derived_fee_sats,
@@ -894,39 +851,6 @@ impl fmt::Display for FeeProofError {
                 f,
                 "Bead claims {} satoshis in fees, its coinbase implies {}",
                 claimed_fee_sats, derived_fee_sats
-            ),
-            FeeProofError::FeeExceedsTransactions {
-                claimed_fee_sats,
-                actual_fee_sats,
-            } => write!(
-                f,
-                "Bead claims {} satoshis in fees, its transactions pay {}",
-                claimed_fee_sats, actual_fee_sats
-            ),
-            FeeProofError::CoinbaseHasNoFee => {
-                write!(f, "A coinbase transaction pays no fee")
-            }
-            FeeProofError::MissingPrevout { txid, outpoint } => write!(
-                f,
-                "Transaction {} spends unknown output {}, cannot compute its fee",
-                txid, outpoint
-            ),
-            FeeProofError::NegativeFee {
-                txid,
-                input_sats,
-                output_sats,
-            } => write!(
-                f,
-                "Transaction {} spends {} satoshis and pays out {}",
-                txid, input_sats, output_sats
-            ),
-            FeeProofError::FeeOutOfRange { txid } => {
-                write!(f, "Transaction {} has values outside the money range", txid)
-            }
-            FeeProofError::DuplicateSpend { txid, outpoint } => write!(
-                f,
-                "Transaction {} spends output {}, already spent in the same block",
-                txid, outpoint
             ),
         }
     }

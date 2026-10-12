@@ -283,7 +283,9 @@ impl AuditDBHandler {
         let bead = Bead {
             block_header,
             committed_metadata: crate::committed_metadata::CommittedMetadata {
-                transaction_ids: crate::TxIdVec(Vec::new()),
+                coinbase_transaction: crate::committed_metadata::placeholder_coinbase(),
+                committed_txs: crate::TxIdVec(Vec::new()),
+                to_be_added: crate::TxIdVec(Vec::new()),
                 parents,
                 parent_bead_timestamps: crate::TimeVec(parent_timestamps),
                 payout_address,

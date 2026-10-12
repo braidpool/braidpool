@@ -279,6 +279,9 @@ pub struct RpcServerImpl {
     bitcoin_rpc_config: Option<BitcoinRpcConfig>,
     dashboard_events: Arc<DashboardEvents>,
     db_tx: mpsc::Sender<BraidpoolDBTypes>,
+    /// Validates the fee claim of each bead added over RPC; `None` skips
+    /// validation.
+    fee_validator: Option<crate::edca::SharedBeadValidator>,
 }
 
 impl RpcServerImpl {
@@ -300,7 +303,17 @@ impl RpcServerImpl {
             bitcoin_rpc_config,
             dashboard_events: DashboardEvents::new(),
             db_tx,
+            fee_validator: None,
         }
+    }
+
+    /// Sets the validator that checks the fee claim of each bead added over RPC.
+    pub fn with_fee_validator(
+        mut self,
+        fee_validator: Option<crate::edca::SharedBeadValidator>,
+    ) -> Self {
+        self.fee_validator = fee_validator;
+        self
     }
 
     /// Returns a handle to the push-notification channels for external producers.
@@ -339,14 +352,25 @@ impl RpcServer for RpcServerImpl {
 
         match success_status {
             AddBeadStatus::BeadAdded { promoted_orphans } => {
-                if let Err(error) = crate::db::persist_added_bead(
+                let mut fee_validator = match &self.fee_validator {
+                    Some(fee_validator) => Some(fee_validator.lock().await),
+                    None => None,
+                };
+                if let Some(fee_validator) = fee_validator.as_mut() {
+                    fee_validator.on_beads_added(&braid_data, &bead, &promoted_orphans);
+                }
+                let persisted = crate::db::persist_added_bead(
                     &braid_data,
                     &bead,
                     promoted_orphans.iter(),
+                    fee_validator
+                        .as_deref()
+                        .map(|validator| validator as &(dyn crate::edca::FeeVerdictSource + Sync)),
                     &self.db_tx,
                 )
-                .await
-                {
+                .await;
+                drop(fee_validator);
+                if let Err(error) = persisted {
                     drop(braid_data);
                     error!(error = %error, hash = %bead_hash, "Failed to persist bead added via RPC");
                     return Err(ErrorObjectOwned::owned(
@@ -1115,6 +1139,33 @@ pub async fn run_rpc_server(
     bitcoin_rpc_config: Option<BitcoinRpcConfig>,
     db_tx: mpsc::Sender<BraidpoolDBTypes>,
 ) -> Result<(SocketAddr, Arc<DashboardEvents>), ()> {
+    run_rpc_server_with_validator(
+        braid_shared_pointer,
+        bind_address,
+        peer_manager,
+        stratum_connection_mapping,
+        latest_block_template,
+        rpc_proxy_tx,
+        bitcoin_rpc_config,
+        db_tx,
+        None,
+    )
+    .await
+}
+
+/// Runs the RPC server like [`run_rpc_server`], and validates the fee claim of
+/// each bead added over RPC with `fee_validator` when one is given.
+pub async fn run_rpc_server_with_validator(
+    braid_shared_pointer: Arc<RwLock<Braid>>,
+    bind_address: &str,
+    peer_manager: Arc<tokio::sync::RwLock<PeerManager>>,
+    stratum_connection_mapping: Arc<tokio::sync::RwLock<stratum::ConnectionMapping>>,
+    latest_block_template: Arc<Mutex<BlockTemplate>>,
+    rpc_proxy_tx: mpsc::UnboundedSender<RpcProxyCommand>,
+    bitcoin_rpc_config: Option<BitcoinRpcConfig>,
+    db_tx: mpsc::Sender<BraidpoolDBTypes>,
+    fee_validator: Option<crate::edca::SharedBeadValidator>,
+) -> Result<(SocketAddr, Arc<DashboardEvents>), ()> {
     //Initializing the middleware
     let rpc_middleware =
         jsonrpsee::server::middleware::rpc::RpcServiceBuilder::new().layer_fn(LoggingMiddleware);
@@ -1139,7 +1190,8 @@ pub async fn run_rpc_server(
         rpc_proxy_tx,
         bitcoin_rpc_config.clone(),
         db_tx,
-    );
+    )
+    .with_fee_validator(fee_validator);
     let dashboard_notification_ref = rpc_impl.dashboard_events();
     let handle = server.start(rpc_impl.into_rpc());
 

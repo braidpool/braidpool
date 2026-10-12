@@ -16,6 +16,10 @@ CREATE TABLE IF NOT EXISTS Bead (
     min_target          INTEGER CHECK (min_target >= 0 AND min_target < 0x100000000),
     weak_target         INTEGER CHECK (weak_target >= 0 AND weak_target < 0x100000000),
     fee_total_sats      INTEGER NOT NULL DEFAULT 0 CHECK (fee_total_sats >= 0), 
+    -- Fee total this node verified against its own template; NULL when unverified
+    verified_fee_sats   INTEGER CHECK (verified_fee_sats IS NULL OR verified_fee_sats >= 0),
+    -- Consensus-serialized coinbase transaction the bead was mined with
+    coinbase_tx         BLOB NOT NULL,
     miner_ip            TEXT NOT NULL,
     -- UnCommitted Metadata
     extranonce1         TEXT NOT NULL,
@@ -31,7 +35,11 @@ CREATE TABLE IF NOT EXISTS Bead (
 CREATE TABLE IF NOT EXISTS Transactions (
       bead_id           INTEGER NOT NULL REFERENCES Bead(id),
       txid              BLOB,
-      UNIQUE (bead_id, txid)
+      -- 0 = committed (in the bead's template), 1 = to_be_added (proposed for later beads)
+      kind              INTEGER NOT NULL CHECK (kind IN (0, 1)),
+      -- Index of the txid within its list, so the committed order survives a reload
+      position          INTEGER NOT NULL CHECK (position >= 0),
+      UNIQUE (bead_id, kind, txid)
 );
 
 -- 3. Cohorts

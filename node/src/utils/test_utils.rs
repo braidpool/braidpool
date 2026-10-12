@@ -178,7 +178,9 @@ pub mod test_utility_functions {
     }
     #[cfg(test)]
     pub struct TestCommittedMetadataBuilder {
-        transaction_ids: Vec<Txid>,
+        coinbase_transaction: Option<Transaction>,
+        committed_txs: Vec<Txid>,
+        to_be_added: Vec<Txid>,
         parents: Vec<BeadHash>,
         parent_bead_timestamps: Option<TimeVec>,
         payout_address: Option<String>,
@@ -194,7 +196,9 @@ pub mod test_utility_functions {
     impl TestCommittedMetadataBuilder {
         pub fn new() -> Self {
             Self {
-                transaction_ids: Vec::new(),
+                coinbase_transaction: None,
+                committed_txs: Vec::new(),
+                to_be_added: Vec::new(),
                 parents: Vec::new(),
                 parent_bead_timestamps: None,
                 payout_address: None,
@@ -208,7 +212,17 @@ pub mod test_utility_functions {
         }
 
         pub fn transactions(mut self, txs: Vec<Txid>) -> Self {
-            self.transaction_ids = txs;
+            self.committed_txs = txs;
+            self
+        }
+
+        pub fn to_be_added(mut self, txs: Vec<Txid>) -> Self {
+            self.to_be_added = txs;
+            self
+        }
+
+        pub fn coinbase(mut self, coinbase: Transaction) -> Self {
+            self.coinbase_transaction = Some(coinbase);
             self
         }
 
@@ -257,7 +271,11 @@ pub mod test_utility_functions {
             use crate::committed_metadata::TxIdVec;
 
             CommittedMetadata {
-                transaction_ids: TxIdVec(self.transaction_ids),
+                coinbase_transaction: self
+                    .coinbase_transaction
+                    .unwrap_or_else(crate::committed_metadata::placeholder_coinbase),
+                committed_txs: TxIdVec(self.committed_txs),
+                to_be_added: TxIdVec(self.to_be_added),
                 parents: self.parents,
                 parent_bead_timestamps: self
                     .parent_bead_timestamps
