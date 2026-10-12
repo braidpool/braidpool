@@ -30,7 +30,7 @@ use node::{
     ibd_manager::{IBDCommands, IBDManager, IBD_BATCH_SIZE},
     ipc_template_consumer,
     peer_manager::PeerManager,
-    rpc_server::{run_rpc_server, BitcoinRpcConfig, RpcProxyCommand},
+    rpc_server::{run_rpc_server_with_validator, BitcoinRpcConfig, RpcProxyCommand},
     setup_tracing,
     stratum::{BlockTemplate, ConnectionMapping, Notifier, NotifyCmd, Server, StratumServerConfig},
     SwarmCommand, TemplateId,
@@ -110,6 +110,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //for supporting concurrent readers and single writer
     let braid: Arc<RwLock<braid::Braid>> =
         Arc::new(RwLock::new(braid::Braid::new(Vec::from([]), network)));
+    // Validates the fee claim of every bead entering the braid against the
+    // templates this node issued. Lock order: braid first, then the validator.
+    let fee_validator: node::edca::SharedBeadValidator = Arc::new(tokio::sync::Mutex::new(
+        node::edca::BeadValidator::new(network),
+    ));
     let mut optional_db_pool = None;
     let db_tx;
 
@@ -135,6 +140,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // FIXME instead we should look 144 blocks back from the bitcoin tip (1 day) and load beads
         // starting from that block as genesis
         let network_ref = network;
+        let fee_validator_ref = fee_validator.clone();
         let initial_bead_fetch_handle = tokio::spawn(async move {
             let mut guard = braid_ref.write().await;
             let fetched_beads =
@@ -147,6 +153,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     status = ?curr_bead_status,
                     "Bead inserted"
                 );
+            }
+            // Fee totals verified by an earlier run are reused, not re-derived.
+            let verified_fees =
+                node::db::db_handlers::fetch_verified_fees(&db_connection_pool_ref).await?;
+            let mut fee_validator = fee_validator_ref.lock().await;
+            for (bead_hash, fee_sats) in verified_fees {
+                fee_validator.restore_verified(bead_hash, fee_sats);
             }
             Ok::<(), node::error::DBErrors>(())
         });
@@ -195,6 +208,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let latest_template_for_ipc = latest_template.clone();
     let latest_template_merkle_branch_for_ipc = latest_template_merkle_branch.clone();
     let network_for_ipc = network;
+    let fee_validator_for_ipc = fee_validator.clone();
 
     //Connection mapping for all the downstream connection connected to the stratum server
     let connection_mapping = Arc::new(tokio::sync::RwLock::new(ConnectionMapping::new()));
@@ -215,8 +229,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let rpc_connection_mapping = connection_mapping_for_rpc.clone();
     let rpc_latest_template = latest_template.clone();
     let rpc_db_tx = db_tx.clone();
+    let rpc_fee_validator = fee_validator.clone();
     let server_join = tokio::spawn(async move {
-        run_rpc_server(
+        run_rpc_server_with_validator(
             rpc_braid,
             &rpc_addr,
             rpc_peer_manager,
@@ -225,6 +240,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             rpc_proxy_tx,
             bitcoin_rpc_config,
             rpc_db_tx,
+            Some(rpc_fee_validator),
         )
         .await
     });
@@ -246,11 +262,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     };
     //Communication bridge between stratum and network swarm and swarm commands also, for communicating share population and propogating them further
-    let (swarm_handler, mut swarm_command_receiver) = SwarmHandler::new(
+    let (mut swarm_handler, mut swarm_command_receiver) = SwarmHandler::new(
         Arc::clone(&braid),
         db_tx.clone(),
         Arc::clone(&dashboard_notifier),
     );
+    swarm_handler.set_fee_validator(fee_validator.clone());
 
     //Swarm command sender
     let swarm_command_sender = swarm_handler.command_sender.clone();
@@ -1040,6 +1057,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                 &mut latest_template_merkle_branch_for_ipc.clone(),
                                 template_cache_for_consumer,
                                 latest_template_id_for_consumer,
+                                Some(fee_validator_for_ipc),
                             )
                             .await
                             {
@@ -1196,7 +1214,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                              }
                                          } else if let braid::AddBeadStatus::BeadAdded { promoted_orphans}= &status {
                                             if !args.audit {
-                                                if let Err(error) = node::db::persist_added_bead(&braid_data, &bead, promoted_orphans.iter(), &db_tx).await {
+                                                // Validate the fee claim before persisting, so the verdict is stored with the bead
+                                                let persisted = {
+                                                    let mut fee_validator = fee_validator.lock().await;
+                                                    fee_validator.on_beads_added(&braid_data, &bead, promoted_orphans);
+                                                    node::db::persist_added_bead(&braid_data, &bead, promoted_orphans.iter(), Some(&*fee_validator as &(dyn node::edca::FeeVerdictSource + Sync)), &db_tx).await
+                                                };
+                                                if let Err(error) = persisted {
                                                     error!(error = %error, bead_hash = ?compute_block_hash(&bead.block_header, braid_data.network), "Failed to persist bead");
                                                     continue;
                                                 }
@@ -1291,7 +1315,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                             peer_manager.penalize_for_invalid_bead(&message.source);
                                         }
                                     } else if let braid::AddBeadStatus::BeadAdded { promoted_orphans } = &status {
-                                        if let Err(error) = node::db::persist_added_bead(&braid_data, &bead, promoted_orphans.iter(), &db_tx).await {
+                                        // Validate the fee claim before persisting, so the verdict is stored with the bead
+                                        let persisted = {
+                                            let mut fee_validator = fee_validator.lock().await;
+                                            fee_validator.on_beads_added(&braid_data, &bead, promoted_orphans);
+                                            node::db::persist_added_bead(&braid_data, &bead, promoted_orphans.iter(), Some(&*fee_validator as &(dyn node::edca::FeeVerdictSource + Sync)), &db_tx).await
+                                        };
+                                        if let Err(error) = persisted {
                                             error!(error = %error, bead_hash = ?compute_block_hash(&bead.block_header, braid_data.network), "Failed to persist bead (GetAllBeads)");
                                             continue;
                                         }
@@ -1605,7 +1635,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                             if !args.audit {
 
                                                 //persisting the received beads from peer onto DB(disk)
-                                                if let Err(error) = node::db::persist_added_bead(&braid_data, &bead, promoted_orphans.iter(), &db_tx).await {
+                                                // Beads fetched during sync are not fee-validated
+                                                if let Err(error) = node::db::persist_added_bead(&braid_data, &bead, promoted_orphans.iter(), None, &db_tx).await {
                                                     error!(error = %error, bead_hash = ?curr_beadhash, "Failed to persist bead (GetBeadsAfter)");
                                                     continue;
                                                 }

@@ -53,7 +53,9 @@ fn create_genesis_bead_for_audit() -> Result<Bead, String> {
 
     // Create committed metadata with no parents
     let committed_metadata = CommittedMetadata {
-        transaction_ids: TxIdVec(Vec::new()),
+        coinbase_transaction: crate::committed_metadata::placeholder_coinbase(),
+        committed_txs: TxIdVec(Vec::new()),
+        to_be_added: TxIdVec(Vec::new()),
         parents: Vec::new(),
         parent_bead_timestamps: TimeVec(Vec::new()),
         payout_address: "bc1qgdjqv0av3q56jvd82tkdjpy7gdp9ut8tlqmgrpmv24sq90ecnvqqjwvw97"
@@ -876,7 +878,9 @@ mod tests {
         Bead {
             block_header: block,
             committed_metadata: CommittedMetadata {
-                transaction_ids: crate::committed_metadata::TxIdVec(vec![]),
+                coinbase_transaction: crate::committed_metadata::placeholder_coinbase(),
+                committed_txs: crate::committed_metadata::TxIdVec(Vec::new()),
+                to_be_added: crate::committed_metadata::TxIdVec(Vec::new()),
                 parents: parents.into_iter().collect(),
                 parent_bead_timestamps: crate::committed_metadata::TimeVec(vec![]),
                 payout_address: "bc1qtest".to_string(),

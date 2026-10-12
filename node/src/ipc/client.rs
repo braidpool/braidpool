@@ -50,6 +50,26 @@ impl fmt::Debug for BlockTemplate {
     }
 }
 
+/// Converts the signed per-transaction fees Bitcoin Core returns from
+/// `getTxFees` into satoshi amounts.
+///
+/// Bitcoin Core may report the coinbase slot (index zero) as the negated fee
+/// total; the coinbase pays no fee, so a negative first entry becomes zero. A
+/// negative fee anywhere else is rejected rather than wrapped into a huge
+/// unsigned value.
+pub fn template_fees_from_ipc(fees: impl IntoIterator<Item = i64>) -> Result<Vec<u64>, String> {
+    fees.into_iter()
+        .enumerate()
+        .map(|(index, fee)| match u64::try_from(fee) {
+            Ok(fee) => Ok(fee),
+            Err(_) if index == 0 => Ok(0),
+            Err(_) => Err(format!(
+                "getTxFees returned a negative fee {fee} at index {index}"
+            )),
+        })
+        .collect()
+}
+
 #[derive(Debug, Clone)]
 pub struct BlockTemplateComponents {
     pub header: Vec<u8>,
@@ -449,13 +469,7 @@ impl BitcoinRpcClient {
         let fees_response = fees_req.send().promise.await?;
         let fees_result = fees_response.get()?;
         let fees_list = fees_result.get_result()?;
-        let mut fees_vec = Vec::new();
-        let mut fees_total: u64 = 0;
-        for i in 0..fees_list.len() {
-            let fee_value = fees_list.get(i);
-            fees_total = fees_total + fee_value as u64;
-            fees_vec.push(fee_value as u64);
-        }
+        let fees_vec = template_fees_from_ipc((0..fees_list.len()).map(|i| fees_list.get(i)))?;
 
         let mut merkle_path_req = block_template_interface.get_coinbase_merkle_path_request();
         merkle_path_req
@@ -1333,5 +1347,36 @@ impl Drop for SharedBitcoinClient {
                 tip_task.abort();
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::template_fees_from_ipc;
+
+    // Fees pass through unchanged when none is negative.
+    #[test]
+    fn non_negative_fees_are_kept() {
+        assert_eq!(
+            template_fees_from_ipc([0, 500, 1200]),
+            Ok(vec![0, 500, 1200])
+        );
+        assert_eq!(template_fees_from_ipc([]), Ok(Vec::new()));
+    }
+
+    // Bitcoin Core may report the coinbase slot as the negated fee total; it
+    // becomes zero instead of wrapping into a huge unsigned fee.
+    #[test]
+    fn negative_coinbase_slot_becomes_zero() {
+        assert_eq!(
+            template_fees_from_ipc([-1700, 500, 1200]),
+            Ok(vec![0, 500, 1200])
+        );
+    }
+
+    // A negative fee outside the coinbase slot is refused.
+    #[test]
+    fn negative_fee_elsewhere_is_rejected() {
+        assert!(template_fees_from_ipc([0, -1, 1200]).is_err());
     }
 }

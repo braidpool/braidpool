@@ -30,6 +30,8 @@ use crate::{
     uncommitted_metadata::UnCommittedMetadata,
 };
 use std::error::Error;
+
+use crate::edca::{non_coinbase_fees, FeeVerdictSource, SharedBeadValidator};
 #[macro_use]
 pub mod macros;
 pub mod audit;
@@ -160,6 +162,7 @@ pub async fn ipc_template_consumer(
         tokio::sync::Mutex<HashMap<TemplateId, Arc<crate::ipc::client::BlockTemplate>>>,
     >,
     latest_template_id: Arc<Mutex<TemplateId>>,
+    fee_validator: Option<SharedBeadValidator>,
 ) -> Result<(), IPCtemplateError> {
     while let Some(ipc_template) = template_rx.recv().await {
         let template_bytes = match &ipc_template.processed_block_hex {
@@ -211,6 +214,19 @@ pub async fn ipc_template_consumer(
                 }
             };
             let _coinbase_transaction = template_transactions.get(0);
+
+            // Snapshot the template so beads mined on its state can have their
+            // fee claim checked against it.
+            if let Some(fee_validator) = &fee_validator {
+                record_template_snapshot(
+                    fee_validator,
+                    &template_header,
+                    &template_transactions,
+                    &ipc_template.components,
+                    &template_id,
+                )
+                .await;
+            }
 
             debug!(template_id = %template_id, template_header = ?template_header, "New block template");
             let template: BlockTemplate = BlockTemplate {
@@ -285,6 +301,57 @@ pub async fn ipc_template_consumer(
 
     Ok(())
 }
+/// Prices a template and records it with the fee validator, keyed by the
+/// committed-mempool state it was built from. A template that cannot be priced
+/// is skipped: beads mined on it stay unverified.
+async fn record_template_snapshot(
+    fee_validator: &SharedBeadValidator,
+    template_header: &bitcoin::block::Header,
+    template_transactions: &[bitcoin::Transaction],
+    components: &crate::ipc::client::BlockTemplateComponents,
+    template_id: &TemplateId,
+) {
+    let height = match (bitcoin::Block {
+        header: *template_header,
+        txdata: template_transactions.to_vec(),
+    })
+    .bip34_block_height()
+    {
+        Ok(height) => height,
+        Err(error) => {
+            warn!(template_id = %template_id, error = %error, "Template has no BIP34 height - not snapshotted");
+            return;
+        }
+    };
+    let Some(fees) = non_coinbase_fees(&components.fees, template_transactions.len()) else {
+        warn!(
+            template_id = %template_id,
+            fees = components.fees.len(),
+            transactions = template_transactions.len(),
+            "Template fee list does not match its transactions - not snapshotted"
+        );
+        return;
+    };
+    let committed_txids: Vec<Txid> = template_transactions
+        .iter()
+        .skip(1)
+        .map(|tx| tx.compute_txid())
+        .collect();
+    match fee_validator.lock().await.insert_template_parts(
+        template_header.prev_blockhash,
+        height,
+        &committed_txids,
+        &components.coinbase_merkle_path,
+        fees,
+    ) {
+        Ok(state_key) => {
+            debug!(template_id = %template_id, state_key = ?state_key, "Template snapshot recorded");
+        }
+        Err(error) => {
+            warn!(template_id = %template_id, error = %error, "Template could not be priced - not snapshotted");
+        }
+    }
+}
 pub enum SwarmCommand {
     PropagateValidBead { bead_bytes: Vec<u8> },
     //Initiate IBD after waiting for connection_mapping to be populated via peer discovery
@@ -295,6 +362,8 @@ pub struct SwarmHandler {
     braid_arc: Arc<tokio::sync::RwLock<Braid>>,
     db_command_sender: tokio::sync::mpsc::Sender<BraidpoolDBTypes>,
     dashboard_notification_sender: Arc<DashboardEvents>,
+    /// Validates the fee claim of each self-mined bead; `None` skips validation.
+    fee_validator: Option<SharedBeadValidator>,
 }
 impl SwarmHandler {
     pub fn new(
@@ -310,9 +379,15 @@ impl SwarmHandler {
                 braid_arc: Arc::clone(&braid_arc),
                 db_command_sender,
                 dashboard_notification_sender,
+                fee_validator: None,
             },
             swarm_stratum_bridge_rx,
         )
+    }
+
+    /// Sets the validator that checks the fee claim of each self-mined bead.
+    pub fn set_fee_validator(&mut self, fee_validator: SharedBeadValidator) {
+        self.fee_validator = Some(fee_validator);
     }
     pub async fn propagate_valid_bead(
         &mut self,
@@ -327,12 +402,15 @@ impl SwarmHandler {
         fee_total_sats: u64,
     ) -> Result<(), StratumErrors> {
         let candidate_block_header = candidate_block.header;
-        let candidate_block_transactions = candidate_block.txdata;
-        let ids: Vec<Txid> = candidate_block_transactions
-            .iter()
+        // The block's first transaction is its coinbase; the rest are the
+        // committed transactions the share was mined on.
+        let mut candidate_block_transactions = candidate_block.txdata.into_iter();
+        let coinbase_transaction = candidate_block_transactions
+            .next()
+            .ok_or(StratumErrors::InvalidCoinbase)?;
+        let committed_txs: Vec<Txid> = candidate_block_transactions
             .map(|tx| tx.compute_txid())
             .collect();
-        let transaction_ids: Vec<Txid> = Vec::from(ids);
         debug!("Broadcasting bead via floodsub");
         //TODO:Currently temprorary placeholder will be replaced in upcoming PRs
         let public_key = "020202020202020202020202020202020202020202020202020202020202020202"
@@ -370,7 +448,10 @@ impl SwarmHandler {
                 .unwrap();
         let candidate_block_bead_committed_metadata = CommittedMetadata {
             comm_pub_key: public_key,
-            transaction_ids: TxIdVec(transaction_ids),
+            coinbase_transaction,
+            committed_txs: TxIdVec(committed_txs),
+            //TODO: Filled once miners select additional transactions from bitcoind
+            to_be_added: TxIdVec(Vec::new()),
             parents: parent_hash_set,
             parent_bead_timestamps: time_hash_set,
             payout_address: downstream_payout_addr.to_string(),
@@ -421,10 +502,22 @@ impl SwarmHandler {
                     "Braid extended successfully"
                 );
 
+                // Self-mined beads pass the same fee validation as peer beads,
+                // so both paths store the same verdict for the same bead.
+                let mut fee_validator = match &self.fee_validator {
+                    Some(fee_validator) => Some(fee_validator.lock().await),
+                    None => None,
+                };
+                if let Some(fee_validator) = fee_validator.as_mut() {
+                    fee_validator.on_beads_added(&braid_data, &weak_share, &promoted_orphans);
+                }
                 db::persist_added_bead(
                     &braid_data,
                     &weak_share,
                     promoted_orphans.iter(),
+                    fee_validator
+                        .as_deref()
+                        .map(|validator| validator as &(dyn FeeVerdictSource + Sync)),
                     &self.db_command_sender,
                 )
                 .await

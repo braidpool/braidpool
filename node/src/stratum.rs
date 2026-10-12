@@ -1082,6 +1082,7 @@ impl DownstreamClient {
 
         let mut valid_header = None;
         let mut valid_block_hash = None;
+        let mut valid_coinbase = None;
         let mut used_extranonce1 = vec![];
         let mut meets_upstream = false;
         let mut candidates = vec![self.extranonce1.clone()];
@@ -1142,6 +1143,7 @@ impl DownstreamClient {
             if Self::validate_share_against_target(block_hash, &miner_target) {
                 valid_header = Some(header);
                 valid_block_hash = Some(block_hash);
+                valid_coinbase = Some(coinbase_tx);
                 used_extranonce1 = extranonce1_candidate.clone();
                 meets_upstream = Self::validate_share_against_target(block_hash, &upstream_target);
                 let miner_target = miner_target.to_be_bytes();
@@ -1168,7 +1170,9 @@ impl DownstreamClient {
             }
         }
 
-        if let (Some(header), Some(block_hash)) = (valid_header, valid_block_hash) {
+        if let (Some(header), Some(block_hash), Some(coinbase_transaction)) =
+            (valid_header, valid_block_hash, valid_coinbase)
+        {
             let share_id = block_hash;
             let upstream_ext1_size = used_extranonce1
                 .len()
@@ -1273,7 +1277,18 @@ impl DownstreamClient {
                     comm_pub_key: public_key,
                     miner_ip: self.downstream_ip.clone(),
                     start_timestamp: job_time,
-                    transaction_ids: crate::committed_metadata::TxIdVec(Vec::new()),
+                    coinbase_transaction,
+                    // The job's template has its coinbase stripped, so these are
+                    // exactly the committed transactions the share was mined on.
+                    committed_txs: crate::committed_metadata::TxIdVec(
+                        submitted_job
+                            .blocktemplate
+                            .transactions
+                            .iter()
+                            .map(|tx| tx.compute_txid())
+                            .collect(),
+                    ),
+                    to_be_added: crate::committed_metadata::TxIdVec(Vec::new()),
                     parents: parent_hash_set,
                     parent_bead_timestamps: time_hash_set,
                     payout_address: payout_address,
