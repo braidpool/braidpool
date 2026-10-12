@@ -1,5 +1,5 @@
 // Visual constants
-export const NODE_RADIUS = 60;
+export const NODE_RADIUS = 100;
 export const PADDING = 100; // Additional padding for SVG
 
 // Color constants
@@ -11,11 +11,12 @@ export const COLORS = [
 ];
 
 // Layout constants - controls spacing between beads
-export const COLUMN_WIDTH = 400; // Horizontal spacing between cohorts
+export const COLUMN_WIDTH = 500; // Horizontal spacing between cohorts
 export const VERTICAL_SPACING = 200; // Vertical spacing between beads in same cohort
-export const MAX_BEADS_RECORDS = 7;
+export const MAX_BEADS_RECORDS = 10;
 
 // Arrow
 export const LINK_STROKE_WIDTH = 2; // Line thickness
-export const ARROW_WIDTH = 24; // Arrowhead width
-export const ARROW_HEIGHT = 21; // Arrowhead height
+export const ARROW_WIDTH = 30; // Arrowhead width
+export const ARROW_HEIGHT = 28; // Arrowhead height
+export const CONTAINER_HEIGHT = 550;
