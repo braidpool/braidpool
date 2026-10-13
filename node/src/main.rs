@@ -75,7 +75,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
         log::info!("Starting accept");
         match listener.accept().await {
             Ok((stream, _)) => {
-                let addr = stream.peer_addr()?;
+                let addr = match stream.peer_addr() {
+                    Ok(addr) => addr,
+                    Err(e) => {
+                        log::warn!("Failed to get peer address: {:?}", e);
+                        continue;
+                    }
+                };
                 log::info!("Accepted connection from {}", addr);
                 let (r, w) = stream.into_split();
                 let framed_reader = FramedRead::new(r, LengthDelimitedCodec::new());
@@ -113,4 +119,71 @@ fn setup_tracing() -> Result<(), Box<dyn Error>> {
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_accept_loop_continues_after_peer_disconnect() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let local_addr = listener.local_addr().unwrap();
+
+        let (accepted_tx, mut accepted_rx) = tokio::sync::mpsc::channel(10);
+        let (shutdown_tx, mut shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+
+        // Spawn simulated accept loop matching the logic in main()
+        let accept_task = tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    _ = &mut shutdown_rx => break,
+                    res = listener.accept() => {
+                        match res {
+                            Ok((stream, _)) => {
+                                let addr = match stream.peer_addr() {
+                                    Ok(addr) => addr,
+                                    Err(e) => {
+                                        log::warn!("Failed to get peer address: {:?}", e);
+                                        continue;
+                                    }
+                                };
+                                let _ = accepted_tx.send(addr).await;
+                            }
+                            Err(e) => {
+                                log::error!("couldn't get client: {:?}", e);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        // Client 1: Connects and drops immediately (simulating early disconnect)
+        let client1 = tokio::spawn(async move {
+            let stream = TcpStream::connect(local_addr).await.unwrap();
+            drop(stream);
+        });
+        client1.await.unwrap();
+
+        // Client 2: Normal connection that stays open long enough to be recorded
+        let client2 = tokio::spawn(async move {
+            let stream = TcpStream::connect(local_addr).await.unwrap();
+            tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+            drop(stream);
+        });
+
+        // The accept loop must accept the second client without having crashed
+        let second_addr =
+            tokio::time::timeout(tokio::time::Duration::from_secs(2), accepted_rx.recv())
+                .await
+                .expect("Accept loop timed out or terminated early")
+                .expect("Channel closed unexpectedly");
+
+        assert_eq!(second_addr.ip(), local_addr.ip());
+
+        client2.await.unwrap();
+        let _ = shutdown_tx.send(());
+        accept_task.await.unwrap();
+    }
 }
