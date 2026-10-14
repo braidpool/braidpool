@@ -19,7 +19,7 @@ use crate::error::BeadValidationError;
 /// `parent_bead_timestamps` must have one entry per parent.
 ///
 /// # Arguments
-/// * `bead` - The bead received from gossip, bead-sync, or `addbead`.
+/// * `bead` - The bead received from anywhere (such as gossip, bead-sync, or `addbead`).
 /// * `network` - Network whose block-hash rules apply.
 ///
 /// # Returns
@@ -30,6 +30,7 @@ use crate::error::BeadValidationError;
 /// without parking it, persisting it, or increasing the sender's peer score.
 pub fn validate_bead(bead: &Bead, network: PoolNetwork) -> Result<(), BeadValidationError> {
     let header = &bead.block_header;
+    // TODO: wait for #330 to complete to compare against ideal difficulty
     let target = Target::from_compact(header.bits);
     if !target.is_met_by(network.block_hash(header)) {
         return Err(BeadValidationError::InsufficientProofOfWork);

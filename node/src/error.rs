@@ -238,6 +238,10 @@ pub enum StratumErrors {
     BeadPersistenceFailed {
         error: String,
     },
+    /// This indicates a bug in bead construction.
+    BeadValidationFailed {
+        error: BeadValidationError,
+    },
     UpstreamConnectionFailed {
         error: String,
     },
@@ -383,6 +387,9 @@ impl fmt::Display for StratumErrors {
                     "Self-mined bead added to braid but not persisted to DB - {}",
                     error
                 )
+            }
+            StratumErrors::BeadValidationFailed { error } => {
+                write!(f, "Self-mined bead failed validation - {}", error)
             }
             StratumErrors::UpstreamConnectionFailed { error } => {
                 write!(f, "Failed to connect to upstream pool: {}", error)

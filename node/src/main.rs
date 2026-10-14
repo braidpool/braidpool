@@ -144,6 +144,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 fetch_beads_in_batch(&db_connection_pool_ref, FETCH_BEAD_BATCH_SIZE).await?;
             info!(beads = fetched_beads.len(), "Beads loaded from DB");
             for bead in &fetched_beads {
+                // Rows written by an earlier build were never validated. Skip any that
+                // fail rather than aborting startup; they stay in the DB untouched.
+                if let Err(error) = validate_bead(bead, network_ref) {
+                    warn!(
+                        hash = %compute_block_hash(&bead.block_header, network_ref),
+                        error = %error,
+                        "Skipping persisted bead that failed validation"
+                    );
+                    continue;
+                }
                 let curr_bead_status = guard.extend(&bead);
                 debug!(
                     hash = ?compute_block_hash(&bead.block_header,network_ref),

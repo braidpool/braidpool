@@ -29,7 +29,7 @@ pub const MAX_CACHED_TEMPLATES: usize = 90;
 pub const GLOBAL_JOB_STORE_CAPACITY: usize = 20;
 
 use crate::{
-    bead::Bead,
+    bead::{validate::validate_bead, Bead},
     braid::{AddBeadStatus, Braid},
     committed_metadata::{CommittedMetadata, TimeVec, TxIdVec},
     db::BraidpoolDBTypes,
@@ -406,6 +406,11 @@ impl SwarmHandler {
             block_header: candidate_block_header,
             uncommitted_metadata: candidate_block_bead_uncommitted_metadata,
         };
+        // It guards against a regression in bead construction before the bead is stored or broadcast.
+        if let Err(error) = validate_bead(&weak_share, braid_data.network) {
+            error!(error = %error, "Self-mined bead failed validation, not adding to braid");
+            return Err(StratumErrors::BeadValidationFailed { error });
+        }
         let status = braid_data.extend(&weak_share);
         match status {
             AddBeadStatus::BeadAdded { promoted_orphans } => {
