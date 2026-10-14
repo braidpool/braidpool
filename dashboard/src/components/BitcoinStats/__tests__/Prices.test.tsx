@@ -26,8 +26,16 @@ jest.mock('recharts', () => ({
   BarChart: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="barchart">{children}</div>
   ),
-  LineChart: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="linechart">{children}</div>
+  LineChart: ({
+    children,
+    data,
+  }: {
+    children: React.ReactNode;
+    data: Record<string, unknown>[];
+  }) => (
+    <div data-testid="linechart" data-points={JSON.stringify(data)}>
+      {children}
+    </div>
   ),
   Bar: () => <div data-testid="bar" />,
   Line: () => <div data-testid="line" />,
@@ -154,6 +162,41 @@ describe('BitcoinPriceTracker', () => {
     });
   });
 
+  it('plots BTC dominance history from global stats', async () => {
+    render(<BitcoinPriceTracker />);
+    const sendDominance = (bitcoin_dominance: number) =>
+      MockWebSocket.mockMessage({
+        type: 'bitcoin_update',
+        data: {
+          price: { USD: { current: 50000, high24h: 51000, low24h: 49000 } },
+          global_stats: {
+            market_cap: 1000000000000,
+            market_cap_change: 2.5,
+            active_cryptocurrencies: 10000,
+            active_markets: 500,
+            bitcoin_dominance,
+          },
+        },
+      });
+    act(() => {
+      MockWebSocket.mockOpen();
+      sendDominance(0.45);
+      sendDominance(0.5);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('BTC Dominance Trend')).toBeInTheDocument();
+      const dominanceChart = screen
+        .getByLabelText('Download BTC dominance chart')
+        .closest('.flex-col')!
+        .querySelector('[data-testid="linechart"]')!;
+      const points = JSON.parse(dominanceChart.getAttribute('data-points')!);
+      expect(points.map((p: { dominance: number }) => p.dominance)).toEqual([
+        45, 50,
+      ]);
+    });
+  });
+
   it('fetches transactions on mount and periodically', async () => {
     jest.useFakeTimers();
     render(<BitcoinPriceTracker />);
@@ -193,7 +236,7 @@ describe('BitcoinPriceTracker', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId('linechart')).toBeInTheDocument();
+      expect(screen.getAllByTestId('linechart')).toHaveLength(2);
     });
   });
 
@@ -292,7 +335,7 @@ describe('BitcoinPriceTracker', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId('linechart')).toBeInTheDocument();
+      expect(screen.getAllByTestId('linechart')).toHaveLength(2);
     });
   });
 });
