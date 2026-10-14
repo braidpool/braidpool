@@ -34,6 +34,7 @@ anyhow = { workspace = true }
 socket2 = { version = "0.5", features = ["all"] }
 reqwest = { workspace = true }
 braidpool-common = {path = "../braidpool-common"}
+pool_sv2 = { git = "https://github.com/braidpool/sv2-apps", branch = "sv2-integration-braidpool" }
 
 [build-dependencies]
 capnpc = "0.24.0"

@@ -49,3 +49,9 @@ anyhow = "1.0.100"
 reqwest = { version = "0.11", features = ["json"] }
 uuid = { version = "1.0", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
+
+# When pool_sv2 is fetched from sv2-apps, it brings its own braidpool-common as a
+# path dep from the same git repo. Override it with our local copy so both the node
+# and pool_sv2 share a single braidpool-common crate in the dep graph.
+[patch."https://github.com/braidpool/sv2-apps"]
+braidpool-common = { path = "./braidpool-common" }
