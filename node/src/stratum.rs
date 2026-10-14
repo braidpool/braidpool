@@ -4843,19 +4843,13 @@ mod test {
         .await
         .unwrap();
         template.transactions.remove(0);
-        let unix_ts = std::time::SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs()
-            .to_u32()
-            .unwrap();
         let job_details = JobDetails {
             blocktemplate: template,
             coinbase1: notification.coinbase1.clone(),
             coinbase2: notification.coinbase2.clone(),
             coinbase_merkle_path: vec![],
             coinbase_witness_commitment: Some(test_witness),
-            job_sent_time: unix_ts,
+            job_sent_time: MicrosecondTimestamp::now(),
             is_upstream_job: false,
         };
         let map = Arc::new(Mutex::new(GlobalJobStore::new(
