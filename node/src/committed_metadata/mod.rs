@@ -120,6 +120,18 @@ impl Decodable for CommittedMetadata {
         let transaction_ids = TxIdVec::consensus_decode(r)?;
         let parents = Vec::<BeadHash>::consensus_decode(r)?;
         let parent_bead_timestamps = TimeVec::consensus_decode(r)?;
+        // `parents` and `parent_bead_timestamps` are one list of pairs split across two
+        // fields: the producer pushes to both in the same iteration and the audit writer
+        // reads them back with `zip`, which stops at the shorter one. Nothing on the wire
+        // required them to match, so a peer could send more parents than timestamps and
+        // have the extra parents linked in the braid while the audit trail recorded none
+        // of them, with no error anywhere.
+        if parents.len() != parent_bead_timestamps.0.len() {
+            return Err(Error::from(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "parents and parent_bead_timestamps have different lengths",
+            )));
+        }
         let payout_address = String::consensus_decode(r)?;
         let start_timestamp = Time::from_consensus(u32::consensus_decode(r)?).map_err(|_| {
             Error::from(io::Error::new(
