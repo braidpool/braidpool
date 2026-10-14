@@ -1,5 +1,11 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import {
+  act,
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+} from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { MempoolData } from '../Types';
 
@@ -539,14 +545,17 @@ describe('MempoolLatencyStats', () => {
   describe('Display Currency Selector', () => {
     const sendData = async (data: Partial<MempoolData>) => {
       render(<MempoolLatencyStats />);
-      await waitFor(() => {
+      await waitFor(() =>
+        expect(mockWebSocketInstance?.onmessage).toBeTruthy()
+      );
+      act(() => {
         mockWebSocketInstance?.onmessage?.(
           new MessageEvent('message', {
             data: JSON.stringify({ type: 'mempool_update', data }),
           })
         );
       });
-      return screen.findByRole('combobox', { name: 'Display currency' });
+      return screen.getByRole('combobox', { name: 'Display currency' });
     };
 
     test('shows totals and fees in USD by default', async () => {
@@ -555,7 +564,7 @@ describe('MempoolLatencyStats', () => {
       expect(select).toHaveValue('USD');
       expect(screen.getByText('Total Fees (USD)')).toBeInTheDocument();
       expect(screen.getByText('$45,679.01')).toBeInTheDocument();
-      expect(screen.getByText('30 sats/vB | $4.57')).toBeInTheDocument();
+      expect(screen.getByText('30 sats/vB | $4.5676')).toBeInTheDocument();
     });
 
     test('converts every value when the currency changes', async () => {
@@ -564,13 +573,26 @@ describe('MempoolLatencyStats', () => {
       fireEvent.change(select, { target: { value: 'EUR' } });
       expect(screen.getByText('Total Fees (EUR)')).toBeInTheDocument();
       expect(screen.getByText('€42,592.59')).toBeInTheDocument();
-      expect(screen.getByText('25 sats/vB | €3.57')).toBeInTheDocument();
+      expect(screen.getByText('25 sats/vB | €3.569')).toBeInTheDocument();
+
+      fireEvent.change(select, { target: { value: 'JPY' } });
+      expect(screen.getByText('Total Fees (JPY)')).toBeInTheDocument();
+      expect(screen.getByText('¥4,938,272')).toBeInTheDocument();
+      expect(screen.getByText('30 sats/vB | ¥494')).toBeInTheDocument();
 
       fireEvent.change(select, { target: { value: 'BTC' } });
       expect(screen.getByText('1.23456789 BTC')).toBeInTheDocument();
       expect(
         screen.getByText('10 sats/vB | 0.00004123 BTC')
       ).toBeInTheDocument();
+    });
+
+    test('ignores values that are not supported currencies', async () => {
+      const select = await sendData(mockMempoolData);
+
+      fireEvent.change(select, { target: { value: 'GBP' } });
+      expect(screen.getByText('Total Fees (USD)')).toBeInTheDocument();
+      expect(screen.getByText('$45,679.01')).toBeInTheDocument();
     });
 
     test('shows placeholders when currency rates are missing', async () => {

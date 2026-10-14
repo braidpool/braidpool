@@ -14,10 +14,10 @@ export function formatBtcAmount(
   if (!rate) return '--';
 
   const value = btc * rate;
-  // Per-vbyte fees are fractions of a cent; the currency's default precision would round them to zero.
+  // Per-vbyte fees are small; default precision would round them to whole cents or yen.
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,
-    ...(value < 1 && { maximumFractionDigits: 4 }),
+    ...(value < 100 && { minimumFractionDigits: 2, maximumFractionDigits: 4 }),
   }).format(value);
 }
