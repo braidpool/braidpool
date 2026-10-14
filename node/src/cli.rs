@@ -111,6 +111,11 @@ pub struct Cli {
     /// Required when --sv2-pool-port is set.
     #[arg(long)]
     pub sv2_authority_seckey: Option<String>,
+
+    /// Bitcoin address for the pool's coinbase payout output (e.g. bcrt1q...).
+    /// Required when --sv2-pool-port is set.
+    #[arg(long)]
+    pub sv2_pool_coinbase_addr: Option<String>,
 }
 
 #[cfg(test)]
