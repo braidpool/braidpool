@@ -61,6 +61,10 @@ const SEED_DNS: &str = "/dnsaddr/french.braidpool.net";
 //combined addr for dns resolution and dialing of boot for peer discovery
 const ADDR_REFRENCE: &str =
     "/dnsaddr/french.braidpool.net/p2p/12D3KooWG9z8TziaNuYyEcc9FeUC3FTtrEf2XSnSdDpLvx4Jh2w3";
+use pool_sv2::{
+    config::{CoinbaseRewardScript, PoolConfig, Secp256k1PublicKey, Secp256k1SecretKey},
+    PoolSv2,
+};
 use tokio::sync::{
     mpsc::{self},
     RwLock,
@@ -981,6 +985,73 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //IPC(inter process communication) based `getblocktemplate` and `notification` to send to the downstream via the `cmempoold` architecture
     info!(socket = %args.ipc_socket, "IPC socket path");
 
+    // Set up SV2 pool if sv2-pool-port is configured.
+    let sv2_template_tx = if let Some(port) = args.sv2_pool_port {
+        let pubkey_str = args.sv2_authority_pubkey.as_deref().unwrap_or_default();
+        let seckey_str = args.sv2_authority_seckey.as_deref().unwrap_or_default();
+        let coinbase_addr = args.sv2_pool_coinbase_addr.as_deref().unwrap_or_default();
+
+        let pubkey = pubkey_str.parse::<Secp256k1PublicKey>().map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Invalid --sv2-authority-pubkey: {e}"),
+            )
+        })?;
+        let seckey = seckey_str.parse::<Secp256k1SecretKey>().map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Invalid --sv2-authority-seckey: {e}"),
+            )
+        })?;
+        let coinbase_script = CoinbaseRewardScript::from_descriptor(&format!(
+            "addr({coinbase_addr})"
+        ))
+        .map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Invalid --sv2-pool-coinbase-addr: {e}"),
+            )
+        })?;
+        let listen_addr: std::net::SocketAddr = format!("0.0.0.0:{port}").parse().map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Invalid sv2 pool listen address: {e}"),
+            )
+        })?;
+
+        let pool_config = PoolConfig::for_braidpool(listen_addr, pubkey, seckey, coinbase_script);
+        let (tx, rx) = mpsc::channel::<braidpool_common::template::BraidpoolTemplate>(32);
+        let pool = PoolSv2::new(pool_config).with_braidpool_template_rx(rx);
+        let (share_rx_tx, share_rx_rx) = tokio::sync::oneshot::channel();
+
+        tokio::spawn(async move {
+            if let Err(e) = pool.start(Some(share_rx_tx)).await {
+                error!(error = %e, "SV2 pool exited");
+            }
+        });
+
+        tokio::spawn(async move {
+            match share_rx_rx.await {
+                Ok(mut share_receiver) => {
+                    while let Some(share) = share_receiver.recv().await {
+                        // TODO(sv2-integration/PR6): call propagate_valid_bead(share)
+                        info!(
+                            template_id = ?share.template_id,
+                            channel_id = share.channel_id,
+                            "ValidatedShare received from SV2 pool"
+                        );
+                    }
+                }
+                Err(_) => warn!("SV2 pool shut down before share bridge was ready"),
+            }
+        });
+
+        info!(port = port, "SV2 pool started in BraidpoolIpc mode");
+        Some(tx)
+    } else {
+        None
+    };
+
     // Spawn IPC handler
     let _ipc_handler = if !args.audit {
         Some(tokio::task::spawn_blocking(move || {
@@ -1040,6 +1111,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                 &mut latest_template_merkle_branch_for_ipc.clone(),
                                 template_cache_for_consumer,
                                 latest_template_id_for_consumer,
+                                sv2_template_tx,
                             )
                             .await
                             {
