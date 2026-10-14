@@ -193,8 +193,8 @@ impl PriorityRequestQueue {
         let result = match priority {
             RequestPriority::Critical => {
                 if self.critical_queue.len() >= self.max_queue_sizes.critical {
-                    error!("BITCOIN IPC QUEUE FULL - CRITICAL QUEUE EXCEEDED LIMIT");
-                    panic!("FATAL: Cannot communicate with Bitcoin Core. Queue is full.");
+                    error!("FATAL: Bitcoin IPC critical queue full - aborting to prevent consensus desync. See issue #318.");
+                    std::process::abort();
                 } else {
                     self.critical_queue.push_back(request);
                     self.metrics
@@ -205,8 +205,8 @@ impl PriorityRequestQueue {
             }
             RequestPriority::High => {
                 if self.high_queue.len() >= self.max_queue_sizes.high {
-                    error!("BITCOIN IPC QUEUE FULL - HIGH PRIORITY QUEUE EXCEEDED LIMIT");
-                    panic!("FATAL: Cannot communicate with Bitcoin Core. Queue is full.");
+                    error!("FATAL: Bitcoin IPC high queue full - aborting to prevent consensus desync. See issue #318.");
+                    std::process::abort();
                 } else {
                     self.high_queue.push_back(request);
                     self.metrics
@@ -217,8 +217,8 @@ impl PriorityRequestQueue {
             }
             RequestPriority::Normal => {
                 if self.normal_queue.len() >= self.max_queue_sizes.normal {
-                    error!("BITCOIN IPC QUEUE FULL - NORMAL PRIORITY QUEUE EXCEEDED LIMIT");
-                    panic!("FATAL: Cannot communicate with Bitcoin Core. Queue is full.");
+                    error!("FATAL: Bitcoin IPC normal queue full - aborting to prevent consensus desync. See issue #318.");
+                    std::process::abort();
                 } else {
                     self.normal_queue.push_back(request);
                     self.metrics
@@ -229,8 +229,8 @@ impl PriorityRequestQueue {
             }
             RequestPriority::Low => {
                 if self.low_queue.len() >= self.max_queue_sizes.low {
-                    error!("BITCOIN IPC QUEUE FULL - LOW PRIORITY QUEUE EXCEEDED LIMIT");
-                    panic!("FATAL: Cannot communicate with Bitcoin Core. Queue is full.");
+                    error!("FATAL: Bitcoin IPC low queue full - aborting to prevent consensus desync. See issue #318.");
+                    std::process::abort();
                 } else {
                     self.low_queue.push_back(request);
                     self.metrics
