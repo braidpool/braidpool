@@ -14,12 +14,14 @@ import {
   CartesianGrid,
 } from 'recharts';
 import {
+  Currency,
   Fee,
   BlockFeeHistoryItem,
   MempoolData,
   FeeDistributionItem,
 } from './Types';
 import { currencyLabels, currencyColors } from './Constants';
+import { CURRENCIES, formatBtcAmount } from './Utils';
 import { WEBSOCKET_URLS } from '@/URLs';
 import { Loader, Download } from 'lucide-react';
 import { downloadSvgFromContainer } from '../../utils/downloadSvg';
@@ -28,6 +30,7 @@ const MempoolLatencyStats = () => {
   const wsRef = useRef<WebSocket | null>(null);
 
   const [mempoolData, setMempoolData] = useState<MempoolData | null>(null);
+  const [currency, setCurrency] = useState<Currency>('USD');
   const [selectedView, setSelectedView] = useState<
     'btc' | 'usd' | 'eur' | 'jpy' | 'all'
   >('all');
@@ -119,6 +122,18 @@ const MempoolLatencyStats = () => {
 
   const fees = mempoolData?.fees || {};
   const next: Fee | undefined = mempoolData?.next_block_fees;
+  const formatFee = (fee: Fee | undefined) =>
+    `${fee?.sats_per_vbyte ?? '--'} sats/vB | ${formatBtcAmount(
+      fee?.fee_btc,
+      currency,
+      mempoolData.currency_rates
+    )}`;
+  const feeEstimates: [string, Fee | undefined][] = [
+    ['High Priority', fees.high_priority],
+    ['Medium Priority', fees.medium_priority],
+    ['Low Priority', fees.standard_priority],
+    ['No Priority', fees.economy],
+  ];
   const feeDist = mempoolData?.fee_distribution || {};
 
   const feeDistChartData: FeeDistributionItem[] = Object.entries(feeDist).map(
@@ -142,6 +157,20 @@ const MempoolLatencyStats = () => {
     <div className="flex flex-col gap-8 p-6 text-gray-100">
       {/* --- Overview --- */}
       <section className="rounded-xl p-3 shadow-sm">
+        <div className="flex justify-end mb-4">
+          <select
+            aria-label="Display currency"
+            value={currency}
+            onChange={(e) => setCurrency(e.target.value as Currency)}
+            className="px-4 py-2 bg-[#1a1a1a] text-gray-300 rounded-md shadow-md border border-white"
+          >
+            {CURRENCIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="grid sm:grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <AnimatedStatCard
             title="Size (vB)"
@@ -152,16 +181,16 @@ const MempoolLatencyStats = () => {
             value={String(mempoolData?.mempool?.count || '--')}
           />
           <AnimatedStatCard
-            title="Total Fees (BTC | USD)"
-            value={`${Number(mempoolData?.mempool?.total_fee_btc).toFixed(6)} BTC | $${Number(
-              mempoolData?.mempool?.total_fee_usd
-            ).toFixed(2)}`}
+            title={`Total Fees (${currency})`}
+            value={formatBtcAmount(
+              mempoolData?.mempool?.total_fee_btc,
+              currency,
+              mempoolData.currency_rates
+            )}
           />
           <AnimatedStatCard
             title="Next Block Fees"
-            value={`${next?.sats_per_vbyte ?? '--'} sats/vB | $${Number(
-              next?.fee_usd ?? 0
-            ).toFixed(4)}`}
+            value={formatFee(next)}
             color={colors.warning}
           />
         </div>
@@ -172,36 +201,13 @@ const MempoolLatencyStats = () => {
             Fee Estimates
           </h3>
           <div className="grid sm:grid-cols-1 md:grid-cols-4 lg:grid-cols-4 gap-4">
-            <AnimatedStatCard
-              title="High Priority"
-              value={`${fees.high_priority?.sats_per_vbyte || '--'} sats/vB | ${Number(
-                fees.high_priority?.fee_btc
-              ).toFixed(
-                8
-              )} BTC | $${Number(fees.high_priority?.fee_usd).toFixed(4)}`}
-            />
-            <AnimatedStatCard
-              title="Medium Priority"
-              value={`${fees.medium_priority?.sats_per_vbyte || '--'} sats/vB | ${Number(
-                fees.medium_priority?.fee_btc
-              ).toFixed(
-                8
-              )} BTC | $${Number(fees.medium_priority?.fee_usd).toFixed(4)}`}
-            />
-            <AnimatedStatCard
-              title="Low Priority"
-              value={`${fees.standard_priority?.sats_per_vbyte || '--'} sats/vB | ${Number(
-                fees.standard_priority?.fee_btc
-              ).toFixed(
-                8
-              )} BTC | $${Number(fees.standard_priority?.fee_usd).toFixed(4)}`}
-            />
-            <AnimatedStatCard
-              title="No Priority"
-              value={`${fees.economy?.sats_per_vbyte || '--'} sats/vB | ${Number(
-                fees.economy?.fee_btc
-              ).toFixed(8)} BTC | $${Number(fees.economy?.fee_usd).toFixed(4)}`}
-            />
+            {feeEstimates.map(([title, fee]) => (
+              <AnimatedStatCard
+                key={title}
+                title={title}
+                value={formatFee(fee)}
+              />
+            ))}
           </div>
         </div>
 
@@ -257,6 +263,7 @@ const MempoolLatencyStats = () => {
           <h2 className="text-lg font-semibold">Live Block Fees</h2>
 
           <select
+            aria-label="Block fee chart currency"
             value={selectedView}
             onChange={(e) =>
               setSelectedView(e.target.value as typeof selectedView)

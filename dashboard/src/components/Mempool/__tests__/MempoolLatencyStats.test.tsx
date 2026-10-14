@@ -218,52 +218,31 @@ const mockMempoolData: MempoolData = {
     vsize: 12345678,
     count: 50000,
     total_fee_btc: 1.23456789,
-    total_fee_usd: 45000.5,
-    total_fee_eur: 42000.0,
-    total_fee_jpy: 5000000,
   },
   next_block_fees: {
     sats_per_vbyte: 25,
     fee_btc: 0.00010345,
-    fee_usd: 3.8901,
-    fee_eur: 3.6234,
-    fee_jpy: 420.5,
   },
   fees: {
     high_priority: {
       sats_per_vbyte: 30,
       fee_btc: 0.00012345,
-      fee_usd: 4.5678,
-      fee_eur: 4.2567,
-      fee_jpy: 460.8,
     },
     medium_priority: {
       sats_per_vbyte: 20,
       fee_btc: 0.00008234,
-      fee_usd: 3.0456,
-      fee_eur: 2.8401,
-      fee_jpy: 307.2,
     },
     standard_priority: {
       sats_per_vbyte: 15,
       fee_btc: 0.00006178,
-      fee_usd: 2.2834,
-      fee_eur: 2.1301,
-      fee_jpy: 230.4,
     },
     economy: {
       sats_per_vbyte: 10,
       fee_btc: 0.00004123,
-      fee_usd: 1.5267,
-      fee_eur: 1.4234,
-      fee_jpy: 153.6,
     },
     minimum: {
       sats_per_vbyte: 5,
       fee_btc: 0.00002061,
-      fee_usd: 0.7634,
-      fee_eur: 0.7117,
-      fee_jpy: 76.8,
     },
   },
   currency_rates: {
@@ -307,9 +286,6 @@ const mockPartialData: Partial<MempoolData> = {
     vsize: 5000000,
     count: 25000,
     total_fee_btc: 0.5,
-    total_fee_usd: 18500,
-    total_fee_eur: 17250,
-    total_fee_jpy: 2000000,
   },
 };
 
@@ -510,7 +486,9 @@ describe('MempoolLatencyStats', () => {
 
     test('renders currency select dropdown', async () => {
       await waitFor(() => {
-        const selectElement = screen.getByRole('combobox');
+        const selectElement = screen.getByRole('combobox', {
+          name: 'Block fee chart currency',
+        });
         expect(selectElement).toBeInTheDocument();
         expect(selectElement).toHaveValue('all');
       });
@@ -521,7 +499,9 @@ describe('MempoolLatencyStats', () => {
         expect(screen.getByDisplayValue('ALL')).toBeInTheDocument();
       });
 
-      const selectElement = screen.getByRole('combobox');
+      const selectElement = screen.getByRole('combobox', {
+        name: 'Block fee chart currency',
+      });
 
       // Check all options exist
       const options = selectElement.querySelectorAll('option');
@@ -538,7 +518,9 @@ describe('MempoolLatencyStats', () => {
 
     test('changes view when selecting different currency', async () => {
       await waitFor(() => {
-        const selectElement = screen.getByRole('combobox');
+        const selectElement = screen.getByRole('combobox', {
+          name: 'Block fee chart currency',
+        });
         fireEvent.change(selectElement, { target: { value: 'usd' } });
         expect(selectElement).toHaveValue('usd');
       });
@@ -546,9 +528,56 @@ describe('MempoolLatencyStats', () => {
 
     test('defaults to "all" view initially', async () => {
       await waitFor(() => {
-        const selectElement = screen.getByRole('combobox');
+        const selectElement = screen.getByRole('combobox', {
+          name: 'Block fee chart currency',
+        });
         expect(selectElement).toHaveValue('all');
       });
+    });
+  });
+
+  describe('Display Currency Selector', () => {
+    const sendData = async (data: Partial<MempoolData>) => {
+      render(<MempoolLatencyStats />);
+      await waitFor(() => {
+        mockWebSocketInstance?.onmessage?.(
+          new MessageEvent('message', {
+            data: JSON.stringify({ type: 'mempool_update', data }),
+          })
+        );
+      });
+      return screen.findByRole('combobox', { name: 'Display currency' });
+    };
+
+    test('shows totals and fees in USD by default', async () => {
+      const select = await sendData(mockMempoolData);
+
+      expect(select).toHaveValue('USD');
+      expect(screen.getByText('Total Fees (USD)')).toBeInTheDocument();
+      expect(screen.getByText('$45,679.01')).toBeInTheDocument();
+      expect(screen.getByText('30 sats/vB | $4.57')).toBeInTheDocument();
+    });
+
+    test('converts every value when the currency changes', async () => {
+      const select = await sendData(mockMempoolData);
+
+      fireEvent.change(select, { target: { value: 'EUR' } });
+      expect(screen.getByText('Total Fees (EUR)')).toBeInTheDocument();
+      expect(screen.getByText('€42,592.59')).toBeInTheDocument();
+      expect(screen.getByText('25 sats/vB | €3.57')).toBeInTheDocument();
+
+      fireEvent.change(select, { target: { value: 'BTC' } });
+      expect(screen.getByText('1.23456789 BTC')).toBeInTheDocument();
+      expect(
+        screen.getByText('10 sats/vB | 0.00004123 BTC')
+      ).toBeInTheDocument();
+    });
+
+    test('shows placeholders when currency rates are missing', async () => {
+      await sendData(mockPartialData);
+
+      expect(screen.getByText('Total Fees (USD)')).toBeInTheDocument();
+      expect(screen.getAllByText('-- sats/vB | --')).toHaveLength(5);
     });
   });
 

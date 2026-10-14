@@ -1,9 +1,6 @@
 export interface Fee {
   sats_per_vbyte: number;
   fee_btc: number;
-  fee_usd: number;
-  fee_eur: number;
-  fee_jpy: number;
 }
 
 export interface BlockFeeHistoryItem {
@@ -20,9 +17,6 @@ export interface MempoolStats {
   count: number;
   vsize: number;
   total_fee_btc: number;
-  total_fee_usd: number;
-  total_fee_eur: number;
-  total_fee_jpy: number;
 }
 
 export interface CurrencyRates {
@@ -30,6 +24,8 @@ export interface CurrencyRates {
   EUR: number;
   JPY: number;
 }
+
+export type Currency = 'BTC' | keyof CurrencyRates;
 
 export interface MempoolData {
   mempool: MempoolStats;
