@@ -11,6 +11,18 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::str::FromStr;
 
+/// Longest `payout_address` a bead may carry.
+///
+/// BIP173 limits a bech32 address to 90 characters, and a base58 address is
+/// shorter than that, so 90 covers every form a payout can legitimately take.
+pub const MAX_PAYOUT_ADDRESS_LEN: usize = 90;
+
+/// Longest `miner_ip` a bead may carry.
+///
+/// An IPv6 literal is at most 45 characters, and a bracketed literal with a
+/// port adds eight more.
+pub const MAX_MINER_IP_LEN: usize = 53;
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct TimeVec(pub Vec<Time>);
 
@@ -120,7 +132,18 @@ impl Decodable for CommittedMetadata {
         let transaction_ids = TxIdVec::consensus_decode(r)?;
         let parents = Vec::<BeadHash>::consensus_decode(r)?;
         let parent_bead_timestamps = TimeVec::consensus_decode(r)?;
+        // Both of these are peer-supplied `String`s, and a `String` decodes up to
+        // `MAX_VEC_SIZE`, so without a bound one bead can carry megabytes of them:
+        // two near-4MB fields encode to a 7.8 MB bead that round-trips today. That
+        // is also what stops `MAX_BEAD_SYNC_RESPONSE_BYTES` being derived from a
+        // realistic per-bead size, since the per-bead figure is not yet true.
         let payout_address = String::consensus_decode(r)?;
+        if payout_address.len() > MAX_PAYOUT_ADDRESS_LEN {
+            return Err(Error::from(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "payout_address is longer than any address format",
+            )));
+        }
         let start_timestamp = Time::from_consensus(u32::consensus_decode(r)?).map_err(|_| {
             Error::from(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -137,6 +160,12 @@ impl Decodable for CommittedMetadata {
         let min_target = CompactTarget::consensus_decode(r)?;
         let weak_target = CompactTarget::consensus_decode(r)?;
         let miner_ip = String::consensus_decode(r)?;
+        if miner_ip.len() > MAX_MINER_IP_LEN {
+            return Err(Error::from(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "miner_ip is longer than an address and port",
+            )));
+        }
         Ok(CommittedMetadata {
             transaction_ids,
             parents,
