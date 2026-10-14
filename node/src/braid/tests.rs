@@ -16,6 +16,7 @@ use crate::braid::consensus_functions::updating_ancestors;
 use crate::braid::Cohort;
 use crate::config::PoolNetwork;
 use crate::utils::compute_block_hash;
+use crate::utils::create_test_bead;
 use crate::utils::test_utils::test_utility_functions::loading_braid_from_file;
 use crate::utils::test_utils::test_utility_functions::*;
 use bitcoin::BlockHash;
@@ -24,6 +25,29 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::path::Path;
 use std::str::FromStr;
+
+/// Extends `braid` with `bead` after giving it one timestamp per parent, as every
+/// producer does. Present parents contribute their real `start_timestamp`; parents
+/// not yet in the braid (orphan tests) use the shared fixture timestamp.
+fn extend_fixture(braid: &mut Braid, bead: &Bead) -> AddBeadStatus {
+    let mut bead = bead.clone();
+    let fixture_time =
+        bitcoin::absolute::Time::from_consensus(crate::utils::TEST_START_TIMESTAMP).unwrap();
+    bead.committed_metadata.parent_bead_timestamps.0 = bead
+        .committed_metadata
+        .parents
+        .iter()
+        .map(|parent| {
+            braid
+                .bead_index_mapping
+                .get(parent)
+                .map(|&index| braid.beads[index].committed_metadata.start_timestamp)
+                .unwrap_or(fixture_time)
+        })
+        .collect();
+    braid.extend(&bead)
+}
+
 #[test]
 pub fn test_extend_functionality() {
     // Create a braid with one bead.
@@ -59,7 +83,7 @@ pub fn test_extend_functionality() {
             PoolNetwork::Cpunet,
         ));
 
-    test_braid.extend(&test_bead_1);
+    extend_fixture(&mut test_braid, &test_bead_1);
     // After adding a new bead that extends the zeroth one, we should have two cohorts
     assert_eq!(
         test_braid.cohorts,
@@ -75,7 +99,7 @@ pub fn test_extend_functionality() {
             &test_bead_1.block_header,
             PoolNetwork::Cpunet,
         ));
-    test_braid.extend(&test_bead_2);
+    extend_fixture(&mut test_braid, &test_bead_2);
 
     // After adding the second bead, we should have three cohorts
     assert_eq!(
@@ -110,7 +134,7 @@ pub fn test_extend_functionality() {
             &test_bead_2.block_header,
             PoolNetwork::Cpunet,
         ));
-    test_braid.extend(&test_bead_3);
+    extend_fixture(&mut test_braid, &test_bead_3);
 
     // Create bead 4 with parent 2
     let mut test_bead_4 = emit_bead();
@@ -121,7 +145,7 @@ pub fn test_extend_functionality() {
             &test_bead_2.block_header,
             PoolNetwork::Cpunet,
         ));
-    test_braid.extend(&test_bead_4);
+    extend_fixture(&mut test_braid, &test_bead_4);
 
     // Create bead 5 with parent 2
     let mut test_bead_5 = emit_bead();
@@ -132,7 +156,7 @@ pub fn test_extend_functionality() {
             &test_bead_2.block_header,
             PoolNetwork::Cpunet,
         ));
-    test_braid.extend(&test_bead_5);
+    extend_fixture(&mut test_braid, &test_bead_5);
 
     assert_eq!(
         test_braid.cohorts,
@@ -154,7 +178,7 @@ pub fn test_extend_functionality() {
             &test_bead_4.block_header,
             PoolNetwork::Cpunet,
         ));
-    test_braid.extend(&test_bead_6);
+    extend_fixture(&mut test_braid, &test_bead_6);
 
     let mut test_bead_7 = emit_bead();
     test_bead_7
@@ -164,7 +188,7 @@ pub fn test_extend_functionality() {
             &test_bead_6.block_header,
             PoolNetwork::Cpunet,
         ));
-    test_braid.extend(&test_bead_7);
+    extend_fixture(&mut test_braid, &test_bead_7);
 
     let mut test_bead_8 = emit_bead();
     test_bead_8
@@ -174,7 +198,7 @@ pub fn test_extend_functionality() {
             &test_bead_7.block_header,
             PoolNetwork::Cpunet,
         ));
-    test_braid.extend(&test_bead_8);
+    extend_fixture(&mut test_braid, &test_bead_8);
 
     assert_eq!(
         test_braid.cohorts,
@@ -195,7 +219,7 @@ pub fn test_extend_functionality() {
             &test_bead_5.block_header,
             PoolNetwork::Cpunet,
         ));
-    test_braid.extend(&test_bead_9);
+    extend_fixture(&mut test_braid, &test_bead_9);
 
     let mut test_bead_10 = emit_bead();
     test_bead_10
@@ -205,7 +229,7 @@ pub fn test_extend_functionality() {
             &test_bead_9.block_header,
             PoolNetwork::Cpunet,
         ));
-    test_braid.extend(&test_bead_10);
+    extend_fixture(&mut test_braid, &test_bead_10);
 
     let mut test_bead_11 = emit_bead();
     test_bead_11
@@ -215,7 +239,7 @@ pub fn test_extend_functionality() {
             &test_bead_10.block_header,
             PoolNetwork::Cpunet,
         ));
-    test_braid.extend(&test_bead_11);
+    extend_fixture(&mut test_braid, &test_bead_11);
 
     assert_eq!(
         test_braid.cohorts,
@@ -249,7 +273,7 @@ pub fn test_extend_functionality() {
             &test_bead_3.block_header,
             PoolNetwork::Cpunet,
         ));
-    test_braid.extend(&test_bead_12);
+    extend_fixture(&mut test_braid, &test_bead_12);
 
     assert_eq!(
         test_braid.cohorts,
@@ -270,7 +294,7 @@ pub fn test_extend_functionality() {
             &test_bead_12.block_header,
             PoolNetwork::Cpunet,
         ));
-    test_braid.extend(&test_bead_13);
+    extend_fixture(&mut test_braid, &test_bead_13);
     assert_eq!(
         test_braid.cohorts,
         vec![
@@ -318,7 +342,7 @@ pub fn test_orphan_beads_functinality() {
             PoolNetwork::Cpunet,
         ));
 
-    test_braid.extend(&test_bead_1);
+    extend_fixture(&mut test_braid, &test_bead_1);
     assert_eq!(
         test_braid.cohorts,
         vec![Cohort(HashSet::from([0]))],
@@ -332,7 +356,7 @@ pub fn test_orphan_beads_functinality() {
             &test_bead_0.block_header,
             PoolNetwork::Cpunet,
         ));
-    test_braid.extend(&test_bead_2);
+    extend_fixture(&mut test_braid, &test_bead_2);
 
     // After adding the second bead, we should have three cohorts
     assert_eq!(
@@ -1758,7 +1782,7 @@ fn test_extend_function() {
         for index in 0..=max_index {
             if !genesis_indices.contains(&index) {
                 if let Some(bead) = index_to_bead.get(&index) {
-                    test_braid.extend(bead);
+                    extend_fixture(&mut test_braid, bead);
                 }
             }
         }
@@ -1851,7 +1875,7 @@ fn test_get_beads_after() {
 
     // Extend braid with remaining beads
     for i in 1..4 {
-        test_braid.extend(&beads[i]);
+        extend_fixture(&mut test_braid, &beads[i]);
     }
 
     // Test 1: Get beads after genesis (should return beads 1, 2, 3)
@@ -1976,7 +2000,7 @@ fn test_get_beads_after_diamond_structure() {
 
     // Extend braid with remaining beads
     for i in 1..4 {
-        test_braid.extend(&beads[i]);
+        extend_fixture(&mut test_braid, &beads[i]);
     }
 
     // Test 1: Get beads after genesis
@@ -2092,7 +2116,7 @@ fn test_get_beads_after_complex_braid() {
 
     // Extend braid with remaining beads
     for i in 1..8 {
-        test_braid.extend(&beads[i]);
+        extend_fixture(&mut test_braid, &beads[i]);
     }
 
     // Test 1: Get beads after genesis (should return all other beads)
@@ -2187,8 +2211,8 @@ fn test_get_beads_after_edge_cases() {
         network: PoolNetwork::Cpunet,
     };
 
-    test_braid.extend(&beads[1]);
-    test_braid.extend(&beads[2]);
+    extend_fixture(&mut test_braid, &beads[1]);
+    extend_fixture(&mut test_braid, &beads[2]);
 
     // Test 1: Empty input vector
     let _result = test_braid.get_beads_after(vec![]);
@@ -2296,7 +2320,7 @@ fn test_get_beads_after_multiple_tips() {
     };
 
     for i in 1..6 {
-        test_braid.extend(&beads[i]);
+        extend_fixture(&mut test_braid, &beads[i]);
     }
 
     // Test: Get beads after multiple tips with different indices
@@ -2337,7 +2361,7 @@ fn test_extend_without_orphans_promotes_nothing() {
         .parents
         .push(compute_block_hash(&genesis.block_header, braid.network));
 
-    match braid.extend(&child) {
+    match extend_fixture(&mut braid, &child) {
         AddBeadStatus::BeadAdded { promoted_orphans } => {
             assert!(
                 promoted_orphans.is_empty(),
@@ -2370,7 +2394,7 @@ fn test_extend_reports_promoted_orphan() {
     // Grandchild arrives before its parent `child` -> parked as an orphan.
     assert!(
         matches!(
-            braid.extend(&grandchild),
+            extend_fixture(&mut braid, &grandchild),
             AddBeadStatus::ParentsNotYetReceived
         ),
         "grandchild should be parked while its parent is missing"
@@ -2378,7 +2402,7 @@ fn test_extend_reports_promoted_orphan() {
     assert_eq!(braid.orphan_beads.len(), 1);
 
     // The parent arrives: `child` is added and `grandchild` becomes connectable.
-    match braid.extend(&child) {
+    match extend_fixture(&mut braid, &child) {
         AddBeadStatus::BeadAdded { promoted_orphans } => {
             assert_eq!(promoted_orphans.len(), 1, "grandchild should be promoted");
             assert_eq!(
@@ -2416,17 +2440,17 @@ fn test_extend_promotes_transitive_orphan_chain() {
 
     // `c` and `b` arrive before `a`; both are parked.
     assert!(matches!(
-        braid.extend(&c),
+        extend_fixture(&mut braid, &c),
         AddBeadStatus::ParentsNotYetReceived
     ));
     assert!(matches!(
-        braid.extend(&b),
+        extend_fixture(&mut braid, &b),
         AddBeadStatus::ParentsNotYetReceived
     ));
     assert_eq!(braid.orphan_beads.len(), 2);
 
     // `a` connects the whole chain: `b` then `c` are promoted transitively.
-    match braid.extend(&a) {
+    match extend_fixture(&mut braid, &a) {
         AddBeadStatus::BeadAdded { promoted_orphans } => {
             assert_eq!(
                 promoted_orphans.len(),
@@ -2447,4 +2471,74 @@ fn test_extend_promotes_transitive_orphan_chain() {
         braid.orphan_beads.is_empty(),
         "all transitively-connectable orphans should be drained"
     );
+}
+
+/// A child whose copied parent timestamp disagrees with the parent is rejected
+/// and leaves the braid unchanged.
+#[test]
+fn test_extend_rejects_falsified_parent_timestamp() {
+    let genesis = create_test_bead(1, None);
+    let mut braid = Braid::new(vec![genesis.clone()], PoolNetwork::Cpunet);
+    let genesis_hash = compute_block_hash(&genesis.block_header, braid.network);
+
+    let mut child = create_test_bead(2, Some(genesis_hash));
+    let actual = genesis
+        .committed_metadata
+        .start_timestamp
+        .to_consensus_u32();
+    child.committed_metadata.parent_bead_timestamps.0 =
+        vec![bitcoin::absolute::Time::from_consensus(actual + 1).unwrap()];
+
+    assert!(matches!(braid.extend(&child), AddBeadStatus::InvalidBead));
+    assert_eq!(braid.beads.len(), 1, "rejected child must not be inserted");
+    assert!(braid.orphan_beads.is_empty());
+}
+
+/// An orphan cannot be checked until its parent arrives; when the parent arrives
+/// the falsified orphan is checked during promotion and dropped.
+#[test]
+fn test_orphan_with_falsified_parent_timestamp_is_dropped_on_promotion() {
+    let genesis = create_test_bead(1, None);
+    let mut braid = Braid::new(vec![genesis.clone()], PoolNetwork::Cpunet);
+    let genesis_hash = compute_block_hash(&genesis.block_header, braid.network);
+
+    let parent = create_test_bead(2, Some(genesis_hash));
+    let parent_hash = compute_block_hash(&parent.block_header, braid.network);
+    let mut child = create_test_bead(3, Some(parent_hash));
+    let actual = parent.committed_metadata.start_timestamp.to_consensus_u32();
+    child.committed_metadata.parent_bead_timestamps.0 =
+        vec![bitcoin::absolute::Time::from_consensus(actual + 1).unwrap()];
+    let child_hash = compute_block_hash(&child.block_header, braid.network);
+
+    assert!(matches!(
+        braid.extend(&child),
+        AddBeadStatus::ParentsNotYetReceived
+    ));
+    match braid.extend(&parent) {
+        AddBeadStatus::BeadAdded { promoted_orphans } => {
+            assert!(
+                promoted_orphans.is_empty(),
+                "falsified orphan must not be promoted"
+            );
+        }
+        other => panic!("expected BeadAdded for the parent, got {:?}", other),
+    }
+    assert!(!braid.bead_index_mapping.contains_key(&child_hash));
+    assert!(
+        braid.orphan_beads.is_empty(),
+        "falsified orphan must be dropped"
+    );
+}
+
+/// A child carrying its parent's real timestamp is accepted.
+#[test]
+fn test_extend_accepts_matching_parent_timestamp() {
+    let genesis = create_test_bead(1, None);
+    let mut braid = Braid::new(vec![genesis.clone()], PoolNetwork::Cpunet);
+    let genesis_hash = compute_block_hash(&genesis.block_header, braid.network);
+    let child = create_test_bead(2, Some(genesis_hash));
+    assert!(matches!(
+        braid.extend(&child),
+        AddBeadStatus::BeadAdded { .. }
+    ));
 }
