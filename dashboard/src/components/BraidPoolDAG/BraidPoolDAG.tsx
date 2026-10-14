@@ -16,7 +16,11 @@ import {
   ARROW_WIDTH,
   ARROW_HEIGHT,
   CONTAINER_HEIGHT,
+  HIGHLIGHT_COLOR,
+  LINK_COLOR,
+  NODE_STROKE_COLOR,
 } from './Constants';
+import BeadTooltip from './BeadTooltip';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 
 const GraphVisualization: React.FC = () => {
@@ -28,7 +32,11 @@ const GraphVisualization: React.FC = () => {
   const [nodeIdMap, setNodeIdMap] = useState<NodeIdMapping>({});
   const [selectedCohorts, setSelectedCohorts] = useState<number | 'all'>(20);
   const nodeRadius = NODE_RADIUS;
-  const tooltipRef = useRef<HTMLDivElement>(null);
+  const [hoveredBead, setHoveredBead] = useState<{
+    bead: GraphNode;
+    cohortIndex: number | undefined;
+    hwpPosition: number | null;
+  } | null>(null);
 
   const [graphUpdateCounter, setGraphUpdateCounter] = useState(0);
   const [latestBeadHashForHighlight, setLatestBeadHashForHighlight] = useState<
@@ -460,12 +468,12 @@ const GraphVisualization: React.FC = () => {
         .selectAll('.node')
         .filter((d: any) => firstCohort.includes(d.id))
         .select('ellipse , rect')
-        .attr('stroke', '#FF8500')
+        .attr('stroke', HIGHLIGHT_COLOR)
         .attr('stroke-width', 3)
         .transition()
         .duration(1000)
         .attr('stroke-width', 2)
-        .attr('stroke', '#fff');
+        .attr('stroke', NODE_STROKE_COLOR);
     }
 
     // Animate last cohort nodes
@@ -474,12 +482,12 @@ const GraphVisualization: React.FC = () => {
         .selectAll('.node')
         .filter((d: any) => lastCohort.includes(d.id))
         .select('ellipse , rect')
-        .attr('stroke', '#FF8500')
+        .attr('stroke', HIGHLIGHT_COLOR)
         .attr('stroke-width', 3)
         .transition()
         .duration(1000)
         .attr('stroke-width', 2)
-        .attr('stroke', '#fff');
+        .attr('stroke', NODE_STROKE_COLOR);
     }
 
     if (firstCohort.length > 0) {
@@ -490,7 +498,7 @@ const GraphVisualization: React.FC = () => {
             firstCohort.includes(d.source) || firstCohort.includes(d.target)
         )
         .attr('stroke-width', 2)
-        .attr('stroke', '#FF8500');
+        .attr('stroke', HIGHLIGHT_COLOR);
 
       animateLinkDirection(selectedLinks);
     }
@@ -504,7 +512,7 @@ const GraphVisualization: React.FC = () => {
             lastCohort.includes(d.source) || lastCohort.includes(d.target)
         )
         .attr('stroke-width', 2)
-        .attr('stroke', '#FF8500');
+        .attr('stroke', HIGHLIGHT_COLOR);
 
       animateLinkDirection(selectedLinks);
     }
@@ -571,7 +579,7 @@ const GraphVisualization: React.FC = () => {
         : graphData.cohorts.slice(-selectedCohorts);
     const filteredCohortNodes = new Set(filteredCohorts.flat());
 
-    const tooltip = d3.select(tooltipRef.current).style('visibility', 'hidden');
+    setHoveredBead(null);
 
     const svg = d3.select(svgRef.current);
     svg.selectAll('*').remove();
@@ -751,8 +759,8 @@ const GraphVisualization: React.FC = () => {
       })
       .attr('stroke', (d) =>
         hwPathSet.has(d.source) && hwPathSet.has(d.target)
-          ? '#FF8500'
-          : '#48CAE4'
+          ? HIGHLIGHT_COLOR
+          : LINK_COLOR
       )
       .attr('stroke-width', LINK_STROKE_WIDTH)
       .attr('marker-end', (d) =>
@@ -785,7 +793,7 @@ const GraphVisualization: React.FC = () => {
             .attr('rx', 5) // rounded corners
             .attr('ry', 5)
             .attr('fill', 'red') // Red for the highlighted bead
-            .attr('stroke', '#fff')
+            .attr('stroke', NODE_STROKE_COLOR)
             .attr('stroke-width', 2);
         } else {
           nodeSelection
@@ -798,22 +806,22 @@ const GraphVisualization: React.FC = () => {
               if (cohortIndex === undefined) return COLORS[0];
               return COLORS[cohortIndex % COLORS.length];
             })
-            .attr('stroke', '#fff')
+            .attr('stroke', NODE_STROKE_COLOR)
             .attr('stroke-width', 2);
         }
       })
       .on('mouseover', function (event: MouseEvent, d: GraphNode) {
         d3.select(this)
           .select('ellipse, rect')
-          .attr('stroke', '#FF8500')
+          .attr('stroke', HIGHLIGHT_COLOR)
           .attr('stroke-width', 3);
       })
       .on('mouseout', function () {
         d3.select(this)
           .select('ellipse, rect')
-          .attr('stroke', '#fff')
+          .attr('stroke', NODE_STROKE_COLOR)
           .attr('stroke-width', 2);
-        tooltip.style('visibility', 'hidden');
+        setHoveredBead(null);
       });
 
     nodes
@@ -826,71 +834,13 @@ const GraphVisualization: React.FC = () => {
       .style('font-weight', 'bold')
       .on('mouseover', function (event: MouseEvent, d: GraphNode) {
         const cohortIndex = cohortMap.get(d.id);
-        const isHWP = hwPathSet.has(d.id);
-        const hwpPosition = isHWP ? hwPath.indexOf(d.id) + 1 : null;
-
-        const tooltipContent = `
-                <div style="max-width: 400px; font-size: 12px; line-height: 1.6;">
-                  <div style="margin-bottom: 8px; padding-bottom: 8px;">
-                    <strong >Bead Information</strong>
-                  </div>
-                  
-                  <div style="margin-bottom: 4px; word-break: break-all;"><strong> Hash:</strong> <span style="font-family: monospace; font-size: 10px;">${d.id}</span></div>
-                  <div style="margin-bottom: 4px;"><strong>Cohort Index:</strong> ${cohortIndex !== undefined ? cohortIndex : 'N/A'}</div>
-                  <div style="margin-bottom: 4px;"><strong>On HWP:</strong> <span style="color: ${isHWP ? '#4ade80' : '#ef4444'};">${isHWP ? 'Yes' : 'No'}${hwpPosition ? ` (Position: ${hwpPosition})` : ''}</span></div>
-                  
-                  <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #48CAE4;">
-                    <strong>Parents (${d.parents.length}):</strong>
-                    ${
-                      d.parents.length > 0
-                        ? `
-                      <div style="margin-top: 4px; padding-left: 8px;">
-                        ${d.parents
-                          .map(
-                            (p) => `
-                          <div style="margin: 2px 0; font-size: 10px;">
-                            <span style="color: #FF8500;">→</span>
-                            <span style="font-family: monospace; color: #48CAE4;">${p.slice(0, 12)}...${p.slice(-8)}</span>
-                          </div>
-                        `
-                          )
-                          .join('')}
-                      </div>
-                    `
-                        : '<span style="color: #999;"> None (Genesis)</span>'
-                    }
-                  </div>
-                  
-                  <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #48CAE4;">
-                    <strong>Children (${d.children?.length || 0}):</strong>
-                    ${
-                      d.children && d.children.length > 0
-                        ? `
-                      <div style="margin-top: 4px; padding-left: 8px;">
-                        ${d.children
-                          .slice(0, 5)
-                          .map(
-                            (c) => `
-                          <div style="margin: 2px 0; font-size: 10px;">
-                            <span style="color: #4ade80;">→</span> 
-                            <span style="font-family: monospace; color: #48CAE4;">${c.slice(0, 12)}...${c.slice(-8)}</span>
-                          </div>
-                        `
-                          )
-                          .join('')}
-                        ${d.children.length > 5 ? `<div style="margin-top: 2px; color: #999; font-size: 10px;">... and ${d.children.length - 5} more</div>` : ''}
-                      </div>
-                    `
-                        : '<span style="color: #999;"> None (Leaf bead)</span>'
-                    }
-                  </div>
-                </div>
-                  `;
-
-        tooltip.html(tooltipContent).style('visibility', 'visible');
+        const hwpPosition = hwPathSet.has(d.id)
+          ? hwPath.indexOf(d.id) + 1
+          : null;
+        setHoveredBead({ bead: d, cohortIndex, hwpPosition });
       })
       .on('mouseout', function () {
-        tooltip.style('visibility', 'hidden');
+        setHoveredBead(null);
       });
     container
       .append('text')
@@ -903,8 +853,8 @@ const GraphVisualization: React.FC = () => {
       .append('defs')
       .selectAll('marker')
       .data([
-        { id: 'arrow-blue', color: '#48CAE4' },
-        { id: 'arrow-orange', color: '#FF8500' },
+        { id: 'arrow-blue', color: LINK_COLOR },
+        { id: 'arrow-orange', color: HIGHLIGHT_COLOR },
       ])
       .enter()
       .append('marker')
@@ -1082,10 +1032,11 @@ const GraphVisualization: React.FC = () => {
             overflow="visible"
             className="block"
           />
-          <div
-            ref={tooltipRef}
-            className="fixed bg-gray-800 text-white border rounded p-2 shadow-lg pointer-events-none z-10 bottom-5 right-5 mb-[200px] border-gray-600 backdrop-blur-lg"
-          ></div>
+          {hoveredBead && (
+            <div className="fixed bg-gray-800 text-white border rounded p-2 shadow-lg pointer-events-none z-10 bottom-5 right-5 mb-[200px] border-gray-600 backdrop-blur-lg">
+              <BeadTooltip {...hoveredBead} />
+            </div>
+          )}
         </div>
       </div>
       {/*  Beads Table */}
