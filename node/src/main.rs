@@ -1151,7 +1151,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                           braid_data.extend(&bead)
                                       };
                                       if ibd_spinlock.load(Ordering::SeqCst){
-                                         let broadcast_ts = bead.uncommitted_metadata.broadcast_timestamp.clone().to_consensus_u32();
+                                         let broadcast_ts = bead.uncommitted_metadata.broadcast_timestamp.as_secs();
                                          let (ts_tx, ts_rx) = tokio::sync::oneshot::channel();
                                          if let Err(e) = ibd_command_tx
                                              .send(IBDCommands::FetchAllTimestamps { sender: ts_tx })
