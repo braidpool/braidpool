@@ -886,14 +886,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
             keypair
         }
     };
-    // load beads from db (if present) and insert in braid here
-    // `peer_manager_arc` created earlier is shared with the RPC server. It must not be created
-    // again here: a second instance would shadow it, the swarm would fill a private copy, and
-    // `getpeerinfo` would always report no peers.
     //For local testing uncomment this keypair peer since it running to process will
     //result in same peerID leading to OutgoingConnectionError
     // let keypair = identity::Keypair::generate_ed25519();
-    //creating a main topic subscribing to the current test topic
+    
+    // load beads from db (if present) and insert in braid here
     let current_broadcast_topic: floodsub::Topic = floodsub::Topic::new(BRAIDPOOL_TOPIC);
 
     let swarm_builder = libp2p::SwarmBuilder::with_existing_identity(keypair)
