@@ -356,6 +356,57 @@ def test_rpc_client_invalid_response() -> None:
     raise AssertionError("invalid response was not raised")
 
 
+def _peer_info_client(connected_by_call: list[int]) -> RpcClient:
+    """RpcClient whose ``getpeerinfo`` replies with the real object shape.
+
+    Each call pops the next ``connected`` value, repeating the last one.
+    """
+
+    def transport(_url: str, payload: bytes, _timeout: float, _auth: str | None = None) -> bytes:
+        request = json.loads(payload.decode("utf8"))
+        assert_equal(request["method"], "getpeerinfo")
+        connected = connected_by_call.pop(0) if len(connected_by_call) > 1 else connected_by_call[0]
+        reply = {
+            "total_peers": connected,
+            "connected": connected,
+            "inbound": 0,
+            "outbound": connected,
+            "network_groups": 0,
+            "avg_latency_ms": 0.0,
+            "peers": [{}] * connected,
+        }
+        return json.dumps({"jsonrpc": "2.0", "id": request["id"], "result": reply}).encode("utf8")
+
+    return RpcClient("127.0.0.1", 1234, retry_delay=0, transport=transport)
+
+
+def test_wait_for_peers_times_out_with_no_peers() -> None:
+    """The reply has 7 keys, so counting keys would satisfy any minimum up to 7."""
+    client = _peer_info_client([0])
+    assert_equal(len(client.get_peer_info()), 7)
+    for minimum in (1, 7):
+        try:
+            client.wait_for_peers(minimum, timeout=0.05)
+        except AssertionError:
+            continue
+        raise AssertionError(f"wait_for_peers({minimum}) returned with 0 connected peers")
+
+
+def test_wait_for_peers_returns_once_enough_peers_connect() -> None:
+    client = _peer_info_client([0, 0, 1])
+    client.wait_for_peers(1, timeout=1.0)
+
+
+def test_wait_for_peers_requires_the_minimum_not_just_one() -> None:
+    client = _peer_info_client([1])
+    client.wait_for_peers(1, timeout=0.05)
+    try:
+        client.wait_for_peers(2, timeout=0.05)
+    except AssertionError:
+        return
+    raise AssertionError("wait_for_peers(2) returned with 1 connected peer")
+
+
 def test_miner_log_parsing() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         miner = CpuMiner(3333, Path(tmp), minerd_path="unused")
@@ -806,6 +857,9 @@ TESTS = [
     test_rpc_client_transport_failure_after_retries,
     test_rpc_client_timeout,
     test_rpc_client_invalid_response,
+    test_wait_for_peers_times_out_with_no_peers,
+    test_wait_for_peers_returns_once_enough_peers_connect,
+    test_wait_for_peers_requires_the_minimum_not_just_one,
     test_miner_log_parsing,
     test_find_binary_relative_path,
     test_find_binary_missing_skips,
