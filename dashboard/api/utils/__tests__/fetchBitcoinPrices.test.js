@@ -11,7 +11,7 @@ describe('fetchBitcoinPrices', () => {
     jest.clearAllMocks();
   });
 
-  it('should fetch BTC prices for USD, EUR, and JPY with correct high and low values', async () => {
+  it('should fetch BTC prices for USD, EUR, GBP, and JPY with correct high and low values', async () => {
     axios.get.mockImplementation((url) => {
       if (url.includes('USD') && url.includes(SUFFIX)) {
         return Promise.resolve({ data: { data: { amount: '30000' } } });
@@ -41,6 +41,23 @@ describe('fetchBitcoinPrices', () => {
                 { price: '27000' },
                 { price: '28500' },
                 { price: '27500' },
+              ],
+            },
+          },
+        });
+      }
+
+      if (url.includes('GBP') && url.includes(SUFFIX)) {
+        return Promise.resolve({ data: { data: { amount: '24000' } } });
+      }
+      if (url.includes('GBP') && url.includes('/historic')) {
+        return Promise.resolve({
+          data: {
+            data: {
+              prices: [
+                { price: '23500' },
+                { price: '24200' },
+                { price: '23800' },
               ],
             },
           },
@@ -80,6 +97,11 @@ describe('fetchBitcoinPrices', () => {
         high24h: 28500,
         low24h: 27000,
       },
+      GBP: {
+        current: 24000,
+        high24h: 24200,
+        low24h: 23500,
+      },
       JPY: {
         current: 4000000,
         high24h: 4050000,
@@ -87,8 +109,8 @@ describe('fetchBitcoinPrices', () => {
       },
     });
 
-    // 6 total calls: 3 spot + 3 historic
-    expect(axios.get).toHaveBeenCalledTimes(6);
+    // 8 total calls: 4 spot + 4 historic
+    expect(axios.get).toHaveBeenCalledTimes(8);
   });
 
   it('should return null and log error if one request fails', async () => {
