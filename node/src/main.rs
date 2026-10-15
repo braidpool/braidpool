@@ -1484,7 +1484,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                                  }
                                              }
                                              //Sending all the beads requested in the hashes supplied during `GetData` request
-                                             swarm.behaviour_mut().respond_with_beads(channel, beads);
+                                             if swarm.behaviour_mut().respond_with_beads(channel, beads).is_err() {
+                                                 warn!(peer = %peer, "Bead sync response channel closed, disconnecting the peer");
+                                                 let _ = swarm.disconnect_peer_id(peer);
+                                             }
                                      }
                                      BeadRequest::GetTips => {
                                              let tips;
@@ -1498,7 +1501,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                                      .map(|bead| braid_lock.compute_bead_hash(&bead))
                                                      .collect();
                                              }
-                                             swarm.behaviour_mut().respond_with_tips(channel, tips);
+                                             if swarm.behaviour_mut().respond_with_tips(channel, tips).is_err() {
+                                                 warn!(peer = %peer, "Tips response channel closed, disconnecting the peer");
+                                                 let _ = swarm.disconnect_peer_id(peer);
+                                             }
                                      }
                                      BeadRequest::GetGenesis => {
                                              let genesis;
@@ -1512,7 +1518,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                                      .map(|bead| braid_lock.compute_bead_hash(&bead))
                                                      .collect();
                                              }
-                                             swarm.behaviour_mut().respond_with_genesis(channel, genesis);
+                                             if swarm.behaviour_mut().respond_with_genesis(channel, genesis).is_err() {
+                                                 warn!(peer = %peer, "Genesis response channel closed, disconnecting the peer");
+                                                 let _ = swarm.disconnect_peer_id(peer);
+                                             }
                                      }
                                      BeadRequest::GetAllBeads => {
 
@@ -1521,7 +1530,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                             let braid_lock = braid.read().await;
                                             all_beads = braid_lock.beads.iter().cloned().collect();
                                         }
-                                        swarm.behaviour_mut().respond_with_beads(channel, all_beads);
+                                        if swarm.behaviour_mut().respond_with_beads(channel, all_beads).is_err() {
+                                            warn!(peer = %peer, "Bead sync response channel closed, disconnecting the peer");
+                                            let _ = swarm.disconnect_peer_id(peer);
+                                        }
                                 }
                                 BeadRequest::GetBeadsAfter(hashes) => {
                                         let braid_lock = braid.read().await;
@@ -1533,14 +1545,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                             }
                                             //Sending the corresponding bead hashes requested by the new peer for IBD that will
                                             //be after the new peer's `Tips`.
-                                            swarm
+                                            if swarm
                                                 .behaviour_mut()
-                                                .respond_with_beadhashes(channel, computed_beads_hashes);
+                                                .respond_with_beadhashes(channel, computed_beads_hashes)
+                                                .is_err()
+                                            {
+                                                warn!(peer = %peer, "Bead hashes response channel closed, disconnecting the peer");
+                                                let _ = swarm.disconnect_peer_id(peer);
+                                            }
                                         } else {
-                                            swarm.behaviour_mut().respond_with_error(
-                                                channel,
-                                                BeadSyncError::BeadHashNotFound,
-                                            );
+                                            if swarm
+                                                .behaviour_mut()
+                                                .respond_with_error(channel, BeadSyncError::BeadHashNotFound)
+                                                .is_err()
+                                            {
+                                                warn!(peer = %peer, "Error response channel closed, disconnecting the peer");
+                                                let _ = swarm.disconnect_peer_id(peer);
+                                            }
                                         }
                                 }
                             }
