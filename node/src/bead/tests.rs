@@ -53,6 +53,7 @@ fn test_serialized_committed_metadata() {
         .parent_bead_timestamps(time_hash_set)
         .payout_address(_address)
         .transactions(vec![])
+        .committed_transactions(vec![])
         .min_target(min_target)
         .weak_target(weak_target)
         .build();
@@ -126,6 +127,7 @@ fn test_serialized_bead() {
         .min_target(min_target)
         .weak_target(weak_target)
         .transactions(vec![test_txid])
+        .committed_transactions(vec![])
         .build();
     let extra_nonce: u64 = 42;
     let hex = "3046022100839c1fbc5304de944f697c9f4b1d01d1faeba32d751c0f7acb21ac8a0f436a72022100e89bd46bb3a5a62adc679f659b7ce876d83ee297c7a5587b2011c4fcc72eab45";
@@ -196,6 +198,7 @@ fn test_bead_response_serialization() {
         .min_target(min_target)
         .weak_target(weak_target)
         .transactions(vec![])
+        .committed_transactions(vec![])
         .build();
     let extra_nonce: u64 = 42;
     let hex = "3046022100839c1fbc5304de944f697c9f4b1d01d1faeba32d751c0f7acb21ac8a0f436a72022100e89bd46bb3a5a62adc679f659b7ce876d83ee297c7a5587b2011c4fcc72eab45";
