@@ -2527,8 +2527,7 @@ impl Notifier {
         })?;
         connection_entry
             .sender
-            .send(json_str.clone())
-            .await
+            .try_send(json_str.clone())
             .map_err(|e| StratumErrors::NotifyMessageNotSent {
                 error: format!("Failed to send upstream job to {}: {}", peer_addr, e),
                 msg: json_str,
@@ -2734,8 +2733,16 @@ impl Notifier {
                                     );
                                     // Use control_tx — a separate low-traffic channel (cap 10) that
                                     // lands even when the data queue (cap 1024) is full.
-                                    let _ =
-                                        connection_info.control_tx.try_send(ControlMsg::Disconnect);
+                                    if connection_info
+                                        .control_tx
+                                        .try_send(ControlMsg::Disconnect)
+                                        .is_err()
+                                    {
+                                        warn!(
+                                            peer = %peer_adr,
+                                            "Disconnect signal dropped — control channel full; socket will self-close on timeout"
+                                        );
+                                    }
                                     self.miner_states.remove(peer_adr);
                                 }
                             }
@@ -2818,10 +2825,8 @@ impl Notifier {
                     let connection_entry = match connection_entry {
                         Some(entry) => entry,
                         None => {
-                            error!(peer = %new_downstream_addr, "Mining peer not found in connection mapping");
-                            return Err(StratumErrors::PeerNotFoundInConnectionMapping {
-                                peer_addr: new_downstream_addr,
-                            });
+                            warn!(peer = %new_downstream_addr, "Mining peer not found in connection mapping — skipping");
+                            continue;
                         }
                     };
                     let connection_id_hex = format!("{:x}", connection_entry.connection_id);
@@ -2941,10 +2946,11 @@ impl Notifier {
                         Ok(job) => job,
                         Err(error) => {
                             error!(
+                                peer = %new_downstream_addr,
                                 error = %error,
-                                "Error occurred while fetching the job notification"
+                                "Failed to build job notification for new miner — skipping"
                             );
-                            return Err(error);
+                            continue;
                         }
                     };
                     // Fresh connection — queue should always be empty. try_send
@@ -3111,9 +3117,16 @@ impl Notifier {
                                         "Disconnecting slow miner after {} consecutive failures",
                                         crate::MAX_CONSECUTIVE_SEND_FAILURES
                                     );
-                                    let _ = downstream_channel
+                                    if downstream_channel
                                         .control_tx
-                                        .try_send(ControlMsg::Disconnect);
+                                        .try_send(ControlMsg::Disconnect)
+                                        .is_err()
+                                    {
+                                        warn!(
+                                            peer = %peer_addr,
+                                            "Disconnect signal dropped — control channel full; socket will self-close on timeout"
+                                        );
+                                    }
                                     self.miner_states.remove(peer_addr);
                                 }
                             }
@@ -5417,7 +5430,9 @@ mod test {
             })
             .await
             .unwrap();
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        // Give the notifier time to process the first SendToAll (which will fail — queue
+        // full) so that needs_clean_jobs is set before the queue is drained below.
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
         let _ = miner_rx.try_recv();
         let _ = miner_rx.try_recv();
