@@ -78,6 +78,18 @@ class TestUtilityFunctions(unittest.TestCase):
         n2 = MockNode(0, 90)
         self.assertAlmostEqual(sph_arclen(n1, n2), math.pi/2)
 
+    def test_node_coordinates_are_degrees(self):
+        """Node coordinates must be in degrees (as sph_arclen expects), spanning the globe."""
+        random.seed(1)
+        net = Network(50, target=2**240 - 1, npeers=4)
+        lats = [n.latitude for n in net.nodes]
+        lons = [n.longitude for n in net.nodes]
+        self.assertTrue(all(-90 <= lat <= 90 for lat in lats))
+        self.assertTrue(all(0 <= lon <= 360 for lon in lons))
+        # In radians these spreads would be < pi and < 2*pi
+        self.assertGreater(max(lats) - min(lats), 90)
+        self.assertGreater(max(lons) - min(lons), 180)
+
 
 class TestBeadClass(unittest.TestCase):
     """Test the Bead class."""
@@ -440,13 +452,10 @@ class TestIntegration(unittest.TestCase):
         # Simulate for a small number of beads
         network.simulate(nbeads=5, mine=False)
 
-        # Check that all nodes have the same number of beads
+        # simulate() runs until node 0 has <nbeads>. Beads take a non-zero time to propagate
+        # so node 1 may lag behind or hold beads node 0 has not yet received.
         self.assertEqual(len(network.nodes[0].braid.beads), 5)
-        self.assertEqual(len(network.nodes[1].braid.beads), 5)
-
-        # Check that all nodes have the same beads
-        self.assertEqual(set(network.nodes[0].braid.beads.keys()),
-                         set(network.nodes[1].braid.beads.keys()))
+        self.assertIn(network.genesis_hash, network.nodes[1].braid.beads)
 
     def test_different_random_seeds(self):
         """Test that different random seeds produce different braids."""
@@ -486,9 +495,9 @@ class TestIntegration(unittest.TestCase):
         network_no_mine.simulate(nbeads=5, mine=False)
         network_mine.simulate(nbeads=5, mine=True)
 
-        # Both networks should have 5 beads
+        # Both networks should have at least 5 beads (mining may find >1 bead in a single tick)
         self.assertEqual(len(network_no_mine.nodes[0].braid.beads), 5)
-        self.assertEqual(len(network_mine.nodes[0].braid.beads), 5)
+        self.assertGreaterEqual(len(network_mine.nodes[0].braid.beads), 5)
 
 
 if __name__ == '__main__':

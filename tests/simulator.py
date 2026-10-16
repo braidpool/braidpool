@@ -233,8 +233,8 @@ class Node:
         self.braid.tips   = {list(self.braid.beads.values())[0]}
         self.working_bead = Bead(None, frozenset(self.braid.tips), self.network, self.nodeid)
         # Geospatial location information
-        self.latitude     = pi*(1/2-random.random())
-        self.longitude    = 2*pi*random.random()
+        self.latitude     = 180*(1/2-random.random()) # degrees, [-90, 90), as sph_arclen() expects
+        self.longitude    = 360*random.random()       # degrees, [0, 360)
 
     def reset(self, initial_target=None, target_algo=None):
         """ Reset the computed braid while keeping the network layout. This must be called after the
