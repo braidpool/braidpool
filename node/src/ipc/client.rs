@@ -53,11 +53,21 @@ impl fmt::Debug for BlockTemplate {
 #[derive(Debug, Clone)]
 pub struct BlockTemplateComponents {
     pub header: Vec<u8>,
-    pub coinbase_transaction: Vec<u8>,
+    pub coinbase: CoinbaseTemplate,
     pub fees: Vec<u64>,
     pub coinbase_merkle_path: Vec<Vec<u8>>,
-    pub coinbase_commitment: Vec<u8>,
     pub block_hex: Vec<u8>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CoinbaseTemplate {
+    pub version: u32,
+    pub sequence: u32,
+    pub script_sig_prefix: Vec<u8>,
+    pub witness: Option<Vec<u8>>,
+    pub block_reward_remaining: u64,
+    pub required_outputs: Vec<bitcoin::TxOut>,
+    pub lock_time: u32,
 }
 
 // Bitcoin notification events
@@ -386,6 +396,10 @@ impl BitcoinRpcClient {
         _rules: Option<Vec<String>>,
     ) -> Result<Vec<u8>, Box<dyn Error>> {
         let mut create_block_req = self.mining_interface.create_new_block_request();
+        create_block_req
+            .get()
+            .get_context()?
+            .set_thread(self.thread_client.clone());
         let mut options = create_block_req.get().init_options();
         options.set_block_reserved_weight(4000);
         options.set_use_mempool(true);
@@ -410,6 +424,10 @@ impl BitcoinRpcClient {
         _rules: Option<Vec<String>>,
     ) -> Result<BlockTemplate, Box<dyn Error>> {
         let mut create_block_req = self.mining_interface.create_new_block_request();
+        create_block_req
+            .get()
+            .get_context()?
+            .set_thread(self.thread_client.clone());
         let mut options = create_block_req.get().init_options();
         options.set_block_reserved_weight(4000);
         options.set_use_mempool(true);
@@ -439,7 +457,27 @@ impl BitcoinRpcClient {
             .get_context()?
             .set_thread(self.thread_client.clone());
         let coinbase_response = coinbase_req.send().promise.await?;
-        let coinbase_data = coinbase_response.get()?.get_result()?.to_vec();
+        let coinbase = coinbase_response.get()?.get_result()?;
+        let required_outputs_reader = coinbase.get_required_outputs()?;
+        let mut required_outputs = Vec::with_capacity(required_outputs_reader.len() as usize);
+        for index in 0..required_outputs_reader.len() {
+            required_outputs.push(bitcoin::consensus::deserialize(
+                &required_outputs_reader.get(index)?,
+            )?);
+        }
+        let coinbase = CoinbaseTemplate {
+            version: coinbase.get_version(),
+            sequence: coinbase.get_sequence(),
+            script_sig_prefix: coinbase.get_script_sig_prefix()?.to_vec(),
+            witness: coinbase
+                .has_witness()
+                .then(|| coinbase.get_witness().map(|witness| witness.to_vec()))
+                .transpose()?,
+            block_reward_remaining: u64::try_from(coinbase.get_block_reward_remaining())
+                .map_err(|_| "coinbase block reward cannot be negative")?,
+            required_outputs,
+            lock_time: coinbase.get_lock_time(),
+        };
 
         let mut fees_req = block_template_interface.get_tx_fees_request();
         fees_req
@@ -480,22 +518,13 @@ impl BitcoinRpcClient {
             }
         }
 
-        let mut commitment_req = block_template_interface.get_coinbase_commitment_request();
-        commitment_req
-            .get()
-            .get_context()?
-            .set_thread(self.thread_client.clone());
-        let commitment_response = commitment_req.send().promise.await?;
-        let commitment_data = commitment_response.get()?.get_result()?.to_vec();
-
         Ok(BlockTemplate {
             template_interface: block_template_interface,
             components: BlockTemplateComponents {
                 header: header_data,
-                coinbase_transaction: coinbase_data,
+                coinbase,
                 fees: fees_vec,
                 coinbase_merkle_path,
-                coinbase_commitment: commitment_data,
                 block_hex: full_block_data,
             },
             processed_block_hex: None,
