@@ -455,7 +455,15 @@ class TestIntegration(unittest.TestCase):
         # simulate() runs until node 0 has <nbeads>. Beads take a non-zero time to propagate
         # so node 1 may lag behind or hold beads node 0 has not yet received.
         self.assertEqual(len(network.nodes[0].braid.beads), 5)
-        self.assertIn(network.genesis_hash, network.nodes[1].braid.beads)
+
+        # Keep ticking without mining new beads until node 0's beads reach node 1.
+        node0_beads = set(network.nodes[0].braid.beads)
+        for _ in range(1000):
+            if node0_beads <= set(network.nodes[1].braid.beads) or not network.inflightdelay:
+                break
+            network.tick(mine=False)
+        self.assertTrue(node0_beads <= set(network.nodes[1].braid.beads),
+                        msg="node 0's beads never propagated to node 1")
 
     def test_different_random_seeds(self):
         """Test that different random seeds produce different braids."""
