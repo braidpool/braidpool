@@ -1,0 +1,48 @@
+# Braidpool Translator Config
+#
+# The translator bridges SV1 miners to the Braidpool SV2 pool.
+#
+#   SV1 miners  →  braidpool-translator (this process)  →  braidpool node (SV2 pool)
+#
+# Required node flags:
+#   --sv2-pool-port <PORT>           must match upstream.port below
+#   --sv2-authority-pubkey <HEX>     must match upstream.authority_pubkey below
+#   --sv2-authority-seckey <HEX>     private key held by the node
+#
+# Start order: braidpool node first, then this translator.
+
+# Downstream — where SV1 miners connect.
+# Use a different port than the node's SV1 stratum (3333) if running both.
+downstream_address = "0.0.0.0"
+downstream_port = 3355
+
+max_supported_version = 2
+min_supported_version = 2
+
+# Extranonce2 bytes each miner can roll.
+downstream_extranonce2_size = 4
+
+# Payout verification: keep false for standard pool mining.
+verify_payout = false
+
+# false = each miner gets its own upstream channel (required for per-miner share tracking).
+aggregate_channels = false
+
+# Difficulty — tune for your miners.
+[downstream_difficulty_config]
+# CPUNet / software miners: set low so vardiff engages quickly.
+min_individual_miner_hashrate = 1000.0
+shares_per_minute = 6.0
+enable_vardiff = true
+# Keepalive mining.notify interval when no new jobs arrive (seconds). 0 = disabled.
+job_keepalive_interval_secs = 60
+
+# Upstream — the Braidpool node's SV2 pool endpoint.
+[[upstreams]]
+address = "127.0.0.1"
+# Must match --sv2-pool-port on the braidpool node.
+port = 34254
+# Must match --sv2-authority-pubkey on the braidpool node (base58-encoded secp256k1 pubkey).
+authority_pubkey = "REPLACE_WITH_NODE_AUTHORITY_PUBKEY"
+# Miner username forwarded upstream. Format: "address.worker" or "sri/solo/<address>/<worker>".
+user_identity = "your_payout_address.worker"
