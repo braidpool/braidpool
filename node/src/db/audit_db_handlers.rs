@@ -174,8 +174,7 @@ impl AuditDBHandler {
 
         // Committed metadata
         let payout_address = row.get::<String, _>("payout_address");
-        let start_timestamp =
-            MicrosecondTimestamp::from_micros(row.get::<i64, _>("start_timestamp") as u64);
+        let start_timestamp = super::get_timestamp(&row, "start_timestamp")?;
 
         let comm_pub_key_bytes: Vec<u8> = row.get("comm_pub_key");
         let comm_pub_key = bitcoin::PublicKey::from_slice(&comm_pub_key_bytes).map_err(|e| {
@@ -205,8 +204,7 @@ impl AuditDBHandler {
                     attribute: "extranonce2".to_string(),
                 }
             })?;
-        let broadcast_timestamp =
-            MicrosecondTimestamp::from_micros(row.get::<i64, _>("broadcast_timestamp") as u64);
+        let broadcast_timestamp = super::get_timestamp(&row, "broadcast_timestamp")?;
         let signature_bytes: Vec<u8> = row.get("signature");
         let signature = bitcoin::ecdsa::Signature::from_slice(&signature_bytes).map_err(|e| {
             DBErrors::TupleAttributeParsingError {
@@ -236,8 +234,7 @@ impl AuditDBHandler {
                     attribute: "parent_block_hash".to_string(),
                 }
             })?);
-            let time =
-                MicrosecondTimestamp::from_micros(p_row.get::<i64, _>("parent_timestamp") as u64);
+            let time = super::get_timestamp(&p_row, "parent_timestamp")?;
             parent_pairs.push((hash, time));
         }
         parent_pairs.sort_by_key(|(hash, _)| *hash);

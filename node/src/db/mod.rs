@@ -1,11 +1,25 @@
 #![allow(non_snake_case)]
 use crate::bead::Bead;
 use crate::braid::Braid;
-use crate::error::BraidError;
+use crate::error::{BraidError, DBErrors};
 use crate::utils::compute_block_hash;
+use crate::utils::timestamp::MicrosecondTimestamp;
+use sqlx::Row;
 pub mod audit_db_handlers;
 pub mod db_handlers;
 pub mod init_db;
+
+/// Reads a microsecond timestamp column, rejecting negative (corrupt) values.
+fn get_timestamp(
+    row: &sqlx::sqlite::SqliteRow,
+    column: &str,
+) -> Result<MicrosecondTimestamp, DBErrors> {
+    let micros = row.get::<i64, _>(column);
+    MicrosecondTimestamp::try_from(micros).map_err(|_| DBErrors::TupleAttributeParsingError {
+        error: format!("Negative timestamp value {micros}"),
+        attribute: column.to_string(),
+    })
+}
 #[derive(Debug, Clone)]
 pub struct BeadInsertData {
     pub bead: Bead,

@@ -543,8 +543,7 @@ pub async fn fetch_beads_in_batch(
                         error: "Invalid parent hash length".into(),
                         attribute: "parent_hash".into(),
                     })?;
-            let ts: i64 = row.get("timestamp");
-            let parent_ts = MicrosecondTimestamp::from_micros(ts as u64);
+            let parent_ts = super::get_timestamp(&row, "timestamp")?;
             let bead = &mut batch[idx];
             bead.committed_metadata
                 .parents
@@ -615,11 +614,10 @@ fn build_bead_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<Bead, DBErrors> 
         CompactTarget::from_consensus(row.get::<u32, _>("weak_target"));
     bead.committed_metadata.miner_ip = row.get("miner_ip");
 
-    bead.committed_metadata.start_timestamp =
-        MicrosecondTimestamp::from_micros(row.get::<i64, _>("start_timestamp") as u64);
+    bead.committed_metadata.start_timestamp = super::get_timestamp(&row, "start_timestamp")?;
 
     bead.uncommitted_metadata.broadcast_timestamp =
-        MicrosecondTimestamp::from_micros(row.get::<i64, _>("broadcast_timestamp") as u64);
+        super::get_timestamp(&row, "broadcast_timestamp")?;
 
     bead.uncommitted_metadata.extra_nonce_1 =
         u64::from_str_radix(&row.get::<String, _>("extranonce1"), 16).map_err(|e| {
@@ -686,8 +684,7 @@ pub async fn fetch_bead_by_bead_hash(
                     attribute: "payout_address".to_string(),
                 })?
                 .to_string();
-            let start_timestamp =
-                MicrosecondTimestamp::from_micros(row.get::<i64, _>("start_timestamp") as u64);
+            let start_timestamp = super::get_timestamp(&row, "start_timestamp")?;
             let pub_key =
                 PublicKey::from_slice(&row.get::<Vec<u8>, _>("comm_pub_key")).map_err(|e| {
                     DBErrors::TupleAttributeParsingError {
@@ -708,8 +705,7 @@ pub async fn fetch_bead_by_bead_hash(
                     error: e.to_string(),
                     attribute: "extranonce2".to_string(),
                 })?;
-            let broadcast_timestamp =
-                MicrosecondTimestamp::from_micros(row.get::<i64, _>("broadcast_timestamp") as u64);
+            let broadcast_timestamp = super::get_timestamp(&row, "broadcast_timestamp")?;
             let signature =
                 Signature::from_slice(&row.get::<Vec<u8>, _>("signature")).map_err(|e| {
                     DBErrors::TupleAttributeParsingError {
@@ -782,8 +778,7 @@ pub async fn fetch_bead_by_bead_hash(
 
     let mut parent_pairs_single: Vec<(BlockHash, MicrosecondTimestamp)> = Vec::new();
     for parent_beads in parent_timestamp_rows {
-        let parent_timestamp =
-            MicrosecondTimestamp::from_micros(parent_beads.get::<i64, _>("timestamp") as u64);
+        let parent_timestamp = super::get_timestamp(&parent_beads, "timestamp")?;
         let parent_bead_id = parent_beads.get::<i64, _>("parent");
         //Fetching parent_bead from DB
         let parent_bead_hash_raw_bytes = match sqlx::query("SELECT  hash FROM Bead WHERE id = ?")

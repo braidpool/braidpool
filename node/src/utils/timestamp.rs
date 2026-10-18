@@ -66,6 +66,14 @@ impl From<MicrosecondTimestamp> for i64 {
     }
 }
 
+impl TryFrom<i64> for MicrosecondTimestamp {
+    type Error = std::num::TryFromIntError;
+
+    fn try_from(micros: i64) -> Result<Self, Self::Error> {
+        u64::try_from(micros).map(Self)
+    }
+}
+
 // Consensus encoding support
 impl Encodable for MicrosecondTimestamp {
     fn consensus_encode<W: Write + ?Sized>(&self, w: &mut W) -> Result<usize, io::Error> {
@@ -120,6 +128,21 @@ mod tests {
 
         assert_eq!(i64::from(timestamp), original_micros as i64);
         assert_eq!(timestamp.as_secs(), 1653195600);
+        assert_eq!(
+            MicrosecondTimestamp::try_from(i64::from(timestamp)),
+            Ok(timestamp)
+        );
+    }
+
+    // A negative stored value is rejected.
+    #[test]
+    fn test_try_from_negative_i64_rejected() {
+        assert!(MicrosecondTimestamp::try_from(-1i64).is_err());
+        assert!(MicrosecondTimestamp::try_from(i64::MIN).is_err());
+        assert_eq!(
+            MicrosecondTimestamp::try_from(0i64),
+            Ok(MicrosecondTimestamp::default())
+        );
     }
 
     // `now()` reports the current wall-clock time, within one second of the
