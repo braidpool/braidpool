@@ -1,0 +1,18 @@
+[package]
+name = "braidpool-translator"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "SV1-to-SV2 translator proxy for Braidpool"
+
+[[bin]]
+name = "braidpool-translator"
+path = "src/main.rs"
+
+[dependencies]
+translator_sv2 = { git = "https://github.com/braidpool/sv2-apps", branch = "sv2-integration-braidpool" }
+stratum_apps = { git = "https://github.com/braidpool/sv2-apps", branch = "sv2-integration-braidpool" }
+tokio = { workspace = true }
+clap = { workspace = true }
+tracing = { workspace = true }
