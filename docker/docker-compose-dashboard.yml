@@ -1,0 +1,21 @@
+services:
+  web:
+    build:
+      context: ../dashboard
+      dockerfile: ../docker/dashboard/Dockerfile
+    ports: 
+    - 80:80
+  simulator:
+    build:
+      context: ../tests
+      dockerfile: ../docker/simulator_api/Dockerfile
+    ports:
+    - 65433:65433
+  api:
+    build:
+      context: ../dashboard/api
+      dockerfile: ../docker/dashboard/api/Dockerfile
+    env_file:
+      - ../dashboard/api/.env
+    ports:
+    - 5000:5000
