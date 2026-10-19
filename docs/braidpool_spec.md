@@ -748,17 +748,28 @@ and without consuming too much bandwidth or computation. However if $n$ is too
 small, a large miner with multiple Sybil nodes might accidentally win $t$ of the
 most recent blocks, giving him full control of the aggregated funds.
 
-The probability of this happening is given by the Poisson distribution:
+Each of the $n$ most recent blocks is won by the attacking miner independently
+with probability $f$, so the number of those blocks won by the attacker follows
+a binomial distribution, and the probability of this happening is:
 
 $$
-\sum_{k=2n/3+1}^n P(f n, k)
+\sum_{k=t}^n \binom{n}{k} f^k (1-f)^{n-k}
 \qquad {\rm where}
-\qquad P(\lambda, k) = \frac{\lambda^k e^{-\lambda}}{k!}
+\qquad t = \lfloor 2n/3 \rfloor + 1
 $$
 
-where $n$ is the number of miners participating in the signing process and $f$
-is the fraction of the pools hashrate controlled by the attacking miner. For
-$n=50$ and $f=20\%$ this is about 7e-8, rising quickly as $f$ increases.
+where $n$ is the number of miners participating in the signing process, $t$ is
+the signing threshold (66%+1 of the signers, as in [Payout
+Authorization](#payout-authorization)), and $f$ is the fraction of the pool's
+hashrate controlled by the attacking miner. For $n=50$ (so $t=34$) this is:
+
+| $f$ | Probability |
+| --- | ----------- |
+| 20% | $2.7 \times 10^{-13}$ |
+| 25% | $2.0 \times 10^{-10}$ |
+| 30% | $3.4 \times 10^{-8}$ |
+| 40% | $5.8 \times 10^{-5}$ |
+| 50% | $7.7 \times 10^{-3}$ |
 
 This is a standard 51\% attack, which we fundamentally can't prevent and if any
 miner gains too much hashrate. We can mitigate it somewhat by requiring the
