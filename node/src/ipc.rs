@@ -97,13 +97,6 @@ pub async fn ipc_block_listener(
                     }
                 }
             };
-            let tip_height = match shared_client.get_mining_tip_info(Some(RequestPriority::High)).await {
-                    Ok((height, _hash)) => height,
-                    Err(e) => {
-                        error!(error = %e, "Failed to get mining tip info");
-                        continue;
-                    }
-            };
             // Handle the result properly
             let is_synced = match initial_sync_result {
                 Ok(is_synced) => is_synced,
@@ -122,7 +115,6 @@ pub async fn ipc_block_listener(
                     &mut shared_client,
                     RequestPriority::High,
                     "initial template",
-                    tip_height,
                     network,
                 ).await {
                     Ok(template) => {
@@ -182,7 +174,6 @@ pub async fn ipc_block_listener(
                                                 &mut shared_client,
                                                 RequestPriority::High,
                                                 &format!("block {}", height),
-                                                height,
                                                 network,
                                             ).await {
                                                 Ok(template) => {
@@ -431,13 +422,11 @@ pub async fn ipc_block_listener(
 /// * `client` - The shared Bitcoin client for IPC communication
 /// * `priority` - Request priority affecting queue position
 /// * `context` - Context for logging
-/// * `block_height` - The height of the block for which the template is requested
 /// * `network` - The network this node runs on, deciding address encoding and bead hashing
 async fn get_template(
     client: &mut SharedBitcoinClient,
     priority: RequestPriority,
     context: &str,
-    block_height: u32,
     network: PoolNetwork,
 ) -> Result<client::BlockTemplate, Box<dyn std::error::Error>> {
     const MIN_TRANSACTION_COUNT: u64 = 1;
@@ -449,8 +438,7 @@ async fn get_template(
         .get_block_template_components(None, Some(priority))
         .await?;
 
-    let final_template =
-        create_braidpool_template(&components.components, &config, block_height, NONCE)?;
+    let final_template = create_braidpool_template(&components.components, &config, NONCE)?;
 
     let complete_block_bytes = final_template.complete_block_hex.clone();
     if complete_block_bytes.is_empty() {
@@ -478,18 +466,10 @@ async fn get_template(
 fn create_braidpool_template(
     components: &BlockTemplateComponents,
     config: &CoinbaseConfig,
-    block_height: u32,
     nonce: u32,
 ) -> Result<FinalTemplate, CoinbaseError> {
     let braidpool_commitment = b"braidpool_bead_metadata_hash_32b";
     //8 bytes that is extranonce has a size of 32 bits
     let extranonce = &[0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08];
-    create_block_template(
-        components,
-        braidpool_commitment,
-        extranonce,
-        block_height,
-        nonce,
-        config,
-    )
+    create_block_template(components, braidpool_commitment, extranonce, nonce, config)
 }
