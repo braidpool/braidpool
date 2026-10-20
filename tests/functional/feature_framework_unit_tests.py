@@ -356,6 +356,39 @@ def test_rpc_client_invalid_response() -> None:
     raise AssertionError("invalid response was not raised")
 
 
+def test_rpc_client_wait_for_peers() -> None:
+    # 1. Connected count 0 must time out (should not count the dict's keys).
+    client = RpcClient(
+        "127.0.0.1",
+        1234,
+        retry_delay=0,
+        transport=lambda _u, p, _t, _a=None: json.dumps({
+            "jsonrpc": "2.0",
+            "id": json.loads(p.decode("utf8"))["id"],
+            "result": {"connected": 0, "peers": [], "total_peers": 0},
+        }).encode("utf8"),
+    )
+    try:
+        client.wait_for_peers(1, timeout=0.1)
+    except AssertionError as exc:
+        assert "Peer count never reached 1" in str(exc)
+    else:
+        raise AssertionError("wait_for_peers did not time out when connected was 0")
+
+    # 2. Connected count >= minimum succeeds.
+    client_connected = RpcClient(
+        "127.0.0.1",
+        1234,
+        retry_delay=0,
+        transport=lambda _u, p, _t, _a=None: json.dumps({
+            "jsonrpc": "2.0",
+            "id": json.loads(p.decode("utf8"))["id"],
+            "result": {"connected": 1, "peers": [{"peer_id": "p1"}], "total_peers": 1},
+        }).encode("utf8"),
+    )
+    client_connected.wait_for_peers(1, timeout=1.0)
+
+
 def test_miner_log_parsing() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         miner = CpuMiner(3333, Path(tmp), minerd_path="unused")
@@ -806,6 +839,7 @@ TESTS = [
     test_rpc_client_transport_failure_after_retries,
     test_rpc_client_timeout,
     test_rpc_client_invalid_response,
+    test_rpc_client_wait_for_peers,
     test_miner_log_parsing,
     test_find_binary_relative_path,
     test_find_binary_missing_skips,
