@@ -1,6 +1,14 @@
 import React, { useRef, useEffect, useState } from 'react';
 import * as d3 from 'd3';
-import { Loader, WifiOff, AlertCircle } from 'lucide-react';
+import {
+  Loader,
+  WifiOff,
+  AlertCircle,
+  Check,
+  Copy,
+  ChevronDown,
+  ChevronUp,
+} from 'lucide-react';
 import { GraphData, GraphNode, NodeIdMapping, BeadRecord } from './Types';
 import {
   layoutNodes,
@@ -12,15 +20,56 @@ import {
   NODE_RADIUS,
   COLORS,
   MAX_BEADS_RECORDS,
+  BEADS_PAGE_SIZE,
   LINK_STROKE_WIDTH,
   ARROW_WIDTH,
   ARROW_HEIGHT,
   CONTAINER_HEIGHT,
 } from './Constants';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { useCopyToClipboard } from '../BeadsTab/lib/Utils';
+
+const formatBeadTimestamp = (timestamp?: number | null): string => {
+  if (timestamp == null || !Number.isFinite(timestamp)) return 'N/A';
+  return new Date(timestamp * 1000).toLocaleString();
+};
+
+const normalizeBeadTimestamp = (value: unknown): number | null => {
+  const rawValue =
+    typeof value === 'object' && value !== null && 'secs_since_epoch' in value
+      ? (value as { secs_since_epoch: unknown }).secs_since_epoch
+      : value;
+  const timestamp = typeof rawValue === 'string' ? Number(rawValue) : rawValue;
+  if (typeof timestamp !== 'number' || !Number.isFinite(timestamp)) return null;
+  return timestamp > 1_000_000_000_000 ? timestamp / 1000 : timestamp;
+};
+
+const formatRelativeTimestamp = (timestamp: number | null, now: number) => {
+  if (timestamp == null || !Number.isFinite(timestamp)) return 'N/A';
+  const secondsAgo = Math.round(now / 1000 - timestamp);
+  if (secondsAgo < 0) {
+    const secondsUntil = Math.abs(secondsAgo);
+    if (secondsUntil < 60) return 'in a few seconds';
+    const minutes = Math.max(1, Math.floor(secondsUntil / 60));
+    if (minutes < 60)
+      return `in ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
+    const hours = Math.max(1, Math.floor(secondsUntil / 3600));
+    if (hours < 24) return `in ${hours} ${hours === 1 ? 'hour' : 'hours'}`;
+    const days = Math.max(1, Math.floor(secondsUntil / 86400));
+    return `in ${days} ${days === 1 ? 'day' : 'days'}`;
+  }
+  if (secondsAgo < 60) return 'just now';
+  const minutes = Math.max(1, Math.floor(secondsAgo / 60));
+  if (minutes < 60)
+    return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'} ago`;
+  const hours = Math.max(1, Math.floor(secondsAgo / 3600));
+  if (hours < 24) return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
+  const days = Math.max(1, Math.floor(secondsAgo / 86400));
+  return `${days} ${days === 1 ? 'day' : 'days'} ago`;
+};
 
 const GraphVisualization: React.FC = () => {
   const svgRef = useRef<SVGSVGElement>(null);
+  const chartScrollRef = useRef<HTMLDivElement>(null);
   const [isPlaying, setIsPlaying] = useState(true);
   const isPlayingRef = useRef(true);
   const width = window.innerWidth - 100;
@@ -58,6 +107,18 @@ const GraphVisualization: React.FC = () => {
   const loadDAGRef = useRef<(() => Promise<void>) | null>(null);
 
   const [beadRecords, setBeadRecords] = useState<BeadRecord[]>([]);
+  const [beadPage, setBeadPage] = useState(1);
+
+  const [relativeTimeNow, setRelativeTimeNow] = useState(Date.now());
+  const { copied, copy } = useCopyToClipboard();
+  const pageCount = Math.max(
+    1,
+    Math.ceil(beadRecords.length / BEADS_PAGE_SIZE)
+  );
+  const pagedBeadRecords = beadRecords.slice(
+    (beadPage - 1) * BEADS_PAGE_SIZE,
+    beadPage * BEADS_PAGE_SIZE
+  );
 
   const [graphData, setGraphData] = useState<GraphData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -71,12 +132,21 @@ const GraphVisualization: React.FC = () => {
   } | null>(null);
 
   useEffect(() => {
+    const interval = window.setInterval(
+      () => setRelativeTimeNow(Date.now()),
+      60_000
+    );
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
     let mounted = true;
     let ws: WebSocket;
     let reqId = 0;
     let reconnectDelay = 1_000;
     let hasLoaded = false;
     let fetchGen = 0;
+    const beadTimestampCache = new Map<string, number>();
     const RPC_TIMEOUT_MS = 15_000;
     const pending = new Map<
       number,
@@ -125,6 +195,7 @@ const GraphVisualization: React.FC = () => {
           if (mounted && fetchGen === myGen) {
             setGraphData({
               cohorts: [],
+              cohort_start_index: 0,
               parents: {},
               children: {},
               highest_work_path: [],
@@ -137,8 +208,15 @@ const GraphVisualization: React.FC = () => {
         }
 
         // 'all' → fetch every cohort; number → fetch the last N.
-        const numToFetch =
+        const selectedCohortCount =
           sel === 'all' ? cohortCount : Math.min(sel, cohortCount);
+        const numToFetch =
+          sel === 'all'
+            ? cohortCount
+            : Math.min(
+                cohortCount,
+                Math.max(selectedCohortCount, MAX_BEADS_RECORDS)
+              );
         const startCohort = Math.max(0, cohortCount - numToFetch);
         const cohorts = (await Promise.all(
           Array.from({ length: cohortCount - startCohort }, (_, i) =>
@@ -171,12 +249,46 @@ const GraphVisualization: React.FC = () => {
         }
         const loadedBeadSet = new Set(allBeads);
         const rawHwp = (await rpc('gethighestworkpathbycount', [
-          numToFetch,
+          selectedCohortCount,
         ]).catch((e) => {
           console.warn('[BraidPoolDAG] gethighestworkpathbycount failed:', e);
           return [] as string[];
         })) as string[];
         const hwp = rawHwp.filter((h) => loadedBeadSet.has(h));
+
+        const timestampEntries = await Promise.all(
+          allBeads.slice(-MAX_BEADS_RECORDS).map(async (hash) => {
+            const cachedTimestamp = beadTimestampCache.get(hash);
+            if (cachedTimestamp !== undefined)
+              return [hash, cachedTimestamp] as const;
+            try {
+              const bead = (await rpc('getbead', [hash])) as {
+                uncommitted_metadata?: { broadcast_timestamp?: unknown };
+                uncommittedMetadata?: { broadcastTimestamp?: unknown };
+                committed_metadata?: { start_timestamp?: unknown };
+                committedMetadata?: { startTimestamp?: unknown };
+              };
+              const broadcastTimestamp = normalizeBeadTimestamp(
+                bead.uncommitted_metadata?.broadcast_timestamp ??
+                  bead.uncommittedMetadata?.broadcastTimestamp
+              );
+              const startTimestamp = normalizeBeadTimestamp(
+                bead.committed_metadata?.start_timestamp ??
+                  bead.committedMetadata?.startTimestamp
+              );
+              const timestamp = broadcastTimestamp ?? startTimestamp;
+              if (timestamp !== null) beadTimestampCache.set(hash, timestamp);
+              return [hash, timestamp] as const;
+            } catch (e) {
+              console.warn(`[BraidPoolDAG] getbead(${hash}) failed:`, e);
+              return [hash, null] as const;
+            }
+          })
+        );
+        const currentBeadHashes = new Set(allBeads.slice(-MAX_BEADS_RECORDS));
+        for (const hash of beadTimestampCache.keys()) {
+          if (!currentBeadHashes.has(hash)) beadTimestampCache.delete(hash);
+        }
 
         if (!mounted || fetchGen !== myGen) return;
         console.log(
@@ -184,10 +296,12 @@ const GraphVisualization: React.FC = () => {
         );
         setGraphData({
           cohorts,
+          cohort_start_index: startCohort,
           parents,
           children,
           highest_work_path: hwp,
           bead_count: bi.bead_count,
+          timestamps: Object.fromEntries(timestampEntries),
         });
         setLoading(false);
         setError(null);
@@ -384,8 +498,8 @@ const GraphVisualization: React.FC = () => {
             childHashes,
             childCount: childHashes.length,
             isHWP: hwPathSet.has(beadHash),
-            timestamp: new Date().toLocaleTimeString(),
-            cohortIndex,
+            timestamp: graphData.timestamps?.[beadHash] ?? null,
+            cohortIndex: graphData.cohort_start_index + cohortIndex,
           });
         });
       });
@@ -406,8 +520,8 @@ const GraphVisualization: React.FC = () => {
           childHashes,
           childCount: childHashes.length,
           isHWP: hwPathSet.has(beadHash),
-          timestamp: new Date().toLocaleTimeString(),
-          cohortIndex,
+          timestamp: graphData.timestamps?.[beadHash] ?? null,
+          cohortIndex: graphData.cohort_start_index + cohortIndex,
         });
       });
       if (newBeads.length > 0) {
@@ -520,6 +634,7 @@ const GraphVisualization: React.FC = () => {
     selectedCohortsRef.current = selectedCohorts;
     hasInitializedTableRef.current = false;
     setBeadRecords([]);
+    setBeadPage(1);
     loadDAGRef.current?.();
     zoomTransformRef.current = null;
   }, [selectedCohorts]);
@@ -563,7 +678,6 @@ const GraphVisualization: React.FC = () => {
   useEffect(() => {
     if (!svgRef.current || !graphData) return;
     const containerWidth = svgRef.current.parentElement?.clientWidth ?? width;
-    svgRef.current.setAttribute('width', String(containerWidth));
 
     const filteredCohorts =
       selectedCohorts === 'all'
@@ -608,6 +722,15 @@ const GraphVisualization: React.FC = () => {
     });
     if (!isFinite(minVisibleX)) minVisibleX = margin.left;
     if (!isFinite(maxVisibleX)) maxVisibleX = margin.left;
+    const scale = defaultZoom;
+    const horizontalPadding = (nodeRadius + 10) * scale + 20;
+    const visibleSpanScaled = (maxVisibleX - minVisibleX) * scale;
+    svgRef.current.setAttribute(
+      'width',
+      String(
+        Math.max(containerWidth, visibleSpanScaled + 2 * horizontalPadding)
+      )
+    );
     const offsetX = margin.left - minVisibleX;
 
     zoomBehavior.current = d3
@@ -619,20 +742,7 @@ const GraphVisualization: React.FC = () => {
           zoomTransformRef.current = event.transform;
         }
       });
-    const scale = defaultZoom;
-    const rightPad = 80;
-    const visibleSpanScaled =
-      (maxVisibleX - minVisibleX + 2 * (nodeRadius + 10)) * scale;
-    let autoTx: number;
-    if (visibleSpanScaled + rightPad < containerWidth) {
-      const contentCenterX = (minVisibleX + maxVisibleX) / 2 + offsetX;
-      autoTx = containerWidth / 2 - contentCenterX * scale;
-    } else {
-      autoTx =
-        containerWidth -
-        rightPad -
-        (maxVisibleX + offsetX + nodeRadius + 10) * scale;
-    }
+    const autoTx = horizontalPadding - margin.left * scale;
     const autoTy = CONTAINER_HEIGHT / 2 - (CONTAINER_HEIGHT / 2) * scale - 60;
     const autoTransform = d3.zoomIdentity
       .translate(autoTx, autoTy)
@@ -644,6 +754,9 @@ const GraphVisualization: React.FC = () => {
         zoomBehavior.current.transform,
         zoomTransformRef.current ?? autoTransform
       );
+    if (chartScrollRef.current) {
+      chartScrollRef.current.scrollLeft = chartScrollRef.current.scrollWidth;
+    }
 
     const links: { source: string; target: string }[] = [];
     allNodes.forEach((node) => {
@@ -672,7 +785,9 @@ const GraphVisualization: React.FC = () => {
 
     const cohortMap = new Map<string, number>();
     (cohorts as string[][]).forEach((cohort, index) => {
-      cohort.forEach((nodeId) => cohortMap.set(nodeId, index));
+      cohort.forEach((nodeId) =>
+        cohortMap.set(nodeId, graphData.cohort_start_index + index)
+      );
     });
 
     container
@@ -807,6 +922,11 @@ const GraphVisualization: React.FC = () => {
           .select('ellipse, rect')
           .attr('stroke', '#FF8500')
           .attr('stroke-width', 3);
+        d3.select(this).select('text').dispatch('mouseover', {
+          bubbles: false,
+          cancelable: false,
+          detail: null,
+        });
       })
       .on('mouseout', function () {
         d3.select(this)
@@ -822,8 +942,9 @@ const GraphVisualization: React.FC = () => {
       .attr('text-anchor', 'middle')
       .text((d) => `${d.id.slice(-4)}`)
       .attr('fill', '#fff')
-      .style('font-size', 55)
+      .style('font-size', 70)
       .style('font-weight', 'bold')
+      .style('pointer-events', 'none')
       .on('mouseover', function (event: MouseEvent, d: GraphNode) {
         const cohortIndex = cohortMap.get(d.id);
         const isHWP = hwPathSet.has(d.id);
@@ -991,7 +1112,7 @@ const GraphVisualization: React.FC = () => {
                 const value = e.target.value;
                 setSelectedCohorts(value === 'all' ? 'all' : Number(value));
               }}
-              className="px-2 py-1 rounded border border-[#0077B6]  text-[#0077B6]"
+              className="px-3 py-2 rounded border border-[#0077B6] text-base text-[#0077B6]"
             >
               <option value="all">Show all cohorts</option>
               {[5, 10, 15, 20].map((value) => (
@@ -1075,13 +1196,18 @@ const GraphVisualization: React.FC = () => {
               </button>
             </div>
           </div>
-          <svg
-            ref={svgRef}
-            width={width}
-            height={CONTAINER_HEIGHT}
-            overflow="visible"
-            className="block"
-          />
+          <div
+            ref={chartScrollRef}
+            className="braidpool-scrollbar overflow-x-auto overflow-y-hidden"
+          >
+            <svg
+              ref={svgRef}
+              width={width}
+              height={CONTAINER_HEIGHT}
+              overflow="visible"
+              className="block"
+            />
+          </div>
           <div
             ref={tooltipRef}
             className="fixed bg-gray-800 text-white border rounded p-2 shadow-lg pointer-events-none z-10 bottom-5 right-5 mb-[200px] border-gray-600 backdrop-blur-lg"
@@ -1089,32 +1215,40 @@ const GraphVisualization: React.FC = () => {
         </div>
       </div>
       {/*  Beads Table */}
-      <div className="m-2 border border-gray-600 backdrop-blur-2xl  rounded-lg  shadow-lg ">
-        <div className="p-4 ">
-          <h3 className="text-xl font-semibold text-white">
-            Incoming Beads ({beadRecords.length})
-          </h3>
+      <div className="mt-2 overflow-hidden rounded-lg border border-gray-600 shadow-lg">
+        <div className="flex items-center justify-between border-b border-slate-700 bg-slate-900/70 px-5 py-4">
+          <div>
+            <h2 className="text-lg font-semibold tracking-wide text-white">
+              Recent beads
+            </h2>
+          </div>
         </div>
         <div
-          className="overflow-x-auto"
+          className="braidpool-scrollbar overflow-x-auto"
           style={{ maxHeight: '700px', overflowY: 'auto' }}
         >
-          <table className="w-full text-sm">
-            <thead className=" text-white ">
+          <table className="w-full min-w-[1000px] table-fixed text-base">
+            <thead className="sticky top-0 z-10 text-white shadow-md">
               <tr>
-                <th className="px-3 py-2 text-left font-semibold w-12"></th>
-                <th className="px-3 py-2 text-left font-semibold">Bead Hash</th>
-                <th className="px-3 py-2 text-center font-semibold">
-                  Timestamp
+                <th className="w-14 px-4 py-4 text-left"></th>
+                <th className="w-1/2 px-4 py-4 text-left text-sm font-semibold uppercase tracking-wider text-slate-300">
+                  Bead Hash
                 </th>
-                <th className="px-3 py-2 text-center font-semibold">
+                <th className="w-40 px-4 py-4 text-center text-sm font-semibold uppercase tracking-wider text-slate-300">
+                  Added
+                </th>
+                <th className="w-40 px-4 py-4 text-center text-sm font-semibold uppercase tracking-wider text-slate-300">
                   Cohort Index
                 </th>
-                <th className="px-3 py-2 text-center font-semibold">Parents</th>
-                <th className="px-3 py-2 text-center font-semibold">
+                <th className="w-30 px-4 py-4 text-center text-sm font-semibold uppercase tracking-wider text-slate-300">
+                  Parents
+                </th>
+                <th className="w-30 px-4 py-4 text-center text-sm font-semibold uppercase tracking-wider text-slate-300">
                   Children
                 </th>
-                <th className="px-3 py-2 text-center font-semibold">HWP</th>
+                <th className="w-25 px-4 py-4 text-center text-sm font-semibold uppercase tracking-wider text-slate-300">
+                  HWP
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -1125,16 +1259,16 @@ const GraphVisualization: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                beadRecords.map((bead, index) => (
+                pagedBeadRecords.map((bead, index) => (
                   <React.Fragment key={`${bead.hash}-${index}`}>
                     <tr
-                      className={`border-t  border-gray-700 hover:bg-opacity-10 cursor-pointer transition-colors ${
-                        index === 0 ? ' bg-opacity-5' : ''
-                      }`}
+                      className={
+                        'cursor-pointer border-t border-slate-700/70 transition-colors hover:bg-sky-900/40 '
+                      }
                       onClick={() => toggleRowExpansion(bead.hash)}
                     >
-                      <td className="px-3 py-3 text-center">
-                        <span className="text-[#0077B6] text-lg">
+                      <td className="px-4 py-4 text-center">
+                        <span className="text-[#48CAE4]">
                           {expandedRows.has(bead.hash) ? (
                             <ChevronUp className="h-5 w-5 text-blue-400" />
                           ) : (
@@ -1142,44 +1276,72 @@ const GraphVisualization: React.FC = () => {
                           )}
                         </span>
                       </td>
-                      <td className="px-3 py-3">
-                        <div className="flex items-center gap-2">
+                      <td className="px-4 py-4">
+                        <div className="flex items-center gap-3">
                           <span
-                            className="font-mono text-xs "
+                            className="break-all font-mono text-sm text-slate-100"
                             title={bead.hash}
                           >
-                            {bead.hash.slice(0, 16)}...{bead.hash.slice(-8)}
+                            {bead.hash}
                           </span>
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              copy(bead.hash);
+                            }}
+                            className="shrink-0 rounded-md p-2 text-slate-400 transition-colors hover:bg-sky-900/60 hover:text-sky-200 focus:outline-none focus:ring-2 focus:ring-sky-400"
+                            title={
+                              copied === bead.hash
+                                ? 'Copied!'
+                                : 'Copy bead hash'
+                            }
+                            aria-label={`Copy bead hash ${bead.hash}`}
+                          >
+                            {copied === bead.hash ? (
+                              <Check className="h-4 w-4 text-emerald-400" />
+                            ) : (
+                              <Copy className="h-4 w-4" />
+                            )}
+                          </button>
                         </div>
                       </td>
-                      <td className="px-3 py-3 text-center text-xs">
-                        {bead.timestamp}
+                      <td
+                        className="px-4 py-4 text-center font-medium text-white"
+                        title={formatBeadTimestamp(bead.timestamp)}
+                      >
+                        {formatRelativeTimestamp(
+                          bead.timestamp,
+                          relativeTimeNow
+                        )}
                       </td>
-                      <td className="px-3 py-3 text-center">
-                        <span className="inline-block px-2 py-1  bg-opacity-20  rounded text-xs font-semibold">
+                      <td className="px-4 py-4 text-center">
+                        <span className="inline-block rounded-md px-3 py-1.5 text-sm font-semibold text-slate-100">
                           {bead.cohortIndex !== undefined &&
                           bead.cohortIndex !== -1
                             ? bead.cohortIndex
                             : 'N/A'}
                         </span>
                       </td>
-                      <td className="px-3 py-3 text-center">
-                        <span className="inline-block px-2 py-1  bg-opacity-20  rounded text-xs font-bold">
+                      <td className="px-4 py-4 text-center">
+                        <span className="inline-flex min-w-9 justify-center rounded-md px-3 py-1.5 text-sm font-bold text-white">
                           {bead.parentCount}
                         </span>
                       </td>
-                      <td className="px-3 py-3 text-center">
-                        <span className="inline-block px-2 py-1  rounded text-xs font-bold">
+                      <td className="px-4 py-4 text-center">
+                        <span className="inline-flex min-w-9 justify-center rounded-md  px-3 py-1.5 text-sm font-bold text-white">
                           {bead.childCount}
                         </span>
                       </td>
-                      <td className="px-3 py-3 text-center">
-                        {bead.isHWP ? (
-                          <span className="inline-block px-3 py-1  text-white rounded text-xs font-semibold shadow">
+                      <td className="px-4 py-4 text-center">
+                        {bead.isHWP === null ? (
+                          <span className="text-sm text-slate-400">—</span>
+                        ) : bead.isHWP ? (
+                          <span className="inline-flex min-w-12 justify-center   px-3 py-1 text-xs font-bold text-white">
                             YES
                           </span>
                         ) : (
-                          <span className="inline-block px-3 py-1  text-white rounded text-xs">
+                          <span className="inline-flex min-w-12 justify-center  px-3 py-1 text-xs font-semibold text-white">
                             NO
                           </span>
                         )}
@@ -1190,8 +1352,14 @@ const GraphVisualization: React.FC = () => {
                     {expandedRows.has(bead.hash) && (
                       <tr className="bg-opacity-5 border-t border-[#48CAE4]">
                         <td></td>
-                        <td colSpan={6} className="px-4 py-4">
-                          <div className="space-y-3">
+                        <td colSpan={6} className="px-4 py-4 text-base">
+                          <div className="space-y-4">
+                            <div>
+                              <span className="font-semibold text-[#0077B6]">
+                                Broadcast timestamp:{' '}
+                              </span>
+                              <span>{formatBeadTimestamp(bead.timestamp)}</span>
+                            </div>
                             <div className="flex items-start gap-2">
                               <span className="font-semibold text-[#0077B6] min-w-[80px]">
                                 Parents:
@@ -1205,7 +1373,7 @@ const GraphVisualization: React.FC = () => {
                                   {bead.parentHashes.map((ph, idx) => (
                                     <div
                                       key={idx}
-                                      className="font-mono text-xs text-white flex items-center gap-2"
+                                      className="font-mono text-sm text-white flex items-center gap-2"
                                       title={ph}
                                     >
                                       <span>
@@ -1231,7 +1399,7 @@ const GraphVisualization: React.FC = () => {
                                     .map((ch, idx) => (
                                       <div
                                         key={idx}
-                                        className="font-mono text-xs text-[#48CAE4] flex items-center gap-2"
+                                        className="font-mono text-sm text-[#48CAE4] flex items-center gap-2"
                                         title={ch}
                                       >
                                         <span>
@@ -1240,7 +1408,7 @@ const GraphVisualization: React.FC = () => {
                                       </div>
                                     ))}
                                   {bead.childCount > 5 && (
-                                    <div className="text-white italic text-xs pl-6">
+                                    <div className="text-white italic text-sm pl-6">
                                       ... and {bead.childCount - 5} more
                                       children
                                     </div>
@@ -1257,6 +1425,40 @@ const GraphVisualization: React.FC = () => {
               )}
             </tbody>
           </table>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-700 px-5 py-4">
+          <p className="text-sm text-slate-400">
+            Showing{' '}
+            {beadRecords.length === 0
+              ? 0
+              : (beadPage - 1) * BEADS_PAGE_SIZE + 1}
+            {'–'}
+            {Math.min(beadPage * BEADS_PAGE_SIZE, beadRecords.length)} of{' '}
+            {beadRecords.length} beads
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setBeadPage((page) => Math.max(1, page - 1))}
+              disabled={beadPage === 1}
+              className="rounded-md border border-slate-600 px-3 py-2 text-sm font-medium text-slate-200 transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Previous
+            </button>
+            <span className="min-w-20 text-center text-sm font-medium text-slate-300">
+              Page {beadPage} of {pageCount}
+            </span>
+            <button
+              type="button"
+              onClick={() =>
+                setBeadPage((page) => Math.min(pageCount, page + 1))
+              }
+              disabled={beadPage === pageCount}
+              className="rounded-md border border-slate-600 px-3 py-2 text-sm font-medium text-slate-200 transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Next
+            </button>
+          </div>
         </div>
       </div>
     </div>
