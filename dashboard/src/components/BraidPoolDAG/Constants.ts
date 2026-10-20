@@ -17,6 +17,7 @@ export const NODE_STROKE_COLOR = '#fff';
 export const COLUMN_WIDTH = 500; // Horizontal spacing between cohorts
 export const VERTICAL_SPACING = 200; // Vertical spacing between beads in same cohort
 export const MAX_BEADS_RECORDS = 10;
+export const MAX_TOOLTIP_CHILDREN = 5;
 
 // Arrow
 export const LINK_STROKE_WIDTH = 2; // Line thickness

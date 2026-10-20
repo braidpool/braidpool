@@ -1,9 +1,7 @@
 import React from 'react';
-import { GraphNode } from './Types';
-
-const MAX_CHILDREN_SHOWN = 5;
-
-const shortHash = (hash: string) => `${hash.slice(0, 12)}...${hash.slice(-8)}`;
+import { BeadTooltipProps } from './Types';
+import { MAX_TOOLTIP_CHILDREN } from './Constants';
+import { shortenHash } from '../BeadsTab/lib/Utils';
 
 const HashList: React.FC<{ hashes: string[]; arrowClass: string }> = ({
   hashes,
@@ -13,24 +11,20 @@ const HashList: React.FC<{ hashes: string[]; arrowClass: string }> = ({
     {hashes.map((hash) => (
       <div key={hash} className="my-0.5 text-[10px]">
         <span className={arrowClass}>→</span>{' '}
-        <span className="font-mono text-[#48CAE4]">{shortHash(hash)}</span>
+        <span className="font-mono text-[#48CAE4]">
+          {shortenHash(hash, 12, 8)}
+        </span>
       </div>
     ))}
   </div>
 );
-
-interface BeadTooltipProps {
-  bead: GraphNode;
-  cohortIndex: number | undefined;
-  hwpPosition: number | null;
-}
 
 const BeadTooltip: React.FC<BeadTooltipProps> = ({
   bead,
   cohortIndex,
   hwpPosition,
 }) => {
-  const hiddenChildren = bead.children.length - MAX_CHILDREN_SHOWN;
+  const hiddenChildren = bead.children.length - MAX_TOOLTIP_CHILDREN;
 
   return (
     <div className="max-w-[400px] text-xs leading-relaxed">
@@ -65,7 +59,7 @@ const BeadTooltip: React.FC<BeadTooltipProps> = ({
         {bead.children.length > 0 ? (
           <>
             <HashList
-              hashes={bead.children.slice(0, MAX_CHILDREN_SHOWN)}
+              hashes={bead.children.slice(0, MAX_TOOLTIP_CHILDREN)}
               arrowClass="text-green-400"
             />
             {hiddenChildren > 0 && (

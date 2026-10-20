@@ -1,7 +1,13 @@
 import React, { useRef, useEffect, useState } from 'react';
 import * as d3 from 'd3';
 import { Loader, WifiOff, AlertCircle } from 'lucide-react';
-import { GraphData, GraphNode, NodeIdMapping, BeadRecord } from './Types';
+import {
+  GraphData,
+  GraphNode,
+  NodeIdMapping,
+  BeadRecord,
+  BeadTooltipProps,
+} from './Types';
 import {
   layoutNodes,
   getEllipseEdgePoint,
@@ -21,6 +27,7 @@ import {
   NODE_STROKE_COLOR,
 } from './Constants';
 import BeadTooltip from './BeadTooltip';
+import { shortenHash } from '../BeadsTab/lib/Utils';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 
 const GraphVisualization: React.FC = () => {
@@ -32,11 +39,7 @@ const GraphVisualization: React.FC = () => {
   const [nodeIdMap, setNodeIdMap] = useState<NodeIdMapping>({});
   const [selectedCohorts, setSelectedCohorts] = useState<number | 'all'>(20);
   const nodeRadius = NODE_RADIUS;
-  const [hoveredBead, setHoveredBead] = useState<{
-    bead: GraphNode;
-    cohortIndex: number | undefined;
-    hwpPosition: number | null;
-  } | null>(null);
+  const [hoveredBead, setHoveredBead] = useState<BeadTooltipProps | null>(null);
 
   const [graphUpdateCounter, setGraphUpdateCounter] = useState(0);
   const [latestBeadHashForHighlight, setLatestBeadHashForHighlight] = useState<
@@ -1099,7 +1102,7 @@ const GraphVisualization: React.FC = () => {
                             className="font-mono text-xs "
                             title={bead.hash}
                           >
-                            {bead.hash.slice(0, 16)}...{bead.hash.slice(-8)}
+                            {shortenHash(bead.hash, 16, 8)}
                           </span>
                         </div>
                       </td>
@@ -1159,9 +1162,7 @@ const GraphVisualization: React.FC = () => {
                                       className="font-mono text-xs text-white flex items-center gap-2"
                                       title={ph}
                                     >
-                                      <span>
-                                        {ph.slice(0, 16)}...{ph.slice(-12)}
-                                      </span>
+                                      <span>{shortenHash(ph, 16, 12)}</span>
                                     </div>
                                   ))}
                                 </div>
@@ -1185,9 +1186,7 @@ const GraphVisualization: React.FC = () => {
                                         className="font-mono text-xs text-[#48CAE4] flex items-center gap-2"
                                         title={ch}
                                       >
-                                        <span>
-                                          {ch.slice(0, 16)}...{ch.slice(-12)}
-                                        </span>
+                                        <span>{shortenHash(ch, 16, 12)}</span>
                                       </div>
                                     ))}
                                   {bead.childCount > 5 && (
