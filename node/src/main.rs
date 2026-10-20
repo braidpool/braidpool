@@ -1252,6 +1252,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                                      ibd_spinlock.store(false,Ordering::SeqCst);
                                                      continue;
                                                  },
+                                                 braid::AddBeadStatus::OrphanAlreadyParked =>{
+                                                     // Already parked by an earlier delivery. The bead is
+                                                     // not in the braid, so clearing `ibd_spinlock` would be
+                                                     // wrong, and aborting IBD again for the same bead only
+                                                     // adds churn.
+                                                     debug!(bead = %bead_hash, "Bead already parked as an orphan during IBD");
+                                                     continue;
+                                                 },
                                                 }
                                             }
                                             else {

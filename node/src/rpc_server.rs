@@ -366,6 +366,9 @@ impl RpcServer for RpcServerImpl {
             AddBeadStatus::ParentsNotYetReceived => {
                 Ok("Bead queued, waiting for parents".to_string())
             }
+            AddBeadStatus::OrphanAlreadyParked => {
+                Ok("Bead already queued, waiting for parents".to_string())
+            }
         }
     }
 
