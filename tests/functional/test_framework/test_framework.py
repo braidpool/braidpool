@@ -105,7 +105,7 @@ class BraidpoolTestFramework(metaclass=BraidpoolTestMetaClass):
         parser.add_argument("--nocleanup", action="store_true", help="preserve the test directory on success")
         parser.add_argument("--loglevel", default=None, help="framework log level")
         parser.add_argument("--tracerpc", action="store_true", help="log RPC request parameters")
-        parser.add_argument("--portseed", type=int, default=0, help="deterministic port range seed")
+        parser.add_argument("--portseed", type=int, default=None, help="deterministic port range seed; auto-select when omitted")
         parser.add_argument("--randomseed", type=int, default=None, help="deterministic random seed")
         parser.add_argument("--timeout-factor", type=float, default=1.0, help="multiply all framework timeouts")
         parser.add_argument("--pdbonfailure", action="store_true", help="open pdb when the test body fails")
@@ -116,7 +116,7 @@ class BraidpoolTestFramework(metaclass=BraidpoolTestMetaClass):
         self.add_options(parser)
         self.options = parser.parse_args(argv)
 
-        if self.options.portseed < 0:
+        if self.options.portseed is not None and self.options.portseed < 0:
             parser.error("--portseed must be greater than or equal to zero")
         if self.options.timeout_factor <= 0:
             parser.error("--timeout-factor must be greater than zero")
@@ -152,8 +152,18 @@ class BraidpoolTestFramework(metaclass=BraidpoolTestMetaClass):
         )
 
         random.seed(self.config.random_seed)
-        PortSeed.n = self.options.portseed
-        self.port_pool = PortPool(port_seed=self.options.portseed)
+        requested_port_seed = self.options.portseed
+        if requested_port_seed is None:
+            requested_port_seed = 0
+            self.port_pool = PortPool(
+                port_seed=requested_port_seed,
+                auto_select_port_seed=True,
+            )
+        else:
+            PortSeed.n = requested_port_seed
+            self.port_pool = PortPool(port_seed=requested_port_seed)
+        self.options.portseed = self.port_pool.port_seed
+        PortSeed.n = self.port_pool.port_seed
         self.cleanup_manager = CleanupManager(self.log)
         self.cleanup_manager.install_signal_handlers()
         self.node_manager = NodeManager(
