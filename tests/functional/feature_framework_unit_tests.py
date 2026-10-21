@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import subprocess
 import stat
 import sys
@@ -90,6 +91,76 @@ def test_port_seed_global_default() -> None:
         PortSeed.n = old_seed
 
 
+def test_port_pool_auto_select_skips_ephemeral_range() -> None:
+    original_probe = PortPool._bind_probe
+    original_udp_probe = PortPool._udp_bind_probe
+    original_ephemeral_range = PortPool._linux_ephemeral_range
+
+    def no_op_probe(port: int) -> None:
+        assert 1 <= port <= PortPool.MAX_PORT
+
+    try:
+        PortPool._bind_probe = staticmethod(no_op_probe)
+        PortPool._udp_bind_probe = staticmethod(no_op_probe)
+        PortPool._linux_ephemeral_range = staticmethod(lambda: (32800, 60999))
+        pool = PortPool(port_seed=168, auto_select_port_seed=True)
+        assert_equal(pool.port_seed, 450)
+        assert_equal(pool.band, (61000, 61099))
+    finally:
+        PortPool._bind_probe = staticmethod(original_probe)
+        PortPool._udp_bind_probe = staticmethod(original_udp_probe)
+        PortPool._linux_ephemeral_range = staticmethod(original_ephemeral_range)
+
+
+def test_port_pool_auto_select_skips_udp_occupied_p2p_port() -> None:
+    original_probe = PortPool._bind_probe
+    original_udp_probe = PortPool._udp_bind_probe
+    original_ephemeral_range = PortPool._linux_ephemeral_range
+    occupied_port = PortPool.BASE_PORT + PortPool._COMPONENT_RANGES["braidpool_p2p"].start
+
+    def no_op_probe(port: int) -> None:
+        assert 1 <= port <= PortPool.MAX_PORT
+
+    def udp_probe_with_collision(port: int) -> None:
+        if port == occupied_port:
+            raise OSError("simulated occupied UDP port")
+
+    try:
+        PortPool._bind_probe = staticmethod(no_op_probe)
+        PortPool._udp_bind_probe = staticmethod(udp_probe_with_collision)
+        PortPool._linux_ephemeral_range = staticmethod(lambda: None)
+        pool = PortPool(port_seed=0, auto_select_port_seed=True)
+        assert_equal(pool.port_seed, 1)
+    finally:
+        PortPool._bind_probe = staticmethod(original_probe)
+        PortPool._udp_bind_probe = staticmethod(original_udp_probe)
+        PortPool._linux_ephemeral_range = staticmethod(original_ephemeral_range)
+
+
+def test_port_pool_auto_select_stays_within_tcp_port_range() -> None:
+    original_probe = PortPool._bind_probe
+    original_ephemeral_range = PortPool._linux_ephemeral_range
+    probed_ports: list[int] = []
+
+    def fake_probe(port: int) -> None:
+        probed_ports.append(port)
+        raise OSError("simulated occupied port")
+
+    try:
+        PortPool._bind_probe = staticmethod(fake_probe)
+        PortPool._linux_ephemeral_range = staticmethod(lambda: None)
+        try:
+            PortPool(port_seed=494, auto_select_port_seed=True)
+        except PortAllocationError:
+            assert probed_ports
+            assert max(probed_ports) <= PortPool.MAX_PORT
+            return
+    finally:
+        PortPool._bind_probe = staticmethod(original_probe)
+        PortPool._linux_ephemeral_range = staticmethod(original_ephemeral_range)
+    raise AssertionError("auto-selection did not report exhausted valid port bands")
+
+
 def test_port_pool_manual_collision() -> None:
     pool = PortPool(port_seed=5, validate_ports=False)
     port = pool.allocate("bitcoin_rpc")
@@ -119,6 +190,32 @@ def test_port_pool_bind_failure_is_reported() -> None:
     finally:
         PortPool._bind_probe = staticmethod(original_probe)
     raise AssertionError("occupied deterministic port was not reported")
+
+
+def test_port_pool_udp_bind_failure_is_reported() -> None:
+    original_probe = PortPool._bind_probe
+    original_udp_probe = PortPool._udp_bind_probe
+    failing_port = 16610
+
+    def no_op_probe(port: int) -> None:
+        assert 1 <= port <= PortPool.MAX_PORT
+
+    def failing_udp_probe(port: int) -> None:
+        if port == failing_port:
+            raise OSError("simulated occupied UDP port")
+
+    try:
+        PortPool._bind_probe = staticmethod(no_op_probe)
+        PortPool._udp_bind_probe = staticmethod(failing_udp_probe)
+        pool = PortPool(port_seed=6)
+        try:
+            pool.allocate("braidpool_p2p", node_id=0)
+        except PortAllocationError:
+            return
+    finally:
+        PortPool._bind_probe = staticmethod(original_probe)
+        PortPool._udp_bind_probe = staticmethod(original_udp_probe)
+    raise AssertionError("occupied UDP port was not reported")
 
 
 def test_log_manager_paths_and_cleanup() -> None:
@@ -172,7 +269,20 @@ def test_runner_args_unknown_passthrough() -> None:
 
 
 def test_runner_stable_port_seeds() -> None:
-    scheduled = schedule_tests(["a.py", "b.py --arg", "c.py"])
+    original_probe = PortPool._bind_probe
+    original_ephemeral_range = PortPool._linux_ephemeral_range
+
+    def no_op_probe(port: int) -> None:
+        assert 1 <= port <= PortPool.MAX_PORT
+
+    try:
+        PortPool._bind_probe = staticmethod(no_op_probe)
+        PortPool._linux_ephemeral_range = staticmethod(lambda: None)
+        scheduled = schedule_tests(["a.py", "b.py --arg", "c.py"])
+    finally:
+        PortPool._bind_probe = staticmethod(original_probe)
+        PortPool._linux_ephemeral_range = staticmethod(original_ephemeral_range)
+
     assert_equal([item.port_seed for item in scheduled], [0, 1, 2])
     assert_equal([item.command for item in scheduled], ["a.py", "b.py --arg", "c.py"])
 
@@ -182,7 +292,8 @@ def test_runner_default_selection_and_filters() -> None:
         "feature_framework_lifecycle.py",
         "feature_framework_skip.py",
         "feature_framework_unit_tests.py",
-        "feature_node_startup.py"
+        "feature_node_startup.py",
+        "feature_mining_block_acceptance.py",
     ]
     assert_equal(build_test_list([], extended=False, exclude=None, pattern=None), expected)
     assert_equal(
@@ -190,7 +301,8 @@ def test_runner_default_selection_and_filters() -> None:
         [
             "feature_framework_lifecycle.py",
             "feature_framework_skip.py",
-            "feature_framework_unit_tests.py"
+            "feature_framework_unit_tests.py",
+            "feature_mining_block_acceptance.py",
         ],
     )
     assert_equal(
@@ -374,7 +486,12 @@ def test_find_binary_relative_path() -> None:
         binary.parent.mkdir(parents=True)
         binary.write_text("#!/bin/sh\n", encoding="utf8")
         binary.chmod(binary.stat().st_mode | stat.S_IXUSR)  # must be executable for find_binary
-        assert_equal(find_minerd(repo_root=root), binary)
+        original_env = os.environ.pop("MINERD_PATH", None)
+        try:
+            assert_equal(find_minerd(repo_root=root), binary)
+        finally:
+            if original_env is not None:
+                os.environ["MINERD_PATH"] = original_env
 
 
 def test_find_binary_missing_skips() -> None:
@@ -711,20 +828,25 @@ def test_node_manager_skip_on_missing_binary() -> None:
     """Verify SkipTest is raised when find_braidpool_bin() fails."""
     from test_framework.test_node import find_braidpool_bin
     from test_framework.util import SkipTest
-    import os
     original_env = os.environ.get("BRAIDPOOL_BIN_PATH")
+    original_path = os.environ.get("PATH")
     try:
         os.environ["BRAIDPOOL_BIN_PATH"] = "/path/to/nowhere/nonexistent_bin"
+        os.environ["PATH"] = str(Path("/path/to/nowhere"))
         try:
             find_braidpool_bin(repo_root=Path("/path/to/nowhere"))
             assert False, "Should have raised SkipTest"
         except SkipTest as e:
-            assert "braidpool node not found" in str(e)
+            assert "node not found" in str(e)
     finally:
         if original_env is not None:
             os.environ["BRAIDPOOL_BIN_PATH"] = original_env
         else:
-            del os.environ["BRAIDPOOL_BIN_PATH"]
+            os.environ.pop("BRAIDPOOL_BIN_PATH", None)
+        if original_path is not None:
+            os.environ["PATH"] = original_path
+        else:
+            os.environ.pop("PATH", None)
 
 
 def test_node_manager_teardown_order() -> None:
@@ -788,8 +910,12 @@ TESTS = [
     test_network_config_defaults,
     test_port_pool_deterministic_band,
     test_port_seed_global_default,
+    test_port_pool_auto_select_skips_ephemeral_range,
+    test_port_pool_auto_select_skips_udp_occupied_p2p_port,
+    test_port_pool_auto_select_stays_within_tcp_port_range,
     test_port_pool_manual_collision,
     test_port_pool_bind_failure_is_reported,
+    test_port_pool_udp_bind_failure_is_reported,
     test_log_manager_paths_and_cleanup,
     test_log_manager_nocleanup,
     test_wait_until,
