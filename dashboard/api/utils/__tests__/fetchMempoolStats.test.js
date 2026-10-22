@@ -92,6 +92,35 @@ describe('fetchMempoolStats', () => {
     });
   });
 
+  it('should return BTC fees with the rates to convert them', async () => {
+    const rate = (amount) => ({ data: { data: { amount } } });
+    axios.get
+      .mockResolvedValueOnce({ data: mockStatsData })
+      .mockResolvedValueOnce({ data: mockFeesData })
+      .mockResolvedValueOnce({ data: mockOneMinuteBlockData })
+      .mockResolvedValueOnce({ data: mockBlockFeesData })
+      .mockResolvedValueOnce(rate('45000.50'))
+      .mockResolvedValueOnce(rate('41000'))
+      .mockResolvedValueOnce(rate('6500000'));
+
+    const result = await fetchMempoolStats();
+
+    expect(result?.currency_rates).toEqual({
+      USD: 45000.5,
+      EUR: 41000,
+      JPY: 6500000,
+    });
+    expect(result?.mempool).toEqual({
+      count: 5000,
+      vsize: 2500000,
+      total_fee_btc: 0.5,
+    });
+    expect(result?.fees.high_priority).toEqual({
+      sats_per_vbyte: 20,
+      fee_btc: 0.0000002,
+    });
+  });
+
   it('should handle network error and return null', async () => {
     const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
 
