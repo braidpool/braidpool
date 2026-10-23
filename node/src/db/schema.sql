@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS AncestorTimestamps (
 -- 7. Fast look-up indices
 CREATE INDEX IF NOT EXISTS bead_txids ON Transactions(bead_id);
 CREATE INDEX IF NOT EXISTS parents ON Relatives(parent);
+CREATE INDEX IF NOT EXISTS transactions_txid ON Transactions(txid);
 CREATE INDEX IF NOT EXISTS bead_hash ON Bead(hash);
 CREATE INDEX IF NOT EXISTS timestamps_parents ON ParentTimestamps(parent);
 CREATE INDEX IF NOT EXISTS timestamps_children ON ParentTimestamps(child);
