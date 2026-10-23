@@ -154,6 +154,7 @@ pub fn create_test_bead(nonce: u32, prev_hash: Option<BlockHash>) -> Bead {
         payout_address: String::from(""),
         start_timestamp: time_val,
         weak_target: weak_target,
+        fee_total_sats: 0,
     };
     let extra_nonce_1 = rand::random::<u64>();
     let extra_nonce_2 = rand::random::<u64>();

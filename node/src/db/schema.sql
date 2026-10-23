@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS Bead (
     comm_pub_key        BLOB NOT NULL,
     min_target          INTEGER CHECK (min_target >= 0 AND min_target < 0x100000000),
     weak_target         INTEGER CHECK (weak_target >= 0 AND weak_target < 0x100000000),
+    fee_total_sats      INTEGER NOT NULL DEFAULT 0 CHECK (fee_total_sats >= 0), 
     miner_ip            TEXT NOT NULL,
     -- UnCommitted Metadata
     extranonce1         TEXT NOT NULL,
