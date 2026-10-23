@@ -90,8 +90,8 @@ fn parse_block_hash(value: &str) -> BlockHash {
     BlockHash::from_str(value).unwrap()
 }
 
-fn parse_time(value: u32) -> Time {
-    Time::from_consensus(value).unwrap()
+fn parse_time(value: u32) -> MicrosecondTimestamp {
+    MicrosecondTimestamp::from_secs(value)
 }
 
 fn parse_public_key(value: &str) -> PublicKey {
@@ -178,6 +178,7 @@ fn test_committed_metadata_default() {
         metadata.payout_address,
         data.payout_addresses.default.as_str()
     );
+    assert_eq!(metadata.start_timestamp, MicrosecondTimestamp::default());
     assert_eq!(
         metadata.comm_pub_key,
         parse_public_key(&data.public_keys.default_committed)
@@ -341,8 +342,7 @@ fn test_committed_metadata_consensus_field_order_decode() {
     let decoded_parents = Vec::<BeadHash>::consensus_decode(&mut reader).unwrap();
     let decoded_parent_times = TimeVec::consensus_decode(&mut reader).unwrap();
     let decoded_payout = String::consensus_decode(&mut reader).unwrap();
-    let decoded_start_timestamp =
-        Time::from_consensus(u32::consensus_decode(&mut reader).unwrap()).unwrap();
+    let decoded_start_timestamp = MicrosecondTimestamp::consensus_decode(&mut reader).unwrap();
     let decoded_pubkey =
         PublicKey::from_slice(&Vec::<u8>::consensus_decode(&mut reader).unwrap()).unwrap();
     let decoded_min_target = CompactTarget::consensus_decode(&mut reader).unwrap();
@@ -350,6 +350,7 @@ fn test_committed_metadata_consensus_field_order_decode() {
     let decoded_miner_ip = String::consensus_decode(&mut reader).unwrap();
 
     assert_eq!(decoded_txids, TxIdVec(txids));
+    assert_eq!(decoded_start_timestamp, parse_time(data.timestamps.first));
     assert_eq!(decoded_parents, parents);
     assert_eq!(
         decoded_parent_times,
@@ -360,7 +361,6 @@ fn test_committed_metadata_consensus_field_order_decode() {
         ])
     );
     assert_eq!(decoded_payout, data.payout_addresses.populated);
-    assert_eq!(decoded_start_timestamp, parse_time(data.timestamps.first));
     assert_eq!(
         decoded_pubkey,
         parse_public_key(&data.public_keys.default_committed)
@@ -437,4 +437,64 @@ fn test_committed_metadata_consensus_txid_order_is_significant() {
         .build();
 
     assert_ne!(serialize(&metadata_ab), serialize(&metadata_ba));
+}
+#[test]
+fn test_committed_metadata_preserves_sub_second_timestamps() {
+    let data = test_data();
+    let parents = vec![parse_block_hash(&data.block_hashes.parent1)];
+
+    // Deliberately not a whole number of seconds.
+    let start = MicrosecondTimestamp::from_micros(1_653_195_600_123_456);
+    let parent_ts = MicrosecondTimestamp::from_micros(1_653_195_599_987_654);
+
+    let metadata = TestCommittedMetadataBuilder::new()
+        .transactions(vec![parse_txid(&data.txids.genesis)])
+        .parents(parents)
+        .parent_bead_timestamps(TimeVec(vec![parent_ts]))
+        .payout_address(data.payout_addresses.populated.clone())
+        .start_timestamp(start)
+        .comm_pub_key(parse_public_key(&data.public_keys.default_committed))
+        .min_target(parse_target(data.targets.default_bits))
+        .weak_target(parse_target(data.targets.default_bits))
+        .miner_ip(data.miner_ips.lan.clone())
+        .build();
+
+    let decoded: CommittedMetadata = deserialize(&serialize(&metadata)).unwrap();
+
+    assert_eq!(decoded.start_timestamp, start);
+    assert_eq!(decoded.parent_bead_timestamps.0[0], parent_ts);
+    // The sub-second remainder is the whole point: assert it explicitly so a
+    // regression to second-granularity fails loudly rather than silently.
+    assert_eq!(decoded.start_timestamp.as_micros() % 1_000_000, 123_456);
+    assert_eq!(
+        decoded.parent_bead_timestamps.0[0].as_micros() % 1_000_000,
+        987_654
+    );
+}
+
+#[test]
+fn test_committed_metadata_sub_second_beads_hash_differently() {
+    let data = test_data();
+    let parents = vec![parse_block_hash(&data.block_hashes.parent1)];
+
+    let build = |start: MicrosecondTimestamp| {
+        TestCommittedMetadataBuilder::new()
+            .transactions(vec![parse_txid(&data.txids.genesis)])
+            .parents(parents.clone())
+            .parent_bead_timestamps(TimeVec(vec![parse_time(data.timestamps.first)]))
+            .payout_address(data.payout_addresses.populated.clone())
+            .start_timestamp(start)
+            .comm_pub_key(parse_public_key(&data.public_keys.default_committed))
+            .min_target(parse_target(data.targets.default_bits))
+            .weak_target(parse_target(data.targets.default_bits))
+            .miner_ip(data.miner_ips.lan.clone())
+            .build()
+    };
+
+    // Two beads one millisecond apart. Under the old seconds-granularity
+    // encoding these serialized identically.
+    let a = build(MicrosecondTimestamp::from_micros(1_653_195_600_000_000));
+    let b = build(MicrosecondTimestamp::from_micros(1_653_195_600_001_000));
+
+    assert_ne!(serialize(&a), serialize(&b));
 }
