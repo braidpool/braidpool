@@ -26,3 +26,4 @@ venv
 .worktrees/
 deny.toml
 miner_api.db
+node/src/cpuminer/

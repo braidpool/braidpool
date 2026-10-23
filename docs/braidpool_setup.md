@@ -8,7 +8,7 @@ Braidpool uses Inter-Process Communication (IPC) to connect with Bitcoin Core us
 - Unix-domain socket support (Linux/macOS).
 - Cap'n Proto development libraries.
 - libmultiprocess library.
-- cpuminer for downstream connection (if no external ASIC).
+- cpuminer for downstream connection on mainnet, testnet4 and signet (if no external ASIC), or `rust_cpunet_miner` for `cpunet`. See [Setting up cpuminer for downstream connection](#setting-up-cpuminer-for-downstream-connection).
 
 ## Building Bitcoin
 First to connect with Braidpool you need to build your Bitcoin node with IPC enabled build configurations. Check out bitcoin [multiprocess](https://github.com/bitcoin/bitcoin/blob/master/doc/multiprocess.md) doc to get the information about building with IPC.
@@ -85,10 +85,26 @@ You can find all available command-line arguments in [node/src/cli.rs](https://g
   - For mining over cpunet on CPU you can run our cpunet configured rust_cpu_miner instructions here - `https://github.com/braidpool/rust_cpunet_miner` .
   - For mining over other testnets,firstly install `cpuminer` for connecting a downstream to the node's stratum service (can be done by any external ASIC device or cpu based).
 
-  - Run the `node/src/mock_miner.sh` script for the installation in the cwd for cpuminerd setup.
+  - Run the `node/src/mock_miner.sh` script to build `minerd`. It works on:
+    - **Debian/Ubuntu**: installs the build dependencies with `apt` (uses `sudo` unless you are root).
+    - **macOS**: needs the Xcode command line tools (`xcode-select --install`) and [Homebrew](https://brew.sh). It installs `automake`, `autoconf` and `curl` with `brew` if they are missing. `curl` is only needed for `libcurl.m4`; the miner links against Apple's libcurl.
+    - **Other systems**: the script stops and lists the tools to install yourself (`git automake autoconf make perl cc curl-config`, where `curl-config` comes with the libcurl development package). Then run it again.
+
+    ```sh
+    ./node/src/mock_miner.sh
+    ```
+
+    The script clones and builds a pinned cpuminer commit in `node/src/cpuminer/`, wherever you run it from, and prints the path of the binary when it finishes. The directory is managed by the script, so local changes in it are discarded on every run. A second run skips the build when `minerd` is already built from the same commit; pass `--rebuild` to build again. Set `CPUMINER_DIR` to build somewhere else, `CPUMINER_REF` to build another tag or commit, and `CONFIGURE_ARGS=--disable-assembly` if the assembly routines do not build on Apple Silicon:
+
+    ```sh
+    CPUMINER_DIR=$HOME/cpuminer ./node/src/mock_miner.sh
+    ```
+
+    The functional tests look for `minerd` at `node/src/cpuminer/minerd` by default. If you built it elsewhere, set `MINERD_PATH` or pass `--minerd-bin`.
 
   - Execute the `minerd` process via console/terminal by 
-    `./minerd -a sha256d -o stratum+tcp://localhost:3333 -q -D -P`.
+    `node/src/cpuminer/minerd -a sha256d -o stratum+tcp://127.0.0.1:3333 -u <MAINNET_ADDRESS>.worker1 -p x -t 1`.
+    The node uses the username as the payout address: it must be a mainnet Bitcoin address, optionally followed by `.workername`. Any other value is accepted when the miner authorizes, but its shares are rejected when they are submitted. Add `-D -P` to see the Stratum handshake when debugging.
 
   - Password and downstream device name are optional paramateres can be sent if required for more information  check the source repository 
   `https://github.com/pooler/cpuminer` .
