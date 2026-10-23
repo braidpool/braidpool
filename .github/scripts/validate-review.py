@@ -40,6 +40,7 @@ VALID_PERSONAS = [
 VALID_GRADES = ["PASS", "PASS-WITH-NOTES", "NEEDS-WORK"]
 VALID_SEVERITIES = ["critical", "high", "medium", "low"]
 VALID_STATUSES = ["open", "resolved", "wont-fix", "regressed"]
+DATE_PATTERN = r"^\d{4}-\d{2}-\d{2}$"
 
 
 def load_schema():
@@ -72,7 +73,7 @@ def basic_validate(data: dict, filepath: str) -> list[str]:
         errors.append(f"Invalid grade: {data['grade']}. Must be one of: {VALID_GRADES}")
     
     # Validate date format (YYYY-MM-DD) if one is given; it is optional in the schema
-    if "date" in data and not re.match(r"^\d{4}-\d{2}-\d{2}$", str(data["date"])):
+    if "date" in data and not re.match(DATE_PATTERN, str(data["date"])):
         errors.append(f"Invalid date format: {data['date']}. Must be YYYY-MM-DD")
     
     # Validate findings
