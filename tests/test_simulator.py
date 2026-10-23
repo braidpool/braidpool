@@ -4,8 +4,10 @@
 """
 
 import unittest
+import subprocess
 import sys
 import os
+import tempfile
 import random
 import time
 import hashlib
@@ -506,6 +508,31 @@ class TestIntegration(unittest.TestCase):
         # Both networks should have at least 5 beads (mining may find >1 bead in a single tick)
         self.assertEqual(len(network_no_mine.nodes[0].braid.beads), 5)
         self.assertGreaterEqual(len(network_mine.nodes[0].braid.beads), 5)
+
+
+class TestCommandLine(unittest.TestCase):
+    """Run simulator.py as a script, as a user would."""
+
+    SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "simulator.py")
+
+    def run_cli(self, *args):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = subprocess.run(
+                [sys.executable, self.SCRIPT, *args, "-o", "out"],
+                cwd=tmp, capture_output=True, text=True, timeout=120)
+            return result, sorted(os.listdir(tmp))
+
+    def test_numeric_options_are_parsed_as_integers(self):
+        """-n/-t/-b/-p/-s/-D used to arrive as strings and crash with a TypeError."""
+        result, files = self.run_cli("-n", "5", "-t", "240", "-b", "5", "-p", "2", "-s", "3", "-D", "64")
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        self.assertEqual(files, ["out.json"])
+
+    def test_test_mining_writes_both_braids(self):
+        """--test-mining used to crash with a NameError saving the no-mine braid."""
+        result, files = self.run_cli("-n", "3", "-t", "244", "-b", "4", "-p", "2", "--test-mining")
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        self.assertEqual(files, ["out-mine.json", "out-no-mine.json"])
 
 
 if __name__ == '__main__':

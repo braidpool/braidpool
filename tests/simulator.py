@@ -722,19 +722,19 @@ def main():
     parser.add_argument("-o", "--output-file", dest="filename",
         help="Base filename to which we will write the generated braid, '.json' will be added",
         default="braid")
-    parser.add_argument("-n", "--nodes",
+    parser.add_argument("-n", "--nodes", type=int,
         help="Number of nodes to simulate",
         default=25)
     parser.add_argument("--mine", action=BooleanOptionalAction,
         help="Do sha256d mining (if --no-mine we will use a geometric distribution)",
         default = False)
-    parser.add_argument("-t", "--target",
+    parser.add_argument("-t", "--target", type=int,
         help="Target difficulty exponent t where T=2**t-1",
         default=239)
-    parser.add_argument("-b", "--beads",
+    parser.add_argument("-b", "--beads", type=int,
         help="Number of beads to simulate",
         default=50)
-    parser.add_argument("-p", "--peers",
+    parser.add_argument("-p", "--peers", type=int,
         help="Number of peers per node",
         default=4)
     parser.add_argument("-d", "--description",
@@ -746,10 +746,10 @@ def main():
     parser.add_argument("-R", "--target-ratio",
         help="Target N_B/N_C ratio",
         default=f"{TARGET_NB}/{TARGET_NC}")
-    parser.add_argument("-s", "--random-seed",
+    parser.add_argument("-s", "--random-seed", type=int,
         help="Random seed (to regenerate the same network)",
         default=1)
-    parser.add_argument("-D", "--damping-factor",
+    parser.add_argument("-D", "--damping-factor", type=int,
         help="Damping factor for difficulty adjustment",
         default=TARGET_DAMPING)
     parser.add_argument("-A", "--algorithm",
@@ -802,7 +802,7 @@ def main():
         n.simulate(nbeads=int(args.beads), mine=False)
         bnomine = copy(n.nodes[0].braid)
         nomine_parents = {int(k): set(map(int, v)) for k,v in dict(bnomine).items()}
-        dag = braid.save_braid(parents, args.filename+"-no-mine.json", args.description)
+        dag = braid.save_braid(nomine_parents, args.filename+"-no-mine.json", args.description)
         Nc = len(dag['cohorts'])
         Ncerr = 1/sqrt(Nc)
         print(f"\nno-mined Nb/Nc = {len(dag['parents'])/len(dag['cohorts']):{8}.{4}} +/- {Ncerr:{5}.{4}}")
