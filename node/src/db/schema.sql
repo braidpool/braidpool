@@ -33,6 +33,13 @@ CREATE TABLE IF NOT EXISTS Transactions (
       UNIQUE (bead_id, txid)
 );
 
+-- 2b. Committed Transactions
+CREATE TABLE IF NOT EXISTS CommittedTransactions (
+      bead_id           INTEGER NOT NULL REFERENCES Bead(id),
+      txid              BLOB,
+      UNIQUE (bead_id, txid)
+);
+
 -- 3. Cohorts
 -- Auxiliary: positive cohort numbers (append a row for each new cohort)
 -- Cohort metadata can be added here
@@ -85,6 +92,7 @@ CREATE TABLE IF NOT EXISTS AncestorTimestamps (
 
 -- 7. Fast look-up indices
 CREATE INDEX IF NOT EXISTS bead_txids ON Transactions(bead_id);
+CREATE INDEX IF NOT EXISTS bead_committed_txids ON CommittedTransactions(bead_id);
 CREATE INDEX IF NOT EXISTS parents ON Relatives(parent);
 CREATE INDEX IF NOT EXISTS bead_hash ON Bead(hash);
 CREATE INDEX IF NOT EXISTS timestamps_parents ON ParentTimestamps(parent);
