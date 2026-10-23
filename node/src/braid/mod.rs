@@ -6,7 +6,157 @@ use num::BigUint;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::VecDeque;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
+
+/// Default upper bound on the number of parked orphan beads.
+///
+/// Beads that arrive before their parents are parked until the parents show up.
+/// Nothing else bounds that set, and a peer can park a bead for free by naming a
+/// parent that will never arrive, so the pool needs a ceiling. When the ceiling is
+/// reached the oldest parked bead is evicted, mirroring the capacity-limited
+/// `GlobalJobStore` in `stratum.rs`.
+pub const DEFAULT_MAX_ORPHAN_BEADS: usize = 4096;
+
+/// Beads that arrived before one or more of their parents, indexed by bead hash.
+///
+/// Keeping the orphans in a map keyed by hash does two things a `Vec<Bead>` could
+/// not: a replayed bead collapses onto the existing entry instead of being parked
+/// again, and `waiting_on` lets a newly-added bead find only the orphans that were
+/// blocked on it rather than rescanning the whole pool.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct OrphanPool {
+    /// Parked beads, keyed by their own hash.
+    beads: HashMap<BeadHash, Bead>,
+    /// Missing parent hash -> hashes of the parked beads waiting on it.
+    waiting_on: HashMap<BeadHash, HashSet<BeadHash>>,
+    /// Insertion order, oldest first: sequence number -> bead hash.
+    ///
+    /// Eviction removes the smallest sequence so that a peer cannot keep the pool
+    /// permanently full of beads whose parents will never arrive.
+    order: BTreeMap<u64, BeadHash>,
+    /// Bead hash -> its key in `order`.
+    sequence: HashMap<BeadHash, u64>,
+    next_sequence: u64,
+    capacity: usize,
+}
+
+impl OrphanPool {
+    /// Creates an empty pool bounded to `capacity` beads (at least one).
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            beads: HashMap::new(),
+            waiting_on: HashMap::new(),
+            order: BTreeMap::new(),
+            sequence: HashMap::new(),
+            next_sequence: 0,
+            capacity: capacity.max(1),
+        }
+    }
+
+    /// Maximum number of beads this pool will park.
+    pub fn capacity(&self) -> usize {
+        self.capacity
+    }
+
+    /// Number of parked beads.
+    pub fn len(&self) -> usize {
+        self.beads.len()
+    }
+
+    /// Whether no beads are parked.
+    pub fn is_empty(&self) -> bool {
+        self.beads.is_empty()
+    }
+
+    /// Whether a bead with `bead_hash` is currently parked.
+    pub fn contains(&self, bead_hash: &BeadHash) -> bool {
+        self.beads.contains_key(bead_hash)
+    }
+
+    /// Removes every parked bead.
+    pub fn clear(&mut self) {
+        self.beads.clear();
+        self.waiting_on.clear();
+        self.order.clear();
+        self.sequence.clear();
+        self.next_sequence = 0;
+    }
+
+    /// Parks `bead`, indexing it against each hash in `missing_parents`.
+    ///
+    /// Returns `false` if the bead is already parked. When the pool is at
+    /// capacity the oldest parked bead is evicted to make room, so parking never
+    /// fails for capacity: a peer cannot lock the pool by naming parents that
+    /// never arrive.
+    pub fn park(&mut self, bead_hash: BeadHash, bead: Bead, missing_parents: &[BeadHash]) -> bool {
+        if self.beads.contains_key(&bead_hash) {
+            return false;
+        }
+        if self.beads.len() >= self.capacity {
+            self.evict_oldest();
+        }
+        for parent_hash in missing_parents {
+            self.waiting_on
+                .entry(*parent_hash)
+                .or_default()
+                .insert(bead_hash);
+        }
+        let sequence = self.next_sequence;
+        self.next_sequence += 1;
+        self.order.insert(sequence, bead_hash);
+        self.sequence.insert(bead_hash, sequence);
+        self.beads.insert(bead_hash, bead);
+        true
+    }
+
+    /// Removes `bead_hash` from the pool and from every waiting-on index.
+    pub fn remove(&mut self, bead_hash: &BeadHash) -> Option<Bead> {
+        self.detach(bead_hash)
+    }
+
+    /// Evicts the bead that has been parked the longest.
+    fn evict_oldest(&mut self) {
+        let Some((_, oldest)) = self.order.pop_first() else {
+            return;
+        };
+        if self.detach(&oldest).is_some() {
+            // Debug rather than warn: an attacker can force an eviction for every
+            // orphan it sends once the pool is full, and this must not become a
+            // log-amplification vector.
+            tracing::debug!(
+                bead = %oldest,
+                capacity = self.capacity,
+                "Orphan pool is full, evicted the oldest parked bead"
+            );
+        }
+    }
+
+    /// Removes `bead_hash` from the pool, the eviction order and every index.
+    fn detach(&mut self, bead_hash: &BeadHash) -> Option<Bead> {
+        let bead = self.beads.remove(bead_hash)?;
+        if let Some(sequence) = self.sequence.remove(bead_hash) {
+            self.order.remove(&sequence);
+        }
+        for parent_hash in &bead.committed_metadata.parents {
+            if let Some(waiting) = self.waiting_on.get_mut(parent_hash) {
+                waiting.remove(bead_hash);
+                if waiting.is_empty() {
+                    self.waiting_on.remove(parent_hash);
+                }
+            }
+        }
+        Some(bead)
+    }
+
+    /// Takes the hashes of the beads that were waiting on `parent_hash`.
+    ///
+    /// The entries are removed from the index, so each parked bead is offered for
+    /// promotion at most once per missing parent.
+    pub fn take_waiting_on(&mut self, parent_hash: &BeadHash) -> HashSet<BeadHash> {
+        self.waiting_on.remove(parent_hash).unwrap_or_default()
+    }
+}
+
 #[derive(Clone, Debug, Serialize, PartialEq, Deserialize)]
 pub struct Cohort(pub HashSet<usize>);
 #[derive(Debug, Clone)]
@@ -15,8 +165,16 @@ pub enum AddBeadStatus {
     InvalidBead,
     // Returning any promoted orphan beads whose parents have
     // been extended currently .
-    BeadAdded { promoted_orphans: Vec<Bead> },
+    BeadAdded {
+        promoted_orphans: Vec<Bead>,
+    },
     ParentsNotYetReceived,
+    /// The bead is already parked in the orphan pool, waiting on one or more
+    /// parents.
+    ///
+    /// Distinct from `DagAlreadyContainsBead` so callers can tell a replay of a
+    /// parked orphan from a bead that is already part of the braid.
+    OrphanAlreadyParked,
 }
 #[derive(Debug, Clone)]
 
@@ -33,7 +191,7 @@ pub struct Braid {
     pub tips: HashSet<usize>,
     pub cohorts: Vec<Cohort>,
     pub cohort_tips: Vec<HashSet<usize>>,
-    pub orphan_beads: Vec<Bead>,
+    pub orphan_beads: OrphanPool,
     pub genesis_beads: HashSet<usize>,
     pub bead_index_mapping: HashMap<BeadHash, usize>,
     //For computing block_hash accordingly
@@ -61,7 +219,7 @@ impl Braid {
             tips: bead_indices.clone(),
             cohorts: genesis_cohort,
             cohort_tips: vec![HashSet::from(bead_indices.clone())],
-            orphan_beads: Vec::new(),
+            orphan_beads: OrphanPool::new(DEFAULT_MAX_ORPHAN_BEADS),
             genesis_beads: bead_indices,
             bead_index_mapping,
             network,
@@ -86,7 +244,11 @@ impl Braid {
 #[allow(unused)]
 impl Braid {
     /// Attempts to extend the braid with the given bead.
-    /// Returns true if the bead successfully extended the braid, false otherwise.
+    ///
+    /// If the bead's parents are all present it is inserted immediately. Any
+    /// orphan beads that were parked waiting on the newly-inserted bead are then
+    /// promoted, transitively, by an iterative worklist — the promoted beads are
+    /// returned parent-before-child in `AddBeadStatus::BeadAdded`.
     pub fn extend(&mut self, bead: &Bead) -> AddBeadStatus {
         // If the braid is empty and bead has no parents, treat as genesis bead
         if self.beads.is_empty() && bead.committed_metadata.parents.is_empty() {
@@ -101,33 +263,65 @@ impl Braid {
                 promoted_orphans: Vec::new(),
             };
         }
+
+        let bead_hash = self.compute_bead_hash(bead);
+
+        // Already in the braid. Checked before the missing-parent branch so that a
+        // replay is answered without hashing the parents again.
+        if self.bead_index_mapping.contains_key(&bead_hash) {
+            return AddBeadStatus::DagAlreadyContainsBead;
+        }
+
+        // Already parked as an orphan. Report that separately: it is not part of
+        // the braid, but re-parking it would duplicate work and (in `main.rs`)
+        // re-trigger the parent request on every delivery.
+        if self.orphan_beads.contains(&bead_hash) {
+            return AddBeadStatus::OrphanAlreadyParked;
+        }
+
         // No parents: bad block i.e. the extend will add beads after the genesis
         //bead is done and the extension of genesis beads to Braid shall be done via Braid::new
         if bead.committed_metadata.parents.is_empty() {
             return AddBeadStatus::InvalidBead;
         }
-        // Don't have all parents
-        for parent_hash in &bead.committed_metadata.parents {
-            let parent_exists = self.bead_index_mapping.contains_key(parent_hash);
 
-            if !parent_exists {
-                // Try to retrieve the parent
-                //This is not required if a bead exists in DB it would already been extended to local braid as well
-                // Parent not found and can't be retrieved
-                self.orphan_beads.push(bead.clone());
-                return AddBeadStatus::ParentsNotYetReceived;
-            }
-        }
-        // Already seen this bead
-        let bead_hash = self.compute_bead_hash(bead);
-        if self
-            .beads
+        // Don't have all parents: park the bead until they arrive.
+        let missing_parents: Vec<BeadHash> = bead
+            .committed_metadata
+            .parents
             .iter()
-            .any(|b| self.compute_bead_hash(b) == bead_hash)
-        {
-            return AddBeadStatus::DagAlreadyContainsBead;
+            .filter(|parent_hash| !self.bead_index_mapping.contains_key(*parent_hash))
+            .copied()
+            .collect();
+
+        if !missing_parents.is_empty() {
+            let parked = self
+                .orphan_beads
+                .park(bead_hash, bead.clone(), &missing_parents);
+            debug_assert!(parked, "an unseen bead cannot already be parked");
+            return AddBeadStatus::ParentsNotYetReceived;
         }
 
+        // Insert bead into beads vector
+        self.insert_with_parents_available(bead, bead_hash);
+
+        // Adding this bead may have supplied the missing parent for one or more
+        // parked orphans; promote whichever became connectable and surface them
+        // to the caller.
+        let promoted_orphans = self.promote_orphans_waiting_on(&bead_hash);
+
+        AddBeadStatus::BeadAdded { promoted_orphans }
+    }
+
+    /// Inserts `bead` into the braid, assuming every parent is already present.
+    ///
+    /// Updates the bead list, the hash index, tips and cohorts. Does not touch the
+    /// orphan pool: promotion is driven by the caller through
+    /// `promote_orphans_waiting_on`.
+    ///
+    /// `bead_hash` is passed in because every caller already computed it while
+    /// checking which parents were missing.
+    fn insert_with_parents_available(&mut self, bead: &Bead, bead_hash: BeadHash) {
         // Insert bead into beads vector
         self.beads.push(bead.clone());
         let new_bead_index = self.beads.len() - 1;
@@ -197,57 +391,59 @@ impl Braid {
             self.cohorts.push(Cohort(dangling));
             self.cohort_tips.push(self.tips.clone());
         }
-
-        // Adding this bead may have supplied the missing parent for one or more
-        // parked orphans; promote whichever became connectable and surface them
-        // to the caller.
-        let promoted_orphans = self.process_orphan_beads();
-
-        AddBeadStatus::BeadAdded { promoted_orphans }
     }
 
-    fn process_orphan_beads(&mut self) -> Vec<Bead> {
+    /// Promotes every parked orphan that becomes connectable because `bead_hash`
+    /// was just added to the braid, and then any orphan made connectable by those
+    /// promotions, and so on.
+    ///
+    /// This is an explicit worklist rather than a recursive call back into
+    /// `extend`: a chain of orphans that connect in a single cascade is as deep as
+    /// the chain is long, and recursion over it overflowed the stack (#532).
+    ///
+    /// The returned beads are ordered parent-before-child, because callers persist
+    /// them in that order.
+    fn promote_orphans_waiting_on(&mut self, bead_hash: &BeadHash) -> Vec<Bead> {
         let mut promoted = Vec::new();
-        // Process orphans in reverse order to maintain proper indexing
-        let mut i = self.orphan_beads.len();
-        while i > 0 {
-            i -= 1;
+        // Beads in the braid whose waiting orphans have not been examined yet.
+        let mut available: VecDeque<BeadHash> = VecDeque::new();
+        available.push_back(*bead_hash);
 
-            // Check if all parents are now available for this orphan
-            let mut all_parents_available = true;
-            for parent_hash in &self.orphan_beads[i].committed_metadata.parents {
-                if !self.bead_index_mapping.contains_key(parent_hash) {
-                    all_parents_available = false;
-                    break;
+        while let Some(available_hash) = available.pop_front() {
+            // Sorted so that a batch of siblings is promoted in a reproducible
+            // order; `promoted_orphans` is persisted in the order returned.
+            let mut waiting: Vec<BeadHash> = self
+                .orphan_beads
+                .take_waiting_on(&available_hash)
+                .into_iter()
+                .collect();
+            waiting.sort();
+
+            for orphan_hash in waiting {
+                // The orphan may already have been promoted through another parent.
+                let Some(orphan) = self.orphan_beads.remove(&orphan_hash) else {
+                    continue;
+                };
+
+                // Re-check: another parent may still be missing.
+                let still_missing: Vec<BeadHash> = orphan
+                    .committed_metadata
+                    .parents
+                    .iter()
+                    .filter(|parent_hash| !self.bead_index_mapping.contains_key(*parent_hash))
+                    .copied()
+                    .collect();
+
+                if !still_missing.is_empty() {
+                    // Re-parking cannot be refused: a slot was freed by `remove`.
+                    let reparked = self.orphan_beads.park(orphan_hash, orphan, &still_missing);
+                    debug_assert!(reparked, "re-parking a just-removed orphan must succeed");
+                    continue;
                 }
-            }
 
-            if all_parents_available {
-                // Remove the orphan bead first, then process it
-                let orphan_bead = self.orphan_beads.remove(i);
-
-                // Now extend with the orphan bead
-                match self.extend(&orphan_bead) {
-                    AddBeadStatus::BeadAdded { promoted_orphans } => {
-                        // This orphan is now connected: record it, along with any
-                        // beads its own addition promoted.
-                        promoted.push(orphan_bead);
-                        promoted.extend(promoted_orphans);
-                        // Recursively process remaining orphans as this addition
-                        // might enable more orphans to be processed.
-                        promoted.extend(self.process_orphan_beads());
-                        return promoted; // Exit current processing as recursion will handle the rest
-                    }
-                    AddBeadStatus::DagAlreadyContainsBead => {
-                        continue;
-                    }
-                    AddBeadStatus::InvalidBead => {
-                        continue;
-                    }
-                    AddBeadStatus::ParentsNotYetReceived => {
-                        self.orphan_beads.push(orphan_bead);
-                    }
-                }
+                self.insert_with_parents_available(&orphan, orphan_hash);
+                promoted.push(orphan);
+                available.push_back(orphan_hash);
             }
         }
         promoted
