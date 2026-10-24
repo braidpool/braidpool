@@ -7,7 +7,6 @@ use libp2p::{
     core::multiaddr::Multiaddr,
     floodsub::{self},
     identify,
-    identity::Keypair,
     kad::{self, Mode, QueryResult},
     ping, request_response,
     swarm::SwarmEvent,
@@ -40,13 +39,11 @@ use node::{
     SwarmCommand, TemplateId,
 };
 use std::collections::HashSet;
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{collections::HashMap, error::Error};
-use std::{fs, time::Duration};
 use tokio_util::sync::CancellationToken;
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
@@ -253,6 +250,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let miner_identity = Arc::new(node::miner_identity::MinerIdentity::load_or_generate(
         &datadir_path,
     )?);
+    let keypair = miner_identity.libp2p_keypair().map_err(|e| {
+        error!(error = %e, "Failed to derive the libp2p keypair from the miner secret");
+        e
+    })?;
+    info!(
+        peer_id = %keypair.public().to_peer_id(),
+        comm_pub_key = %miner_identity.xonly(),
+        "libp2p identity derived from the miner key"
+    );
     //Communication bridge between stratum and network swarm and swarm commands also, for communicating share population and propogating them further
     let (swarm_handler, mut swarm_command_receiver) = SwarmHandler::new_with_identity(
         Arc::clone(&braid),
@@ -853,48 +859,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .await;
     });
 
-    let keystore_path = datadir_path.join("keystore");
-    #[cfg(unix)]
-    {
-        if keystore_path.exists() {
-            let perms = fs::metadata(&keystore_path)?.permissions();
-            if perms.mode() & 0o777 != 0o400 {
-                warn!(
-                    permissions = perms.mode() & 0o777,
-                    "Keystore permissions are not secure, setting to 0o400"
-                );
-                let mut new_perms = perms.clone();
-                new_perms.set_mode(0o400);
-                fs::set_permissions(&keystore_path, new_perms)?;
-            }
-        }
+    let legacy_keystore_path = datadir_path.join("keystore");
+    if legacy_keystore_path.exists() {
+        warn!(
+            path = %legacy_keystore_path.display(),
+            "Ignoring the legacy ed25519 keystore: the PeerId now comes from the miner key, so \
+             this node's PeerId has changed. The file can be deleted."
+        );
     }
-    let keypair = match fs::read(&keystore_path) {
-        Ok(keypair) => {
-            info!(path = %keystore_path.display(), "Loading keypair from keystore");
-            libp2p::identity::Keypair::from_protobuf_encoding(&keypair).map_err(|e| {
-                error!(error = %e, path = %keystore_path.display(), "Failed to read keypair from keystore");
-                e
-            })?
-        }
-        Err(_) => {
-            info!(path = %keystore_path.display(), "Generating new keypair");
-            let keypair: Keypair = libp2p::identity::Keypair::generate_ed25519();
-            let keypair_bytes = keypair.to_protobuf_encoding()?;
-            fs::write(&keystore_path, keypair_bytes)?;
-            #[cfg(unix)]
-            {
-                let mut perms = fs::metadata(&keystore_path)?.permissions();
-                perms.set_mode(0o400);
-                fs::set_permissions(&keystore_path, perms)?;
-                info!(path = %keystore_path.display(), perms = "0o400", "Set keystore permissions");
-            }
-            keypair
-        }
-    };
-    // For local testing uncomment this keypair peer since it running to process will
-    // result in same peerID leading to OutgoingConnectionError
-    // let keypair = identity::Keypair::generate_ed25519();
+    // Two nodes on one machine need separate data directories: the same miner key gives the
+    // same PeerId, which fails with OutgoingConnectionError.
     // load beads from db (if present) and insert in braid here
     let current_broadcast_topic: floodsub::Topic = floodsub::Topic::new(BRAIDPOOL_TOPIC);
 

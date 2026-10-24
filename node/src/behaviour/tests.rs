@@ -65,7 +65,9 @@ fn create_test_bead() -> Bead {
     }
 }
 fn build_swarm() -> (Swarm<BraidPoolBehaviour>, PeerId) {
-    let key = Keypair::generate_ed25519();
+    let key = crate::miner_identity::MinerIdentity::generate()
+        .libp2p_keypair()
+        .unwrap();
     let peer_id = PeerId::from(key.public());
     let swarm = SwarmBuilder::with_existing_identity(key)
         .with_tokio()

@@ -95,7 +95,7 @@ braidpool/
 |------|---------|
 | `node/src/bead/mod.rs` | Bead structure, serialization, validation |
 | `node/src/bead/sign.rs` | BIP340 Schnorr signing and verification of beads (`VerifiedBead`) |
-| `node/src/miner_identity.rs` | The node's secp256k1 miner key (`datadir/miner_secp256k1`) |
+| `node/src/miner_identity.rs` | The node's secp256k1 miner key (`datadir/miner_secp256k1`); signs beads and derives the libp2p `PeerId` |
 | `node/src/braid/mod.rs` | Cohort calculation, DAG ordering |
 | `node/src/behaviour/mod.rs` | P2P gossip protocol (libp2p) |
 | `node/src/stratum.rs` | Stratum protocol for miners |
