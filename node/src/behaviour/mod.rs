@@ -12,12 +12,15 @@ use libp2p::{
 };
 use std::{error::Error, time::Duration};
 
-// Protocol names
-pub const KADPROTOCOLNAME: StreamProtocol = StreamProtocol::new("/braidpool/kad/1.0.0");
-pub const IDENTIFYPROTOCOLNAME: StreamProtocol = StreamProtocol::new("/braidpool/identify/1.0.0");
-pub const BEAD_SYNC_PROTOCOL: StreamProtocol = StreamProtocol::new("/braidpool/bead-sync/1.0.0");
+// Protocol names. 2.0.0 is the BIP340 bead encoding (32-byte x-only keys, 64-byte Schnorr
+// signatures); nodes on other versions cannot decode it. Floodsub's own name is fixed by libp2p,
+// so the gossip topic carries the version instead.
+pub const PROTOCOL_VERSION: &str = "2.0.0";
+pub const KADPROTOCOLNAME: StreamProtocol = StreamProtocol::new("/braidpool/kad/2.0.0");
+pub const IDENTIFYPROTOCOLNAME: StreamProtocol = StreamProtocol::new("/braidpool/identify/2.0.0");
+pub const BEAD_SYNC_PROTOCOL: StreamProtocol = StreamProtocol::new("/braidpool/bead-sync/2.0.0");
 pub const BEAD_ANNOUNCE_PROTOCOL: StreamProtocol = StreamProtocol::new("/floodsub/1.0.0");
-pub const BRAIDPOOL_TOPIC: &str = "braidpool_channel";
+pub const BRAIDPOOL_TOPIC: &str = "braidpool_channel/2.0.0";
 
 // Configuration for the request-response protocol
 #[derive(Debug, Clone)]
