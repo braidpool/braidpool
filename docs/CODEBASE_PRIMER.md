@@ -174,6 +174,19 @@ let (tx, rx) = tokio::sync::mpsc::channel(100);
 // Use tokio::fs, not std::fs
 ```
 
+### Adding Beads to the Braid (Rust)
+The braid is one `Arc<RwLock<Braid>>`; while the write lock is held, RPC, dashboard,
+gossip and stratum all wait. Do work that needs only the bead before taking it:
+```rust
+// Signature (and denylist) check: no lock held
+let checked = VerifiedBead::new(&bead);
+// Lock only to extend; checks that need the DAG (parents) happen inside
+let mut braid = braid_arc.write().await;
+let status = extend_checked(&mut braid, checked);
+```
+Beads the node forms itself read the tips under a read lock, then are built and signed with no
+lock held.
+
 ## Glossary
 
 | Term | Definition |

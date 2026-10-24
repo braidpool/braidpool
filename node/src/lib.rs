@@ -26,7 +26,10 @@ pub const MAX_CACHED_TEMPLATES: usize = 90;
 pub const GLOBAL_JOB_STORE_CAPACITY: usize = 20;
 
 use crate::{
-    bead::{sign::extend_verified, Bead},
+    bead::{
+        sign::{extend_checked, VerifiedBead},
+        Bead,
+    },
     braid::{AddBeadStatus, Braid},
     committed_metadata::{CommittedMetadata, TimeVec, TxIdVec},
     db::BraidpoolDBTypes,
@@ -356,28 +359,33 @@ impl SwarmHandler {
             .collect();
         let transaction_ids: Vec<Txid> = Vec::from(ids);
         debug!("Broadcasting bead via floodsub");
-        let mut braid_data = self.braid_arc.write().await;
-        let mut pairs: Vec<(BlockHash, bitcoin::absolute::Time)> = braid_data
-            .tips
-            .iter()
-            .map(|&idx| {
-                let tip = braid_data.beads.get(idx).unwrap();
-                (
-                    braid_data.compute_bead_hash(tip),
-                    tip.committed_metadata.start_timestamp,
-                )
-            })
-            .collect();
-        pairs.sort_by_key(|(hash, _)| *hash);
+        // Only a read lock while choosing parents: the bead is built and signed without holding
+        // the braid lock. Tips added meanwhile are not parents of this bead, which stays valid.
+        let (parent_hash_set, time_hash_set) = {
+            let braid_data = self.braid_arc.read().await;
+            let mut pairs: Vec<(BlockHash, bitcoin::absolute::Time)> = braid_data
+                .tips
+                .iter()
+                .map(|&idx| {
+                    let tip = braid_data.beads.get(idx).unwrap();
+                    (
+                        braid_data.compute_bead_hash(tip),
+                        tip.committed_metadata.start_timestamp,
+                    )
+                })
+                .collect();
+            pairs.sort_by_key(|(hash, _)| *hash);
 
-        let mut time_hash_set = TimeVec(Vec::new());
-        let mut parent_hash_set: Vec<BlockHash> = Vec::new();
-        for (hash, time) in pairs {
-            parent_hash_set.push(hash);
-            time_hash_set.0.push(time);
-        }
-        debug!(tip_indices = ?braid_data.tips, tip_hashes = ?parent_hash_set,
-            "Tips before extending the Braid");
+            let mut time_hash_set = TimeVec(Vec::new());
+            let mut parent_hash_set: Vec<BlockHash> = Vec::new();
+            for (hash, time) in pairs {
+                parent_hash_set.push(hash);
+                time_hash_set.0.push(time);
+            }
+            debug!(tip_indices = ?braid_data.tips, tip_hashes = ?parent_hash_set,
+                "Tips before extending the Braid");
+            (parent_hash_set, time_hash_set)
+        };
         //TODO:This will be replaced via the allotted `WeakShareDifficulty` after Difficulty adjustment
         let weak_target = CompactTarget::from_unprefixed_hex("1d00ffff").unwrap();
         //Mindiff
@@ -424,7 +432,9 @@ impl SwarmHandler {
             .map_err(|e| StratumErrors::InvalidShare {
                 reason: e.to_string(),
             })?;
-        let status = extend_verified(&mut braid_data, &weak_share);
+        let checked = VerifiedBead::new(&weak_share);
+        let mut braid_data = self.braid_arc.write().await;
+        let status = extend_checked(&mut braid_data, checked);
         match status {
             AddBeadStatus::BeadAdded { promoted_orphans } => {
                 let new_tips: Vec<_> = braid_data.tips.iter().map(|&idx| idx).collect();

@@ -128,6 +128,23 @@ impl<'a> VerifiedBead<'a> {
     }
 }
 
+/// Extend the DAG with a bead checked by [`VerifiedBead::new`], or return `InvalidBead` if the
+/// check failed.
+///
+/// Callers run the check before taking the braid lock, so signature verification never holds it.
+pub fn extend_checked(
+    braid: &mut Braid,
+    checked: Result<VerifiedBead<'_>, BeadSignError>,
+) -> AddBeadStatus {
+    match checked {
+        Ok(verified) => braid.extend_verified(verified),
+        Err(e) => {
+            tracing::debug!(error = %e, "Rejected bead");
+            AddBeadStatus::InvalidBead
+        }
+    }
+}
+
 /// Verify `bead` and extend the DAG with it, or return `InvalidBead` if verification fails.
 pub fn extend_verified(braid: &mut Braid, bead: &Bead) -> AddBeadStatus {
     match VerifiedBead::new(bead) {
@@ -232,6 +249,28 @@ mod tests {
             extend_verified(&mut braid, &bead),
             AddBeadStatus::BeadAdded { .. }
         ));
+    }
+
+    #[test]
+    fn extend_checked_adds_a_verified_bead_and_drops_a_failed_check() {
+        let mut braid = crate::braid::Braid::new(Vec::new(), crate::config::PoolNetwork::Cpunet);
+        let bead = create_test_bead(1, None);
+        let mut tampered = bead.clone();
+        tampered.uncommitted_metadata.extra_nonce_1 ^= 1;
+
+        let failed = VerifiedBead::new(&tampered);
+        assert_eq!(failed.unwrap_err(), BeadSignError::InvalidSignature);
+        assert!(matches!(
+            extend_checked(&mut braid, VerifiedBead::new(&tampered)),
+            AddBeadStatus::InvalidBead
+        ));
+        assert!(braid.beads.is_empty());
+
+        assert!(matches!(
+            extend_checked(&mut braid, VerifiedBead::new(&bead)),
+            AddBeadStatus::BeadAdded { .. }
+        ));
+        assert_eq!(braid.beads.len(), 1);
     }
 
     #[test]

@@ -252,6 +252,9 @@ pub struct DownstreamClient {
     pub monitor_target: Option<bitcoin::Target>,
     /// channel for sending valid block submissions from miners to the block submission handler.
     pub block_submission_tx: Option<mpsc::UnboundedSender<BlockSubmissionRequest>>,
+    /// Key that signs this client's shares. Set once per connection so share submission does
+    /// not lock `SwarmHandler`; when `None` the identity is read from `SwarmHandler`.
+    pub miner_identity: Option<Arc<crate::miner_identity::MinerIdentity>>,
     /// Indicates whether this downstream client is operating in proxy/audit mode (connected via an upstream pool).
     pub is_proxy_mode: bool,
     // Payout address used in the audit mode
@@ -1320,7 +1323,10 @@ impl DownstreamClient {
                         }
                     })?;
 
-                let identity = swarm_handler.lock().await.miner_identity();
+                let identity = match &self.miner_identity {
+                    Some(identity) => Arc::clone(identity),
+                    None => swarm_handler.lock().await.miner_identity(),
+                };
                 let committed_metadata = crate::committed_metadata::CommittedMetadata {
                     comm_pub_key: identity.xonly(),
                     miner_ip: self.downstream_ip.clone(),
@@ -1993,6 +1999,7 @@ impl DownstreamClient {
             miner_extranonce2_size: EXTRANONCE2_SIZE,
             monitor_target: None,
             block_submission_tx: None,
+            miner_identity: None,
             network,
             is_proxy_mode: false,
             payout_address: None,
@@ -3492,6 +3499,7 @@ impl Server {
         upstream_configure_tx: Option<mpsc::Sender<(Value, u64, mpsc::Sender<Value>)>>,
     ) -> Result<(), Box<std::io::Error>> {
         debug!("Starting stratum server");
+        let miner_identity = swarm_handler.lock().await.miner_identity();
         let bound_addr = listener.local_addr()?;
         let endpoints = crate::utils::server_endpoints(
             &self.stratum_config.hostname,
@@ -3525,6 +3533,7 @@ impl Server {
                     if let Some(ref submission_tx) = self.block_submission_tx {
                          client.block_submission_tx = Some(submission_tx.clone());
                      }
+                    client.miner_identity = Some(Arc::clone(&miner_identity));
                             let id = client.connection_id;
                             (id, format!("{:x}", id))
                         };
@@ -3652,6 +3661,7 @@ impl Server {
                                 miner_extranonce2_size: assigned_extranonce2_size,
                                 monitor_target: None,
                                 block_submission_tx: self.block_submission_tx.clone(),
+                                miner_identity: Some(Arc::clone(&miner_identity)),
                                 is_proxy_mode: is_proxy,
                                 payout_address: None,
                                 audit_miner_difficulty: self.stratum_config.audit_miner_difficulty,

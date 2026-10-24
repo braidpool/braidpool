@@ -14,7 +14,7 @@ use libp2p::{
     PeerId,
 };
 use node::audit;
-use node::bead::sign::extend_verified;
+use node::bead::sign::{extend_checked, VerifiedBead};
 use node::db::db_handlers::fetch_beads_in_batch;
 use node::db::db_handlers::FETCH_BEAD_BATCH_SIZE;
 use node::ibd_manager::{IBD_TRIGGER_AFTER, MAX_IBD_INCOMING_THRESHOLD, MAX_IBD_RETRIES};
@@ -141,12 +141,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // starting from that block as genesis
         let network_ref = network;
         let initial_bead_fetch_handle = tokio::spawn(async move {
-            let mut guard = braid_ref.write().await;
             let fetched_beads =
                 fetch_beads_in_batch(&db_connection_pool_ref, FETCH_BEAD_BATCH_SIZE).await?;
             info!(beads = fetched_beads.len(), "Beads loaded from DB");
-            for bead in &fetched_beads {
-                let curr_bead_status = extend_verified(&mut *guard, bead);
+            let checked: Vec<_> = fetched_beads.iter().map(VerifiedBead::new).collect();
+            let mut guard = braid_ref.write().await;
+            for (bead, checked) in fetched_beads.iter().zip(checked) {
+                let curr_bead_status = extend_checked(&mut guard, checked);
                 debug!(
                     hash = ?compute_block_hash(&bead.block_header,network_ref),
                     status = ?curr_bead_status,
@@ -1146,12 +1147,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
                               match result_bead {
                                   Ok(bead) => {
                                       // Handle the received bead here
+                                      let checked = VerifiedBead::new(&bead);
                                       let mut braid_data = braid.write().await;
                                       let bead_hash = braid_data.compute_bead_hash(&bead);
                                  info!(bead = ?bead, hash = %bead_hash, "Received bead");
-                                let status = {
-                                          extend_verified(&mut braid_data, &bead)
-                                      };
+                                let status = extend_checked(&mut braid_data, checked);
                                       if ibd_spinlock.load(Ordering::SeqCst){
                                          let broadcast_ts = bead.uncommitted_metadata.broadcast_timestamp.clone().to_consensus_u32();
                                          let (ts_tx, ts_rx) = tokio::sync::oneshot::channel();
@@ -1592,9 +1592,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                         }
                                     };
                                     for bead in beads.into_iter() {
+                                        let checked = VerifiedBead::new(&bead);
                                         let mut braid_data = braid.write().await;
                                         let bead_hash = braid_data.compute_bead_hash(&bead);
-                                        let status = extend_verified(&mut braid_data, &bead);
+                                        let status = extend_checked(&mut braid_data, checked);
                                         let curr_beadhash = bead_hash.to_string();
                                         if let braid::AddBeadStatus::InvalidBead = status {
                                             warn!("Invalid bead received from peer");

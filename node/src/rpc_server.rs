@@ -1,4 +1,4 @@
-use crate::bead::sign::extend_verified;
+use crate::bead::sign::{extend_checked, VerifiedBead};
 use crate::bead::Bead;
 use crate::braid::consensus_functions;
 use crate::braid::consensus_functions::highest_work_path;
@@ -353,13 +353,14 @@ impl RpcServer for RpcServerImpl {
         let bead: Bead = serde_json::from_str(&bead_data).map_err(|e| {
             ErrorObjectOwned::owned(1, format!("Invalid bead data: {}", e), None::<()>)
         })?;
+        let checked = VerifiedBead::new(&bead);
         let mut braid_data = self.braid_arc.write().await;
         let bead_hash = braid_data.compute_bead_hash(&bead);
         info!(
             hash = %bead_hash,
             "Add bead request received"
         );
-        let success_status = extend_verified(&mut braid_data, &bead);
+        let success_status = extend_checked(&mut braid_data, checked);
 
         match success_status {
             AddBeadStatus::BeadAdded { promoted_orphans } => {

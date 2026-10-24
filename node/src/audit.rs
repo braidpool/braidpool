@@ -1,4 +1,4 @@
-use crate::bead::sign::extend_verified;
+use crate::bead::sign::{extend_checked, VerifiedBead};
 use crate::bead::Bead;
 use crate::braid::{AddBeadStatus, Braid};
 use crate::committed_metadata::CommittedMetadata;
@@ -672,9 +672,10 @@ impl AuditDAG {
         record.bead_hash = composite_hash;
         let mut bead_added = false;
         {
+            let checked = VerifiedBead::new(&bead);
             let mut braid = self.braid.write().await;
             let network = braid.network;
-            let status = extend_verified(&mut braid, &bead);
+            let status = extend_checked(&mut braid, checked);
             match status {
                 AddBeadStatus::BeadAdded { .. } => {
                     bead_added = true;
