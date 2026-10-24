@@ -18,6 +18,7 @@ use node::bead::sign::extend_verified;
 use node::db::db_handlers::fetch_beads_in_batch;
 use node::db::db_handlers::FETCH_BEAD_BATCH_SIZE;
 use node::ibd_manager::{IBD_TRIGGER_AFTER, MAX_IBD_INCOMING_THRESHOLD, MAX_IBD_RETRIES};
+use node::miner_identity::{set_active_key_denylist, KeyDenylist};
 use node::upstream_pool;
 use node::utils::compute_block_hash;
 use node::utils::resolve_datadir;
@@ -108,6 +109,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
         AtomicBool::new(true)
     };
     let ibd_spinlock = Arc::new(ibd_or_not);
+
+    // The denylist must be installed before any bead is verified, including the DB reload below.
+    let key_denylist = KeyDenylist::from_flags(args.no_default_key_denylist, &args.deny_key)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+    info!(
+        denied_keys = key_denylist.len(),
+        "Miner key denylist active"
+    );
+    set_active_key_denylist(key_denylist.clone())
+        .map_err(|_| std::io::Error::other("the miner key denylist was already installed"))?;
 
     // Resolving datadir or the default datadir if not provided .
     let datadir_path = resolve_datadir(&args.datadir)?;
@@ -253,6 +264,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let miner_identity = Arc::new(node::miner_identity::MinerIdentity::load_or_generate(
         &datadir_path,
     )?);
+    miner_identity.ensure_allowed(&key_denylist)?;
     //Communication bridge between stratum and network swarm and swarm commands also, for communicating share population and propogating them further
     let (swarm_handler, mut swarm_command_receiver) = SwarmHandler::new_with_identity(
         Arc::clone(&braid),

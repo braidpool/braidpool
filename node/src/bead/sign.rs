@@ -6,6 +6,7 @@
 
 use crate::bead::Bead;
 use crate::braid::{AddBeadStatus, Braid};
+use crate::miner_identity::KeyDenylist;
 use bitcoin::consensus::encode::Encodable;
 use bitcoin::hashes::{sha256, Hash, HashEngine};
 use bitcoin::secp256k1::schnorr::Signature as SchnorrSignature;
@@ -23,6 +24,8 @@ pub enum BeadSignError {
     Encode(String),
     /// The Schnorr signature does not match `comm_pub_key`.
     InvalidSignature,
+    /// `comm_pub_key` is on the key denylist (its secret is publicly known).
+    DeniedKey,
 }
 
 impl fmt::Display for BeadSignError {
@@ -32,6 +35,7 @@ impl fmt::Display for BeadSignError {
             BeadSignError::InvalidSignature => {
                 write!(f, "invalid Schnorr signature on uncommitted metadata")
             }
+            BeadSignError::DeniedKey => write!(f, "miner key is on the key denylist"),
         }
     }
 }
@@ -104,7 +108,8 @@ pub fn verify_uncommitted_signature(bead: &Bead) -> Result<(), BeadSignError> {
     .map_err(|_| BeadSignError::InvalidSignature)
 }
 
-/// A bead whose Schnorr signature is valid under its own `comm_pub_key`.
+/// A bead whose Schnorr signature is valid under its own `comm_pub_key`, and whose key is not
+/// on the key denylist.
 ///
 /// [`Braid::extend_verified`] accepts only this type and `Braid::extend` is crate-private, so
 /// outside this crate a bead cannot reach the DAG without passing through [`VerifiedBead::new`].
@@ -112,12 +117,23 @@ pub fn verify_uncommitted_signature(bead: &Bead) -> Result<(), BeadSignError> {
 pub struct VerifiedBead<'a>(&'a Bead);
 
 impl<'a> VerifiedBead<'a> {
-    /// Verify `bead`'s signature.
+    /// Check `bead` against the process-wide key denylist and verify its signature.
     ///
     /// # Errors
-    /// [`BeadSignError::InvalidSignature`] if the signature does not verify, or
+    /// [`BeadSignError::DeniedKey`], [`BeadSignError::InvalidSignature`], or
     /// [`BeadSignError::Encode`] if the signed payload cannot be encoded.
     pub fn new(bead: &'a Bead) -> Result<Self, BeadSignError> {
+        Self::with_denylist(bead, crate::miner_identity::active_key_denylist())
+    }
+
+    /// [`VerifiedBead::new`] with an explicit denylist.
+    ///
+    /// # Errors
+    /// As [`VerifiedBead::new`].
+    pub fn with_denylist(bead: &'a Bead, denylist: &KeyDenylist) -> Result<Self, BeadSignError> {
+        if denylist.contains(&bead.committed_metadata.comm_pub_key) {
+            return Err(BeadSignError::DeniedKey);
+        }
         verify_uncommitted_signature(bead)?;
         Ok(Self(bead))
     }
@@ -133,7 +149,7 @@ pub fn extend_verified(braid: &mut Braid, bead: &Bead) -> AddBeadStatus {
     match VerifiedBead::new(bead) {
         Ok(verified) => braid.extend_verified(verified),
         Err(e) => {
-            tracing::debug!(error = %e, "Rejected bead with invalid signature");
+            tracing::debug!(error = %e, "Rejected bead");
             AddBeadStatus::InvalidBead
         }
     }
@@ -244,5 +260,35 @@ mod tests {
         let decoded: Bead = deserialize(&bytes).unwrap();
         assert_eq!(decoded, bead);
         verify_uncommitted_signature(&decoded).unwrap();
+    }
+
+    #[test]
+    fn denied_key_is_rejected_even_with_a_valid_signature() {
+        let mut bead = create_test_bead(1, None);
+        MinerIdentity::test_fixture().sign_bead(&mut bead).unwrap();
+        verify_uncommitted_signature(&bead).unwrap();
+        assert_eq!(
+            VerifiedBead::with_denylist(&bead, &KeyDenylist::known_secrets()).unwrap_err(),
+            BeadSignError::DeniedKey
+        );
+        VerifiedBead::with_denylist(&bead, &KeyDenylist::empty()).unwrap();
+    }
+
+    #[test]
+    fn ordinary_key_passes_the_default_denylist() {
+        let mut bead = create_test_bead(1, None);
+        MinerIdentity::generate().sign_bead(&mut bead).unwrap();
+        VerifiedBead::with_denylist(&bead, &KeyDenylist::known_secrets()).unwrap();
+    }
+
+    #[test]
+    fn denylist_is_checked_before_the_signature() {
+        let mut bead = create_test_bead(1, None);
+        MinerIdentity::test_fixture().sign_bead(&mut bead).unwrap();
+        bead.uncommitted_metadata.signature = SchnorrSignature::from_slice(&[0u8; 64]).unwrap();
+        assert_eq!(
+            VerifiedBead::with_denylist(&bead, &KeyDenylist::known_secrets()).unwrap_err(),
+            BeadSignError::DeniedKey
+        );
     }
 }

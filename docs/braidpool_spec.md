@@ -129,7 +129,9 @@ encoding and no sighash-type byte. It signs the BIP340 tagged hash with tag
 
 Only the signature itself is left out, so a valid signature cannot be moved onto
 another bead or checked against another key. A bead whose signature does not verify
-under its own `comm_pubkey` is invalid. Each node keeps its miner secret in
+under its own `comm_pubkey` is invalid, and so is a bead whose `comm_pubkey` has a
+publicly known secret (the key denylist: secrets 1 to 1024 and the BIP340 test-vector
+secrets), even if its signature is valid. Each node keeps its miner secret in
 `datadir/miner_secp256k1` (32 bytes, mode `0o400`) and signs every bead it forms
 with it. This encoding is P2P protocol version 2.0.0, which nodes on earlier versions
 cannot decode. The full identity specification is in
