@@ -31,3 +31,9 @@ export interface BeadRecord {
   timestamp: string;
   cohortIndex: number;
 }
+
+export interface BeadTooltipProps {
+  bead: GraphNode;
+  cohortIndex: number | undefined;
+  hwpPosition: number | null;
+}
