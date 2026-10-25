@@ -654,12 +654,11 @@ and immediately paid out to hashers, as there are not enough known parties to
 sign a multi-signature, and we don't even know their pubkeys to construct a
 (P2TR, P2SH, etc) bitcoin output address and scriptPubKey.
 
-After the first 4 blocks, we assume that more than 2/3 of the miners who have
-previously mined a block must sign the RCA and UHPO output(s). The set of
-signers is the unique hashers who won the most recent $S$ blocks in the pool.
-The exact number $S$ will be decided after benchmarking the network latency of
-the chosen signing algorithm, but preliminary analysis indicates this will be
-around 50 signers using [FROST](https://eprint.iacr.org/2020/852) or [ROAST](https://eprint.iacr.org/2022/550).
+After the first 4 blocks, we assume that more than 2/3 of the signers must sign
+the RCA and UHPO output(s). The set of signers is the unique hashers who won
+the most recent $S$ blocks in the pool. The exact number $S$ will be decided
+after benchmarking the network latency of the chosen signing algorithm, but
+preliminary analysis indicates this will be around 50 signers using [FROST](https://eprint.iacr.org/2020/852) or [ROAST](https://eprint.iacr.org/2022/550).
 
 ## Schnorr Threshold Signatures
 
@@ -748,11 +747,10 @@ and without consuming too much bandwidth or computation. However if $n$ is too
 small, a large miner with multiple Sybil nodes might accidentally win $t$ of the
 most recent blocks, giving him full control of the aggregated funds.
 
-Assume the signers are the distinct winners of the $n$ most recent blocks, so
-$n$ is also the number of signers. Each of those blocks is won by the attacking
-miner independently with probability $f$, so the number of them won by the
-attacker follows a binomial distribution, and the probability of this happening
-is:
+Assume each of the $S$ most recent blocks was won by a distinct miner, so
+$S = n$. Each of those blocks is won by the attacking miner independently with
+probability $f$, so the number of them won by the attacker follows a binomial
+distribution, and the probability of this happening is:
 
 $$
 \sum_{k=t}^n \binom{n}{k} f^k (1-f)^{n-k}
