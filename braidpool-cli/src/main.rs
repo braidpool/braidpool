@@ -63,7 +63,7 @@ enum Commands {
     GetMiningInfo {
         /// List of public keys (hex-encoded) to filter beads by.
         /// Supports multiple keys for key rotation scenarios.
-        /// Example: --public_keys "79be667e...,c6047f94..."
+        /// Each key is a 64-character BIP340 x-only hex key, e.g. --public_keys "79be667e...,c6047f94..."
         #[arg(long, value_delimiter = ',')]
         public_keys: Option<Vec<String>>,
 

@@ -97,7 +97,7 @@ The `BraidpoolMetadata` struct is:
 | -----           | -----------                                                     |
 | `parents`       | [[BeadHash, Timestamp], ... ]                                   |
 | `payout_address`| P2TR address for this miner's payout                            |
-| `comm_pubkey`   | BIP340 x-only secp256k1 pubkey (32 bytes) identifying this miner |
+| `comm_pubkey`   | BIP340 x-only secp256k1 pubkey (32 bytes) that signs this bead, also usable for encrypted DH communication with this miner |
 | `miner IP`      | IP address of this miner                                        |
 | `timestamp`     | Timestamp when this bead was created                            |
 | `transactions`  | List of serialized transactions                                 |
@@ -128,12 +128,21 @@ encoding and no sighash-type byte. It signs the BIP340 tagged hash with tag
 3. the consensus encoding of the committed metadata, including `comm_pubkey`.
 
 Only the signature itself is left out, so a valid signature cannot be moved onto
-another bead or checked against another key. A bead whose signature does not verify
-under its own `comm_pubkey` is invalid. Each node keeps its miner secret in
-`datadir/miner_secp256k1` (32 bytes, mode `0o400`) and signs every bead it forms
-with it. This encoding is P2P protocol version 2.0.0, which nodes on earlier versions
-cannot decode. The full identity specification is in
-[`identity_specifications.md`](identity_specifications.md).
+another bead, and changing any signed field, `comm_pubkey` included, invalidates it.
+A bead whose signature does not verify under its own `comm_pubkey` is invalid. Each
+node keeps its miner secret in `datadir/miner_secp256k1` (32 bytes, mode `0o400`) and
+signs every bead it forms with it, using fresh BIP340 auxiliary randomness for each
+signature. This encoding is P2P protocol version 2.0.0, which nodes on earlier versions
+cannot decode.
+
+**Limitation: the signature does not yet prove who mined a bead.** The proof of work
+does not commit to the committed metadata: the coinbase carries a placeholder
+commitment, not a hash of `comm_pubkey` and `payout_address`. Anyone who relays a bead
+can therefore replace `comm_pubkey` (and `payout_address`) with their own, re-sign it,
+and get the same proof of work accepted under their key, racing the original bead. The
+signature proves only that the holder of `comm_pubkey` signed this exact bead.
+Attribution needs the coinbase to commit to a hash of the committed metadata, checked
+during bead validation; that is planned as a separate change.
 
 The purpose of the timestamps is to gather higher resolution timestamps than are
 possible if the timestamp was committed, in order to measure (in a non-consensus

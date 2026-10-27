@@ -421,9 +421,7 @@ impl SwarmHandler {
         };
         self.miner_identity
             .sign_bead(&mut weak_share)
-            .map_err(|e| StratumErrors::InvalidShare {
-                reason: e.to_string(),
-            })?;
+            .map_err(|error| StratumErrors::BeadSigningFailed { error })?;
         let status = extend_verified(&mut braid_data, &weak_share);
         match status {
             AddBeadStatus::BeadAdded { promoted_orphans } => {

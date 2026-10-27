@@ -1399,9 +1399,7 @@ impl DownstreamClient {
                 };
                 identity
                     .sign_bead(&mut bead)
-                    .map_err(|e| StratumErrors::InvalidShare {
-                        reason: e.to_string(),
-                    })?;
+                    .map_err(|error| StratumErrors::BeadSigningFailed { error })?;
 
                 debug!(
                     worker = %worker_name,
