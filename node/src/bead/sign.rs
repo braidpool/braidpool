@@ -9,8 +9,10 @@ use crate::braid::{AddBeadStatus, Braid};
 use bitcoin::consensus::encode::Encodable;
 use bitcoin::hashes::{sha256, Hash, HashEngine};
 use bitcoin::secp256k1::schnorr::Signature as SchnorrSignature;
-use bitcoin::secp256k1::{Message, Secp256k1, SecretKey};
+use bitcoin::secp256k1::{Keypair, Message, Secp256k1, SecretKey};
 use bitcoin::XOnlyPublicKey;
+use rand::rngs::OsRng;
+use rand::RngCore;
 use std::fmt;
 
 /// Domain-separation tag for uncommitted-metadata Schnorr signatures.
@@ -23,6 +25,13 @@ pub enum BeadSignError {
     Encode(String),
     /// The Schnorr signature does not match `comm_pub_key`.
     InvalidSignature,
+    /// The signing secret is not the secret of the bead's `comm_pub_key`, so the signature
+    /// would never verify. Holds the x-only key of the signing secret; the bead's own key is
+    /// on the bead.
+    KeyMismatch(XOnlyPublicKey),
+    /// The operating system's random number generator failed to produce the BIP340
+    /// auxiliary randomness.
+    Randomness(String),
 }
 
 impl fmt::Display for BeadSignError {
@@ -31,6 +40,12 @@ impl fmt::Display for BeadSignError {
             BeadSignError::Encode(e) => write!(f, "failed to encode bead sighash payload: {e}"),
             BeadSignError::InvalidSignature => {
                 write!(f, "invalid Schnorr signature on uncommitted metadata")
+            }
+            BeadSignError::KeyMismatch(signer) => {
+                write!(f, "signing key {signer} is not the bead's comm_pub_key")
+            }
+            BeadSignError::Randomness(e) => {
+                write!(f, "failed to draw BIP340 auxiliary randomness: {e}")
             }
         }
     }
@@ -81,13 +96,40 @@ pub fn uncommitted_sighash(bead: &Bead) -> Result<[u8; 32], BeadSignError> {
     ))
 }
 
-/// Sign `bead.uncommitted_metadata` with `secret`. Does not change `comm_pub_key`.
+/// Sign `bead.uncommitted_metadata` with `secret`, using 32 bytes of fresh auxiliary
+/// randomness from the operating system as BIP340 recommends.
+///
+/// Does not change `comm_pub_key`, which must already be the x-only key of `secret`.
+///
+/// # Arguments
+/// * `bead` - The bead to sign. Only `uncommitted_metadata.signature` is written.
+/// * `secret` - The secret of the bead's `comm_pub_key`.
 pub fn sign_uncommitted_metadata(bead: &mut Bead, secret: &SecretKey) -> Result<(), BeadSignError> {
-    let digest = uncommitted_sighash(bead)?;
+    let mut aux_rand = [0u8; 32];
+    OsRng
+        .try_fill_bytes(&mut aux_rand)
+        .map_err(|e| BeadSignError::Randomness(e.to_string()))?;
+    sign_uncommitted_metadata_with_aux_rand(bead, secret, &aux_rand)
+}
+
+/// [`sign_uncommitted_metadata`] with caller-supplied auxiliary randomness.
+///
+/// A fixed `aux_rand` makes the signature deterministic, which tests rely on. Production
+/// code signs through [`sign_uncommitted_metadata`] so every signature gets fresh randomness,
+/// the BIP340 hardening against side-channel and fault attacks on the nonce.
+fn sign_uncommitted_metadata_with_aux_rand(
+    bead: &mut Bead,
+    secret: &SecretKey,
+    aux_rand: &[u8; 32],
+) -> Result<(), BeadSignError> {
     let secp = Secp256k1::signing_only();
-    let keypair = bitcoin::secp256k1::Keypair::from_secret_key(&secp, secret);
-    let msg = Message::from_digest(digest);
-    bead.uncommitted_metadata.signature = secp.sign_schnorr_no_aux_rand(&msg, &keypair);
+    let keypair = Keypair::from_secret_key(&secp, secret);
+    let (signer, _) = keypair.x_only_public_key();
+    if signer != bead.committed_metadata.comm_pub_key {
+        return Err(BeadSignError::KeyMismatch(signer));
+    }
+    let msg = Message::from_digest(uncommitted_sighash(bead)?);
+    bead.uncommitted_metadata.signature = secp.sign_schnorr_with_aux_rand(&msg, &keypair, aux_rand);
     Ok(())
 }
 
@@ -113,10 +155,6 @@ pub struct VerifiedBead<'a>(&'a Bead);
 
 impl<'a> VerifiedBead<'a> {
     /// Verify `bead`'s signature.
-    ///
-    /// # Errors
-    /// [`BeadSignError::InvalidSignature`] if the signature does not verify, or
-    /// [`BeadSignError::Encode`] if the signed payload cannot be encoded.
     pub fn new(bead: &'a Bead) -> Result<Self, BeadSignError> {
         verify_uncommitted_signature(bead)?;
         Ok(Self(bead))
@@ -178,11 +216,78 @@ mod tests {
         let other = MinerIdentity::generate();
         let mut bead = create_test_bead(1, None);
         bead.committed_metadata.comm_pub_key = other.xonly();
-        sign_uncommitted_metadata(&mut bead, signer.secret_for_tests()).unwrap();
+        // `sign_uncommitted_metadata` refuses this, so sign the sighash directly.
+        let secp = Secp256k1::new();
+        let keypair = Keypair::from_secret_key(&secp, signer.secret_for_tests());
+        let msg = Message::from_digest(uncommitted_sighash(&bead).unwrap());
+        bead.uncommitted_metadata.signature =
+            secp.sign_schnorr_with_aux_rand(&msg, &keypair, &[0; 32]);
         assert_eq!(
             verify_uncommitted_signature(&bead),
             Err(BeadSignError::InvalidSignature)
         );
+    }
+
+    #[test]
+    fn signing_refuses_a_secret_that_does_not_own_comm_pub_key() {
+        let signer = MinerIdentity::generate();
+        let other = MinerIdentity::generate();
+        let mut bead = create_test_bead(1, None);
+        bead.committed_metadata.comm_pub_key = other.xonly();
+        let before = bead.clone();
+        assert_eq!(
+            sign_uncommitted_metadata(&mut bead, signer.secret_for_tests()),
+            Err(BeadSignError::KeyMismatch(signer.xonly()))
+        );
+        assert_eq!(bead, before, "a refused signing must not touch the bead");
+    }
+
+    #[test]
+    fn signing_accepts_the_negated_secret_of_comm_pub_key() {
+        // A secret and its negation share one x-only key; both are valid BIP340 signers.
+        let identity = MinerIdentity::generate();
+        let mut bead = create_test_bead(1, None);
+        bead.committed_metadata.comm_pub_key = identity.xonly();
+        sign_uncommitted_metadata(&mut bead, &identity.secret_for_tests().negate()).unwrap();
+        verify_uncommitted_signature(&bead).unwrap();
+    }
+
+    #[test]
+    fn each_signature_uses_fresh_aux_randomness() {
+        let identity = MinerIdentity::generate();
+        let mut first = create_test_bead(1, None);
+        first.committed_metadata.comm_pub_key = identity.xonly();
+        let mut second = first.clone();
+        sign_uncommitted_metadata(&mut first, identity.secret_for_tests()).unwrap();
+        sign_uncommitted_metadata(&mut second, identity.secret_for_tests()).unwrap();
+        assert_ne!(
+            first.uncommitted_metadata.signature,
+            second.uncommitted_metadata.signature
+        );
+        verify_uncommitted_signature(&first).unwrap();
+        verify_uncommitted_signature(&second).unwrap();
+    }
+
+    #[test]
+    fn fixed_aux_randomness_is_deterministic() {
+        let identity = MinerIdentity::generate();
+        let mut first = create_test_bead(1, None);
+        first.committed_metadata.comm_pub_key = identity.xonly();
+        let mut second = first.clone();
+        let aux_rand = [7u8; 32];
+        sign_uncommitted_metadata_with_aux_rand(&mut first, identity.secret_for_tests(), &aux_rand)
+            .unwrap();
+        sign_uncommitted_metadata_with_aux_rand(
+            &mut second,
+            identity.secret_for_tests(),
+            &aux_rand,
+        )
+        .unwrap();
+        assert_eq!(
+            first.uncommitted_metadata.signature,
+            second.uncommitted_metadata.signature
+        );
+        verify_uncommitted_signature(&first).unwrap();
     }
 
     #[test]

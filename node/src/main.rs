@@ -14,7 +14,7 @@ use libp2p::{
     PeerId,
 };
 use node::audit;
-use node::bead::sign::extend_verified;
+use node::bead::sign::{extend_verified, VerifiedBead};
 use node::db::db_handlers::fetch_beads_in_batch;
 use node::db::db_handlers::FETCH_BEAD_BATCH_SIZE;
 use node::ibd_manager::{IBD_TRIGGER_AFTER, MAX_IBD_INCOMING_THRESHOLD, MAX_IBD_RETRIES};
@@ -145,12 +145,37 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let fetched_beads =
                 fetch_beads_in_batch(&db_connection_pool_ref, FETCH_BEAD_BATCH_SIZE).await?;
             info!(beads = fetched_beads.len(), "Beads loaded from DB");
+            // Every stored bead passed these checks before it was written, so a bead refused here
+            // means the database is corrupt or was written under different validation rules.
+            let mut refused_beads = 0usize;
             for bead in &fetched_beads {
-                let curr_bead_status = extend_verified(&mut *guard, bead);
-                debug!(
-                    hash = ?compute_block_hash(&bead.block_header,network_ref),
-                    status = ?curr_bead_status,
-                    "Bead inserted"
+                let hash = compute_block_hash(&bead.block_header, network_ref);
+                let curr_bead_status = match VerifiedBead::new(bead) {
+                    Ok(verified) => guard.extend_verified(verified),
+                    Err(e) => {
+                        refused_beads += 1;
+                        error!(
+                            hash = %hash,
+                            error = %e,
+                            "Stored bead failed signature verification; skipping it"
+                        );
+                        continue;
+                    }
+                };
+                if let braid::AddBeadStatus::InvalidBead = curr_bead_status {
+                    refused_beads += 1;
+                    error!(hash = %hash, "Stored bead was refused by the braid; skipping it");
+                } else {
+                    debug!(hash = %hash, status = ?curr_bead_status, "Bead inserted");
+                }
+            }
+            if refused_beads > 0 {
+                error!(
+                    refused = refused_beads,
+                    loaded = fetched_beads.len(),
+                    "Some stored beads were refused on reload; the database may be corrupt. \
+                     Stop the node and delete braidpool.db (and its -wal and -shm files) to \
+                     rebuild the braid from peers"
                 );
             }
             Ok::<(), node::error::DBErrors>(())

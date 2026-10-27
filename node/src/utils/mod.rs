@@ -130,6 +130,7 @@ pub fn resolve_datadir(datadir: &Path) -> std::io::Result<PathBuf> {
 }
 
 // Helper function to create test beads
+#[cfg(test)]
 pub fn create_test_bead(nonce: u32, prev_hash: Option<BlockHash>) -> Bead {
     let identity = crate::miner_identity::MinerIdentity::test_fixture();
     let time_hash_set = TimeVec(Vec::new());

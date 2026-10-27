@@ -125,9 +125,6 @@ pub trait Rpc {
 }
 
 /// Parse one `public_keys` filter entry: a 64-hex-character BIP340 x-only key (either case).
-///
-/// The error says what was wrong and, for the two formats people most often paste (33-byte
-/// compressed and 65-byte uncompressed keys), how to fix it.
 fn parse_public_key_filter(entry: &str) -> Result<XOnlyPublicKey, String> {
     let entry = entry.trim();
     entry.parse::<XOnlyPublicKey>().map_err(|_| {

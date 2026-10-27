@@ -35,6 +35,7 @@ impl fmt::Debug for MinerIdentity {
 
 impl MinerIdentity {
     /// Deterministic identity for tests that need a shared `comm_pub_key`.
+    #[cfg(test)]
     pub fn test_fixture() -> Self {
         let mut bytes = [0u8; 32];
         bytes[31] = 1;
@@ -59,10 +60,6 @@ impl MinerIdentity {
     }
 
     /// Load `datadir/miner_secp256k1`, or create it with a fresh secret if it does not exist.
-    ///
-    /// # Errors
-    /// Any error from [`read_or_create_secret`], or a file that is not exactly 32 bytes holding
-    /// a valid secret scalar. An invalid file is left untouched.
     pub fn load_or_generate(datadir: impl AsRef<Path>) -> io::Result<Self> {
         let path = miner_key_path(datadir.as_ref());
         let (bytes, created) = read_or_create_secret(&path, || {
@@ -104,6 +101,10 @@ impl MinerIdentity {
     }
 
     /// Set `comm_pub_key` to this identity and sign uncommitted metadata.
+    ///
+    /// # Errors
+    /// [`BeadSignError::Randomness`] if the random number generator fails, or
+    /// [`BeadSignError::Encode`] if the signed payload cannot be encoded.
     pub fn sign_bead(&self, bead: &mut Bead) -> Result<(), BeadSignError> {
         bead.committed_metadata.comm_pub_key = self.xonly;
         sign_uncommitted_metadata(bead, &self.secret)
