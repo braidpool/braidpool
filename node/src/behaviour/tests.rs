@@ -41,6 +41,7 @@ fn create_test_bead() -> Bead {
         .min_target(min_target)
         .weak_target(weak_target)
         .transactions(vec![])
+        .committed_transactions(vec![])
         .build();
     let extra_nonce_1: u64 = 42;
     let extra_nonce_2: u64 = 42;
