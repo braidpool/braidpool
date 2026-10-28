@@ -7,7 +7,7 @@ import os
 import re
 import subprocess
 from pathlib import Path
-from typing import Any, Callable, Protocol, TYPE_CHECKING
+from typing import Callable, Protocol, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from test_framework.test_node import TestNode
@@ -17,7 +17,7 @@ from test_framework.log_manager import LogManager
 from test_framework.logging_utils import log_event, log_exception
 from test_framework.network_config import NetworkConfig
 from test_framework.cleanup_manager import terminate_process_group
-from test_framework.util import SkipTest, find_binary
+from test_framework.util import find_binary
 
 
 class _Registerable(Protocol):
@@ -45,6 +45,9 @@ class CpuMiner:
         algorithm: str = "sha256d",
         miner_id: int = 0,
         miner_logger: logging.Logger | None = None,
+        default_flags: list[str] | None = None,
+        username: str = "user",
+        password: str = "password",
     ) -> None:
         self.stratum_port = stratum_port
         self.run_dir = Path(run_dir)
@@ -56,21 +59,29 @@ class CpuMiner:
         self.stdout_path = self.run_dir / STDOUT_LOG_NAME
         self.stderr_path = self.run_dir / STDERR_LOG_NAME
         self.run_dir.mkdir(parents=True, exist_ok=True)
+        self.default_flags = default_flags or ["-q", "-D", "-P"]
+        self.username = username
+        self.password = password
 
 
     def start(self, extra_args: list[str] | None = None) -> None:
         """Start minerd with stdout/stderr redirected to files."""
         if self.is_alive():
             raise RuntimeError(f"CpuMiner {self.miner_id} is already running")
-        DEFAULT_MINERD_FLAGS = ["-q", "-D", "-P"]
+        
         args = [
             str(self.minerd_path),
             "-a",
             self.algorithm,
             "-o",
             f"stratum+tcp://127.0.0.1:{self.stratum_port}",
-            *DEFAULT_MINERD_FLAGS,
+            *self.default_flags,
+            "-u",
+            self.username,
+            "-p",
+            self.password,
         ]
+        
         if extra_args:
             args.extend(extra_args)
 
@@ -173,6 +184,9 @@ class MinerManager:
             minerd_path=minerd_path,
             miner_id=miner_id,
             miner_logger=self.logger,
+            default_flags=["-q", "-D", "-P"],  # Default for cpuminer
+            username="user",
+            password="password",
         )
         miner.start()
         self.miners.append(miner)
