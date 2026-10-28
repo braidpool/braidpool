@@ -135,6 +135,17 @@ fn test_timevec_roundtrip_multiple() {
 }
 
 #[test]
+fn test_timevec_decode_rejects_sub_threshold_timestamp() {
+    // len = 1, followed by a u32 below LOCK_TIME_THRESHOLD (500_000_000):
+    // Time::from_consensus rejects this, and decode should propagate that as
+    // an error instead of unwrapping and panicking.
+    let mut bytes = serialize(&1u64);
+    bytes.extend_from_slice(&0u32.to_le_bytes());
+    let result: Result<TimeVec, _> = deserialize(&bytes);
+    assert!(result.is_err());
+}
+
+#[test]
 fn test_txidvec_roundtrip_empty() {
     let original = TxIdVec(vec![]);
     let bytes = serialize(&original);
