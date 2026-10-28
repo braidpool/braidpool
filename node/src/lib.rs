@@ -28,6 +28,13 @@ pub const MAX_CACHED_TEMPLATES: usize = 90;
 /// At bead rate (150ms), 20 slots retain ~3s of history for in-flight submits.
 pub const GLOBAL_JOB_STORE_CAPACITY: usize = 20;
 
+/// Maximum number of simultaneous downstream miner connections.
+///
+/// New TCP connections are rejected with a log warning once this limit is reached.
+/// A warning is also emitted at 80% capacity so operators can plan ahead.
+/// Sized for realistic pool deployments; large proxy operators will need a higher value.
+pub const MAX_DOWNSTREAM_CONNECTIONS: usize = 10_000;
+
 use crate::{
     bead::Bead,
     braid::{AddBeadStatus, Braid},
