@@ -47,6 +47,8 @@ pub struct Bead {
 }
 impl_consensus_encoding!(Bead, block_header, committed_metadata, uncommitted_metadata);
 
+pub mod sign;
+
 impl Default for Bead {
     fn default() -> Self {
         let empty_merkle_bytes: [u8; 32] = [0; 32];

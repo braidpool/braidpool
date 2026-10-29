@@ -7,13 +7,13 @@ use libp2p::{
     core::multiaddr::Multiaddr,
     floodsub::{self},
     identify,
-    identity::Keypair,
     kad::{self, Mode, QueryResult},
     ping, request_response,
     swarm::SwarmEvent,
     PeerId,
 };
 use node::audit;
+use node::bead::sign::extend_verified;
 use node::db::db_handlers::fetch_beads_in_batch;
 use node::db::db_handlers::FETCH_BEAD_BATCH_SIZE;
 use node::ibd_manager::{IBD_TRIGGER_AFTER, MAX_IBD_INCOMING_THRESHOLD, MAX_IBD_RETRIES};
@@ -39,13 +39,11 @@ use node::{
     SwarmCommand, TemplateId,
 };
 use std::collections::HashSet;
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{collections::HashMap, error::Error};
-use std::{fs, time::Duration};
 use tokio_util::sync::CancellationToken;
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
@@ -55,6 +53,7 @@ use behaviour::{BraidPoolBehaviour, BraidPoolBehaviourEvent};
 use crate::behaviour::KADPROTOCOLNAME;
 const LATENCY_ALPHA: u64 = 10; // seconds
                                //boot nodes peerIds
+                               // TODO: this bootnode still speaks protocol 1.0.0; update once it runs 2.0.0.
 const BOOTNODES: [&str; 1] = ["12D3KooWG9z8TziaNuYyEcc9FeUC3FTtrEf2XSnSdDpLvx4Jh2w3"];
 //dns NS
 const SEED_DNS: &str = "/dnsaddr/french.braidpool.net";
@@ -144,7 +143,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 fetch_beads_in_batch(&db_connection_pool_ref, FETCH_BEAD_BATCH_SIZE).await?;
             info!(beads = fetched_beads.len(), "Beads loaded from DB");
             for bead in &fetched_beads {
-                let curr_bead_status = guard.extend(&bead);
+                let curr_bead_status = extend_verified(&mut *guard, bead);
                 debug!(
                     hash = ?compute_block_hash(&bead.block_header,network_ref),
                     status = ?curr_bead_status,
@@ -248,11 +247,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .into());
         }
     };
+    let miner_identity = Arc::new(node::miner_identity::MinerIdentity::load_or_generate(
+        &datadir_path,
+    )?);
+    let keypair = miner_identity.libp2p_keypair().map_err(|e| {
+        error!(error = %e, "Failed to derive the libp2p keypair from the miner secret");
+        e
+    })?;
+    info!(
+        peer_id = %keypair.public().to_peer_id(),
+        comm_pub_key = %miner_identity.xonly(),
+        "libp2p identity derived from the miner key"
+    );
     //Communication bridge between stratum and network swarm and swarm commands also, for communicating share population and propogating them further
-    let (swarm_handler, mut swarm_command_receiver) = SwarmHandler::new(
+    let (swarm_handler, mut swarm_command_receiver) = SwarmHandler::new_with_identity(
         Arc::clone(&braid),
         db_tx.clone(),
         Arc::clone(&dashboard_notifier),
+        miner_identity,
     );
 
     //Swarm command sender
@@ -847,48 +859,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .await;
     });
 
-    let keystore_path = datadir_path.join("keystore");
-    #[cfg(unix)]
-    {
-        if keystore_path.exists() {
-            let perms = fs::metadata(&keystore_path)?.permissions();
-            if perms.mode() & 0o777 != 0o400 {
-                warn!(
-                    permissions = perms.mode() & 0o777,
-                    "Keystore permissions are not secure, setting to 0o400"
-                );
-                let mut new_perms = perms.clone();
-                new_perms.set_mode(0o400);
-                fs::set_permissions(&keystore_path, new_perms)?;
-            }
-        }
+    let legacy_keystore_path = datadir_path.join("keystore");
+    if legacy_keystore_path.exists() {
+        warn!(
+            path = %legacy_keystore_path.display(),
+            "Ignoring the legacy ed25519 keystore: the PeerId now comes from the miner key, so \
+             this node's PeerId has changed. The file can be deleted."
+        );
     }
-    let keypair = match fs::read(&keystore_path) {
-        Ok(keypair) => {
-            info!(path = %keystore_path.display(), "Loading keypair from keystore");
-            libp2p::identity::Keypair::from_protobuf_encoding(&keypair).map_err(|e| {
-                error!(error = %e, path = %keystore_path.display(), "Failed to read keypair from keystore");
-                e
-            })?
-        }
-        Err(_) => {
-            info!(path = %keystore_path.display(), "Generating new keypair");
-            let keypair: Keypair = libp2p::identity::Keypair::generate_ed25519();
-            let keypair_bytes = keypair.to_protobuf_encoding()?;
-            fs::write(&keystore_path, keypair_bytes)?;
-            #[cfg(unix)]
-            {
-                let mut perms = fs::metadata(&keystore_path)?.permissions();
-                perms.set_mode(0o400);
-                fs::set_permissions(&keystore_path, perms)?;
-                info!(path = %keystore_path.display(), perms = "0o400", "Set keystore permissions");
-            }
-            keypair
-        }
-    };
-    // For local testing uncomment this keypair peer since it running to process will
-    // result in same peerID leading to OutgoingConnectionError
-    // let keypair = identity::Keypair::generate_ed25519();
+    // Two nodes on one machine need separate data directories: the same miner key gives the
+    // same PeerId, which fails with OutgoingConnectionError.
     // load beads from db (if present) and insert in braid here
     let current_broadcast_topic: floodsub::Topic = floodsub::Topic::new(BRAIDPOOL_TOPIC);
 
@@ -1144,7 +1124,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                       let bead_hash = braid_data.compute_bead_hash(&bead);
                                  info!(bead = ?bead, hash = %bead_hash, "Received bead");
                                 let status = {
-                                          braid_data.extend(&bead)
+                                          extend_verified(&mut braid_data, &bead)
                                       };
                                       if ibd_spinlock.load(Ordering::SeqCst){
                                          let broadcast_ts = bead.uncommitted_metadata.broadcast_timestamp.clone().to_consensus_u32();
@@ -1588,7 +1568,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     for bead in beads.into_iter() {
                                         let mut braid_data = braid.write().await;
                                         let bead_hash = braid_data.compute_bead_hash(&bead);
-                                        let status = braid_data.extend(&bead);
+                                        let status = extend_verified(&mut braid_data, &bead);
                                         let curr_beadhash = bead_hash.to_string();
                                         if let braid::AddBeadStatus::InvalidBead = status {
                                             warn!("Invalid bead received from peer");
