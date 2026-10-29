@@ -1,3 +1,4 @@
+use crate::bead::sign::{extend_checked, VerifiedBead};
 use crate::bead::Bead;
 use crate::braid::consensus_functions;
 use crate::braid::consensus_functions::highest_work_path;
@@ -13,7 +14,7 @@ use crate::stratum::BlockTemplate;
 #[cfg(test)]
 use crate::utils::compute_block_hash;
 use crate::utils::BeadHash;
-use bitcoin::Transaction;
+use bitcoin::{Transaction, XOnlyPublicKey};
 use futures::lock::Mutex;
 use jsonrpsee::core::async_trait;
 use jsonrpsee::core::middleware::Batch;
@@ -121,6 +122,29 @@ pub trait Rpc {
     /// Push notifications: emits the most recent bead.
     #[subscription(name = "subscribebead", item = Bead)]
     async fn subscribe_bead(&self) -> SubscriptionResult;
+}
+
+/// Parse one `public_keys` filter entry: a 64-hex-character BIP340 x-only key (either case).
+///
+/// The error says what was wrong and, for the two formats people most often paste (33-byte
+/// compressed and 65-byte uncompressed keys), how to fix it.
+fn parse_public_key_filter(entry: &str) -> Result<XOnlyPublicKey, String> {
+    let entry = entry.trim();
+    entry.parse::<XOnlyPublicKey>().map_err(|_| {
+        let hint = match (entry.len(), entry.get(..2)) {
+            (66, Some("02" | "03")) => {
+                " This looks like a 33-byte compressed key; use the x-only key, which is the same \
+                 value without the leading 02/03."
+            }
+            (130, Some("04")) => {
+                " This looks like a 65-byte uncompressed key; use the 64-character x-only key."
+            }
+            _ => "",
+        };
+        format!(
+            "Invalid public key {entry:?}: expected 64 hex characters (a BIP340 x-only key).{hint}"
+        )
+    })
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -329,13 +353,14 @@ impl RpcServer for RpcServerImpl {
         let bead: Bead = serde_json::from_str(&bead_data).map_err(|e| {
             ErrorObjectOwned::owned(1, format!("Invalid bead data: {}", e), None::<()>)
         })?;
+        let checked = VerifiedBead::new(&bead);
         let mut braid_data = self.braid_arc.write().await;
         let bead_hash = braid_data.compute_bead_hash(&bead);
         info!(
             hash = %bead_hash,
             "Add bead request received"
         );
-        let success_status = braid_data.extend(&bead);
+        let success_status = extend_checked(&mut braid_data, checked);
 
         match success_status {
             AddBeadStatus::BeadAdded { promoted_orphans } => {
@@ -468,7 +493,7 @@ impl RpcServer for RpcServerImpl {
                         format!(
                             "Invalid parameters: {}. Expected JSON object with at least one of: \
                             public_keys (array of hex-encoded strings) or miner_ips (array of strings). \
-                            Example: {{\"public_keys\": [\"0202...\"]}} or {{\"miner_ips\": [\"192.168.1.1\"]}}",
+                            Example: {{\"public_keys\": [\"79be667e...\"]}} or {{\"miner_ips\": [\"192.168.1.1\"]}}",
                             e
                         ),
                         None::<()>,
@@ -479,7 +504,7 @@ impl RpcServer for RpcServerImpl {
                 return Err(ErrorObjectOwned::owned(
                     2,
                     "Parameters required. Please provide at least one filter: public_keys or miner_ips. \
-                    Example: {\"public_keys\": [\"020202020202020202020202020202020202020202020202020202020202020202\"]}",
+                    Example: {\"public_keys\": [\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\"]}",
                     None::<()>,
                 ));
             }
@@ -505,19 +530,25 @@ impl RpcServer for RpcServerImpl {
             ));
         }
 
-        let public_key_set: Option<HashSet<String>> = filter_params
+        // Every entry must be a BIP340 x-only key. A key in any other format is an error, not a
+        // filter that silently matches nothing.
+        let public_key_set: Option<HashSet<XOnlyPublicKey>> = match filter_params
             .public_keys
             .as_ref()
             .filter(|keys| !keys.is_empty())
-            .map(|keys| {
-                keys.iter()
-                    .map(|k| {
-                        // Remove any whitespace and convert to lowercase
-                        k.trim().to_lowercase()
-                    })
-                    .filter(|k| !k.is_empty())
-                    .collect()
-            });
+        {
+            Some(keys) => {
+                let mut set = HashSet::new();
+                for key in keys.iter().filter(|k| !k.trim().is_empty()) {
+                    set.insert(
+                        parse_public_key_filter(key)
+                            .map_err(|message| ErrorObjectOwned::owned(1, message, None::<()>))?,
+                    );
+                }
+                Some(set)
+            }
+            None => None,
+        };
 
         let miner_ip_set: Option<HashSet<String>> = filter_params
             .miner_ips
@@ -563,12 +594,7 @@ impl RpcServer for RpcServerImpl {
             let mut is_ours = false;
 
             if let Some(ref pub_key_set) = public_key_set {
-                let bead_pub_key_hex = bead
-                    .committed_metadata
-                    .comm_pub_key
-                    .to_string()
-                    .to_lowercase();
-                if pub_key_set.contains(&bead_pub_key_hex) {
+                if pub_key_set.contains(&bead.committed_metadata.comm_pub_key) {
                     is_ours = true;
                 }
             }
@@ -2399,7 +2425,7 @@ pub async fn test_get_mining_info_rpc() {
 
     // Test 2: Filter by non-matching public key - should match 0 beads
     let params2_obj = json!({
-        "public_keys": ["030303030303030303030303030303030303030303030303030303030303030303"]
+        "public_keys": ["c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"]
     });
     let mut array_params2 = ArrayParams::new();
     array_params2.insert(params2_obj).unwrap();
@@ -2438,7 +2464,7 @@ pub async fn test_get_mining_info_rpc() {
 
     // Test 5: Multiple public keys (key rotation scenario)
     let params5_obj = json!({
-        "public_keys": [test_public_key.clone(), "030303030303030303030303030303030303030303030303030303030303030303"]
+        "public_keys": [test_public_key.clone(), "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"]
     });
     let mut array_params5 = ArrayParams::new();
     array_params5.insert(params5_obj).unwrap();
@@ -2549,4 +2575,95 @@ pub async fn test_subscribe_bead_rpc() {
             panic!("Notification not received !");
         }
     }
+}
+
+#[test]
+fn public_key_filter_accepts_x_only_keys_in_either_case() {
+    let lower = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
+    let key = parse_public_key_filter(lower).unwrap();
+    assert_eq!(parse_public_key_filter(&lower.to_uppercase()).unwrap(), key);
+    assert_eq!(
+        parse_public_key_filter(&format!("  {lower}\n")).unwrap(),
+        key
+    );
+}
+
+#[test]
+fn public_key_filter_rejects_a_compressed_key_with_a_hint() {
+    let compressed = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
+    let error = parse_public_key_filter(compressed).unwrap_err();
+    assert!(error.contains("compressed"), "{error}");
+    assert!(error.contains("leading 02/03"), "{error}");
+}
+
+#[test]
+fn public_key_filter_rejects_an_uncompressed_key_with_a_hint() {
+    let uncompressed = format!("04{}{}", "79be".repeat(16), "483a".repeat(16));
+    assert_eq!(uncompressed.len(), 130);
+    let error = parse_public_key_filter(&uncompressed).unwrap_err();
+    assert!(error.contains("uncompressed"), "{error}");
+}
+
+#[test]
+fn public_key_filter_rejects_malformed_entries() {
+    for bad in [
+        "",
+        "not hex at all",
+        "79be667e",
+        // 64 characters but not a point on the curve
+        "0000000000000000000000000000000000000000000000000000000000000000",
+        // 64 characters, not hex
+        "zzbe667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+    ] {
+        let error = parse_public_key_filter(bad).unwrap_err();
+        assert!(error.contains("64 hex characters"), "{bad:?}: {error}");
+    }
+}
+
+#[tokio::test]
+pub async fn test_get_mining_info_rejects_keys_that_are_not_x_only() {
+    use serde_json::json;
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(
+        vec![create_test_bead(1, None)],
+        PoolNetwork::Cpunet,
+    )));
+    let (proxy_tx, _) = mpsc::unbounded_channel();
+    let (server_addr, _) = run_rpc_server(
+        Arc::clone(&braid),
+        "127.0.0.1:0",
+        Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
+        Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
+        Arc::new(Mutex::new(stratum::BlockTemplate::default())),
+        proxy_tx,
+        None,
+        test_db_tx(),
+    )
+    .await
+    .unwrap();
+    let client: HttpClient = HttpClient::builder()
+        .build(format!("http://{}", server_addr))
+        .unwrap();
+
+    // A 33-byte compressed key used to match nothing, silently. It is now an error that says why.
+    let mut params = ArrayParams::new();
+    params
+        .insert(json!({
+            "public_keys": ["0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"]
+        }))
+        .unwrap();
+    let response: Result<Value, _> = client.request("getmininginfo", params).await;
+    let error = response.unwrap_err().to_string();
+    assert!(error.contains("compressed"), "{error}");
+
+    // One bad entry among good ones fails the whole request.
+    let good = create_test_bead(1, None)
+        .committed_metadata
+        .comm_pub_key
+        .to_string();
+    let mut params = ArrayParams::new();
+    params
+        .insert(json!({ "public_keys": [good, "garbage"] }))
+        .unwrap();
+    let response: Result<Value, _> = client.request("getmininginfo", params).await;
+    assert!(response.is_err());
 }
