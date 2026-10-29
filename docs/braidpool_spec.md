@@ -97,7 +97,7 @@ The `BraidpoolMetadata` struct is:
 | -----           | -----------                                                     |
 | `parents`       | [[BeadHash, Timestamp], ... ]                                   |
 | `payout_address`| P2TR address for this miner's payout                            |
-| `comm_pubkey`   | secp256k1 pubkey for encrypted DH communication with this miner |
+| `comm_pubkey`   | BIP340 x-only secp256k1 pubkey (32 bytes) identifying this miner |
 | `miner IP`      | IP address of this miner                                        |
 | `timestamp`     | Timestamp when this bead was created                            |
 | `transactions`  | List of serialized transactions                                 |
@@ -109,11 +109,34 @@ mining process. It contains:
 | Field             | Description |
 | -----             | ----------- |
 | `timestamp`       | timestamp when this bead was broadcast                                |
-| `signature`       | Signature on the `Uncommitted Metadata` block using the `comm_pubkey` |
+| `signature`       | BIP340 Schnorr signature (64 bytes) by `comm_pubkey`, see below       |
 | `extranonce`      | 64-bit extranonce field                                               |
-| `timestamp`       | timestamp when this bead was broadcast                        |
-| `signature`       | Signature on the `Uncommitted Metadata` block using the `comm_pubkey` |
-| `extranonce`    | 64-bit extranonce field                                         |
+
+### Miner identity encoding (BIP340)
+
+`comm_pubkey` MUST be a BIP340 x-only secp256k1 public key: exactly 32 bytes, the
+x-coordinate of the point whose y-coordinate is even (BIP340 `lift_x`). Compressed
+(`02`/`03` + x), uncompressed (`04` + x + y) and DER encodings are invalid.
+
+`signature` MUST be a BIP340 Schnorr signature: exactly 64 bytes, with no DER
+encoding and no sighash-type byte. It signs the BIP340 tagged hash with tag
+`Braidpool/bead/uncommitted/v1` of the concatenation of:
+
+1. `extra_nonce_1` and `extra_nonce_2` (u64 little-endian each) and
+   `broadcast_timestamp` (u32 little-endian);
+2. the 80-byte block header;
+3. the consensus encoding of the committed metadata, including `comm_pubkey`.
+
+Only the signature itself is left out, so a valid signature cannot be moved onto
+another bead or checked against another key. A bead whose signature does not verify
+under its own `comm_pubkey` is invalid. Each node keeps its miner secret in
+`datadir/miner_secp256k1` (32 bytes, mode `0o400`) and signs every bead it forms
+with it. The node's libp2p `PeerId` is derived from the same secret (its even-y form), so the
+x-coordinate of the `PeerId`'s public key is the node's `comm_pubkey`. libp2p signs its own
+connection handshake with ECDSA under that key; Braidpool's own signatures are always
+BIP340. This encoding is P2P protocol version 2.0.0, which nodes on earlier versions
+cannot decode. The full identity specification is in
+[`identity_specifications.md`](identity_specifications.md).
 
 The purpose of the timestamps is to gather higher resolution timestamps than are
 possible if the timestamp was committed, in order to measure (in a non-consensus

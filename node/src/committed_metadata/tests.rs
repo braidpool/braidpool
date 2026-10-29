@@ -1,8 +1,9 @@
 use super::*;
 use crate::utils::test_utils::test_utility_functions::TestCommittedMetadataBuilder;
+use bitcoin::absolute::Time;
 use bitcoin::consensus::encode::deserialize;
 use bitcoin::consensus::serialize;
-use bitcoin::BlockHash;
+use bitcoin::{BlockHash, CompactTarget, Txid, XOnlyPublicKey};
 use serde::Deserialize;
 use std::fs;
 use std::path::Path;
@@ -94,8 +95,8 @@ fn parse_time(value: u32) -> Time {
     Time::from_consensus(value).unwrap()
 }
 
-fn parse_public_key(value: &str) -> PublicKey {
-    PublicKey::from_str(value).unwrap()
+fn parse_public_key(value: &str) -> XOnlyPublicKey {
+    XOnlyPublicKey::from_str(value).unwrap()
 }
 
 fn parse_target(value: u32) -> CompactTarget {
@@ -178,10 +179,7 @@ fn test_committed_metadata_default() {
         metadata.payout_address,
         data.payout_addresses.default.as_str()
     );
-    assert_eq!(
-        metadata.comm_pub_key,
-        parse_public_key(&data.public_keys.default_committed)
-    );
+    assert_eq!(metadata.comm_pub_key, placeholder_xonly_pubkey());
     assert_eq!(metadata.min_target, parse_target(data.targets.default_bits));
     assert_eq!(
         metadata.weak_target,
@@ -343,8 +341,10 @@ fn test_committed_metadata_consensus_field_order_decode() {
     let decoded_payout = String::consensus_decode(&mut reader).unwrap();
     let decoded_start_timestamp =
         Time::from_consensus(u32::consensus_decode(&mut reader).unwrap()).unwrap();
-    let decoded_pubkey =
-        PublicKey::from_slice(&Vec::<u8>::consensus_decode(&mut reader).unwrap()).unwrap();
+    let mut pubkey_bytes = [0u8; 32];
+    use bitcoin::io::Read;
+    reader.read_exact(&mut pubkey_bytes).unwrap();
+    let decoded_pubkey = XOnlyPublicKey::from_slice(&pubkey_bytes).unwrap();
     let decoded_min_target = CompactTarget::consensus_decode(&mut reader).unwrap();
     let decoded_weak_target = CompactTarget::consensus_decode(&mut reader).unwrap();
     let decoded_miner_ip = String::consensus_decode(&mut reader).unwrap();
@@ -437,4 +437,11 @@ fn test_committed_metadata_consensus_txid_order_is_significant() {
         .build();
 
     assert_ne!(serialize(&metadata_ab), serialize(&metadata_ba));
+}
+
+#[test]
+fn placeholder_key_is_a_valid_point_and_not_the_generator() {
+    let key = placeholder_xonly_pubkey();
+    assert_eq!(key.to_string(), PLACEHOLDER_XONLY_PUBKEY_HEX);
+    assert_ne!(key, default_xonly_pubkey());
 }

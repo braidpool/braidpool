@@ -1,3 +1,4 @@
+use bitcoin::XOnlyPublicKey;
 use libp2p::PeerId;
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
@@ -27,6 +28,9 @@ pub struct PeerInfo {
     pub connected: bool,
     /// The peer's IP address
     pub ip_addr: Option<IpAddr>,
+    /// The peer's BIP340 miner key, read from its secp256k1 `PeerId`. `None` for a peer with
+    /// any other kind of identity (for example a legacy ed25519 peer).
+    pub bead_key: Option<XOnlyPublicKey>,
 }
 
 impl PeerInfo {
@@ -42,6 +46,7 @@ impl PeerInfo {
             last_ping: None,
             connected: true,
             ip_addr: ip,
+            bead_key: crate::miner_identity::xonly_from_peer_id(&peer_id),
             score_penalty_multiplier: 0.01,
         }
     }
@@ -254,6 +259,11 @@ impl PeerManager {
         candidates
     }
 
+    /// The miner key of a known peer, if its `PeerId` carries one.
+    pub fn bead_key(&self, peer_id: &PeerId) -> Option<XOnlyPublicKey> {
+        self.peers.get(peer_id).and_then(|p| p.bead_key)
+    }
+
     /// Get the number of connected peers
     pub fn num_connected_peers(&self) -> usize {
         self.connected_peers.len()
@@ -290,6 +300,7 @@ impl PeerManager {
                 "score": info.score,
                 "last_seen_secs": last_seen_secs,
                 "geo_group": info.geo_group,
+                "bead_key": info.bead_key.map(|k| k.to_string()),
             }));
         }
 
@@ -457,5 +468,60 @@ mod tests {
 
         // Should select peer3 (highest score) and either peer1 or peer2 (different geo group)
         assert!(top_peers.contains(&peer3));
+    }
+
+    #[test]
+    fn peer_with_secp256k1_peer_id_has_a_bead_key() {
+        let identity = MinerIdentity::generate();
+        let peer_id = PeerId::from(identity.libp2p_keypair().unwrap().public());
+        let mut manager = PeerManager::new(10);
+        manager.add_peer(peer_id, false, None);
+        assert_eq!(manager.bead_key(&peer_id), Some(identity.xonly()));
+    }
+
+    #[test]
+    fn legacy_ed25519_peer_has_no_bead_key() {
+        let peer_id = PeerId::from(libp2p::identity::Keypair::generate_ed25519().public());
+        let mut manager = PeerManager::new(10);
+        manager.add_peer(peer_id, false, None);
+        assert_eq!(manager.bead_key(&peer_id), None);
+    }
+
+    #[test]
+    fn unknown_peer_has_no_bead_key() {
+        let manager = PeerManager::new(10);
+        assert_eq!(manager.bead_key(&generate_peer_id()), None);
+    }
+
+    #[test]
+    fn bead_key_survives_reconnect() {
+        let identity = MinerIdentity::generate();
+        let peer_id = PeerId::from(identity.libp2p_keypair().unwrap().public());
+        let mut manager = PeerManager::new(10);
+        manager.add_peer(peer_id, true, None);
+        manager.remove_peer(&peer_id);
+        manager.add_peer(peer_id, false, None);
+        assert_eq!(manager.bead_key(&peer_id), Some(identity.xonly()));
+    }
+
+    #[test]
+    fn peers_json_reports_bead_key_or_null() {
+        let identity = MinerIdentity::generate();
+        let secp_peer = PeerId::from(identity.libp2p_keypair().unwrap().public());
+        let legacy_peer = PeerId::from(libp2p::identity::Keypair::generate_ed25519().public());
+        let mut manager = PeerManager::new(10);
+        manager.add_peer(secp_peer, false, None);
+        manager.add_peer(legacy_peer, false, None);
+        let json = manager.get_peers_json();
+        let peers = json["peers"].as_array().unwrap();
+        assert_eq!(peers.len(), 2);
+        let find = |id: &PeerId| {
+            peers
+                .iter()
+                .find(|p| p["peer_id"] == id.to_base58())
+                .unwrap()
+        };
+        assert_eq!(find(&secp_peer)["bead_key"], identity.xonly().to_string());
+        assert!(find(&legacy_peer)["bead_key"].is_null());
     }
 }

@@ -35,7 +35,7 @@ bitcoin = {version="0.32.5",features=["serde","std","rand"]}
 shellexpand = "3.1.0"
 num = { version = "0.4.1", features = ["serde", "rand"] }
 rand = "0.8"
-libp2p = { version = "0.55.0", features = ["identify", "quic", "tokio","ping","macros","kad","dns","request-response","floodsub"] }
+libp2p = { version = "0.55.0", features = ["identify", "quic", "tokio","ping","macros","kad","dns","request-response","floodsub","secp256k1"] }
 toml = "0.8.22"
 jsonrpsee = {version = "0.25.1",features = ["full"]}
 async-trait = "0.1.88"

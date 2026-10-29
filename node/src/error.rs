@@ -90,6 +90,13 @@ pub enum DBErrors {
         error: String,
         db_path: PathBuf,
     },
+    /// The database was written by another, incompatible version of the node.
+    IncompatibleDatabase {
+        db_path: PathBuf,
+        found_version: i64,
+        expected_version: i64,
+        detail: String,
+    },
     SchemaPathNotFound {
         error: String,
         schema_desired_path: PathBuf,
@@ -117,6 +124,21 @@ impl fmt::Display for DBErrors {
             }
             DBErrors::SchemaNotInitialized { error, db_path } => {
                 write!(f,"Connection to DB initialized but schema could not be executed at the given DB path {:?} due to - {:?}",db_path,error.to_string())
+            }
+            DBErrors::IncompatibleDatabase {
+                db_path,
+                found_version,
+                expected_version,
+                detail,
+            } => {
+                write!(
+                    f,
+                    "Database {} has format version {} but this node needs version {}: {}",
+                    db_path.display(),
+                    found_version,
+                    expected_version,
+                    detail
+                )
             }
             DBErrors::ConnectionToSQlitePoolFailed { error } => {
                 write!(f,"Connection to pool could not be initialized hence DB connection could not be made due to - {:?}",error)
