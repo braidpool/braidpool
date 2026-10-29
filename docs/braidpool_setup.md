@@ -67,6 +67,10 @@ You can find all available command-line arguments in [node/src/cli.rs](https://g
 -   `--ipc-socket <PATH>`: Specifies the path to the UNIX domain socket file (should be the same as bitcoin node).
 -   `--network <NETWORK>`: Sets the network. Valid options are `mainnet`, `testnet4`, `signet`, and `cpunet`. The default is `mainnet`.
 
+#### Data directory
+
+-   `miner_secp256k1`: the node's miner key, created owner read-only (`0o400`) on first start and reused afterwards. Anyone who can read it can sign beads as this node. A file that is not exactly 32 bytes holding a valid secret stops startup and is left untouched.
+
 ## For probing current braidpool-node 
 - `braidpool-cli` crate can be utilized for accessing current braid-state including information about the `bead-count`,`bead-by-beadhash`,`tips` etc.
 ```
