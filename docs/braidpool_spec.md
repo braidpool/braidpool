@@ -132,8 +132,7 @@ another bead, and changing any signed field, `comm_pubkey` included, invalidates
 A bead whose signature does not verify under its own `comm_pubkey` is invalid. Each
 node keeps its miner secret in `datadir/miner_secp256k1` (32 bytes, mode `0o400`) and
 signs every bead it forms with it, using fresh BIP340 auxiliary randomness for each
-signature. This encoding is P2P protocol version 2.0.0, which nodes on earlier versions
-cannot decode.
+signature.
 
 **Limitation: the signature does not yet prove who mined a bead.** The proof of work
 does not commit to the committed metadata: the coinbase carries a placeholder

@@ -1,5 +1,5 @@
-//! Wire and JSON format of `UnCommittedMetadata` after the protocol 2.0.0 cut-over:
-//! a 64-byte BIP340 Schnorr signature, never an ECDSA DER signature.
+//! Wire and JSON format of `UnCommittedMetadata`: a 64-byte BIP340 Schnorr signature, never an
+//! ECDSA DER signature.
 
 use super::UnCommittedMetadata;
 use bitcoin::absolute::Time;
@@ -14,7 +14,7 @@ fn sample() -> UnCommittedMetadata {
     }
 }
 
-/// ECDSA DER signature plus sighash byte, as nodes before 2.0.0 stored it (hex string).
+/// ECDSA DER signature plus sighash byte, as the previous encoding stored it (hex string).
 const OLD_DER_SIGNATURE_HEX: &str = "3046022100839c1fbc5304de944f697c9f4b1d01d1faeba32d751c0f7acb21ac8a0f436a72022100e89bd46bb3a5a62adc679f659b7ce876d83ee297c7a5587b2011c4fcc72eab4501";
 
 #[test]
@@ -28,7 +28,7 @@ fn consensus_roundtrip_and_fixed_length() {
 }
 
 #[test]
-fn pre_2_0_0_encoding_with_der_signature_string_is_rejected() {
+fn legacy_der_signature_encoding_is_rejected() {
     let mut old = Vec::new();
     7u64.consensus_encode(&mut old).unwrap();
     9u64.consensus_encode(&mut old).unwrap();

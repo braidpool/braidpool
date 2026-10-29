@@ -435,13 +435,3 @@ async fn test_floodsub_message_propagation() {
     )
     .await;
 }
-
-#[test]
-fn protocol_names_carry_the_version() {
-    let suffix = format!("/{PROTOCOL_VERSION}");
-    assert!(KADPROTOCOLNAME.as_ref().ends_with(&suffix));
-    assert!(IDENTIFYPROTOCOLNAME.as_ref().ends_with(&suffix));
-    assert!(BEAD_SYNC_PROTOCOL.as_ref().ends_with(&suffix));
-    assert!(BRAIDPOOL_TOPIC.ends_with(&suffix));
-    assert_eq!(BEAD_ANNOUNCE_PROTOCOL.as_ref(), "/floodsub/1.0.0");
-}
