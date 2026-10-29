@@ -44,8 +44,8 @@ const BULK_INSERT_BEADS: &str =
         unhex(json_extract(value, '$.signature')) 
     FROM json_each(?);";
 //Separating into sub-queries
-const BULK_INSERT_TRANSACTIONS: &str = "INSERT INTO Transactions (bead_id, txid) 
-    SELECT json_extract(value, '$.bead_id'), unhex(json_extract(value, '$.txid')) 
+const BULK_INSERT_TRANSACTIONS: &str = "INSERT INTO Transactions (bead_id, idx, txid) 
+    SELECT json_extract(value, '$.bead_id'), json_extract(value, '$.idx'), unhex(json_extract(value, '$.txid')) 
     FROM json_each(?);";
 
 const BULK_INSERT_RELATIVES: &str = "INSERT INTO Relatives (child, parent) 
@@ -53,9 +53,9 @@ const BULK_INSERT_RELATIVES: &str = "INSERT INTO Relatives (child, parent)
     FROM json_each(?);";
 
 const BULK_INSERT_PARENT_TIMESTAMPS: &str =
-    "INSERT INTO ParentTimestamps (parent, child, timestamp) 
+    "INSERT INTO ParentTimestamps (parent, child, timestamp, idx) 
     SELECT json_extract(value, '$.parent'), json_extract(value, '$.child'), 
-        json_extract(value, '$.timestamp') 
+        json_extract(value, '$.timestamp'), json_extract(value, '$.idx') 
     FROM json_each(?);";
 #[derive(Debug)]
 pub struct DBHandler {
@@ -154,21 +154,23 @@ impl DBHandler {
         let bead_id = data.bead_id as u64;
         let mut relatives_values = Vec::with_capacity(data.parent_refs.len());
         let mut parent_ts_values = Vec::with_capacity(data.parent_refs.len());
-        for (parent_id, parent_timestamp) in &data.parent_refs {
+        for (idx, (parent_id, parent_timestamp)) in data.parent_refs.iter().enumerate() {
             relatives_values.push(json!({ "parent": *parent_id, "child": bead_id }));
             parent_ts_values.push(json!({
                 "child": bead_id,
                 "parent": *parent_id,
                 "timestamp": *parent_timestamp,
+                "idx": idx,
             }));
             debug!("Parent found with id - {:?}", parent_id);
         }
         let mut txs_values =
             Vec::with_capacity(data.bead.committed_metadata.transaction_ids.0.len());
-        for tx in &data.bead.committed_metadata.transaction_ids.0 {
+        for (idx, tx) in data.bead.committed_metadata.transaction_ids.0.iter().enumerate() {
             txs_values.push(json!({
                 "txid": hex::encode(tx.to_byte_array()),
                 "bead_id": bead_id,
+                "idx": idx,
             }));
         }
         (txs_values, relatives_values, parent_ts_values)
@@ -477,8 +479,9 @@ pub async fn fetch_beads_in_batch(
         let placeholders = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
 
         // Transactions for every bead in the batch.
-        let tx_sql =
-            format!("SELECT bead_id, txid FROM Transactions WHERE bead_id IN ({placeholders})");
+        let tx_sql = format!(
+            "SELECT bead_id, txid FROM Transactions WHERE bead_id IN ({placeholders}) ORDER BY bead_id, idx"
+        );
         let mut tx_query = sqlx::query(&tx_sql);
         for id in &ids {
             tx_query = tx_query.bind(id);
@@ -516,7 +519,7 @@ pub async fn fetch_beads_in_batch(
              FROM ParentTimestamps pt
              JOIN Bead pb ON pb.id = pt.parent
              WHERE pt.child IN ({placeholders})
-             ORDER BY pt.child, pt.parent"
+             ORDER BY pt.child, pt.idx"
         );
         let mut pt_query = sqlx::query(&pt_sql);
         for id in &ids {
@@ -776,7 +779,7 @@ pub async fn fetch_bead_by_bead_hash(
         }
     };
     let rows =
-        match sqlx::query("SELECT  txid as txid, bead_id FROM Transactions WHERE bead_id = ?")
+        match sqlx::query("SELECT  txid as txid, bead_id FROM Transactions WHERE bead_id = ? ORDER BY idx")
             .bind(bead_id)
             .fetch_all(&*db_connection_arc)
             .await
@@ -790,7 +793,7 @@ pub async fn fetch_bead_by_bead_hash(
         };
     //Fetching parent timestamps from DB
     let parent_timestamp_rows =
-        match sqlx::query("SELECT  parent,child,timestamp FROM ParentTimestamps WHERE child = ?")
+        match sqlx::query("SELECT  parent,child,timestamp FROM ParentTimestamps WHERE child = ? ORDER BY idx")
             .bind(bead_id)
             .fetch_all(&*db_connection_arc)
             .await
@@ -841,7 +844,6 @@ pub async fn fetch_bead_by_bead_hash(
         ));
     }
 
-    parent_pairs_single.sort_by_key(|(hash, _)| *hash);
     for (hash, time) in parent_pairs_single {
         fetched_bead.committed_metadata.parents.push(hash);
         fetched_bead
@@ -983,6 +985,18 @@ pub mod test {
                 fetched.committed_metadata.parents.len(),
                 bead.committed_metadata.parents.len(),
                 "Parent count mismatch for bead {}",
+                bead_hash
+            );
+            assert_eq!(
+                fetched.committed_metadata.parents,
+                bead.committed_metadata.parents,
+                "Parent ordering mismatch for bead {}",
+                bead_hash
+            );
+            assert_eq!(
+                fetched.committed_metadata.transaction_ids,
+                bead.committed_metadata.transaction_ids,
+                "Transaction IDs ordering mismatch for bead {}",
                 bead_hash
             );
         }
