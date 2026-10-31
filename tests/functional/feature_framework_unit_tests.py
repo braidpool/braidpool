@@ -356,6 +356,51 @@ def test_rpc_client_invalid_response() -> None:
     raise AssertionError("invalid response was not raised")
 
 
+def _peer_info_client(connected_by_call: list[int]) -> RpcClient:
+    """RpcClient whose ``getpeerinfo`` replies with the real object shape.
+
+    Each call pops the next ``connected`` value, repeating the last one.
+    """
+
+    def transport(_url: str, payload: bytes, _timeout: float, _auth: str | None = None) -> bytes:
+        request = json.loads(payload.decode("utf8"))
+        assert_equal(request["method"], "getpeerinfo")
+        connected = connected_by_call.pop(0) if len(connected_by_call) > 1 else connected_by_call[0]
+        reply = {
+            "total_peers": connected,
+            "connected": connected,
+            "inbound": 0,
+            "outbound": connected,
+            "network_groups": 0,
+            "avg_latency_ms": 0.0,
+            "peers": [{}] * connected,
+        }
+        return json.dumps({"jsonrpc": "2.0", "id": request["id"], "result": reply}).encode("utf8")
+
+    return RpcClient("127.0.0.1", 1234, retry_delay=0, transport=transport)
+
+
+def test_wait_for_peers_returns_once_the_minimum_is_connected() -> None:
+    client = _peer_info_client([0, 0, 1])
+    client.wait_for_peers(1, timeout=1.0)
+    # One connected peer must not satisfy a request for two.
+    try:
+        client.wait_for_peers(2, timeout=0.05)
+    except AssertionError as exc:
+        assert "Peer count never reached 2" in str(exc), str(exc)
+    else:
+        raise AssertionError("wait_for_peers(2) returned with 1 connected peer")
+
+    # With no connected peers, even a minimum of 1 must time out.
+    empty_client = _peer_info_client([0])
+    try:
+        empty_client.wait_for_peers(1, timeout=0.05)
+    except AssertionError as exc:
+        assert "Peer count never reached 1" in str(exc), str(exc)
+    else:
+        raise AssertionError("wait_for_peers(1) returned with 0 connected peers")
+
+
 def test_miner_log_parsing() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         miner = CpuMiner(3333, Path(tmp), minerd_path="unused")
@@ -806,6 +851,7 @@ TESTS = [
     test_rpc_client_transport_failure_after_retries,
     test_rpc_client_timeout,
     test_rpc_client_invalid_response,
+    test_wait_for_peers_returns_once_the_minimum_is_connected,
     test_miner_log_parsing,
     test_find_binary_relative_path,
     test_find_binary_missing_skips,
