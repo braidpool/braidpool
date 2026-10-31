@@ -76,6 +76,10 @@ pub struct CommittedMetadata {
     //minimum possible target
     pub weak_target: CompactTarget,
     pub miner_ip: String,
+    /// Total transaction fees, in satoshis, in the block template this bead
+    /// was mined on.
+    #[serde(default)]
+    pub fee_total_sats: u64,
 }
 impl Default for CommittedMetadata {
     fn default() -> Self {
@@ -92,6 +96,7 @@ impl Default for CommittedMetadata {
             min_target: CompactTarget::from_consensus(486604799),
             weak_target: CompactTarget::from_consensus(486604799),
             miner_ip: "127.0.0.1".to_string(),
+            fee_total_sats: 0,
         }
     }
 }
@@ -111,6 +116,7 @@ impl Encodable for CommittedMetadata {
         len += self.min_target.consensus_encode(w)?;
         len += self.weak_target.consensus_encode(w)?;
         len += self.miner_ip.consensus_encode(w)?;
+        len += self.fee_total_sats.consensus_encode(w)?;
         Ok(len)
     }
 }
@@ -137,6 +143,14 @@ impl Decodable for CommittedMetadata {
         let min_target = CompactTarget::consensus_decode(r)?;
         let weak_target = CompactTarget::consensus_decode(r)?;
         let miner_ip = String::consensus_decode(r)?;
+        let fee_total_sats = u64::consensus_decode(r)?;
+        // A template cannot carry more fees than can ever exist.
+        if fee_total_sats > bitcoin::Amount::MAX_MONEY.to_sat() {
+            return Err(Error::from(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "fee_total_sats in CommittedMetadata exceeds MAX_MONEY",
+            )));
+        }
         Ok(CommittedMetadata {
             transaction_ids,
             parents,
@@ -147,6 +161,7 @@ impl Decodable for CommittedMetadata {
             min_target,
             weak_target,
             miner_ip,
+            fee_total_sats,
         })
     }
 }

@@ -22,7 +22,7 @@ pub const FETCH_BEAD_BATCH_SIZE: u32 = 50;
 const BULK_INSERT_BEADS: &str =
     "INSERT INTO bead (id, hash, nVersion, hashPrevBlock, hashMerkleRoot, nTime, 
         nBits, nNonce, payout_address, start_timestamp, comm_pub_key, min_target, 
-        weak_target, miner_ip, extranonce1, extranonce2, broadcast_timestamp, signature) 
+        weak_target, miner_ip, fee_total_sats, extranonce1, extranonce2, broadcast_timestamp, signature) 
     SELECT 
         json_extract(value, '$.id'), 
         unhex(json_extract(value, '$.hash')), 
@@ -37,7 +37,8 @@ const BULK_INSERT_BEADS: &str =
         unhex(json_extract(value, '$.comm_pub_key')), 
         json_extract(value, '$.min_target'), 
         json_extract(value, '$.weak_target'), 
-        json_extract(value, '$.miner_ip'), 
+        json_extract(value, '$.miner_ip'),
+        json_extract(value, '$.fee_total_sats'), 
         json_extract(value, '$.extranonce1'), 
         json_extract(value, '$.extranonce2'), 
         json_extract(value, '$.broadcast_timestamp'), 
@@ -209,6 +210,7 @@ impl DBHandler {
                 "min_target": bead.committed_metadata.min_target.to_consensus(),
                 "weak_target": bead.committed_metadata.weak_target.to_consensus(),
                 "miner_ip": bead.committed_metadata.miner_ip.clone(),
+                "fee_total_sats": bead.committed_metadata.fee_total_sats,
                 "extranonce1": hex::encode(bead.uncommitted_metadata.extra_nonce_1.to_be_bytes()),
                 "extranonce2": hex::encode(bead.uncommitted_metadata.extra_nonce_2.to_be_bytes()),
                 "broadcast_timestamp": bead.uncommitted_metadata.broadcast_timestamp.to_consensus_u32(),
@@ -440,6 +442,7 @@ pub async fn fetch_beads_in_batch(
                 b.min_target          AS min_target,
                 b.weak_target         AS weak_target,
                 b.miner_ip            AS miner_ip,
+                b.fee_total_sats      AS fee_total_sats,
                 b.start_timestamp     AS start_timestamp,
                 b.broadcast_timestamp AS broadcast_timestamp,
                 b.extranonce1         AS extranonce1,
@@ -619,6 +622,11 @@ fn build_bead_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<Bead, DBErrors> 
     bead.committed_metadata.weak_target =
         CompactTarget::from_consensus(row.get::<u32, _>("weak_target"));
     bead.committed_metadata.miner_ip = row.get("miner_ip");
+    bead.committed_metadata.fee_total_sats = u64::try_from(row.get::<i64, _>("fee_total_sats"))
+        .map_err(|_| DBErrors::TupleAttributeParsingError {
+            error: "Negative fee_total_sats".into(),
+            attribute: "fee_total_sats".into(),
+        })?;
 
     let start_ts = row.get::<u32, _>("start_timestamp");
     bead.committed_metadata.start_timestamp =
@@ -716,6 +724,13 @@ pub async fn fetch_bead_by_bead_hash(
             let min_target = CompactTarget::from_consensus(row.get::<u32, _>("min_target"));
             let weak_target = CompactTarget::from_consensus(row.get::<u32, _>("weak_target"));
             let miner_ip = row.get::<String, _>("miner_ip");
+            let fee_total_sats =
+                u64::try_from(row.get::<i64, _>("fee_total_sats")).map_err(|_| {
+                    DBErrors::TupleAttributeParsingError {
+                        error: "Negative fee_total_sats".to_string(),
+                        attribute: "fee_total_sats".to_string(),
+                    }
+                })?;
             let extranonce_1 = u64::from_str_radix(&row.get::<String, _>("extranonce1"), 16)
                 .map_err(|e| DBErrors::TupleAttributeParsingError {
                     error: e.to_string(),
@@ -750,6 +765,7 @@ pub async fn fetch_bead_by_bead_hash(
             fetched_bead.block_header.merkle_root = merkle_hash;
             fetched_bead.committed_metadata.comm_pub_key = pub_key;
             fetched_bead.committed_metadata.miner_ip = miner_ip;
+            fetched_bead.committed_metadata.fee_total_sats = fee_total_sats;
             fetched_bead.committed_metadata.min_target = min_target;
             fetched_bead.committed_metadata.start_timestamp = start_timestamp;
             fetched_bead.committed_metadata.weak_target = weak_target;
