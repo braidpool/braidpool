@@ -85,9 +85,20 @@ impl Braid {
 }
 #[allow(unused)]
 impl Braid {
-    /// Attempts to extend the braid with the given bead.
-    /// Returns true if the bead successfully extended the braid, false otherwise.
+    /// Attempts to extend the braid with the given bead, then promotes any
+    /// parked orphans that became connectable as a result.
     pub fn extend(&mut self, bead: &Bead) -> AddBeadStatus {
+        match self.insert_bead(bead) {
+            AddBeadStatus::BeadAdded { .. } => AddBeadStatus::BeadAdded {
+                promoted_orphans: self.process_orphan_beads(),
+            },
+            status => status,
+        }
+    }
+
+    /// Adds a single bead to the braid, parking it as an orphan if a parent is
+    /// missing. Does not promote other orphans.
+    fn insert_bead(&mut self, bead: &Bead) -> AddBeadStatus {
         // If the braid is empty and bead has no parents, treat as genesis bead
         if self.beads.is_empty() && bead.committed_metadata.parents.is_empty() {
             tracing::debug!(
@@ -198,56 +209,28 @@ impl Braid {
             self.cohort_tips.push(self.tips.clone());
         }
 
-        // Adding this bead may have supplied the missing parent for one or more
-        // parked orphans; promote whichever became connectable and surface them
-        // to the caller.
-        let promoted_orphans = self.process_orphan_beads();
-
-        AddBeadStatus::BeadAdded { promoted_orphans }
+        // Orphans this bead may have unblocked are promoted by `extend`.
+        AddBeadStatus::BeadAdded {
+            promoted_orphans: Vec::new(),
+        }
     }
 
+    /// Promotes every parked orphan whose parents are now all present. This is
+    /// a loop rather than recursion through `extend`, so a long orphan chain
+    /// can't overflow the stack.
     fn process_orphan_beads(&mut self) -> Vec<Bead> {
         let mut promoted = Vec::new();
-        // Process orphans in reverse order to maintain proper indexing
-        let mut i = self.orphan_beads.len();
-        while i > 0 {
-            i -= 1;
-
-            // Check if all parents are now available for this orphan
-            let mut all_parents_available = true;
-            for parent_hash in &self.orphan_beads[i].committed_metadata.parents {
-                if !self.bead_index_mapping.contains_key(parent_hash) {
-                    all_parents_available = false;
-                    break;
-                }
-            }
-
-            if all_parents_available {
-                // Remove the orphan bead first, then process it
-                let orphan_bead = self.orphan_beads.remove(i);
-
-                // Now extend with the orphan bead
-                match self.extend(&orphan_bead) {
-                    AddBeadStatus::BeadAdded { promoted_orphans } => {
-                        // This orphan is now connected: record it, along with any
-                        // beads its own addition promoted.
-                        promoted.push(orphan_bead);
-                        promoted.extend(promoted_orphans);
-                        // Recursively process remaining orphans as this addition
-                        // might enable more orphans to be processed.
-                        promoted.extend(self.process_orphan_beads());
-                        return promoted; // Exit current processing as recursion will handle the rest
-                    }
-                    AddBeadStatus::DagAlreadyContainsBead => {
-                        continue;
-                    }
-                    AddBeadStatus::InvalidBead => {
-                        continue;
-                    }
-                    AddBeadStatus::ParentsNotYetReceived => {
-                        self.orphan_beads.push(orphan_bead);
-                    }
-                }
+        // Searching from the back keeps a chain that arrived child-first linear.
+        while let Some(i) = self.orphan_beads.iter().rposition(|orphan| {
+            orphan
+                .committed_metadata
+                .parents
+                .iter()
+                .all(|parent_hash| self.bead_index_mapping.contains_key(parent_hash))
+        }) {
+            let orphan_bead = self.orphan_beads.remove(i);
+            if let AddBeadStatus::BeadAdded { .. } = self.insert_bead(&orphan_bead) {
+                promoted.push(orphan_bead);
             }
         }
         promoted

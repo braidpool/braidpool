@@ -2448,3 +2448,39 @@ fn test_extend_promotes_transitive_orphan_chain() {
         "all transitively-connectable orphans should be drained"
     );
 }
+
+/// A long chain of orphans that arrives child-first must be promoted without
+/// recursing once per bead, which used to overflow the stack.
+#[test]
+fn test_extend_promotes_long_orphan_chain() {
+    const CHAIN_LEN: usize = 2_000;
+    let genesis = emit_bead();
+    let mut braid = Braid::new(vec![genesis.clone()], PoolNetwork::Cpunet);
+
+    let mut chain = Vec::with_capacity(CHAIN_LEN);
+    let mut parent = compute_block_hash(&genesis.block_header, braid.network);
+    for _ in 0..CHAIN_LEN {
+        let mut bead = emit_bead();
+        bead.committed_metadata.parents.push(parent);
+        parent = compute_block_hash(&bead.block_header, braid.network);
+        chain.push(bead);
+    }
+
+    // Everything but the root arrives child-first and is parked.
+    for bead in chain[1..].iter().rev() {
+        assert!(matches!(
+            braid.extend(bead),
+            AddBeadStatus::ParentsNotYetReceived
+        ));
+    }
+
+    // The root connects the whole chain.
+    match braid.extend(&chain[0]) {
+        AddBeadStatus::BeadAdded { promoted_orphans } => {
+            assert_eq!(promoted_orphans.len(), CHAIN_LEN - 1);
+        }
+        other => panic!("expected BeadAdded, got {:?}", other),
+    }
+    assert!(braid.orphan_beads.is_empty());
+    assert_eq!(braid.beads.len(), CHAIN_LEN + 1);
+}
