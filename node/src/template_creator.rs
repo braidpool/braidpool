@@ -120,42 +120,6 @@ impl FinalTemplate {
     }
 }
 
-/// Encodes a block height according to BIP-34 minimal integer specification
-///
-/// Converts a block height to the minimal little-endian byte representation
-/// required by BIP-34. Adds padding byte if the most significant bit is set
-/// to ensure the number is interpreted as positive.
-///
-/// # Arguments
-/// * `height` - Block height to encode (must be ≤ 10,000,000 for safety)
-///
-/// # Encoding Rules
-/// 1. Convert to little-endian bytes
-/// 2. Remove trailing zero bytes (minimal representation)
-/// 3. Add 0x00 padding byte if MSB is set (positive number requirement)
-fn encode_bip34_height(height: u32) -> Result<Vec<u8>, CoinbaseError> {
-    if height > constants::MAX_BITCOIN_HEIGHT {
-        return Err(CoinbaseError::InvalidBlockTemplateData);
-    }
-    if height == 0 {
-        return Ok(vec![0]);
-    }
-
-    let mut bytes = Vec::new();
-    let mut n = height;
-
-    while n > 0 {
-        bytes.push((n & 0xff) as u8);
-        n >>= 8;
-    }
-    if let Some(&last_byte) = bytes.last() {
-        if last_byte & 0x80 != 0 {
-            bytes.push(0);
-        }
-    }
-    Ok(bytes)
-}
-
 /// Computes the Merkle root from a coinbase transaction ID and a path of transaction hashes.
 ///
 /// This function iteratively combines the coinbase `txid` with each hash in the provided
@@ -217,30 +181,22 @@ fn find_transaction_end(tx_data: &[u8]) -> Result<usize, CoinbaseError> {
     }
 }
 
-/// Builds the coinbase transaction input with BIP-34 compliant height encoding
-///
-/// Creates the coinbase input with proper BIP-34 block height encoding.
-/// Uses `block_height + 1` because the coinbase must contain
-/// the height of the block being mined, not the current blockchain tip.
+/// Builds the coinbase transaction input
 ///
 /// # Arguments
-/// * `block_height` - Current blockchain tip height
+/// * `script_sig_prefix` - Required prefix supplied by Bitcoin Core
 /// * `extranonce` - Miner's work distribution data
 /// * `pool_identifier` - Pool identification string
 ///
 /// # ScriptSig Structure:
-///   <height_push> <height_bytes> <extranonce_push> <extranonce> <pool_id_push> <pool_id>
+///   <script_sig_prefix> (height) <separator_length> <separator_bytes> <pool_id_push> <pool_id>
 fn build_coinbase_input(
-    block_height: u32,
+    script_sig_prefix: &[u8],
     extranonce: &[u8],
     pool_identifier: &str,
+    witness: Option<&[u8]>,
+    sequence: u32,
 ) -> Result<TxIn, CoinbaseError> {
-    let coinbase_height = block_height + 1;
-    let height_bytes = encode_bip34_height(coinbase_height)?;
-
-    if height_bytes.len() > constants::MAX_BIP34_HEIGHT_BYTES {
-        return Err(CoinbaseError::ScriptCreationError);
-    }
     if extranonce.len() > 32 {
         return Err(CoinbaseError::InvalidExtranonceLength);
     }
@@ -248,14 +204,12 @@ fn build_coinbase_input(
     if pool_bytes.len() > 20 {
         return Err(CoinbaseError::ScriptCreationError);
     }
-    let total_script_size = 1 + height_bytes.len() + 1 + extranonce.len() + 1 + pool_bytes.len();
+    let total_script_size = script_sig_prefix.len() + 1 + extranonce.len() + 1 + pool_bytes.len();
     if total_script_size > constants::MAX_COINBASE_SCRIPT_SIG {
         return Err(CoinbaseError::ScriptCreationError);
     }
 
-    let mut script_data = Vec::new();
-    script_data.push(height_bytes.len() as u8);
-    script_data.extend_from_slice(&height_bytes);
+    let mut script_data = script_sig_prefix.to_vec();
     //extranonce starts with 8 assigned to extranonce bytes
     //therefore the extranonce separator must be before this
     //TODO KINDLY REVERT IF NOT WORKS
@@ -265,13 +219,16 @@ fn build_coinbase_input(
     script_data.extend_from_slice(pool_bytes);
 
     let script_sig = ScriptBuf::from_bytes(script_data);
-    let mut witness = Witness::new();
-    witness.push(vec![0u8; 32]);
+    let witness = witness.map_or_else(Witness::new, |value| {
+        let mut witness = Witness::new();
+        witness.push(value.to_vec());
+        witness
+    });
 
     Ok(TxIn {
         previous_output: OutPoint::null(),
         script_sig,
-        sequence: Sequence::MAX,
+        sequence: Sequence(sequence),
         witness,
     })
 }
@@ -307,37 +264,6 @@ fn build_braidpool_op_return(commitment: &[u8], extranonce: &[u8]) -> Result<TxO
     })
 }
 
-/// Creates a SegWit witness commitment output from template data
-///
-/// Validates and creates the BIP-141 required witness commitment output.
-/// This output commits to all witness data in the block and is mandatory
-/// for SegWit-compatible blocks.
-///
-/// # Arguments
-/// * `commitment_bytes` - 38-byte SegWit commitment from Bitcoin Core template
-fn create_segwit_commitment_output(commitment_bytes: &[u8]) -> Result<TxOut, CoinbaseError> {
-    // Validate commitment size (should be 38 bytes: OP_RETURN + 0x24 + 0xaa21a9ed + 32-byte hash)
-    if commitment_bytes.len() < constants::SEGWIT_COMMITMENT_SIZE {
-        warn!(
-            "SegWit commitment too short: {} bytes",
-            commitment_bytes.len()
-        );
-        return Err(CoinbaseError::InvalidCommitmentLength);
-    }
-
-    // Verify it starts with the SegWit commitment pattern
-    if commitment_bytes.len() >= 6 && commitment_bytes[2..6] != [0xaa, 0x21, 0xa9, 0xed] {
-        warn!(commitment_len = %commitment_bytes.len(), expected_pattern = "aa21a9ed", "Invalid SegWit commitment pattern");
-        return Err(CoinbaseError::InvalidCommitmentLength);
-    }
-    let script_bytes = commitment_bytes.to_vec();
-    let script = ScriptBuf::from_bytes(script_bytes);
-    Ok(TxOut {
-        value: Amount::ZERO,
-        script_pubkey: script,
-    })
-}
-
 /// Build a Braidpool coinbase transaction from BlockTemplateComponents
 ///
 /// This creates a coinbase transaction with the format:
@@ -348,13 +274,11 @@ fn create_segwit_commitment_output(commitment_bytes: &[u8]) -> Result<TxOut, Coi
 /// * `components` - Block template data from Bitcoin Core IPC
 /// * `braidpool_commitment` - Pool-specific commitment data (max 72 bytes)
 /// * `extranonce` - Mining work distribution data (max 32 bytes)
-/// * `block_height` - Current blockchain tip height (will be incremented for BIP-34)
 /// * `config` - Pool configuration including payout address and identifier
 pub fn build_braidpool_coinbase_from_template(
     components: &BlockTemplateComponents,
     braidpool_commitment: &[u8],
     extranonce: &[u8],
-    block_height: u32,
     config: &CoinbaseConfig,
 ) -> Result<FinalCoinbase, CoinbaseError> {
     if extranonce.len() > constants::MAX_EXTRANONCE_LEN {
@@ -366,22 +290,6 @@ pub fn build_braidpool_coinbase_from_template(
     if braidpool_commitment.len() + extranonce.len() > 78 {
         return Err(CoinbaseError::OpReturnTooLarge);
     }
-
-    let original_coinbase = parse_coinbase_transaction(&components.coinbase_transaction)?;
-    let segwit_commitment = if !components.coinbase_commitment.is_empty() {
-        Some(create_segwit_commitment_output(
-            &components.coinbase_commitment,
-        )?)
-    } else {
-        warn!(
-            context = "block_template",
-            "SegWit commitment missing (may be expected for non-SegWit blocks)"
-        );
-        None
-    };
-
-    // Calculate the total available funds (extracted reward + fees).
-    let total_available = original_coinbase.output[0].value.to_sat();
 
     // Create the single payout output for the entire available amount.
     // According to the type of chain/network derive the pubkeyscript
@@ -399,28 +307,32 @@ pub fn build_braidpool_coinbase_from_template(
     };
 
     let reward_payout = TxOut {
-        value: Amount::from_sat(total_available),
+        value: Amount::from_sat(components.coinbase.block_reward_remaining),
         script_pubkey: payout_script,
     };
 
     // Build OP_RETURN output.
     let braidpool_output = build_braidpool_op_return(braidpool_commitment, extranonce)?;
 
-    // Build final outputs in the correct order: [REWARD, WTXID, BRAIDPOOL_OPRETURN].
+    // Required outputs must follow the pool's reward output.
     let mut final_outputs = vec![reward_payout];
-    if let Some(segwit_output) = segwit_commitment {
-        final_outputs.push(segwit_output);
-    }
+    final_outputs.extend(components.coinbase.required_outputs.iter().cloned());
     final_outputs.push(braidpool_output);
 
     // Build coinbase input
-    let coinbase_input = build_coinbase_input(block_height, extranonce, &config.pool_identifier)?;
+    let coinbase_input = build_coinbase_input(
+        &components.coinbase.script_sig_prefix,
+        extranonce,
+        &config.pool_identifier,
+        components.coinbase.witness.as_deref(),
+        components.coinbase.sequence,
+    )?;
     if coinbase_input.script_sig.len() > constants::MAX_COINBASE_SCRIPT_SIG {
         return Err(CoinbaseError::ScriptCreationError);
     }
     let transaction = Transaction {
-        version: Version::TWO,
-        lock_time: LockTime::ZERO,
+        version: Version::non_standard(components.coinbase.version as i32),
+        lock_time: LockTime::from_consensus(components.coinbase.lock_time),
         input: vec![coinbase_input],
         output: final_outputs,
     };
@@ -526,7 +438,6 @@ pub fn build_complete_block(
 /// * `components` - Block template data from Bitcoin Core
 /// * `braidpool_commitment` - Pool-specific commitment data
 /// * `extranonce` - Mining work distribution identifier
-/// * `block_height` - Current blockchain tip height
 /// * `nonce` - Mining nonce value
 /// * `config` - Pool configuration settings
 ///
@@ -534,7 +445,6 @@ pub fn create_block_template(
     components: &BlockTemplateComponents,
     braidpool_commitment: &[u8],
     extranonce: &[u8],
-    block_height: u32,
     nonce: u32,
     config: &CoinbaseConfig,
 ) -> Result<FinalTemplate, CoinbaseError> {
@@ -543,7 +453,6 @@ pub fn create_block_template(
         components,
         braidpool_commitment,
         extranonce,
-        block_height,
         config,
     )?;
 
@@ -740,20 +649,11 @@ mod tests {
 }
 
 #[test]
-fn rejects_bad_witness_commitment() {
-    let mut bad = vec![0x6a, 0x24, 0x00, 0x00, 0x00, 0x00];
-    bad.extend(vec![0; 32]);
-    let res = create_segwit_commitment_output(&bad);
-    assert!(matches!(res, Err(CoinbaseError::InvalidCommitmentLength)));
-}
-
-#[test]
 fn coinbase_input_too_big_is_rejected() {
-    let block_height = 740_000;
     // Should fail because 33 > MAX_EXTRANONCE_LEN (32)
     let extranonce = vec![0u8; 33];
     let pool_id = "braidpool";
-    let res = build_coinbase_input(block_height, &extranonce, pool_id);
+    let res = build_coinbase_input(&[], &extranonce, pool_id, None, Sequence::MAX.0);
     assert!(matches!(res, Err(CoinbaseError::InvalidExtranonceLength)));
 }
 

@@ -30,34 +30,12 @@ export async function fetchBlockDetails(wss) {
       method: 'getblock',
       params: [blockHash, 2],
     });
-    const block = await rpcWithEnv({
-      method: 'getblock',
-      params: [blockHash, 2],
-    });
-    const coinbaseTx = block.tx[0]; // first transaction
+
+    const coinbaseTx = blockData.tx[0];
+
     const reward = coinbaseTx.vout.reduce((acc, vout) => acc + vout.value, 0);
+
     console.log(`Reward: ${reward} BTC`);
-
-    const transactions = blockData.tx.slice(1).map((tx, index) => ({
-      id: `${blockHash}_tx_${index}`,
-      hash: tx.txid,
-      timestamp: blockData.time * 1000,
-      count: index + 1,
-      blockId: latestHeight.toString(),
-      fee: typeof tx.fee === 'number' ? Math.abs(tx.fee) : 0,
-      size: tx.size || tx.vsize || (tx.weight ? Math.ceil(tx.weight / 4) : 225),
-      feeRate:
-        typeof tx.fee === 'number' && tx.fee !== 0
-          ? Math.round(
-              Math.abs(tx.fee * 1e8) /
-                (tx.vsize || tx.size || Math.ceil(tx.weight / 4) || 225)
-            )
-          : 0,
-      inputs: tx.vin.length,
-      outputs: tx.vout.length,
-    }));
-
-    // Log number of transactions in this block
     console.log(`Number of transactions in this block: ${blockData.tx.length}`);
 
     const blockInfo = {
@@ -83,24 +61,6 @@ export async function fetchBlockDetails(wss) {
       mempoolSize = -1;
     }
 
-    const validTransactions = transactions.filter((tx) => tx.fee > 0);
-    const totalFees = validTransactions.reduce((acc, tx) => acc + tx.fee, 0);
-
-    const avgFeeRate =
-      validTransactions.length > 0
-        ? Math.round(
-            validTransactions.reduce((acc, tx) => acc + tx.feeRate, 0) /
-              validTransactions.length
-          )
-        : 0;
-
-    const avgTxSize =
-      validTransactions.length > 0
-        ? Math.round(
-            validTransactions.reduce((acc, tx) => acc + tx.size, 0) /
-              validTransactions.length
-          )
-        : 0;
     const { difficulty, tx, previousblockhash, hash, time } = blockData;
     const blockPayload = {
       type: 'block_data',
@@ -113,7 +73,6 @@ export async function fetchBlockDetails(wss) {
         nonCoinbaseTxCount: tx.length - 1,
         reward,
         parent: previousblockhash,
-        transactions,
       },
     };
 
@@ -121,12 +80,9 @@ export async function fetchBlockDetails(wss) {
       type: 'transaction_stats',
       data: {
         mempoolSize,
-        avgFeeRate,
-        avgTxSize,
+        avgFeeRate: 0,
+        avgTxSize: 0,
         txRate: txRates.movingAverage,
-        totalFees,
-        blockTransactionCount: transactions.length,
-        blockTimeDiff: txRates.lastBlockTime,
         averagingWindow: blockHistory.length,
       },
     };
