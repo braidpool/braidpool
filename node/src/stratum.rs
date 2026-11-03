@@ -80,6 +80,10 @@ pub struct BlockTemplate {
     pub bits: bitcoin::CompactTarget,
     pub height: bitcoin::absolute::Height,
     pub default_witness_commitment: Option<Witness>,
+    /// Total transaction fees in this template, in satoshis, committed into
+    /// every bead mined on it as `CommittedMetadata::fee_total_sats`.
+    #[serde(default)]
+    pub fee_total_sats: u64,
 }
 impl Default for BlockTemplate {
     fn default() -> Self {
@@ -104,6 +108,7 @@ impl Default for BlockTemplate {
             bits: bitcoin::CompactTarget::from_consensus(0),
             height: bitcoin::absolute::Height::ZERO,
             default_witness_commitment: None,
+            fee_total_sats: 0,
         }
     }
 }
@@ -1052,6 +1057,7 @@ impl DownstreamClient {
                 submitted_job.job_sent_time,
                 worker_name,
                 extranonce_1_raw_value,
+                submitted_job.blocktemplate.fee_total_sats,
             )
             .await
         {
@@ -1332,6 +1338,7 @@ impl DownstreamClient {
                     payout_address: payout_address,
                     min_target,
                     weak_target,
+                    fee_total_sats: submitted_job.blocktemplate.fee_total_sats,
                 };
 
                 let broadcast_time = std::time::SystemTime::now()

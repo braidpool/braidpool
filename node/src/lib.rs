@@ -48,6 +48,7 @@ pub mod cli;
 pub mod committed_metadata;
 pub mod config;
 pub mod db;
+pub mod edca;
 pub mod error;
 pub mod ibd_manager;
 pub mod ipc;
@@ -226,6 +227,13 @@ pub async fn ipc_template_consumer(
                 transactions: template_transactions.clone(),
                 curtime: template_header.time,
                 bits: template_header.bits,
+                // Summed once per template, so every job and every bead mined
+                // on it commits the same fee total.
+                fee_total_sats: ipc_template
+                    .components
+                    .fees
+                    .iter()
+                    .fold(0u64, |total, fee| total.saturating_add(*fee)),
                 ..Default::default()
             };
 
@@ -238,6 +246,7 @@ pub async fn ipc_template_consumer(
             latest_template.transactions = template.transactions.clone();
             latest_template.coinbaseaux = template.coinbaseaux.clone();
             latest_template.coinbasevalue = template.coinbasevalue;
+            latest_template.fee_total_sats = template.fee_total_sats;
             latest_template.longpollid = template.longpollid.clone();
             latest_template.target = template.target.clone();
             latest_template.mintime = template.mintime;
@@ -322,6 +331,8 @@ impl SwarmHandler {
         downstream_payout_addr: &str,
         //TODO: Will be used as seperate entity after altering `uncommitted_metadata`
         extranonce_1_raw_value: u64,
+        // Total fees of the template this block was mined on, committed for EDCA scoring.
+        fee_total_sats: u64,
     ) -> Result<(), StratumErrors> {
         let candidate_block_header = candidate_block.header;
         let candidate_block_transactions = candidate_block.txdata;
@@ -375,6 +386,7 @@ impl SwarmHandler {
             min_target: min_target,
             weak_target: weak_target,
             miner_ip: downstream_client_ip.to_string(),
+            fee_total_sats,
         };
         //TODO:This will be either be generated via the `Pubkey` from config parameter from `~/.braidpool`
         let hex = "3046022100839c1fbc5304de944f697c9f4b1d01d1faeba32d751c0f7acb21ac8a0f436a72022100e89bd46bb3a5a62adc679f659b7ce876d83ee297c7a5587b2011c4fcc72eab45";

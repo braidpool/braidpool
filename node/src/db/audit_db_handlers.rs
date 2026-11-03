@@ -13,9 +13,10 @@ INSERT INTO AuditBead (
     composite_hash, block_hash,
     version, prev_block_hash, merkle_root, timestamp, bits, nonce,
     payout_address, start_timestamp, comm_pub_key, min_target, weak_target, miner_ip,
+    fee_total_sats,
     extranonce1, extranonce2, broadcast_timestamp, signature,
     created_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ";
 
 pub struct AuditDBHandler {
@@ -62,6 +63,12 @@ impl AuditDBHandler {
 
         let extranonce1 = format!("{:016x}", bead.uncommitted_metadata.extra_nonce_1);
         let extranonce2 = format!("{:016x}", bead.uncommitted_metadata.extra_nonce_2);
+        let fee_total_sats =
+            i64::try_from(bead.committed_metadata.fee_total_sats).map_err(|_| {
+                DBErrors::TupleNotInserted {
+                    error: "fee_total_sats does not fit an SQLite INTEGER".to_string(),
+                }
+            })?;
         let result = sqlx::query(INSERT_BEAD_QUERY)
             .bind(composite_hash.as_byte_array().as_slice())
             .bind(block_hash.as_byte_array().as_slice())
@@ -77,6 +84,7 @@ impl AuditDBHandler {
             .bind(bead.committed_metadata.min_target.to_consensus() as i64)
             .bind(bead.committed_metadata.weak_target.to_consensus() as i64)
             .bind(miner_ip)
+            .bind(fee_total_sats)
             .bind(extranonce1)
             .bind(extranonce2)
             .bind(
@@ -197,6 +205,12 @@ impl AuditDBHandler {
         let weak_target =
             bitcoin::CompactTarget::from_consensus(row.get::<i64, _>("weak_target") as u32);
         let miner_ip = row.get::<String, _>("miner_ip");
+        let fee_total_sats = u64::try_from(row.get::<i64, _>("fee_total_sats")).map_err(|_| {
+            DBErrors::TupleAttributeParsingError {
+                error: "Negative fee_total_sats".to_string(),
+                attribute: "fee_total_sats".to_string(),
+            }
+        })?;
 
         // Uncommitted metadata
         let extranonce1 =
@@ -278,6 +292,7 @@ impl AuditDBHandler {
                 min_target,
                 weak_target,
                 miner_ip,
+                fee_total_sats,
             },
             uncommitted_metadata: crate::uncommitted_metadata::UnCommittedMetadata {
                 extra_nonce_1: extranonce1,

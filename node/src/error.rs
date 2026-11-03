@@ -581,3 +581,354 @@ impl fmt::Display for UnsupportedNetworkError {
     }
 }
 impl std::error::Error for UnsupportedNetworkError {}
+
+/// Errors raised by the EDCA payout algorithm.
+///
+/// Every variant is a consensus-parameter or arithmetic fault rather than an
+/// I/O failure: [`crate::payout`] is a pure function of its parameters and the
+/// DAG, so these are the only ways it can fail.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EdcaError {
+    /// The retention parameter `r = numerator / denominator` was not strictly
+    /// between (0,1] .
+    InvalidRetention { numerator: u64, denominator: u64 },
+    /// The configured Bitcoin network difficulty `D_network` was zero.
+    ZeroNetworkDifficulty,
+    /// A fixed-point intermediate could not be represented.
+    ArithmeticOverflow { operation: &'static str },
+    /// The fee amplifier `A_i = B_base + F_i` exceeded the maximum Bitcoin
+    /// amount, so the bead's committed template cannot be valid.
+    FeeOverflow {
+        /// The fee total, in satoshis, that could not be amplified.
+        fees: u64,
+    },
+    /// The active UHPO state carries no weight .
+    EmptyPool,
+    /// A miner's payout address has no output script on the pool's network.
+    UnresolvedPayoutAddress {
+        /// The payout address that could not be resolved.
+        payout_address: String,
+    },
+    /// Every nominal output fell below the network dust limit, leaving no
+    /// qualifying miner to redistribute the aggregated dust to.
+    NoQualifyingMiners {
+        /// The dust limit in satoshis that no output reached.
+        dust_limit: u64,
+        /// The block reward in satoshis that was being settled.
+        total_reward: u64,
+    },
+    /// A Q64.64 fixed-point product or sum exceeded the range of a `u128`.
+    FixedPointOverflow,
+    /// A weight accumulation (`U_m`, `U_total` or an output sum) overflowed.
+    WeightOverflow,
+    /// The fee amplifier `A_i = B_base + F_i` overflowed `u64` satoshis.
+    AmplifierOverflow,
+    /// A value passed where a Q64.64 fraction in `[0, 1]` was required.
+    FractionOutOfRange {
+        /// The offending raw Q64.64 value.
+        raw: u128,
+    },
+    /// A bead committed a zero `weak_target`, which no hash can meet.
+    ZeroBeadTarget {
+        /// Index of the offending bead in `Braid::beads`.
+        bead_index: usize,
+    },
+    /// A target ratio could not be represented as a Q64.64 fraction in `[0, 1]`.
+    InvalidTargetRatio {
+        /// Index of the offending bead in `Braid::beads`.
+        bead_index: usize,
+    },
+    /// A cohort referenced a bead index that is absent from `Braid::beads`.
+    BeadIndexOutOfRange {
+        /// The unresolvable bead index.
+        index: usize,
+    },
+    /// Settlement was attempted with no settleable weight, so
+    /// `P_m = U_m / U_total` would divide by zero.
+    EmptyState,
+    /// A payout roster did not sum to the amount it was settled against, which
+    /// would produce an invalid coinbase.
+    RosterSumMismatch {
+        /// Sum of the roster's outputs, in satoshis.
+        roster_total: u64,
+        /// The amount the roster was required to sum to, in satoshis.
+        expected_total: u64,
+    },
+}
+
+impl fmt::Display for EdcaError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            EdcaError::InvalidRetention {
+                numerator,
+                denominator,
+            } => write!(
+                f,
+                "Invalid EDCA retention parameter {}/{}, expected 0 < r < 1",
+                numerator, denominator
+            ),
+            EdcaError::ZeroNetworkDifficulty => {
+                write!(f, "EDCA network difficulty must be non-zero")
+            }
+            EdcaError::ArithmeticOverflow { operation } => {
+                write!(f, "EDCA fixed-point overflow while computing {}", operation)
+            }
+            EdcaError::FeeOverflow { fees } => write!(
+                f,
+                "EDCA fee amplifier overflowed for a template carrying {} satoshis in fees",
+                fees
+            ),
+            EdcaError::EmptyPool => {
+                write!(f, "EDCA active pool weight is zero, no payout is defined")
+            }
+            EdcaError::UnresolvedPayoutAddress { payout_address } => write!(
+                f,
+                "Payout address {:?} has no output script on this network",
+                payout_address
+            ),
+            EdcaError::NoQualifyingMiners {
+                dust_limit,
+                total_reward,
+            } => write!(
+                f,
+                "No EDCA payout reaches the {} satoshi dust limit when settling {} satoshis",
+                dust_limit, total_reward
+            ),
+            EdcaError::FixedPointOverflow => {
+                write!(f, "EDCA fixed-point arithmetic overflowed a u128")
+            }
+            EdcaError::WeightOverflow => {
+                write!(f, "EDCA weight accumulation overflowed")
+            }
+            EdcaError::AmplifierOverflow => {
+                write!(f, "EDCA fee amplifier B_base + F_i overflowed u64 satoshis")
+            }
+            EdcaError::FractionOutOfRange { raw } => {
+                write!(f, "EDCA Q64.64 fraction {} is outside [0, 1]", raw)
+            }
+            EdcaError::ZeroBeadTarget { bead_index } => {
+                write!(f, "Bead {} committed a zero weak_target", bead_index)
+            }
+            EdcaError::InvalidTargetRatio { bead_index } => write!(
+                f,
+                "Bead {} has a target ratio that is not representable in [0, 1]",
+                bead_index
+            ),
+            EdcaError::BeadIndexOutOfRange { index } => {
+                write!(f, "Cohort references unknown bead index {}", index)
+            }
+            EdcaError::EmptyState => {
+                write!(f, "EDCA settlement attempted with zero total weight")
+            }
+            EdcaError::RosterSumMismatch {
+                roster_total,
+                expected_total,
+            } => write!(
+                f,
+                "EDCA payout roster sums to {} satoshis, expected {}",
+                roster_total, expected_total
+            ),
+        }
+    }
+}
+impl std::error::Error for EdcaError {}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FeeProofError {
+    /// The transaction supplied as the coinbase is not a coinbase transaction.
+    NotCoinbase,
+    /// The bead commits to no transactions, so it has no coinbase txid.
+    NoTransactions,
+    /// A template's transaction fees sum past `MAX_MONEY`.
+    FeeTotalOverflow,
+    /// A merkle branch sibling was not 32 bytes.
+    InvalidMerkleBranch {
+        /// Length of the offending sibling, in bytes.
+        length: usize,
+    },
+    /// The coinbase does not hash to the first committed txid.
+    CoinbaseTxidMismatch {
+        /// The first txid in the bead's `transaction_ids`.
+        committed: bitcoin::Txid,
+        /// The txid of the supplied coinbase.
+        computed: bitcoin::Txid,
+    },
+    /// A txid appears more than once in the bead's `transaction_ids`.
+    DuplicateTxid {
+        /// The repeated txid.
+        txid: bitcoin::Txid,
+    },
+    /// The bead builds on a different block than the state it was checked
+    /// against.
+    AnchorMismatch {
+        /// The block the state builds on.
+        expected: bitcoin::BlockHash,
+        /// The block the bead's header commits to.
+        found: bitcoin::BlockHash,
+    },
+    /// The committed txids do not produce the merkle root in the bead's header.
+    MerkleRootMismatch {
+        /// The merkle root in the bead's header.
+        header: bitcoin::TxMerkleNode,
+        /// The merkle root computed from `transaction_ids`.
+        computed: bitcoin::TxMerkleNode,
+    },
+    /// The coinbase does not carry a valid BIP34 block height.
+    InvalidBip34Height {
+        /// Why the height could not be read.
+        error: String,
+    },
+    /// The coinbase outputs sum past `MAX_MONEY`.
+    CoinbaseValueOverflow,
+    /// The coinbase pays out less than the block subsidy, so it implies a
+    /// negative fee total.
+    CoinbaseBelowSubsidy {
+        /// Sum of the coinbase outputs, in satoshis.
+        coinbase_value_sats: u64,
+        /// The subsidy at the committed height, in satoshis.
+        subsidy_sats: u64,
+    },
+    /// The claimed fee total differs from `coinbase value - subsidy`.
+    FeeCommitmentMismatch {
+        /// `fee_total_sats` from the bead's committed metadata.
+        claimed_fee_sats: u64,
+        /// The fee total implied by the coinbase.
+        derived_fee_sats: u64,
+    },
+    /// Every committed transaction's fee is known, and together they pay less
+    /// than the bead claims.
+    FeeExceedsTransactions {
+        /// The fee total the bead claims, in satoshis.
+        claimed_fee_sats: u64,
+        /// The fees its transactions actually pay, in satoshis.
+        actual_fee_sats: u64,
+    },
+    /// A coinbase transaction was passed where a fee-paying transaction was
+    /// required.
+    CoinbaseHasNoFee,
+    /// An input's spent output is unknown to this node, so the transaction's
+    /// fee cannot be computed.
+    MissingPrevout {
+        /// The transaction being priced.
+        txid: bitcoin::Txid,
+        /// The outpoint whose output is unknown.
+        outpoint: bitcoin::OutPoint,
+    },
+    /// A transaction's outputs exceed its inputs, so it could never be valid.
+    NegativeFee {
+        /// The offending transaction.
+        txid: bitcoin::Txid,
+        /// Sum of the resolved input values, in satoshis.
+        input_sats: u64,
+        /// Sum of the output values, in satoshis.
+        output_sats: u64,
+    },
+    /// A transaction's values or fee left the valid money range.
+    FeeOutOfRange {
+        /// The offending transaction.
+        txid: bitcoin::Txid,
+    },
+    /// Two transactions in one block spend the same output.
+    DuplicateSpend {
+        /// The second transaction to spend it.
+        txid: bitcoin::Txid,
+        /// The outpoint spent twice.
+        outpoint: bitcoin::OutPoint,
+    },
+}
+
+impl fmt::Display for FeeProofError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FeeProofError::NotCoinbase => {
+                write!(f, "Supplied transaction is not a coinbase transaction")
+            }
+            FeeProofError::NoTransactions => {
+                write!(f, "Bead commits to no transactions")
+            }
+            FeeProofError::FeeTotalOverflow => {
+                write!(f, "Template transaction fees sum past MAX_MONEY")
+            }
+            FeeProofError::InvalidMerkleBranch { length } => {
+                write!(f, "Merkle branch sibling is {} bytes, expected 32", length)
+            }
+            FeeProofError::AnchorMismatch { expected, found } => write!(
+                f,
+                "Bead builds on block {} but was checked against state on {}",
+                found, expected
+            ),
+            FeeProofError::CoinbaseTxidMismatch {
+                committed,
+                computed,
+            } => write!(
+                f,
+                "Coinbase txid {} does not match committed txid {}",
+                computed, committed
+            ),
+            FeeProofError::DuplicateTxid { txid } => {
+                write!(f, "Bead commits to txid {} more than once", txid)
+            }
+            FeeProofError::MerkleRootMismatch { header, computed } => write!(
+                f,
+                "Committed txids produce merkle root {}, header has {}",
+                computed, header
+            ),
+            FeeProofError::InvalidBip34Height { error } => {
+                write!(f, "Coinbase has no valid BIP34 height: {}", error)
+            }
+            FeeProofError::CoinbaseValueOverflow => {
+                write!(f, "Coinbase outputs sum past MAX_MONEY")
+            }
+            FeeProofError::CoinbaseBelowSubsidy {
+                coinbase_value_sats,
+                subsidy_sats,
+            } => write!(
+                f,
+                "Coinbase pays {} satoshis, below the {} satoshi subsidy",
+                coinbase_value_sats, subsidy_sats
+            ),
+            FeeProofError::FeeCommitmentMismatch {
+                claimed_fee_sats,
+                derived_fee_sats,
+            } => write!(
+                f,
+                "Bead claims {} satoshis in fees, its coinbase implies {}",
+                claimed_fee_sats, derived_fee_sats
+            ),
+            FeeProofError::FeeExceedsTransactions {
+                claimed_fee_sats,
+                actual_fee_sats,
+            } => write!(
+                f,
+                "Bead claims {} satoshis in fees, its transactions pay {}",
+                claimed_fee_sats, actual_fee_sats
+            ),
+            FeeProofError::CoinbaseHasNoFee => {
+                write!(f, "A coinbase transaction pays no fee")
+            }
+            FeeProofError::MissingPrevout { txid, outpoint } => write!(
+                f,
+                "Transaction {} spends unknown output {}, cannot compute its fee",
+                txid, outpoint
+            ),
+            FeeProofError::NegativeFee {
+                txid,
+                input_sats,
+                output_sats,
+            } => write!(
+                f,
+                "Transaction {} spends {} satoshis and pays out {}",
+                txid, input_sats, output_sats
+            ),
+            FeeProofError::FeeOutOfRange { txid } => {
+                write!(f, "Transaction {} has values outside the money range", txid)
+            }
+            FeeProofError::DuplicateSpend { txid, outpoint } => write!(
+                f,
+                "Transaction {} spends output {}, already spent in the same block",
+                txid, outpoint
+            ),
+        }
+    }
+}
+impl std::error::Error for FeeProofError {}

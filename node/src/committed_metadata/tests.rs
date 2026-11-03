@@ -332,6 +332,7 @@ fn test_committed_metadata_consensus_field_order_decode() {
         .min_target(parse_target(data.targets.default_bits))
         .weak_target(parse_target(data.targets.default_bits))
         .miner_ip(data.miner_ips.lan.clone())
+        .fee_total_sats(12_345_678)
         .build();
 
     let bytes = serialize(&metadata);
@@ -348,6 +349,7 @@ fn test_committed_metadata_consensus_field_order_decode() {
     let decoded_min_target = CompactTarget::consensus_decode(&mut reader).unwrap();
     let decoded_weak_target = CompactTarget::consensus_decode(&mut reader).unwrap();
     let decoded_miner_ip = String::consensus_decode(&mut reader).unwrap();
+    let decoded_fee_total_sats = u64::consensus_decode(&mut reader).unwrap();
 
     assert_eq!(decoded_txids, TxIdVec(txids));
     assert_eq!(decoded_parents, parents);
@@ -368,6 +370,7 @@ fn test_committed_metadata_consensus_field_order_decode() {
     assert_eq!(decoded_min_target, parse_target(data.targets.default_bits));
     assert_eq!(decoded_weak_target, parse_target(data.targets.default_bits));
     assert_eq!(decoded_miner_ip, data.miner_ips.lan);
+    assert_eq!(decoded_fee_total_sats, 12_345_678);
     assert!(reader.is_empty(), "consensus decode left trailing bytes");
 }
 

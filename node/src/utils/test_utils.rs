@@ -187,6 +187,7 @@ pub mod test_utility_functions {
         min_target: Option<CompactTarget>,
         weak_target: Option<CompactTarget>,
         miner_ip: Option<String>,
+        fee_total_sats: u64,
     }
 
     #[cfg(test)]
@@ -202,6 +203,7 @@ pub mod test_utility_functions {
                 min_target: None,
                 weak_target: None,
                 miner_ip: None,
+                fee_total_sats: 0,
             }
         }
 
@@ -247,6 +249,10 @@ pub mod test_utility_functions {
             self.weak_target = Some(weak_target);
             self
         }
+        pub fn fee_total_sats(mut self, fee_total_sats: u64) -> Self {
+            self.fee_total_sats = fee_total_sats;
+            self
+        }
         pub fn build(self) -> CommittedMetadata {
             use crate::committed_metadata::TxIdVec;
 
@@ -264,6 +270,7 @@ pub mod test_utility_functions {
                 min_target: self.min_target.expect("min_target is required"),
                 weak_target: self.weak_target.expect("weak_target is required"),
                 miner_ip: self.miner_ip.expect("miner_ip is required"),
+                fee_total_sats: self.fee_total_sats,
             }
         }
     }

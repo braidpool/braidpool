@@ -63,6 +63,7 @@ fn create_genesis_bead_for_audit() -> Result<Bead, String> {
         min_target: CompactTarget::from_consensus(0x1d00ffff),
         weak_target: CompactTarget::from_consensus(0x1d00ffff),
         miner_ip: "system".to_string(),
+        fee_total_sats: 0,
     };
 
     let default_sig_hex = "3046022100839c1fbc5304de944f697c9f4b1d01d1faeba32d751c0f7acb21ac8a0f436a72022100e89bd46bb3a5a62adc679f659b7ce876d83ee297c7a5587b2011c4fcc72eab45";
@@ -887,6 +888,7 @@ mod tests {
                 min_target: bitcoin::CompactTarget::from_consensus(486604799),
                 weak_target: bitcoin::CompactTarget::from_consensus(486604799),
                 miner_ip: "127.0.0.1".to_string(),
+                fee_total_sats: 0,
             },
             uncommitted_metadata: UnCommittedMetadata {
                 extra_nonce_1: 42,
