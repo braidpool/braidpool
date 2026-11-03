@@ -167,7 +167,14 @@ impl DBHandler {
         }
         let mut txs_values =
             Vec::with_capacity(data.bead.committed_metadata.transaction_ids.0.len());
-        for (idx, tx) in data.bead.committed_metadata.transaction_ids.0.iter().enumerate() {
+        for (idx, tx) in data
+            .bead
+            .committed_metadata
+            .transaction_ids
+            .0
+            .iter()
+            .enumerate()
+        {
             txs_values.push(json!({
                 "txid": hex::encode(tx.to_byte_array()),
                 "bead_id": bead_id,
@@ -801,14 +808,14 @@ pub async fn fetch_bead_by_bead_hash(
     .bind(bead_id)
     .fetch_all(&*db_connection_arc)
     .await
-        {
-            Ok(rows) => rows,
-            Err(error) => {
-                return Err(DBErrors::TupleNotFetched {
-                    error: error.to_string(),
-                });
-            }
-        };
+    {
+        Ok(rows) => rows,
+        Err(error) => {
+            return Err(DBErrors::TupleNotFetched {
+                error: error.to_string(),
+            });
+        }
+    };
 
     let mut parent_pairs_single: Vec<(BlockHash, Time)> = Vec::new();
     for parent_beads in parent_timestamp_rows {
@@ -992,14 +999,12 @@ pub mod test {
                 bead_hash
             );
             assert_eq!(
-                fetched.committed_metadata.parents,
-                bead.committed_metadata.parents,
+                fetched.committed_metadata.parents, bead.committed_metadata.parents,
                 "Parent ordering mismatch for bead {}",
                 bead_hash
             );
             assert_eq!(
-                fetched.committed_metadata.transaction_ids,
-                bead.committed_metadata.transaction_ids,
+                fetched.committed_metadata.transaction_ids, bead.committed_metadata.transaction_ids,
                 "Transaction IDs ordering mismatch for bead {}",
                 bead_hash
             );
@@ -1013,13 +1018,11 @@ pub mod test {
         assert_eq!(batch_fetched.len(), expected_beads);
         for (fetched, bead) in batch_fetched.iter().zip(current_file_braid.beads.iter()) {
             assert_eq!(
-                fetched.committed_metadata.parents,
-                bead.committed_metadata.parents,
+                fetched.committed_metadata.parents, bead.committed_metadata.parents,
                 "Batch fetch parent ordering mismatch"
             );
             assert_eq!(
-                fetched.committed_metadata.transaction_ids,
-                bead.committed_metadata.transaction_ids,
+                fetched.committed_metadata.transaction_ids, bead.committed_metadata.transaction_ids,
                 "Batch fetch transaction IDs ordering mismatch"
             );
         }
