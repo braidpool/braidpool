@@ -438,3 +438,43 @@ fn test_committed_metadata_consensus_txid_order_is_significant() {
 
     assert_ne!(serialize(&metadata_ab), serialize(&metadata_ba));
 }
+
+#[test]
+fn test_compute_commitment_hash_deterministic() {
+    let metadata = CommittedMetadata::default();
+    let hash1 = metadata.compute_commitment_hash();
+    let hash2 = metadata.compute_commitment_hash();
+    assert_eq!(hash1, hash2);
+    assert_ne!(hash1, [0u8; 32]);
+}
+
+#[test]
+fn test_compute_commitment_hash_changes_with_comm_pub_key() {
+    let metadata_default = CommittedMetadata::default();
+    let mut metadata_modified = metadata_default.clone();
+    metadata_modified.comm_pub_key = PublicKey::from_str(
+        "020101010101010101010101010101010101010101010101010101010101010101",
+    )
+    .unwrap();
+
+    let hash_default = metadata_default.compute_commitment_hash();
+    let hash_modified = metadata_modified.compute_commitment_hash();
+    assert_ne!(
+        hash_default, hash_modified,
+        "Commitment hash must change when comm_pub_key changes"
+    );
+}
+
+#[test]
+fn test_compute_commitment_hash_changes_with_payout_address() {
+    let metadata_default = CommittedMetadata::default();
+    let mut metadata_modified = metadata_default.clone();
+    metadata_modified.payout_address = "bc1qattackeraddress".to_string();
+
+    let hash_default = metadata_default.compute_commitment_hash();
+    let hash_modified = metadata_modified.compute_commitment_hash();
+    assert_ne!(
+        hash_default, hash_modified,
+        "Commitment hash must change when payout_address changes"
+    );
+}

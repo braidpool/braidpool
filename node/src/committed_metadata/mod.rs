@@ -3,6 +3,7 @@ use bitcoin::absolute::Time;
 use bitcoin::consensus::encode::Decodable;
 use bitcoin::consensus::encode::Encodable;
 use bitcoin::consensus::encode::Error;
+use bitcoin::hashes::{sha256d, Hash};
 use bitcoin::io::{self, Read, Write};
 use bitcoin::CompactTarget;
 use bitcoin::PublicKey;
@@ -77,6 +78,24 @@ pub struct CommittedMetadata {
     pub weak_target: CompactTarget,
     pub miner_ip: String,
 }
+
+impl CommittedMetadata {
+    /// Computes the 32-byte Braidpool commitment hash for this committed metadata.
+    ///
+    /// The commitment hash is calculated by serializing the metadata using Bitcoin consensus
+    /// encoding and hashing the resulting bytes with double-SHA256 (`sha256d`).
+    ///
+    /// This commitment hash is placed in the coinbase transaction's `OP_RETURN` output,
+    /// cryptographically binding the miner's public key (`comm_pub_key`) and payout
+    /// address (`payout_address`) to the block header's Merkle root and proof of work.
+    pub fn compute_commitment_hash(&self) -> [u8; 32] {
+        let mut bytes = Vec::new();
+        self.consensus_encode(&mut bytes)
+            .expect("in-memory vector serialization should never fail");
+        sha256d::Hash::hash(&bytes).to_byte_array()
+    }
+}
+
 impl Default for CommittedMetadata {
     fn default() -> Self {
         Self {
