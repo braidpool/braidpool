@@ -181,9 +181,6 @@ the peer's beads.
 libp2p accepts an ed25519 peer on a secp256k1 node, so the restriction to secp256k1
 identities is enforced by Braidpool.
 
-- **Key policy** (`--require-secp256k1-peers`, **on by default**; `=false` turns it
-off). A peer whose `PeerId` does not carry a miner key is ignored (see quarantine
-below) from the moment the connection is established (`peer_meets_key_policy`).
 - The `PeerId` is enough. The transport handshake proves the remote controls the key
 behind its `PeerId`, and a secp256k1 `PeerId` contains that key, so no identify
 payload is trusted and there is nothing for a peer to forge.
@@ -192,13 +189,6 @@ without a miner key.
 - Beads are **not** rejected based on the peer that delivered them: floodsub relays
 beads, so the sender is often not the author. A bead is valid or not by its own
 signature.
-
-**Quarantine, not disconnect.** An ignored peer is left connected but unused: it is not  
-added to the peer manager, to floodsub's partial view or to the DHT, and it is logged  
-once. Disconnecting is worse. A disconnected floodsub peer redials immediately, and in a  
-test with a rejected peer that was **2,252 reconnects in 6 seconds and about 220% CPU on**  
-**the rejecting node** (debug build, same machine); quarantining the same peer used about  
-**0.1% CPU**.
 
 ## ECIES between mining nodes
 
