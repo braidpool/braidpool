@@ -43,9 +43,10 @@ const BULK_INSERT_BEADS: &str =
         json_extract(value, '$.broadcast_timestamp'), 
         unhex(json_extract(value, '$.signature')) 
     FROM json_each(?);";
-//Separating into sub-queries
 const BULK_INSERT_TRANSACTIONS: &str = "INSERT INTO Transactions (bead_id, idx, txid) 
-    SELECT json_extract(value, '$.bead_id'), json_extract(value, '$.idx'), unhex(json_extract(value, '$.txid')) 
+    SELECT json_extract(value, '$.bead_id'), 
+        json_extract(value, '$.idx'), 
+        unhex(json_extract(value, '$.txid')) 
     FROM json_each(?);";
 
 const BULK_INSERT_RELATIVES: &str = "INSERT INTO Relatives (child, parent) 
@@ -480,7 +481,8 @@ pub async fn fetch_beads_in_batch(
 
         // Transactions for every bead in the batch.
         let tx_sql = format!(
-            "SELECT bead_id, txid FROM Transactions WHERE bead_id IN ({placeholders}) ORDER BY bead_id, idx"
+            "SELECT bead_id, txid FROM Transactions \
+             WHERE bead_id IN ({placeholders}) ORDER BY bead_id, idx"
         );
         let mut tx_query = sqlx::query(&tx_sql);
         for id in &ids {
@@ -778,25 +780,27 @@ pub async fn fetch_bead_by_bead_hash(
             });
         }
     };
-    let rows =
-        match sqlx::query("SELECT  txid as txid, bead_id FROM Transactions WHERE bead_id = ? ORDER BY idx")
-            .bind(bead_id)
-            .fetch_all(&*db_connection_arc)
-            .await
-        {
-            Ok(rows) => rows,
-            Err(error) => {
-                return Err(DBErrors::TupleNotFetched {
-                    error: error.to_string(),
-                });
-            }
-        };
+    let rows = match sqlx::query(
+        "SELECT txid as txid, bead_id FROM Transactions WHERE bead_id = ? ORDER BY idx",
+    )
+    .bind(bead_id)
+    .fetch_all(&*db_connection_arc)
+    .await
+    {
+        Ok(rows) => rows,
+        Err(error) => {
+            return Err(DBErrors::TupleNotFetched {
+                error: error.to_string(),
+            });
+        }
+    };
     //Fetching parent timestamps from DB
-    let parent_timestamp_rows =
-        match sqlx::query("SELECT  parent,child,timestamp FROM ParentTimestamps WHERE child = ? ORDER BY idx")
-            .bind(bead_id)
-            .fetch_all(&*db_connection_arc)
-            .await
+    let parent_timestamp_rows = match sqlx::query(
+        "SELECT parent, child, timestamp FROM ParentTimestamps WHERE child = ? ORDER BY idx",
+    )
+    .bind(bead_id)
+    .fetch_all(&*db_connection_arc)
+    .await
         {
             Ok(rows) => rows,
             Err(error) => {
@@ -1000,5 +1004,147 @@ pub mod test {
                 bead_hash
             );
         }
+
+        // Batch retrieval check: Ensure batch queries also preserve the exact
+        // deterministic ordering for all beads.
+        let batch_fetched = fetch_beads_in_batch(&test_pool, 10)
+            .await
+            .expect("fetch_beads_in_batch failed");
+        assert_eq!(batch_fetched.len(), expected_beads);
+        for (fetched, bead) in batch_fetched.iter().zip(current_file_braid.beads.iter()) {
+            assert_eq!(
+                fetched.committed_metadata.parents,
+                bead.committed_metadata.parents,
+                "Batch fetch parent ordering mismatch"
+            );
+            assert_eq!(
+                fetched.committed_metadata.transaction_ids,
+                bead.committed_metadata.transaction_ids,
+                "Batch fetch transaction IDs ordering mismatch"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_deterministic_ordering_lifecycle() {
+        let (handler, _db_tx) = DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
+        let test_pool = handler.db_connection_pool.clone();
+        let network = PoolNetwork::Cpunet;
+
+        // 1. Insert parent dummy beads first so they exist in Bead table.
+        let parent1 = crate::utils::create_test_bead(101, None);
+        let parent2 = crate::utils::create_test_bead(102, None);
+        let parent3 = crate::utils::create_test_bead(103, None);
+        let h1 = compute_block_hash(&parent1.block_header, network);
+        let h2 = compute_block_hash(&parent2.block_header, network);
+        let h3 = compute_block_hash(&parent3.block_header, network);
+
+        let parent_beads = [parent1, parent2, parent3];
+        let parent_insert_data = parent_beads
+            .iter()
+            .enumerate()
+            .map(|(id, bead)| BeadInsertData {
+                bead: bead.clone(),
+                bead_id: id,
+                parent_refs: Vec::new(),
+            })
+            .collect();
+        handler
+            .insert_beads_batch(parent_insert_data, Vec::new())
+            .await
+            .expect("Failed to insert parent dummy beads");
+
+        // 2. Producer side: Simulate creating multiple parents in arbitrary order,
+        // then canonically sorting by hash before constructing the bead (as in node/src/lib.rs
+        // and node/src/stratum.rs).
+        let t1 = Time::from_consensus(1653195601).unwrap();
+        let t2 = Time::from_consensus(1653195602).unwrap();
+        let t3 = Time::from_consensus(1653195603).unwrap();
+
+        // Intentionally create unsorted parent pairs:
+        let mut pairs = vec![(h3, t3, 2u64), (h1, t1, 0u64), (h2, t2, 1u64)];
+        pairs.sort_by_key(|(hash, _, _)| *hash);
+
+        let mut canonical_parents = Vec::new();
+        let mut canonical_timestamps = Vec::new();
+        let mut parent_refs = Vec::new();
+        for (h, t, parent_id) in pairs {
+            canonical_parents.push(h);
+            canonical_timestamps.push(t);
+            parent_refs.push((parent_id, t.to_consensus_u32()));
+        }
+
+        let tx1 = Txid::from_byte_array([0xaa; 32]);
+        let tx2 = Txid::from_byte_array([0x55; 32]);
+        let tx3 = Txid::from_byte_array([0x88; 32]);
+        let expected_txs = vec![tx1, tx2, tx3];
+
+        let mut child_bead = crate::utils::create_test_bead(104, None);
+        child_bead.committed_metadata.parents = canonical_parents.clone();
+        child_bead.committed_metadata.parent_bead_timestamps =
+            crate::TimeVec(canonical_timestamps.clone());
+        child_bead.committed_metadata.transaction_ids = crate::TxIdVec(expected_txs.clone());
+
+        // 3. Receiver pre-acceptance validation (as in PR #579):
+        // Assert that the bead's parents are canonically sorted by hash.
+        let is_canonical = child_bead
+            .committed_metadata
+            .parents
+            .windows(2)
+            .all(|w| w[0] <= w[1]);
+        assert!(
+            is_canonical,
+            "Received bead parents must be canonically sorted by hash"
+        );
+        assert_eq!(
+            child_bead.committed_metadata.parents.len(),
+            child_bead.committed_metadata.parent_bead_timestamps.0.len(),
+            "Parent hashes count must equal timestamps count"
+        );
+
+        // 4. Receiver persistence: Save the exact received order into the database.
+        let child_bead_data = BeadInsertData {
+            bead: child_bead.clone(),
+            bead_id: 3,
+            parent_refs,
+        };
+        handler
+            .insert_beads_batch(vec![child_bead_data], Vec::new())
+            .await
+            .expect("Failed to insert child bead");
+
+        // 5. Verification: Single bead retrieval preserves exact canonical ordering.
+        let child_hash = compute_block_hash(&child_bead.block_header, network);
+        let fetched_single = fetch_bead_by_bead_hash(&test_pool, child_hash)
+            .await
+            .unwrap()
+            .expect("Child bead not found via single fetch");
+
+        assert_eq!(
+            fetched_single.committed_metadata.parents, canonical_parents,
+            "Single fetch: parent ordering altered from original"
+        );
+        assert_eq!(
+            fetched_single.committed_metadata.transaction_ids.0, expected_txs,
+            "Single fetch: transaction_ids ordering altered from original"
+        );
+
+        // 6. Verification: Batch retrieval preserves exact canonical ordering.
+        let fetched_batch = fetch_beads_in_batch(&test_pool, 10)
+            .await
+            .expect("Batch fetch failed");
+        let fetched_child = fetched_batch
+            .iter()
+            .find(|b| compute_block_hash(&b.block_header, network) == child_hash)
+            .expect("Child bead not found in batch");
+
+        assert_eq!(
+            fetched_child.committed_metadata.parents, canonical_parents,
+            "Batch fetch: parent ordering altered from original"
+        );
+        assert_eq!(
+            fetched_child.committed_metadata.transaction_ids.0, expected_txs,
+            "Batch fetch: transaction_ids ordering altered from original"
+        );
     }
 }
