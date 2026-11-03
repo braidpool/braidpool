@@ -560,6 +560,23 @@ pub async fn fetch_beads_in_batch(
                 .push(parent_ts);
         }
 
+        // Rows arrive ordered by parent row id (insertion order). Restore the
+        // canonical layout producers emit: parents ascending by hash, each kept
+        // paired with its own timestamp.
+        for bead in &mut batch {
+            let metadata = &mut bead.committed_metadata;
+            let mut pairs: Vec<(BlockHash, Time)> = metadata
+                .parents
+                .drain(..)
+                .zip(metadata.parent_bead_timestamps.0.drain(..))
+                .collect();
+            pairs.sort_by_key(|(hash, _)| *hash);
+            for (hash, time) in pairs {
+                metadata.parents.push(hash);
+                metadata.parent_bead_timestamps.0.push(time);
+            }
+        }
+
         let batch_len = batch.len() as i64;
         all_beads.extend(batch);
 
@@ -884,6 +901,69 @@ pub mod test {
     use serde_json::json;
     use std::collections::{HashMap, HashSet};
     use std::path::Path;
+    /// Beads reloaded at startup must come back in the canonical layout producers
+    /// emit: parents ascending by hash, each paired with its own timestamp. Row ids
+    /// follow insertion order, so the parent with the higher hash is inserted first.
+    #[tokio::test]
+    async fn test_fetch_beads_in_batch_returns_canonical_parent_order() {
+        use crate::utils::create_test_bead;
+        use bitcoin::absolute::Time;
+
+        let network = PoolNetwork::Cpunet;
+        let genesis = create_test_bead(1, None);
+        let genesis_hash = compute_block_hash(&genesis.block_header, network);
+        let mut first = create_test_bead(2, Some(genesis_hash));
+        let mut second = create_test_bead(3, Some(genesis_hash));
+        first.committed_metadata.start_timestamp = Time::from_consensus(1_700_000_100).unwrap();
+        second.committed_metadata.start_timestamp = Time::from_consensus(1_700_000_200).unwrap();
+        let (low, high) = if compute_block_hash(&first.block_header, network)
+            < compute_block_hash(&second.block_header, network)
+        {
+            (first, second)
+        } else {
+            (second, first)
+        };
+        let low_hash = compute_block_hash(&low.block_header, network);
+        let high_hash = compute_block_hash(&high.block_header, network);
+
+        let mut child = create_test_bead(4, Some(low_hash));
+        child.committed_metadata.parents = vec![low_hash, high_hash];
+        child.committed_metadata.parent_bead_timestamps.0 = vec![
+            low.committed_metadata.start_timestamp,
+            high.committed_metadata.start_timestamp,
+        ];
+        let child_hash = compute_block_hash(&child.block_header, network);
+
+        let mut braid = braid::Braid::new(vec![genesis], network);
+        for bead in [&high, &low, &child] {
+            assert!(matches!(
+                braid.extend(bead),
+                braid::AddBeadStatus::BeadAdded { .. }
+            ));
+        }
+
+        let (handler, _db_tx) = DBHandler::new_in_memory(network).await.unwrap();
+        let rows = BeadInsertData::resolve_many(&braid, braid.beads.iter()).unwrap();
+        handler.insert_beads_batch(rows, Vec::new()).await.unwrap();
+
+        let reloaded = fetch_beads_in_batch(&handler.db_connection_pool, 100)
+            .await
+            .unwrap();
+        let reloaded_child = reloaded
+            .iter()
+            .find(|bead| compute_block_hash(&bead.block_header, network) == child_hash)
+            .expect("child bead reloaded");
+        assert_eq!(
+            reloaded_child.committed_metadata.parents, child.committed_metadata.parents,
+            "parents must be ascending by hash after reload"
+        );
+        assert_eq!(
+            reloaded_child.committed_metadata.parent_bead_timestamps,
+            child.committed_metadata.parent_bead_timestamps,
+            "each timestamp must stay paired with its parent after reload"
+        );
+    }
+
     #[tokio::test]
     async fn test_batch_insertion_beads() {
         let (handler, _db_tx) = DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
