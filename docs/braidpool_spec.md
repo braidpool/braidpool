@@ -128,11 +128,14 @@ encoding and no sighash-type byte. It signs the BIP340 tagged hash with tag
 3. the consensus encoding of the committed metadata, including `comm_pubkey`.
 
 Only the signature itself is left out, so a valid signature cannot be moved onto
-another bead or checked against another key. A bead whose signature does not verify
+another bead, and changing any signed field, `comm_pubkey` included, invalidates it.
+A bead whose signature does not verify
 under its own `comm_pubkey` is invalid. Each node keeps its miner secret in
 `datadir/miner_secp256k1` (32 bytes, mode `0o400`) and signs every bead it forms
-with it. This encoding is P2P protocol version 2.0.0, which nodes on earlier versions
-cannot decode. The full identity specification is in
+with it. The node's libp2p `PeerId` is derived from the same secret (its even-y form), so the
+x-coordinate of the `PeerId`'s public key is the node's `comm_pubkey`. libp2p signs its own
+connection handshake with ECDSA under that key; Braidpool's own signatures are always
+BIP340. The full identity specification is in
 [`identity_specifications.md`](identity_specifications.md).
 
 The purpose of the timestamps is to gather higher resolution timestamps than are
