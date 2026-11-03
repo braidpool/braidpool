@@ -27,15 +27,10 @@ pub struct BraidDirectoryConfig {
     pub path: String,
 }
 #[derive(Serialize, Deserialize, Clone)]
-pub struct MinerConfig {
-    pub miner_pubkey: String,
-}
-#[derive(Serialize, Deserialize, Clone)]
 pub struct BraidpoolConfig {
     pub braidnetwork_config: NetworkConfig,
     pub bitcoin_config: BitcoinConfig,
     pub braid_directory: BraidDirectoryConfig,
-    pub miner_config: MinerConfig,
     pub braid_rpc_config: BraidRpcConfig,
 }
 #[derive(Serialize, Deserialize, Clone)]
@@ -242,7 +237,7 @@ mod test {
 
     use bitcoin::Network;
 
-    use crate::config::{BraidRpcConfig, MinerConfig};
+    use crate::config::BraidRpcConfig;
 
     use super::{
         BitcoinConfig, BraidDirectoryConfig, BraidpoolConfig, NetworkConfig, PoolNetwork,
@@ -285,9 +280,6 @@ mod test {
             braid_directory: BraidDirectoryConfig {
                 path: "~/.braidpool".to_string(),
             },
-            miner_config: MinerConfig {
-                miner_pubkey: "".to_string(),
-            },
             braid_rpc_config: BraidRpcConfig::default(),
         };
         assert_eq!(
@@ -324,5 +316,15 @@ mod test {
             from_file.braid_rpc_config.rpc_server_addr,
             built.braid_rpc_config.rpc_server_addr
         );
+    }
+
+    #[test]
+    fn config_file_that_still_has_the_removed_miner_section_loads() {
+        // `[miner_config] miner_pubkey` was never read. A file written for an older version that
+        // still has it must keep loading: unknown tables are ignored.
+        let default_file = include_str!("default_braidpool_config.toml");
+        let old_file = format!("{default_file}\n[miner_config]\nminer_pubkey = \"02ab\"\n");
+        let config: BraidpoolConfig = toml::from_str(&old_file).unwrap();
+        assert_eq!(config.braid_directory.path, "~/.braidpool");
     }
 }
