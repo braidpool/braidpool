@@ -252,6 +252,9 @@ pub struct DownstreamClient {
     pub monitor_target: Option<bitcoin::Target>,
     /// channel for sending valid block submissions from miners to the block submission handler.
     pub block_submission_tx: Option<mpsc::UnboundedSender<BlockSubmissionRequest>>,
+    /// Key that signs this client's shares. Set once per connection so share submission does
+    /// not lock `SwarmHandler`; when `None` the identity is read from `SwarmHandler`.
+    pub miner_identity: Option<Arc<crate::miner_identity::MinerIdentity>>,
     /// Indicates whether this downstream client is operating in proxy/audit mode (connected via an upstream pool).
     pub is_proxy_mode: bool,
     // Payout address used in the audit mode
@@ -734,6 +737,7 @@ impl DownstreamClient {
                     audit_dag,
                     upstream_share_tx,
                     upstream_difficulty,
+                    swarm_handler,
                 )
                 .await;
         }
@@ -1095,6 +1099,7 @@ impl DownstreamClient {
         audit_dag: Option<Arc<Mutex<crate::audit::AuditDAG>>>,
         upstream_share_tx: Option<mpsc::Sender<crate::upstream_pool::UpstreamShare>>,
         upstream_difficulty: Option<f64>,
+        swarm_handler: Arc<Mutex<SwarmHandler>>,
     ) -> Result<StratumResponses, StratumErrors> {
         let ntime_u32 =
             u32::from_str_radix(ntime, 16).map_err(|e| StratumErrors::InvalidMethodParams {
@@ -1306,10 +1311,6 @@ impl DownstreamClient {
                     upstream_difficulty = ?upstream_difficulty,
                     "Calculated bead difficulty targets"
                 );
-                let public_key =
-                    "020202020202020202020202020202020202020202020202020202020202020202"
-                        .parse::<bitcoin::PublicKey>()
-                        .unwrap();
                 let job_time = bitcoin::absolute::Time::from_consensus(submitted_job.job_sent_time)
                     .map_err(|e| {
                         error!(
@@ -1322,8 +1323,12 @@ impl DownstreamClient {
                         }
                     })?;
 
+                let identity = match &self.miner_identity {
+                    Some(identity) => Arc::clone(identity),
+                    None => swarm_handler.lock().await.miner_identity(),
+                };
                 let committed_metadata = crate::committed_metadata::CommittedMetadata {
-                    comm_pub_key: public_key,
+                    comm_pub_key: identity.xonly(),
                     miner_ip: self.downstream_ip.clone(),
                     start_timestamp: job_time,
                     transaction_ids: crate::committed_metadata::TxIdVec(Vec::new()),
@@ -1385,27 +1390,24 @@ impl DownstreamClient {
                     (extra_nonce_1, extra_nonce_2)
                 };
 
-                let placeholder_sig_bytes = [0u8; 64];
-                let sig = bitcoin::ecdsa::Signature {
-                    signature: bitcoin::secp256k1::ecdsa::Signature::from_compact(
-                        &placeholder_sig_bytes,
-                    )
-                    .expect("Valid placeholder signature"),
-                    sighash_type: bitcoin::EcdsaSighashType::All,
-                };
-
                 let uncommitted_metadata = crate::uncommitted_metadata::UnCommittedMetadata {
                     broadcast_timestamp: broadcast_time,
                     extra_nonce_1: extranonce_1_raw_value,
                     extra_nonce_2: extranonce_2_raw_value,
-                    signature: sig,
+                    signature: crate::uncommitted_metadata::UnCommittedMetadata::default()
+                        .signature,
                 };
 
-                let bead = crate::bead::Bead {
+                let mut bead = crate::bead::Bead {
                     committed_metadata,
                     block_header: header,
                     uncommitted_metadata,
                 };
+                identity
+                    .sign_bead(&mut bead)
+                    .map_err(|e| StratumErrors::InvalidShare {
+                        reason: e.to_string(),
+                    })?;
 
                 debug!(
                     worker = %worker_name,
@@ -1997,6 +1999,7 @@ impl DownstreamClient {
             miner_extranonce2_size: EXTRANONCE2_SIZE,
             monitor_target: None,
             block_submission_tx: None,
+            miner_identity: None,
             network,
             is_proxy_mode: false,
             payout_address: None,
@@ -3496,6 +3499,7 @@ impl Server {
         upstream_configure_tx: Option<mpsc::Sender<(Value, u64, mpsc::Sender<Value>)>>,
     ) -> Result<(), Box<std::io::Error>> {
         debug!("Starting stratum server");
+        let miner_identity = swarm_handler.lock().await.miner_identity();
         let bound_addr = listener.local_addr()?;
         let endpoints = crate::utils::server_endpoints(
             &self.stratum_config.hostname,
@@ -3529,6 +3533,7 @@ impl Server {
                     if let Some(ref submission_tx) = self.block_submission_tx {
                          client.block_submission_tx = Some(submission_tx.clone());
                      }
+                    client.miner_identity = Some(Arc::clone(&miner_identity));
                             let id = client.connection_id;
                             (id, format!("{:x}", id))
                         };
@@ -3656,6 +3661,7 @@ impl Server {
                                 miner_extranonce2_size: assigned_extranonce2_size,
                                 monitor_target: None,
                                 block_submission_tx: self.block_submission_tx.clone(),
+                                miner_identity: Some(Arc::clone(&miner_identity)),
                                 is_proxy_mode: is_proxy,
                                 payout_address: None,
                                 audit_miner_difficulty: self.stratum_config.audit_miner_difficulty,

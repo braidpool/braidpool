@@ -1,9 +1,11 @@
+use crate::bead::sign::{extend_checked, VerifiedBead};
 use crate::bead::Bead;
 use crate::braid::{AddBeadStatus, Braid};
 use crate::committed_metadata::CommittedMetadata;
 #[cfg(test)]
 use crate::config::PoolNetwork;
 use crate::db::audit_db_handlers::AuditDBHandler;
+use crate::miner_identity::MinerIdentity;
 use crate::uncommitted_metadata::UnCommittedMetadata;
 use crate::utils::compute_block_hash;
 use crate::{TimeVec, TxIdVec};
@@ -47,9 +49,8 @@ fn create_genesis_bead_for_audit() -> Result<Bead, String> {
         nonce: 0,
     };
 
-    let public_key = "020202020202020202020202020202020202020202020202020202020202020202"
-        .parse::<bitcoin::PublicKey>()
-        .unwrap();
+    // Audit mode has no peers, so the genesis is signed by a throwaway identity.
+    let identity = MinerIdentity::generate();
 
     // Create committed metadata with no parents
     let committed_metadata = CommittedMetadata {
@@ -59,19 +60,10 @@ fn create_genesis_bead_for_audit() -> Result<Bead, String> {
         payout_address: "bc1qgdjqv0av3q56jvd82tkdjpy7gdp9ut8tlqmgrpmv24sq90ecnvqqjwvw97"
             .to_string(),
         start_timestamp: genesis_time,
-        comm_pub_key: public_key,
+        comm_pub_key: identity.xonly(),
         min_target: CompactTarget::from_consensus(0x1d00ffff),
         weak_target: CompactTarget::from_consensus(0x1d00ffff),
         miner_ip: "system".to_string(),
-    };
-
-    let default_sig_hex = "3046022100839c1fbc5304de944f697c9f4b1d01d1faeba32d751c0f7acb21ac8a0f436a72022100e89bd46bb3a5a62adc679f659b7ce876d83ee297c7a5587b2011c4fcc72eab45";
-    let default_sig_bytes =
-        hex::decode(default_sig_hex).map_err(|e| format!("Invalid signature hex: {}", e))?;
-    let default_sig = bitcoin::ecdsa::Signature {
-        signature: bitcoin::secp256k1::ecdsa::Signature::from_der(&default_sig_bytes)
-            .map_err(|e| format!("Invalid signature DER: {}", e))?,
-        sighash_type: bitcoin::sighash::EcdsaSighashType::All,
     };
 
     // Create uncommitted metadata
@@ -79,14 +71,17 @@ fn create_genesis_bead_for_audit() -> Result<Bead, String> {
         extra_nonce_1: 0,
         extra_nonce_2: 0,
         broadcast_timestamp: genesis_time,
-        signature: default_sig,
+        signature: UnCommittedMetadata::default().signature,
     };
 
-    let genesis_bead = Bead {
+    let mut genesis_bead = Bead {
         block_header,
         committed_metadata,
         uncommitted_metadata,
     };
+    identity
+        .sign_bead(&mut genesis_bead)
+        .map_err(|e| format!("Failed to sign genesis bead: {e}"))?;
 
     info!(
         block_hash = %genesis_bead.block_header.block_hash(),
@@ -127,7 +122,7 @@ fn compare_hash(a: &BlockHash, b: &BlockHash) -> Ordering {
 }
 
 /// Computes a deterministic generation hash by concatenating all current DAG tips using compare_hash function.
-/// This is used for calculating the current commitment by combining the composite hash of the current briad tips,
+/// This is used for calculating the current commitment by combining the composite hash of the current braid tips,
 /// by doing this we are commiting to the entire set of tips in a variable interval. Now future beads will
 /// point/contain this commitment.
 pub fn compute_generation_hash(
@@ -677,9 +672,10 @@ impl AuditDAG {
         record.bead_hash = composite_hash;
         let mut bead_added = false;
         {
+            let checked = VerifiedBead::new(&bead);
             let mut braid = self.braid.write().await;
             let network = braid.network;
-            let status = braid.extend(&bead);
+            let status = extend_checked(&mut braid, checked);
             match status {
                 AddBeadStatus::BeadAdded { .. } => {
                     bead_added = true;
@@ -855,24 +851,19 @@ pub struct MinerStats {
 mod tests {
     use super::*;
     use crate::bead::Bead;
-    use crate::committed_metadata::CommittedMetadata;
+    use crate::committed_metadata::{default_xonly_pubkey, CommittedMetadata};
+    use crate::miner_identity::MinerIdentity;
     use crate::uncommitted_metadata::UnCommittedMetadata;
-    use bitcoin::{absolute::Time, ecdsa::Signature, EcdsaSighashType};
+    use bitcoin::absolute::Time;
     use std::str::FromStr;
 
     fn create_test_bead(parents: Vec<BlockHash>) -> Bead {
+        let identity = MinerIdentity::test_fixture();
         let block: BlockHeader = bitcoin::consensus::deserialize(&hex::decode(
             "0100000000000000000000000000000000000000000000000000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a29ab5f49ffff001d1dac2b7c"
         ).unwrap()).unwrap();
 
-        // Create a valid signature for uncommitted metadata
-        let hex = "3046022100839c1fbc5304de944f697c9f4b1d01d1faeba32d751c0f7acb21ac8a0f436a72022100e89bd46bb3a5a62adc679f659b7ce876d83ee297c7a5587b2011c4fcc72eab45";
-        let sig = Signature {
-            signature: bitcoin::secp256k1::ecdsa::Signature::from_str(hex).unwrap(),
-            sighash_type: EcdsaSighashType::All,
-        };
-
-        Bead {
+        let mut bead = Bead {
             block_header: block,
             committed_metadata: CommittedMetadata {
                 transaction_ids: crate::committed_metadata::TxIdVec(vec![]),
@@ -880,10 +871,7 @@ mod tests {
                 parent_bead_timestamps: crate::committed_metadata::TimeVec(vec![]),
                 payout_address: "bc1qtest".to_string(),
                 start_timestamp: Time::from_consensus(1653195600).unwrap(),
-                comm_pub_key: bitcoin::PublicKey::from_str(
-                    "020202020202020202020202020202020202020202020202020202020202020202",
-                )
-                .unwrap(),
+                comm_pub_key: default_xonly_pubkey(),
                 min_target: bitcoin::CompactTarget::from_consensus(486604799),
                 weak_target: bitcoin::CompactTarget::from_consensus(486604799),
                 miner_ip: "127.0.0.1".to_string(),
@@ -892,9 +880,11 @@ mod tests {
                 extra_nonce_1: 42,
                 extra_nonce_2: 42,
                 broadcast_timestamp: Time::from_consensus(1653195600).unwrap(),
-                signature: sig,
+                signature: UnCommittedMetadata::default().signature,
             },
-        }
+        };
+        identity.sign_bead(&mut bead).unwrap();
+        bead
     }
 
     /// Helper to construct a strictly valid 11-byte extranonce1 array

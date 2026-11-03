@@ -94,6 +94,8 @@ braidpool/
 | File | Purpose |
 |------|---------|
 | `node/src/bead/mod.rs` | Bead structure, serialization, validation |
+| `node/src/bead/sign.rs` | BIP340 Schnorr signing and verification of beads (`VerifiedBead`) |
+| `node/src/miner_identity.rs` | The node's secp256k1 miner key (`datadir/miner_secp256k1`) |
 | `node/src/braid/mod.rs` | Cohort calculation, DAG ordering |
 | `node/src/behaviour/mod.rs` | P2P gossip protocol (libp2p) |
 | `node/src/stratum.rs` | Stratum protocol for miners |
@@ -172,6 +174,19 @@ let (tx, rx) = tokio::sync::mpsc::channel(100);
 // Use tokio::fs, not std::fs
 ```
 
+### Adding Beads to the Braid (Rust)
+The braid is one `Arc<RwLock<Braid>>`; while the write lock is held, RPC, dashboard,
+gossip and stratum all wait. Do work that needs only the bead before taking it:
+```rust
+// Signature (and denylist) check: no lock held
+let checked = VerifiedBead::new(&bead);
+// Lock only to extend; checks that need the DAG (parents) happen inside
+let mut braid = braid_arc.write().await;
+let status = extend_checked(&mut braid, checked);
+```
+Beads the node forms itself read the tips under a read lock, then are built and signed with no
+lock held.
+
 ## Glossary
 
 | Term | Definition |
@@ -181,6 +196,7 @@ let (tx, rx) = tokio::sync::mpsc::channel(100);
 | **DAG** | Directed Acyclic Graph—the data structure holding all beads |
 | **HWP** | Highest Work Path—the heaviest chain through the DAG |
 | **UHPO** | Unspent Hasher Payout Output—miner's accumulated rewards |
+| **Miner key** | BIP340 x-only key in `comm_pub_key`; signs each bead with a 64-byte Schnorr signature |
 | **Difficulty Epoch** | Bitcoin's ~2 week difficulty adjustment period |
 | **Full Proportional** | Payout algorithm: rewards ∝ shares submitted |
 | **Share** | A bead; proof of work submitted by a miner |

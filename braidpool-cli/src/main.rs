@@ -63,7 +63,7 @@ enum Commands {
     GetMiningInfo {
         /// List of public keys (hex-encoded) to filter beads by.
         /// Supports multiple keys for key rotation scenarios.
-        /// Example: --public_keys "0202...,0303..."
+        /// Each key is a 64-character BIP340 x-only hex key, e.g. --public_keys "79be667e...,c6047f94..."
         #[arg(long, value_delimiter = ',')]
         public_keys: Option<Vec<String>>,
 
@@ -105,7 +105,7 @@ enum Commands {
 
     /// Get node information for the node that created a specific bead
     /// Returns information about the node that created the specified bead, including:
-    /// common_pubkey (libp2p public key), miner_ip, payout_address, and minimum_target.
+    /// common_pubkey (the miner's BIP340 x-only key), miner_ip, payout_address, and minimum_target.
     #[command(name = "getnodeinfo")]
     GetNodeInfo {
         /// The bead hash (block hash) as a 64-character hex-encoded string representing the bead's block hash
