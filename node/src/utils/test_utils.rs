@@ -57,7 +57,7 @@ pub mod test_utility_functions {
 
         use num::range;
 
-        use crate::braid::{Braid, Cohort};
+        use crate::braid::{Braid, Cohort, OrphanPool};
 
         let current_file_path = file_path;
         let file_content = std::fs::read_to_string(current_file_path).unwrap();
@@ -124,7 +124,7 @@ pub mod test_utility_functions {
                 genesis_beads: current_braid_genesis,
                 cohorts: current_bead_cohorots,
                 cohort_tips: vec![HashSet::new()], // Cohorts tips are only used in extend(), so we can skip them here.
-                orphan_beads: Vec::new(),
+                orphan_beads: OrphanPool::new(),
                 network: PoolNetwork::Cpunet,
             },
             file_braid.clone(),

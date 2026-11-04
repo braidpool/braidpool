@@ -7,6 +7,9 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::collections::{HashMap, HashSet};
+
+mod orphan_pool;
+pub use orphan_pool::{OrphanPool, MAX_ORPHAN_BEADS};
 #[derive(Clone, Debug, Serialize, PartialEq, Deserialize)]
 pub struct Cohort(pub HashSet<usize>);
 #[derive(Debug, Clone)]
@@ -33,7 +36,7 @@ pub struct Braid {
     pub tips: HashSet<usize>,
     pub cohorts: Vec<Cohort>,
     pub cohort_tips: Vec<HashSet<usize>>,
-    pub orphan_beads: Vec<Bead>,
+    pub orphan_beads: OrphanPool,
     pub genesis_beads: HashSet<usize>,
     pub bead_index_mapping: HashMap<BeadHash, usize>,
     //For computing block_hash accordingly
@@ -61,7 +64,7 @@ impl Braid {
             tips: bead_indices.clone(),
             cohorts: genesis_cohort,
             cohort_tips: vec![HashSet::from(bead_indices.clone())],
-            orphan_beads: Vec::new(),
+            orphan_beads: OrphanPool::new(),
             genesis_beads: bead_indices,
             bead_index_mapping,
             network,
@@ -86,7 +89,9 @@ impl Braid {
 #[allow(unused)]
 impl Braid {
     /// Attempts to extend the braid with the given bead.
-    /// Returns true if the bead successfully extended the braid, false otherwise.
+    ///
+    /// On success any parked orphans that this bead (transitively) unblocked
+    /// are connected too, and returned in `promoted_orphans`.
     pub fn extend(&mut self, bead: &Bead) -> AddBeadStatus {
         // If the braid is empty and bead has no parents, treat as genesis bead
         if self.beads.is_empty() && bead.committed_metadata.parents.is_empty() {
@@ -106,28 +111,49 @@ impl Braid {
         if bead.committed_metadata.parents.is_empty() {
             return AddBeadStatus::InvalidBead;
         }
-        // Don't have all parents
-        for parent_hash in &bead.committed_metadata.parents {
-            let parent_exists = self.bead_index_mapping.contains_key(parent_hash);
 
-            if !parent_exists {
-                // Try to retrieve the parent
-                //This is not required if a bead exists in DB it would already been extended to local braid as well
-                // Parent not found and can't be retrieved
-                self.orphan_beads.push(bead.clone());
-                return AddBeadStatus::ParentsNotYetReceived;
-            }
-        }
-        // Already seen this bead
         let bead_hash = self.compute_bead_hash(bead);
-        if self
-            .beads
-            .iter()
-            .any(|b| self.compute_bead_hash(b) == bead_hash)
-        {
+
+        // Already seen this bead. Checked before the parent scan so that a bead
+        // replayed after it was connected is rejected here instead of being
+        // parked as an orphan again.
+        if self.bead_index_mapping.contains_key(&bead_hash) {
             return AddBeadStatus::DagAlreadyContainsBead;
         }
 
+        // Don't have all parents: park the bead until the missing one arrives.
+        if let Some(missing_parent) = self.first_missing_parent(bead) {
+            self.orphan_beads
+                .park(bead_hash, bead.clone(), missing_parent);
+            return AddBeadStatus::ParentsNotYetReceived;
+        }
+
+        self.connect_bead(bead, bead_hash);
+
+        // Adding this bead may have supplied the missing parent for one or more
+        // parked orphans; promote whichever became connectable and surface them
+        // to the caller.
+        let promoted_orphans = self.promote_connectable(bead_hash);
+
+        AddBeadStatus::BeadAdded { promoted_orphans }
+    }
+
+    /// Returns the first parent of `bead` that is not yet in the braid, or
+    /// `None` when every parent is present.
+    fn first_missing_parent(&self, bead: &Bead) -> Option<BeadHash> {
+        bead.committed_metadata
+            .parents
+            .iter()
+            .find(|parent_hash| !self.bead_index_mapping.contains_key(*parent_hash))
+            .copied()
+    }
+
+    /// Inserts a bead whose parents are all present, updating the tips and
+    /// recomputing the cohorts its arrival invalidated.
+    ///
+    /// The caller is responsible for having checked that the bead is not
+    /// already in the braid and that none of its parents are missing.
+    fn connect_bead(&mut self, bead: &Bead, bead_hash: BeadHash) {
         // Insert bead into beads vector
         self.beads.push(bead.clone());
         let new_bead_index = self.beads.len() - 1;
@@ -197,59 +223,48 @@ impl Braid {
             self.cohorts.push(Cohort(dangling));
             self.cohort_tips.push(self.tips.clone());
         }
-
-        // Adding this bead may have supplied the missing parent for one or more
-        // parked orphans; promote whichever became connectable and surface them
-        // to the caller.
-        let promoted_orphans = self.process_orphan_beads();
-
-        AddBeadStatus::BeadAdded { promoted_orphans }
     }
 
-    fn process_orphan_beads(&mut self) -> Vec<Bead> {
+    /// Connects every parked orphan that the arrival of `seed_hash` unblocked,
+    /// along with whatever those promotions unblock in turn, and returns them.
+    ///
+    /// Promotion is iterative by design. It used to recurse — `extend` called
+    /// `process_orphan_beads`, which called `extend` on each newly connectable
+    /// orphan — so one stack frame was consumed per bead and a long enough
+    /// chain of parked orphans overflowed the stack and aborted the process
+    /// (#532). A Rust stack overflow is not a catchable panic and is not
+    /// confined to the task that triggers it, so this took the whole node down.
+    ///
+    /// Seeding the worklist with the hash that just arrived also replaces the
+    /// full rescan of the orphan set that ran on every insertion: only orphans
+    /// waiting on that specific hash can have become connectable.
+    fn promote_connectable(&mut self, seed_hash: BeadHash) -> Vec<Bead> {
         let mut promoted = Vec::new();
-        // Process orphans in reverse order to maintain proper indexing
-        let mut i = self.orphan_beads.len();
-        while i > 0 {
-            i -= 1;
+        let mut worklist = VecDeque::new();
+        worklist.push_back(seed_hash);
 
-            // Check if all parents are now available for this orphan
-            let mut all_parents_available = true;
-            for parent_hash in &self.orphan_beads[i].committed_metadata.parents {
-                if !self.bead_index_mapping.contains_key(parent_hash) {
-                    all_parents_available = false;
-                    break;
+        while let Some(parent_hash) = worklist.pop_front() {
+            for orphan in self.orphan_beads.take_waiting_on(&parent_hash) {
+                let orphan_hash = self.compute_bead_hash(&orphan);
+
+                // Reachable by more than one path, or already connected.
+                if self.bead_index_mapping.contains_key(&orphan_hash) {
+                    continue;
                 }
-            }
 
-            if all_parents_available {
-                // Remove the orphan bead first, then process it
-                let orphan_bead = self.orphan_beads.remove(i);
-
-                // Now extend with the orphan bead
-                match self.extend(&orphan_bead) {
-                    AddBeadStatus::BeadAdded { promoted_orphans } => {
-                        // This orphan is now connected: record it, along with any
-                        // beads its own addition promoted.
-                        promoted.push(orphan_bead);
-                        promoted.extend(promoted_orphans);
-                        // Recursively process remaining orphans as this addition
-                        // might enable more orphans to be processed.
-                        promoted.extend(self.process_orphan_beads());
-                        return promoted; // Exit current processing as recursion will handle the rest
-                    }
-                    AddBeadStatus::DagAlreadyContainsBead => {
-                        continue;
-                    }
-                    AddBeadStatus::InvalidBead => {
-                        continue;
-                    }
-                    AddBeadStatus::ParentsNotYetReceived => {
-                        self.orphan_beads.push(orphan_bead);
-                    }
+                // This parent arrived but the orphan is waiting on others too:
+                // re-park it against the next one still missing.
+                if let Some(missing_parent) = self.first_missing_parent(&orphan) {
+                    self.orphan_beads.park(orphan_hash, orphan, missing_parent);
+                    continue;
                 }
+
+                self.connect_bead(&orphan, orphan_hash);
+                worklist.push_back(orphan_hash);
+                promoted.push(orphan);
             }
         }
+
         promoted
     }
     pub fn resolve_parents(&self, bead: &Bead) -> Result<Vec<(u64, u32)>, BraidError> {
