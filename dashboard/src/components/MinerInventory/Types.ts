@@ -1,4 +1,3 @@
-import { Dispatch, SetStateAction } from 'react';
 export interface Miner {
   id: string;
   ip: string;
@@ -40,14 +39,6 @@ export interface Miner {
   primary_pool: string;
   pools: any[];
 }
-export type MinerAnalyticsPoint = {
-  timestamp: number;
-  hashrate: number;
-  expected: number;
-  efficiency: number;
-  temperature: number;
-  vrTemperature: number;
-};
 export type HistoryPoint = {
   timestamp: number;
   totalHashrate: number;
@@ -63,11 +54,6 @@ export type AnalyticsChartsProps = {
 export type MinerAlert = {
   message: string;
 };
-export interface MinerTableProps {
-  miners: Miner[];
-  getAlerts: (miner: Miner) => MinerAlert[];
-  onDelete?: (minerId: string) => void;
-}
 export interface MinerDashboardHeaderProps {
   totalMiners: number;
   totalHashrate: number;
@@ -78,4 +64,78 @@ export interface MinerControlsProps {
   loading: boolean;
   lastUpdate: Date | null;
   wsConnected: boolean;
+}
+export type MinerType = 'asic' | 'cpu';
+
+export interface ShareStats {
+  submitted: number;
+  accepted: number;
+  rejected: number;
+  acceptanceRate: number;
+  blocksFound: number;
+}
+
+export interface HashrateInfo {
+  currentKhashS: number;
+  totalHashes: number;
+  threads: number;
+}
+
+export interface ConnectionInfo {
+  status: 'disconnected' | 'connecting' | 'connected' | 'error';
+  poolUrl: string;
+  username: string;
+  uptimeSeconds: number;
+  difficulty: number;
+}
+
+export interface WorkerInfo {
+  id: number;
+  status: string;
+}
+
+export interface ShareRecord {
+  timestamp: string;
+  jobId: string;
+  nonce: string;
+  hash: string;
+  isBlockCandidate: boolean;
+  accepted: boolean | null;
+}
+
+export interface MiningStatsSnapshot {
+  minerId: string;
+  minerVersion: string;
+  uptimeSeconds: number;
+  hashrate: HashrateInfo;
+  shares: ShareStats;
+  connection: ConnectionInfo;
+  workerThreads: WorkerInfo[];
+  recentShares: ShareRecord[];
+}
+
+export interface CpuMiner {
+  id: string;
+  api_url: string;
+  label: string | null;
+  is_online: boolean;
+  last_seen: string | null;
+  stats: MiningStatsSnapshot | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UnifiedMiner {
+  id: string;
+  type: MinerType;
+  name: string;
+  status: 'online' | 'warning' | 'offline';
+  hashrateTHs: number;
+  sharesAccepted: number | null;
+  sharesSubmitted: number | null;
+  uptime: number;
+  power: number | null;
+  efficiency: number | null;
+  lastSeen: string;
+  raw: Miner | CpuMiner;
 }
