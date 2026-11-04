@@ -18,6 +18,12 @@ pub struct ScanSubnetRequest {
     pub cidr: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct RegisterCpuMinerRequest {
+    pub api_url: String,
+    pub label: Option<String>,
+}
+
 //  response models
 
 #[derive(Debug, Serialize)]
