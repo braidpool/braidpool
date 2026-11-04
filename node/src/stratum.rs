@@ -39,6 +39,7 @@ const COMMITMENT_SIZE: usize = 5; // Size of bead hash commitment in bytes
 const DEFAULT_VERSION_ROLLING_MASK: u32 = 0x1FFFE000; // BIP 310 default mask
 const UPSTREAM_EXTRANONCE1_SIZE: usize = 4; // Standard upstream extranonce1 size
 const COMMITMENT_HISTORY_SIZE: usize = 5; // Number of historical commitments to track
+const REGTEST_SHARE_DIFFICULTY: f64 = 0.01; // Difficulty for the regtest testing network
 
 #[derive(Debug, Clone)]
 pub struct BlockSubmissionRequest {
@@ -268,6 +269,16 @@ impl DownstreamClient {
     pub fn connection_id(&self) -> u32 {
         self.connection_id
     }
+
+    fn regtest_share_difficulty(&self) -> Option<f64> {
+        (!self.is_proxy_mode
+            && matches!(
+                self.network,
+                PoolNetwork::Bitcoin(bitcoin::Network::Regtest)
+            ))
+        .then_some(REGTEST_SHARE_DIFFICULTY)
+    }
+
     /// Handles an incoming Stratum `Client2Server` request from a downstream miner.
     ///
     /// Routes the request to the appropriate handler based on its `method`:
@@ -428,12 +439,12 @@ impl DownstreamClient {
                         let mapping = connection_mapping.read().await;
                         mapping.upstream_difficulty
                     };
-                    if let Some(diff) = upstream_diff {
-                        let miner_difficulty: f64 = if self.is_proxy_mode {
-                            self.audit_miner_difficulty.unwrap_or(diff)
-                        } else {
-                            diff
-                        };
+                    let miner_difficulty = if self.is_proxy_mode {
+                        upstream_diff.map(|diff| self.audit_miner_difficulty.unwrap_or(diff))
+                    } else {
+                        self.regtest_share_difficulty().or(upstream_diff)
+                    };
+                    if let Some(miner_difficulty) = miner_difficulty {
                         let set_difficulty_msg = serde_json::json!({
                             "method": "mining.set_difficulty",
                             "params": [miner_difficulty]
@@ -1142,7 +1153,7 @@ impl DownstreamClient {
         let miner_difficulty = if self.is_proxy_mode {
             self.audit_miner_difficulty.or(upstream_difficulty)
         } else {
-            None
+            self.regtest_share_difficulty()
         }
         .unwrap_or(100.0);
         let miner_target = Self::target_from_difficulty(miner_difficulty);
@@ -1531,7 +1542,7 @@ impl DownstreamClient {
     }
 
     fn target_from_difficulty(difficulty: f64) -> bitcoin::Target {
-        if difficulty < 1.0 || !difficulty.is_finite() {
+        if difficulty <= 0.0 || !difficulty.is_finite() {
             return bitcoin::Target::from_compact(bitcoin::CompactTarget::from_consensus(
                 0x1d00ffff,
             ));
@@ -4084,6 +4095,26 @@ mod test {
         );
 
         println!("Assertion Passed: Target matches expected value for Diff 100.");
+    }
+
+    #[test]
+    fn test_regtest_fractional_difficulty() {
+        let difficulty_one = DownstreamClient::target_from_difficulty(1.0);
+        let regtest_target = DownstreamClient::target_from_difficulty(REGTEST_SHARE_DIFFICULTY);
+
+        assert!(
+            regtest_target.to_be_bytes() > difficulty_one.to_be_bytes(),
+            "Difficulty 0.01 must produce an easier share target than difficulty 1"
+        );
+
+        let regtest_client = DownstreamClient::new(PoolNetwork::Bitcoin(bitcoin::Network::Regtest));
+        assert_eq!(
+            regtest_client.regtest_share_difficulty(),
+            Some(REGTEST_SHARE_DIFFICULTY)
+        );
+
+        let mainnet_client = DownstreamClient::new(PoolNetwork::Bitcoin(bitcoin::Network::Bitcoin));
+        assert_eq!(mainnet_client.regtest_share_difficulty(), None);
     }
 
     #[tokio::test]

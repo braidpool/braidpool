@@ -39,9 +39,10 @@ class PortPool:
     The bind probe is a sanity check only. It does not determine uniqueness.
     """
 
-    
     BASE_PORT = 16000
     PORTS_PER_TEST = 100
+    MIN_PORT = 1
+    MAX_PORT = 65535
 
     _COMPONENT_RANGES = {
         "bitcoin_rpc": range(0, 5),
@@ -59,6 +60,7 @@ class PortPool:
         base_port: int = BASE_PORT,
         ports_per_test: int = PORTS_PER_TEST,
         validate_ports: bool = True,
+        auto_select_port_seed: bool = False,
     ) -> None:
         if port_seed is None:
             port_seed = PortSeed.n
@@ -69,10 +71,13 @@ class PortPool:
                 f"ports_per_test must be at least {self.PORTS_PER_TEST}, got {ports_per_test}"
             )
 
-        self.port_seed = port_seed
         self.base_port = base_port
         self.ports_per_test = ports_per_test
         self.validate_ports = validate_ports
+        if auto_select_port_seed:
+            port_seed = self._find_available_port_seed(port_seed)
+
+        self.port_seed = port_seed
         self.test_range_start = base_port + (port_seed * ports_per_test)
         self.test_range_end = self.test_range_start + ports_per_test - 1
         self._next_by_component = {
@@ -92,6 +97,72 @@ class PortPool:
             range_end=self.test_range_end,
             validate_ports=self.validate_ports,
         )
+
+    def _find_available_port_seed(self, starting_seed: int) -> int:
+        """Return the first seed whose complete port band is available."""
+        min_valid_seed = max(
+            0,
+            (self.MIN_PORT - self.base_port + self.ports_per_test - 1)
+            // self.ports_per_test,
+        )
+        max_valid_seed = (
+            self.MAX_PORT - self.base_port - (self.ports_per_test - 1)
+        ) // self.ports_per_test
+        first_candidate = max(starting_seed, min_valid_seed)
+        last_candidate = min(starting_seed + 999, max_valid_seed)
+        if first_candidate > last_candidate:
+            raise PortAllocationError(
+                f"No valid TCP port band is available at or after seed {starting_seed}"
+            )
+
+        ephemeral_range = self._linux_ephemeral_range() if self.validate_ports else None
+        for candidate in range(first_candidate, last_candidate + 1):
+            range_start = self.base_port + (candidate * self.ports_per_test)
+            range_end = range_start + self.ports_per_test - 1
+            if ephemeral_range is not None:
+                ephemeral_start, ephemeral_end = ephemeral_range
+                if range_start <= ephemeral_end and range_end >= ephemeral_start:
+                    continue
+            tcp_ports_available = all(
+                self._is_bindable(port) for port in range(range_start, range_end + 1)
+            )
+            if not tcp_ports_available:
+                continue
+
+            p2p_ports_available = all(
+                self._is_udp_bindable(range_start + offset)
+                for offset in self._COMPONENT_RANGES["braidpool_p2p"]
+            )
+            if p2p_ports_available:
+                if candidate != starting_seed:
+                    log_event(
+                        logger,
+                        "port_seed_auto_selected",
+                        level=logging.INFO,
+                        requested_seed=starting_seed,
+                        selected_seed=candidate,
+                        range_start=range_start,
+                        range_end=range_end,
+                    )
+                return candidate
+
+        raise PortAllocationError(
+            f"No available port band found for seeds {first_candidate}-{last_candidate}"
+        )
+
+    def _is_bindable(self, port: int) -> bool:
+        try:
+            self._bind_probe(port)
+        except OSError:
+            return False
+        return True
+
+    def _is_udp_bindable(self, port: int) -> bool:
+        try:
+            self._udp_bind_probe(port)
+        except OSError:
+            return False
+        return True
 
     def allocate(self, component: str = "helper", node_id: int | None = None) -> int:
         """Allocate one deterministic port for *component*."""
@@ -189,11 +260,18 @@ class PortPool:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             sock.bind(("127.0.0.1", port))
 
+    @staticmethod
+    def _udp_bind_probe(port: int) -> None:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.bind(("127.0.0.1", port))
+
     def _validate_bindable(self, port: int, component: str, offset: int | str) -> None:
         if not self.validate_ports:
             return
         try:
             self._bind_probe(port)
+            if component == "braidpool_p2p":
+                self._udp_bind_probe(port)
         except OSError as exc:
             log_exception(logger, "port_bind_probe_failed", exc, port=port, component=component, offset=offset)
             raise PortAllocationError(
