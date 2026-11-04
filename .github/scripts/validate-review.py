@@ -25,19 +25,22 @@ except ImportError:
 SCHEMA_PATH = Path(__file__).parent.parent / "schemas" / "review.schema.json"
 REVIEWS_DIR = Path(".reviews")
 
-# Required fields for basic validation
-REQUIRED_FIELDS = ["branch", "persona", "model", "date", "grade", "findings"]
+# Required fields and allowed values for basic validation. These must match
+# review.schema.json (tests/test_validate_review.py checks that they do).
+REQUIRED_FIELDS = ["branch", "persona", "model", "grade", "findings"]
 VALID_PERSONAS = [
     "Security Researcher",
-    "Cryptographer", 
+    "Cryptographer",
     "Senior Rust Developer",
     "Senior TypeScript Developer",
     "Senior Software Architect",
-    "Senior Database Engineer"
+    "Senior Database Engineer",
+    "Performance Engineer"
 ]
 VALID_GRADES = ["PASS", "PASS-WITH-NOTES", "NEEDS-WORK"]
 VALID_SEVERITIES = ["critical", "high", "medium", "low"]
 VALID_STATUSES = ["open", "resolved", "wont-fix", "regressed"]
+DATE_PATTERN = r"^\d{4}-\d{2}-\d{2}$"
 
 
 def load_schema():
@@ -69,8 +72,8 @@ def basic_validate(data: dict, filepath: str) -> list[str]:
     if data["grade"] not in VALID_GRADES:
         errors.append(f"Invalid grade: {data['grade']}. Must be one of: {VALID_GRADES}")
     
-    # Validate date format (YYYY-MM-DD)
-    if not re.match(r"^\d{4}-\d{2}-\d{2}$", data["date"]):
+    # Validate date format (YYYY-MM-DD) if one is given; it is optional in the schema
+    if "date" in data and not re.match(DATE_PATTERN, str(data["date"])):
         errors.append(f"Invalid date format: {data['date']}. Must be YYYY-MM-DD")
     
     # Validate findings
