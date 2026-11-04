@@ -118,6 +118,23 @@ impl AuditDBHandler {
                 })?;
         }
 
+        // Insert committed transactions
+        let committed_txs = &bead.committed_metadata.committed_transactions.0;
+        if !committed_txs.is_empty() {
+            let mut qb =
+                sqlx::QueryBuilder::new("INSERT INTO CommittedTransactions (bead_id, txid) ");
+            qb.push_values(committed_txs, |mut b, txid| {
+                b.push_bind(bead_id)
+                    .push_bind(txid.as_byte_array().as_slice());
+            });
+            qb.build()
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| DBErrors::TupleNotInserted {
+                    error: e.to_string(),
+                })?;
+        }
+
         tx.commit()
             .await
             .map_err(|e| DBErrors::InsertionTransactionNotCommitted {
@@ -266,10 +283,35 @@ impl AuditDBHandler {
             parent_timestamps.push(time);
         }
 
+        let committed_tx_rows =
+            sqlx::query("SELECT txid FROM CommittedTransactions WHERE bead_id = ? ORDER BY txid")
+                .bind(bead_id)
+                .fetch_all(pool)
+                .await
+                .map_err(|e| DBErrors::TupleNotFetched {
+                    error: format!(
+                        "Failed to fetch committed transactions for bead id {}: {}",
+                        bead_id, e
+                    ),
+                })?;
+
+        let mut committed_transactions = Vec::new();
+        for ct_row in committed_tx_rows {
+            let txid_bytes: Vec<u8> = ct_row.get("txid");
+            let txid = bitcoin::Txid::from_byte_array(txid_bytes.try_into().map_err(|_| {
+                DBErrors::TupleAttributeParsingError {
+                    error: "Expected 32 bytes".to_string(),
+                    attribute: "committed_transaction_txid".to_string(),
+                }
+            })?);
+            committed_transactions.push(txid);
+        }
+
         let bead = Bead {
             block_header,
             committed_metadata: crate::committed_metadata::CommittedMetadata {
                 transaction_ids: crate::TxIdVec(Vec::new()),
+                committed_transactions: crate::TxIdVec(committed_transactions),
                 parents,
                 parent_bead_timestamps: crate::TimeVec(parent_timestamps),
                 payout_address,

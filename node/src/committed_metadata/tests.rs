@@ -338,6 +338,7 @@ fn test_committed_metadata_consensus_field_order_decode() {
     let mut reader = &bytes[..];
 
     let decoded_txids = TxIdVec::consensus_decode(&mut reader).unwrap();
+    let decoded_committed_transactions = TxIdVec::consensus_decode(&mut reader).unwrap();
     let decoded_parents = Vec::<BeadHash>::consensus_decode(&mut reader).unwrap();
     let decoded_parent_times = TimeVec::consensus_decode(&mut reader).unwrap();
     let decoded_payout = String::consensus_decode(&mut reader).unwrap();
@@ -350,6 +351,7 @@ fn test_committed_metadata_consensus_field_order_decode() {
     let decoded_miner_ip = String::consensus_decode(&mut reader).unwrap();
 
     assert_eq!(decoded_txids, TxIdVec(txids));
+    assert_eq!(decoded_committed_transactions, TxIdVec(vec![]));
     assert_eq!(decoded_parents, parents);
     assert_eq!(
         decoded_parent_times,
@@ -397,6 +399,7 @@ fn test_committed_metadata_consensus_parents_are_canonical() {
 
     let bytes = serialize(&metadata);
     let mut reader = &bytes[..];
+    let _ = TxIdVec::consensus_decode(&mut reader).unwrap();
     let _ = TxIdVec::consensus_decode(&mut reader).unwrap();
     let decoded_parents = Vec::<BeadHash>::consensus_decode(&mut reader).unwrap();
 

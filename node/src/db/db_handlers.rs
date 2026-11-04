@@ -48,6 +48,11 @@ const BULK_INSERT_TRANSACTIONS: &str = "INSERT INTO Transactions (bead_id, txid)
     SELECT json_extract(value, '$.bead_id'), unhex(json_extract(value, '$.txid')) 
     FROM json_each(?);";
 
+const BULK_INSERT_COMMITTED_TRANSACTIONS: &str =
+    "INSERT INTO CommittedTransactions (bead_id, txid) 
+    SELECT json_extract(value, '$.bead_id'), unhex(json_extract(value, '$.txid')) 
+    FROM json_each(?);";
+
 const BULK_INSERT_RELATIVES: &str = "INSERT INTO Relatives (child, parent) 
     SELECT json_extract(value, '$.child'), json_extract(value, '$.parent') 
     FROM json_each(?);";
@@ -142,11 +147,12 @@ impl DBHandler {
         ))
     }
 
-    /// Builds the `(transactions, relatives, parent_timestamps)` JSON value tuples for a single
-    /// bead.
+    /// Builds the `(transactions, committed_transactions, relatives, parent_timestamps)` JSON
+    /// value tuples for a single bead.
     fn prepare_bead_tuple_values(
         data: &BeadInsertData,
     ) -> (
+        Vec<serde_json::Value>,
         Vec<serde_json::Value>,
         Vec<serde_json::Value>,
         Vec<serde_json::Value>,
@@ -171,7 +177,20 @@ impl DBHandler {
                 "bead_id": bead_id,
             }));
         }
-        (txs_values, relatives_values, parent_ts_values)
+        let mut committed_txs_values =
+            Vec::with_capacity(data.bead.committed_metadata.committed_transactions.0.len());
+        for tx in &data.bead.committed_metadata.committed_transactions.0 {
+            committed_txs_values.push(json!({
+                "txid": hex::encode(tx.to_byte_array()),
+                "bead_id": bead_id,
+            }));
+        }
+        (
+            txs_values,
+            committed_txs_values,
+            relatives_values,
+            parent_ts_values,
+        )
     }
 
     /// Inserting chunks for bulk insertions
@@ -182,6 +201,7 @@ impl DBHandler {
     ) -> Result<(), DBErrors> {
         let mut all_bead_data = Vec::with_capacity(chunk.len());
         let mut all_txs_json_parts = Vec::new();
+        let mut all_committed_txs_json_parts = Vec::new();
         let mut all_relatives_json_parts = Vec::new();
         let mut all_parent_ts_json_parts = Vec::new();
 
@@ -190,7 +210,7 @@ impl DBHandler {
             let bead = &data.bead;
             let bead_id = data.bead_id;
 
-            let (txs, relatives, parent_ts) = Self::prepare_bead_tuple_values(data);
+            let (txs, committed_txs, relatives, parent_ts) = Self::prepare_bead_tuple_values(data);
             let block_hash_bytes = compute_block_hash(&bead.block_header, self.network)
                 .to_byte_array()
                 .to_vec();
@@ -215,6 +235,7 @@ impl DBHandler {
                 "signature": hex::encode(bead.uncommitted_metadata.signature.to_vec()),
             }));
             all_txs_json_parts.extend(txs);
+            all_committed_txs_json_parts.extend(committed_txs);
             all_relatives_json_parts.extend(relatives);
             all_parent_ts_json_parts.extend(parent_ts);
         }
@@ -231,6 +252,13 @@ impl DBHandler {
                 attribute: "bulk_transactions".to_string(),
             }
         })?;
+        let committed_txs_json =
+            serde_json::to_string(&all_committed_txs_json_parts).map_err(|e| {
+                DBErrors::TupleAttributeParsingError {
+                    error: e.to_string(),
+                    attribute: "bulk_committed_transactions".to_string(),
+                }
+            })?;
         let relatives_json = serde_json::to_string(&all_relatives_json_parts).map_err(|e| {
             DBErrors::TupleAttributeParsingError {
                 error: e.to_string(),
@@ -266,6 +294,18 @@ impl DBHandler {
                 DBErrors::InsertionTransactionNotCommitted {
                     error: e.to_string(),
                     query_name: "Bulk insert transactions".to_string(),
+                }
+            })?;
+
+        sqlx::query(BULK_INSERT_COMMITTED_TRANSACTIONS)
+            .bind(&committed_txs_json)
+            .execute(&mut **local_transaction)
+            .await
+            .map_err(|e| {
+                error!(error = ?e, "Bulk insert committed transactions failed");
+                DBErrors::InsertionTransactionNotCommitted {
+                    error: e.to_string(),
+                    query_name: "Bulk insert committed transactions".to_string(),
                 }
             })?;
 
@@ -507,6 +547,43 @@ pub async fn fetch_beads_in_batch(
             batch[idx]
                 .committed_metadata
                 .transaction_ids
+                .0
+                .push(Txid::from_byte_array(arr));
+        }
+
+        // Committed transactions for every bead in the batch.
+        let committed_tx_sql = format!(
+            "SELECT bead_id, txid FROM CommittedTransactions WHERE bead_id IN ({placeholders})"
+        );
+        let mut committed_tx_query = sqlx::query(&committed_tx_sql);
+        for id in &ids {
+            committed_tx_query = committed_tx_query.bind(id);
+        }
+        let committed_tx_rows =
+            committed_tx_query
+                .fetch_all(db_pool)
+                .await
+                .map_err(|e| DBErrors::TupleNotFetched {
+                    error: e.to_string(),
+                })?;
+        for row in committed_tx_rows {
+            let bead_id: i64 = row.get("bead_id");
+            let idx = ids
+                .binary_search(&bead_id)
+                .map_err(|_| DBErrors::TupleNotFetched {
+                    error: format!("CommittedTransaction references unknown bead_id {bead_id}"),
+                })?;
+            let tx_bytes: Vec<u8> = row.get("txid");
+            let arr: [u8; 32] =
+                tx_bytes
+                    .try_into()
+                    .map_err(|_| DBErrors::TupleAttributeParsingError {
+                        error: "Invalid txid length".into(),
+                        attribute: "committed_txid".into(),
+                    })?;
+            batch[idx]
+                .committed_metadata
+                .committed_transactions
                 .0
                 .push(Txid::from_byte_array(arr));
         }
@@ -788,6 +865,20 @@ pub async fn fetch_bead_by_bead_hash(
                 });
             }
         };
+    let committed_tx_rows = match sqlx::query(
+        "SELECT txid, bead_id FROM CommittedTransactions WHERE bead_id = ? ORDER BY txid",
+    )
+    .bind(bead_id)
+    .fetch_all(&*db_connection_arc)
+    .await
+    {
+        Ok(rows) => rows,
+        Err(error) => {
+            return Err(DBErrors::TupleNotFetched {
+                error: error.to_string(),
+            });
+        }
+    };
     //Fetching parent timestamps from DB
     let parent_timestamp_rows =
         match sqlx::query("SELECT  parent,child,timestamp FROM ParentTimestamps WHERE child = ?")
@@ -865,6 +956,24 @@ pub async fn fetch_bead_by_bead_hash(
         fetched_bead
             .committed_metadata
             .transaction_ids
+            .0
+            .push(raw_tx_id);
+    }
+
+    for tx_row in committed_tx_rows {
+        let _txid = tx_row.get::<Vec<u8>, _>("txid");
+        let raw_tx_id = match _txid.clone().try_into() {
+            Ok(arr) => Txid::from_byte_array(arr),
+            Err(_) => {
+                return Err(DBErrors::TupleAttributeParsingError {
+                    error: "Invalid hash length".to_string(),
+                    attribute: "committed_txid".to_string(),
+                });
+            }
+        };
+        fetched_bead
+            .committed_metadata
+            .committed_transactions
             .0
             .push(raw_tx_id);
     }
@@ -964,6 +1073,24 @@ pub mod test {
             "ParentTimestamps count mismatch"
         );
 
+        // Count how many committed_transactions exist across all beads in the test braid
+        let expected_committed_txs: usize = current_file_braid
+            .beads
+            .iter()
+            .map(|b| b.committed_metadata.committed_transactions.0.len())
+            .sum();
+
+        // Verify the DB stored the correct number of committed transaction rows
+        let committed_tx_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM CommittedTransactions")
+                .fetch_one(&test_pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            committed_tx_count as usize, expected_committed_txs,
+            "CommittedTransactions count mismatch"
+        );
+
         // Beads were inserted under the `cpunet` network, so their stored `hash` column is
         // network-scoped. Lookups and assertions must use the same network-scoped hash.
         let network = PoolNetwork::Cpunet;
@@ -984,6 +1111,65 @@ pub mod test {
                 bead.committed_metadata.parents.len(),
                 "Parent count mismatch for bead {}",
                 bead_hash
+            );
+            assert_eq!(
+                fetched.committed_metadata.committed_transactions.0.len(),
+                bead.committed_metadata.committed_transactions.0.len(),
+                "CommittedTransactions count mismatch for bead {}",
+                bead_hash
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_committed_transactions_round_trip() {
+        use crate::db::BeadInsertData;
+        use bitcoin::hashes::Hash;
+
+        let (handler, _db_tx) = DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
+        let test_pool = handler.db_connection_pool.clone();
+
+        // Create a test bead with 3 known committed_transactions
+        let mut bead = emit_bead();
+        let txid_a = Txid::from_byte_array([0xaa; 32]);
+        let txid_b = Txid::from_byte_array([0xbb; 32]);
+        let txid_c = Txid::from_byte_array([0xcc; 32]);
+
+        // Insert in non-sorted order to verify deterministic retrieval
+        bead.committed_metadata.committed_transactions.0 = vec![txid_c, txid_a, txid_b];
+
+        let bead_hash = compute_block_hash(&bead.block_header, PoolNetwork::Cpunet);
+
+        let insert_data = BeadInsertData {
+            bead: bead.clone(),
+            bead_id: 0,
+            parent_refs: vec![],
+        };
+
+        handler
+            .insert_beads_batch(vec![insert_data], vec![])
+            .await
+            .expect("Insertion failed");
+
+        // Fetch the bead back from the database
+        let fetched = fetch_bead_by_bead_hash(&test_pool, bead_hash)
+            .await
+            .unwrap()
+            .expect("Bead not found after insertion");
+
+        // Verify all 3 committed_transactions were saved and retrieved
+        assert_eq!(
+            fetched.committed_metadata.committed_transactions.0.len(),
+            3,
+            "Expected 3 committed transactions"
+        );
+
+        // Verify deterministic ordering (sorted by txid bytes)
+        let fetched_txids = &fetched.committed_metadata.committed_transactions.0;
+        for i in 1..fetched_txids.len() {
+            assert!(
+                fetched_txids[i - 1].as_byte_array() <= fetched_txids[i].as_byte_array(),
+                "CommittedTransactions not in deterministic order"
             );
         }
     }
