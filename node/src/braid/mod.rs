@@ -26,6 +26,10 @@ pub enum GenesisCheckStatus {
     GenesisBeadsCountMismatch,
 }
 
+/// Maximum number of orphan beads kept while their parents are missing. When
+/// the limit is reached the oldest orphan is dropped to make room.
+pub const MAX_ORPHAN_BEADS: usize = 4096;
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 
 pub struct Braid {
@@ -124,18 +128,24 @@ impl Braid {
             if !parent_exists {
                 // Try to retrieve the parent
                 //This is not required if a bead exists in DB it would already been extended to local braid as well
-                // Parent not found and can't be retrieved
-                self.orphan_beads.push(bead.clone());
+                // Parent not found and can't be retrieved. Park the bead once,
+                // keyed by its header since that is what its hash covers.
+                if !self
+                    .orphan_beads
+                    .iter()
+                    .any(|orphan| orphan.block_header == bead.block_header)
+                {
+                    if self.orphan_beads.len() >= MAX_ORPHAN_BEADS {
+                        self.orphan_beads.remove(0);
+                    }
+                    self.orphan_beads.push(bead.clone());
+                }
                 return AddBeadStatus::ParentsNotYetReceived;
             }
         }
         // Already seen this bead
         let bead_hash = self.compute_bead_hash(bead);
-        if self
-            .beads
-            .iter()
-            .any(|b| self.compute_bead_hash(b) == bead_hash)
-        {
+        if self.bead_index_mapping.contains_key(&bead_hash) {
             return AddBeadStatus::DagAlreadyContainsBead;
         }
 
@@ -216,23 +226,43 @@ impl Braid {
     }
 
     /// Promotes every parked orphan whose parents are now all present. This is
-    /// a loop rather than recursion through `extend`, so a long orphan chain
+    /// a worklist rather than recursion through `extend`, so a long orphan chain
     /// can't overflow the stack.
     fn process_orphan_beads(&mut self) -> Vec<Bead> {
+        // Index orphans by the parents they name, so adding a bead only rechecks
+        // the orphans waiting on it instead of rescanning all of them.
+        let mut waiting: HashMap<BeadHash, Vec<usize>> = HashMap::new();
+        for (i, orphan) in self.orphan_beads.iter().enumerate() {
+            for parent_hash in &orphan.committed_metadata.parents {
+                waiting.entry(*parent_hash).or_default().push(i);
+            }
+        }
+        let mut orphans: Vec<Option<Bead>> = std::mem::take(&mut self.orphan_beads)
+            .into_iter()
+            .map(Some)
+            .collect();
+        let mut queue: VecDeque<usize> = (0..orphans.len()).collect();
         let mut promoted = Vec::new();
-        // Searching from the back keeps a chain that arrived child-first linear.
-        while let Some(i) = self.orphan_beads.iter().rposition(|orphan| {
-            orphan
-                .committed_metadata
-                .parents
-                .iter()
-                .all(|parent_hash| self.bead_index_mapping.contains_key(parent_hash))
-        }) {
-            let orphan_bead = self.orphan_beads.remove(i);
+        while let Some(i) = queue.pop_front() {
+            let ready = orphans[i].as_ref().is_some_and(|orphan| {
+                orphan
+                    .committed_metadata
+                    .parents
+                    .iter()
+                    .all(|parent_hash| self.bead_index_mapping.contains_key(parent_hash))
+            });
+            if !ready {
+                continue;
+            }
+            let orphan_bead = orphans[i].take().unwrap();
             if let AddBeadStatus::BeadAdded { .. } = self.insert_bead(&orphan_bead) {
+                let hash = self.compute_bead_hash(&orphan_bead);
+                queue.extend(waiting.get(&hash).into_iter().flatten());
                 promoted.push(orphan_bead);
             }
         }
+        // Keep the rest in arrival order, oldest first, for eviction.
+        self.orphan_beads = orphans.into_iter().flatten().collect();
         promoted
     }
     pub fn resolve_parents(&self, bead: &Bead) -> Result<Vec<(u64, u32)>, BraidError> {
