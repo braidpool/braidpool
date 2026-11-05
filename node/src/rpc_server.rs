@@ -1268,6 +1268,7 @@ impl RpcServer for RpcServerImpl {
     ) -> Result<serde_json::Value, ErrorObjectOwned> {
         info!(method = %method, "bitcoin_proxy request received");
 
+        // Only RPC methods listed here are allowed; all other methods are rejected.
         const ALLOWED: &[&str] = &[
             "getrawmempool",
             "getrawtransaction",
