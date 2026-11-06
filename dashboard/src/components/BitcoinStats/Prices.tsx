@@ -46,11 +46,15 @@ const BitcoinPriceTracker: React.FC = () => {
   const [priceHistory, setPriceHistory] = useState<
     { price: number; time: string }[]
   >([]);
+  const [dominanceHistory, setDominanceHistory] = useState<
+    { dominance: number; time: string }[]
+  >([]);
   // MAX_HISTORY_ITEMS is imported from BeadsTab/Constants
   const showSkeletons = loading || !isConnected || (!priceData && !globalStats);
   const currencyRef = useRef(currency);
   const priceRangeChartRef = useRef<HTMLDivElement | null>(null);
   const priceHistoryChartRef = useRef<HTMLDivElement | null>(null);
+  const dominanceChartRef = useRef<HTMLDivElement | null>(null);
 
   const handleDownloadPriceRange = () => {
     if (!priceRangeChartRef.current) return;
@@ -63,6 +67,11 @@ const BitcoinPriceTracker: React.FC = () => {
       priceHistoryChartRef.current,
       'bitcoin-price-history'
     );
+  };
+
+  const handleDownloadDominance = () => {
+    if (!dominanceChartRef.current) return;
+    downloadSvgFromContainer(dominanceChartRef.current, 'btc-dominance-trend');
   };
 
   useEffect(() => {
@@ -126,15 +135,23 @@ const BitcoinPriceTracker: React.FC = () => {
           const timeString = now.toLocaleTimeString();
 
           if (data.data.global_stats) {
+            const dominance = data.data.global_stats.bitcoin_dominance * 100;
             setGlobalStats({
               marketCap: formatLargeNumber(data.data.global_stats.market_cap),
               marketCapChange: data.data.global_stats.market_cap_change,
               activeCryptocurrencies:
                 data.data.global_stats.active_cryptocurrencies,
               activeMarkets: data.data.global_stats.active_markets,
-              bitcoinDominance: data.data.global_stats.bitcoin_dominance * 100,
+              bitcoinDominance: dominance,
               lastUpdated: now.toLocaleString(),
             });
+            if (!isNaN(dominance)) {
+              setDominanceHistory((prev) =>
+                [...prev, { dominance, time: timeString }].slice(
+                  -MAX_HISTORY_ITEMS
+                )
+              );
+            }
           }
 
           setPriceHistory((prev) => {
@@ -497,11 +514,56 @@ const BitcoinPriceTracker: React.FC = () => {
 
         {/* Market Trends */}
         <div className="flex flex-col">
-          <p className="font-semibold text-base">Market Trends</p>
-          <span className="text-sm text-gray-500 mb-3">Coming soon...</span>
+          <div className="flex items-center gap-2">
+            <p className="font-semibold text-base">BTC Dominance Trend</p>
+            <button
+              onClick={handleDownloadDominance}
+              className="p-1.5 rounded text-gray-500 hover:text-gray-300 hover:bg-gray-800 transition-colors"
+              aria-label="Download BTC dominance chart"
+            >
+              <Download className="w-4 h-4" />
+            </button>
+          </div>
+          <span className="text-sm text-gray-500 mb-3">
+            Bitcoin's share of total crypto market cap over time
+          </span>
 
-          <div className="w-full aspect-[4/3] max-w-lg mx-auto border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center">
-            <p className="text-gray-500">Additional visualization</p>
+          <div
+            ref={dominanceChartRef}
+            className="w-full aspect-[4/3] max-w-lg mx-auto border border-gray-700 rounded-lg"
+          >
+            <ResponsiveContainer width="99%" height="100%">
+              <LineChart
+                data={dominanceHistory}
+                margin={{ left: 10, right: 30, top: 20, bottom: 20 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="time" tick={{ fontSize: 10 }} />
+                <YAxis
+                  domain={['auto', 'auto']}
+                  tick={{ fontSize: 10 }}
+                  tickFormatter={(value) => `${Number(value).toFixed(2)}%`}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'black',
+                    border: '1px solid #ccc',
+                  }}
+                  formatter={(value) => [
+                    `${Number(value).toFixed(2)}%`,
+                    'BTC Dominance',
+                  ]}
+                  labelFormatter={(label) => `Time: ${label}`}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="dominance"
+                  stroke="#f7931a"
+                  dot={false}
+                  isAnimationActive={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
           </div>
         </div>
       </div>
