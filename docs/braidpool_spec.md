@@ -97,7 +97,7 @@ The `BraidpoolMetadata` struct is:
 | -----           | -----------                                                     |
 | `parents`       | [[BeadHash, Timestamp], ... ]                                   |
 | `payout_address`| P2TR address for this miner's payout                            |
-| `comm_pubkey`   | secp256k1 pubkey for encrypted DH communication with this miner |
+| `comm_pubkey`   | BIP340 x-only secp256k1 pubkey (32 bytes) that signs this bead, also usable for encrypted DH communication with this miner |
 | `miner IP`      | IP address of this miner                                        |
 | `timestamp`     | Timestamp when this bead was created                            |
 | `transactions`  | List of serialized transactions                                 |
@@ -109,11 +109,8 @@ mining process. It contains:
 | Field             | Description |
 | -----             | ----------- |
 | `timestamp`       | timestamp when this bead was broadcast                                |
-| `signature`       | Signature on the `Uncommitted Metadata` block using the `comm_pubkey` |
+| `signature`       | BIP340 Schnorr signature (64 bytes) by `comm_pubkey`, see below       |
 | `extranonce`      | 64-bit extranonce field                                               |
-| `timestamp`       | timestamp when this bead was broadcast                        |
-| `signature`       | Signature on the `Uncommitted Metadata` block using the `comm_pubkey` |
-| `extranonce`    | 64-bit extranonce field                                         |
 
 The purpose of the timestamps is to gather higher resolution timestamps than are
 possible if the timestamp was committed, in order to measure (in a non-consensus
