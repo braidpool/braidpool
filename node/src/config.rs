@@ -220,10 +220,10 @@ impl CoinbaseConfig {
         let pool_payout_address = match network {
             PoolNetwork::Cpunet => "tc1qu3cdq9unyhdc3d2hw8mvpfgnnhvp6ucckkl6ft".to_string(),
             PoolNetwork::Bitcoin(Network::Bitcoin) => {
-                "bc1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string()
+                "bc1qrj5sqclvf877syf6wsf9qayzhcvufjcykuztlh".to_string()
             }
             PoolNetwork::Bitcoin(Network::Regtest) => {
-                "bcrt1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string()
+                "bcrt1q6ehm6d0ge9745dgjg3zcj9k4ya9v0vqf45ly2j".to_string()
             }
             PoolNetwork::Bitcoin(_) => "tb1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
         };
