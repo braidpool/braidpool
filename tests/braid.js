@@ -758,13 +758,25 @@ function layout(cohort, allParents, beadWork = null, previousCohortTipsPos = nul
     const comparator = workSortComparator(parents, children, cohortBeadWork);
     remainingY.sort((a, b) => comparator(a, b)); // Sorts highest work first
 
+    const xOf = b => (pos.has(b) ? pos.get(b)[0] : proposedX.get(b));
+
     for (const bead of remainingY) {
-        const x = proposedX.get(bead);
+        // A bead can sit in any column between its parents and its children. Try its proposed
+        // column first, then the others, before moving further away from the highest work path.
+        // Tail beads stay at the right edge.
+        const beadParents = [...parents.get(bead)];
+        const beadChildren = [...children.get(bead)];
+        const lo = beadParents.length ? Math.max(...beadParents.map(p => xOf(p) + 1)) : 0;
+        const hi = beadChildren.length ? Math.min(...beadChildren.map(c => xOf(c) - 1)) : proposedX.get(bead);
+        const xs = [proposedX.get(bead)];
+        for (let x = lo; x <= hi; x++) {
+            if (x !== proposedX.get(bead)) xs.push(x);
+        }
         let dist = 0;
         let placed = false;
         let y = 0;
 
-        while (true) {
+        while (!placed) {
             dist++;
             if (y <= 0) {
                 y += dist;
@@ -772,49 +784,52 @@ function layout(cohort, allParents, beadWork = null, previousCohortTipsPos = nul
                 y -= dist;
             }
 
-            // if [x,y] in pos.values(): continue
-            let occupied = false;
-            for (const [x1,y1] of pos.values()) {
-                if (x1 === x && y1 === y) {
-                    occupied = true;
+            for (const x of xs) {
+                // if [x,y] in pos.values(): continue
+                let occupied = false;
+                for (const [x1,y1] of pos.values()) {
+                    if (x1 === x && y1 === y) {
+                        occupied = true;
+                        break;
+                    }
+                }
+                if (occupied) continue;
+
+                // Create a list of all lines on the graph including the proposed <bead> position [x,y]
+                pos.set(bead, [x, y]); // Temporarily place the bead
+                const newLines = []; // {p: [x,y], c: [x,y]}
+                const beadPos = pos.get(bead);
+                for (const p of extendedParents.get(bead)) {
+                    if (pos.has(p)) {
+                        newLines.push({ p: pos.get(p), c: beadPos });
+                    }
+                }
+                for (const c of extendedChildren.get(bead)) {
+                    if (pos.has(c)) {
+                        newLines.push({ p: beadPos, c: pos.get(c) });
+                    }
+                }
+
+                // If there are no intersections of a parent-child edge with any middle bead, stop
+                let intersects = false;
+                for (const line of [...lines, ...newLines]) {
+                    const [x1, y1] = line.p;
+                    const [x2, y2] = line.c;
+
+                    for (const [middleBead, [x3, y3]] of pos.entries()) {
+                         if (intersection(x1, y1, x2, y2, x3, y3)) {
+                             intersects = true;
+                             break;
+                         }
+                    }
+                    if (intersects) break;
+                }
+
+                if (!intersects) {
+                    lines.push(...newLines);
+                    placed = true;
                     break;
                 }
-            }
-            if (occupied) continue;
-
-            // Create a list of all lines on the graph including the proposed <bead> position [x,y]
-            pos.set(bead, [x, y]); // Temporarily place the bead
-            const newLines = []; // {p: [x,y], c: [x,y]}
-            const beadPos = pos.get(bead);
-            for (const p of extendedParents.get(bead)) {
-                if (pos.has(p)) {
-                    newLines.push({ p: pos.get(p), c: beadPos });
-                }
-            }
-            for (const c of extendedChildren.get(bead)) {
-                if (pos.has(c)) {
-                    newLines.push({ p: beadPos, c: pos.get(c) });
-                }
-            }
-
-            // If there are no intersections of a parent-child edge with any middle bead, break
-            let intersects = false;
-            for (const line of [...lines, ...newLines]) {
-                const [x1, y1] = line.p;
-                const [x2, y2] = line.c;
-
-                for (const [middleBead, [x3, y3]] of pos.entries()) {
-                     if (intersection(x1, y1, x2, y2, x3, y3)) {
-                         intersects = true;
-                         break;
-                     }
-                }
-                if (intersects) break;
-            }
-
-            if (!intersects) {
-                lines.push(...newLines);
-                break;
             }
         }
     } // End loop over remainingY beads
