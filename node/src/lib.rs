@@ -29,7 +29,7 @@ pub const MAX_CACHED_TEMPLATES: usize = 90;
 pub const GLOBAL_JOB_STORE_CAPACITY: usize = 20;
 
 use crate::{
-    bead::Bead,
+    bead::{Bead, PreBead},
     braid::{AddBeadStatus, Braid},
     committed_metadata::{CommittedMetadata, TimeVec, TxIdVec},
     db::BraidpoolDBTypes,
@@ -313,9 +313,16 @@ impl SwarmHandler {
             swarm_stratum_bridge_rx,
         )
     }
+    /// Builds a bead from an accepted share, adds it to the braid and propagates it.
+    ///
+    /// `pre_bead` is the job's [`PreBead`], so no transaction is hashed here and the
+    /// bead's bytes are assembled from the template's pre-encoded txid list.
+    /// `coinbase_txid` is the txid of the share's own coinbase.
     pub async fn propagate_valid_bead(
         &mut self,
-        candidate_block: bitcoin::Block,
+        candidate_block_header: bitcoin::block::Header,
+        coinbase_txid: Txid,
+        pre_bead: &PreBead,
         extranonce_2_raw_value: u64,
         downstream_client_ip: &str,
         job_sent_timestamp: u32,
@@ -323,18 +330,20 @@ impl SwarmHandler {
         //TODO: Will be used as seperate entity after altering `uncommitted_metadata`
         extranonce_1_raw_value: u64,
     ) -> Result<(), StratumErrors> {
-        let candidate_block_header = candidate_block.header;
-        let candidate_block_transactions = candidate_block.txdata;
-        let ids: Vec<Txid> = candidate_block_transactions
-            .iter()
-            .map(|tx| tx.compute_txid())
-            .collect();
-        let transaction_ids: Vec<Txid> = Vec::from(ids);
         debug!("Broadcasting bead via floodsub");
+        // Everything that does not depend on the braid is prepared before taking its
+        // write lock, which every submitting miner contends for.
+        let transaction_ids = pre_bead.transaction_ids(coinbase_txid);
         //TODO:Currently temprorary placeholder will be replaced in upcoming PRs
         let public_key = "020202020202020202020202020202020202020202020202020202020202020202"
             .parse::<bitcoin::PublicKey>()
             .unwrap();
+        //TODO:This will be either be generated via the `Pubkey` from config parameter from `~/.braidpool`
+        let hex = "3046022100839c1fbc5304de944f697c9f4b1d01d1faeba32d751c0f7acb21ac8a0f436a72022100e89bd46bb3a5a62adc679f659b7ce876d83ee297c7a5587b2011c4fcc72eab45";
+        let sig = Signature {
+            signature: bitcoin::secp256k1::ecdsa::Signature::from_str(hex).unwrap(),
+            sighash_type: EcdsaSighashType::All,
+        };
         let mut braid_data = self.braid_arc.write().await;
         let mut pairs: Vec<(BlockHash, bitcoin::absolute::Time)> = braid_data
             .tips
@@ -367,7 +376,7 @@ impl SwarmHandler {
                 .unwrap();
         let candidate_block_bead_committed_metadata = CommittedMetadata {
             comm_pub_key: public_key,
-            transaction_ids: TxIdVec(transaction_ids),
+            transaction_ids,
             parents: parent_hash_set,
             parent_bead_timestamps: time_hash_set,
             payout_address: downstream_payout_addr.to_string(),
@@ -375,12 +384,6 @@ impl SwarmHandler {
             min_target: min_target,
             weak_target: weak_target,
             miner_ip: downstream_client_ip.to_string(),
-        };
-        //TODO:This will be either be generated via the `Pubkey` from config parameter from `~/.braidpool`
-        let hex = "3046022100839c1fbc5304de944f697c9f4b1d01d1faeba32d751c0f7acb21ac8a0f436a72022100e89bd46bb3a5a62adc679f659b7ce876d83ee297c7a5587b2011c4fcc72eab45";
-        let sig = Signature {
-            signature: bitcoin::secp256k1::ecdsa::Signature::from_str(hex).unwrap(),
-            sighash_type: EcdsaSighashType::All,
         };
         //Current UNIX timestamp during broadcast of bead
         let current_system_time = std::time::SystemTime::now();
@@ -434,7 +437,7 @@ impl SwarmHandler {
                     hash = %bead_hash,
                     "InsertBeadsBatch sent to DB thread"
                 );
-                let serialized_weak_share_bytes = bitcoin::consensus::serialize(&weak_share);
+                let serialized_weak_share_bytes = pre_bead.encode(&weak_share);
                 let res = self
                     .dashboard_notification_sender
                     .new_bead

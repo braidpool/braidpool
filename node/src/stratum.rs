@@ -1,3 +1,4 @@
+use crate::bead::PreBead;
 use crate::config::PoolNetwork;
 use crate::error::StratumErrors;
 use crate::template_creator::calculate_merkle_root;
@@ -8,7 +9,7 @@ use bitcoin::consensus::{serialize, Decodable};
 use bitcoin::hashes::Hash;
 use bitcoin::io::Cursor;
 use bitcoin::Transaction;
-use bitcoin::{block::Header as BlockHeader, BlockHash, TxMerkleNode, Txid, Witness};
+use bitcoin::{block::Header as BlockHeader, BlockHash, TxMerkleNode, Witness};
 use futures::{lock::Mutex, FutureExt};
 use num::ToPrimitive;
 use rand::RngCore;
@@ -16,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::OnceLock;
 use std::time::UNIX_EPOCH;
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use tokio::{
@@ -810,8 +812,11 @@ impl DownstreamClient {
             }
             merkle_branches_bytes.push(Vec::from(merkle_branch_bytes));
         }
+        // The witness is added below and does not affect the txid, so this is also the
+        // coinbase txid committed to by the bead.
+        let coinbase_txid = coinbase_tx.compute_txid();
         let merkle_root_bytes =
-            calculate_merkle_root(coinbase_tx.compute_txid(), merkle_branches_bytes.as_slice());
+            calculate_merkle_root(coinbase_txid, merkle_branches_bytes.as_slice());
         //Computing the newly constructed merkle root via the merkle path
         let merkle_root = TxMerkleNode::from_byte_array(merkle_root_bytes);
 
@@ -889,7 +894,7 @@ impl DownstreamClient {
         );
 
         // Print each header field in big-endian hex just before PoW validation
-        let coinbase_txid_be_hex = hex::encode(coinbase_tx.compute_txid().to_byte_array());
+        let coinbase_txid_be_hex = hex::encode(coinbase_txid.to_byte_array());
         let version_be_hex = {
             let v = header.version.to_consensus() as u32;
             hex::encode(v.to_be_bytes())
@@ -940,15 +945,6 @@ impl DownstreamClient {
                 return Err(StratumErrors::InvalidCoinbase);
             }
         };
-        let coinbase_tx_for_submission = coinbase_tx.clone();
-        let mut block_transactions = vec![coinbase_tx];
-        block_transactions.extend(submitted_job.blocktemplate.transactions.clone());
-
-        // Construct and log the complete block using rust-bitcoin's Block struct
-        let complete_block = bitcoin::Block {
-            header,
-            txdata: block_transactions,
-        };
         // For cpunet, use custom block_hash calculation; otherwise use standard validate_pow
         let pow_result = if self.network.is_cpunet() {
             // Cpunet uses a modified block hash with "cpunet\0" suffix
@@ -977,7 +973,7 @@ impl DownstreamClient {
                     let submission = BlockSubmissionRequest {
                         template_id: template_id.clone(),
                         header: header.clone(),
-                        coinbase_transaction: coinbase_tx_for_submission.clone(),
+                        coinbase_transaction: coinbase_tx,
                     };
 
                     match submission_tx.send(submission) {
@@ -1046,7 +1042,9 @@ impl DownstreamClient {
             .lock()
             .await
             .propagate_valid_bead(
-                complete_block,
+                header,
+                coinbase_txid,
+                submitted_job.pre_bead(),
                 extranonce_2_raw_value,
                 &self.downstream_ip,
                 submitted_job.job_sent_time,
@@ -2086,6 +2084,36 @@ pub struct JobDetails {
     //Unix timestamp at which current job was sent to downstream miner
     pub job_sent_time: u32,
     pub is_upstream_job: bool,
+    /// Bead state that is the same for every share of this job, see [`PreBead`].
+    ///
+    /// Filled in off the dispatch path by [`JobDetails::spawn_pre_bead`] right after the
+    /// job is stored; [`JobDetails::pre_bead`] computes it on demand if a share beats it.
+    pub pre_bead: OnceLock<PreBead>,
+}
+
+impl JobDetails {
+    /// The pre-built bead state for this job, computed on first use.
+    ///
+    /// `blocktemplate.transactions` holds only non-coinbase transactions: the coinbase
+    /// placeholder is stripped when the job is built, since every share carries its own.
+    pub fn pre_bead(&self) -> &PreBead {
+        self.pre_bead
+            .get_or_init(|| PreBead::new(&self.blocktemplate.transactions))
+    }
+
+    /// Computes [`JobDetails::pre_bead`] on the blocking pool so that hashing the
+    /// template's transactions neither delays `mining.notify` nor stalls the notifier.
+    /// Shares only wait for it in the unlikely case one arrives before it finishes, and
+    /// then they do no more work than they would have without a pre-bead.
+    pub fn spawn_pre_bead(self: &Arc<Self>) {
+        if self.is_upstream_job {
+            return;
+        }
+        let job = Arc::clone(self);
+        tokio::task::spawn_blocking(move || {
+            job.pre_bead();
+        });
+    }
 }
 
 /// Global job store shared across all miner connections.
@@ -2362,10 +2390,6 @@ impl Notifier {
         debug!(prefix_len = %coinbase_1.len(), suffix_len = %coinbase_2.len(), "Split coinbase transaction");
         //Constructing merkle root via merkle path .
         let mut merkle_branches: Vec<String> = Vec::new();
-        let mut txids_hashes: Vec<Txid> = vec![];
-        for tx in notified_template.transactions {
-            txids_hashes.push(tx.compute_txid());
-        }
         if merkle_coinbase_branch.len() != 0 {
             for sibling_node in merkle_coinbase_branch.iter() {
                 let sibling_hex = hex::encode(sibling_node);
@@ -2483,6 +2507,7 @@ impl Notifier {
                 coinbase_witness_commitment: job_notification.coinbase_witness_commitment.clone(),
                 job_sent_time: unix_timestamp,
                 is_upstream_job: true,
+                pre_bead: Default::default(),
             };
             job_store_guard.insert(template_id, Arc::new(job_details));
         }
@@ -2545,6 +2570,7 @@ impl Notifier {
             coinbase_witness_commitment: notification.coinbase_witness_commitment.clone(),
             job_sent_time: unix_timestamp,
             is_upstream_job: false,
+            pre_bead: Default::default(),
         })
     }
 
@@ -2626,8 +2652,13 @@ impl Notifier {
                     let job_details =
                         Self::build_local_job_details(&template, &job_notification, unix_timestamp);
 
-                    let numeric_job_id =
-                        self.job_store.lock().await.insert(template_id, job_details);
+                    let numeric_job_id = self
+                        .job_store
+                        .lock()
+                        .await
+                        .insert(template_id, Arc::clone(&job_details));
+                    // Hash the template's transactions while the job is dispatched below.
+                    job_details.spawn_pre_bead();
 
                     for (peer_adr, connection_info) in &connection_snapshot {
                         let connection_id_hex = format!("{:x}", connection_info.connection_id);
@@ -2827,10 +2858,13 @@ impl Notifier {
                                             &job,
                                             unix_timestamp,
                                         );
-                                        self.job_store
+                                        let job_id = self
+                                            .job_store
                                             .lock()
                                             .await
-                                            .insert(current_template_id, job_details)
+                                            .insert(current_template_id, Arc::clone(&job_details));
+                                        job_details.spawn_pre_bead();
+                                        job_id
                                     }
                                 };
                                 let job_notification_response = JobNotificationResponse {
@@ -2957,6 +2991,7 @@ impl Notifier {
                             .clone(),
                         job_sent_time: current_system_time,
                         is_upstream_job: true,
+                        pre_bead: Default::default(),
                     });
                     self.job_store.lock().await.insert(template_id, job_details);
 
@@ -4004,6 +4039,7 @@ mod test {
             coinbase_witness_commitment: None,
             job_sent_time: 1234567890,
             is_upstream_job: false,
+            pre_bead: Default::default(),
         };
 
         // Insert Braidpool job
@@ -4026,6 +4062,74 @@ mod test {
         assert_eq!(job_id_2, 1, "Second job ID should be 1");
     }
 
+    fn job_with_template_transactions(count: u32, is_upstream_job: bool) -> Arc<JobDetails> {
+        let transactions = (0..count)
+            .map(|seed| bitcoin::Transaction {
+                version: bitcoin::transaction::Version::TWO,
+                lock_time: bitcoin::absolute::LockTime::from_consensus(seed),
+                input: vec![],
+                output: vec![bitcoin::TxOut {
+                    value: bitcoin::Amount::from_sat(1_000 + seed as u64),
+                    script_pubkey: bitcoin::ScriptBuf::new(),
+                }],
+            })
+            .collect();
+        Arc::new(JobDetails {
+            blocktemplate: BlockTemplate {
+                transactions,
+                ..Default::default()
+            },
+            coinbase1: String::new(),
+            coinbase2: String::new(),
+            coinbase_merkle_path: vec![],
+            coinbase_witness_commitment: None,
+            job_sent_time: 0,
+            is_upstream_job,
+            pre_bead: Default::default(),
+        })
+    }
+
+    #[test]
+    fn test_job_pre_bead_covers_template_transactions() {
+        let job = job_with_template_transactions(7, false);
+        assert!(job.pre_bead.get().is_none(), "built lazily, not eagerly");
+
+        assert_eq!(job.pre_bead().transaction_count(), 7);
+
+        // Computed once: later calls hand back the same instance.
+        assert!(std::ptr::eq(job.pre_bead(), job.pre_bead()));
+    }
+
+    #[tokio::test]
+    async fn test_spawn_pre_bead_fills_local_job_in_background() {
+        let job = job_with_template_transactions(5, false);
+
+        job.spawn_pre_bead();
+
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while job.pre_bead.get().is_none() {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("pre-bead should be computed in the background");
+        assert_eq!(job.pre_bead().transaction_count(), 5);
+    }
+
+    #[tokio::test]
+    async fn test_spawn_pre_bead_skips_upstream_jobs() {
+        let job = job_with_template_transactions(5, true);
+
+        job.spawn_pre_bead();
+        // Let any (unexpected) blocking task run.
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        assert!(
+            job.pre_bead.get().is_none(),
+            "upstream jobs never build beads from a template"
+        );
+    }
+
     #[test]
     fn test_upstream_job_storage() {
         let mut store = GlobalJobStore::new(10);
@@ -4039,6 +4143,7 @@ mod test {
             coinbase_witness_commitment: None,
             job_sent_time: 1234567890,
             is_upstream_job: true,
+            pre_bead: Default::default(),
         };
 
         let upstream_id = "upstream_job_abc123";
@@ -4537,6 +4642,7 @@ mod test {
             coinbase_witness_commitment: Some(test_witness),
             job_sent_time: unix_timestamp,
             is_upstream_job: false,
+            pre_bead: Default::default(),
         };
         let numeric_job_id = mock_global_job_store
             .lock()
@@ -4691,6 +4797,7 @@ mod test {
             coinbase_witness_commitment: None,
             job_sent_time: 0,
             is_upstream_job: false,
+            pre_bead: Default::default(),
         });
         let store = Arc::new(Mutex::new(GlobalJobStore::new(
             crate::GLOBAL_JOB_STORE_CAPACITY,
@@ -4914,6 +5021,7 @@ mod test {
             coinbase_witness_commitment: Some(test_witness),
             job_sent_time: unix_ts,
             is_upstream_job: false,
+            pre_bead: Default::default(),
         };
         let map = Arc::new(Mutex::new(GlobalJobStore::new(
             crate::GLOBAL_JOB_STORE_CAPACITY,
@@ -5072,6 +5180,7 @@ mod global_job_store_tests {
             coinbase_witness_commitment: None,
             job_sent_time: 0,
             is_upstream_job: false,
+            pre_bead: Default::default(),
         })
     }
 
