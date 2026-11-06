@@ -57,17 +57,10 @@ export async function fetchMempoolStats() {
     const { fastestFee, halfHourFee, hourFee, economyFee, minimumFee } =
       feesRes.data;
 
-    const btcPriceUSD = btcRates['USD'];
-
-    const convertFee = (sats) => {
-      const feeBtc = sats / 1e8;
-      const feeUsd = feeBtc * btcPriceUSD;
-      return {
-        sats_per_vbyte: sats,
-        fee_btc: feeBtc,
-        fee_usd: feeUsd,
-      };
-    };
+    const convertFee = (sats) => ({
+      sats_per_vbyte: sats,
+      fee_btc: sats / 1e8,
+    });
 
     const blockFeesArray = blockfeesRes.data;
     const latestBlockFeeRaw =
@@ -95,7 +88,6 @@ export async function fetchMempoolStats() {
         count,
         vsize,
         total_fee_btc: total_fee / 1e8,
-        total_fee_usd: (total_fee / 1e8) * btcPriceUSD,
       },
       next_block_fees: convertFee(fastestFee),
       fees: {
@@ -105,7 +97,7 @@ export async function fetchMempoolStats() {
         economy: convertFee(economyFee),
         minimum: convertFee(minimumFee),
       },
-      btc_price_usd: btcPriceUSD,
+      currency_rates: btcRates,
       fee_distribution: feeDistribution,
       block_fee_history: blockfeeHistory,
     };
