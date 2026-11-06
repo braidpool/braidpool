@@ -95,10 +95,17 @@ impl Default for CommittedMetadata {
         }
     }
 }
-impl Encodable for CommittedMetadata {
-    fn consensus_encode<W: Write + ?Sized>(&self, w: &mut W) -> Result<usize, io::Error> {
+impl CommittedMetadata {
+    /// Encodes every field that follows `transaction_ids` in the wire format.
+    ///
+    /// Split out of [`Encodable::consensus_encode`] so that a caller holding a
+    /// pre-encoded `transaction_ids` (see [`crate::bead::PreBead`]) can splice it in
+    /// without re-encoding it, while the field order stays defined in one place.
+    pub(crate) fn consensus_encode_after_transaction_ids<W: Write + ?Sized>(
+        &self,
+        w: &mut W,
+    ) -> Result<usize, io::Error> {
         let mut len = 0;
-        len += self.transaction_ids.consensus_encode(w)?;
         len += self.parents.consensus_encode(w)?;
         len += self.parent_bead_timestamps.consensus_encode(w)?;
         len += self.payout_address.consensus_encode(w)?;
@@ -111,6 +118,14 @@ impl Encodable for CommittedMetadata {
         len += self.min_target.consensus_encode(w)?;
         len += self.weak_target.consensus_encode(w)?;
         len += self.miner_ip.consensus_encode(w)?;
+        Ok(len)
+    }
+}
+
+impl Encodable for CommittedMetadata {
+    fn consensus_encode<W: Write + ?Sized>(&self, w: &mut W) -> Result<usize, io::Error> {
+        let mut len = self.transaction_ids.consensus_encode(w)?;
+        len += self.consensus_encode_after_transaction_ids(w)?;
         Ok(len)
     }
 }
