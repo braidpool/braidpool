@@ -42,6 +42,7 @@ and [consensus](https://github.com/braidpool/braidpool/blob/main/docs/braid_cons
 
 This covers how you should approach a PR from creating to merging. 
 
++ You may optionally refer to the **[Pull Request Template](.github/PULL_REQUEST_TEMPLATE.md)** as a helpful reference when drafting your PR description.
 + Use a concise title that summarizes the change, prefixed by the affected area (e.g., `bead`, `dag`, `rpc`, `doc`, `test`, `feat`, `style`) <br>
  ``` e.g., bead: Add dynamic difficulty validation. ```
 + Explain what the PR does and why it’s needed and reference related issues `(e.g., Fixes #123)` or discussions `(e.g., Discord thread)`.
@@ -64,6 +65,8 @@ This covers how you should approach a PR from creating to merging.
 ## PR Review Process
 
 Reviewing is the most beneficial and needed part for any software; thus, we need to ensure thorough evaluation, clear feedback, and efficient collaboration. A reviewer can express their final decision by commenting on the PR discussion page by acknowledging or denying the changes, or the reviewer can also request some changes. Now it's in the author's hands to weigh the opinion of a reviewer by looking at their understanding of the codebase and in the community.  <br>
+
+Reviewers and authors can also optionally consult the **[Code Review Checklist](docs/CODE_REVIEW_CHECKLIST.md)** as a guide for evaluating Functionality, Security, Performance, Style, and Documentation.
 
 Here are few steps you can follow while reviewing PRs. 
 
