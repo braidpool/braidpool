@@ -46,18 +46,21 @@ pub fn setup(
     let best_block_hash = rpc.get_best_block_hash()?;
     log::info!("Best block hash: {:?}", best_block_hash);
     // get_blockchain_info returns a json blob
-    let info = rpc.get_blockchain_info().unwrap();
-    log::info!("Blockchain info: {:?}", info);
-    if let Err(e) = rpc.get_blockchain_info() {
-        log::error!("get_blockchain_info returned an error: {:?}", e);
-        if is_cookie_auth {
-            log::error!(
-                "Unable to authenticate to bitcoind using a cookie file. \
-                Ensure that bitcoind is running on the same node or use \
-                rpcuser/rpcpass instead."
-            );
+    match rpc.get_blockchain_info() {
+        Ok(info) => {
+            log::info!("Blockchain info: {:?}", info);
         }
-        std::process::exit(1);
+        Err(e) => {
+            log::error!("get_blockchain_info returned an error: {:?}", e);
+            if is_cookie_auth {
+                log::error!(
+                    "Unable to authenticate to bitcoind using a cookie file. \
+                    Ensure that bitcoind is running on the same node or use \
+                    rpcuser/rpcpass instead."
+                );
+            }
+            std::process::exit(1);
+        }
     }
 
     Ok(rpc)
