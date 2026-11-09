@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { getTxInfo, useCopyToClipboard } from './Utils';
+import { getMempoolTransactionUrl } from '../../URLs';
 import { CopyIcon } from 'lucide-react';
+import ContextualError from '../common/ContextualError';
 
 const RBFTransactionDialog = ({
   txid,
@@ -12,17 +14,25 @@ const RBFTransactionDialog = ({
   const [txInfo, setTxInfo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [errorDetails, setErrorDetails] = useState<unknown>(null);
   const [copied, copyToClipboard] = useCopyToClipboard();
 
   useEffect(() => {
     setLoading(true);
     setError(null);
+    setErrorDetails(null);
     const fetchData = async () => {
       try {
         const data = await getTxInfo(txid);
         setTxInfo(data);
       } catch (err) {
         setError('Failed to load transaction details');
+        setErrorDetails({
+          component: 'RBFTransactionDialog',
+          txid,
+          endpoint: getMempoolTransactionUrl(txid),
+          error: err instanceof Error ? err.message : String(err),
+        });
         console.error(err);
       } finally {
         setLoading(false);
@@ -58,9 +68,7 @@ const RBFTransactionDialog = ({
           {loading && (
             <div className="text-center py-8">Loading transaction data...</div>
           )}
-          {error && (
-            <div className="text-red-500 py-8 text-center">{error}</div>
-          )}
+          {error && <ContextualError message={error} details={errorDetails} />}
 
           {txInfo && (
             <>

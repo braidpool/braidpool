@@ -13,6 +13,7 @@ jest.mock('../Utils', () => ({
 }));
 
 jest.mock('lucide-react', () => ({
+  ...jest.requireActual('lucide-react'),
   CopyIcon: () => <svg data-testid="copy-icon" />,
 }));
 

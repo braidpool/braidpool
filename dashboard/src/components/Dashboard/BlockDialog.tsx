@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { formatTimestamp, getBlockInfo, useCopyToClipboard } from './Utils';
+import { getBraidPoolBlockUrl } from '../../URLs';
 import { CopyIcon } from 'lucide-react';
+import ContextualError from '../common/ContextualError';
 
 const BlockInfoDialog = ({
   hash,
@@ -12,11 +14,13 @@ const BlockInfoDialog = ({
   const [blockInfo, setBlockInfo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [errorDetails, setErrorDetails] = useState<unknown>(null);
   const [copied, copyToClipboard] = useCopyToClipboard();
 
   useEffect(() => {
     setLoading(true);
     setError(null);
+    setErrorDetails(null);
 
     const fetchData = async () => {
       try {
@@ -24,6 +28,12 @@ const BlockInfoDialog = ({
         setBlockInfo(data);
       } catch (err) {
         setError('Failed to load block details');
+        setErrorDetails({
+          component: 'BlockInfoDialog',
+          hash,
+          endpoint: getBraidPoolBlockUrl(hash),
+          error: err instanceof Error ? err.message : String(err),
+        });
         console.error(err);
       } finally {
         setLoading(false);
@@ -58,9 +68,7 @@ const BlockInfoDialog = ({
           {loading && (
             <div className="text-center py-8">Loading block data...</div>
           )}
-          {error && (
-            <div className="text-red-500 py-8 text-center">{error}</div>
-          )}
+          {error && <ContextualError message={error} details={errorDetails} />}
 
           {blockInfo && (
             <>
