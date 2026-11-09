@@ -67,7 +67,7 @@ use pool_sv2::{
 };
 use tokio::sync::{
     mpsc::{self},
-    RwLock,
+    watch, RwLock,
 };
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -1016,8 +1016,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
         })?;
 
         let pool_config = PoolConfig::for_braidpool(listen_addr, pubkey, seckey, coinbase_script);
-        let (tx, rx) = mpsc::channel::<braidpool_common::template::BraidpoolTemplate>(32);
-        let pool = PoolSv2::new(pool_config).with_braidpool_template_rx(rx);
+        // watch::channel — latest-wins. Pool always sees the newest template; a slow
+        // pool skips stale fee refreshes but never misses a prev_hash change.
+        // sv2-apps receives via watch::Receiver<Option<BraidpoolTemplate>>.
+        let (tx, rx) =
+            watch::channel::<Option<braidpool_common::template::BraidpoolTemplate>>(None);
+        let pool = PoolSv2::new(pool_config).with_braidpool_template_watch(rx);
         let (share_rx_tx, share_rx_rx) = tokio::sync::oneshot::channel();
 
         tokio::spawn(async move {
@@ -1030,7 +1034,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             match share_rx_rx.await {
                 Ok(mut share_receiver) => {
                     while let Some(share) = share_receiver.recv().await {
-                        // TODO(sv2-integration/PR6): call propagate_valid_bead(share)
+                        // TODO: call propagate_valid_bead(share) to build a bead from the validated share
                         info!(
                             template_id = ?share.template_id,
                             channel_id = share.channel_id,
