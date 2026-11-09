@@ -116,6 +116,7 @@ pub async fn ipc_block_listener(
                     RequestPriority::High,
                     "initial template",
                     network,
+                    0,
                 ).await {
                     Ok(template) => {
                         if let Err(e) = block_template_tx.send(Arc::new(template)).await {
@@ -175,6 +176,7 @@ pub async fn ipc_block_listener(
                                                 RequestPriority::High,
                                                 &format!("block {}", height),
                                                 network,
+                                                height,
                                             ).await {
                                                 Ok(template) => {
                                                     if let Err(e) = block_template_tx.send(Arc::new(template)).await {
@@ -428,6 +430,7 @@ async fn get_template(
     priority: RequestPriority,
     context: &str,
     network: PoolNetwork,
+    block_height: u32,
 ) -> Result<client::BlockTemplate, Box<dyn std::error::Error>> {
     const MIN_TRANSACTION_COUNT: u64 = 1;
     const NONCE: u32 = 0;
@@ -459,6 +462,7 @@ async fn get_template(
 
     let mut processed_template = (*components).clone();
     processed_template.processed_block_hex = Some(complete_block_bytes);
+    processed_template.components.height = block_height;
 
     Ok(processed_template)
 }

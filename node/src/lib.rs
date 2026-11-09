@@ -1,5 +1,6 @@
 //These implementations must be defined under lib.rs as they are required for intergration tests
 use crate::{rpc_server::DashboardEvents, utils::compute_block_hash};
+use bitcoin::hashes::Hash as _;
 use bitcoin::{
     consensus::encode::deserialize, ecdsa::Signature, BlockHash, CompactTarget, EcdsaSighashType,
     Txid,
@@ -8,7 +9,10 @@ use num::ToPrimitive;
 use std::{collections::HashMap, str::FromStr, sync::Arc, time::UNIX_EPOCH};
 
 use futures::lock::Mutex;
-use tokio::sync::mpsc::{self, Receiver, Sender};
+use tokio::sync::{
+    mpsc::{self, Receiver, Sender},
+    watch,
+};
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
 
@@ -167,6 +171,11 @@ pub async fn ipc_template_consumer(
         tokio::sync::Mutex<HashMap<TemplateId, Arc<crate::ipc::client::BlockTemplate>>>,
     >,
     latest_template_id: Arc<Mutex<TemplateId>>,
+    // watch::Sender so the pool always sees the latest template and never blocks.
+    // A slow pool skips stale intermediate templates; a dropped prev-hash is never lost.
+    mut sv2_template_tx: Option<
+        watch::Sender<Option<braidpool_common::template::BraidpoolTemplate>>,
+    >,
 ) -> Result<(), IPCtemplateError> {
     while let Some(ipc_template) = template_rx.recv().await {
         let template_bytes = match &ipc_template.processed_block_hex {
@@ -262,6 +271,7 @@ pub async fn ipc_template_consumer(
                 "New block template"
             );
 
+            // Notify SV1 miners first — must never be delayed by SV2 backpressure.
             let notification_sent_or_not = notifier_tx
                 .send(NotifyCmd::SendToAll {
                     template: template,
@@ -275,6 +285,46 @@ pub async fn ipc_template_consumer(
                 }
                 Err(error) => {
                     error!(error = ?error, "Failed to send template notification");
+                }
+            }
+
+            if let Some(ref sv2_tx) = sv2_template_tx {
+                let height = ipc_template.components.height;
+                // Skip the initial template fetch (height=0) — height comes from TipChanged
+                // and is unknown before the first block notification. The pool will receive
+                // the correct template on the first TipChanged event.
+                if height == 0 {
+                    warn!("Skipping SV2 forward for initial template — height unknown");
+                } else {
+                    let coinbase_tx =
+                        bitcoin::consensus::encode::serialize(&template_transactions[0]);
+                    let merkle_path: Vec<[u8; 32]> = ipc_template
+                        .components
+                        .coinbase_merkle_path
+                        .iter()
+                        .filter_map(|b| b.as_slice().try_into().ok())
+                        .collect();
+                    let prev_hash: [u8; 32] = template_header.prev_blockhash.to_byte_array();
+                    let braidpool_tmpl = braidpool_common::template::BraidpoolTemplate {
+                        coinbase_tx,
+                        merkle_path,
+                        prev_hash,
+                        nbits: template_header.bits.to_consensus(),
+                        header_timestamp: template_header.time,
+                        version: template_header.version.to_consensus(),
+                        height,
+                        template_id: match &template_id {
+                            TemplateId::Braidpool(id) => *id,
+                            TemplateId::Upstream(_) => 0,
+                        },
+                    };
+                    // watch::Sender::send returns Err only when all receivers are dropped.
+                    // Otherwise it always overwrites — slow pool skips stale templates,
+                    // and a new prev_hash is never silently dropped.
+                    if sv2_tx.send(Some(braidpool_tmpl)).is_err() {
+                        warn!(template_id = %template_id, "SV2 watch channel closed — disabling SV2 forwarding");
+                        sv2_template_tx = None;
+                    }
                 }
             }
         } else {
