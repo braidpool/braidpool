@@ -132,11 +132,6 @@ impl Decodable for CommittedMetadata {
         let transaction_ids = TxIdVec::consensus_decode(r)?;
         let parents = Vec::<BeadHash>::consensus_decode(r)?;
         let parent_bead_timestamps = TimeVec::consensus_decode(r)?;
-        // Both of these are peer-supplied `String`s, and a `String` decodes up to
-        // `MAX_VEC_SIZE`, so without a bound one bead can carry megabytes of them:
-        // two near-4MB fields encode to a 7.8 MB bead that round-trips today. That
-        // is also what stops `MAX_BEAD_SYNC_RESPONSE_BYTES` being derived from a
-        // realistic per-bead size, since the per-bead figure is not yet true.
         let payout_address = String::consensus_decode(r)?;
         if payout_address.len() > MAX_PAYOUT_ADDRESS_LEN {
             return Err(Error::from(io::Error::new(
