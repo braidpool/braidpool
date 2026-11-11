@@ -102,6 +102,9 @@ const GraphVisualization: React.FC = () => {
 
     function rpc(method: string, params: unknown[] = []): Promise<unknown> {
       return new Promise((resolve, reject) => {
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+          return reject(new Error('WebSocket is not connected'));
+        }
         const id = ++reqId;
         const timer = setTimeout(() => {
           pending.delete(id);
@@ -119,6 +122,9 @@ const GraphVisualization: React.FC = () => {
     }
 
     async function loadDAG() {
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        return;
+      }
       const myGen = ++fetchGen;
       const sel = selectedCohortsRef.current;
       try {
