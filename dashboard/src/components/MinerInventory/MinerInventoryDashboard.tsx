@@ -7,7 +7,7 @@ import MinerDashboardHeader from './MinerDashboardHeader';
 import MinerControls from './MinerControls';
 import { HISTORY_POINTS, REFRESH_INTERVAL } from './Constant';
 import { mapApiToMiner, getAlerts } from './Utils';
-import { UseBitcoinNetworkHashrate } from './useChainHashrates';
+import { UseBitcoinNetworkHashrate } from './UseChainHashrates';
 
 const MAX_HISTORY_POINTS = HISTORY_POINTS;
 const H_PER_EH = 1e18;
