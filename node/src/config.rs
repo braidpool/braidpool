@@ -216,7 +216,11 @@ impl CoinbaseConfig {
     /// The payout address is chosen from the network, so it can never be
     /// silently coerced onto a default chain, which would produce shares and
     /// payout addresses for the wrong chain.
-    pub fn from_network(network: PoolNetwork) -> Self {
+    ///
+    /// # Errors
+    /// Returns [`UnsupportedNetworkError`] if the network does not have a configured
+    /// default payout address.
+    pub fn from_network(network: PoolNetwork) -> Result<Self, UnsupportedNetworkError> {
         let pool_payout_address = match network {
             PoolNetwork::Cpunet => "tc1qu3cdq9unyhdc3d2hw8mvpfgnnhvp6ucckkl6ft".to_string(),
             PoolNetwork::Bitcoin(Network::Bitcoin) => {
@@ -225,14 +229,18 @@ impl CoinbaseConfig {
             PoolNetwork::Bitcoin(Network::Regtest) => {
                 "bcrt1q6ehm6d0ge9745dgjg3zcj9k4ya9v0vqf45ly2j".to_string()
             }
-            PoolNetwork::Bitcoin(_) => "tb1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
+            other => {
+                return Err(UnsupportedNetworkError {
+                    network_name: other.name().to_string(),
+                });
+            }
         };
 
-        Self {
+        Ok(Self {
             network,
             pool_payout_address,
             pool_identifier: "Braidpool".to_string(),
-        }
+        })
     }
 }
 
@@ -256,6 +264,45 @@ mod test {
                 .unwrap_or_else(|| panic!("'{}' should be a supported network", name));
             assert_eq!(network.name(), name);
             assert_eq!(network.to_string(), name);
+        }
+    }
+
+    #[test]
+    fn coinbase_config_payout_address_valid_for_supported_networks() {
+        use bitcoin::Address;
+        use std::str::FromStr;
+
+        for network in [
+            PoolNetwork::Cpunet,
+            PoolNetwork::Bitcoin(Network::Bitcoin),
+            PoolNetwork::Bitcoin(Network::Regtest),
+        ] {
+            let config = super::CoinbaseConfig::from_network(network)
+                .expect("Configured network should have valid coinbase config");
+            assert!(!config.pool_payout_address.is_empty());
+            if let PoolNetwork::Bitcoin(expected_net) = network {
+                let parsed = Address::from_str(&config.pool_payout_address).unwrap_or_else(|e| {
+                    panic!(
+                        "Address '{}' for network '{}' should be valid: {}",
+                        config.pool_payout_address, network, e
+                    )
+                });
+                let _checked = parsed.require_network(expected_net).unwrap_or_else(|e| {
+                    panic!(
+                        "Address '{}' not valid for network '{:?}': {}",
+                        config.pool_payout_address, expected_net, e
+                    )
+                });
+            }
+        }
+
+        // Networks without a default payout address (no silent fallback) must return UnsupportedNetworkError
+        for network in [
+            PoolNetwork::Bitcoin(Network::Testnet),
+            PoolNetwork::Bitcoin(Network::Testnet4),
+            PoolNetwork::Bitcoin(Network::Signet),
+        ] {
+            assert!(super::CoinbaseConfig::from_network(network).is_err());
         }
     }
     #[test]

@@ -432,7 +432,7 @@ async fn get_template(
     const MIN_TRANSACTION_COUNT: u64 = 1;
     const NONCE: u32 = 0;
 
-    let config = CoinbaseConfig::from_network(network);
+    let config = CoinbaseConfig::from_network(network)?;
 
     let components = client
         .get_block_template_components(None, Some(priority))
