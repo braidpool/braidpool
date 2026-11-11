@@ -1,12 +1,11 @@
 import { useState } from 'react';
 import { TrendsTABS } from '../lib/Constants';
-import HashrateTab from './HashrateTab';
 import LatencyTab from './LatencyTab';
 import TransactionsTab from './TransactionsTab';
 import { Difficulty } from './Difficulty';
 
 export function TrendsTab({ timeRange }: { timeRange: string }) {
-  const [activeSubTab, setActiveSubTab] = useState('hashrate');
+  const [activeSubTab, setActiveSubTab] = useState('latency');
   const [chartHovered, setChartHovered] = useState(false);
 
   return (
@@ -44,9 +43,6 @@ export function TrendsTab({ timeRange }: { timeRange: string }) {
         </nav>
       </div>
 
-      <div style={{ display: activeSubTab === 'hashrate' ? 'block' : 'none' }}>
-        <HashrateTab timeRange={timeRange} />
-      </div>
       <div style={{ display: activeSubTab === 'latency' ? 'block' : 'none' }}>
         <LatencyTab timeRange={timeRange} />
       </div>
