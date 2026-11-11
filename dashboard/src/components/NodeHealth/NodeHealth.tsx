@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import ContextualError from '../common/ContextualError';
 import Peers from './Peers';
 import NetworkPanel from './Network';
 import MempoolPanel from './Mempool';
@@ -41,6 +42,7 @@ const NodeHealth: React.FC = () => {
   const [lastUpdated, setLastUpdated] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [errorDetails, setErrorDetails] = useState<unknown>(null);
   const [wsConnected, setWsConnected] = useState(false);
   const [bandwidthHistory, setBandwidthHistory] = useState<
     BandwidthHistoryPoint[]
@@ -74,6 +76,14 @@ const NodeHealth: React.FC = () => {
         }
         setLoading(false);
         setError('WebSocket connection failed');
+        setErrorDetails({
+          component: 'NodeHealth',
+          endpoint: WEBSOCKET_URLS.MAIN_WEBSOCKET,
+          eventType: err.type,
+          readyState: ws.readyState,
+          reconnectAttempts,
+          maxReconnectAttempts,
+        });
       };
 
       ws.onmessage = (event) => {
@@ -90,6 +100,7 @@ const NodeHealth: React.FC = () => {
             setLastUpdated(new Date(data.lastUpdated).toLocaleTimeString());
             setLoading(false);
             setError(null);
+            setErrorDetails(null);
             setBandwidthHistory((prevHistory) => {
               const timestamp = new Date(data.lastUpdated).getTime();
               const { totalbytesrecv, totalbytessent } = data.netTotals;
@@ -176,9 +187,7 @@ const NodeHealth: React.FC = () => {
   if (error) {
     return (
       <div className="min-h-auto bg-[#1e1e1e] text-white flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-red-500 mb-4">{error}</p>
-        </div>
+        <ContextualError message={error} details={errorDetails} />
       </div>
     );
   }
