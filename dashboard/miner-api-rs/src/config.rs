@@ -17,6 +17,8 @@ impl Default for Config {
             cors_origins: vec![
                 "http://localhost:3000".to_string(),
                 "http://localhost:3001".to_string(),
+                "http://localhost:5173".to_string(), // Vite dev server
+                "http://localhost:4173".to_string(), // Vite preview
             ],
             refresh_interval_secs: 1,
             scan_interval_secs: 300,
