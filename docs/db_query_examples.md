@@ -130,11 +130,15 @@ WHERE t.txid = :txid;
 ### 12. **All TXIDs for a specific bead**
     (bead_id = :bid)
 
+`kind` is 0 for a transaction in the bead's template (committed) and 1 for a
+transaction the bead proposes for later beads (to be added). `position` keeps
+each list in the order the bead committed it.
+
 ```sql
-SELECT txid
+SELECT txid, kind
 FROM Transactions
 WHERE bead_id = :bid
-ORDER BY txid;
+ORDER BY kind, position;
 ```
 
 ## Timestamp Analysis
@@ -283,10 +287,12 @@ BEGIN TRANSACTION;
     )
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
-    INSERT INTO Transactions (bead_id, txid)
+    INSERT INTO Transactions (bead_id, txid, kind, position)
     SELECT 
         json_extract(value, '$.bead_id') AS bead_id,
-        json_extract(value, '$.txid') AS txid
+        json_extract(value, '$.txid') AS txid,
+        json_extract(value, '$.kind') AS kind,
+        json_extract(value, '$.position') AS position
     FROM json_each(?);
 
     INSERT INTO Relatives (child, parent) 

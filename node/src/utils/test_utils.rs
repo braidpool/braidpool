@@ -178,7 +178,9 @@ pub mod test_utility_functions {
     }
     #[cfg(test)]
     pub struct TestCommittedMetadataBuilder {
-        transaction_ids: Vec<Txid>,
+        coinbase_transaction: Option<Transaction>,
+        committed_txs: Vec<Txid>,
+        to_be_added: Vec<Txid>,
         parents: Vec<BeadHash>,
         parent_bead_timestamps: Option<TimeVec>,
         payout_address: Option<String>,
@@ -187,13 +189,16 @@ pub mod test_utility_functions {
         min_target: Option<CompactTarget>,
         weak_target: Option<CompactTarget>,
         miner_ip: Option<String>,
+        fee_total_sats: u64,
     }
 
     #[cfg(test)]
     impl TestCommittedMetadataBuilder {
         pub fn new() -> Self {
             Self {
-                transaction_ids: Vec::new(),
+                coinbase_transaction: None,
+                committed_txs: Vec::new(),
+                to_be_added: Vec::new(),
                 parents: Vec::new(),
                 parent_bead_timestamps: None,
                 payout_address: None,
@@ -202,11 +207,22 @@ pub mod test_utility_functions {
                 min_target: None,
                 weak_target: None,
                 miner_ip: None,
+                fee_total_sats: 0,
             }
         }
 
         pub fn transactions(mut self, txs: Vec<Txid>) -> Self {
-            self.transaction_ids = txs;
+            self.committed_txs = txs;
+            self
+        }
+
+        pub fn to_be_added(mut self, txs: Vec<Txid>) -> Self {
+            self.to_be_added = txs;
+            self
+        }
+
+        pub fn coinbase(mut self, coinbase: Transaction) -> Self {
+            self.coinbase_transaction = Some(coinbase);
             self
         }
 
@@ -247,11 +263,19 @@ pub mod test_utility_functions {
             self.weak_target = Some(weak_target);
             self
         }
+        pub fn fee_total_sats(mut self, fee_total_sats: u64) -> Self {
+            self.fee_total_sats = fee_total_sats;
+            self
+        }
         pub fn build(self) -> CommittedMetadata {
             use crate::committed_metadata::TxIdVec;
 
             CommittedMetadata {
-                transaction_ids: TxIdVec(self.transaction_ids),
+                coinbase_transaction: self
+                    .coinbase_transaction
+                    .unwrap_or_else(crate::committed_metadata::placeholder_coinbase),
+                committed_txs: TxIdVec(self.committed_txs),
+                to_be_added: TxIdVec(self.to_be_added),
                 parents: self.parents,
                 parent_bead_timestamps: self
                     .parent_bead_timestamps
@@ -264,6 +288,7 @@ pub mod test_utility_functions {
                 min_target: self.min_target.expect("min_target is required"),
                 weak_target: self.weak_target.expect("weak_target is required"),
                 miner_ip: self.miner_ip.expect("miner_ip is required"),
+                fee_total_sats: self.fee_total_sats,
             }
         }
     }

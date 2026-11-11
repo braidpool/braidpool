@@ -6,10 +6,28 @@ use bitcoin::consensus::encode::Error;
 use bitcoin::io::{self, Read, Write};
 use bitcoin::CompactTarget;
 use bitcoin::PublicKey;
+use bitcoin::Transaction;
 use bitcoin::Txid;
 use serde::Deserialize;
 use serde::Serialize;
+use std::collections::HashSet;
 use std::str::FromStr;
+
+/// Most transactions a bead may propose for the committed mempool.
+pub const MAX_TO_BE_ADDED_TXS: usize = 5;
+
+/// Most non-coinbase transactions a block template can hold: the block weight
+/// limit divided by the weight of the smallest possible transaction.
+pub const MAX_COMMITTED_TXS: usize = 4_000_000 / 240;
+
+/// Largest allocation a decoder makes before it has read any element, so a
+/// declared length alone cannot reserve memory.
+const MAX_DECODE_PREALLOCATION: usize = 1024;
+
+/// Builds the decode error for malformed committed metadata.
+fn invalid_data(reason: &'static str) -> Error {
+    Error::from(io::Error::new(io::ErrorKind::InvalidData, reason))
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct TimeVec(pub Vec<Time>);
@@ -28,10 +46,11 @@ impl Encodable for TimeVec {
 impl Decodable for TimeVec {
     fn consensus_decode<R: Read + ?Sized>(r: &mut R) -> Result<Self, Error> {
         let len = u64::consensus_decode(r)?;
-        let mut vec = Vec::with_capacity(len as usize);
+        let mut vec = Vec::with_capacity((len as usize).min(MAX_DECODE_PREALLOCATION));
         for _ in 0..len {
             let time_u32 = u32::consensus_decode(r)?;
-            let time = Time::from_consensus(time_u32).unwrap();
+            let time = Time::from_consensus(time_u32)
+                .map_err(|_| invalid_data("invalid parent bead timestamp in TimeVec"))?;
             vec.push(time);
         }
         Ok(TimeVec(vec))
@@ -49,14 +68,43 @@ impl Encodable for TxIdVec {
         Ok(len)
     }
 }
-impl Decodable for TxIdVec {
-    fn consensus_decode<R: Read + ?Sized>(r: &mut R) -> Result<Self, Error> {
+impl TxIdVec {
+    /// Decodes a txid list holding at most `max_len` distinct entries.
+    pub fn consensus_decode_bounded<R: Read + ?Sized>(
+        r: &mut R,
+        max_len: usize,
+    ) -> Result<Self, Error> {
         let len = u64::consensus_decode(r)?;
-        let mut vec = Vec::with_capacity(len as usize);
+        if len > max_len as u64 {
+            return Err(invalid_data("txid list longer than its limit"));
+        }
+        let len = len as usize;
+        let mut vec = Vec::with_capacity(len.min(MAX_DECODE_PREALLOCATION));
+        let mut seen = HashSet::with_capacity(len.min(MAX_DECODE_PREALLOCATION));
         for _ in 0..len {
-            vec.push(Txid::consensus_decode(r)?);
+            let txid = Txid::consensus_decode(r)?;
+            if !seen.insert(txid) {
+                return Err(invalid_data("duplicate txid in txid list"));
+            }
+            vec.push(txid);
         }
         Ok(Self(vec))
+    }
+}
+impl Decodable for TxIdVec {
+    fn consensus_decode<R: Read + ?Sized>(r: &mut R) -> Result<Self, Error> {
+        Self::consensus_decode_bounded(r, MAX_COMMITTED_TXS)
+    }
+}
+
+/// Returns the stand-in coinbase used where no template coinbase exists: one
+/// null input and no outputs.
+pub fn placeholder_coinbase() -> Transaction {
+    Transaction {
+        version: bitcoin::transaction::Version::TWO,
+        lock_time: bitcoin::absolute::LockTime::ZERO,
+        input: vec![bitcoin::TxIn::default()],
+        output: Vec::new(),
     }
 }
 
@@ -64,7 +112,14 @@ impl Decodable for TxIdVec {
 //deserializable trait
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CommittedMetadata {
-    pub transaction_ids: TxIdVec,
+    /// The coinbase transaction this bead was mined with.
+    pub coinbase_transaction: Transaction,
+    /// Txids of the template's transactions, coinbase excluded, in template
+    /// order. This is the committed-mempool state the bead was mined on.
+    pub committed_txs: TxIdVec,
+    /// Txids this bead proposes for the committed mempool. They are not part
+    /// of this bead's own block and count only for its descendants.
+    pub to_be_added: TxIdVec,
     pub parents: Vec<BeadHash>,
     pub parent_bead_timestamps: TimeVec,
     pub payout_address: String,
@@ -76,11 +131,17 @@ pub struct CommittedMetadata {
     //minimum possible target
     pub weak_target: CompactTarget,
     pub miner_ip: String,
+    /// Total transaction fees, in satoshis, in the block template this bead
+    /// was mined on.
+    #[serde(default)]
+    pub fee_total_sats: u64,
 }
 impl Default for CommittedMetadata {
     fn default() -> Self {
         Self {
-            transaction_ids: TxIdVec(Vec::new()),
+            coinbase_transaction: placeholder_coinbase(),
+            committed_txs: TxIdVec(Vec::new()),
+            to_be_added: TxIdVec(Vec::new()),
             parents: Vec::new(),
             parent_bead_timestamps: TimeVec(Vec::new()),
             payout_address: "bc1".to_string(),
@@ -92,13 +153,16 @@ impl Default for CommittedMetadata {
             min_target: CompactTarget::from_consensus(486604799),
             weak_target: CompactTarget::from_consensus(486604799),
             miner_ip: "127.0.0.1".to_string(),
+            fee_total_sats: 0,
         }
     }
 }
 impl Encodable for CommittedMetadata {
     fn consensus_encode<W: Write + ?Sized>(&self, w: &mut W) -> Result<usize, io::Error> {
         let mut len = 0;
-        len += self.transaction_ids.consensus_encode(w)?;
+        len += self.coinbase_transaction.consensus_encode(w)?;
+        len += self.committed_txs.consensus_encode(w)?;
+        len += self.to_be_added.consensus_encode(w)?;
         len += self.parents.consensus_encode(w)?;
         len += self.parent_bead_timestamps.consensus_encode(w)?;
         len += self.payout_address.consensus_encode(w)?;
@@ -111,13 +175,16 @@ impl Encodable for CommittedMetadata {
         len += self.min_target.consensus_encode(w)?;
         len += self.weak_target.consensus_encode(w)?;
         len += self.miner_ip.consensus_encode(w)?;
+        len += self.fee_total_sats.consensus_encode(w)?;
         Ok(len)
     }
 }
 
 impl Decodable for CommittedMetadata {
     fn consensus_decode<R: Read + ?Sized>(r: &mut R) -> Result<Self, Error> {
-        let transaction_ids = TxIdVec::consensus_decode(r)?;
+        let coinbase_transaction = Transaction::consensus_decode(r)?;
+        let committed_txs = TxIdVec::consensus_decode_bounded(r, MAX_COMMITTED_TXS)?;
+        let to_be_added = TxIdVec::consensus_decode_bounded(r, MAX_TO_BE_ADDED_TXS)?;
         let parents = Vec::<BeadHash>::consensus_decode(r)?;
         let parent_bead_timestamps = TimeVec::consensus_decode(r)?;
         let payout_address = String::consensus_decode(r)?;
@@ -137,8 +204,18 @@ impl Decodable for CommittedMetadata {
         let min_target = CompactTarget::consensus_decode(r)?;
         let weak_target = CompactTarget::consensus_decode(r)?;
         let miner_ip = String::consensus_decode(r)?;
+        let fee_total_sats = u64::consensus_decode(r)?;
+        // A template cannot carry more fees than can ever exist.
+        if fee_total_sats > bitcoin::Amount::MAX_MONEY.to_sat() {
+            return Err(Error::from(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "fee_total_sats in CommittedMetadata exceeds MAX_MONEY",
+            )));
+        }
         Ok(CommittedMetadata {
-            transaction_ids,
+            coinbase_transaction,
+            committed_txs,
+            to_be_added,
             parents,
             parent_bead_timestamps,
             payout_address,
@@ -147,6 +224,7 @@ impl Decodable for CommittedMetadata {
             min_target,
             weak_target,
             miner_ip,
+            fee_total_sats,
         })
     }
 }
