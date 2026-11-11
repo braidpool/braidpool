@@ -33,6 +33,21 @@ CREATE TABLE IF NOT EXISTS Transactions (
       UNIQUE (bead_id, txid)
 );
 
+-- 2b. Committed Transactions
+CREATE TABLE IF NOT EXISTS CommittedTransactions (
+      bead_id           INTEGER NOT NULL REFERENCES Bead(id),
+      txid              BLOB NOT NULL,
+      UNIQUE (bead_id, txid)
+);
+
+-- Enforce the spec constraint that a bead can have at most 5 committed transactions.
+CREATE TRIGGER IF NOT EXISTS limit_committed_transactions
+BEFORE INSERT ON CommittedTransactions
+BEGIN
+    SELECT RAISE(ABORT, 'A bead cannot have more than 5 committed transactions')
+    WHERE (SELECT COUNT(*) FROM CommittedTransactions WHERE bead_id = NEW.bead_id) >= 5;
+END;
+
 -- 3. Cohorts
 -- Auxiliary: positive cohort numbers (append a row for each new cohort)
 -- Cohort metadata can be added here
@@ -85,6 +100,7 @@ CREATE TABLE IF NOT EXISTS AncestorTimestamps (
 
 -- 7. Fast look-up indices
 CREATE INDEX IF NOT EXISTS bead_txids ON Transactions(bead_id);
+CREATE INDEX IF NOT EXISTS bead_committed_txids ON CommittedTransactions(bead_id);
 CREATE INDEX IF NOT EXISTS parents ON Relatives(parent);
 CREATE INDEX IF NOT EXISTS bead_hash ON Bead(hash);
 CREATE INDEX IF NOT EXISTS timestamps_parents ON ParentTimestamps(parent);
