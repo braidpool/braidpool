@@ -1,12 +1,3 @@
-export enum Page {
-  DASHBOARD = 'dashboard',
-  MINING_INVENTORY = 'mining-inventory',
-  MEMPOOL = 'mempool',
-  MINER_STATS = 'miner-stats',
-  BITCOIN_STATS = 'bitcoin-stats',
-  NODE_HEALTH = 'node-health',
-}
-
 export interface RecentBlocksTableProps {
   maxHeight?: number;
   blocks: Block[];

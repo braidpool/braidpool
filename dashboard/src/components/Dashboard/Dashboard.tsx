@@ -3,10 +3,14 @@ import Card from '../common/Card';
 import Header from '../common/Header';
 import MinerInventoryDashboard from '../MinerInventory/MinerInventoryDashboard';
 import MempoolLatencyStats from '../Mempool/MempoolLatencyStats';
-import MinedSharesExplorer from '../BeadsTab/MinedSharesExplorer';
+import { PoolDominance } from '../BeadsTab/PoolDominance/PoolDominance';
+import { TrendsTab } from '../BeadsTab/Trends/TrendsTab';
+import { RewardsDashboard } from '../BeadsTab/Reward/RewardsDashboard';
+import { DEFAULT_TIME_RANGE } from '../BeadsTab/Constants';
+import GraphVisualization from '../BraidPoolDAG/BraidPoolDAG';
 import NodeHealth from '../NodeHealth/NodeHealth';
 import BitcoinStats from '../BitcoinStats/BitcoinStats';
-import { Page } from './Types';
+import { Page } from '../common/Types';
 import BlockViewer from './BlockViewer';
 
 const Dashboard = () => {
@@ -66,18 +70,40 @@ const Dashboard = () => {
             </Card>
           </div>
         );
-      case Page.MINER_STATS:
+      case Page.POOL_DOMINANCE:
         return (
           <div className="p-2">
-            <Card title="Beads Explorer">
-              <div>
-                <MinedSharesExplorer />
-              </div>
+            <Card title="Pool Dominance">
+              <PoolDominance />
             </Card>
           </div>
         );
       case Page.NODE_HEALTH:
         return <NodeHealth />;
+      case Page.DAG:
+        return (
+          <div className="p-2">
+            <Card title="Braid DAG">
+              <GraphVisualization />
+            </Card>
+          </div>
+        );
+      case Page.TRENDS:
+        return (
+          <div className="p-2">
+            <Card title="Network Trends">
+              <TrendsTab timeRange={DEFAULT_TIME_RANGE} />
+            </Card>
+          </div>
+        );
+      case Page.REWARDS:
+        return (
+          <div className="p-2">
+            <Card title="Rewards">
+              <RewardsDashboard />
+            </Card>
+          </div>
+        );
 
       default:
         return (
