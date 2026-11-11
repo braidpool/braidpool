@@ -290,6 +290,8 @@ impl PeerManager {
                 "score": info.score,
                 "last_seen_secs": last_seen_secs,
                 "geo_group": info.geo_group,
+                "miner_key": crate::miner_identity::xonly_from_peer_id(&info.peer_id)
+                    .map(|key| key.to_string()),
             }));
         }
 
@@ -395,6 +397,7 @@ impl PeerManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::miner_identity::MinerIdentity;
     use libp2p::identity::Keypair;
     use std::net::{Ipv4Addr, Ipv6Addr};
 
@@ -457,5 +460,26 @@ mod tests {
 
         // Should select peer3 (highest score) and either peer1 or peer2 (different geo group)
         assert!(top_peers.contains(&peer3));
+    }
+
+    #[test]
+    fn peers_json_reports_miner_key_or_null() {
+        let identity = MinerIdentity::generate();
+        let secp_peer = PeerId::from(identity.libp2p_keypair().unwrap().public());
+        let legacy_peer = PeerId::from(libp2p::identity::Keypair::generate_ed25519().public());
+        let mut manager = PeerManager::new(10);
+        manager.add_peer(secp_peer, false, None);
+        manager.add_peer(legacy_peer, false, None);
+        let json = manager.get_peers_json();
+        let peers = json["peers"].as_array().unwrap();
+        assert_eq!(peers.len(), 2);
+        let find = |id: &PeerId| {
+            peers
+                .iter()
+                .find(|p| p["peer_id"] == id.to_base58())
+                .unwrap()
+        };
+        assert_eq!(find(&secp_peer)["miner_key"], identity.xonly().to_string());
+        assert!(find(&legacy_peer)["miner_key"].is_null());
     }
 }
