@@ -12,7 +12,7 @@ function App() {
             <Route path="/:page" element={<Dashboard />} />
             <Route
               path="/minedsharesexplorer"
-              element={<Navigate to="/miner-stats" replace />}
+              element={<Navigate to="/dashboard" replace />}
             />
           </Routes>
         </main>

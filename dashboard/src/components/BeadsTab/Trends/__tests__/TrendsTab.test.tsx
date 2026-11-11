@@ -28,7 +28,7 @@ class MockResizeObserver {
   disconnect(): void {}
 }
 
-(global as any).ResizeObserver = MockResizeObserver;
+(globalThis as any).ResizeObserver = MockResizeObserver;
 
 jest.mock('../HashrateTab', () => ({
   __esModule: true,
