@@ -4,7 +4,7 @@ jest.mock('../rpcWithEnv', () => ({
   rpcWithEnv: jest.fn(),
 }));
 
-describe('fetchHashrateStats', () => {
+describe('fetchHashrateStats (difficulty)', () => {
   let fetchHashrateStats;
   let rpcWithEnv;
   let mockClient;
@@ -24,9 +24,6 @@ describe('fetchHashrateStats', () => {
 
     rpcWithEnv.mockReset();
 
-    // keep console output quiet
-    jest.spyOn(console, 'log').mockImplementation(() => {});
-    jest.spyOn(console, 'warn').mockImplementation(() => {});
     jest.spyOn(console, 'error').mockImplementation(() => {});
   });
 
@@ -34,107 +31,79 @@ describe('fetchHashrateStats', () => {
     jest.restoreAllMocks();
   });
 
-  it('should fetch difficulty & hashrate then broadcast once', async () => {
+  it('broadcasts only the network difficulty, in T', async () => {
     const diff = 65_000_000_000_000;
-    const hashps = 500 * 1e18; // 500 EH/s
-    const now = 1_752_000_000_000; // fake timestamp
+    const now = 1_752_000_000_000;
 
     jest.spyOn(Date, 'now').mockReturnValue(now);
-    rpcWithEnv
-      .mockResolvedValueOnce(diff) // getdifficulty
-      .mockResolvedValueOnce(hashps); // getnetworkhashps
+    rpcWithEnv.mockResolvedValueOnce(diff);
 
     await fetchHashrateStats(mockWSS);
 
-    expect(rpcWithEnv).toHaveBeenCalledTimes(2);
-    expect(
-      rpcWithEnv.mock.calls.some((call) => call[0].method === 'getdifficulty')
-    ).toBe(true);
+    expect(rpcWithEnv).toHaveBeenCalledTimes(1);
+    expect(rpcWithEnv).toHaveBeenCalledWith({ method: 'getdifficulty' });
 
     expect(mockClient.send).toHaveBeenCalledTimes(1);
     const payload = JSON.parse(mockClient.send.mock.calls[0][0]);
-    expect(payload).toMatchObject({
+    expect(payload).toEqual({
       type: 'hashrate_data',
       data: {
-        hashrate: hashps / 1e18, // EH/s
-        timestamp: now,
         networkDifficulty: diff / 1e12,
+        timestamp: now,
       },
     });
+    expect(payload.data).not.toHaveProperty('hashrate');
   });
 
-  it('should reuse cached difficulty within 30 s', async () => {
+  it('reuses cached difficulty within 30 s', async () => {
     const diff = 123456789;
-    const t0 = 1_752_100_000_000; // first call
-    const t1 = t0 + 5_000; // second call ( < 30 s)
+    const t0 = 1_752_100_000_000;
+    const t1 = t0 + 5_000;
 
-    jest
-      .spyOn(Date, 'now')
-      .mockReturnValueOnce(t0) // for first fetch
-      .mockReturnValueOnce(t1); // for second fetch
+    jest.spyOn(Date, 'now').mockReturnValueOnce(t0).mockReturnValueOnce(t1);
 
-    rpcWithEnv
-      .mockResolvedValueOnce(diff) // getdifficulty (1×)
-      .mockResolvedValueOnce(100 * 1e18) // hashps 1
-      .mockResolvedValueOnce(200 * 1e18); // hashps 2
-
-    await fetchHashrateStats(mockWSS); // first call
-    await fetchHashrateStats(mockWSS); // second call
-
-    // exactly one difficulty query, two networkhashps queries
-    expect(
-      rpcWithEnv.mock.calls.filter((c) => c[0].method === 'getdifficulty')
-    ).toHaveLength(1);
-    expect(
-      rpcWithEnv.mock.calls.filter((c) => c[0].method === 'getnetworkhashps')
-    ).toHaveLength(2);
-
-    expect(mockClient.send).toHaveBeenCalledTimes(2);
-    const firstDiff = JSON.parse(mockClient.send.mock.calls[0][0]).data
-      .networkDifficulty;
-    const secondDiff = JSON.parse(mockClient.send.mock.calls[1][0]).data
-      .networkDifficulty;
-    expect(firstDiff).toBe(diff / 1e12);
-    expect(secondDiff).toBe(diff / 1e12);
-  });
-
-  it('normalizes hashrate below displayed precision to numeric zero', async () => {
-    rpcWithEnv
-      .mockResolvedValueOnce(65_000_000_000_000) // getdifficulty
-      .mockResolvedValueOnce(4e-7); // getnetworkhashps, converts to 4e-25 EH/s
+    rpcWithEnv.mockResolvedValueOnce(diff);
 
     await fetchHashrateStats(mockWSS);
+    await fetchHashrateStats(mockWSS);
 
-    const payload = JSON.parse(mockClient.send.mock.calls[0][0]);
-    expect(payload.data.hashrate).toBe(0);
-    expect(typeof payload.data.hashrate).toBe('number');
+    expect(rpcWithEnv).toHaveBeenCalledTimes(1);
+    expect(mockClient.send).toHaveBeenCalledTimes(2);
   });
 
-  it('should log & skip send on RPC failure', async () => {
+  it('refetches difficulty after the 30 s cache expires', async () => {
+    const t0 = 1_752_100_000_000;
+    const t1 = t0 + 31_000;
+
+    jest.spyOn(Date, 'now').mockReturnValueOnce(t0).mockReturnValueOnce(t1);
+
+    rpcWithEnv.mockResolvedValueOnce(100).mockResolvedValueOnce(200);
+
+    await fetchHashrateStats(mockWSS);
+    await fetchHashrateStats(mockWSS);
+
+    expect(rpcWithEnv).toHaveBeenCalledTimes(2);
+  });
+
+  it('logs and skips sending on RPC failure', async () => {
     rpcWithEnv.mockRejectedValueOnce(new Error('RPC down'));
 
     await fetchHashrateStats(mockWSS);
 
     expect(console.error).toHaveBeenCalledWith(
-      '[WebSocket] Failed to fetch or send hashrate stats:',
+      '[WebSocket] Failed to fetch or send difficulty:',
       'RPC down'
     );
     expect(mockClient.send).not.toHaveBeenCalled();
   });
 
-  it('should not send when client is not OPEN', async () => {
-    const diff = 65_000_000_000_000;
-    const hashps = 500 * 1e18;
-
+  it('does not send to clients that are not OPEN', async () => {
     mockWSS.clients = new Set();
-
-    rpcWithEnv
-      .mockResolvedValueOnce(diff) // getdifficulty
-      .mockResolvedValueOnce(hashps); // getnetworkhashps
+    rpcWithEnv.mockResolvedValueOnce(65_000_000_000_000);
 
     await fetchHashrateStats(mockWSS);
 
-    expect(rpcWithEnv).toHaveBeenCalledTimes(2);
+    expect(rpcWithEnv).toHaveBeenCalledTimes(1);
     expect(mockClient.send).not.toHaveBeenCalled();
   });
 });

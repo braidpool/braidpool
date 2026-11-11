@@ -6,3 +6,5 @@ export const THRESHOLDS = {
   FAN_SPEED_LOW: 1000,
 } as const;
 export const REFRESH_INTERVAL = 1;
+// Decimal places for the network hashrate (EH/s) tooltip value.
+export const NETWORK_HASHRATE_DECIMALS = 2;
