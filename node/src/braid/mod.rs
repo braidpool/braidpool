@@ -252,7 +252,8 @@ impl Braid {
         }
         promoted
     }
-    pub fn resolve_parents(&self, bead: &Bead) -> Result<Vec<(u64, u32)>, BraidError> {
+    /// Maps each of `bead`'s parents to its braid index and start timestamp.
+    pub fn resolve_parents(&self, bead: &Bead) -> Result<Vec<(u64, u64)>, BraidError> {
         bead.committed_metadata
             .parents
             .iter()
@@ -269,7 +270,7 @@ impl Braid {
                     self.beads[parent_index]
                         .committed_metadata
                         .start_timestamp
-                        .to_consensus_u32(),
+                        .as_micros(),
                 ))
             })
             .collect()
