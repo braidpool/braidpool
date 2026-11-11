@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import ContextualError from '../../common/ContextualError';
 import AdvancedChart from '../AdvancedChart';
 import AnimatedStatCard from '../AnimatedStatCard';
 import {
@@ -21,6 +22,8 @@ export default function LatencyTab({ timeRange }: { timeRange: string }) {
 
   const [isLoading, setIsLoading] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [errorDetails, setErrorDetails] = useState<unknown>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   const latencyHistory = useRef<LatencyHistoryEntry[]>([]);
@@ -83,26 +86,61 @@ export default function LatencyTab({ timeRange }: { timeRange: string }) {
       if (!isMounted) return;
       setIsConnected(true);
       setIsLoading(false);
+      setError(null);
+      setErrorDetails(null);
     };
 
     ws.onerror = (error) => {
       console.error('[LatencyTab] WebSocket error:', error);
       setIsConnected(false);
       setIsLoading(false);
+      setError('WebSocket connection error');
+      setErrorDetails({
+        component: 'LatencyTab',
+        endpoint: WEBSOCKET_URLS.MAIN_WEBSOCKET,
+        eventType: error.type,
+        readyState: ws.readyState,
+        timeRange,
+      });
     };
 
     ws.onmessage = (event) => {
       if (!isMounted) return;
       try {
-        const message: LatencyWebSocketMessage = JSON.parse(event.data);
+        const message = JSON.parse(event.data);
+        if (message.type === 'error') {
+          setError(
+            typeof message.data === 'string'
+              ? message.data
+              : message.data?.message || 'Unknown error'
+          );
+          setErrorDetails({
+            component: 'LatencyTab',
+            endpoint: WEBSOCKET_URLS.MAIN_WEBSOCKET,
+            payload: message,
+          });
+          setIsLoading(false);
+          return;
+        }
         if (message.type === 'latency_data') {
-          const processed = processLatencyData(message.data);
+          const processed = processLatencyData(
+            (message as LatencyWebSocketMessage).data
+          );
           setLatencyData(processed);
           setIsLoading(false);
+          setError(null);
+          setErrorDetails(null);
         }
       } catch (e) {
         console.error('[LatencyTab] WebSocket message parse error:', e);
         setIsLoading(false);
+        setError('Failed to parse data');
+        setErrorDetails({
+          component: 'LatencyTab',
+          endpoint: WEBSOCKET_URLS.MAIN_WEBSOCKET,
+          error: e instanceof Error ? e.message : String(e),
+          rawPayload: event.data,
+        });
       }
     };
     ws.onclose = () => {
@@ -131,7 +169,7 @@ export default function LatencyTab({ timeRange }: { timeRange: string }) {
   }));
 
   // ✅ Loading UI
-  if (isLoading || !isConnected) {
+  if ((isLoading || !isConnected) && !error) {
     return (
       <div className="p-8 text-center text-gray-400">
         Loading latency data...
@@ -142,6 +180,7 @@ export default function LatencyTab({ timeRange }: { timeRange: string }) {
   // ✅ Render UI
   return (
     <div className="space-y-4 ">
+      {error && <ContextualError message={error} details={errorDetails} />}
       <div>
         <AdvancedChart
           data={chartData}

@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
+import ContextualError from '../../common/ContextualError';
 import AdvancedChart from '../AdvancedChart';
 import { WEBSOCKET_URLS } from '@/URLs';
 
 export const Difficulty = () => {
   const [isConnected, setIsConnected] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [errorDetails, setErrorDetails] = useState<unknown>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const [chartData, setChartData] = useState<
     { value: number; timestamp: number }[]
@@ -17,17 +20,39 @@ export const Difficulty = () => {
     ws.onopen = () => {
       if (!isMounted) return;
       setIsConnected(true);
+      setError(null);
+      setErrorDetails(null);
     };
 
     ws.onerror = (error) => {
       console.error('[Difficulty] WebSocket error:', error);
       setIsConnected(false);
+      setError('WebSocket connection error');
+      setErrorDetails({
+        component: 'Difficulty',
+        endpoint: WEBSOCKET_URLS.MAIN_WEBSOCKET,
+        eventType: error.type,
+        readyState: ws.readyState,
+      });
     };
 
     ws.onmessage = (event) => {
       if (!isMounted) return;
       try {
         const message = JSON.parse(event.data);
+        if (message.type === 'error') {
+          setError(
+            typeof message.data === 'string'
+              ? message.data
+              : message.data?.message || 'Unknown error'
+          );
+          setErrorDetails({
+            component: 'Difficulty',
+            endpoint: WEBSOCKET_URLS.MAIN_WEBSOCKET,
+            payload: message,
+          });
+          return;
+        }
         if (message.type === 'hashrate_data') {
           const { networkDifficulty, timestamp } = message.data;
 
@@ -40,9 +65,18 @@ export const Difficulty = () => {
             const updated = [...prevData, newPoint];
             return updated.slice(-10);
           });
+          setError(null);
+          setErrorDetails(null);
         }
       } catch (e) {
         console.error('[Difficulty] Message parse error:', e);
+        setError('Failed to parse data');
+        setErrorDetails({
+          component: 'Difficulty',
+          endpoint: WEBSOCKET_URLS.MAIN_WEBSOCKET,
+          error: e instanceof Error ? e.message : String(e),
+          rawPayload: event.data,
+        });
       }
     };
 
@@ -66,6 +100,7 @@ export const Difficulty = () => {
 
   return (
     <div className="space-y-6 ">
+      {error && <ContextualError message={error} details={errorDetails} />}
       <div>
         <AdvancedChart
           data={chartData}
@@ -80,7 +115,9 @@ export const Difficulty = () => {
                 Current Difficulty :{' '}
                 {chartData.length > 0
                   ? `${chartData[chartData.length - 1].value} T`
-                  : 'Loading...'}
+                  : error
+                    ? 'No data'
+                    : 'Loading...'}
               </span>
             </div>
           }

@@ -166,6 +166,9 @@ describe('PoolDominance Component', () => {
         'WebSocket error:',
         expect.any(Event)
       );
+      expect(
+        screen.getByText(/WebSocket connection error/i)
+      ).toBeInTheDocument();
       consoleSpy.mockRestore();
     });
 
@@ -224,6 +227,7 @@ describe('PoolDominance Component', () => {
         'Error parsing websocket message :',
         expect.any(SyntaxError)
       );
+      expect(screen.getByText(/Failed to parse data/i)).toBeInTheDocument();
 
       consoleSpy.mockRestore();
     });

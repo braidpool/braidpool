@@ -130,6 +130,19 @@ describe('BlockViewer Component', () => {
     });
   });
 
+  it('shows ContextualError when fetchPreviousBlocks fails', async () => {
+    (Utils.fetchPreviousBlocks as jest.Mock).mockRejectedValue(
+      new Error('Failed to fetch')
+    );
+    render(<BlockViewer />);
+    await waitFor(() => {
+      expect(screen.getByText(/could not load blocks/i)).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /more info/i })
+      ).toBeInTheDocument();
+    });
+  });
+
   it('opens block dialog when a block is clicked', async () => {
     render(<BlockViewer />);
     await waitFor(() => screen.getByText(/block explorer/i));

@@ -126,7 +126,7 @@ describe('<HashrateTab />', () => {
     expect(await screen.findByText(/10.00 EH\/s/)).toBeInTheDocument(); // still old hashrate
   });
 
-  it('handles websocket error gracefully', async () => {
+  it('handles websocket error and shows error state', async () => {
     render(<HashrateTab timeRange="24h" />);
 
     act(() => {
@@ -134,8 +134,54 @@ describe('<HashrateTab />', () => {
     });
 
     expect(
-      await screen.findByText(/Loading hashrate data/i)
-    ).toBeInTheDocument(); // still loading, connection failed
+      await screen.findByText(/WebSocket connection error/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Loading hashrate data/i)
+    ).not.toBeInTheDocument();
+  });
+
+  it('handles error messages from server', async () => {
+    jest.useFakeTimers();
+
+    render(<HashrateTab timeRange="24h" />);
+
+    act(() => {
+      jest.advanceTimersByTime(10);
+    });
+
+    act(() => {
+      wsInstances[0].onmessage({
+        data: JSON.stringify({
+          type: 'error',
+          data: { message: 'Error fetching hashrate data' },
+        }),
+      });
+    });
+
+    expect(
+      screen.getByText(/Error fetching hashrate data/i)
+    ).toBeInTheDocument();
+
+    jest.useRealTimers();
+  });
+
+  it('handles malformed JSON messages', async () => {
+    jest.useFakeTimers();
+
+    render(<HashrateTab timeRange="24h" />);
+
+    act(() => {
+      jest.advanceTimersByTime(10);
+    });
+
+    act(() => {
+      wsInstances[0].onmessage({ data: 'invalid json' });
+    });
+
+    expect(screen.getByText(/Failed to parse data/i)).toBeInTheDocument();
+
+    jest.useRealTimers();
   });
 
   it('cleans up websocket on unmount', () => {

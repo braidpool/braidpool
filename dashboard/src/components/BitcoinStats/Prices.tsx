@@ -98,13 +98,44 @@ const BitcoinPriceTracker: React.FC = () => {
       console.log('Connected to WebSocket server');
       setIsConnected(true);
       setLoading(false);
+      setError(null);
+      setErrorDetails(null);
+    };
+
+    websocket.onerror = (err) => {
+      if (!isMounted) return;
+      console.error('WebSocket error:', err);
+      setIsConnected(false);
+      setLoading(false);
+      setError('WebSocket connection error');
+      setErrorDetails({
+        component: 'BitcoinPriceTracker',
+        endpoint: WEBSOCKET_URLS.MAIN_WEBSOCKET,
+        eventType: err.type,
+        readyState: websocket.readyState,
+      });
     };
 
     websocket.onmessage = (event) => {
       if (!isMounted) return;
       try {
         const data = JSON.parse(event.data);
+        if (data.type === 'error') {
+          setError(
+            typeof data.data === 'string'
+              ? data.data
+              : data.data?.message || 'Unknown error'
+          );
+          setErrorDetails({
+            component: 'BitcoinPriceTracker',
+            endpoint: WEBSOCKET_URLS.MAIN_WEBSOCKET,
+            payload: data,
+          });
+          return;
+        }
         if (data.type === 'bitcoin_update') {
+          setError(null);
+          setErrorDetails(null);
           const selectedCurrency = currencyRef.current;
           const currentPrice = data.data.price?.[selectedCurrency]?.current;
           const high24hPrice = data.data.price?.[selectedCurrency]?.high24h;

@@ -381,6 +381,9 @@ describe('MempoolLatencyStats', () => {
         '[WebSocket] Error:',
         expect.any(Event)
       );
+      expect(
+        screen.getByText(/WebSocket connection error/i)
+      ).toBeInTheDocument();
       consoleSpy.mockRestore();
     });
 
@@ -441,6 +444,9 @@ describe('MempoolLatencyStats', () => {
         'WebSocket message parse error:',
         expect.any(Error)
       );
+      await waitFor(() => {
+        expect(screen.getByText(/Failed to parse data/i)).toBeInTheDocument();
+      });
       consoleSpy.mockRestore();
     });
 

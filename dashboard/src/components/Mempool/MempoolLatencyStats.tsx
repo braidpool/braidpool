@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import ContextualError from '../common/ContextualError';
 import colors from '../../theme/colors';
 import AnimatedStatCard from '../BeadsTab/AnimatedStatCard';
 import {
@@ -35,6 +36,8 @@ const MempoolLatencyStats = () => {
     []
   );
   const [wsConnected, setWsConnected] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [errorDetails, setErrorDetails] = useState<unknown>(null);
   const feeDistChartRef = useRef<HTMLDivElement | null>(null);
   const blockFeeChartRef = useRef<HTMLDivElement | null>(null);
 
@@ -60,14 +63,36 @@ const MempoolLatencyStats = () => {
     };
     ws.onerror = (err) => {
       setWsConnected(false);
+      setError('WebSocket connection error');
+      setErrorDetails({
+        component: 'MempoolLatencyStats',
+        endpoint: WEBSOCKET_URLS.MAIN_WEBSOCKET,
+        eventType: err.type,
+        readyState: ws.readyState,
+      });
       console.error('[WebSocket] Error:', err);
     };
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data);
+        if (msg.type === 'error') {
+          setError(
+            typeof msg.data === 'string'
+              ? msg.data
+              : msg.data?.message || 'Unknown error'
+          );
+          setErrorDetails({
+            component: 'MempoolLatencyStats',
+            endpoint: WEBSOCKET_URLS.MAIN_WEBSOCKET,
+            payload: msg,
+          });
+          return;
+        }
         if (msg.type === 'mempool_update') {
           const data = msg.data;
           setMempoolData(data);
+          setError(null);
+          setErrorDetails(null);
           const latest = data?.block_fee_history?.[0];
           if (latest) {
             setBlockFeeHistory((prev) => {
@@ -87,6 +112,13 @@ const MempoolLatencyStats = () => {
         }
       } catch (e) {
         console.error('WebSocket message parse error:', e);
+        setError('Failed to parse data');
+        setErrorDetails({
+          component: 'MempoolLatencyStats',
+          endpoint: WEBSOCKET_URLS.MAIN_WEBSOCKET,
+          error: e instanceof Error ? e.message : String(e),
+          rawPayload: event.data,
+        });
       }
     };
 
@@ -108,11 +140,15 @@ const MempoolLatencyStats = () => {
 
   if (!mempoolData) {
     return (
-      <div className="flex items-center justify-center h-full w-full">
-        <div className="flex flex-col items-center">
-          <Loader className="h-8 w-8 text-[#0077B6] animate-spin" />
-          <p className="mt-4 text-[#0077B6]">Loading Mempool Stats...</p>
-        </div>
+      <div className="flex flex-col items-center justify-center h-full w-full p-4 gap-4">
+        {error ? (
+          <ContextualError message={error} details={errorDetails} />
+        ) : (
+          <div className="flex flex-col items-center">
+            <Loader className="h-8 w-8 text-[#0077B6] animate-spin" />
+            <p className="mt-4 text-[#0077B6]">Loading Mempool Stats...</p>
+          </div>
+        )}
       </div>
     );
   }
@@ -140,6 +176,7 @@ const MempoolLatencyStats = () => {
 
   return (
     <div className="flex flex-col gap-8 p-6 text-gray-100">
+      {error && <ContextualError message={error} details={errorDetails} />}
       {/* --- Overview --- */}
       <section className="rounded-xl p-3 shadow-sm">
         <div className="grid sm:grid-cols-1 md:grid-cols-4 gap-4 mb-6">

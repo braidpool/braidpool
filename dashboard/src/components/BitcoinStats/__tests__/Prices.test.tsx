@@ -53,6 +53,7 @@ jest.mock('../RBFTransactionTable', () => () => (
 class MockWebSocket {
   static instances: MockWebSocket[] = [];
   onopen: () => void = () => {};
+  onerror: (event: Event) => void = () => {};
   onmessage: (event: { data: string }) => void = () => {};
   onclose: () => void = () => {};
   readyState: number = WebSocket.CONNECTING;
@@ -65,6 +66,13 @@ class MockWebSocket {
     MockWebSocket.instances.forEach((instance) => {
       instance.readyState = WebSocket.OPEN;
       instance.onopen();
+    });
+  }
+
+  static mockError() {
+    MockWebSocket.instances.forEach((instance) => {
+      instance.readyState = WebSocket.CLOSED;
+      instance.onerror(new Event('error'));
     });
   }
 
@@ -271,6 +279,19 @@ describe('BitcoinPriceTracker', () => {
     await waitFor(() => {
       expect(
         screen.getByText('Invalid data format received')
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('sets error when WebSocket connection fails', async () => {
+    render(<BitcoinPriceTracker />);
+    act(() => {
+      MockWebSocket.mockError();
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('WebSocket connection error')
       ).toBeInTheDocument();
     });
   });
