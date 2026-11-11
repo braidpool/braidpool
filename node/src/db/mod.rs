@@ -1,8 +1,9 @@
 #![allow(non_snake_case)]
 use crate::bead::Bead;
 use crate::braid::Braid;
-use crate::error::BraidError;
-use crate::utils::compute_block_hash;
+use crate::error::{BraidError, DBErrors};
+use crate::utils::{compute_block_hash, BeadHash};
+use bitcoin::Txid;
 pub mod audit_db_handlers;
 pub mod db_handlers;
 pub mod init_db;
@@ -73,7 +74,29 @@ pub enum InsertTupleTypes {
         removed_orphans: Vec<BeadInsertData>,
     },
 }
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum BraidpoolDBTypes {
-    InsertTupleTypes { query: InsertTupleTypes },
+    InsertTupleTypes {
+        query: InsertTupleTypes,
+    },
+    FetchBeadHashByTxid {
+        txid: Txid,
+        responder: tokio::sync::oneshot::Sender<Option<BeadHash>>,
+    },
+    FetchCommittedTransactionsPage {
+        page: u32,
+        page_size: u32,
+        responder: tokio::sync::oneshot::Sender<Result<CommittedTransactionsPage, DBErrors>>,
+    },
+}
+#[derive(Debug, Clone)]
+pub struct CommittedTxEntry {
+    pub txid: Txid,
+    pub bead_hash: BeadHash,
+    pub timestamp: u32,
+}
+#[derive(Debug, Clone)]
+pub struct CommittedTransactionsPage {
+    pub total: u64,
+    pub entries: Vec<CommittedTxEntry>,
 }
