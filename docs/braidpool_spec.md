@@ -1,4 +1,3 @@
-
 # Braidpool Specification
 
 Herein we present the specification for a decentralized mining pool we name
@@ -15,14 +14,14 @@ will build upon.
 ## Table of Contents
 
 1. [Shares and Weak Blocks](#shares-and-weak-blocks)
-    1. [Metadata Commitments](#metadata-commitments)
-    2. [Share Value](#share-value)
+   1. [Metadata Commitments](#metadata-commitments)
+   2. [Share Value](#share-value)
 2. [Braid Consensus Mechansim](#braid-consensus-mechanism)
-    1. [Simple Sum of Descendant Work](#simple-sum-of-descendant-work)
-    2. [Difficulty Retarget Algorithm](#difficulty-retarget-algorithm)
-    3. [Miner-Selected Difficulty](#miner-selected-difficulty)
+   1. [Simple Sum of Descendant Work](#simple-sum-of-descendant-work)
+   2. [Difficulty Retarget Algorithm](#difficulty-retarget-algorithm)
+   3. [Miner-Selected Difficulty](#miner-selected-difficulty)
 3. [Payout Update](#payout-commitment)
-    1. [Unspent Hasher Payment Output](#unspent-hasher-payment-output)
+   1. [Unspent Hasher Payment Output](#unspent-hasher-payment-output)
 4. [Payout Update and Settlement Signing](#payout-update-and-settlement-signing)
 5. [Transaction Selection](#transaction-selection)
 6. [Attacks](#attacks)
@@ -66,11 +65,13 @@ computed.
 The coinbase transaction is a standard transaction having no inputs, and must
 have an `OP_RETURN` and one output for each miner receiving rewards this round:
 
-    OutPoint(Value:0, scriptPubKey OP_RETURN <BraidpoolCommitment>+<extranonce>)
-    OutPoint(Value:<miner_1_payout>, scriptPubKey <miner_1_address>)
-    OutPoint(Value:<miner_2_payout>, scriptPubKey <miner_2_address>)
-    ...
-    OutPoint(Value:<miner_N_payout>, scriptPubKey <miner_N_address>)
+```
+OutPoint(Value:0, scriptPubKey OP_RETURN <BraidpoolCommitment>+<extranonce>)
+OutPoint(Value:<miner_1_payout>, scriptPubKey <miner_1_address>)
+OutPoint(Value:<miner_2_payout>, scriptPubKey <miner_2_address>)
+...
+OutPoint(Value:<miner_N_payout>, scriptPubKey <miner_N_address>)
+```
 
 This is a PPLNS payout mechanism, similar to the [TIDES mechanism](https://ocean.xyz/docs/tides)
 used by [OCEAN](https://ocean.xyz/).  Here is an [example of a block with such a
@@ -106,14 +107,14 @@ The `BraidpoolMetadata` struct is:
 The `Uncommitted Metadata` block is intentionally not committed to in the PoW
 mining process. It contains:
 
-| Field             | Description |
-| -----             | ----------- |
-| `timestamp`       | timestamp when this bead was broadcast                                |
-| `signature`       | Signature on the `Uncommitted Metadata` block using the `comm_pubkey` |
-| `extranonce`      | 64-bit extranonce field                                               |
-| `timestamp`       | timestamp when this bead was broadcast                        |
-| `signature`       | Signature on the `Uncommitted Metadata` block using the `comm_pubkey` |
-| `extranonce`    | 64-bit extranonce field                                         |
+| Field        | Description                                                           |
+| ------------ | --------------------------------------------------------------------- |
+| `timestamp`  | timestamp when this bead was broadcast                                |
+| `signature`  | Signature on the `Uncommitted Metadata` block using the `comm_pubkey` |
+| `extranonce` | 64-bit extranonce field                                               |
+| `timestamp`  | timestamp when this bead was broadcast                                |
+| `signature`  | Signature on the `Uncommitted Metadata` block using the `comm_pubkey` |
+| `extranonce` | 64-bit extradifficulnonce field                                       |
 
 The purpose of the timestamps is to gather higher resolution timestamps than are
 possible if the timestamp was committed, in order to measure (in a non-consensus
@@ -315,16 +316,17 @@ which has many similarities to ours and should be read by implementors. We
 reject it for the following reasons:
 
 1. The k-width heuristic is somewhat analogous to our cohorts, but has the
-   property that it improperly penalizes naturally occurring beads. If for
-   example we target the bead rate such that 40% of the cohorts have 2 or more
-   beads, this means that approximately 2.5% of cohorts would have 4 or more
-   beads. The red/blue algorithm of PHANTOM would improperly penalize all but
-   the first three of the beads in this cohort.
 
+   property that it improperly penalizes naturally occurring beads. If for
+    example we target the bead rate such that 40% of the cohorts have 2 or more
+    beads, this means that approximately 2.5% of cohorts would have 4 or more
+    beads. The red/blue algorithm of PHANTOM would improperly penalize all but
+    the first three of the beads in this cohort.
 2. It is impossible in practice to reliably identify "honest" and "attacking"
+
    nodes. There is only latency, which we can measure and take account of. Even
-   in the absence of attackers, cohorts exceeding the k-width happen naturally
-   and cannot be prevented.
+    in the absence of attackers, cohorts exceeding the k-width happen naturally
+    and cannot be prevented.
 
 ## Simple Sum of Descendant Work
 
@@ -347,7 +349,7 @@ create a game which can be played to give a non-work advantage to an attacking
 miner which he could use to reverse transactions. The SSDW work is:
 
 $$
-    w_{\rm SSDW} = \frac{1}{x_{\rm self}} + \sum_{i \in \rm descendants} \frac{1}{x_i}
+w_{\rm SSDW} = \frac{1}{x_{\rm self}} + \sum_{i \in \rm descendants} \frac{1}{x_i}
 $$
 
 where $x_{\rm self}$ is the target difficulty for the bead itself, $x_i$ is the target difficulty for descendant $i$, and $1/x$ is
@@ -385,6 +387,7 @@ function](https://en.wikipedia.org/wiki/Lambert_W_function).
 
 Given a starting value for $x$, we can measure these parameters directly from
 the braid within a time window corresponding to a retarget epoch:
+
 | Parameter   | Description |
 | ----------- | ----------- |
 | $N_B$       | Number of beads   |
@@ -453,9 +456,11 @@ block is mined.  In other words, it must represent and commit to the consensus
 of the decentralized mining pool's share accounting. This transaction has two
 inputs and one output
 
-    Input (1): <existing Braidpool payout update UTXO>
-    Input (2): <block N-100 coinbase output>
-    Outputs (1): <new Braidpool payout update UTXO>
+```
+Input (1): <existing Braidpool payout update UTXO>
+Input (2): <block N-100 coinbase output>
+Outputs (1): <new Braidpool payout update UTXO>
+```
 
 Validating the output of the [consensus mechanism](#consensus-mechanism) is well
 beyond the capability of bitcoin script. Therefore generally one must find a
@@ -598,7 +603,7 @@ adjustment window have a different value compared to shares in another window,
 due to the difficulty adjustment itself. If one can compute the derivative
 
 $$
-    \frac{d({\rm hashrate})}{d({\rm BTC})} = \frac{d_1-d_2}{{\rm BTC}_1 - {\rm BTC}_2}
+\frac{d({\rm hashrate})}{d({\rm BTC})} = \frac{d_1-d_2}{{\rm BTC}_1 - {\rm BTC}_2}
 $$
 
 then derivative instruments such as options and futures can be constructed by
@@ -610,8 +615,9 @@ pool to support private contract derivative instruments are:
 
 1. The ability to send shares to another party
 2. The ability to settle shares into BTC at a well defined point in time with
+
    respect to the difficulty adjustment (for instance after the adjustment, for
-   the previous epoch)
+    the previous epoch)
 3. The ability transact shares across two difficulty adjustment windows.
 
 It may be tempting to turn a decentralized mining pool into a full DeFi market
@@ -758,9 +764,9 @@ $$
 
 where $n$ is the number of miners participating in the signing process and $f$
 is the fraction of the pools hashrate controlled by the attacking miner. For
-$n=50$ and $f=20\%$ this is about 7e-8, rising quickly as $f$ increases.
+$n=50$ and $f=20$ this is about 7e-8, rising quickly as $f$ increases.
 
-This is a standard 51\% attack, which we fundamentally can't prevent and if any
+This is a standard 51 attack, which we fundamentally can't prevent and if any
 miner gains too much hashrate. We can mitigate it somewhat by requiring the
 signing nodes to be distinct, but miners can run multiple independent Braidpool
 instances and appear to be independent miners (a Sybil attack) and we
