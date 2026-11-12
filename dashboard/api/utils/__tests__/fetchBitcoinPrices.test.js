@@ -130,4 +130,25 @@ describe('fetchBitcoinPrices', () => {
 
     consoleSpy.mockRestore();
   });
+
+  it('fetches spot and history together with at most two requests in flight', async () => {
+    let activeRequests = 0;
+    let peakRequests = 0;
+    axios.get.mockImplementation(async (url) => {
+      activeRequests += 1;
+      peakRequests = Math.max(peakRequests, activeRequests);
+      // Keep requests pending for a microtask so concurrent calls overlap.
+      await Promise.resolve();
+      activeRequests -= 1;
+      return url.includes('/historic')
+        ? { data: { data: { prices: [{ price: '99' }, { price: '101' }] } } }
+        : { data: { data: { amount: '100' } } };
+    });
+
+    const result = await fetchBitcoinPrices(BASE_URL, SUFFIX);
+
+    expect(peakRequests).toBe(2);
+    expect(axios.get).toHaveBeenCalledTimes(8);
+    expect(Object.keys(result)).toEqual(['USD', 'EUR', 'GBP', 'JPY']);
+  });
 });
