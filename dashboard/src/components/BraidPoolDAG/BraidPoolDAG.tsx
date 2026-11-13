@@ -15,6 +15,7 @@ import {
   animateLinkDirection,
 } from './BraidPoolDAGUtils';
 import { WEBSOCKET_URLS } from '../../URLs';
+import { useNodeRpc } from '../../hooks/useNodeRpc';
 import {
   NODE_RADIUS,
   COLORS,
@@ -68,6 +69,8 @@ const GraphVisualization: React.FC = () => {
 
   const selectedCohortsRef = useRef<number | 'all'>(selectedCohorts);
   const loadDAGRef = useRef<(() => Promise<void>) | null>(null);
+  const fetchGeneration = useRef(0);
+  const hasLoaded = useRef(false);
 
   const [beadRecords, setBeadRecords] = useState<BeadRecord[]>([]);
 
@@ -75,57 +78,49 @@ const GraphVisualization: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [errorDetails, setErrorDetails] = useState<unknown>(null);
-  const [connectionStatus, setConnectionStatus] = useState<
-    'connecting' | 'connected' | 'disconnected' | 'error'
-  >('connecting');
   const [nodeBraidInfo, setNodeBraidInfo] = useState<{
     bead_count: number;
     cohort_count: number;
   } | null>(null);
 
-  useEffect(() => {
-    let mounted = true;
-    let ws: WebSocket;
-    let reqId = 0;
-    let reconnectDelay = 1_000;
-    let hasLoaded = false;
-    let fetchGen = 0;
-    const RPC_TIMEOUT_MS = 15_000;
-    const pending = new Map<
-      number,
-      {
-        resolve: (v: unknown) => void;
-        reject: (e: Error) => void;
-        timer: ReturnType<typeof setTimeout>;
-      }
-    >();
-
-    function rpc(method: string, params: unknown[] = []): Promise<unknown> {
-      return new Promise((resolve, reject) => {
-        if (!ws || ws.readyState !== WebSocket.OPEN) {
-          return reject(new Error('WebSocket is not connected'));
-        }
-        const id = ++reqId;
-        const timer = setTimeout(() => {
-          pending.delete(id);
-          reject(new Error(`RPC timeout: ${method}`));
-        }, RPC_TIMEOUT_MS);
-        pending.set(id, { resolve, reject, timer });
-        try {
-          ws.send(JSON.stringify({ jsonrpc: '2.0', id, method, params }));
-        } catch (e) {
-          clearTimeout(timer);
-          pending.delete(id);
-          reject(e);
+  const { rpc, isConnected, connectionStatus } = useNodeRpc({
+    onOpen: () => {
+      loadDAGRef.current?.();
+      void rpc('subscribebead').catch((error) => {
+        if (isConnected()) {
+          console.warn('[BraidPoolDAG] Could not subscribe to beads:', error);
         }
       });
-    }
-
-    async function loadDAG() {
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
-        return;
+    },
+    onNotification: (method, result) => {
+      if (
+        method === 'subscribebead' &&
+        result != null &&
+        isPlayingRef.current
+      ) {
+        loadDAGRef.current?.();
       }
-      const myGen = ++fetchGen;
+    },
+    onClose: ({ code }) => {
+      fetchGeneration.current++;
+      if (!hasLoaded.current) {
+        setLoading(false);
+        setError(`Cannot reach node at ${WEBSOCKET_URLS.NODE_RPC_WS}.`);
+        setErrorDetails({
+          component: 'BraidPoolDAG',
+          action: 'WebSocket connection',
+          endpoint: WEBSOCKET_URLS.NODE_RPC_WS,
+          closeCode: code,
+          hint: `Make sure the node is running at ${WEBSOCKET_URLS.NODE_RPC_WS}`,
+        });
+      }
+    },
+  });
+
+  useEffect(() => {
+    async function loadDAG() {
+      if (!isConnected()) return;
+      const generation = ++fetchGeneration.current;
       const sel = selectedCohortsRef.current;
       try {
         const rawBraidInfo = await rpc('getbraidinfo');
@@ -136,22 +131,23 @@ const GraphVisualization: React.FC = () => {
           total_work: string;
           tip_count: number;
         };
-        if (mounted) setNodeBraidInfo(bi);
+        if (fetchGeneration.current !== generation) return;
+        setNodeBraidInfo(bi);
 
         const cohortCount = bi.cohort_count ?? 0;
 
         if (cohortCount === 0) {
-          if (mounted && fetchGen === myGen) {
-            setGraphData({
-              cohorts: [],
-              parents: {},
-              children: {},
-              highest_work_path: [],
-              bead_count: bi.bead_count,
-            });
-            setLoading(false);
-            hasLoaded = true;
-          }
+          setGraphData({
+            cohorts: [],
+            parents: {},
+            children: {},
+            highest_work_path: [],
+            bead_count: bi.bead_count,
+          });
+          setLoading(false);
+          setError(null);
+          setErrorDetails(null);
+          hasLoaded.current = true;
           return;
         }
 
@@ -171,6 +167,7 @@ const GraphVisualization: React.FC = () => {
           )
         )) as string[][];
 
+        if (fetchGeneration.current !== generation) return;
         const allBeads = cohorts.flat();
 
         const parentEntries = await Promise.all(
@@ -181,6 +178,7 @@ const GraphVisualization: React.FC = () => {
           )
         );
 
+        if (fetchGeneration.current !== generation) return;
         const parents = Object.fromEntries(parentEntries);
         const children: Record<string, string[]> = {};
         for (const [hash, ps] of parentEntries) {
@@ -197,7 +195,7 @@ const GraphVisualization: React.FC = () => {
         })) as string[];
         const hwp = rawHwp.filter((h) => loadedBeadSet.has(h));
 
-        if (!mounted || fetchGen !== myGen) return;
+        if (fetchGeneration.current !== generation) return;
         console.log(
           `[BraidPoolDAG] ready: ${allBeads.length} beads across ${cohorts.length} cohorts (node total: ${bi.bead_count})`
         );
@@ -211,9 +209,9 @@ const GraphVisualization: React.FC = () => {
         setLoading(false);
         setError(null);
         setErrorDetails(null);
-        hasLoaded = true;
+        hasLoaded.current = true;
       } catch (err) {
-        if (!mounted || fetchGen !== myGen) return;
+        if (fetchGeneration.current !== generation) return;
         console.error('[BraidPoolDAG] loadDAG failed:', err);
         setError('Failed to load DAG data from node');
         setErrorDetails({
@@ -230,103 +228,11 @@ const GraphVisualization: React.FC = () => {
     // Expose so other effects can trigger a re-fetch when selection changes.
     loadDAGRef.current = loadDAG;
 
-    function connect() {
-      if (!mounted) return;
-      setConnectionStatus('connecting');
-      ws = new WebSocket(WEBSOCKET_URLS.NODE_RPC_WS);
-
-      ws.onopen = () => {
-        if (!mounted) return;
-        reconnectDelay = 1_000;
-        setConnectionStatus('connected');
-        loadDAG();
-        const subId = ++reqId;
-        const subTimer = setTimeout(
-          () => pending.delete(subId),
-          RPC_TIMEOUT_MS
-        );
-        pending.set(subId, {
-          resolve: () => {
-            clearTimeout(subTimer);
-          },
-          reject: () => {
-            clearTimeout(subTimer);
-          },
-          timer: subTimer,
-        });
-        ws.send(
-          JSON.stringify({
-            jsonrpc: '2.0',
-            id: subId,
-            method: 'subscribebead',
-            params: [],
-          })
-        );
-      };
-
-      ws.onmessage = ({ data }: MessageEvent<string>) => {
-        if (!mounted) return;
-        let msg: Record<string, unknown>;
-        try {
-          msg = JSON.parse(data) as Record<string, unknown>;
-        } catch {
-          return;
-        }
-        if (msg.id != null) {
-          const p = pending.get(msg.id as number);
-          if (p) {
-            clearTimeout(p.timer);
-            pending.delete(msg.id as number);
-            if (msg.error) p.reject(new Error(JSON.stringify(msg.error)));
-            else p.resolve(msg.result);
-          }
-          return;
-        }
-        const params = msg.params as Record<string, unknown> | undefined;
-        if (msg.method === 'subscribebead' && params?.result != null) {
-          if (isPlayingRef.current) loadDAG();
-        }
-      };
-
-      ws.onerror = (e) => {
-        console.error('[BraidPoolDAG] WebSocket error:', e);
-        if (mounted) setConnectionStatus('error');
-      };
-
-      ws.onclose = (e) => {
-        if (!mounted) return;
-        console.warn(`[BraidPoolDAG] disconnected (code ${e.code})`);
-        setConnectionStatus('disconnected');
-        pending.forEach(({ reject, timer }) => {
-          clearTimeout(timer);
-          reject(new Error('WebSocket closed'));
-        });
-        pending.clear();
-        if (!hasLoaded) {
-          setLoading(false);
-          setError(`Cannot reach node at ${WEBSOCKET_URLS.NODE_RPC_WS}.`);
-          setErrorDetails({
-            component: 'BraidPoolDAG',
-            action: 'WebSocket connection',
-            endpoint: WEBSOCKET_URLS.NODE_RPC_WS,
-            closeCode: e.code,
-            hint: `Make sure the node is running at ${WEBSOCKET_URLS.NODE_RPC_WS}`,
-          });
-        }
-        setTimeout(connect, reconnectDelay);
-        reconnectDelay = Math.min(reconnectDelay * 2, 30_000);
-      };
-    }
-
-    connect();
     return () => {
-      mounted = false;
-      if (ws) {
-        ws.onclose = null;
-        ws.close();
-      }
+      fetchGeneration.current++;
+      loadDAGRef.current = null;
     };
-  }, []);
+  }, [isConnected, rpc]);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const toggleRowExpansion = (hash: string) => {
     setExpandedRows((prev) => {
