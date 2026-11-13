@@ -23,7 +23,7 @@ use node::utils::resolve_datadir;
 use node::utils::BeadHash;
 use node::SwarmHandler;
 use node::{
-    bead::{Bead, BeadHashes, BeadRequest, BeadResponse, BeadSyncError},
+    bead::{cap_sync_response, Bead, BeadHashes, BeadRequest, BeadResponse, BeadSyncError},
     behaviour::{self, BEAD_ANNOUNCE_PROTOCOL, BRAIDPOOL_TOPIC},
     braid, cli, config,
     db::db_handlers::DBHandler,
@@ -1480,6 +1480,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                                  }
                                              }
                                              //Sending all the beads requested in the hashes supplied during `GetData` request
+                                             let dropped = cap_sync_response(&mut beads);
+                                             if dropped > 0 {
+                                                 warn!(peer = %peer, dropped, "Capped a bead sync response at the batch size");
+                                             }
                                              swarm.behaviour_mut().respond_with_beads(channel, beads);
                                      }
                                      BeadRequest::GetTips => {
@@ -1512,10 +1516,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                      }
                                      BeadRequest::GetAllBeads => {
 
-                                        let all_beads;
+                                        let mut all_beads;
                                         {
                                             let braid_lock = braid.read().await;
                                             all_beads = braid_lock.beads.iter().cloned().collect();
+                                        }
+                                        // The requester carries on from where a response stops, by
+                                        // offset, so answering with one batch is what it expects.
+                                        let dropped = cap_sync_response(&mut all_beads);
+                                        if dropped > 0 {
+                                            warn!(peer = %peer, dropped, "Capped a GetAllBeads response at the batch size");
                                         }
                                         swarm.behaviour_mut().respond_with_beads(channel, all_beads);
                                 }

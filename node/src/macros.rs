@@ -252,14 +252,14 @@ macro_rules! impl_consensus_encoding {
 /// - `From<Vec<T>>` and `From<Wrapper>` for conversions
 /// - `Encodable` and `Decodable` with OOM protection
 ///
-/// **Syntax:** `impl_vec_wrapper!(WrapperName, ElementType);`
+/// **Syntax:** `impl_vec_wrapper!(WrapperName, ElementType, MAX_ELEMENTS);`
 ///
 /// **Example:**
 /// ```text
 /// #[derive(Clone, Debug, PartialEq)]
 /// pub struct Transactions(pub Vec<Transaction>);
 ///
-/// impl_vec_wrapper!(Transactions, Transaction);
+/// impl_vec_wrapper!(Transactions, Transaction, 4096);
 ///
 /// // Now you can use:
 /// let txs: Transactions = vec![tx1, tx2].into();
@@ -270,7 +270,7 @@ macro_rules! impl_consensus_encoding {
 /// Based on rust-bitcoin's orphan rule workaround pattern:
 /// <https://github.com/rust-bitcoin/rust-bitcoin/blob/master/p2p/src/consensus.rs>
 macro_rules! impl_vec_wrapper {
-    ($wrapper: ident, $type: ty) => {
+    ($wrapper: ident, $type: ty, $max_len: expr) => {
         impl std::ops::Deref for $wrapper {
             type Target = Vec<$type>;
 
@@ -322,7 +322,18 @@ macro_rules! impl_vec_wrapper {
                 r: &mut R,
             ) -> core::result::Result<$wrapper, bitcoin::consensus::encode::Error> {
                 use bitcoin::consensus::encode::{VarInt};
-                let len = VarInt::consensus_decode(r)?.0 as usize;                  // Limit the initial vec allocation to at most 8,000 bytes, which is
+                let len = VarInt::consensus_decode(r)?.0 as usize;
+                // The length is whatever the sender put on the wire, and the loop below
+                // reads that many elements. A byte cap on the whole message does not bound
+                // it: small elements let a sender ask for millions while staying inside the
+                // byte cap. So refuse a count this message type cannot legitimately carry
+                // before reading any of it.
+                if len > $max_len {
+                    return Err(bitcoin::consensus::encode::Error::ParseFailed(
+                        concat!(stringify!($wrapper), " length exceeds the protocol maximum"),
+                    ));
+                }
+                // Limit the initial vec allocation to at most 8,000 bytes, which is
                 // sufficient for most use cases. We don't allocate more space upfront
                 // than this, since `len` is an untrusted allocation capacity. If the
                 // vector does overflow the initial capacity `push` will just reallocate.

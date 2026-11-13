@@ -1,3 +1,6 @@
+use super::cap_sync_response;
+use super::check_bounded;
+use super::read_bounded;
 use super::Bead;
 use super::BeadCodec;
 use super::BeadHash;
@@ -8,10 +11,15 @@ use super::BeadSyncError;
 use super::Beads;
 use super::CommittedMetadata;
 use super::UnCommittedMetadata;
+use super::MAX_BEADS_PER_SYNC_RESPONSE;
+use super::MAX_BEAD_HASHES_PER_MESSAGE;
+use super::MAX_BEAD_SYNC_REQUEST_BYTES;
+use super::MAX_BEAD_SYNC_RESPONSE_BYTES;
 use crate::committed_metadata::TimeVec;
 use crate::config::PoolNetwork;
 use crate::utils::compute_block_hash;
 use crate::utils::create_test_bead;
+use crate::utils::test_utils::test_utility_functions::emit_bead;
 use crate::utils::test_utils::test_utility_functions::*;
 use bitcoin::absolute::Time;
 use bitcoin::consensus::encode::deserialize;
@@ -31,6 +39,7 @@ use bitcoin::{block::Header as BlockHeader, block::Version as BlockVersion};
 use futures::executor::block_on;
 use libp2p::request_response::Codec;
 use std::io::Cursor;
+use std::io::ErrorKind;
 use std::str::FromStr;
 #[test]
 
@@ -272,6 +281,40 @@ fn test_codec_response_roundtrip() {
 }
 
 #[test]
+fn test_read_bounded_rejects_only_streams_over_max() {
+    let read = |bytes: Vec<u8>, max: u64| {
+        block_on(read_bounded(
+            &mut futures::io::AllowStdIo::new(Cursor::new(bytes)),
+            max,
+        ))
+    };
+
+    assert_eq!(read(vec![0u8; 3], 4).unwrap().len(), 3);
+    assert_eq!(read(vec![0u8; 4], 4).unwrap().len(), 4);
+    let err = read(vec![0u8; 5], 4).unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::InvalidData);
+}
+
+#[test]
+fn test_codec_request_over_cap_is_rejected_even_if_prefix_decodes() {
+    // A valid GetTips is one byte; pad the stream past the cap. Plain
+    // truncation would decode the prefix and accept it; the bounded read
+    // must reject on size instead.
+    let mut codec = BeadCodec::default();
+    let mut buffer = Vec::new();
+    BeadRequest::GetTips.consensus_encode(&mut buffer).unwrap();
+    buffer.resize(MAX_BEAD_SYNC_REQUEST_BYTES as usize + 1, 0);
+
+    let protocol = libp2p::StreamProtocol::new("/braidpool/1.0.0");
+    let err = block_on(codec.read_request(
+        &protocol,
+        &mut futures::io::AllowStdIo::new(Cursor::new(buffer)),
+    ))
+    .unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::InvalidData);
+}
+
+#[test]
 fn test_get_beads_after_serialization() {
     let mut codec = BeadCodec::default();
     let request =
@@ -379,4 +422,127 @@ fn test_bead_sync_error_codec() {
     let mut cursor = Cursor::new(invalid_buffer);
     let result = BeadSyncError::consensus_decode(&mut cursor);
     assert!(result.is_err(), "Should fail to decode invalid error type");
+}
+
+#[test]
+fn test_write_request_over_cap_is_refused() {
+    // The reader rejects anything over the cap, so the writer must not emit it:
+    // the peer would otherwise see an unexplained decode failure.
+    assert!(check_bounded(
+        &vec![0u8; MAX_BEAD_SYNC_REQUEST_BYTES as usize],
+        MAX_BEAD_SYNC_REQUEST_BYTES
+    )
+    .is_ok());
+
+    let err = check_bounded(
+        &vec![0u8; MAX_BEAD_SYNC_REQUEST_BYTES as usize + 1],
+        MAX_BEAD_SYNC_REQUEST_BYTES,
+    )
+    .unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::InvalidData);
+}
+
+#[test]
+fn test_cap_sync_response_trims_to_the_batch_size() {
+    let bead = emit_bead();
+    let mut beads = vec![bead.clone(); MAX_BEADS_PER_SYNC_RESPONSE + 3];
+
+    let dropped = cap_sync_response(&mut beads);
+
+    assert_eq!(dropped, 3);
+    assert_eq!(beads.len(), MAX_BEADS_PER_SYNC_RESPONSE);
+    assert_eq!(beads[0], bead);
+}
+
+#[test]
+fn test_cap_sync_response_leaves_a_response_within_the_cap_alone() {
+    let mut beads = vec![emit_bead(), emit_bead()];
+    let before = beads.clone();
+
+    assert_eq!(cap_sync_response(&mut beads), 0);
+    assert_eq!(beads, before);
+
+    let mut empty: Vec<Bead> = Vec::new();
+    assert_eq!(cap_sync_response(&mut empty), 0);
+    assert!(empty.is_empty());
+}
+
+#[test]
+fn test_a_capped_response_encodes_within_the_byte_cap() {
+    // The two caps have to agree: a response the sender is allowed to build has
+    // to be one the reader is allowed to accept, or honest sync stalls.
+    let mut beads = vec![emit_bead(); MAX_BEADS_PER_SYNC_RESPONSE + 10];
+    cap_sync_response(&mut beads);
+
+    let mut buffer = Vec::new();
+    BeadResponse::Beads(Beads(beads))
+        .consensus_encode(&mut buffer)
+        .expect("a capped response encodes");
+
+    assert!(
+        buffer.len() as u64 <= MAX_BEAD_SYNC_RESPONSE_BYTES,
+        "a capped response is {} bytes, over the {} byte cap the reader enforces",
+        buffer.len(),
+        MAX_BEAD_SYNC_RESPONSE_BYTES
+    );
+}
+
+/// A sender picks the element count on the wire, and the decode loop reads that
+/// many. A byte cap on the whole message does not bound it, because small
+/// elements fit in huge numbers, so the count itself has to be refused.
+#[test]
+fn test_beads_length_over_the_cap_is_refused_before_reading() {
+    use bitcoin::consensus::encode::{deserialize, VarInt};
+
+    let mut bytes = Vec::new();
+    VarInt((MAX_BEADS_PER_SYNC_RESPONSE + 1) as u64)
+        .consensus_encode(&mut bytes)
+        .unwrap();
+    // Nothing follows the length: a decoder that trusted it would run out of
+    // input, and one that checks it first refuses without reading an element.
+    let err = deserialize::<Beads>(&bytes).expect_err("an over-long count must not decode");
+    assert!(
+        format!("{err:?}").contains("length exceeds the protocol maximum"),
+        "refused for the wrong reason: {err:?}"
+    );
+
+    let mut at_cap = Vec::new();
+    VarInt(MAX_BEADS_PER_SYNC_RESPONSE as u64)
+        .consensus_encode(&mut at_cap)
+        .unwrap();
+    let err = deserialize::<Beads>(&at_cap).expect_err("no elements follow, so this still fails");
+    assert!(
+        !format!("{err:?}").contains("length exceeds the protocol maximum"),
+        "a count at the cap must be allowed through to the element reads: {err:?}"
+    );
+}
+
+#[test]
+fn test_bead_hashes_length_over_the_cap_is_refused() {
+    use bitcoin::consensus::encode::{deserialize, VarInt};
+
+    let mut bytes = Vec::new();
+    VarInt((MAX_BEAD_HASHES_PER_MESSAGE + 1) as u64)
+        .consensus_encode(&mut bytes)
+        .unwrap();
+    let err = deserialize::<BeadHashes>(&bytes).expect_err("an over-long count must not decode");
+    assert!(
+        format!("{err:?}").contains("length exceeds the protocol maximum"),
+        "refused for the wrong reason: {err:?}"
+    );
+}
+
+#[test]
+fn test_bead_hashes_longer_than_a_request_still_decode() {
+    use bitcoin::consensus::encode::{deserialize, VarInt};
+
+    // A GetBeadsAfter answer can list the whole braid, so it may hold more hashes
+    // than fit in a request and still has to decode.
+    let count = MAX_BEAD_SYNC_REQUEST_BYTES as usize / 32 + 1;
+    let mut bytes = Vec::new();
+    VarInt(count as u64).consensus_encode(&mut bytes).unwrap();
+    bytes.resize(bytes.len() + count * 32, 0);
+
+    let hashes = deserialize::<BeadHashes>(&bytes).expect("a long sync answer must decode");
+    assert_eq!(hashes.len(), count);
 }
