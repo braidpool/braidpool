@@ -74,11 +74,13 @@ def generation(beads, children=None):
         retval |= children[b]
     return retval
 
-def all_ancestors_recursive(b, parents, ancestors={}):
+def all_ancestors_recursive(b, parents, ancestors=None):
     """ Gets all ancestors for a bead <b>, filling in ancestors of
         any other ancestors encountered, using a recursive
         algorithm.  Assumes b not in parents and b not in ancestors.
     """
+    if ancestors is None:
+        ancestors = {}
     ancestors[b] = set(copy(parents[b]))
     for p in parents[b]:
         if p not in ancestors:
@@ -86,11 +88,13 @@ def all_ancestors_recursive(b, parents, ancestors={}):
         ancestors[b].update(ancestors[p])
     return ancestors
 
-def all_ancestors(b, parents, ancestors={}):
+def all_ancestors(b, parents, ancestors=None):
     """ Gets all ancestors for a bead <b>, filling in ancestors of any other
         ancestors encountered, using an iterative algorithm. Assumes b not in
         parents and b not in ancestors.
     """
+    if ancestors is None:
+        ancestors = {}
     work_stack = [(b, False)]  # (bead, is_processed)
 
     while work_stack:
