@@ -730,6 +730,15 @@ impl RpcServer for RpcServerImpl {
 
         let braid_data = self.braid_arc.read().await;
 
+        // Handle empty braid case (e.g. a freshly started node)
+        if braid_data.beads.is_empty() {
+            return Err(ErrorObjectOwned::owned(
+                7,
+                "No beads available in the braid. Cannot compute highest work path. Add beads to the braid first.",
+                None::<()>,
+            ));
+        }
+
         let mut parents_map: HashMap<usize, HashSet<usize>> = HashMap::new();
         for (index, bead) in braid_data.beads.iter().enumerate() {
             let parent_indices: HashSet<usize> = bead
@@ -756,15 +765,6 @@ impl RpcServer for RpcServerImpl {
             };
 
         let available_count = bead_list.len();
-
-        // Handle empty braid case
-        if available_count == 0 {
-            return Err(ErrorObjectOwned::owned(
-                7,
-                "No beads available in the braid. Cannot compute highest work path. Add beads to the braid first.",
-                None::<()>,
-            ));
-        }
 
         let requested_limit = limit as usize;
 
@@ -1834,6 +1834,46 @@ pub async fn test_get_hwpath_rpc() {
 
     if let Ok(hw_path) = response {
         assert!(hw_path.len() <= 2);
+    }
+}
+
+#[tokio::test]
+pub async fn test_get_hwpath_rpc_empty_braid() {
+    // A freshly started node has no beads yet. The RPC must answer with the
+    // "no beads" error instead of panicking inside highest_work_path.
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(
+        Vec::new(),
+        PoolNetwork::Cpunet,
+    )));
+
+    let (proxy_tx, _) = mpsc::unbounded_channel();
+
+    let (server_addr, _) = run_rpc_server(
+        Arc::clone(&braid),
+        "127.0.0.1:0",
+        Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
+        Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
+        Arc::new(Mutex::new(stratum::BlockTemplate::default())),
+        proxy_tx,
+        None,
+        test_db_tx(),
+    )
+    .await
+    .unwrap();
+    let target_uri = format!("http://{}", server_addr);
+    let client: HttpClient = HttpClient::builder().build(target_uri).unwrap();
+
+    let mut params = ArrayParams::new();
+    params.insert(10_u64).unwrap();
+    let response: Result<Vec<String>, jsonrpsee::core::ClientError> =
+        client.request("gethighestworkpathbycount", params).await;
+
+    match response {
+        Err(jsonrpsee::core::ClientError::Call(error)) => assert_eq!(error.code(), 7),
+        other => panic!(
+            "expected RPC error code 7 for an empty braid, got {:?}",
+            other
+        ),
     }
 }
 

@@ -1097,8 +1097,7 @@ pub mod consensus_functions {
         let max_gensis_bead = genesis_beads
             .iter()
             .max_by(|a, b| bead_cmp(**a, **b, &descendant_work_braid, &ancestor_work).unwrap())
-            .ok_or(HighestWorkBeadFetchFailed)
-            .unwrap();
+            .ok_or(HighestWorkBeadFetchFailed)?;
         //populating the highest work path with indices representing the beads involved from the
         //entire braid for computation of highest work path
         let mut highest_work_path: Vec<usize> = vec![*max_gensis_bead];
@@ -1115,8 +1114,7 @@ pub mod consensus_functions {
             let max_bead = current_bead_children_set
                 .iter()
                 .max_by(|a, b| bead_cmp(**a, **b, &descendant_work_braid, &ancestor_work).unwrap())
-                .ok_or(HighestWorkBeadFetchFailed)
-                .unwrap();
+                .ok_or(HighestWorkBeadFetchFailed)?;
             highest_work_path.push(*max_bead);
         }
 

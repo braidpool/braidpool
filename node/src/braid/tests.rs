@@ -1420,6 +1420,21 @@ pub fn test_diamond_path_highest_work() {
 }
 
 #[test]
+pub fn test_highest_work_path_empty_braid_returns_error() {
+    // The node starts with an empty braid, so this must be an error, not a panic.
+    let empty_braid = Braid::new(Vec::new(), PoolNetwork::Cpunet);
+    let parents: HashMap<usize, HashSet<usize>> = HashMap::new();
+    let children = reverse(&empty_braid, &parents);
+
+    let result = highest_work_path(&empty_braid, &parents, Some(&children), None);
+
+    assert!(matches!(
+        result,
+        Err(crate::error::BraidError::HighestWorkBeadFetchFailed)
+    ));
+}
+
+#[test]
 pub fn highest_work_path_testcases_directory() {
     let ancestors = std::env::current_dir().unwrap();
     let ancestors_directory: Vec<&Path> = ancestors.ancestors().collect();
