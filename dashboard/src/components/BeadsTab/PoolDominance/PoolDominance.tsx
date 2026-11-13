@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import ContextualError from '../../common/ContextualError';
 import { formatWork } from '../lib/Utils';
 import { PoolData } from '../lib/Types';
 import { WEBSOCKET_URLS } from '@/URLs';
@@ -6,6 +7,8 @@ import { formatFeePercentage } from '../lib/Utils';
 
 export function PoolDominance() {
   const [poolDominance, setPoolDominance] = useState<PoolData[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [errorDetails, setErrorDetails] = useState<unknown>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
@@ -18,20 +21,51 @@ export function PoolDominance() {
     ws.onopen = () => {
       if (!isMounted) return;
       setWsConnected(true);
+      setError(null);
+      setErrorDetails(null);
     };
     ws.onerror = (error) => {
       setWsConnected(false);
+      setError('WebSocket connection error');
+      setErrorDetails({
+        component: 'PoolDominance',
+        endpoint: WEBSOCKET_URLS.MAIN_WEBSOCKET,
+        eventType: error.type,
+        readyState: ws.readyState,
+      });
       console.error('WebSocket error:', error);
     };
     ws.onmessage = (event) => {
       if (!isMounted) return;
       try {
         const message = JSON.parse(event.data);
+        if (message.type === 'error') {
+          setError(
+            typeof message.data === 'string'
+              ? message.data
+              : message.data?.message || 'Unknown error'
+          );
+          setErrorDetails({
+            component: 'PoolDominance',
+            endpoint: WEBSOCKET_URLS.MAIN_WEBSOCKET,
+            payload: message,
+          });
+          return;
+        }
         if (message.type === 'pool_update') {
           setPoolDominance(message.data as PoolData[]);
+          setError(null);
+          setErrorDetails(null);
         }
       } catch (err) {
         console.error('Error parsing websocket message :', err);
+        setError('Failed to parse data');
+        setErrorDetails({
+          component: 'PoolDominance',
+          endpoint: WEBSOCKET_URLS.MAIN_WEBSOCKET,
+          error: err instanceof Error ? err.message : String(err),
+          rawPayload: event.data,
+        });
       }
     };
 
@@ -54,6 +88,11 @@ export function PoolDominance() {
 
   return (
     <div>
+      {error && (
+        <div className="mt-4">
+          <ContextualError message={error} details={errorDetails} />
+        </div>
+      )}
       <div className="flex justify-between items-center mt-4">
         <div className="flex items-center gap-2">
           <h2 className="text-white text-xl font-semibold">Pool Ranking</h2>

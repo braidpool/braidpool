@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import ContextualError from '../../common/ContextualError';
 import AdvancedChart from '../AdvancedChart';
 import AnimatedStatCard from '../AnimatedStatCard';
 import {
@@ -19,6 +20,8 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
 
   const [isLoading, setIsLoading] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [errorDetails, setErrorDetails] = useState<unknown>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const peakHashrate = useRef(0);
   const hashrateHistory = useRef<HashrateHistoryEntry[]>([]);
@@ -78,24 +81,57 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
       if (!isMounted) return;
       setIsConnected(true);
       setIsLoading(false);
+      setError(null);
+      setErrorDetails(null);
     };
 
     ws.onerror = (error) => {
       setIsConnected(false);
       setIsLoading(false);
+      setError('WebSocket connection error');
+      setErrorDetails({
+        component: 'HashrateTab',
+        endpoint: WEBSOCKET_URLS.MAIN_WEBSOCKET,
+        eventType: error.type,
+        readyState: ws.readyState,
+        timeRange,
+      });
       console.error('[HashrateTab] WebSocket error:', error);
     };
     ws.onmessage = (event) => {
       if (!isMounted) return;
       try {
         const message = JSON.parse(event.data);
+        if (message.type === 'error') {
+          setError(
+            typeof message.data === 'string'
+              ? message.data
+              : message.data?.message || 'Unknown error'
+          );
+          setErrorDetails({
+            component: 'HashrateTab',
+            endpoint: WEBSOCKET_URLS.MAIN_WEBSOCKET,
+            payload: message,
+          });
+          setIsLoading(false);
+          return;
+        }
         if (message.type === 'hashrate_data') {
           const processed = processHashrateData(message.data);
           setHashrateData(processed);
           setIsLoading(false);
+          setError(null);
+          setErrorDetails(null);
         }
       } catch (e) {
         setIsLoading(false);
+        setError('Failed to parse data');
+        setErrorDetails({
+          component: 'HashrateTab',
+          endpoint: WEBSOCKET_URLS.MAIN_WEBSOCKET,
+          error: e instanceof Error ? e.message : String(e),
+          rawPayload: event.data,
+        });
         console.error('[HashrateTab] WebSocket message parse error:', e);
       }
     };
@@ -122,7 +158,7 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
     timestamp: d.timestamp,
   }));
 
-  if (isLoading || !isConnected) {
+  if ((isLoading || !isConnected) && !error) {
     return (
       <div className="p-8 text-center text-gray-400">
         Loading hashrate data...
@@ -132,6 +168,7 @@ export default function HashrateTab({ timeRange }: { timeRange: string }) {
 
   return (
     <div className="space-y-4  ">
+      {error && <ContextualError message={error} details={errorDetails} />}
       <div>
         <AdvancedChart
           data={chartData}

@@ -203,6 +203,9 @@ describe('RewardsDashboard Component', () => {
         'WebSocket error:',
         expect.any(Event)
       );
+      expect(
+        screen.getByText(/WebSocket connection error/i)
+      ).toBeInTheDocument();
     });
 
     test('logs disconnection', async () => {
@@ -301,6 +304,9 @@ describe('RewardsDashboard Component', () => {
         'object',
         { invalid: 'data' }
       );
+      expect(
+        screen.getByText(/Invalid reward data format/i)
+      ).toBeInTheDocument();
     });
 
     test('ignores non-reward_update messages', async () => {
@@ -341,6 +347,7 @@ describe('RewardsDashboard Component', () => {
         'WebSocket JSON error:',
         expect.any(SyntaxError)
       );
+      expect(screen.getByText(/Failed to parse data/i)).toBeInTheDocument();
     });
   });
 });

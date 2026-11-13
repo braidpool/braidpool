@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import ContextualError from '../../common/ContextualError';
 import {
   LineChart,
   Line,
@@ -18,6 +19,8 @@ import { Download } from 'lucide-react';
 
 export function RewardsDashboard() {
   const [rewardHistory, setRewardHistory] = useState<RewardPoint[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [errorDetails, setErrorDetails] = useState<unknown>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const rewardsChartRef = useRef<HTMLDivElement | null>(null);
 
@@ -34,12 +37,27 @@ export function RewardsDashboard() {
     ws.onopen = () => {
       if (!isMounted) return;
       console.log('WebSocket connected');
+      setError(null);
+      setErrorDetails(null);
     };
 
     ws.onmessage = (event) => {
       if (!isMounted) return;
       try {
         const message = JSON.parse(event.data);
+        if (message.type === 'error') {
+          setError(
+            typeof message.data === 'string'
+              ? message.data
+              : message.data?.message || 'Unknown error'
+          );
+          setErrorDetails({
+            component: 'RewardsDashboard',
+            endpoint: WEBSOCKET_URLS.MAIN_WEBSOCKET,
+            payload: message,
+          });
+          return;
+        }
         if (message.type === 'reward_update') {
           let rawData = message.data;
 
@@ -52,17 +70,41 @@ export function RewardsDashboard() {
             }));
 
             setRewardHistory(parsedData);
+            setError(null);
+            setErrorDetails(null);
           } else {
             console.error('Expected array but got:', typeof rawData, rawData);
+            setError('Invalid reward data format');
+            setErrorDetails({
+              component: 'RewardsDashboard',
+              endpoint: WEBSOCKET_URLS.MAIN_WEBSOCKET,
+              expected: 'array',
+              receivedType: typeof rawData,
+              payload: rawData,
+            });
           }
         }
       } catch (err) {
         console.error('WebSocket JSON error:', err);
+        setError('Failed to parse data');
+        setErrorDetails({
+          component: 'RewardsDashboard',
+          endpoint: WEBSOCKET_URLS.MAIN_WEBSOCKET,
+          error: err instanceof Error ? err.message : String(err),
+          rawPayload: event.data,
+        });
       }
     };
 
     ws.onerror = (error) => {
       console.error('WebSocket error:', error);
+      setError('WebSocket connection error');
+      setErrorDetails({
+        component: 'RewardsDashboard',
+        endpoint: WEBSOCKET_URLS.MAIN_WEBSOCKET,
+        eventType: error.type,
+        readyState: ws.readyState,
+      });
     };
 
     ws.onclose = () => {
@@ -86,6 +128,7 @@ export function RewardsDashboard() {
 
   return (
     <div className="space-y-6">
+      {error && <ContextualError message={error} details={errorDetails} />}
       {/* Analytics Cards */}
       <div className="w-full  p-6 rounded-xl border border-gray-700">
         <h2 className="text-white text-lg font-semibold mb-4">

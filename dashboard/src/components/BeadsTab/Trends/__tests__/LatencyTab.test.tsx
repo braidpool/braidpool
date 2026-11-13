@@ -150,7 +150,7 @@ describe('<LatencyTab />', () => {
     jest.useRealTimers();
   });
 
-  it('handles websocket error and shows fallback', async () => {
+  it('handles websocket error and shows error state', async () => {
     render(<LatencyTab timeRange="24h" />);
 
     act(() => {
@@ -158,8 +158,52 @@ describe('<LatencyTab />', () => {
     });
 
     expect(
-      await screen.findByText(/Loading latency data/i)
+      await screen.findByText(/WebSocket connection error/i)
     ).toBeInTheDocument();
+    expect(screen.queryByText(/Loading latency data/i)).not.toBeInTheDocument();
+  });
+
+  it('handles error messages from server', async () => {
+    jest.useFakeTimers();
+
+    render(<LatencyTab timeRange="24h" />);
+
+    act(() => {
+      jest.advanceTimersByTime(10);
+    });
+
+    act(() => {
+      wsInstances[0].onmessage({
+        data: JSON.stringify({
+          type: 'error',
+          data: { message: 'Error fetching latency data' },
+        }),
+      });
+    });
+
+    expect(
+      screen.getByText(/Error fetching latency data/i)
+    ).toBeInTheDocument();
+
+    jest.useRealTimers();
+  });
+
+  it('handles malformed JSON messages', async () => {
+    jest.useFakeTimers();
+
+    render(<LatencyTab timeRange="24h" />);
+
+    act(() => {
+      jest.advanceTimersByTime(10);
+    });
+
+    act(() => {
+      wsInstances[0].onmessage({ data: 'invalid json' });
+    });
+
+    expect(screen.getByText(/Failed to parse data/i)).toBeInTheDocument();
+
+    jest.useRealTimers();
   });
 
   it('cleans up websocket connection on unmount', () => {

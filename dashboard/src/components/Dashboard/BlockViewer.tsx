@@ -4,8 +4,9 @@ import colors from '../../theme/colors';
 import { Block } from './Types';
 import { fetchPreviousBlocks } from './Utils';
 import BlockInfoDialog from './BlockDialog';
-import { WEBSOCKET_URLS } from '../../URLs';
+import { getBraidPoolBlocksUrl, WEBSOCKET_URLS } from '../../URLs';
 import { Loader } from 'lucide-react';
+import ContextualError from '../common/ContextualError';
 
 const BlockViewer: React.FC = () => {
   const [nextBlock, setNextBlock] = useState<Block | null>(null);
@@ -13,6 +14,8 @@ const BlockViewer: React.FC = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedBlock, setSelectedBlock] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [errorDetails, setErrorDetails] = useState<unknown>(undefined);
 
   useEffect(() => {
     const getBlocks = async () => {
@@ -20,8 +23,20 @@ const BlockViewer: React.FC = () => {
       try {
         const data = await fetchPreviousBlocks();
         setPreviousBlocks(data);
+        setError(null);
+        setErrorDetails(undefined);
       } catch (err) {
         console.log('Could not load blocks');
+        const message =
+          err instanceof Error ? err.message : 'Failed to load blocks';
+        setError('Could not load blocks');
+        setErrorDetails({
+          component: 'BlockViewer',
+          action: 'fetchPreviousBlocks',
+          endpoint: getBraidPoolBlocksUrl(),
+          method: 'GET',
+          error: message,
+        });
       } finally {
         setIsLoading(false);
       }
@@ -61,12 +76,29 @@ const BlockViewer: React.FC = () => {
         }
       } catch (err) {
         console.error('Failed to parse WS message', err);
+        setError('Failed to parse WebSocket message');
+        setErrorDetails({
+          component: 'BlockViewer',
+          endpoint: WEBSOCKET_URLS.BLOCK_VIEWER_WEBSOCKET,
+          rawData: event.data,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     };
 
     socket.onerror = (err) => {
       console.error('WebSocket error:', err);
       setIsConnected(false);
+      setError((prev) => prev || 'WebSocket connection error');
+      setErrorDetails(
+        (prev: unknown) =>
+          prev || {
+            component: 'BlockViewer',
+            endpoint: WEBSOCKET_URLS.BLOCK_VIEWER_WEBSOCKET,
+            eventType: err instanceof Event ? err.type : 'error',
+            readyState: socket.readyState,
+          }
+      );
     };
 
     socket.onclose = () => {
@@ -99,7 +131,12 @@ const BlockViewer: React.FC = () => {
 
   if (allBlocks.length === 0) {
     return (
-      <div className="flex items-center justify-center h-50 p-4">
+      <div className="flex flex-col items-center justify-center h-50 p-4 gap-4">
+        {error && (
+          <div className="w-full max-w-2xl">
+            <ContextualError message={error} details={errorDetails} />
+          </div>
+        )}
         <div className="text-white">No blocks available</div>
       </div>
     );
@@ -111,6 +148,11 @@ const BlockViewer: React.FC = () => {
   return (
     <div className="max-w-screen w-full overflow-x-hidden">
       <div className="p-4">
+        {error && (
+          <div className="mb-4">
+            <ContextualError message={error} details={errorDetails} />
+          </div>
+        )}
         <h2 className="text-white text-xl font-bold mb-4">Block Explorer</h2>
         <div
           className="flex items-end gap-4 overflow-x-auto pb-4"
