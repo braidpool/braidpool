@@ -67,6 +67,19 @@ You can find all available command-line arguments in [node/src/cli.rs](https://g
 -   `--ipc-socket <PATH>`: Specifies the path to the UNIX domain socket file (should be the same as bitcoin node).
 -   `--network <NETWORK>`: Sets the network. Valid options are `mainnet`, `testnet4`, `signet`, and `cpunet`. The default is `mainnet`.
 
+#### Data directory and protocol 2.0.0
+
+-   `miner_secp256k1`: the node's miner key, created owner read-only (`0o400`) on first start and reused afterwards. Anyone who can read it can sign beads as this node. A file that is not exactly 32 bytes holding a valid secret stops startup and is left untouched.
+-   Protocol 2.0.0 changed the bead encoding to BIP340 x-only keys and Schnorr signatures. A `braidpool.db` (or `audit.db`) holding beads from an earlier version is refused at startup. Stop the node and delete `braidpool.db`, `braidpool.db-wal` and `braidpool.db-shm` (and the matching `audit.db*` files); the braid is rebuilt from peers. Nodes on 1.0.0 and 2.0.0 do not exchange beads.
+-   Until the bootnode is upgraded to 2.0.0, connect nodes directly with `--addnode=/ip4/<host>/udp/<port>/quic-v1`.
+
+#### Denied miner keys
+
+Beads signed by a key whose secret is publicly known are rejected on every path (gossip, sync, `addbead`, database reload), even when the signature is valid. The built-in list holds the keys of the secrets 1 to 1024 (the generator point is secret 1) and of the BIP340 test-vector secrets, 1,027 keys. A node whose own `miner_secp256k1` holds such a secret refuses to start and names the key; delete the file to get a new one.
+
+-   `--deny-key <64 hex>`: also deny this BIP340 x-only key. Repeat for more. A value that is not a valid x-only key stops startup.
+-   `--no-default-key-denylist`: drop the built-in list, for local experiments only. Keys given with `--deny-key` still apply.
+
 ## For probing current braidpool-node 
 - `braidpool-cli` crate can be utilized for accessing current braid-state including information about the `bead-count`,`bead-by-beadhash`,`tips` etc.
 ```

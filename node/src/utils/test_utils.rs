@@ -13,28 +13,21 @@ use crate::uncommitted_metadata::UnCommittedMetadata;
 #[cfg(test)]
 use bitcoin::block::Header as BlockHeader;
 #[cfg(test)]
-pub use bitcoin::ecdsa::Signature;
+pub use bitcoin::secp256k1::schnorr::Signature as SchnorrSignature;
 #[cfg(test)]
-pub use bitcoin::{absolute::Time, p2p::address::AddrV2, PublicKey, Transaction};
+pub use bitcoin::{absolute::Time, p2p::address::AddrV2, Transaction, XOnlyPublicKey};
 #[cfg(test)]
 pub mod test_utility_functions {
-    use std::{
-        collections::{HashMap, HashSet},
-        str::FromStr,
-    };
+    use std::collections::{HashMap, HashSet};
 
-    use bitcoin::secp256k1::{Message, Secp256k1, SecretKey};
-    #[cfg(test)]
     use bitcoin::Txid;
     use bitcoin::{
-        block::Version as BlockVersion, hashes::Hash, BlockHash, CompactTarget, EcdsaSighashType,
-        TxMerkleNode,
+        block::Version as BlockVersion, hashes::Hash, BlockHash, CompactTarget, TxMerkleNode,
     };
-    use rand::{rngs::OsRng, RngCore};
     use serde::{Deserialize, Serialize};
 
     #[cfg(test)]
-    use crate::{braid::Braid, utils::compute_block_hash};
+    use crate::{braid::Braid, miner_identity::MinerIdentity, utils::compute_block_hash};
 
     pub use super::*;
     #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -135,7 +128,7 @@ pub mod test_utility_functions {
         extra_nonce_1: u64,
         extra_nonce_2: u64,
         broadcast_timestamp: Option<Time>,
-        signature: Option<Signature>,
+        signature: Option<SchnorrSignature>,
     }
 
     #[cfg(test)]
@@ -160,7 +153,7 @@ pub mod test_utility_functions {
             self
         }
 
-        pub fn signature(mut self, sig: Signature) -> Self {
+        pub fn signature(mut self, sig: SchnorrSignature) -> Self {
             self.signature = Some(sig);
             self
         }
@@ -183,7 +176,7 @@ pub mod test_utility_functions {
         parent_bead_timestamps: Option<TimeVec>,
         payout_address: Option<String>,
         start_timestamp: Option<Time>,
-        comm_pub_key: Option<PublicKey>,
+        comm_pub_key: Option<XOnlyPublicKey>,
         min_target: Option<CompactTarget>,
         weak_target: Option<CompactTarget>,
         miner_ip: Option<String>,
@@ -230,7 +223,7 @@ pub mod test_utility_functions {
             self
         }
 
-        pub fn comm_pub_key(mut self, key: PublicKey) -> Self {
+        pub fn comm_pub_key(mut self, key: XOnlyPublicKey) -> Self {
             self.comm_pub_key = Some(key);
             self
         }
@@ -311,19 +304,8 @@ pub mod test_utility_functions {
             }
         }
     }
-    fn generate_random_public_key_string() -> String {
-        let secp = &Secp256k1::new();
-        let secret_key = SecretKey::new(&mut rand::thread_rng());
-        hex::encode(secret_key.public_key(secp).serialize())
-    }
-
     pub fn emit_bead() -> Bead {
-        // This function creates a random bead for testing purposes.
-
-        let random_public_key = generate_random_public_key_string()
-            .parse::<bitcoin::PublicKey>()
-            .expect("An error occurred while generating Secret key rand bytes");
-        // Generate a reasonable timestamp (between 2020-01-01 and now)
+        let identity = MinerIdentity::generate();
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -331,7 +313,6 @@ pub mod test_utility_functions {
         let current_time = bitcoin::absolute::Time::from_consensus(now).unwrap();
 
         let _address = String::from("127.0.0.1:8888");
-        let public_key = random_public_key;
         let socket: String = String::from("127.0.0.1");
         let time_hash_set = TimeVec(Vec::new());
         let parent_hash_set: Vec<BlockHash> = Vec::new();
@@ -340,7 +321,7 @@ pub mod test_utility_functions {
         let time_val = current_time;
 
         let committed_metadata = TestCommittedMetadataBuilder::new()
-            .comm_pub_key(public_key)
+            .comm_pub_key(identity.xonly())
             .miner_ip(socket)
             .start_timestamp(time_val)
             .parents(parent_hash_set)
@@ -354,33 +335,10 @@ pub mod test_utility_functions {
         let extra_nonce_1 = rand::random::<u64>();
         let extra_nonce_2 = rand::random::<u64>();
 
-        let secp = bitcoin::secp256k1::Secp256k1::new();
-
-        // Generate random secret key
-        let mut rng = OsRng::default();
-        let (secret_key, _) = secp.generate_keypair(&mut rng);
-
-        // Create random 32-byte message
-        let mut msg_bytes = [0u8; 32];
-        rng.fill_bytes(&mut msg_bytes);
-        let msg = Message::from_digest(msg_bytes);
-
-        // Sign the message
-        let signature = secp.sign_ecdsa(&msg, &secret_key);
-
-        // DER encode the signature and get hex
-        let der_sig = signature.serialize_der();
-        let hex = hex::encode(der_sig);
-
-        let sig = Signature {
-            signature: bitcoin::secp256k1::ecdsa::Signature::from_str(&hex).unwrap(),
-            sighash_type: EcdsaSighashType::All,
-        };
-
         let uncommitted_metadata = TestUnCommittedMetadataBuilder::new()
             .broadcast_timestamp(time_val)
             .extra_nonce(extra_nonce_1, extra_nonce_2)
-            .signature(sig)
+            .signature(UnCommittedMetadata::default().signature)
             .build();
         let bytes: [u8; 32] = [0u8; 32];
 
@@ -393,11 +351,14 @@ pub mod test_utility_functions {
             merkle_root: TxMerkleNode::from_byte_array(bytes),
         };
 
-        let test_bead = TestBeadBuilder::new()
+        let mut test_bead = TestBeadBuilder::new()
             .block_header(test_block_header)
             .committed_metadata(committed_metadata)
             .uncommitted_metadata(uncommitted_metadata)
             .build();
+        identity
+            .sign_bead(&mut test_bead)
+            .expect("test bead Schnorr signature");
         test_bead
     }
 }
