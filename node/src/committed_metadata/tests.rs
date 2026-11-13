@@ -471,7 +471,7 @@ fn decoding_an_over_long_miner_ip_fails() {
 /// The bounds must admit every real value. A bech32 address at BIP173's limit
 /// and a bracketed IPv6 literal with a port both have to decode.
 #[test]
-fn decoding_the_longest_real_address_and_ip_succeeds() {
+fn decoding_values_at_the_length_bound_succeeds() {
     let mut metadata = CommittedMetadata::default();
     metadata.payout_address = "b".repeat(MAX_PAYOUT_ADDRESS_LEN);
     metadata.miner_ip = "[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:48332".to_string();
@@ -481,4 +481,15 @@ fn decoding_the_longest_real_address_and_ip_succeeds() {
         .expect("values at the bound must decode");
     assert_eq!(back.payout_address.len(), MAX_PAYOUT_ADDRESS_LEN);
     assert_eq!(back.miner_ip, metadata.miner_ip);
+}
+
+#[test]
+fn an_oversized_length_prefix_is_refused_before_reading() {
+    let prefix = serialize(&VarInt((MAX_PAYOUT_ADDRESS_LEN + 1) as u64));
+    let err = decode_bounded_string(&mut prefix.as_slice(), MAX_PAYOUT_ADDRESS_LEN, "too long")
+        .expect_err("a prefix above the bound must be refused");
+    assert!(
+        matches!(err, Error::Io(ref e) if e.kind() == io::ErrorKind::InvalidData),
+        "expected the bound error, not running out of input: {err:?}"
+    );
 }

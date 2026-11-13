@@ -3,6 +3,7 @@ use bitcoin::absolute::Time;
 use bitcoin::consensus::encode::Decodable;
 use bitcoin::consensus::encode::Encodable;
 use bitcoin::consensus::encode::Error;
+use bitcoin::consensus::encode::VarInt;
 use bitcoin::io::{self, Read, Write};
 use bitcoin::CompactTarget;
 use bitcoin::PublicKey;
@@ -127,18 +128,40 @@ impl Encodable for CommittedMetadata {
     }
 }
 
+/// Decodes a length-prefixed string, refusing a length above `max` before
+/// any of its bytes are read.
+fn decode_bounded_string<R: Read + ?Sized>(
+    r: &mut R,
+    max: usize,
+    too_long: &'static str,
+) -> Result<String, Error> {
+    let len = VarInt::consensus_decode(r)?.0;
+    if len > max as u64 {
+        return Err(Error::from(io::Error::new(
+            io::ErrorKind::InvalidData,
+            too_long,
+        )));
+    }
+    let mut bytes = vec![0u8; len as usize];
+    r.read_exact(&mut bytes)?;
+    String::from_utf8(bytes).map_err(|_| {
+        Error::from(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "string is not valid UTF-8",
+        ))
+    })
+}
+
 impl Decodable for CommittedMetadata {
     fn consensus_decode<R: Read + ?Sized>(r: &mut R) -> Result<Self, Error> {
         let transaction_ids = TxIdVec::consensus_decode(r)?;
         let parents = Vec::<BeadHash>::consensus_decode(r)?;
         let parent_bead_timestamps = TimeVec::consensus_decode(r)?;
-        let payout_address = String::consensus_decode(r)?;
-        if payout_address.len() > MAX_PAYOUT_ADDRESS_LEN {
-            return Err(Error::from(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "payout_address is longer than any address format",
-            )));
-        }
+        let payout_address = decode_bounded_string(
+            r,
+            MAX_PAYOUT_ADDRESS_LEN,
+            "payout_address is longer than any address format",
+        )?;
         let start_timestamp = Time::from_consensus(u32::consensus_decode(r)?).map_err(|_| {
             Error::from(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -154,13 +177,11 @@ impl Decodable for CommittedMetadata {
             })?;
         let min_target = CompactTarget::consensus_decode(r)?;
         let weak_target = CompactTarget::consensus_decode(r)?;
-        let miner_ip = String::consensus_decode(r)?;
-        if miner_ip.len() > MAX_MINER_IP_LEN {
-            return Err(Error::from(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "miner_ip is longer than an address and port",
-            )));
-        }
+        let miner_ip = decode_bounded_string(
+            r,
+            MAX_MINER_IP_LEN,
+            "miner_ip is longer than an address and port",
+        )?;
         Ok(CommittedMetadata {
             transaction_ids,
             parents,
