@@ -14,6 +14,7 @@ use libp2p::{
     PeerId,
 };
 use node::audit;
+use node::bead::sign::{extend_verified, VerifiedBead};
 use node::db::db_handlers::fetch_beads_in_batch;
 use node::db::db_handlers::FETCH_BEAD_BATCH_SIZE;
 use node::ibd_manager::{IBD_TRIGGER_AFTER, MAX_IBD_INCOMING_THRESHOLD, MAX_IBD_RETRIES};
@@ -143,12 +144,37 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let fetched_beads =
                 fetch_beads_in_batch(&db_connection_pool_ref, FETCH_BEAD_BATCH_SIZE).await?;
             info!(beads = fetched_beads.len(), "Beads loaded from DB");
+            // Every stored bead passed these checks before it was written, so a bead refused here
+            // means the database is corrupt or was written under different validation rules.
+            let mut refused_beads = 0usize;
             for bead in &fetched_beads {
-                let curr_bead_status = guard.extend(&bead);
-                debug!(
-                    hash = ?compute_block_hash(&bead.block_header,network_ref),
-                    status = ?curr_bead_status,
-                    "Bead inserted"
+                let hash = compute_block_hash(&bead.block_header, network_ref);
+                let curr_bead_status = match VerifiedBead::new(bead) {
+                    Ok(verified) => guard.extend_verified(verified),
+                    Err(e) => {
+                        refused_beads += 1;
+                        error!(
+                            hash = %hash,
+                            error = %e,
+                            "Stored bead failed signature verification; skipping it"
+                        );
+                        continue;
+                    }
+                };
+                if let braid::AddBeadStatus::InvalidBead = curr_bead_status {
+                    refused_beads += 1;
+                    error!(hash = %hash, "Stored bead was refused by the braid; skipping it");
+                } else {
+                    debug!(hash = %hash, status = ?curr_bead_status, "Bead inserted");
+                }
+            }
+            if refused_beads > 0 {
+                error!(
+                    refused = refused_beads,
+                    loaded = fetched_beads.len(),
+                    "Some stored beads were refused on reload; the database may be corrupt. \
+                     Stop the node and delete braidpool.db (and its -wal and -shm files) to \
+                     rebuild the braid from peers"
                 );
             }
             Ok::<(), node::error::DBErrors>(())
@@ -248,11 +274,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .into());
         }
     };
+    let miner_identity = Arc::new(node::miner_identity::MinerIdentity::load_or_generate(
+        &datadir_path,
+    )?);
     //Communication bridge between stratum and network swarm and swarm commands also, for communicating share population and propogating them further
-    let (swarm_handler, mut swarm_command_receiver) = SwarmHandler::new(
+    let (swarm_handler, mut swarm_command_receiver) = SwarmHandler::new_with_identity(
         Arc::clone(&braid),
         db_tx.clone(),
         Arc::clone(&dashboard_notifier),
+        miner_identity,
     );
 
     //Swarm command sender
@@ -1144,7 +1174,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                       let bead_hash = braid_data.compute_bead_hash(&bead);
                                  info!(bead = ?bead, hash = %bead_hash, "Received bead");
                                 let status = {
-                                          braid_data.extend(&bead)
+                                          extend_verified(&mut braid_data, &bead)
                                       };
                                       if ibd_spinlock.load(Ordering::SeqCst){
                                          let broadcast_ts = bead.uncommitted_metadata.broadcast_timestamp.clone().to_consensus_u32();
@@ -1588,7 +1618,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                     for bead in beads.into_iter() {
                                         let mut braid_data = braid.write().await;
                                         let bead_hash = braid_data.compute_bead_hash(&bead);
-                                        let status = braid_data.extend(&bead);
+                                        let status = extend_verified(&mut braid_data, &bead);
                                         let curr_beadhash = bead_hash.to_string();
                                         if let braid::AddBeadStatus::InvalidBead = status {
                                             warn!("Invalid bead received from peer");
