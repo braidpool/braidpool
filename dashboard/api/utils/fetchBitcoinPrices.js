@@ -11,12 +11,13 @@ async function fetchBitcoinPrices(BASE_URL, SPOT_SUFFIX) {
       const spotUrl = `${BASE_URL}${currency}${SPOT_SUFFIX}`;
       const historicUrl = `${BASE_URL}${currency}${HISTORIC_SUFFIX}`;
 
-      // 1. Fetch spot price
-      const spotRes = await axios.get(spotUrl);
+      // Fetch each currency's independent requests together (at most two).
+      const [spotRes, historicRes] = await Promise.all([
+        axios.get(spotUrl),
+        axios.get(historicUrl),
+      ]);
       const current = parseFloat(spotRes.data.data.amount);
 
-      // 2. Fetch 24h historic prices
-      const historicRes = await axios.get(historicUrl);
       const historicPrices = historicRes.data.data.prices.map((p) =>
         parseFloat(p.price)
       );
