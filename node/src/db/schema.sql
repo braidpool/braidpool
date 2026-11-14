@@ -29,7 +29,9 @@ CREATE TABLE IF NOT EXISTS Bead (
 -- 2. Transactions
 CREATE TABLE IF NOT EXISTS Transactions (
       bead_id           INTEGER NOT NULL REFERENCES Bead(id),
-      txid              BLOB,
+      idx               INTEGER NOT NULL,
+      txid              BLOB NOT NULL,
+      PRIMARY KEY (bead_id, idx),
       UNIQUE (bead_id, txid)
 );
 
@@ -70,7 +72,9 @@ CREATE TABLE IF NOT EXISTS ParentTimestamps (
     parent      INTEGER NOT NULL REFERENCES Bead(id),
     child       INTEGER NOT NULL REFERENCES Bead(id),
     timestamp   INTEGER NOT NULL,               -- 64-bit unix epoch in MICROseconds
+    idx         INTEGER NOT NULL,
     PRIMARY KEY (parent, child),                -- exactly one timestamp per link
+    UNIQUE (child, idx),
     FOREIGN KEY (parent, child) REFERENCES Relatives(parent, child)
 );
 
