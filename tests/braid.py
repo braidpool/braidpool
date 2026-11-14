@@ -420,33 +420,45 @@ def layout(cohort, all_parents, bead_work=None, previous_cohort_tips=None):
     if previous_cohort_tips:
         for key, value in previous_cohort_tips.items():
             pos[key] = [-1, value[1]] # add the position of tips from the previous cohort as (-1, y_coord)
+
+    def x_of(b):
+        return pos[b][0] if b in pos else proposed_x[b]
+
     # Place remaining beads in work sorted order (lowest work at top)
     for bead in sorted(set(parents) - set(hwpath),
                        key=work_sort_key(parents, children, bead_work), reverse=True):
-        x = proposed_x[bead]
+        # A bead can sit in any column between its parents and its children. Try its proposed
+        # column first, then the others, before moving further away from the highest work path.
+        # Tail beads stay at the right edge.
+        lo = max((x_of(p) + 1 for p in parents[bead]), default=0)
+        hi = min((x_of(c) - 1 for c in children[bead]), default=proposed_x[bead])
+        xs = [proposed_x[bead]] + [x for x in range(lo, hi + 1) if x != proposed_x[bead]]
         y = 0
         dist = 0
+        placed = False
 
-        while True:
+        while not placed:
             dist += 1
             if y <= 0:
                 y += dist
             else:
                 y -= dist
-            if [x,y] in pos.values(): continue
+            for x in xs:
+                if [x,y] in pos.values(): continue
 
-            # Create a list of all lines on the graph including the proposed <bead> position [x,y]
-            pos[bead] = [x, y]
-            new_lines = [(pos[parent], pos[child])
-                          for parent, child in
-                              [(bead, c) for c in extended_children[bead] if c in pos] +
-                              [(p, bead) for p in extended_parents[bead] if p in pos]
-                        ]
+                # Create a list of all lines on the graph including the proposed <bead> position [x,y]
+                pos[bead] = [x, y]
+                new_lines = [(pos[parent], pos[child])
+                              for parent, child in
+                                  [(bead, c) for c in extended_children[bead] if c in pos] +
+                                  [(p, bead) for p in extended_parents[bead] if p in pos]
+                            ]
 
-            # If there are no intersections of a parent-child edge with any middle bead, break
-            if not any(intersection(*line[0], *line[1], *pos[middle]) for line in lines + new_lines
-                       for middle in pos):
-                break
+                # If there are no intersections of a parent-child edge with any middle bead, stop
+                if not any(intersection(*line[0], *line[1], *pos[middle]) for line in lines + new_lines
+                           for middle in pos):
+                    placed = True
+                    break
 
         lines += new_lines
     cohort_tips = tips(parents, children)
