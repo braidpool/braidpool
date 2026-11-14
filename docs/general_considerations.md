@@ -315,8 +315,8 @@ and immediately paid out to hashers, as there are not enough known parties to
 sign a multi-signature, and we don't even know their pubkeys to construct a
 (P2TR, P2SH, etc) bitcoin output address and scriptPubKey.
 
-After the first 4 blocks, we assume that 66%+1 miners who have previously mined
-a block must sign the coinbase output(s), paying into the UHPO set transaction.
+After the first 4 blocks, we assume that more than 2/3 of the signers must sign
+the coinbase output(s), paying into the UHPO set transaction.
 
 This is probably the biggest unsolved problem in building a decentralized mining
 pool -- how to coordinate a large number of signers. If we assume that shares
