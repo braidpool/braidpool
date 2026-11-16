@@ -1,16 +1,19 @@
 import React, { useState } from 'react';
 import {
   Bitcoin,
-  LayoutDashboard,
-  Package,
-  MemoryStick,
-  Layers,
-  Menu,
-  X,
+  Coins,
   HeartPulse,
+  Layers,
+  LayoutDashboard,
+  Menu,
+  Package,
+  PieChart,
+  TrendingUp,
+  Waypoints,
+  X,
 } from 'lucide-react';
-import { Page } from '../Dashboard/Types';
-import { HeaderNavProps } from './Types';
+
+import { HeaderNavProps, Page } from './Types';
 
 const NAV_ITEMS = [
   {
@@ -18,15 +21,26 @@ const NAV_ITEMS = [
     page: Page.DASHBOARD,
     icon: <LayoutDashboard size={18} />,
   },
-  { label: 'Bead', page: Page.MINER_STATS, icon: <MemoryStick size={18} /> },
   {
-    label: 'Inventory',
+    label: 'Miners',
     page: Page.MINING_INVENTORY,
     icon: <Package size={18} />,
   },
+  { label: 'DAG', page: Page.DAG, icon: <Waypoints size={18} /> },
+  { label: 'Rewards', page: Page.REWARDS, icon: <Coins size={18} /> },
+  {
+    label: 'Trends',
+    page: Page.TRENDS,
+    icon: <TrendingUp size={18} />,
+  },
+  {
+    label: 'Pools',
+    page: Page.POOL_DOMINANCE,
+    icon: <PieChart size={18} />,
+  },
   { label: 'Mempool', page: Page.MEMPOOL, icon: <Layers size={18} /> },
   {
-    label: 'Bitcoin Statistics',
+    label: 'Bitcoin',
     page: Page.BITCOIN_STATS,
     icon: <Bitcoin size={18} />,
   },
@@ -69,7 +83,7 @@ const Header: React.FC<HeaderNavProps> = ({
               <button
                 key={item.label}
                 onClick={() => setCurrentPage(item.page)}
-                className={`flex items-center px-3 py-1.5 rounded border-b-2 transition-colors font-medium text-sm
+                className={`flex items-center whitespace-nowrap px-3 py-1.5 rounded border-b-2 transition-colors font-medium text-sm
                   ${
                     currentPage === item.page
                       ? 'text-blue-500 border-blue-500 bg-blue-500/10 font-bold'

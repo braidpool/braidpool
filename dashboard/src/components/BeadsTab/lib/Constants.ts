@@ -7,9 +7,4 @@ export const TrendsTABS = [
   { id: 'difficulty', label: 'Difficulty', icon: Cpu },
 ];
 
-export const TABS = [
-  { id: 'beads', label: 'Bead Explorer' },
-  { id: 'trends', label: 'Network Trends' },
-  { id: 'rewards', label: 'Rewards' },
-  { id: 'pool', label: 'Pool Dominance' },
-];
+export const TABS = [{ id: 'pool', label: 'Pool Dominance' }];

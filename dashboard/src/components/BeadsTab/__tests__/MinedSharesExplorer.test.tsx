@@ -7,38 +7,9 @@ jest.mock('../DashboardHeader', () => {
     return (
       <div>
         <div>DashboardHeader</div>
-        <button onClick={() => setActiveTab('beads')}>Beads Tab</button>
-        <button onClick={() => setActiveTab('trends')}>Trends Tab</button>
-        <button onClick={() => setActiveTab('rewards')}>Rewards Tab</button>
         <button onClick={() => setActiveTab('pool')}>Pool Tab</button>
       </div>
     );
-  };
-});
-
-jest.mock('../../BraidPoolDAG/BraidPoolDAG', () => {
-  return function MockGraphVisualization() {
-    return <div data-testid="graph-visualization">GraphVisualization</div>;
-  };
-});
-
-jest.mock('../Trends/TrendsTab', () => {
-  const MockTrendsTab = function MockTrendsTab() {
-    return <div>TrendsTab</div>;
-  };
-
-  return {
-    TrendsTab: MockTrendsTab,
-    __esModule: true,
-    default: MockTrendsTab,
-  };
-});
-
-jest.mock('../Reward/RewardsDashboard', () => {
-  return {
-    RewardsDashboard: function MockRewardsDashboard() {
-      return <div>RewardsDashboard</div>;
-    },
   };
 });
 
@@ -55,65 +26,20 @@ describe('MinedSharesExplorer', () => {
     jest.clearAllMocks();
   });
 
-  it('renders the component with initial state', () => {
+  it('renders the header and defaults to the pool dominance tab', () => {
     render(<MinedSharesExplorer />);
 
     expect(screen.getByText('DashboardHeader')).toBeInTheDocument();
-    expect(screen.getByTestId('graph-visualization')).toBeInTheDocument();
+    expect(screen.getByText('PoolDominance')).toBeInTheDocument();
   });
 
-  it('shows GraphVisualization by default on beads tab', () => {
+  it('shows PoolDominance when the pool tab is selected', async () => {
     render(<MinedSharesExplorer />);
 
-    expect(screen.getByTestId('graph-visualization')).toBeInTheDocument();
-  });
-
-  it('switches to trends tab when activeTab changes', async () => {
-    render(<MinedSharesExplorer />);
-
-    const trendsButton = screen.getByText('Trends Tab');
-    fireEvent.click(trendsButton);
-
-    await waitFor(() => {
-      expect(screen.getByText('TrendsTab')).toBeInTheDocument();
-    });
-  });
-
-  it('switches to rewards tab when activeTab changes', async () => {
-    render(<MinedSharesExplorer />);
-
-    const rewardsButton = screen.getByText('Rewards Tab');
-    fireEvent.click(rewardsButton);
-
-    await waitFor(() => {
-      expect(screen.getByText('RewardsDashboard')).toBeInTheDocument();
-    });
-  });
-
-  it('switches to pool tab when activeTab changes', async () => {
-    render(<MinedSharesExplorer />);
-
-    const poolButton = screen.getByText('Pool Tab');
-    fireEvent.click(poolButton);
+    fireEvent.click(screen.getByText('Pool Tab'));
 
     await waitFor(() => {
       expect(screen.getByText('PoolDominance')).toBeInTheDocument();
-    });
-  });
-
-  it('switches back to beads tab', async () => {
-    render(<MinedSharesExplorer />);
-
-    // Go to trends first
-    fireEvent.click(screen.getByText('Trends Tab'));
-    await waitFor(() => {
-      expect(screen.getByText('TrendsTab')).toBeInTheDocument();
-    });
-
-    // Go back to beads
-    fireEvent.click(screen.getByText('Beads Tab'));
-    await waitFor(() => {
-      expect(screen.getByTestId('graph-visualization')).toBeInTheDocument();
     });
   });
 });
