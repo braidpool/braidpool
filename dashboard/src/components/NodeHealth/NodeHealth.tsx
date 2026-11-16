@@ -66,6 +66,8 @@ const NodeHealth: React.FC = () => {
         if (!isMounted) return;
         setWsConnected(true);
         reconnectAttempts = 0;
+        // Request current data immediately, including after reconnecting.
+        ws.send(JSON.stringify({ action: 'refresh' }));
       };
 
       ws.onerror = (err: Event) => {

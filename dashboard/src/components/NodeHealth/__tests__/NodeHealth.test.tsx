@@ -1,4 +1,4 @@
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, waitFor } from '@testing-library/react';
 import NodeHealth from '../NodeHealth';
 
 class WebSocketMock {
@@ -79,6 +79,14 @@ describe('NodeHealth - WebSocket', () => {
     render(<NodeHealth />);
     const ws = WebSocketMock.instances[0];
 
+    expect(ws.send).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(ws.send).toHaveBeenCalledTimes(1);
+      expect(ws.send).toHaveBeenCalledWith(
+        JSON.stringify({ action: 'refresh' })
+      );
+    });
+
     await act(async () => {
       ws.onmessage?.({ data: JSON.stringify(mockData) });
     });
@@ -98,11 +106,18 @@ describe('NodeHealth - WebSocket', () => {
     render(<NodeHealth />);
     const ws = WebSocketMock.instances[0];
 
+    await waitFor(() => expect(ws.send).toHaveBeenCalledTimes(1));
     await act(() => {
       ws.close();
     });
 
     expect(ws.readyState).toBe(WebSocket.CLOSED);
+    await waitFor(() => {
+      expect(WebSocketMock.instances).toHaveLength(2);
+      expect(WebSocketMock.instances[1].send).toHaveBeenCalledWith(
+        JSON.stringify({ action: 'refresh' })
+      );
+    });
   });
 
   it('switches tabs correctly', async () => {
