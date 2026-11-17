@@ -10,13 +10,28 @@ import {
   Legend,
 } from 'recharts';
 import { AnalyticsChartsProps } from './Types';
+import { NETWORK_HASHRATE_DECIMALS } from './Constant';
+export const formatNetworkHashrate = (value: number): string => {
+  if (value === 0) return '0';
+  if (Math.abs(value) >= 10 ** -NETWORK_HASHRATE_DECIMALS) {
+    return value.toFixed(NETWORK_HASHRATE_DECIMALS);
+  }
+  return value.toExponential(2);
+};
+
+type ChartLine = {
+  key: string;
+  color: string;
+  label: string;
+  yAxisId?: 'left' | 'right';
+};
 
 const AnalyticsCharts = ({ fleetHistory }: AnalyticsChartsProps) => {
   const [activeView, setActiveView] = useState<
     'hashrate' | 'efficiency' | 'temperature'
   >('hashrate');
 
-  const chartConfig = useMemo(() => {
+  const chartConfig = useMemo<{ title: string; lines: ChartLine[] }>(() => {
     switch (activeView) {
       case 'efficiency':
         return {
@@ -34,14 +49,28 @@ const AnalyticsCharts = ({ fleetHistory }: AnalyticsChartsProps) => {
       case 'hashrate':
       default:
         return {
-          title: 'Hashrate vs Expected (TH/s)',
+          title: 'Hashrate: Fleet (TH/s) and Bitcoin Network (EH/s)',
           lines: [
-            { key: 'totalHashrate', color: '#60a5fa', label: 'Total' },
-            { key: 'expectedHashrate', color: '#22c55e', label: 'Expected' },
+            { key: 'totalHashrate', color: '#60a5fa', label: 'Total (TH/s)' },
+            {
+              key: 'expectedHashrate',
+              color: '#22c55e',
+              label: 'Expected (TH/s)',
+            },
+            {
+              key: 'networkHashrate',
+              color: '#f97316',
+              label: 'Bitcoin Network (EH/s)',
+              yAxisId: 'right',
+            },
           ],
         };
     }
   }, [activeView]);
+
+  const hasRightAxis = chartConfig.lines.some(
+    (line) => line.yAxisId === 'right'
+  );
 
   return (
     <div className="min-h-[350px] mt-9 mb-9">
@@ -98,7 +127,14 @@ const AnalyticsCharts = ({ fleetHistory }: AnalyticsChartsProps) => {
                 tickFormatter={(ts) => new Date(ts).toLocaleTimeString()}
                 tick={{ fill: '#aaa' }}
               />
-              <YAxis tick={{ fill: '#aaa' }} />
+              <YAxis yAxisId="left" tick={{ fill: '#aaa' }} />
+              {hasRightAxis && (
+                <YAxis
+                  yAxisId="right"
+                  orientation="right"
+                  tick={{ fill: '#aaa' }}
+                />
+              )}
               <Tooltip
                 content={({ active, payload, label }) => {
                   if (!active || !payload?.length) return null;
@@ -119,11 +155,21 @@ const AnalyticsCharts = ({ fleetHistory }: AnalyticsChartsProps) => {
                           <span className="text-gray-300">{entry.name}:</span>
                           <span className="text-white font-medium">
                             {typeof entry.value === 'number'
-                              ? entry.value.toFixed(2)
+                              ? entry.dataKey === 'networkHashrate'
+                                ? formatNetworkHashrate(entry.value)
+                                : entry.value.toFixed(2)
                               : entry.value}
                           </span>
                         </div>
                       ))}
+                      {payload[0]?.payload?.networkTimestamp && (
+                        <div className="text-gray-500 text-xs mt-2">
+                          Network sampled{' '}
+                          {new Date(
+                            payload[0].payload.networkTimestamp
+                          ).toLocaleTimeString()}
+                        </div>
+                      )}
                     </div>
                   );
                 }}
@@ -134,6 +180,7 @@ const AnalyticsCharts = ({ fleetHistory }: AnalyticsChartsProps) => {
                   key={line.key}
                   type="monotone"
                   dataKey={line.key}
+                  yAxisId={line.yAxisId ?? 'left'}
                   stroke={line.color}
                   dot={false}
                   name={line.label}

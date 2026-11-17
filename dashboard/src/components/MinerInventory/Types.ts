@@ -52,6 +52,10 @@ export type HistoryPoint = {
   timestamp: number;
   totalHashrate: number;
   expectedHashrate: number;
+  // Bitcoin network hashrate in EH/s, plotted on the right axis
+  networkHashrate: number | null;
+  // When the network hashrate sample behind networkHashrate was taken (ms since epoch)
+  networkTimestamp: number | null;
   efficiency: number;
   temperature: number;
   vrTemperature: number;

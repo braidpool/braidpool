@@ -26,3 +26,7 @@ venv
 .worktrees/
 deny.toml
 miner_api.db
+# miner-api-rs runtime database (default MINER_API_DB)
+miners.db
+miners.db-shm
+miners.db-wal

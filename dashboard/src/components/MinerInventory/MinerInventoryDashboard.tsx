@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import ContextualError from '../common/ContextualError';
 import { Miner, HistoryPoint } from './Types';
 import { API_URLS, WEBSOCKET_URLS } from '../../URLs';
 import AnalyticsCharts from './AnalyticsCharts';
@@ -8,14 +7,15 @@ import MinerDashboardHeader from './MinerDashboardHeader';
 import MinerControls from './MinerControls';
 import { HISTORY_POINTS, REFRESH_INTERVAL } from './Constant';
 import { mapApiToMiner, getAlerts } from './Utils';
+import { UseBitcoinNetworkHashrate } from './UseChainHashrates';
 
 const MAX_HISTORY_POINTS = HISTORY_POINTS;
+const H_PER_EH = 1e18;
 
 const MinerInventoryDashboard = () => {
   const [miners, setMiners] = useState<Miner[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [errorDetails, setErrorDetails] = useState<unknown>(null);
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<
@@ -29,6 +29,13 @@ const MinerInventoryDashboard = () => {
   const [wsConnected, setWsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const [fleetHistory, setFleetHistory] = useState<HistoryPoint[]>([]);
+  const networkSample = UseBitcoinNetworkHashrate();
+  const networkSampleRef = useRef(networkSample);
+
+  useEffect(() => {
+    networkSampleRef.current = networkSample;
+  }, [networkSample]);
+
   useEffect(() => {
     let cancelled = false;
     const connect = () => {
@@ -75,17 +82,15 @@ const MinerInventoryDashboard = () => {
 
   const fetchMiners = useCallback(async () => {
     setLoading(true);
-    const endpoint = `${API_URLS.MINER_DEVICE_URL}/api/miners`;
+    setError(null);
     try {
-      const response = await fetch(endpoint);
+      const response = await fetch(`${API_URLS.MINER_DEVICE_URL}/api/miners`);
       if (!response.ok)
         throw new Error(`HTTP ${response.status} ${response.statusText}`);
       const data = await response.json();
       if (data.success && data.miners) {
         setMiners(data.miners.map((m: any) => mapApiToMiner(m)));
         setLastUpdate(new Date());
-        setError(null);
-        setErrorDetails(null);
       } else if (!data.success) {
         throw new Error(data.error || 'Failed to load miners');
       }
@@ -94,13 +99,6 @@ const MinerInventoryDashboard = () => {
         err instanceof Error ? err.message : 'Failed to fetch miners';
       console.error('Failed to fetch miners:', err);
       setError(message);
-      setErrorDetails({
-        component: 'MinerInventoryDashboard',
-        action: 'fetchMiners',
-        endpoint,
-        method: 'GET',
-        error: err instanceof Error ? err.message : String(err),
-      });
     } finally {
       setLoading(false);
     }
@@ -159,6 +157,13 @@ const MinerInventoryDashboard = () => {
           timestamp,
           totalHashrate: totalHashrateNow,
           expectedHashrate: totalExpectedNow,
+          //  the newest network sample taken at or before this point.
+          networkHashrate: networkSampleRef.current
+            ? networkSampleRef.current.hashrate / H_PER_EH
+            : null,
+          networkTimestamp: networkSampleRef.current
+            ? networkSampleRef.current.timestamp
+            : null,
           efficiency: avgEfficiencyNow,
           temperature: avgTempNow,
           vrTemperature: avgVrTempNow,
@@ -169,59 +174,32 @@ const MinerInventoryDashboard = () => {
   }, [miners]);
 
   const deleteMiner = async (minerId: string) => {
-    const endpoint = `${API_URLS.MINER_DEVICE_URL}/api/miners/${minerId}`;
     try {
-      const response = await fetch(endpoint, {
-        method: 'DELETE',
-      });
+      const response = await fetch(
+        `${API_URLS.MINER_DEVICE_URL}/api/miners/${minerId}`,
+        {
+          method: 'DELETE',
+        }
+      );
 
       const result = await response.json();
       if (!response.ok) {
         const errorMsg =
           result.detail?.error || result.detail || 'Failed to delete miner';
         setError(
-          typeof errorMsg === 'string' ? errorMsg : 'Failed to delete miner'
+          typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg)
         );
-        setErrorDetails({
-          component: 'MinerInventoryDashboard',
-          action: 'deleteMiner',
-          minerId,
-          endpoint,
-          method: 'DELETE',
-          status: response.status,
-          response: result,
-        });
         return;
       }
 
       if (result.success) {
         setMiners((prev) => prev.filter((m) => m.id !== minerId));
       } else {
-        setError(
-          typeof result.error === 'string'
-            ? result.error
-            : 'Failed to delete miner'
-        );
-        setErrorDetails({
-          component: 'MinerInventoryDashboard',
-          action: 'deleteMiner',
-          minerId,
-          endpoint,
-          method: 'DELETE',
-          response: result,
-        });
+        setError(result.error || 'Failed to delete miner');
       }
     } catch (err) {
       console.error('Error deleting miner:', err);
       setError('Failed to delete miner');
-      setErrorDetails({
-        component: 'MinerInventoryDashboard',
-        action: 'deleteMiner',
-        minerId,
-        endpoint,
-        method: 'DELETE',
-        error: err instanceof Error ? err.message : String(err),
-      });
     }
   };
 
@@ -307,7 +285,12 @@ const MinerInventoryDashboard = () => {
             Mining Dashboard
           </h1>
 
-          {error && <ContextualError message={error} details={errorDetails} />}
+          {error && (
+            <div className="text-red-400 border border-red-500 px-4 py-3 rounded max-w-md mx-auto mb-4">
+              <strong className="font-bold">Error: </strong>
+              <span className="block sm:inline">{error}</span>
+            </div>
+          )}
 
           <MinerControls
             loading={loading}
