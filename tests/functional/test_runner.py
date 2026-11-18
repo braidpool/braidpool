@@ -28,6 +28,7 @@ from test_framework.constants import (
     TEST_EXIT_SKIPPED,
 )
 from test_framework.logging_utils import configure_stream_logger, log_duration, log_event, log_exception
+from test_framework.port_pool import PortPool
 from test_framework.report_manager import ReportManager
 
 
@@ -39,6 +40,7 @@ BASE_SCRIPTS = [
     "feature_framework_skip.py",
     "feature_framework_unit_tests.py",
     "feature_node_startup.py",
+    "feature_mining_block_acceptance.py",
 ]
 
 EXTENDED_SCRIPTS: list[str] = []
@@ -309,8 +311,21 @@ def build_test_list(tests: list[str], *, extended: bool, exclude: str | None, pa
 
 
 def schedule_tests(test_list: list[str]) -> list[ScheduledTest]:
-    """Assign stable port seeds before any tests are started."""
-    scheduled = [ScheduledTest(command=test, port_seed=index) for index, test in enumerate(test_list)]
+    """Assign stable, available port seeds before any tests are started."""
+    scheduled: list[ScheduledTest] = []
+    reserved_seeds: set[int] = set()
+    for index, test in enumerate(test_list):
+        candidate = index
+        while True:
+            selected = PortPool(
+                port_seed=candidate,
+                auto_select_port_seed=True,
+            ).port_seed
+            if selected not in reserved_seeds:
+                break
+            candidate = selected + 1
+        reserved_seeds.add(selected)
+        scheduled.append(ScheduledTest(command=test, port_seed=selected))
     log_event(logger, "runner_tests_scheduled", test_count=len(scheduled), tests=[item.command for item in scheduled])
     return scheduled
 
