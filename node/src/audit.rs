@@ -6,6 +6,7 @@ use crate::config::PoolNetwork;
 use crate::db::audit_db_handlers::AuditDBHandler;
 use crate::uncommitted_metadata::UnCommittedMetadata;
 use crate::utils::compute_block_hash;
+use crate::utils::timestamp::MicrosecondTimestamp;
 use crate::{TimeVec, TxIdVec};
 use bitcoin::consensus::serialize;
 use bitcoin::hashes::{sha256d, Hash};
@@ -29,20 +30,15 @@ pub type ShareId = BlockHash;
 
 /// Create a genesis bead for audit mode with empty parents
 fn create_genesis_bead_for_audit() -> Result<Bead, String> {
-    let genesis_time = bitcoin::absolute::Time::from_consensus(
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|e| format!("System time error: {}", e))?
-            .as_secs() as u32,
-    )
-    .map_err(|_| "Invalid genesis timestamp")?;
+    let genesis_time = MicrosecondTimestamp::from_system_time(std::time::SystemTime::now())
+        .map_err(|e| format!("System time error: {}", e))?;
 
     // Create genesis block header
     let block_header = BlockHeader {
         version: bitcoin::block::Version::ONE,
         prev_blockhash: BlockHash::from_byte_array([0u8; 32]),
         merkle_root: TxMerkleNode::from_byte_array([0u8; 32]),
-        time: genesis_time.to_consensus_u32(),
+        time: genesis_time.as_secs(),
         bits: CompactTarget::from_consensus(0x1d00ffff),
         nonce: 0,
     };
@@ -131,7 +127,7 @@ fn compare_hash(a: &BlockHash, b: &BlockHash) -> Ordering {
 /// by doing this we are commiting to the entire set of tips in a variable interval. Now future beads will
 /// point/contain this commitment.
 pub fn compute_generation_hash(
-    tips: &[(BlockHash, bitcoin::absolute::Time)],
+    tips: &[(BlockHash, MicrosecondTimestamp)],
 ) -> Result<BlockHash, &'static str> {
     if tips.is_empty() {
         return Err("Cannot compute generation hash, tips array is empty. Genesis bead must be loaded first.");
@@ -419,9 +415,9 @@ pub struct AuditDAG {
     /// Database handler
     db_handler: Option<Arc<AuditDBHandler>>,
     /// The set of parents that all shares in the current job must point to.
-    pub active_parents: Vec<(BlockHash, BlockHash, bitcoin::absolute::Time)>,
+    pub active_parents: Vec<(BlockHash, BlockHash, MicrosecondTimestamp)>,
     /// The accumulating set of valid shares mined during the current job.
-    pub current_siblings: Vec<(BlockHash, BlockHash, bitcoin::absolute::Time)>,
+    pub current_siblings: Vec<(BlockHash, BlockHash, MicrosecondTimestamp)>,
     // total beads in DB
     db_bead_count: usize,
 }
@@ -857,7 +853,7 @@ mod tests {
     use crate::bead::Bead;
     use crate::committed_metadata::CommittedMetadata;
     use crate::uncommitted_metadata::UnCommittedMetadata;
-    use bitcoin::{absolute::Time, ecdsa::Signature, EcdsaSighashType};
+    use bitcoin::{ecdsa::Signature, EcdsaSighashType};
     use std::str::FromStr;
 
     fn create_test_bead(parents: Vec<BlockHash>) -> Bead {
@@ -879,7 +875,7 @@ mod tests {
                 parents: parents.into_iter().collect(),
                 parent_bead_timestamps: crate::committed_metadata::TimeVec(vec![]),
                 payout_address: "bc1qtest".to_string(),
-                start_timestamp: Time::from_consensus(1653195600).unwrap(),
+                start_timestamp: MicrosecondTimestamp::from_secs(1653195600),
                 comm_pub_key: bitcoin::PublicKey::from_str(
                     "020202020202020202020202020202020202020202020202020202020202020202",
                 )
@@ -891,7 +887,7 @@ mod tests {
             uncommitted_metadata: UnCommittedMetadata {
                 extra_nonce_1: 42,
                 extra_nonce_2: 42,
-                broadcast_timestamp: Time::from_consensus(1653195600).unwrap(),
+                broadcast_timestamp: MicrosecondTimestamp::from_secs(1653195600),
                 signature: sig,
             },
         }

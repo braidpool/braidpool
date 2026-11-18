@@ -66,6 +66,12 @@ $$
 
 where the parameter $\lambda$ is the total hashrate of the network having units
 [hashes/second], $t$ has units [seconds], and $x$ is unitless.
+Bead timestamps are stored as microseconds since the Unix epoch (see
+[metadata commitments](https://github.com/braidpool/braidpool/blob/main/docs/braidpool_spec.md#metadata-commitments)),
+so time differences derived from them must be divided by $10^6$ before being
+used as $t$, $T$ or $a$ in the equations below (or $\lambda$ expressed in
+[hashes/microsecond]). Ratios of times, such as $T/N_B$ relative to $a$, are
+unit-independent.
 
 For any subgraph corresponding to a length of time $T$, we can *measure* the
 number of beads $N_B$, the number of cohorts $N_C$ as well as the average time
@@ -269,7 +275,7 @@ $$
 The required difficulty for his bead which then given by $x_0$. This difficulty
 is committed to in the [committed metadata](https://github.com/braidpool/braidpool/blob/main/docs/braidpool_spec.md#metadata-commitments) and verified to be correct
 according to the DAG and parent beads by all nodes. The committed metadata also
-contains a millisecond-resolution timestamp which is required to be monotonic. A
+contains a microsecond-resolution timestamp which is required to be monotonic. A
 bead's timestamp must be strictly greater than that of any of its parents. This
 timestamp is *different* from the timestamp in the Bitcoin block header, which
 is commonly used as nonce space for mining and not accurate. All time-dependent

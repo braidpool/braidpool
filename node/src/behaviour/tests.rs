@@ -4,8 +4,9 @@ use crate::bead::{Bead, BeadResponse};
 use crate::config::PoolNetwork;
 use crate::utils::compute_block_hash;
 use crate::utils::test_utils::test_utility_functions::{
-    Signature, TestCommittedMetadataBuilder, TestUnCommittedMetadataBuilder, Time, TimeVec,
+    Signature, TestCommittedMetadataBuilder, TestUnCommittedMetadataBuilder, TimeVec,
 };
+use crate::utils::timestamp::MicrosecondTimestamp;
 use bitcoin::consensus::encode::deserialize;
 use bitcoin::consensus::serialize;
 use bitcoin::hashes::Hash;
@@ -30,7 +31,7 @@ fn create_test_bead() -> Bead {
     let parent_hash_set: Vec<BlockHash> = Vec::new();
     let weak_target = CompactTarget::from_consensus(486604799);
     let min_target = CompactTarget::from_consensus(486604799);
-    let time_val = Time::from_consensus(1653195600).unwrap();
+    let time_val = MicrosecondTimestamp::from_secs(1653195600);
     let test_committed_metadata = TestCommittedMetadataBuilder::new()
         .comm_pub_key(public_key)
         .miner_ip(socket)

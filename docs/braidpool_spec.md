@@ -117,8 +117,14 @@ mining process. It contains:
 
 The purpose of the timestamps is to gather higher resolution timestamps than are
 possible if the timestamp was committed, in order to measure (in a non-consensus
-manner) the behavior of latency in the network. All Braidpool timestamps are
-64-bit fields as milliseconds since the Unix epoch. When a block header is sent
+manner) the behavior of latency in the network. All Braidpool timestamps
+(`parents` timestamps, the bead creation `timestamp`, and the broadcast
+`timestamp`) are unsigned 64-bit fields as microseconds since the Unix epoch,
+encoded little-endian. Microsecond resolution is used because intra-cohort
+latencies can be sub-millisecond between well-connected nodes, and
+millisecond resolution would collapse distinct observations into ties. The
+Bitcoin block header `Timestamp` is unaffected and remains a 32-bit
+seconds-since-epoch field as required by Bitcoin consensus. When a block header is sent
 to mining devices, many manufacturers' mining devices do not return for quite
 some time (10-60 seconds) while they compute the hash, which causes PoW-mined
 timestamps to be delayed by this amount. Additionally some mining hardware rolls
@@ -246,7 +252,10 @@ full share by this factor. The value $T_C$ is the cohort time, which is half the
 time difference between the median of the parent cohort's timestamps, and the
 median of the descendant cohort's timestamps. Here we use only the timestamps
 as witnessed by descendants, not the claimed broadcast time by the miner in
-`Uncommitted Metadata`.
+`Uncommitted Metadata`. Since $\sigma(T_C)$ depends only on the ratio
+$T_C / {\rm block\ time}$, the formula is independent of the timestamp unit,
+provided the block time is expressed in the same unit as $T_C$ (e.g. 600
+seconds = $6 \times 10^8$ microseconds).
 
 As $T_C$ grows, the value of shares decreases. Therefore an attacker attempting
 to reorganize transactions or execute a selfish mining attack will see the value
