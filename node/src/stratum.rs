@@ -127,6 +127,9 @@ pub struct StratumServerConfig {
     pub audit_mode: bool,
     /// Audit mode miner weak difficulty
     pub audit_miner_difficulty: Option<f64>,
+    /// Maximum number of simultaneous downstream miner connections.
+    /// New connections are rejected once this limit is reached.
+    pub max_downstream_connections: usize,
 }
 
 impl Default for StratumServerConfig {
@@ -140,6 +143,7 @@ impl Default for StratumServerConfig {
             solo_address: None,
             audit_mode: false,
             audit_miner_difficulty: None,
+            max_downstream_connections: crate::MAX_DOWNSTREAM_CONNECTIONS,
         }
     }
 }
@@ -2020,6 +2024,8 @@ pub struct Server {
     block_submission_tx: Option<mpsc::UnboundedSender<BlockSubmissionRequest>>,
     /// Network this server runs on, propagated to every downstream connection
     network: PoolNetwork,
+    /// Set to true once the 80% capacity warning has fired; re-arms when count drops below threshold.
+    capacity_warned: bool,
 }
 ///Types for the `mining.notify` jobs to be sent to the fellow connected downstream nodes
 /// `SendToAll` broadcasts the most recently received `job` to the downstream nodes .
@@ -3473,6 +3479,7 @@ impl Server {
             downstream_connection_mapping: connection_mapping_arc,
             block_submission_tx,
             network,
+            capacity_warned: false,
         }
     }
     /// Starts and runs the Stratum server, handling incoming miner connections.
@@ -3522,6 +3529,37 @@ impl Server {
                             continue;
                         }
                         else{
+                        {
+                            // One select! arm runs to completion per iteration, so the count
+                            // can only drop between here and new_connection() below — the limit
+                            // cannot be exceeded. Multi-acceptor refactors would need an AtomicUsize.
+                            let current = self
+                                .downstream_connection_mapping
+                                .read()
+                                .await
+                                .downstream_channel_mapping
+                                .len();
+                            let limit = self.stratum_config.max_downstream_connections;
+                            if current >= limit {
+                                warn!(
+                                    current_connections = current,
+                                    limit,
+                                    "Connection limit reached — rejecting new miner connection"
+                                );
+                                continue;
+                            }
+                            let warning_threshold = limit * 80 / 100;
+                            if current >= warning_threshold && !self.capacity_warned {
+                                warn!(
+                                    current_connections = current,
+                                    limit,
+                                    "Downstream connections at 80% capacity"
+                                );
+                                self.capacity_warned = true;
+                            } else if current < warning_threshold {
+                                self.capacity_warned = false;
+                            }
+                        }
                  //shared ownership across all tasks and spawning a seperate downstream for each new connection
                  let self_ = Arc::new(Mutex::new(DownstreamClient::new(self.network)));
                         let (connection_id, connection_id_hex) = {
@@ -5056,6 +5094,110 @@ mod test {
         assert_eq!(client.share_counters.invalid, 1);
         assert_eq!(client.share_counters.stale, 0);
         assert_eq!(client.share_counters.accepted, 0);
+    }
+
+    /// Verify that the server stops accepting TCP connections once the configured limit is
+    /// reached, and that connections below the limit are accepted normally.
+    #[tokio::test]
+    async fn test_connection_limit_rejects_at_capacity() {
+        const TEST_LIMIT: usize = 2;
+
+        let connection_mapping = Arc::new(RwLock::new(ConnectionMapping::new()));
+        let job_store = Arc::new(Mutex::new(GlobalJobStore::new(
+            crate::GLOBAL_JOB_STORE_CAPACITY,
+        )));
+        let notify_tx = mpsc::channel::<NotifyCmd>(32).0;
+        let genesis_beads = Vec::from([]);
+        let test_braid = Arc::new(RwLock::new(braid::Braid::new(
+            genesis_beads,
+            PoolNetwork::Cpunet,
+        )));
+        let (_test_db_handler, test_db_tx) =
+            DBHandler::new_in_memory(PoolNetwork::Cpunet).await.unwrap();
+        let (swarm_handler, _swarm_rx) =
+            SwarmHandler::new(Arc::clone(&test_braid), test_db_tx, DashboardEvents::new());
+        let swarm_handler_arc = Arc::new(Mutex::new(swarm_handler));
+        let ibd = Arc::new(AtomicBool::new(false));
+
+        let config = StratumServerConfig {
+            hostname: "127.0.0.1".to_string(),
+            max_downstream_connections: TEST_LIMIT,
+            ..Default::default()
+        };
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let bound_addr = listener.local_addr().unwrap();
+        let addr = bound_addr.to_string();
+
+        let mut server = Server::new(
+            config,
+            connection_mapping.clone(),
+            None,
+            PoolNetwork::Cpunet,
+        );
+
+        tokio::spawn(async move {
+            let _ = server
+                .run_stratum_service(
+                    listener,
+                    job_store,
+                    notify_tx,
+                    swarm_handler_arc,
+                    ibd,
+                    None,
+                    None,
+                    None,
+                )
+                .await;
+        });
+
+        // Connect TEST_LIMIT miners — all should be accepted.
+        let mut kept_streams = Vec::new();
+        for i in 0..TEST_LIMIT {
+            let mut stream = TcpStream::connect(&addr).await.unwrap();
+            let msg = format!(
+                r#"{{"id":{},"method":"mining.subscribe","params":[]}}"#,
+                i + 1
+            );
+            stream.write_all(msg.as_bytes()).await.unwrap();
+            stream.write_all(b"\n").await.unwrap();
+            kept_streams.push(stream);
+        }
+
+        // Give the server time to register all connections.
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        assert_eq!(
+            connection_mapping
+                .read()
+                .await
+                .downstream_channel_mapping
+                .len(),
+            TEST_LIMIT,
+            "Expected all {} connections to be registered",
+            TEST_LIMIT
+        );
+
+        // One more connection at the limit — must not be registered in the map.
+        // The TCP handshake succeeds (the OS queues it) but the server's accept loop
+        // reads it and immediately continues without registering it.
+        let mut over_limit = TcpStream::connect(&addr).await.unwrap();
+        over_limit
+            .write_all(b"{\"id\":99,\"method\":\"mining.subscribe\",\"params\":[]}\n")
+            .await
+            .unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+        assert_eq!(
+            connection_mapping
+                .read()
+                .await
+                .downstream_channel_mapping
+                .len(),
+            TEST_LIMIT,
+            "Connection count must not exceed the configured limit"
+        );
+
+        drop(kept_streams);
     }
 }
 
