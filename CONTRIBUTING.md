@@ -4,47 +4,22 @@ Contributing to open source is one of the best things you can do. It not only be
 <br/> <br>
 With this responsibility, we also want to put the right efforts into development so everything goes smoothly and in a collaborative way. For this, there are some guidelines designed that will help us to work together so we can read, write and understand each other's code in an efficient way.
 
-## Key Concepts (Quick Reference)
-
-Before diving in, understand these core concepts:
-
-| Term | Definition |
-|------|------------|
-| **Bead** | A share in Braidpool's DAG—like a Bitcoin block but with multiple parents |
-| **Cohort** | A set of beads at the same "height" in the DAG (simultaneous beads) |
-| **DAG** | Directed Acyclic Graph—all beads form this structure, not a linear chain |
-| **HWP** | Highest Work Path—the heaviest chain through the DAG (like Bitcoin's longest chain) |
-
-📖 **For detailed explanations**, see [`docs/CODEBASE_PRIMER.md`](docs/CODEBASE_PRIMER.md)
-
-## Development Tools
-
-Before contributing, ensure you have the following tools installed:
-
-- **Rust & Cargo** - Required to build the node (`cargo build`, `cargo test`)
-- **Node.js & npm** - Required for dashboard development and formatting (`npx prettier --write .`)
-- **jq** - Required for git hooks to parse AI review results
-  - On Ubuntu/Debian: `sudo apt-get install jq`
-  - On macOS: `brew install jq`
-  - On Windows: Download from [jqlang.org](https://jqlang.github.io/jq/)
-
-If `jq` is not installed, the git hooks will skip AI review checks with a warning.
+**For detailed explanations**, see [`docs/CODEBASE_PRIMER.md`](docs/CODEBASE_PRIMER.md)
 
 ## Initials
 
-We deeply value each and every contributions made to Braidpool, we take this as a huge step to make Bitcoin safer and sustainable in future. So, new contributors are always needed and appreciated. <br><br>
-Before moving further it's best to familiarize yourself with the Braidpool codebase structure for more information you can refer to 
-
-[overview](https://github.com/braidpool/braidpool/blob/main/docs/overview.md), [specification](https://github.com/braidpool/braidpool/blob/main/docs/braidpool_spec.md), 
-and [consensus](https://github.com/braidpool/braidpool/blob/main/docs/braid_consensus.md). This will give you a brief idea about working and its implementation. Braidpool is implemented using Rust, so some familiarity with Rust is also required. The general idea to understand a project is looking into their `tests` directory; the same applies here.
+We deeply value each and every contributions made to Braidpool, we take this as a huge step to make Bitcoin safer and sustainable in future. So, new contributors are always needed and appreciated. Before moving further it's best to familiarize yourself with the Braidpool codebase structure for more information you can refer to
+[overview](docs/overview.md), [specification](docs/braidpool_spec.md),
+[consensus](docs/braid_consensus.md) and [setup guide](docs/braidpool_setup.md). This will give you an overview of how Braidpool works, its implementation, and how to set it up. Braidpool is implemented using Rust, so some familiarity with Rust is also required. The general idea to understand a project is looking into their `tests` directory; the same applies here.
 
 ## Structuring a Pull Request
 
 This covers how you should approach a PR from creating to merging. 
 
-+ Use a concise title that summarizes the change, prefixed by the affected area (e.g., `bead`, `dag`, `rpc`, `doc`, `test`, `feat`, `style`) <br>
- ``` e.g., bead: Add dynamic difficulty validation. ```
++ Use a concise title that summarizes the change, prefixed by the affected area. Use one of these predefined prefixes `bead`, `braid`, `consensus`, `network`, `rpc`, `stratum`, `db`, `cli`, `dashboard`, `api`, `test`, `doc`, `build`, `ci`, `deps`, `config`, `audit`, `payout`, `policy`, `ipc`. <br>
+For example: ``` e.g., bead: Add dynamic difficulty validation. ```
 + Explain what the PR does and why it’s needed and reference related issues `(e.g., Fixes #123)` or discussions `(e.g., Discord thread)`.
++ Use the same area-related prefix convention for commit subjects.
 + Limit the PR to a single feature, bug fix, or refactor. Avoid combining unrelated changes. If ignored, this will lead to several other problems. e.g., hard to review, delay feedback, may block others work.
 + Ensure each commit represents a single logical change (e.g., one commit for adding a function, another for tests) to maintain a clean history, make code reviews easier, and allow for efficient debugging or reverting specific changes if needed.
 + Before merging, squash related commits into one; multiple commits for a single logical change seem irrelevant.
@@ -59,7 +34,9 @@ This covers how you should approach a PR from creating to merging.
   ```
 + For significant changes open a GitHub issue or discuss on Discord (Braidpool [Discord](https://discord.gg/pZYUDwkpPv) ) to confirm alignment with maintainers.
 + Add labels in GitHub according to the PR changes. This will help to understand the current progress and type of the PR.
-+ Be sure to run `npx prettier --write .` before commiting so as to cross-check that the commits adhere to the linting scheme of the project's frontend
++ Be sure to run `npx prettier --write .` before committing so as to cross-check that the commits adhere to the linting scheme of the project's frontend
+
+If you use AI tools while contributing, please read and follow our [AI Policy](AI_POLICY.md).
 
 ## PR Review Process
 
@@ -77,6 +54,16 @@ Here are few steps you can follow while reviewing PRs.
 3. If it's working fine, then manually review each line of code and think about why that particular line is removed or added in the codebase. And try to find out possible consequences that can occur with that change (always try to find a bug in the new or existing code; think like there is something wrong in the code).
 4. Now if you find anything wrong or you can't be able to understand much about that change, then you can ask that thing directly to the PR author via a simple comment. (First try to understand yourself and don't ask silly questions.)
 5. Finally, you can publish your official review in GitHub.
+
+## Git Hooks
+
+`jq` is used by the `pre-push` and `prepare-commit-msg` hooks to process the AI review files. Install it according to your operating system:
+
+- Ubuntu/Debian: `sudo apt-get install jq`
+- macOS: `brew install jq`
+- Windows: [Download jq](https://jqlang.github.io/jq/)
+
+If `jq` is not installed, the `pre-push` hook skips the AI review gate and `prepare-commit-msg` skips adding review trailers. Both hooks display a warning.
 
 ## Communication Channels
 
