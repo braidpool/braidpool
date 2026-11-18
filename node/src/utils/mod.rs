@@ -148,12 +148,15 @@ pub fn create_test_bead(nonce: u32, prev_hash: Option<BlockHash>) -> Bead {
         comm_pub_key: public_key,
         min_target: min_target,
         miner_ip: "".to_string(),
-        transaction_ids: TxIdVec(vec![]),
+        coinbase_transaction: crate::committed_metadata::placeholder_coinbase(),
+        committed_txs: TxIdVec(Vec::new()),
+        to_be_added: TxIdVec(Vec::new()),
         parents: parent_hash_set,
         parent_bead_timestamps: time_hash_set,
         payout_address: String::from(""),
         start_timestamp: time_val,
         weak_target: weak_target,
+        fee_total_sats: 0,
     };
     let extra_nonce_1 = rand::random::<u64>();
     let extra_nonce_2 = rand::random::<u64>();
