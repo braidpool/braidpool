@@ -35,6 +35,12 @@
       "pattern": "^[a-z0-9]+([-.]?[a-z0-9]+)*$",
       "examples": ["claude-sonnet-4.5", "gpt-5.2-codex", "claude-haiku-4.5"]
     },
+    "date": {
+      "type": "string",
+      "description": "Optional review date (save-review.sh does not require it)",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "examples": ["2026-01-16"]
+    },
     "summary": {
       "type": "string",
       "description": "Brief summary of the review findings",
