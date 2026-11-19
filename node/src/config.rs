@@ -27,15 +27,10 @@ pub struct BraidDirectoryConfig {
     pub path: String,
 }
 #[derive(Serialize, Deserialize, Clone)]
-pub struct MinerConfig {
-    pub miner_pubkey: String,
-}
-#[derive(Serialize, Deserialize, Clone)]
 pub struct BraidpoolConfig {
     pub braidnetwork_config: NetworkConfig,
     pub bitcoin_config: BitcoinConfig,
     pub braid_directory: BraidDirectoryConfig,
-    pub miner_config: MinerConfig,
     pub braid_rpc_config: BraidRpcConfig,
 }
 #[derive(Serialize, Deserialize, Clone)]
@@ -250,7 +245,7 @@ mod test {
 
     use bitcoin::Network;
 
-    use crate::config::{BraidRpcConfig, MinerConfig};
+    use crate::config::BraidRpcConfig;
 
     use super::{
         BitcoinConfig, BraidDirectoryConfig, BraidpoolConfig, NetworkConfig, PoolNetwork,
@@ -331,9 +326,6 @@ mod test {
             },
             braid_directory: BraidDirectoryConfig {
                 path: "~/.braidpool".to_string(),
-            },
-            miner_config: MinerConfig {
-                miner_pubkey: "".to_string(),
             },
             braid_rpc_config: BraidRpcConfig::default(),
         };
