@@ -17,7 +17,7 @@
       "third": 1653195800
     },
     "public_keys": {
-      "default_committed": "020202020202020202020202020202020202020202020202020202020202020202"
+      "default_committed": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
     },
     "targets": {
       "default_bits": 486604799

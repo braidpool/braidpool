@@ -14,6 +14,8 @@ use libp2p::StreamProtocol;
 use serde::{Deserialize, Serialize};
 use std::io::{Error as IoError, ErrorKind, Result as IoResult};
 
+pub mod sign;
+
 /// Collection of beads.
 ///
 /// Newtype wrapper around `Vec<Bead>` that provides Bitcoin consensus encoding/decoding

@@ -85,9 +85,14 @@ impl Braid {
 }
 #[allow(unused)]
 impl Braid {
-    /// Attempts to extend the braid with the given bead.
-    /// Returns true if the bead successfully extended the braid, false otherwise.
-    pub fn extend(&mut self, bead: &Bead) -> AddBeadStatus {
+    /// Extend the braid with a bead whose signature has been checked.
+    pub fn extend_verified(&mut self, bead: crate::bead::sign::VerifiedBead<'_>) -> AddBeadStatus {
+        self.extend(bead.bead())
+    }
+
+    /// Extend the braid without checking the bead's signature. Production code must use
+    /// [`Braid::extend_verified`]; unit tests call this directly with fixtures.
+    pub(crate) fn extend(&mut self, bead: &Bead) -> AddBeadStatus {
         // If the braid is empty and bead has no parents, treat as genesis bead
         if self.beads.is_empty() && bead.committed_metadata.parents.is_empty() {
             tracing::debug!(

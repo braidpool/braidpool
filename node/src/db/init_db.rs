@@ -103,3 +103,41 @@ async fn setup_sqlite_db(
 
     Ok(pool)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    fn unique_dir() -> PathBuf {
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "braidpool-initdb-{}-{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    /// SQL inserting one `Bead` row whose key and signature have the given byte lengths.
+    fn bead_row_sql(key_len: usize, signature_len: usize) -> String {
+        format!(
+            "INSERT INTO Bead (hash, hashPrevBlock, hashMerkleRoot, payout_address, \
+             start_timestamp, comm_pub_key, miner_ip, extranonce1, extranonce2, \
+             broadcast_timestamp, signature) \
+             VALUES (x'01', x'02', x'03', x'04', 1, zeroblob({key_len}), 'ip', 'a', 'b', 2, \
+             zeroblob({signature_len}))"
+        )
+    }
+
+    #[tokio::test]
+    async fn bead_table_accepts_exactly_32_byte_keys_and_64_byte_signatures() {
+        let dir = unique_dir();
+        let pool = init_db(&dir).await.unwrap();
+        pool.execute(&*bead_row_sql(32, 64)).await.unwrap();
+        let _ = fs::remove_dir_all(&dir);
+    }
+}

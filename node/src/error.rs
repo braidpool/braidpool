@@ -188,6 +188,11 @@ pub enum StratumErrors {
     InvalidShare {
         reason: String,
     },
+    /// The node failed to sign a bead it formed from a share. A node-side fault, not a
+    /// problem with the miner's share.
+    BeadSigningFailed {
+        error: crate::bead::sign::BeadSignError,
+    },
     PeerNotFoundInConnectionMapping {
         peer_addr: String,
     },
@@ -339,6 +344,9 @@ impl fmt::Display for StratumErrors {
             }
             StratumErrors::InvalidShare { reason } => {
                 write!(f, "Invalid share: {}", reason)
+            }
+            StratumErrors::BeadSigningFailed { error } => {
+                write!(f, "Node failed to sign the bead: {}", error)
             }
             StratumErrors::ResponseWriteError { error } => {
                 write!(f, "{:?}", error)
