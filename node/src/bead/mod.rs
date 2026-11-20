@@ -1,4 +1,5 @@
 use crate::committed_metadata::CommittedMetadata;
+use crate::ibd_manager::IBD_BATCH_SIZE;
 use crate::uncommitted_metadata::UnCommittedMetadata;
 use crate::utils::BeadHash;
 use async_trait::async_trait;
@@ -6,6 +7,7 @@ use bitcoin::block::Header as BlockHeader;
 use bitcoin::block::Version as BlockVersion;
 use bitcoin::consensus::encode::Decodable;
 use bitcoin::consensus::encode::Encodable;
+use bitcoin::consensus::encode::MAX_VEC_SIZE;
 use bitcoin::hashes::Hash;
 use bitcoin::{BlockHash, CompactTarget, TxMerkleNode};
 use libp2p::futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
@@ -20,7 +22,7 @@ use std::io::{Error as IoError, ErrorKind, Result as IoResult};
 /// and convenient iteration methods. Used to work around Rust's orphan rule.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Beads(pub Vec<Bead>);
-impl_vec_wrapper!(Beads, Bead);
+impl_vec_wrapper!(Beads, Bead, MAX_BEADS_PER_SYNC_RESPONSE);
 
 /// Collection of bead hashes.
 ///
@@ -28,7 +30,7 @@ impl_vec_wrapper!(Beads, Bead);
 /// and convenient iteration methods. Used for requesting and responding with bead identifiers.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct BeadHashes(pub Vec<BeadHash>);
-impl_vec_wrapper!(BeadHashes, BeadHash);
+impl_vec_wrapper!(BeadHashes, BeadHash, MAX_BEAD_HASHES_PER_MESSAGE);
 
 /// A bead in the Braidpool DAG structure.
 ///
@@ -124,6 +126,72 @@ braidpool_protocol! {
     }
 }
 
+/// Largest bead sync request a peer may send, in bytes (32,768 hashes).
+pub const MAX_BEAD_SYNC_REQUEST_BYTES: u64 = 1024 * 1024;
+
+/// Largest bead sync response a peer may send, in bytes. A coarse ceiling of one
+/// IBD batch at `MAX_VEC_SIZE` per bead; nothing below this bounds a single bead.
+pub const MAX_BEAD_SYNC_RESPONSE_BYTES: u64 = IBD_BATCH_SIZE as u64 * MAX_VEC_SIZE as u64;
+
+/// The most bead hashes one message can carry.
+///
+/// `BeadHashes` is also the answer to `GetBeadsAfter`, which lists every hash after
+/// the requester's tips and can be the whole braid, so this follows the response
+/// byte cap. A request is still held to its own byte cap by `read_bounded`.
+pub const MAX_BEAD_HASHES_PER_MESSAGE: usize = (MAX_BEAD_SYNC_RESPONSE_BYTES / 32) as usize;
+
+/// The most beads a node puts in one sync response.
+///
+/// The byte cap above is a ceiling on the encoded message, so a node that
+/// assembles a bigger response than this fails to send it at all rather than
+/// answering with what it can. Capping the count where the response is built
+/// keeps an honest node inside the reader's bound, and an IBD requester already
+/// asks for beads one `IBD_BATCH_SIZE` slice at a time, so nothing honest is
+/// asking for more than this.
+pub const MAX_BEADS_PER_SYNC_RESPONSE: usize = IBD_BATCH_SIZE;
+
+/// Caps `beads` at [`MAX_BEADS_PER_SYNC_RESPONSE`] in place, returning how many
+/// were dropped so the caller can say so in its log.
+pub fn cap_sync_response(beads: &mut Vec<Bead>) -> usize {
+    let dropped = beads.len().saturating_sub(MAX_BEADS_PER_SYNC_RESPONSE);
+    beads.truncate(MAX_BEADS_PER_SYNC_RESPONSE);
+    dropped
+}
+
+/// Refuses to hand a peer a message the other side is required to reject.
+///
+/// The reader caps what it will accept, so the same cap belongs on the writer:
+/// a message over it is a bug on this node, and sending it would surface as an
+/// unexplained decode failure on the peer instead.
+fn check_bounded(buf: &[u8], max: u64) -> IoResult<()> {
+    if buf.len() as u64 > max {
+        return Err(IoError::new(
+            ErrorKind::InvalidData,
+            format!("bead sync message exceeds {max} bytes"),
+        ));
+    }
+    Ok(())
+}
+
+/// Reads the whole stream into memory, failing if it holds more than `max` bytes.
+///
+/// Reads `max + 1` so an oversized stream is reported as an error instead of
+/// being silently truncated to a prefix that might still decode.
+async fn read_bounded<T>(io: &mut T, max: u64) -> IoResult<Vec<u8>>
+where
+    T: AsyncRead + Unpin + Send,
+{
+    let mut buf = Vec::new();
+    io.take(max + 1).read_to_end(&mut buf).await?;
+    if buf.len() as u64 > max {
+        return Err(IoError::new(
+            ErrorKind::InvalidData,
+            format!("bead sync message exceeds {max} bytes"),
+        ));
+    }
+    Ok(buf)
+}
+
 /// Codec for encoding/decoding bead sync messages over libp2p.
 ///
 /// Implements the `libp2p::request_response::Codec` trait to handle serialization
@@ -141,8 +209,7 @@ impl Codec for BeadCodec {
     where
         T: AsyncRead + Unpin + Send,
     {
-        let mut buf = Vec::new();
-        io.read_to_end(&mut buf).await?;
+        let buf = read_bounded(io, MAX_BEAD_SYNC_REQUEST_BYTES).await?;
         BeadRequest::consensus_decode(&mut buf.as_slice())
             .map_err(|e| IoError::new(ErrorKind::InvalidData, e))
     }
@@ -151,8 +218,7 @@ impl Codec for BeadCodec {
     where
         T: AsyncRead + Unpin + Send,
     {
-        let mut buf = Vec::new();
-        io.read_to_end(&mut buf).await?;
+        let buf = read_bounded(io, MAX_BEAD_SYNC_RESPONSE_BYTES).await?;
         BeadResponse::consensus_decode(&mut buf.as_slice())
             .map_err(|e| IoError::new(ErrorKind::InvalidData, e))
     }
@@ -170,6 +236,7 @@ impl Codec for BeadCodec {
         request
             .consensus_encode(&mut buf)
             .map_err(|e| IoError::new(ErrorKind::InvalidData, e))?;
+        check_bounded(&buf, MAX_BEAD_SYNC_REQUEST_BYTES)?;
         io.write_all(&buf)
             .await
             .map_err(|e| IoError::new(ErrorKind::Other, e))
@@ -188,6 +255,7 @@ impl Codec for BeadCodec {
         response
             .consensus_encode(&mut buf)
             .map_err(|e| IoError::new(ErrorKind::InvalidData, e))?;
+        check_bounded(&buf, MAX_BEAD_SYNC_RESPONSE_BYTES)?;
         io.write_all(&buf)
             .await
             .map_err(|e| IoError::new(ErrorKind::Other, e))
