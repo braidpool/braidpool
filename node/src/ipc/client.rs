@@ -57,6 +57,10 @@ pub struct BlockTemplateComponents {
     pub fees: Vec<u64>,
     pub coinbase_merkle_path: Vec<Vec<u8>>,
     pub block_hex: Vec<u8>,
+    /// Block height at the time this template was requested. Populated from the
+    /// `TipChanged { height }` IPC notification, not from Bitcoin Core's template
+    /// response (which uses `Height::ZERO` in some configurations).
+    pub height: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -526,6 +530,7 @@ impl BitcoinRpcClient {
                 fees: fees_vec,
                 coinbase_merkle_path,
                 block_hex: full_block_data,
+                height: 0, // set by get_template() after creation
             },
             processed_block_hex: None,
         })
