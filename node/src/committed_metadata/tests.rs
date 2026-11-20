@@ -438,3 +438,57 @@ fn test_committed_metadata_consensus_txid_order_is_significant() {
 
     assert_ne!(serialize(&metadata_ab), serialize(&metadata_ba));
 }
+
+/// `parents` and `parent_bead_timestamps` are one list of pairs stored as two
+/// fields. The producer fills both in the same loop and the audit writer reads
+/// them back with `zip`, which stops at the shorter one, so a bead that arrives
+/// with more parents than timestamps would be linked in the braid while the
+/// audit trail recorded fewer of its parents, or none.
+#[test]
+fn decoding_a_bead_with_more_parents_than_timestamps_fails() {
+    let mut metadata = CommittedMetadata::default();
+    metadata.parents =
+        vec![
+            BlockHash::from_str("0000000000000000000000000000000000000000000000000000000000000009")
+                .unwrap();
+            10
+        ];
+    metadata.parent_bead_timestamps = TimeVec(Vec::new());
+
+    let err = deserialize::<CommittedMetadata>(&serialize(&metadata))
+        .expect_err("a skewed pairing must not decode");
+
+    assert!(
+        format!("{err:?}").contains("different lengths"),
+        "refused for the wrong reason: {err:?}"
+    );
+}
+
+#[test]
+fn decoding_a_bead_with_matching_parent_timestamps_succeeds() {
+    let mut metadata = CommittedMetadata::default();
+    metadata.parents =
+        vec![
+            BlockHash::from_str("0000000000000000000000000000000000000000000000000000000000000009")
+                .unwrap();
+            3
+        ];
+    metadata.parent_bead_timestamps =
+        TimeVec(vec![Time::from_consensus(1_653_195_600).unwrap(); 3]);
+
+    let back = deserialize::<CommittedMetadata>(&serialize(&metadata)).expect("matching lengths");
+    assert_eq!(back.parents.len(), 3);
+    assert_eq!(back.parent_bead_timestamps.0.len(), 3);
+}
+
+/// A genesis bead has no parents, so both sides are empty and still agree.
+#[test]
+fn decoding_a_parentless_bead_succeeds() {
+    let metadata = CommittedMetadata::default();
+    assert!(metadata.parents.is_empty());
+
+    let back =
+        deserialize::<CommittedMetadata>(&serialize(&metadata)).expect("no parents is valid");
+    assert!(back.parents.is_empty());
+    assert!(back.parent_bead_timestamps.0.is_empty());
+}
