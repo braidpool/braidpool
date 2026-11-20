@@ -7,7 +7,6 @@ use crate::{
 };
 use ::bitcoin::BlockHash;
 use bitcoin::{
-    absolute::Time,
     block::{Header as BlockHeader, Version as BlockVersion},
     ecdsa::Signature,
     hashes::Hash,
@@ -18,6 +17,9 @@ use bitcoin::{
 use tracing::{debug, error, info, trace, warn};
 
 pub mod test_utils;
+pub mod timestamp;
+
+use crate::utils::timestamp::MicrosecondTimestamp;
 
 // External Type Aliases
 pub type BeadHash = BlockHash;
@@ -143,7 +145,7 @@ pub fn create_test_bead(nonce: u32, prev_hash: Option<BlockHash>) -> Bead {
     }
     let weak_target = CompactTarget::from_consensus(486604799);
     let min_target = CompactTarget::from_consensus(486604799);
-    let time_val = Time::from_consensus(1653195600).unwrap();
+    let time_val = MicrosecondTimestamp::from_secs(1653195600);
     let test_committed_metadata: CommittedMetadata = CommittedMetadata {
         comm_pub_key: public_key,
         min_target: min_target,
