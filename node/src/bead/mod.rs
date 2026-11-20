@@ -14,6 +14,8 @@ use libp2p::StreamProtocol;
 use serde::{Deserialize, Serialize};
 use std::io::{Error as IoError, ErrorKind, Result as IoResult};
 
+pub mod sign;
+
 /// Collection of beads.
 ///
 /// Newtype wrapper around `Vec<Bead>` that provides Bitcoin consensus encoding/decoding
@@ -46,8 +48,6 @@ pub struct Bead {
     pub uncommitted_metadata: UnCommittedMetadata,
 }
 impl_consensus_encoding!(Bead, block_header, committed_metadata, uncommitted_metadata);
-
-pub mod sign;
 
 impl Default for Bead {
     fn default() -> Self {

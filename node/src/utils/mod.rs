@@ -1,16 +1,16 @@
 // Bitcoin Imports
 use crate::config::PoolNetwork;
+#[cfg(test)]
 use crate::{
     bead::Bead,
     committed_metadata::{CommittedMetadata, TimeVec, TxIdVec},
     uncommitted_metadata::UnCommittedMetadata,
 };
 use ::bitcoin::BlockHash;
+use bitcoin::block::Header as BlockHeader;
+#[cfg(test)]
 use bitcoin::{
-    absolute::Time,
-    block::{Header as BlockHeader, Version as BlockVersion},
-    hashes::Hash,
-    CompactTarget, TxMerkleNode,
+    absolute::Time, block::Version as BlockVersion, hashes::Hash, CompactTarget, TxMerkleNode,
 };
 // Standard Imports
 #[allow(unused_imports)]

@@ -56,7 +56,6 @@ use behaviour::{BraidPoolBehaviour, BraidPoolBehaviourEvent};
 use crate::behaviour::KADPROTOCOLNAME;
 const LATENCY_ALPHA: u64 = 10; // seconds
                                //boot nodes peerIds
-                               // TODO: this bootnode still speaks protocol 1.0.0; update once it runs 2.0.0.
 const BOOTNODES: [&str; 1] = ["12D3KooWG9z8TziaNuYyEcc9FeUC3FTtrEf2XSnSdDpLvx4Jh2w3"];
 //dns NS
 const SEED_DNS: &str = "/dnsaddr/french.braidpool.net";

@@ -45,7 +45,7 @@ Before running `braidpool/node` make sure you have rust-toolchain and rustc inst
 https://rust-lang.org/tools/install/
 ```
 
-#### Start Braidpool with IPC:
+### Start Braidpool with IPC:
 ```sh
 cd braidpool/node
 
@@ -60,18 +60,17 @@ cargo run -- \
   --bind 127.0.0.1:6680 \
   --datadir ~/.braidpool/
 ```
-#### CLI Options:
+
+### CLI Options:
 
 You can find all available command-line arguments in [node/src/cli.rs](https://github.com/braidpool/braidpool/blob/main/node/src/cli.rs).
 
 -   `--ipc-socket <PATH>`: Specifies the path to the UNIX domain socket file (should be the same as bitcoin node).
 -   `--network <NETWORK>`: Sets the network. Valid options are `mainnet`, `testnet4`, `signet`, and `cpunet`. The default is `mainnet`.
 
-#### Data directory and protocol 2.0.0
+### Data directory
 
--   `miner_secp256k1`: the node's miner key, created owner read-only (`0o400`) on first start and reused afterwards. Anyone who can read it can sign beads as this node. A file that is not exactly 32 bytes holding a valid secret stops startup and is left untouched.
--   Protocol 2.0.0 changed the bead encoding to BIP340 x-only keys and Schnorr signatures. A `braidpool.db` (or `audit.db`) holding beads from an earlier version is refused at startup. Stop the node and delete `braidpool.db`, `braidpool.db-wal` and `braidpool.db-shm` (and the matching `audit.db*` files); the braid is rebuilt from peers. Nodes on 1.0.0 and 2.0.0 do not exchange beads.
--   Until the bootnode is upgraded to 2.0.0, connect nodes directly with `--addnode=/ip4/<host>/udp/<port>/quic-v1`.
+`miner_secp256k1`: the node's miner key, created owner read-only (`0o400`) on first start and reused afterwards. Anyone who can read it can sign beads as this node. A file that is not exactly 32 bytes holding a valid secret stops startup and is left untouched.
 
 ## For probing current braidpool-node 
 - `braidpool-cli` crate can be utilized for accessing current braid-state including information about the `bead-count`,`bead-by-beadhash`,`tips` etc.
@@ -86,6 +85,7 @@ You can find all available command-line arguments in [node/src/cli.rs](https://g
   cargo run -- --help
 
 ```
+
 ## Setting up cpuminer for downstream connection
   - If you don't have a physical miner, you can use CPUMiner to run tests on Bitcoin `mainnet`, `testnet4`, or `signet`. CPUMiner does not support the `cpunet` network, because CPUNet uses a different block-header hash algorithm; to mine on CPUNet with a CPU, use our CPUNet-specific `rust_cpunet_miner` as described below.
   - For mining over cpunet on CPU you can run our cpunet configured rust_cpu_miner instructions here - `https://github.com/braidpool/rust_cpunet_miner` .

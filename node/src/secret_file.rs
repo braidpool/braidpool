@@ -1,14 +1,3 @@
-//! Creating and loading node secret files such as the miner secp256k1 key.
-//!
-//! * A new file is created owner-read-only (`0o400`): it is written to a temporary sibling
-//!   with that mode, then published with `hard_link`, which fails if the destination exists.
-//!   The secret never exists with wider permissions, never appears half-written, and two
-//!   processes starting at once cannot overwrite each other's key.
-//! * Only a missing file (`NotFound`) causes a new secret to be generated. Any other read
-//!   error aborts, so an identity is never silently replaced.
-//! * An existing file must be a regular file; a mode other than `0o400` is tightened with a
-//!   warning.
-
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, ErrorKind, Write};
 use std::path::{Path, PathBuf};

@@ -90,9 +90,12 @@ pub struct CommittedMetadata {
     pub parent_bead_timestamps: TimeVec,
     pub payout_address: String,
     pub start_timestamp: Time,
-    /// BIP340 x-only secp256k1 miner identity (exactly 32 bytes on the wire).
+    /// BIP340-compatible XOnlyPublicKey miner identity (exactly 32 bytes).
     pub comm_pub_key: XOnlyPublicKey,
+    //minimum possible target > which will be the weak target
     pub min_target: CompactTarget,
+    //the weaker target locally apart from mainnet target ranging between the mainnet target and
+    //minimum possible target
     pub weak_target: CompactTarget,
     pub miner_ip: String,
 }
