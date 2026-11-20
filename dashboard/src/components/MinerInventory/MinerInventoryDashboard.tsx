@@ -7,8 +7,10 @@ import MinerDashboardHeader from './MinerDashboardHeader';
 import MinerControls from './MinerControls';
 import { HISTORY_POINTS, REFRESH_INTERVAL } from './Constant';
 import { mapApiToMiner, getAlerts } from './Utils';
+import { UseBitcoinNetworkHashrate } from './UseChainHashrates';
 
 const MAX_HISTORY_POINTS = HISTORY_POINTS;
+const H_PER_EH = 1e18;
 
 const MinerInventoryDashboard = () => {
   const [miners, setMiners] = useState<Miner[]>([]);
@@ -27,6 +29,13 @@ const MinerInventoryDashboard = () => {
   const [wsConnected, setWsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const [fleetHistory, setFleetHistory] = useState<HistoryPoint[]>([]);
+  const networkSample = UseBitcoinNetworkHashrate();
+  const networkSampleRef = useRef(networkSample);
+
+  useEffect(() => {
+    networkSampleRef.current = networkSample;
+  }, [networkSample]);
+
   useEffect(() => {
     let cancelled = false;
     const connect = () => {
@@ -148,6 +157,13 @@ const MinerInventoryDashboard = () => {
           timestamp,
           totalHashrate: totalHashrateNow,
           expectedHashrate: totalExpectedNow,
+          //  the newest network sample taken at or before this point.
+          networkHashrate: networkSampleRef.current
+            ? networkSampleRef.current.hashrate / H_PER_EH
+            : null,
+          networkTimestamp: networkSampleRef.current
+            ? networkSampleRef.current.timestamp
+            : null,
           efficiency: avgEfficiencyNow,
           temperature: avgTempNow,
           vrTemperature: avgVrTempNow,

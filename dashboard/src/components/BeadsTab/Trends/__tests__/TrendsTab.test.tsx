@@ -28,12 +28,7 @@ class MockResizeObserver {
   disconnect(): void {}
 }
 
-(global as any).ResizeObserver = MockResizeObserver;
-
-jest.mock('../HashrateTab', () => ({
-  __esModule: true,
-  default: () => <div data-testid="hashrate-tab">Hashrate Content</div>,
-}));
+(globalThis as any).ResizeObserver = MockResizeObserver;
 
 jest.mock('../LatencyTab', () => ({
   __esModule: true,
@@ -52,7 +47,6 @@ jest.mock('../TransactionsTab', () => ({
 // Mock TrendsTABS
 jest.mock('../../lib/Constants', () => ({
   TrendsTABS: [
-    { id: 'hashrate', label: 'Hashrate', icon: () => <span>Hashrate</span> },
     { id: 'latency', label: 'Latency', icon: () => <span>Latency</span> },
     {
       id: 'transactions',
@@ -68,29 +62,11 @@ describe('<TrendsTab />', () => {
     jest.clearAllMocks();
   });
 
-  it('renders the initial hashrate tab by default', () => {
+  it('renders the latency tab by default', () => {
     render(<TrendsTab timeRange="24h" />);
-    const hashrateTab = screen.getByTestId('hashrate-tab');
-    expect(hashrateTab).toBeInTheDocument();
-    expect(hashrateTab.parentElement).toHaveStyle('display: block');
     const latencyTab = screen.getByTestId('latency-tab');
-    const transactionsTab = screen.getByTestId('transactions-tab');
-    expect(latencyTab.parentElement).toHaveStyle('display: none');
-    expect(transactionsTab.parentElement).toHaveStyle('display: none');
-  });
-
-  it('switches to latency tab when clicked', () => {
-    render(<TrendsTab timeRange="24h" />);
-    const latencyBtn = screen.getByRole('button', { name: /latency/i });
-    fireEvent.click(latencyBtn);
-
-    const latencyTab = screen.getByTestId('latency-tab');
-    expect(latencyTab).toBeInTheDocument();
     expect(latencyTab.parentElement).toHaveStyle('display: block');
-
-    const hashrateTab = screen.getByTestId('hashrate-tab');
     const transactionsTab = screen.getByTestId('transactions-tab');
-    expect(hashrateTab.parentElement).toHaveStyle('display: none');
     expect(transactionsTab.parentElement).toHaveStyle('display: none');
   });
 
@@ -99,20 +75,33 @@ describe('<TrendsTab />', () => {
     const txBtn = screen.getByRole('button', { name: /transactions/i });
     fireEvent.click(txBtn);
     const transactionsTab = screen.getByTestId('transactions-tab');
-    expect(transactionsTab).toBeInTheDocument();
+    expect(transactionsTab.parentElement).toHaveStyle('display: block');
     expect(transactionsTab.textContent).toContain('hovered: false');
   });
 
-  it('renders all tab buttons correctly', () => {
+  it('switches back to latency tab when clicked', () => {
     render(<TrendsTab timeRange="24h" />);
-    expect(
-      screen.getByRole('button', { name: /hashrate/i })
-    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /transactions/i }));
+    fireEvent.click(screen.getByRole('button', { name: /latency/i }));
+
+    expect(screen.getByTestId('latency-tab').parentElement).toHaveStyle(
+      'display: block'
+    );
+    expect(screen.getByTestId('transactions-tab').parentElement).toHaveStyle(
+      'display: none'
+    );
+  });
+
+  it('renders the remaining tab buttons and no hashrate tab', () => {
+    render(<TrendsTab timeRange="24h" />);
     expect(
       screen.getByRole('button', { name: /latency/i })
     ).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: /transactions/i })
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /hashrate/i })
+    ).not.toBeInTheDocument();
   });
 });

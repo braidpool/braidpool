@@ -13,6 +13,7 @@ jest.mock('../Utils', () => ({
 }));
 
 jest.mock('lucide-react', () => ({
+  ...jest.requireActual('lucide-react'),
   CopyIcon: () => <svg data-testid="copy-icon" />,
 }));
 
@@ -71,6 +72,21 @@ describe('TransactionDialog', () => {
     // Simulate close
     fireEvent.click(screen.getByText('✕'));
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('displays error message when fetch fails', async () => {
+    const consoleSpy = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    (getTxInfo as jest.Mock).mockRejectedValue(new Error('Fetch error'));
+
+    render(<TransactionDialog txid="bad-txid" onClose={jest.fn()} />);
+    await waitFor(() =>
+      expect(
+        screen.getByText('Failed to load transaction details')
+      ).toBeInTheDocument()
+    );
+    consoleSpy.mockRestore();
   });
 
   it('copies transaction ID to clipboard using hook', async () => {

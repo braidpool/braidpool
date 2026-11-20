@@ -308,9 +308,14 @@ class RpcClient(JsonRpcClient):
         return result[0]
 
     def wait_for_peers(self, minimum: int, timeout: float = 30.0) -> None:
-        """Poll get_peer_info until peer count >= minimum."""
+        """Poll get_peer_info until at least ``minimum`` peers are connected.
+
+        ``getpeerinfo`` returns a single object, not a list of peers, so the
+        count is its ``connected`` field. ``len()`` of the reply would count
+        the object's keys instead.
+        """
         wait_until(
-            lambda: len(self.get_peer_info()) >= minimum,
+            lambda: self.get_peer_info()["connected"] >= minimum,
             timeout=timeout,
             message=f"Peer count never reached {minimum}",
         )

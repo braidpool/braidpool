@@ -97,6 +97,22 @@ pub struct Cli {
     /// Weak difficulty for the miner in audit mode
     #[arg(long)]
     pub miner_difficulty: Option<f64>,
+
+    /// Maximum number of simultaneous downstream miner connections.
+    /// New connections are rejected once this limit is reached.
+    #[arg(long, default_value_t = crate::MAX_DOWNSTREAM_CONNECTIONS, value_parser = parse_nonzero_usize)]
+    pub max_downstream_connections: usize,
+}
+
+fn parse_nonzero_usize(s: &str) -> Result<usize, String> {
+    let n: usize = s
+        .parse()
+        .map_err(|e: std::num::ParseIntError| e.to_string())?;
+    if n == 0 {
+        Err("must be at least 1".to_string())
+    } else {
+        Ok(n)
+    }
 }
 
 #[cfg(test)]

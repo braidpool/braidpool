@@ -26,6 +26,7 @@ import { MAX_HISTORY_ITEMS } from './Constants';
 import ActionIconButton from '../common/ActionIconButton';
 import { downloadSvgFromContainer } from '../../utils/downloadSvg';
 import { Download } from 'lucide-react';
+import ContextualError from '../common/ContextualError';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY'] as const;
 
@@ -39,6 +40,7 @@ const BitcoinPriceTracker: React.FC = () => {
   const [globalStats, setGlobalStats] = useState<GlobalStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [errorDetails, setErrorDetails] = useState<unknown>(null);
   const [priceDirection, setPriceDirection] = useState<'up' | 'down' | null>(
     null
   );
@@ -151,6 +153,12 @@ const BitcoinPriceTracker: React.FC = () => {
       } catch (err) {
         console.error('Error parsing WebSocket message:', err);
         setError('Invalid data format received');
+        setErrorDetails({
+          component: 'BitcoinPriceTracker',
+          endpoint: WEBSOCKET_URLS.MAIN_WEBSOCKET,
+          error: err instanceof Error ? err.message : String(err),
+          rawPayload: event.data,
+        });
       }
     };
 
@@ -201,9 +209,7 @@ const BitcoinPriceTracker: React.FC = () => {
       {/* Price Display */}
       <div className="flex flex-wrap justify-center items-center gap-4 md:gap-20 p-4 md:p-6 rounded-lg shadow-sm mb-6">
         {error ? (
-          <div className="w-full p-3 bg-red-100 text-red-700 rounded-md">
-            {error}
-          </div>
+          <ContextualError message={error} details={errorDetails} />
         ) : showSkeletons ? (
           <div className="flex gap-6" data-testid="animate-pulse">
             {[

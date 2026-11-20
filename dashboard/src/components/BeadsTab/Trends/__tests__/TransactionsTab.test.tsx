@@ -218,7 +218,7 @@ describe('<TransactionsTab />', () => {
     });
 
     expect(
-      await screen.findByText(/Error: WebSocket connection error/)
+      await screen.findByText(/WebSocket connection error/)
     ).toBeInTheDocument();
     expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
   });
@@ -249,9 +249,7 @@ describe('<TransactionsTab />', () => {
       wsInstances[0].onmessage({ data: JSON.stringify(errorMessage) });
     });
 
-    expect(
-      screen.getByText(/Error: Server connection failed/)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Server connection failed/)).toBeInTheDocument();
 
     jest.useRealTimers();
   });
@@ -275,7 +273,7 @@ describe('<TransactionsTab />', () => {
       wsInstances[0].onmessage({ data: 'invalid json' });
     });
 
-    expect(screen.getByText(/Error: Failed to parse data/)).toBeInTheDocument();
+    expect(screen.getByText(/Failed to parse data/)).toBeInTheDocument();
 
     jest.useRealTimers();
   });

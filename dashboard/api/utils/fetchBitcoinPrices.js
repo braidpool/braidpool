@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const HISTORIC_SUFFIX = '/historic?days=1';
-const currencies = ['USD', 'EUR', 'JPY'];
+const currencies = ['USD', 'EUR', 'GBP', 'JPY'];
 
 async function fetchBitcoinPrices(BASE_URL, SPOT_SUFFIX) {
   const prices = {};

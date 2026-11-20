@@ -1,34 +1,28 @@
 import { rpcWithEnv } from './rpcWithEnv.js';
 
+// Difficulty changes roughly every two weeks, so it is cached between broadcasts.
+const DIFFICULTY_TTL_MS = 30_000;
+
 let lastDifficulty = null;
 let lastDiffTime = 0;
-const MIN_DISPLAYABLE_HASHRATE_EH = 0.005;
 
+// Broadcasts the network difficulty (in T) to all connected clients.
 export async function fetchHashrateStats(wss) {
   try {
-    const startTime = Date.now();
-    const now = startTime;
+    const now = Date.now();
 
-    if (!lastDifficulty || now - lastDiffTime > 30_000) {
+    if (!lastDifficulty || now - lastDiffTime > DIFFICULTY_TTL_MS) {
       lastDifficulty = await rpcWithEnv({ method: 'getdifficulty' });
       lastDiffTime = now;
     }
 
-    const hashrate = await rpcWithEnv({ method: 'getnetworkhashps' });
-    const hashrateEH = hashrate / 1e18;
-    const normalizedHashrateEH =
-      hashrateEH < MIN_DISPLAYABLE_HASHRATE_EH ? 0 : hashrateEH;
-    const timestamp = now;
-
     const payload = {
       type: 'hashrate_data',
       data: {
-        hashrate: normalizedHashrateEH,
-        timestamp: timestamp,
         networkDifficulty: lastDifficulty / 1e12,
+        timestamp: now,
       },
     };
-    console.log('Hashrate', payload.data);
 
     wss.clients.forEach((client) => {
       if (client.readyState === client.OPEN) {
@@ -37,7 +31,7 @@ export async function fetchHashrateStats(wss) {
     });
   } catch (err) {
     console.error(
-      '[WebSocket] Failed to fetch or send hashrate stats:',
+      '[WebSocket] Failed to fetch or send difficulty:',
       err.message
     );
   }
