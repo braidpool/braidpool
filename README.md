@@ -79,7 +79,7 @@ A visualization dashboard for the Braidpool decentralized mining pool, and Bitco
 3. **Bead Explorer** — Explore individual beads and their relationships within the braid.  
 4. **Mining Inventory** — View the status and performance of connected miners. 
 5. **Bitcoin Statistics** — Detailed insights into Bitcoin price ranges, historical trends, and market analysis.  
-6. **Mempool Statistics** — Provides real-time data on transactions awaiting confirmation.  
+6. **Mempool Statistics** — Provides real-time data on transactions awaiting confirmation, with fees shown in BTC, USD, EUR, or JPY.  
 7. **Node Health** — Tracks node uptime, connectivity, and overall performance.
 
 For setup instructions and environment configuration, please see the [Dashboard README](./dashboard/README.md)
