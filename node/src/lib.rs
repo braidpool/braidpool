@@ -61,6 +61,7 @@ pub mod ipc;
 pub mod peer_manager;
 pub mod rpc_server;
 pub mod stratum;
+pub mod sync;
 pub mod template_creator;
 pub mod uncommitted_metadata;
 pub mod upstream_pool;
