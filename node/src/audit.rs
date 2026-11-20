@@ -737,6 +737,13 @@ impl AuditDAG {
                         "Parents not yet received, treating as orphan"
                     );
                 }
+                AddBeadStatus::OrphanAlreadyParked => {
+                    warn!(
+                        composite_hash = %composite_hash,
+                        parents = ?bead.committed_metadata.parents,
+                        "Bead already parked as an orphan, treating as idempotent success"
+                    );
+                }
             }
         }
         self.records.insert(share_id.clone(), record);
