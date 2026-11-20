@@ -40,6 +40,10 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         // Scan
         .route("/api/miners/scan/lan", post(handlers::scan_lan))
         .route("/api/miners/scan/subnet", post(handlers::scan_subnet))
+        // CPU miner routes
+        .route("/api/cpu-miners", post(handlers::register_cpu_miner))
+        .route("/api/cpu-miners", get(handlers::list_cpu_miners))
+        .route("/api/cpu-miners/:id", delete(handlers::delete_cpu_miner))
         // Real-time WebSocket — pushes miner list on every refresh/scan
         .route("/api/miners/ws", get(handlers::ws_miners))
         .layer(cors)
