@@ -134,6 +134,25 @@ fn test_timevec_roundtrip_multiple() {
     assert_eq!(original, decoded);
 }
 
+// A peer-supplied length prefix with no elements behind it. Before the
+// preallocation cap, Vec::with_capacity on this length overflowed capacity
+// and panicked; now the loop runs out of input and returns an error.
+const HUGE_LEN: u64 = 0xdddd_dddd_dddd_dddd;
+
+#[test]
+fn test_timevec_decode_huge_length_prefix_errors_instead_of_panicking() {
+    let bytes = serialize(&HUGE_LEN);
+    let result: Result<TimeVec, _> = deserialize(&bytes);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_txidvec_decode_huge_length_prefix_errors_instead_of_panicking() {
+    let bytes = serialize(&HUGE_LEN);
+    let result: Result<TxIdVec, _> = deserialize(&bytes);
+    assert!(result.is_err());
+}
+
 #[test]
 fn test_txidvec_roundtrip_empty() {
     let original = TxIdVec(vec![]);
