@@ -1003,6 +1003,22 @@ pub mod test {
                 "Parent ordering mismatch for bead {}",
                 bead_hash
             );
+            let expected_timestamps: Vec<Time> = bead
+                .committed_metadata
+                .parents
+                .iter()
+                .map(|p_hash| {
+                    let parent_idx = current_file_braid.bead_index_mapping[p_hash];
+                    current_file_braid.beads[parent_idx]
+                        .committed_metadata
+                        .start_timestamp
+                })
+                .collect();
+            assert_eq!(
+                fetched.committed_metadata.parent_bead_timestamps.0, expected_timestamps,
+                "Parent timestamps ordering mismatch for bead {}",
+                bead_hash
+            );
             assert_eq!(
                 fetched.committed_metadata.transaction_ids, bead.committed_metadata.transaction_ids,
                 "Transaction IDs ordering mismatch for bead {}",
@@ -1017,9 +1033,24 @@ pub mod test {
             .expect("fetch_beads_in_batch failed");
         assert_eq!(batch_fetched.len(), expected_beads);
         for (fetched, bead) in batch_fetched.iter().zip(current_file_braid.beads.iter()) {
+            let expected_timestamps: Vec<Time> = bead
+                .committed_metadata
+                .parents
+                .iter()
+                .map(|p_hash| {
+                    let parent_idx = current_file_braid.bead_index_mapping[p_hash];
+                    current_file_braid.beads[parent_idx]
+                        .committed_metadata
+                        .start_timestamp
+                })
+                .collect();
             assert_eq!(
                 fetched.committed_metadata.parents, bead.committed_metadata.parents,
                 "Batch fetch parent ordering mismatch"
+            );
+            assert_eq!(
+                fetched.committed_metadata.parent_bead_timestamps.0, expected_timestamps,
+                "Batch fetch parent timestamps ordering mismatch"
             );
             assert_eq!(
                 fetched.committed_metadata.transaction_ids, bead.committed_metadata.transaction_ids,
@@ -1128,6 +1159,10 @@ pub mod test {
             "Single fetch: parent ordering altered from original"
         );
         assert_eq!(
+            fetched_single.committed_metadata.parent_bead_timestamps.0, canonical_timestamps,
+            "Single fetch: parent timestamps ordering altered from original"
+        );
+        assert_eq!(
             fetched_single.committed_metadata.transaction_ids.0, expected_txs,
             "Single fetch: transaction_ids ordering altered from original"
         );
@@ -1144,6 +1179,10 @@ pub mod test {
         assert_eq!(
             fetched_child.committed_metadata.parents, canonical_parents,
             "Batch fetch: parent ordering altered from original"
+        );
+        assert_eq!(
+            fetched_child.committed_metadata.parent_bead_timestamps.0, canonical_timestamps,
+            "Batch fetch: parent timestamps ordering altered from original"
         );
         assert_eq!(
             fetched_child.committed_metadata.transaction_ids.0, expected_txs,
