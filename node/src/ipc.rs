@@ -1,4 +1,5 @@
 //! Listens for block notifications and fetches new block templates via IPC
+use crate::committed_metadata::CommittedMetadata;
 use crate::config::CoinbaseConfig;
 use crate::config::PoolNetwork;
 use crate::error::CoinbaseError;
@@ -468,8 +469,8 @@ fn create_braidpool_template(
     config: &CoinbaseConfig,
     nonce: u32,
 ) -> Result<FinalTemplate, CoinbaseError> {
-    let braidpool_commitment = b"braidpool_bead_metadata_hash_32b";
-    //8 bytes that is extranonce has a size of 32 bits
+    let commitment = CommittedMetadata::default().compute_commitment_hash();
+    // 8 bytes extranonce
     let extranonce = &[0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08];
-    create_block_template(components, braidpool_commitment, extranonce, nonce, config)
+    create_block_template(components, &commitment, extranonce, nonce, config)
 }
