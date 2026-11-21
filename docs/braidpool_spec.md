@@ -654,12 +654,11 @@ and immediately paid out to hashers, as there are not enough known parties to
 sign a multi-signature, and we don't even know their pubkeys to construct a
 (P2TR, P2SH, etc) bitcoin output address and scriptPubKey.
 
-After the first 4 blocks, we assume that 66%+1 miners who have previously mined
-a block must sign the RCA and UHPO output(s). The set of signers is the unique
-hashers who won the most recent $S$ blocks in the pool. The exact number $S$
-will be decided after benchmarking the network latency of the chosen signing
-algorithm, but preliminary analysis indicates this will be around 50 signers
-using [FROST](https://eprint.iacr.org/2020/852) or [ROAST](https://eprint.iacr.org/2022/550).
+After the first 4 blocks, we assume that more than 2/3 of the signers must sign
+the RCA and UHPO output(s). The set of signers is the unique hashers who won
+the most recent $S$ blocks in the pool. The exact number $S$ will be decided
+after benchmarking the network latency of the chosen signing algorithm, but
+preliminary analysis indicates this will be around 50 signers using [FROST](https://eprint.iacr.org/2020/852) or [ROAST](https://eprint.iacr.org/2022/550).
 
 ## Schnorr Threshold Signatures
 
@@ -748,17 +747,28 @@ and without consuming too much bandwidth or computation. However if $n$ is too
 small, a large miner with multiple Sybil nodes might accidentally win $t$ of the
 most recent blocks, giving him full control of the aggregated funds.
 
-The probability of this happening is given by the Poisson distribution:
+Assume each of the $S$ most recent blocks was won by a distinct miner, so
+$S = n$. Each of those blocks is won by the attacking miner independently with
+probability $f$, so the number of them won by the attacker follows a binomial
+distribution, and the probability of this happening is:
 
 $$
-\sum_{k=2n/3+1}^n P(f n, k)
+\sum_{k=t}^n \binom{n}{k} f^k (1-f)^{n-k}
 \qquad {\rm where}
-\qquad P(\lambda, k) = \frac{\lambda^k e^{-\lambda}}{k!}
+\qquad t = \lfloor 2n/3 \rfloor + 1
 $$
 
-where $n$ is the number of miners participating in the signing process and $f$
-is the fraction of the pools hashrate controlled by the attacking miner. For
-$n=50$ and $f=20\%$ this is about 7e-8, rising quickly as $f$ increases.
+where $t$ is the signing threshold (more than 2/3 of the signers, as in [Payout
+Authorization](#payout-authorization)) and $f$ is the fraction of the pool's
+hashrate controlled by the attacking miner. For $n=50$ (so $t=34$) this is:
+
+| $f$ | Probability |
+| --- | ----------- |
+| 20% | $2.7 \times 10^{-13}$ |
+| 25% | $2.0 \times 10^{-10}$ |
+| 30% | $3.4 \times 10^{-8}$ |
+| 40% | $5.8 \times 10^{-5}$ |
+| 50% | $7.7 \times 10^{-3}$ |
 
 This is a standard 51\% attack, which we fundamentally can't prevent and if any
 miner gains too much hashrate. We can mitigate it somewhat by requiring the
