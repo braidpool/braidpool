@@ -3,9 +3,15 @@ use crate::config::PoolNetwork;
 use crate::{
     bead::Bead,
     committed_metadata::{CommittedMetadata, TimeVec, TxIdVec},
+    error::StratumErrors,
     uncommitted_metadata::UnCommittedMetadata,
 };
 use ::bitcoin::BlockHash;
+use bitcoin::base58;
+use bitcoin::constants::{
+    PUBKEY_ADDRESS_PREFIX_MAIN, PUBKEY_ADDRESS_PREFIX_TEST, SCRIPT_ADDRESS_PREFIX_MAIN,
+    SCRIPT_ADDRESS_PREFIX_TEST,
+};
 use bitcoin::{
     absolute::Time,
     block::{Header as BlockHeader, Version as BlockVersion},
@@ -13,6 +19,7 @@ use bitcoin::{
     hashes::Hash,
     secp256k1, CompactTarget, EcdsaSighashType, TxMerkleNode,
 };
+use braidpool_common::{cpunet::Cpunet, error::CpunetAddressError};
 // Standard Imports
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
@@ -40,6 +47,87 @@ use std::{
 /// Computes a bead's block hash under the rules of `network`.
 pub fn compute_block_hash(block_header: &BlockHeader, network: PoolNetwork) -> BlockHash {
     network.block_hash(block_header)
+}
+
+//Validation for usernames and parsing the payout_address for the downstream connected
+pub fn validate(
+    username: &str,
+    network: PoolNetwork,
+) -> Result<(&str, Option<&str>), StratumErrors> {
+    let parts: Vec<&str> = username.splitn(2, '.').collect();
+    let address_part = parts[0];
+    // Worker name is the optional suffix after the first '.'
+    let worker = parts.get(1).copied();
+    match network {
+        PoolNetwork::Bitcoin(network) => {
+            let address = address_part.parse::<bitcoin::Address<_>>().map_err(|_e| {
+                StratumErrors::UserNameParseError {
+                    error: crate::error::UsernameValidationError::InvalidAddress {
+                        address: address_part.to_string(),
+                    },
+                }
+            })?;
+
+            address
+                .require_network(network)
+                .map_err(|_| StratumErrors::UserNameParseError {
+                    error: crate::error::UsernameValidationError::NetworkIncompatibleAddress {
+                        network: network.to_string(),
+                    },
+                })?;
+
+            Ok((address_part, worker))
+        }
+        PoolNetwork::Cpunet => {
+            match Cpunet::decode_bech32_address(address_part) {
+                Ok(_) => return Ok((address_part, worker)),
+                Err(CpunetAddressError::Bech32(_)) => {}
+                Err(error) => {
+                    return Err(StratumErrors::UserNameParseError {
+                        error: crate::error::UsernameValidationError::InvalidCpunetAddress {
+                            address: address_part.to_string(),
+                            error,
+                        },
+                    });
+                }
+            }
+
+            if address_part.len() > 50 {
+                return Err(StratumErrors::UserNameParseError {
+                    error: crate::error::UsernameValidationError::InvalidAddress {
+                        address: address_part.to_string(),
+                    },
+                });
+            }
+            let data = base58::decode_check(address_part).map_err(|_| {
+                StratumErrors::UserNameParseError {
+                    error: crate::error::UsernameValidationError::InvalidAddress {
+                        address: address_part.to_string(),
+                    },
+                }
+            })?;
+            if data.len() != 21 {
+                return Err(StratumErrors::UserNameParseError {
+                    error: crate::error::UsernameValidationError::InvalidAddress {
+                        address: address_part.to_string(),
+                    },
+                });
+            }
+
+            let (prefix, _) = data.split_first().expect("length checked above");
+            match *prefix {
+                PUBKEY_ADDRESS_PREFIX_MAIN
+                | PUBKEY_ADDRESS_PREFIX_TEST
+                | SCRIPT_ADDRESS_PREFIX_MAIN
+                | SCRIPT_ADDRESS_PREFIX_TEST => Ok((address_part, worker)),
+                _ => Err(StratumErrors::UserNameParseError {
+                    error: crate::error::UsernameValidationError::InvalidAddress {
+                        address: address_part.to_string(),
+                    },
+                }),
+            }
+        }
+    }
 }
 
 /// Get list of actual local IPv4 addresses for servers binding to 0.0.0.0
@@ -187,6 +275,10 @@ pub fn create_test_bead(nonce: u32, prev_hash: Option<BlockHash>) -> Bead {
 
 #[cfg(test)]
 mod tests {
+    use bitcoin::Network;
+
+    use crate::error::UsernameValidationError;
+
     use super::*;
     fn unique_temp_test_path(label: &str) -> PathBuf {
         let suffix = rand::random::<u8>();
@@ -235,6 +327,115 @@ mod tests {
         assert!(file_path.is_file());
 
         let _ = fs::remove_file(&file_path);
+    }
+
+    #[test]
+    fn valid_address_with_worker() {
+        let username = "bc1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7.worker1";
+        let result = validate(username, PoolNetwork::Bitcoin(Network::Bitcoin));
+
+        assert!(result.is_ok());
+
+        let (address, worker) = result.unwrap();
+        assert_eq!(address, "bc1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7");
+        assert_eq!(worker, Some("worker1"));
+    }
+
+    #[test]
+    fn invalid_bitcoin_address() {
+        let username = "not_a_valid_address.worker";
+        let result = validate(username, PoolNetwork::Bitcoin(Network::Bitcoin));
+
+        assert!(result.is_err());
+
+        match result {
+            Err(StratumErrors::UserNameParseError { error }) => {
+                assert_eq!(
+                    error,
+                    UsernameValidationError::InvalidAddress {
+                        address: "not_a_valid_address".to_string()
+                    }
+                )
+            }
+            _ => panic!("Expected UserNameParseError for invalid address"),
+        }
+    }
+
+    #[test]
+    fn network_incompatible_address() {
+        // Mainnet address checked against Testnet
+        let username = "bc1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7";
+        let result = validate(username, PoolNetwork::Bitcoin(Network::Testnet4));
+
+        assert!(result.is_err());
+
+        match result {
+            Err(StratumErrors::UserNameParseError { error }) => {
+                assert_eq!(
+                    error,
+                    UsernameValidationError::NetworkIncompatibleAddress {
+                        network: "testnet4".to_string()
+                    }
+                )
+            }
+            _ => panic!("Expected UserNameParseError for network mismatch"),
+        }
+    }
+    #[test]
+    fn valid_cpunet_address_with_worker() {
+        let address = Cpunet::encode_bech32_address(
+            &bitcoin::WitnessProgram::new(bitcoin::WitnessVersion::V0, &[0u8; 20])
+                .expect("valid witness program"),
+        );
+        let username = format!("{}.worker1", address);
+        let result = validate(&username, PoolNetwork::Cpunet);
+
+        assert!(result.is_ok());
+
+        let (payout_address, worker) = result.unwrap();
+        assert_eq!(payout_address, address);
+        assert_eq!(worker, Some("worker1"));
+    }
+
+    #[test]
+    fn cpunet_rejects_bitcoin_segwit_address() {
+        // Mainnet HRP checked against cpunet
+        let username = "bc1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7.worker1";
+        let result = validate(username, PoolNetwork::Cpunet);
+
+        match result {
+            Err(StratumErrors::UserNameParseError { error }) => {
+                assert_eq!(
+                    error,
+                    UsernameValidationError::InvalidCpunetAddress {
+                        address: "bc1qpa77defz30uavu8lxef98q95rae6m7t8au9vp7".to_string(),
+                        error: CpunetAddressError::WrongNetwork {
+                            expected: "tc".to_string(),
+                            found: "bc".to_string(),
+                        },
+                    }
+                )
+            }
+            _ => panic!("Expected UserNameParseError for a non cpunet segwit address"),
+        }
+    }
+
+    #[test]
+    fn cpunet_rejects_malformed_address() {
+        let username = "not_a_valid_address.worker";
+        let result = validate(username, PoolNetwork::Cpunet);
+
+        match result {
+            Err(StratumErrors::UserNameParseError { error }) => {
+                assert_eq!(
+                    error,
+                    UsernameValidationError::InvalidAddress {
+                        address: "not_a_valid_address".to_string()
+                    }
+                )
+            }
+            _ => panic!("Expected UserNameParseError for an unparseable address"),
+        }
     }
 
     #[test]

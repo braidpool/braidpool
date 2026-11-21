@@ -14,7 +14,7 @@ impl fmt::Display for ParseCpunetError {
 impl std::error::Error for ParseCpunetError {}
 
 /// Error type for cpunet address operations.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CpunetAddressError {
     /// Bech32 decoding error
     Bech32(bech32::segwit::DecodeError),
