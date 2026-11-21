@@ -2409,6 +2409,95 @@ fn test_extend_reports_promoted_orphan() {
     );
 }
 
+/// On an empty braid, a child bead can arrive before the genesis bead it builds
+/// on. The child is parked as an orphan, and adding the genesis bead must
+/// promote it instead of discarding the orphan set.
+#[test]
+fn test_genesis_on_empty_braid_promotes_parked_orphans() {
+    let genesis = emit_bead();
+    let mut braid = Braid::new(vec![], PoolNetwork::Cpunet);
+
+    let mut child = emit_bead();
+    child
+        .committed_metadata
+        .parents
+        .push(compute_block_hash(&genesis.block_header, braid.network));
+
+    assert!(
+        matches!(braid.extend(&child), AddBeadStatus::ParentsNotYetReceived),
+        "child should be parked while the genesis bead is missing"
+    );
+    assert_eq!(braid.orphan_beads.len(), 1);
+
+    match braid.extend(&genesis) {
+        AddBeadStatus::BeadAdded { promoted_orphans } => {
+            assert_eq!(promoted_orphans.len(), 1, "child should be promoted");
+            assert_eq!(
+                compute_block_hash(&promoted_orphans[0].block_header, braid.network),
+                compute_block_hash(&child.block_header, braid.network)
+            );
+        }
+        other => panic!("expected BeadAdded, got {:?}", other),
+    }
+    assert_eq!(
+        braid.beads.len(),
+        2,
+        "genesis and child should both be in the braid"
+    );
+    assert!(
+        braid.orphan_beads.is_empty(),
+        "the orphan set should be drained once genesis arrives"
+    );
+    assert!(braid
+        .bead_index_mapping
+        .contains_key(&compute_block_hash(&child.block_header, braid.network)));
+}
+
+/// An orphan parked before genesis that also depends on another bead that has
+/// not arrived yet must stay parked when only the genesis bead arrives.
+#[test]
+fn test_genesis_on_empty_braid_keeps_orphan_with_missing_parent() {
+    let genesis = emit_bead();
+    let other_parent = emit_bead();
+    let mut braid = Braid::new(vec![], PoolNetwork::Cpunet);
+
+    let mut child = emit_bead();
+    child
+        .committed_metadata
+        .parents
+        .push(compute_block_hash(&genesis.block_header, braid.network));
+    child.committed_metadata.parents.push(compute_block_hash(
+        &other_parent.block_header,
+        braid.network,
+    ));
+
+    assert!(
+        matches!(braid.extend(&child), AddBeadStatus::ParentsNotYetReceived),
+        "child should be parked while its parents are missing"
+    );
+    assert_eq!(braid.orphan_beads.len(), 1);
+
+    match braid.extend(&genesis) {
+        AddBeadStatus::BeadAdded { promoted_orphans } => {
+            assert!(
+                promoted_orphans.is_empty(),
+                "child still has a missing parent, so it must not be promoted"
+            );
+        }
+        other => panic!("expected BeadAdded, got {:?}", other),
+    }
+    assert_eq!(
+        braid.beads.len(),
+        1,
+        "only the genesis bead should be added"
+    );
+    assert_eq!(
+        braid.orphan_beads.len(),
+        1,
+        "child should stay parked until its other parent arrives"
+    );
+}
+
 /// A chain of orphans (each depending on the previous) that arrive before their
 /// common ancestor should all be promoted transitively in a single `extend`.
 #[test]
