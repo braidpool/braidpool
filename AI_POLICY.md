@@ -13,7 +13,9 @@ This documents the AI policy for the Braidpool, and every PR created in the code
 
 - Writing the PR description, title, commit name, and message.
 - Using in discussion with maintainers and contributors. This includes sending the AI-generated comments, but one can reference a text that is written using AI only if it's previously disclosed.
-- Using the autonomous AI agents.
+- Using autonomous AI agents, meaning contributions made without a human in the loop who understands and takes responsibility for the resulting work.
+- Using AI agents as co-authors or committers of a PR.
+- Writing documentation.
 - Creating a PR that lacks things described above in the allowed section.
 
 The things described above will benefit every community member, contributor, reviewer, and maintainer. And will lead to a more strategic development process. **Any PR that is seen violating the above terms and suspected by the maintainers will be closed without giving a detailed reason or any reason for closure.**
