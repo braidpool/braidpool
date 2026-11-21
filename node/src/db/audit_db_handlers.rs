@@ -38,6 +38,29 @@ impl AuditDBHandler {
         })
     }
 
+    #[cfg(test)]
+    /// Creates an in-memory audit DB handler for testing.
+    pub async fn new_in_memory() -> Result<Self, DBErrors> {
+        use sqlx::sqlite::SqlitePoolOptions;
+        use sqlx::Executor;
+        let pool = SqlitePoolOptions::new()
+            .connect("sqlite::memory:")
+            .await
+            .map_err(|e| DBErrors::ConnectionToSQlitePoolFailed {
+                error: e.to_string(),
+            })?;
+        static AUDIT_SCHEMA_SQL: &str = include_str!("audit_schema.sql");
+        pool.execute(AUDIT_SCHEMA_SQL)
+            .await
+            .map_err(|e| DBErrors::SchemaNotInitialized {
+                error: e.to_string(),
+                db_path: std::path::PathBuf::from(":memory:"),
+            })?;
+        Ok(Self {
+            db_connection_pool: pool,
+        })
+    }
+
     pub async fn insert_bead(
         &self,
         bead: &Bead,
@@ -99,16 +122,18 @@ impl AuditDBHandler {
             .parents
             .iter()
             .zip(bead.committed_metadata.parent_bead_timestamps.0.iter())
+            .enumerate()
             .collect();
 
         if !parents.is_empty() {
             let mut qb = sqlx::QueryBuilder::new(
-                "INSERT INTO AuditBeadParent (child_id, parent_block_hash, parent_timestamp) ",
+                "INSERT INTO AuditBeadParent (child_id, parent_block_hash, parent_timestamp, idx) ",
             );
-            qb.push_values(parents, |mut b, (parent_hash, parent_timestamp)| {
+            qb.push_values(parents, |mut b, (idx, (parent_hash, parent_timestamp))| {
                 b.push_bind(bead_id)
                     .push_bind(parent_hash.as_byte_array().as_slice())
-                    .push_bind(parent_timestamp.to_consensus_u32() as i64);
+                    .push_bind(parent_timestamp.to_consensus_u32() as i64)
+                    .push_bind(idx as i64);
             });
             qb.build()
                 .execute(&mut *tx)
@@ -230,7 +255,8 @@ impl AuditDBHandler {
         // Fetch parents for this specific bead
         let bead_id: i64 = row.get("id");
         let parent_rows = sqlx::query(
-            "SELECT parent_block_hash, parent_timestamp FROM AuditBeadParent WHERE child_id = ?",
+            "SELECT parent_block_hash, parent_timestamp \
+             FROM AuditBeadParent WHERE child_id = ? ORDER BY idx",
         )
         .bind(bead_id)
         .fetch_all(pool)
@@ -239,7 +265,8 @@ impl AuditDBHandler {
             error: format!("Failed to fetch parents for bead id {}: {}", bead_id, e),
         })?;
 
-        let mut parent_pairs: Vec<(BlockHash, bitcoin::absolute::Time)> = Vec::new();
+        let mut parents: Vec<BlockHash> = Vec::with_capacity(parent_rows.len());
+        let mut parent_timestamps = Vec::with_capacity(parent_rows.len());
 
         for p_row in parent_rows {
             let p_hash: Vec<u8> = p_row.get("parent_block_hash");
@@ -256,12 +283,6 @@ impl AuditDBHandler {
                 error: e.to_string(),
                 attribute: "parent_timestamp".to_string(),
             })?;
-            parent_pairs.push((hash, time));
-        }
-        parent_pairs.sort_by_key(|(hash, _)| *hash);
-        let mut parents: Vec<BlockHash> = Vec::new();
-        let mut parent_timestamps = Vec::new();
-        for (hash, time) in parent_pairs {
             parents.push(hash);
             parent_timestamps.push(time);
         }
@@ -377,5 +398,83 @@ impl sqlx::FromRow<'_, sqlx::sqlite::SqliteRow> for MinerStats {
             first_bead_at: row.try_get("first_bead_at")?,
             last_bead_at: row.try_get("last_bead_at")?,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_audit_db_deterministic_parent_ordering() {
+        let handler = AuditDBHandler::new_in_memory().await.unwrap();
+        let network = PoolNetwork::Cpunet;
+
+        // 1. Insert parent dummy beads so they exist in AuditBead
+        // for the foreign key constraint.
+        let parent1 = crate::utils::create_test_bead(10, None);
+        let parent2 = crate::utils::create_test_bead(20, None);
+        let p1_hash = compute_block_hash(&parent1.block_header, network);
+        let p2_hash = compute_block_hash(&parent2.block_header, network);
+
+        let comp1 = BlockHash::from_byte_array([0x01; 32]);
+        let comp2 = BlockHash::from_byte_array([0x02; 32]);
+        handler
+            .insert_bead(&parent1, comp1, "127.0.0.1".into(), network)
+            .await
+            .expect("Failed to insert parent 1");
+        handler
+            .insert_bead(&parent2, comp2, "127.0.0.1".into(), network)
+            .await
+            .expect("Failed to insert parent 2");
+
+        // 2. Producer side: Canonically sort parent pairs by hash.
+        let t1 = bitcoin::absolute::Time::from_consensus(1653195601).unwrap();
+        let t2 = bitcoin::absolute::Time::from_consensus(1653195602).unwrap();
+        let mut pairs = vec![(p1_hash, t1), (p2_hash, t2)];
+        pairs.sort_by_key(|(hash, _)| *hash);
+
+        let mut canonical_parents = Vec::new();
+        let mut canonical_timestamps = Vec::new();
+        for (h, t) in pairs {
+            canonical_parents.push(h);
+            canonical_timestamps.push(t);
+        }
+
+        let mut child_bead = crate::utils::create_test_bead(30, None);
+        child_bead.committed_metadata.parents = canonical_parents.clone();
+        child_bead.committed_metadata.parent_bead_timestamps =
+            crate::TimeVec(canonical_timestamps.clone());
+
+        // 3. Receiver pre-acceptance validation:
+        assert!(
+            child_bead
+                .committed_metadata
+                .parents
+                .windows(2)
+                .all(|w| w[0] <= w[1]),
+            "Parents must be canonically sorted"
+        );
+
+        // 4. Persistence: Insert child bead into Audit DB.
+        let comp_child = BlockHash::from_byte_array([0x03; 32]);
+        handler
+            .insert_bead(&child_bead, comp_child, "127.0.0.1".into(), network)
+            .await
+            .expect("Failed to insert child bead");
+
+        // 5. Retrieval: Retrieve tips and verify exact parent order preservation.
+        let tips = handler.get_tips().await.expect("Failed to get DAG tips");
+        assert_eq!(tips.len(), 1, "Only child bead should be a tip");
+        let (retrieved, _) = &tips[0];
+
+        assert_eq!(
+            retrieved.committed_metadata.parents, canonical_parents,
+            "Audit DB parent ordering mismatch"
+        );
+        assert_eq!(
+            retrieved.committed_metadata.parent_bead_timestamps.0, canonical_timestamps,
+            "Audit DB parent timestamps ordering mismatch"
+        );
     }
 }
