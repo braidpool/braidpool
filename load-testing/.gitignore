@@ -1,0 +1,10 @@
+# JMeter reports and results
+reports/*.jtl
+reports/*-dashboard/
+reports/braidpool-node.log
+
+# PID files from test runs
+.pids/
+
+# JMeter log
+jmeter.log
