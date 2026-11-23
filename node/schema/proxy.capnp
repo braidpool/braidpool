@@ -1,4 +1,4 @@
-# Copyright (c) 2019 The Bitcoin Core developers
+# Copyright (c) The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -45,6 +45,10 @@ interface ThreadMap $count(0) {
     # execute on. Clients create and name threads and pass the thread handle as
     # a call parameter.
     makeThread @0 (name :Text) -> (result :Thread);
+    # Pre-allocate a pool of server threads for implicit dispatch. When a
+    # request arrives with no context.thread set, the server dispatches it
+    # through this pool via a shared work queue.
+    makePool @1 (count :UInt32) -> ();
 }
 
 interface Thread {

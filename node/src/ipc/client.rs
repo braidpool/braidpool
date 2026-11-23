@@ -33,6 +33,7 @@ pub struct CheckBlockResult {
 pub struct SubmitBlockResult {
     pub success: bool,
     pub reason: String,
+    pub debug: String,
 }
 
 #[derive(Clone)]
@@ -637,14 +638,13 @@ impl BitcoinRpcClient {
         let response = submit_req.send().promise.await?;
         let result = response.get()?;
         let success = result.get_result();
+        let reason = result.get_reason()?.to_string()?;
+        let debug = result.get_debug()?.to_string()?;
 
         Ok(SubmitBlockResult {
             success,
-            reason: if success {
-                "Block submitted successfully".to_string()
-            } else {
-                "Block submission failed".to_string()
-            },
+            reason,
+            debug,
         })
     }
 
