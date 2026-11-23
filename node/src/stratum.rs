@@ -2753,10 +2753,8 @@ impl Notifier {
                     let connection_entry = match connection_entry {
                         Some(entry) => entry,
                         None => {
-                            error!(peer = %new_downstream_addr, "Mining peer not found in connection mapping");
-                            return Err(StratumErrors::PeerNotFoundInConnectionMapping {
-                                peer_addr: new_downstream_addr,
-                            });
+                            debug!(peer = %new_downstream_addr, "Miner disconnected before job lookup");
+                            continue;
                         }
                     };
                     let connection_id_hex = format!("{:x}", connection_entry.connection_id);
@@ -2882,15 +2880,8 @@ impl Notifier {
                             return Err(error);
                         }
                     };
-                    match connection_entry.sender.send(job_notification).await {
-                        Ok(_) => {}
-                        Err(error) => {
-                            return Err(StratumErrors::NotifyMessageNotSent {
-                                error: error.to_string(),
-                                msg: error.0,
-                                msg_type: "LatestTemplateSent".to_string(),
-                            })
-                        }
+                    if let Err(error) = connection_entry.sender.send(job_notification).await {
+                        debug!(peer = %new_downstream_addr, %error, "Miner disconnected before job delivery");
                     }
                 }
 
