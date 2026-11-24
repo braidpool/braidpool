@@ -385,7 +385,7 @@ impl PeerManager {
     pub fn penalize_for_invalid_bead(&mut self, peer_id: &PeerId) {
         if let Some(peer) = self.peers.get_mut(peer_id) {
             // Apply a penalty to the peer's score for sending an invalid bead
-            peer.score -= peer.score * peer.score_penalty_multiplier;
+            peer.score -= peer.score.abs() * peer.score_penalty_multiplier;
             peer.score_penalty_multiplier *= 2.0; // Double the penalty multiplier
             peer.last_message_time = Instant::now(); // Reset last message time
         }
@@ -457,5 +457,20 @@ mod tests {
 
         // Should select peer3 (highest score) and either peer1 or peer2 (different geo group)
         assert!(top_peers.contains(&peer3));
+    }
+
+    #[test]
+    fn test_invalid_bead_penalty_never_raises_score() {
+        let mut manager = PeerManager::new(10);
+        let peer_id = generate_peer_id();
+        manager.add_peer(peer_id, false, None);
+
+        let mut previous_score = manager.peers[&peer_id].score;
+        for _ in 0..15 {
+            manager.penalize_for_invalid_bead(&peer_id);
+            let score = manager.peers[&peer_id].score;
+            assert!(score < previous_score);
+            previous_score = score;
+        }
     }
 }
