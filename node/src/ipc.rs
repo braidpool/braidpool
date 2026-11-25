@@ -274,6 +274,7 @@ pub async fn ipc_block_listener(
                                             template_id = %template_id,
                                             block_hash = %block_hash,
                                             reason = %result.reason,
+                                            debug = %result.debug,
                                             "Block REJECTED by Bitcoin Core"
                                         );
                                     }
