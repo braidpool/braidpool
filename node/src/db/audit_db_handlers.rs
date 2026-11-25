@@ -28,7 +28,6 @@ SELECT
 FROM json_each(?);
 ";
 
-
 pub struct AuditDBHandler {
     db_connection_pool: Pool<Sqlite>,
 }
@@ -328,16 +327,16 @@ impl AuditDBHandler {
     }
 
     pub async fn get_all_beads(&self) -> Result<Vec<(Bead, BlockHash)>, DBErrors> {
-        let pool = self.db_connection_pool.lock().await;
+        let pool = &self.db_connection_pool;
         let rows = sqlx::query("SELECT * FROM AuditBead ORDER BY id ASC")
-            .fetch_all(&*pool)
+            .fetch_all(pool)
             .await
             .map_err(|e| DBErrors::TupleNotFetched {
                 error: format!("Failed to fetch all beads: {}", e),
             })?;
         let mut beads = Vec::new();
         for row in rows {
-            match Self::parse_bead_row(&pool, row).await {
+            match Self::parse_bead_row(pool, row).await {
                 Ok(parsed) => beads.push(parsed),
                 Err(e) => {
                     error!(error = ?e, "Failed to parse bead row, skipping entry");

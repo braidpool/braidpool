@@ -565,10 +565,11 @@ impl AuditDAG {
                         .map(|(comp, _, time)| (*comp, *time))
                         .collect();
 
-                    let generation_hash = match crate::audit::compute_generation_hash(&generation_inputs) {
-                        Ok(h) => h,
-                        Err(e) => return Err(e.to_string()),
-                    };
+                    let generation_hash =
+                        match crate::audit::compute_generation_hash(&generation_inputs) {
+                            Ok(h) => h,
+                            Err(e) => return Err(e.to_string()),
+                        };
 
                     info!(tip_count = sibling_count, "Restored DAG tips from database");
 
