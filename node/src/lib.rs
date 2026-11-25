@@ -35,6 +35,10 @@ pub const GLOBAL_JOB_STORE_CAPACITY: usize = 20;
 /// Sized for realistic pool deployments; large proxy operators will need a higher value.
 pub const MAX_DOWNSTREAM_CONNECTIONS: usize = 10_000;
 
+/// Disconnect a miner after this many consecutive job-send failures.
+/// At 150ms bead rate, 5 failures ≈ 750ms of unresponsiveness before eviction.
+pub const MAX_CONSECUTIVE_SEND_FAILURES: u32 = 5;
+
 use crate::{
     bead::Bead,
     braid::{AddBeadStatus, Braid},
