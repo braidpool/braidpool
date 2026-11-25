@@ -469,7 +469,7 @@ impl AuditDAG {
         let db_handler = self.db_handler.as_ref().unwrap();
 
         // Load the latest bead from the database to get its commitment
-        match db_handler.get_tips().await {
+        match db_handler.get_all_beads().await {
             Ok(beads) => {
                 if beads.is_empty() {
                     info!("No beads found in audit database, creating and persisting genesis bead");
@@ -565,8 +565,10 @@ impl AuditDAG {
                         .map(|(comp, _, time)| (*comp, *time))
                         .collect();
 
-                    let generation_hash = crate::audit::compute_generation_hash(&generation_inputs)
-                        .expect("No generation hash generated");
+                    let generation_hash = match crate::audit::compute_generation_hash(&generation_inputs) {
+                        Ok(h) => h,
+                        Err(e) => return Err(e.to_string()),
+                    };
 
                     info!(tip_count = sibling_count, "Restored DAG tips from database");
 
