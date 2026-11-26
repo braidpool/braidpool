@@ -6,7 +6,6 @@ from test_framework.bitcoin_node import BitcoinNode
 from test_framework.cleanup_manager import CleanupManager
 from test_framework.log_manager import LogManager
 from test_framework.logging_utils import log_event
-from test_framework.miner_manager import CpuMiner, MinerManager
 from test_framework.network_config import NetworkConfig
 from test_framework.port_pool import PortPool
 from test_framework.test_node import TestNode
@@ -33,19 +32,12 @@ class NodeManager:
 
         self.bitcoin: BitcoinNode | None = None
         self.nodes: list[TestNode] = []
-        
-        self.miner_manager = MinerManager(config, log_manager, cleanup_manager)
-
-    @property
-    def miners(self) -> list[CpuMiner]:
-        return self.miner_manager.miners
 
     def setup(self) -> None:
-        """Start all configured nodes and miners in the correct order."""
+        """Start Bitcoin and all configured Braidpool nodes."""
         log_event(self.logger, "node_manager_setup_started")
         self._start_bitcoin()
         self._start_braidpool_nodes()
-        self._start_miners()
         log_event(self.logger, "node_manager_setup_finished")
 
     def _start_bitcoin(self) -> None:
@@ -98,22 +90,9 @@ class NodeManager:
             
             self.nodes.append(node)
 
-    def _start_miners(self) -> None:
-        """Spawn miners attached to the Braidpool nodes."""
-        if self.config.num_cpu_miners > 0 and not self.nodes:
-            raise RuntimeError("Cannot start miners without Braidpool nodes")
-            
-        log_event(self.logger, "node_manager_start_miners", count=self.config.num_cpu_miners)
-        
-        for i in range(self.config.num_cpu_miners):
-            node = self.nodes[i % len(self.nodes)]
-            self.miner_manager.spawn_miner(node)
-
     def teardown(self) -> None:
         """Explicitly tear down nodes in reverse order."""
         log_event(self.logger, "node_manager_teardown_started")
-        
-        self.miner_manager.stop_all()
         
         for node in reversed(self.nodes):
             node.stop_node()

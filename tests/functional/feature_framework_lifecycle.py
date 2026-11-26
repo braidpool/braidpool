@@ -38,7 +38,6 @@ class FrameworkLifecycleTest(BraidpoolTestFramework):
     def set_test_params(self) -> None:
         self.config = NetworkConfig(
             num_braidpool_nodes=0,
-            num_cpu_miners=0,
             initial_blocks=0,
             random_seed=1729,
         )
@@ -79,7 +78,6 @@ class FrameworkLifecycleTest(BraidpoolTestFramework):
             raise AssertionError("Base framework handles were not exposed")
         assert_equal(self.options.expected_token, "framework-ready")
         assert_equal(self.nodes, [])
-        assert_equal(self.miners, [])
         assert_equal(self.bitcoin, None)
         assert_equal(self.port_pool.port_seed, self.options.portseed)
         assert_equal(self.report.summary_path.exists(), False)

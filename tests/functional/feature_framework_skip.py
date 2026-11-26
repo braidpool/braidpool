@@ -13,7 +13,6 @@ class FrameworkSkipTest(BraidpoolTestFramework):
     def set_test_params(self) -> None:
         self.config = NetworkConfig(
             num_braidpool_nodes=0,
-            num_cpu_miners=0,
             initial_blocks=0,
         )
 

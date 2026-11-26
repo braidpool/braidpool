@@ -26,7 +26,6 @@ from test_framework.util import SkipTest, wait_until as framework_wait_until
 
 if TYPE_CHECKING:
     from test_framework.bitcoin_node import BitcoinNode
-    from test_framework.miner_manager import CpuMiner
     from test_framework.test_node import TestNode
 
 
@@ -83,7 +82,6 @@ class BraidpoolTestFramework(metaclass=BraidpoolTestMetaClass):
 
         self.bitcoin: BitcoinNode | None = None
         self.nodes: list[TestNode] = []
-        self.miners: list[CpuMiner] = []
 
     def set_test_params(self) -> None:
         """Set ``self.config`` to the network required by the test."""
@@ -111,7 +109,6 @@ class BraidpoolTestFramework(metaclass=BraidpoolTestMetaClass):
         parser.add_argument("--pdbonfailure", action="store_true", help="open pdb when the test body fails")
         parser.add_argument("--braidpool-bin", type=Path, help="path to the braidpool-node binary")
         parser.add_argument("--bitcoin-bin", type=Path, help="path to the bitcoin-node binary")
-        parser.add_argument("--minerd-bin", type=Path, help="path to the minerd binary")
         parser.add_argument("--network", choices=("regtest", "cpunet", "signet"))
         self.add_options(parser)
         self.options = parser.parse_args(argv)
@@ -183,7 +180,7 @@ class BraidpoolTestFramework(metaclass=BraidpoolTestMetaClass):
         log_event(self.log, "test_setup_finished", test_name=self.test_name)
 
     def setup_network(self) -> None:
-        """Start Bitcoin, Braidpool nodes, and miners from ``self.config``."""
+        """Start Bitcoin and Braidpool nodes from ``self.config``."""
         if self.node_manager is None:
             raise RuntimeError("NodeManager is not initialized")
         self.node_manager.setup()
@@ -307,15 +304,12 @@ class BraidpoolTestFramework(metaclass=BraidpoolTestMetaClass):
             self.config.braidpool_bin_path = self.options.braidpool_bin
         if self.options.bitcoin_bin is not None:
             self.config.bitcoin_bin_path = self.options.bitcoin_bin
-        if self.options.minerd_bin is not None:
-            self.config.minerd_bin_path = self.options.minerd_bin
 
         # sync_all() scales bead_propagation_timeout after choosing between
         # the configured default and a caller-provided timeout.
         for field_name in (
             "startup_timeout_braidpool",
             "startup_timeout_btc",
-            "startup_timeout_minerd",
             "rpc_timeout",
             "peer_connection_timeout",
         ):
@@ -341,10 +335,6 @@ class BraidpoolTestFramework(metaclass=BraidpoolTestMetaClass):
     def _validate_config(self) -> None:
         if self.config.num_braidpool_nodes < 0:
             raise ValueError("num_braidpool_nodes must be greater than or equal to zero")
-        if self.config.num_cpu_miners < 0:
-            raise ValueError("num_cpu_miners must be greater than or equal to zero")
-        if self.config.num_cpu_miners and not self.config.num_braidpool_nodes:
-            raise ValueError("num_cpu_miners requires at least one Braidpool node")
         if self.config.network not in ("regtest", "cpunet", "signet"):
             raise ValueError(f"Unsupported network: {self.config.network!r}")
 
@@ -353,7 +343,6 @@ class BraidpoolTestFramework(metaclass=BraidpoolTestMetaClass):
             return
         self.bitcoin = self.node_manager.bitcoin
         self.nodes = self.node_manager.nodes
-        self.miners = self.node_manager.miners
 
     def _enable_rpc_tracing(self) -> None:
         rpc_clients = []

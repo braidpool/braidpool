@@ -36,9 +36,7 @@ class CleanupManager:
         self._hooks_installed = False
         self._previous_handlers: dict[int, signal.Handlers] = {}
 
-    # The cleanup manager is a registrable that is attached to different modules
-    # later when running the test suite such as miner_manager. This allows us to
-    # register different callback functions in a LIFO stack.
+    # Components that own resources register cleanup callbacks here in LIFO order.
     def register(self, fn: Callable[[], None], *, name: str | None = None) -> None:
         """Push a zero-argument cleanup callback onto the LIFO stack."""
         callback_name = name or _callable_name(fn)

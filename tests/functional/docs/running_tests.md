@@ -59,12 +59,12 @@ from the runner's hard `--timeout`.
 ```bash
 export BRAIDPOOL_BIN_PATH="$PWD/target/debug/node"
 export BITCOIN_NODE_PATH="$PWD/../bitcoin/build/bin/bitcoin-node"
-export MINERD_PATH="$PWD/node/src/cpuminer/minerd"
 ```
 
-Equivalent per-test options are `--braidpool-bin`, `--bitcoin-bin`, and
-`--minerd-bin`. Missing required binaries cause a skip (exit `77`), not a
-failure.
+Equivalent per-test options are `--braidpool-bin` and `--bitcoin-bin`.
+Missing required binaries cause a skip (exit `77`), not a failure. Tests that
+need Stratum mining use the framework's `MockStratumMiner` and require no
+external miner binary.
 
 ## Results and artifacts
 
