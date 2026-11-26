@@ -19,10 +19,9 @@ INSERT INTO AuditBead (
 ";
 
 const INSERT_PARENT_QUERY: &str = "
-INSERT INTO AuditBeadParent (child_id, idx, parent_block_hash, parent_timestamp)
+INSERT INTO AuditBeadParent (child_id, parent_block_hash, parent_timestamp)
 SELECT 
     ?, 
-    CAST(key AS INTEGER), 
     unhex(json_extract(value, '$.parent_hash')), 
     json_extract(value, '$.timestamp')
 FROM json_each(?);
@@ -240,7 +239,7 @@ impl AuditDBHandler {
         // Fetch parents for this specific bead
         let bead_id: i64 = row.get("id");
         let parent_rows = sqlx::query(
-            "SELECT parent_block_hash, parent_timestamp FROM AuditBeadParent WHERE child_id = ? ORDER BY idx ASC",
+            "SELECT parent_block_hash, parent_timestamp FROM AuditBeadParent WHERE child_id = ?",
         )
         .bind(bead_id)
         .fetch_all(pool)
@@ -268,6 +267,7 @@ impl AuditDBHandler {
             })?;
             parent_pairs.push((hash, time));
         }
+        parent_pairs.sort_by_key(|(hash, _)| *hash);
         let mut parents: Vec<BlockHash> = Vec::new();
         let mut parent_timestamps = Vec::new();
         for (hash, time) in parent_pairs {
