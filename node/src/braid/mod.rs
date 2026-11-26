@@ -94,12 +94,14 @@ impl Braid {
                 " Genesis BeadHash - {:?}",
                 compute_block_hash(&bead.block_header, self.network)
             );
+            // Beads that build on this genesis can arrive first and be parked as
+            // orphans while the braid is still empty. Carry them across the reset
+            // so they are promoted now instead of being dropped.
+            let parked_orphans = std::mem::take(&mut self.orphan_beads);
             *self = Braid::new(vec![bead.clone()], self.network);
-            // Genesis resets the braid, so there is never an existing orphan set
-            // to promote here.
-            return AddBeadStatus::BeadAdded {
-                promoted_orphans: Vec::new(),
-            };
+            self.orphan_beads = parked_orphans;
+            let promoted_orphans = self.process_orphan_beads();
+            return AddBeadStatus::BeadAdded { promoted_orphans };
         }
         // No parents: bad block i.e. the extend will add beads after the genesis
         //bead is done and the extension of genesis beads to Braid shall be done via Braid::new
