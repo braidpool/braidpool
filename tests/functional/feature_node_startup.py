@@ -78,7 +78,6 @@ def main() -> int:
     
     config = NetworkConfig(
         num_braidpool_nodes=2,
-        num_cpu_miners=0,
         network=args.network,
         bitcoin_bin_path=args.bitcoin_bin,
         braidpool_bin_path=args.braidpool_bin

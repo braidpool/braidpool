@@ -36,7 +36,6 @@ class FeatureNodeHealth(BraidpoolTestFramework):
     def set_test_params(self) -> None:
         self.config = NetworkConfig(
             num_braidpool_nodes=2,
-            num_cpu_miners=0,
             initial_blocks=101,
         )
 
@@ -71,7 +70,7 @@ Every test follows the same lifecycle:
 2. Create the test directory and start its timing report.
 3. Call `set_test_params()`.
 4. Validate the configuration and initialize logging, cleanup, and ports.
-5. Call `setup_network()` to start Bitcoin, Braidpool nodes, and miners.
+5. Call `setup_network()` to start Bitcoin and Braidpool nodes.
 6. Call `run_test()`.
 7. Stop managed resources, run custom cleanup, finalize the report, and
    remove or preserve the test directory.
@@ -103,7 +102,6 @@ Assign a `NetworkConfig` in `set_test_params()`:
 def set_test_params(self) -> None:
     self.config = NetworkConfig(
         num_braidpool_nodes=3,
-        num_cpu_miners=2,
         network="regtest",
         initial_blocks=101,
         random_seed=42,
@@ -115,7 +113,6 @@ def set_test_params(self) -> None:
 | Field | Default | Meaning |
 |---|---:|---|
 | `num_braidpool_nodes` | `1` | Number of Braidpool nodes to start. |
-| `num_cpu_miners` | `0` | Number of `minerd` processes, distributed across the nodes. |
 | `network` | `"regtest"` | Bitcoin/Braidpool network: `regtest`, `cpunet`, or `signet`. |
 | `initial_blocks` | `101` | Bitcoin blocks generated before Braidpool nodes start. |
 | `bitcoin_rpc_port` | `None` | Manual Bitcoin RPC port; normally leave unset. |
@@ -123,21 +120,42 @@ def set_test_params(self) -> None:
 | `bitcoin_ipc_socket` | `None` | Manual IPC socket; normally use the isolated per-test path. |
 | `bitcoin_bin_path` | `None` | Explicit `bitcoin-node` path. |
 | `braidpool_bin_path` | `None` | Explicit Braidpool node path. |
-| `minerd_bin_path` | `None` | Explicit CPU miner path. |
 | `startup_timeout_braidpool` | `30.0` | Braidpool startup timeout in seconds. |
 | `startup_timeout_btc` | `90.0` | Bitcoin startup timeout in seconds. |
-| `startup_timeout_minerd` | `60.0` | Miner startup timeout in seconds. |
 | `rpc_timeout` | `10.0` | Timeout for one RPC call. |
 | `peer_connection_timeout` | `15.0` | Peer connection timeout. |
 | `bead_propagation_timeout` | `60.0` | Default `sync_all()` timeout. |
 | `log_level` | `"INFO"` | Framework log level. |
 | `random_seed` | `42` | Seed used by Python's global `random` module. |
 
-Counts cannot be negative. Miners require at least one Braidpool node.
 
 Avoid fixed ports and shared IPC sockets: they make parallel tests collide.
 The runner assigns a stable `--portseed` to each script, and `PortPool` uses it
 to create an isolated port band.
+
+### Mining in functional tests
+
+The Braidpool functional testing framework uses [mock miner](../test_framework/mock_miner.py) implementation in place of the actual miner binary. This acts the same as the real miner to the connecting node and does most of the things a real miner can do, including authorization, finding the nonce, submitting the solution, listening to the job and extranonce updates, and many more. The main reason for using the mock miner implementation is to reduce the dependency overhead from the users.
+
+The Braidpool node count cannot be negative. Miners require at least one Braidpool node. For tests, who needs to mine a single block and doesn't want to open a continuous mining session can initialize the miner as:
+
+```python
+from test_framework.mock_miner import MockStratumMiner
+
+mining_result = MockStratumMiner(
+    self.nodes[0].stratum_port, logger=self.log
+).mine_one_block()
+```
+For tests, who needs to open a continuous stratum session with the miner to test different functionalities in the same session can initialize the miner as:
+
+```python
+with MockStratumMiner(
+    self.nodes[0].stratum_port, logger=self.log
+).session() as miner:
+    first_result = miner.mine_current_job()
+    difficulty, new_job = miner.wait_for_next_job()
+    next_result = miner.mine_current_job()
+```
 
 ## Objects available in run_test()
 
@@ -147,7 +165,6 @@ After normal setup, the base class exposes:
 |---|---|
 | `self.bitcoin` | Managed `BitcoinNode`; use `self.bitcoin.rpc._call(...)`. |
 | `self.nodes` | List of managed `TestNode` objects. |
-| `self.miners` | List of managed `CpuMiner` objects. |
 | `self.config` | Effective `NetworkConfig`, including CLI overrides. |
 | `self.options` | Parsed framework and test-specific arguments. |
 | `self.tmpdir` | This script's artifact directory. |
@@ -156,8 +173,8 @@ After normal setup, the base class exposes:
 | `self.port_pool` | Isolated port allocator for extra services. |
 | `self.report` | Timing report owned and finalized by the framework. |
 
-The framework manages the lifecycle of `self.bitcoin`, `self.nodes`, and
-`self.miners`. Tests should normally inspect them, not stop them manually.
+The framework manages the lifecycle of `self.bitcoin` and `self.nodes`. Tests
+should normally inspect them, not stop them manually.
 
 ### RPC calls
 
@@ -306,7 +323,6 @@ class FeatureNoBinaries(BraidpoolTestFramework):
     def set_test_params(self) -> None:
         self.config = NetworkConfig(
             num_braidpool_nodes=0,
-            num_cpu_miners=0,
             initial_blocks=0,
         )
 
@@ -320,10 +336,9 @@ class FeatureNoBinaries(BraidpoolTestFramework):
 See [`feature_framework_lifecycle.py`](../feature_framework_lifecycle.py) for a
 complete example with custom options, polling, logging, and cleanup callbacks.
 
-Before running a test that starts a Bitcoin node, Braidpool nodes, or a CPU
-miner, export the paths to the corresponding executables. Build the Braidpool
-node first, and use the path to the Bitcoin build that includes the IPC
-support required by Braidpool:
+Before running a test that starts Bitcoin or Braidpool nodes, export the paths
+to the corresponding executables. Build the Braidpool node first, and use the
+path to the Bitcoin build that includes the IPC support required by Braidpool:
 
 ```bash
 cd /path/to/braidpool
@@ -331,17 +346,14 @@ cargo build --bin node
 
 export BRAIDPOOL_BIN_PATH="$PWD/target/debug/node"
 export BITCOIN_NODE_PATH="$PWD/bitcoin/build/bin/bitcoin-node"
-export MINERD_PATH="$PWD/cpuminer/minerd"
-
 ```
-`MINERD_PATH` is required only by tests whose configuration sets `num_cpu_miners` 
-above zero. The framework reports a test as skipped when a required executable
-cannot be found. You can verify each configured path before running a test. 
-This check prints the result for every binary and exits with an error if any 
-required binary is missing or not executable:
+The framework reports a test as skipped when a required executable cannot be
+found. You can verify each configured path before running a test. This check
+prints the result for every binary and exits with an error if any required
+binary is missing or not executable:
 
 ```bash
-for path in "$BRAIDPOOL_BIN_PATH" "$BITCOIN_NODE_PATH" "$MINERD_PATH"; do
+for path in "$BRAIDPOOL_BIN_PATH" "$BITCOIN_NODE_PATH"; do
     if [ -x "$path" ]; then
         echo "OK: $path"
     else
@@ -357,7 +369,8 @@ different build.
 ## Binaries and discovery
 
 A normal network test needs `bitcoin-node`; tests with Braidpool nodes also need
-the Braidpool binary, and miner tests need `minerd`.
+the Braidpool binary. Tests that mine a share use `MockStratumMiner` and need no
+separate miner binary.
 
 ```bash
 # Build the Braidpool node from the repository root.
@@ -375,7 +388,6 @@ Binary selection uses this order:
 |---|---|---|---|
 | Braidpool node | `--braidpool-bin` | `BRAIDPOOL_BIN_PATH` | `target/debug/node` |
 | Bitcoin node | `--bitcoin-bin` | `BITCOIN_NODE_PATH` | `../bitcoin/build/bin/bitcoin-node` |
-| CPU miner | `--minerd-bin` | `MINERD_PATH` | `node/src/cpuminer/minerd` |
 
 Example:
 
@@ -461,7 +473,6 @@ applicable options to each child script:
 | `--network=NAME` | Override the configured network. |
 | `--braidpool-bin=PATH` | Override the Braidpool node binary. |
 | `--bitcoin-bin=PATH` | Override the Bitcoin node binary. |
-| `--minerd-bin=PATH` | Override the CPU miner binary. |
 
 `--cachedir` and `--configfile` are currently reserved; do not rely on them to
 change framework behavior.
@@ -501,9 +512,6 @@ Failed tests are always preserved. Passed and skipped tests are removed unless
     ├── node0/
     │   ├── stdout.log
     │   └── stderr.log
-    └── miner0/
-        ├── stdout.log
-        └── stderr.log
 ```
 
 `test_framework.log` contains one structured JSON event per line. Component
@@ -570,7 +578,7 @@ Useful framework events include:
 - Use deterministic seeds and framework-allocated ports.
 - Register custom resources immediately and start subprocesses with
   `start_new_session=True`.
-- Let the framework stop its own nodes and miners.
+- Let the framework stop its own nodes.
 - Preserve artifacts with `--nocleanup`; there is no separate log-retention
   option.
 - Avoid secrets in arguments and logs. RPC tracing is for controlled test data.

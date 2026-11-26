@@ -12,7 +12,6 @@ class NetworkConfig:
 
     #Node number config
     num_braidpool_nodes: int = 1
-    num_cpu_miners: int = 0
 
     #Chain config
     network: str = "regtest"
@@ -24,12 +23,10 @@ class NetworkConfig:
     #Binary paths
     bitcoin_bin_path: Path | None = None
     braidpool_bin_path: Path | None = None
-    minerd_bin_path: Path | None = None
 
     # Timeouts 
     startup_timeout_braidpool: float = 30.0
     startup_timeout_btc: float = 90.0
-    startup_timeout_minerd: float = 60.0
 
     rpc_timeout: float = 10.0
     peer_connection_timeout: float = 15.0

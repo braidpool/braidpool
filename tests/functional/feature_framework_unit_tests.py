@@ -11,7 +11,10 @@ import subprocess
 import stat
 import sys
 import tempfile
+import time
+from collections.abc import Callable
 from pathlib import Path
+from unittest.mock import ANY, Mock, call, patch
 
 from test_runner import (
     RunningJob,
@@ -37,7 +40,6 @@ from test_framework.logging_utils import (
     log_exception,
     log_rpc_call,
 )
-from test_framework.miner_manager import CpuMiner, find_minerd
 from test_framework.network_config import NetworkConfig
 from test_framework.port_pool import PortAllocationError, PortPool, PortSeed
 from test_framework.rpc_client import (
@@ -53,7 +55,6 @@ from test_framework.util import SkipTest, assert_equal, find_binary, wait_until
 def test_network_config_defaults() -> None:
     cfg = NetworkConfig()
     assert_equal(cfg.num_braidpool_nodes, 1)
-    assert_equal(cfg.num_cpu_miners, 0)
     assert_equal(cfg.network, "regtest")
     assert_equal(cfg.initial_blocks, 101)
     assert cfg.bitcoin_rpc_port is None
@@ -61,10 +62,8 @@ def test_network_config_defaults() -> None:
     assert cfg.bitcoin_ipc_socket is None
     assert cfg.bitcoin_bin_path is None
     assert cfg.braidpool_bin_path is None
-    assert cfg.minerd_bin_path is None
     assert_equal(cfg.startup_timeout_braidpool, 30.0)
     assert_equal(cfg.startup_timeout_btc, 90.0)
-    assert_equal(cfg.startup_timeout_minerd, 60.0)
     assert_equal(cfg.rpc_timeout, 10.0)
     assert_equal(cfg.peer_connection_timeout, 15.0)
     assert_equal(cfg.bead_propagation_timeout, 60.0)
@@ -468,6 +467,744 @@ def test_rpc_client_invalid_response() -> None:
     raise AssertionError("invalid response was not raised")
 
 
+def test_mock_miner_retries_early_eof() -> None:
+    from test_framework.mock_miner import MockStratumMiner
+
+    logger = Mock()
+    miner = MockStratumMiner(12345, logger=logger)
+    closed_connection = Mock()
+    closed_connection.recv.return_value = b""
+    subscribed_connection = Mock()
+    subscribed_connection.recv.return_value = (
+        b'{"id":1,"result":[[], "abcd", 4],"error":null}\n'
+    )
+    connections = [closed_connection, subscribed_connection]
+    original_request = miner._request
+
+    def request(method: str, params: list[object]) -> object:
+        if method == "mining.subscribe":
+            return original_request(method, params)
+        if method in ("mining.authorize", "mining.submit"):
+            return True
+        raise AssertionError(f"Unexpected Stratum request: {method}")
+
+    def select_readable(readers, *_args):
+        readable = [
+            reader
+            for reader in readers
+            if (
+                reader is closed_connection
+                and closed_connection.recv.call_count == 0
+            )
+            or (
+                reader is subscribed_connection
+                and subscribed_connection.recv.call_count == 0
+            )
+        ]
+        return readable, [], []
+
+    with (
+        patch(
+            "test_framework.mock_miner.socket.create_connection",
+            side_effect=connections,
+        ) as create_connection,
+        patch(
+            "test_framework.mock_miner.select.select",
+            side_effect=select_readable,
+        ),
+        patch.object(miner, "_request", side_effect=request),
+        patch.object(
+            miner,
+            "_wait_for_job",
+            return_value=(0.01, {"job_id": "job", "ntime": "00000000"}),
+        ),
+        patch.object(miner, "_find_nonce", return_value="00000000"),
+    ):
+        result = miner.mine_one_block(timeout=1.0)
+
+    assert_equal(result.job_id, "job")
+    assert_equal(create_connection.call_count, 2)
+    closed_connection.recv.assert_called_once_with(4096)
+    subscribed_connection.recv.assert_called_once_with(4096)
+    closed_connection.close.assert_called()
+    events = [
+        log_call.kwargs["extra"]["bp_event"]
+        for log_call in logger.log.call_args_list
+    ]
+    assert_equal(events.count("miner_session_closed"), 1)
+
+
+def test_mock_miner_header_hash_fixture() -> None:
+    from test_framework.mock_miner import MockStratumMiner
+
+    miner = MockStratumMiner(12345)
+    miner._deadline = time.monotonic() + 10.0
+    job = {
+        "coinbase1": "010203",
+        "coinbase2": "aabb",
+        "prevhash": bytes(range(32)).hex(),
+        "merkle_branches": [bytes(range(32, 64)).hex()],
+        "version": "20000000",
+        "bits": "1f400000",
+        "ntime": "00000001",
+    }
+    expected_header_prefix = bytes.fromhex(
+        "00000020"
+        "03020100070605040b0a09080f0e0d0c"
+        "13121110171615141b1a19181f1e1d1c"
+        "ac9d09a0279ed605e6fa134c3caecac1"
+        "b35afbd90bd2f6c7243e325631ed5660"
+        "01000000"
+        "0000401f"
+    )
+    expected_block_hash = (
+        "87657fb9c83cb4f833d72f919e9b99b1219d6efd24a4151a717e47cb43802b00"
+    )
+    hashed_headers: list[tuple[bytes, bytes]] = []
+    original_double_sha256 = miner._double_sha256
+
+    def record_double_sha256(data: bytes) -> bytes:
+        digest = original_double_sha256(data)
+        if len(data) == 80:
+            hashed_headers.append((data, digest))
+        return digest
+
+    with patch.object(miner, "_double_sha256", side_effect=record_double_sha256):
+        nonce = miner._find_nonce(job, "a1b2", 2)
+
+    assert_equal(nonce, "000000b4")
+    assert hashed_headers, "Mock miner did not hash a block header"
+    header, block_hash = hashed_headers[-1]
+    assert_equal(header[:76], expected_header_prefix)
+    assert_equal(header[76:], bytes.fromhex("b4000000"))
+    assert_equal(block_hash.hex(), expected_block_hash)
+    target = 0x400000 << 224
+    assert int.from_bytes(block_hash, "little") <= target
+
+
+def test_mock_miner_returns_on_nbits() -> None:
+    from test_framework.mock_miner import MockStratumMiner
+
+    miner = MockStratumMiner(12345)
+    miner._difficulty = 0.01
+    miner._deadline = time.monotonic() + 10.0
+    job = {
+        "coinbase1": "010203",
+        "coinbase2": "aabb",
+        "prevhash": "00" * 32,
+        "merkle_branches": [],
+        "version": "20000000",
+        "bits": "207fffff",
+        "ntime": "00000001",
+    }
+    block_target = miner._target_from_compact(0x207FFFFF)
+    share_target = miner._target_from_difficulty(miner._difficulty)
+    block_only_hash = ((block_target + share_target) // 2).to_bytes(32, "little")
+    with patch.object(
+        miner,
+        "_double_sha256",
+        side_effect=[bytes(32), block_only_hash],
+    ):
+        nonce = miner._find_nonce(job, "abcd", 2, extranonce2=bytes(2))
+
+    assert share_target < block_target
+    assert int.from_bytes(block_only_hash, "little") <= block_target
+    assert int.from_bytes(block_only_hash, "little") > share_target
+    assert_equal(nonce, "00000000")
+
+
+def test_mock_miner_continues_after_share() -> None:
+    from test_framework.mock_miner import MockStratumMiner
+
+    logger = Mock()
+    miner = MockStratumMiner(12345, logger=logger)
+    miner._socket = Mock()
+    miner._difficulty = 0.5
+    miner._deadline = time.monotonic() + 10.0
+    miner._current_job = {
+        "job_id": "job",
+        "coinbase1": "010203",
+        "coinbase2": "aabb",
+        "prevhash": "00" * 32,
+        "merkle_branches": [],
+        "version": "20000000",
+        "bits": "1d00ffff",
+        "ntime": "00000001",
+    }
+    miner._extranonce1 = "abcd"
+    miner._extranonce2_size = 2
+    block_target = miner._target_from_compact(0x1D00FFFF)
+    share_target = miner._target_from_difficulty(miner._difficulty)
+    share_only_hash = ((block_target + share_target) // 2).to_bytes(32, "little")
+
+    with (
+        patch.object(
+            miner,
+            "_double_sha256",
+            side_effect=[bytes(32), share_only_hash, bytes(32)],
+        ),
+        patch.object(miner, "_request", return_value=True) as request,
+        patch.object(miner, "_process_available_notifications"),
+    ):
+        result = miner._mine_current_job()
+
+    assert share_target > block_target
+    assert int.from_bytes(share_only_hash, "little") <= share_target
+    assert int.from_bytes(share_only_hash, "little") > block_target
+    assert_equal(result.nonce, "00000001")
+    assert_equal(request.call_count, 2)
+    request.assert_has_calls(
+        [
+            call(
+                "mining.submit",
+                ["mock-miner", "job", "0000", "00000001", "00000000"],
+            ),
+            call(
+                "mining.submit",
+                ["mock-miner", "job", "0000", "00000001", "00000001"],
+            ),
+        ]
+    )
+    assert_equal(
+        [
+            log_call.kwargs["extra"]["bp_event"]
+            for log_call in logger.log.call_args_list
+        ],
+        [
+            "miner_mining_started",
+            "miner_share_submitted",
+            "miner_block_submitted",
+        ],
+    )
+
+
+def test_mock_miner_rejects_share_submission() -> None:
+    from test_framework.mock_miner import MockStratumMiner, SubmissionRejectedError
+
+    logger = Mock()
+    miner = MockStratumMiner(12345, logger=logger)
+    miner._socket = Mock()
+    miner._difficulty = 0.5
+    miner._deadline = time.monotonic() + 10.0
+    miner._current_job = {
+        "job_id": "job",
+        "coinbase1": "010203",
+        "coinbase2": "aabb",
+        "prevhash": "00" * 32,
+        "merkle_branches": [],
+        "version": "20000000",
+        "bits": "1d00ffff",
+        "ntime": "00000001",
+    }
+    miner._extranonce1 = "abcd"
+    miner._extranonce2_size = 2
+    block_target = miner._target_from_compact(0x1D00FFFF)
+    share_target = miner._target_from_difficulty(miner._difficulty)
+    share_only_hash = ((block_target + share_target) // 2).to_bytes(32, "little")
+
+    with (
+        patch.object(
+            miner,
+            "_double_sha256",
+            side_effect=[bytes(32), share_only_hash],
+        ),
+        patch.object(miner, "_request", return_value=False) as request,
+        patch.object(miner, "_process_available_notifications"),
+    ):
+        try:
+            miner._mine_current_job()
+        except SubmissionRejectedError as exc:
+            assert_equal(str(exc), "Stratum server rejected share for job job")
+        else:
+            raise AssertionError("rejected share was accepted")
+
+    request.assert_called_once_with(
+        "mining.submit",
+        ["mock-miner", "job", "0000", "00000001", "00000000"],
+    )
+    assert_equal(
+        [
+            log_call.kwargs["extra"]["bp_event"]
+            for log_call in logger.log.call_args_list
+        ],
+        ["miner_mining_started", "miner_share_rejected"],
+    )
+
+
+def test_mock_miner_rejects_invalid_set_difficulty() -> None:
+    from test_framework.mock_miner import MockMinerProtocolError, MockStratumMiner
+
+    invalid_difficulties = (True, 0, -1, float("nan"), float("inf"), 10**400)
+    for difficulty in invalid_difficulties:
+        miner = MockStratumMiner(12345)
+        notification = {
+            "id": None,
+            "method": "mining.set_difficulty",
+            "params": [difficulty],
+        }
+        with patch.object(miner, "_receive", return_value=notification):
+            try:
+                miner._wait_for_job()
+            except MockMinerProtocolError as exc:
+                assert_equal(
+                    str(exc), "Invalid mining.set_difficulty notification"
+                )
+            else:
+                raise AssertionError(
+                    f"Invalid difficulty {difficulty!r} was accepted"
+                )
+
+
+def test_mock_miner_rejects_authorization() -> None:
+    from test_framework.mock_miner import (
+        MockMinerAuthorizationError,
+        MockStratumMiner,
+    )
+
+    miner = MockStratumMiner(12345)
+    connection = Mock()
+    with (
+        patch(
+            "test_framework.mock_miner.socket.create_connection",
+            return_value=connection,
+        ),
+        patch.object(miner, "_subscribe", return_value=("abcd", 4)),
+        patch.object(miner, "_request", return_value=False) as request,
+    ):
+        try:
+            miner.mine_one_block(timeout=1.0)
+        except MockMinerAuthorizationError as exc:
+            assert "rejected miner authorization" in str(exc)
+        else:
+            raise AssertionError("rejected authorization was accepted")
+
+    request.assert_called_once_with("mining.authorize", ["mock-miner", "x"])
+    connection.close.assert_called_once()
+
+
+def test_mock_miner_rejects_unaccepted_submission() -> None:
+    from test_framework.mock_miner import (
+        SubmissionRejectedError,
+        MockStratumMiner,
+    )
+
+    miner = MockStratumMiner(12345)
+    connection = Mock()
+    with (
+        patch(
+            "test_framework.mock_miner.socket.create_connection",
+            return_value=connection,
+        ),
+        patch.object(miner, "_subscribe", return_value=("abcd", 4)),
+        patch.object(miner, "_request", side_effect=[True, False]) as request,
+        patch.object(
+            miner,
+            "_wait_for_job",
+            return_value=(0.01, {"job_id": "job", "ntime": "00000000"}),
+        ),
+        patch(
+            "test_framework.mock_miner.select.select",
+            return_value=([], [], []),
+        ),
+        patch.object(miner, "_find_nonce", return_value="00000000"),
+    ):
+        try:
+            miner.mine_one_block(timeout=1.0)
+        except SubmissionRejectedError as exc:
+            assert_equal(str(exc), "Stratum server rejected mined job job")
+        else:
+            raise AssertionError("unaccepted mining submission was accepted")
+
+    request.assert_has_calls(
+        [
+            call("mining.authorize", ["mock-miner", "x"]),
+            call(
+                "mining.submit",
+                ["mock-miner", "job", "00000000", "00000000", "00000000"],
+            ),
+        ]
+    )
+    assert_equal(request.call_count, 2)
+    connection.close.assert_called_once()
+
+
+def test_mock_miner_categorizes_stratum_request_errors() -> None:
+    from test_framework.mock_miner import (
+        MockMinerAuthorizationError,
+        MockMinerRequestError,
+        SubmissionRejectedError,
+        MockStratumMiner,
+    )
+
+    error_types = (
+        ("mining.authorize", MockMinerAuthorizationError),
+        ("mining.submit", SubmissionRejectedError),
+        ("mining.subscribe", MockMinerRequestError),
+    )
+    for method, error_type in error_types:
+        miner = MockStratumMiner(12345)
+        miner._socket = Mock()
+        with (
+            patch.object(miner, "_send"),
+            patch.object(
+                miner,
+                "_receive",
+                return_value={
+                    "id": 1,
+                    "error": {"code": -1, "message": "request rejected"},
+                },
+            ),
+        ):
+            try:
+                miner._request(method, [])
+            except error_type as exc:
+                assert method in str(exc)
+            else:
+                raise AssertionError(f"{method} error was not categorized")
+
+
+def _mock_stratum_message(payload: dict[str, object]) -> bytes:
+    return (json.dumps(payload) + "\n").encode("utf8")
+
+
+def _mock_mining_notify(
+    job_id: str, prevhash: str, *, clean_jobs: bool = True
+) -> bytes:
+    return _mock_stratum_message(
+        {
+            "id": None,
+            "method": "mining.notify",
+            "params": [
+                job_id,
+                prevhash,
+                "010203",
+                "aabb",
+                [],
+                "20000000",
+                "1f400000",
+                "00000001",
+                clean_jobs,
+            ],
+        }
+    )
+
+
+def test_mock_miner_session_reuses_pushed_jobs() -> None:
+    from test_framework.mock_miner import MockStratumMiner
+
+    connection = Mock()
+    connection.recv.side_effect = [
+        _mock_stratum_message({"id": 1, "result": [[], "abcd", 4], "error": None}),
+        b"".join(
+            [
+                _mock_stratum_message({"id": 2, "result": True, "error": None}),
+                _mock_stratum_message(
+                    {
+                        "id": None,
+                        "method": "mining.set_difficulty",
+                        "params": [0.01],
+                    }
+                ),
+                _mock_mining_notify("job-1", "00" * 32),
+            ]
+        ),
+        _mock_mining_notify("job-2", "11" * 32, clean_jobs=False),
+        _mock_stratum_message({"id": 3, "result": True, "error": None}),
+        _mock_stratum_message({"id": 4, "result": True, "error": None}),
+    ]
+    miner = MockStratumMiner(12345)
+    searches_with_notifications = {1}
+    notified_searches: set[int] = set()
+
+    def select_readable(readers, _writers, _errors, timeout):
+        if timeout == 0:
+            search_count = find_nonce.call_count
+            if (
+                search_count in searches_with_notifications
+                and search_count not in notified_searches
+            ):
+                notified_searches.add(search_count)
+                return readers, [], []
+            return [], [], []
+        return readers, [], []
+
+    with (
+        patch(
+            "test_framework.mock_miner.socket.create_connection",
+            return_value=connection,
+        ) as create_connection,
+        patch(
+            "test_framework.mock_miner.select.select",
+            side_effect=select_readable,
+        ),
+        patch.object(
+            miner, "_find_nonce", side_effect=["00000000", "00000001"]
+        ) as find_nonce,
+    ):
+        with miner.session(timeout=1.0):
+            first_job = miner.current_job
+            first_result = miner.mine_current_job(timeout=1.0)
+            assert_equal(first_result.job_id, "job-1")
+            connection.close.assert_not_called()
+
+            difficulty, next_job = miner.wait_for_next_job(timeout=1.0)
+            assert_equal(difficulty, 0.01)
+            assert_equal(next_job["job_id"], "job-2")
+            second_result = miner.mine_current_job(timeout=1.0)
+            assert_equal(second_result.job_id, "job-2")
+            connection.close.assert_not_called()
+
+    create_connection.assert_called_once()
+    connection.close.assert_called_once()
+    submissions = [
+        json.loads(sent.args[0].decode("utf8"))
+        for sent in connection.sendall.call_args_list
+        if json.loads(sent.args[0].decode("utf8"))["method"] == "mining.submit"
+    ]
+    assert_equal(
+        [submission["params"][1] for submission in submissions],
+        ["job-1", "job-2"],
+    )
+    assert_equal(
+        [submission["params"][2] for submission in submissions],
+        ["00000000", "00000001"],
+    )
+    find_nonce.assert_has_calls(
+        [
+            call(
+                first_job,
+                "abcd",
+                4,
+                extranonce2=bytes.fromhex("00000000"),
+                on_share=ANY,
+            ),
+            call(
+                next_job,
+                "abcd",
+                4,
+                extranonce2=bytes.fromhex("00000001"),
+                on_share=ANY,
+            ),
+        ]
+    )
+
+
+def test_mock_miner_stages_extranonce_until_next_job() -> None:
+    from test_framework.mock_miner import MockStratumMiner
+
+    connection = Mock()
+    connection.recv.side_effect = [
+        _mock_stratum_message({"id": 1, "result": [[], "abcd", 4], "error": None}),
+        b"".join(
+            [
+                _mock_stratum_message({"id": 2, "result": True, "error": None}),
+                _mock_stratum_message(
+                    {
+                        "id": None,
+                        "method": "mining.set_difficulty",
+                        "params": [0.01],
+                    }
+                ),
+                _mock_mining_notify("job-1", "00" * 32),
+            ]
+        ),
+        _mock_stratum_message(
+            {
+                "id": None,
+                "method": "mining.set_extranonce",
+                "params": ["aabbccdd", 1],
+            }
+        ),
+        _mock_stratum_message({"id": 3, "result": True, "error": None}),
+        _mock_mining_notify("job-2", "11" * 32, clean_jobs=False),
+        _mock_stratum_message({"id": 4, "result": True, "error": None}),
+    ]
+    miner = MockStratumMiner(12345)
+    searches_with_notifications = {1}
+    notified_searches: set[int] = set()
+
+    def select_readable(readers, _writers, _errors, timeout):
+        if timeout == 0:
+            search_count = find_nonce.call_count
+            if (
+                search_count in searches_with_notifications
+                and search_count not in notified_searches
+            ):
+                notified_searches.add(search_count)
+                return readers, [], []
+            return [], [], []
+        return readers, [], []
+
+    with (
+        patch(
+            "test_framework.mock_miner.socket.create_connection",
+            return_value=connection,
+        ) as create_connection,
+        patch(
+            "test_framework.mock_miner.select.select",
+            side_effect=select_readable,
+        ),
+        patch.object(
+            miner, "_find_nonce", side_effect=["00000000", "00000001"]
+        ) as find_nonce,
+    ):
+        with miner.session(timeout=1.0):
+            first_job = miner.current_job
+            first_result = miner.mine_current_job(timeout=1.0)
+            assert_equal(first_result.job_id, "job-1")
+            assert_equal(miner._extranonce1, "abcd")
+            assert_equal(miner._extranonce2_size, 4)
+            assert_equal(miner._pending_extranonce, ("aabbccdd", 1))
+
+            difficulty, next_job = miner.wait_for_next_job(timeout=1.0)
+            assert_equal(difficulty, 0.01)
+            assert_equal(next_job["job_id"], "job-2")
+            assert_equal(miner._extranonce1, "aabbccdd")
+            assert_equal(miner._extranonce2_size, 1)
+
+            second_result = miner.mine_current_job(timeout=1.0)
+            assert_equal(second_result.job_id, "job-2")
+            connection.close.assert_not_called()
+
+    create_connection.assert_called_once()
+    connection.close.assert_called_once()
+    submissions = [
+        json.loads(sent.args[0].decode("utf8"))
+        for sent in connection.sendall.call_args_list
+        if json.loads(sent.args[0].decode("utf8"))["method"] == "mining.submit"
+    ]
+    assert_equal(
+        [submission["params"][1] for submission in submissions],
+        [first_job["job_id"], next_job["job_id"]],
+    )
+    assert_equal(
+        [submission["params"][2] for submission in submissions],
+        ["00000000", "00"],
+    )
+    find_nonce.assert_has_calls(
+        [
+            call(
+                first_job,
+                "abcd",
+                4,
+                extranonce2=bytes.fromhex("00000000"),
+                on_share=ANY,
+            ),
+            call(
+                next_job,
+                "aabbccdd",
+                1,
+                extranonce2=bytes.fromhex("00"),
+                on_share=ANY,
+            ),
+        ]
+    )
+
+
+def test_mock_miner_discards_superseded_work_during_search() -> None:
+    from test_framework.mock_miner import MockMinerStateError, MockStratumMiner
+
+    connection = Mock()
+    connection.recv.side_effect = [
+        _mock_stratum_message({"id": 1, "result": [[], "abcd", 4], "error": None}),
+        b"".join(
+            [
+                _mock_stratum_message({"id": 2, "result": True, "error": None}),
+                _mock_stratum_message(
+                    {
+                        "id": None,
+                        "method": "mining.set_difficulty",
+                        "params": [0.01],
+                    }
+                ),
+                _mock_mining_notify("job-1", "00" * 32),
+            ]
+        ),
+        b"".join(
+            [
+                _mock_mining_notify(
+                    "stale-job", "22" * 32, clean_jobs=False
+                ),
+                _mock_mining_notify("job-2", "11" * 32),
+            ]
+        ),
+        _mock_stratum_message({"id": 3, "result": True, "error": None}),
+    ]
+    miner = MockStratumMiner(12345)
+    searches_with_notifications = {1}
+    notified_searches: set[int] = set()
+
+    def select_readable(readers, _writers, _errors, timeout):
+        if timeout == 0:
+            search_count = find_nonce.call_count
+            if (
+                search_count in searches_with_notifications
+                and search_count not in notified_searches
+            ):
+                notified_searches.add(search_count)
+                return readers, [], []
+            return [], [], []
+        return readers, [], []
+
+    with (
+        patch(
+            "test_framework.mock_miner.socket.create_connection",
+            return_value=connection,
+        ) as create_connection,
+        patch(
+            "test_framework.mock_miner.select.select",
+            side_effect=select_readable,
+        ),
+        patch.object(
+            miner, "_find_nonce", side_effect=["00000000", "00000001"]
+        ) as find_nonce,
+    ):
+        with miner.session(timeout=1.0):
+            first_job = miner.current_job
+            try:
+                miner.mine_current_job(timeout=1.0)
+            except MockMinerStateError as exc:
+                assert "superseded by clean_jobs" in str(exc)
+            else:
+                raise AssertionError("clean_jobs did not invalidate the current job")
+
+            difficulty, next_job = miner.wait_for_next_job(timeout=1.0)
+            assert_equal(difficulty, 0.01)
+            assert_equal(next_job["job_id"], "job-2")
+            assert_equal(next_job["prevhash"], "11" * 32)
+            second_result = miner.mine_current_job(timeout=1.0)
+            assert_equal(second_result.job_id, "job-2")
+
+    create_connection.assert_called_once()
+    connection.close.assert_called_once()
+    submissions = [
+        json.loads(sent.args[0].decode("utf8"))
+        for sent in connection.sendall.call_args_list
+        if json.loads(sent.args[0].decode("utf8"))["method"] == "mining.submit"
+    ]
+    assert_equal(
+        [submission["params"][1] for submission in submissions], ["job-2"]
+    )
+    find_nonce.assert_has_calls(
+        [
+            call(
+                first_job,
+                "abcd",
+                4,
+                extranonce2=bytes.fromhex("00000000"),
+                on_share=ANY,
+            ),
+            call(
+                next_job,
+                "abcd",
+                4,
+                extranonce2=bytes.fromhex("00000001"),
+                on_share=ANY,
+            ),
+        ]
+    )
+
+
 def _peer_info_client(connected_by_call: list[int]) -> RpcClient:
     """RpcClient whose ``getpeerinfo`` replies with the real object shape.
 
@@ -513,30 +1250,27 @@ def test_wait_for_peers_returns_once_the_minimum_is_connected() -> None:
         raise AssertionError("wait_for_peers(1) returned with 0 connected peers")
 
 
-def test_miner_log_parsing() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        miner = CpuMiner(3333, Path(tmp), minerd_path="unused")
-        miner.stdout_path.write_text(
-            "accepted: 1/1\nshare accepted\nrejected share\n",
-            encoding="utf8",
-        )
-        miner.stderr_path.write_text("Accepted share from worker\n", encoding="utf8")
-        assert_equal(miner.shares_submitted(), 3)
-
-
 def test_find_binary_relative_path() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
-        binary = root / "node" / "src" / "cpuminer" / "minerd"
+        binary = root / "node" / "src" / "test-node"
         binary.parent.mkdir(parents=True)
         binary.write_text("#!/bin/sh\n", encoding="utf8")
         binary.chmod(binary.stat().st_mode | stat.S_IXUSR)  # must be executable for find_binary
-        original_env = os.environ.pop("MINERD_PATH", None)
+        original_env = os.environ.pop("BP_TEST_NODE_PATH", None)
         try:
-            assert_equal(find_minerd(repo_root=root), binary)
+            assert_equal(
+                find_binary(
+                    "test-node",
+                    "BP_TEST_NODE_PATH",
+                    ["node/src/test-node"],
+                    repo_root=root,
+                ),
+                binary,
+            )
         finally:
             if original_env is not None:
-                os.environ["MINERD_PATH"] = original_env
+                os.environ["BP_TEST_NODE_PATH"] = original_env
 
 
 def test_find_binary_missing_skips() -> None:
@@ -546,32 +1280,6 @@ def test_find_binary_missing_skips() -> None:
         except SkipTest:
             return
     raise AssertionError("missing binary did not raise SkipTest")
-
-
-def test_cpu_miner_fake_process_lifecycle() -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        fake_minerd = root / "fake_minerd.py"
-        fake_minerd.write_text(
-            "#!/usr/bin/env python3\n"
-            "import signal\n"
-            "import sys\n"
-            "import time\n"
-            "signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))\n"
-            "print('fake miner started', flush=True)\n"
-            "time.sleep(60)\n",
-            encoding="utf8",
-        )
-        fake_minerd.chmod(fake_minerd.stat().st_mode | stat.S_IXUSR)
-        miner = CpuMiner(3333, root / "miner", minerd_path=fake_minerd)
-        miner.start()
-        try:
-            wait_until(miner.is_alive, timeout=2.0, interval=0.01)
-        finally:
-            miner.stop(term_timeout=0.5, kill_timeout=0.5)
-        wait_until(lambda: not miner.is_alive(), timeout=2.0, interval=0.01)
-        assert (root / "miner" / STDOUT_LOG_NAME).exists()
-        assert (root / "miner" / STDERR_LOG_NAME).exists()
 
 
 def test_cleanup_manager_lifo_order() -> None:
@@ -977,11 +1685,21 @@ TESTS = [
     test_rpc_client_transport_failure_after_retries,
     test_rpc_client_timeout,
     test_rpc_client_invalid_response,
+    test_mock_miner_retries_early_eof,
+    test_mock_miner_header_hash_fixture,
+    test_mock_miner_returns_on_nbits,
+    test_mock_miner_continues_after_share,
+    test_mock_miner_rejects_share_submission,
+    test_mock_miner_rejects_invalid_set_difficulty,
+    test_mock_miner_rejects_authorization,
+    test_mock_miner_rejects_unaccepted_submission,
+    test_mock_miner_categorizes_stratum_request_errors,
+    test_mock_miner_session_reuses_pushed_jobs,
+    test_mock_miner_stages_extranonce_until_next_job,
+    test_mock_miner_discards_superseded_work_during_search,
     test_wait_for_peers_returns_once_the_minimum_is_connected,
-    test_miner_log_parsing,
     test_find_binary_relative_path,
     test_find_binary_missing_skips,
-    test_cpu_miner_fake_process_lifecycle,
     test_cleanup_manager_lifo_order,
     test_cleanup_manager_exception_swallowing,
     test_cleanup_manager_idempotent,

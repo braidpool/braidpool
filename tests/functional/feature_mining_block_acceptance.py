@@ -2,6 +2,7 @@
 """Verify Stratum mining produces a block accepted by Bitcoin Core."""
 
 from test_framework.network_config import NetworkConfig
+from test_framework.mock_miner import MockStratumMiner
 from test_framework.test_framework import BraidpoolTestFramework
 
 
@@ -10,13 +11,8 @@ class FeatureMiningBlockAcceptance(BraidpoolTestFramework):
     def set_test_params(self) -> None:
         self.config = NetworkConfig(
             num_braidpool_nodes=2,
-            num_cpu_miners=1,
             network="regtest",
         )
-
-    def _miner_log(self, miner) -> str:
-        path = miner.stderr_path
-        return path.read_text(errors="replace") if path.exists() else ""
 
     def _node_log(self, node) -> str:
         return "\n".join(
@@ -27,30 +23,19 @@ class FeatureMiningBlockAcceptance(BraidpoolTestFramework):
 
     def run_test(self) -> None:
         node0, node1 = self.nodes[0], self.nodes[1]
-        miner = self.miners[0]
 
         self.log.info("Test nodes running and RPC is reachable")
         assert node0.is_running() and node1.is_running()
         assert "genesis_beads" in node0.get_braid_info()
 
-        self.log.info("Test miner handshake and work distribution")
-        self.wait_until(
-            lambda: "mining.authorize" in self._miner_log(miner)
-            or "Stratum session id" in self._miner_log(miner),
-            timeout=60.0,
-            message="Miner did not authorize via Stratum",
-        )
-        self.wait_until(
-            lambda: "mining.notify" in self._miner_log(miner),
-            timeout=60.0, message="Miner never received mining.notify",
-        )
-        self.wait_until(
-            lambda: '"method":"mining.set_difficulty","params":[0.01]'
-            in self._miner_log(miner),
-            timeout=60.0,
-            message="miner did not receive share difficulty 0.01",
-        )
-        assert miner.is_alive(), "Miner died after handshake"
+        self.log.info("Test miner handshake, work distribution and submission")
+        mining_result = MockStratumMiner(
+            node0.stratum_port, logger=self.log
+        ).mine_one_block(timeout=60.0)
+        assert mining_result.job_id, "Miner did not receive mining.notify"
+        assert (
+            mining_result.difficulty == 0.01
+        ), f"Expected share difficulty 0.01, got {mining_result.difficulty}"
 
         self.log.info("Test and verify the miner found a block accepted by Bitcoin Core")
         assert self.bitcoin is not None, "Bitcoin node was not initialized"
