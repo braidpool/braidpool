@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS AuditBead (
 -- Represents DAG parent relationships
 CREATE TABLE IF NOT EXISTS AuditBeadParent (
     child_id            INTEGER NOT NULL,
-    parent_block_hash   BLOB NOT NULL,            
+    parent_block_hash BLOB NOT NULL,            
     parent_timestamp    INTEGER NOT NULL,           
     
     PRIMARY KEY (child_id, parent_block_hash),
