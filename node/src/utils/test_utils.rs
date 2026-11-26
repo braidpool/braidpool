@@ -179,6 +179,7 @@ pub mod test_utility_functions {
     #[cfg(test)]
     pub struct TestCommittedMetadataBuilder {
         transaction_ids: Vec<Txid>,
+        committed_transactions: Vec<Txid>,
         parents: Vec<BeadHash>,
         parent_bead_timestamps: Option<TimeVec>,
         payout_address: Option<String>,
@@ -194,6 +195,7 @@ pub mod test_utility_functions {
         pub fn new() -> Self {
             Self {
                 transaction_ids: Vec::new(),
+                committed_transactions: Vec::new(),
                 parents: Vec::new(),
                 parent_bead_timestamps: None,
                 payout_address: None,
@@ -207,6 +209,11 @@ pub mod test_utility_functions {
 
         pub fn transactions(mut self, txs: Vec<Txid>) -> Self {
             self.transaction_ids = txs;
+            self
+        }
+
+        pub fn committed_transactions(mut self, txs: Vec<Txid>) -> Self {
+            self.committed_transactions = txs;
             self
         }
 
@@ -252,6 +259,7 @@ pub mod test_utility_functions {
 
             CommittedMetadata {
                 transaction_ids: TxIdVec(self.transaction_ids),
+                committed_transactions: TxIdVec(self.committed_transactions),
                 parents: self.parents,
                 parent_bead_timestamps: self
                     .parent_bead_timestamps
