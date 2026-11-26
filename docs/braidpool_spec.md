@@ -4,7 +4,7 @@
 Herein we present the specification for a decentralized mining pool we name
 "Braidpool". For background information and general considerations please read
 [General Considerations for Decentralized Mining
-Pools](https://github.com/mcelrath/braidcoin/blob/master/general_considerations.md)
+Pools](general_considerations.md)
 which has relevant general discussion omitted from this document.  The sections
 below correspond to the sections in that document, describing how Braidpool will
 solve each of the indicated issues.  Orthogonal considerations including

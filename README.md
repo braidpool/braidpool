@@ -1,10 +1,10 @@
-![Build status](https://github.com/wholooks/braidpool/actions/workflows/rust-node.yml/badge.svg)
+![Build status](https://github.com/braidpool/braidpool/actions/workflows/rust-node.yml/badge.svg)
 
 # Proposal
 
 Read the
-[Overview](https://github.com/braidpool/braidpool/blob/master/docs/overview.md)
-for [General Considerations for Decentralized Mining Pools](https://github.com/braidpool/braidpool/blob/master/docs/general_considerations.md), or [Braidpool Spec](https://github.com/braidpool/braidpool/blob/master/docs/braidpool_spec.md) in increasing levels of complexity. You may also be interested in our [Roadmap](https://github.com/braidpool/braidpool/blob/master/docs/roadmap.md)
+[Overview](docs/overview.md)
+for [General Considerations for Decentralized Mining Pools](docs/general_considerations.md), or [Braidpool Spec](docs/braidpool_spec.md) in increasing levels of complexity. You may also be interested in our [Roadmap](docs/roadmap.md)
 
 The goals of the pool are:
 
