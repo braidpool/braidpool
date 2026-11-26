@@ -34,7 +34,10 @@ pub mod test_utility_functions {
     use serde::{Deserialize, Serialize};
 
     #[cfg(test)]
-    use crate::{braid::Braid, utils::compute_block_hash};
+    use crate::{
+        braid::{Braid, OrphanPool, DEFAULT_MAX_ORPHAN_BEADS},
+        utils::compute_block_hash,
+    };
 
     pub use super::*;
     #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -124,7 +127,7 @@ pub mod test_utility_functions {
                 genesis_beads: current_braid_genesis,
                 cohorts: current_bead_cohorots,
                 cohort_tips: vec![HashSet::new()], // Cohorts tips are only used in extend(), so we can skip them here.
-                orphan_beads: Vec::new(),
+                orphan_beads: OrphanPool::new(DEFAULT_MAX_ORPHAN_BEADS),
                 network: PoolNetwork::Cpunet,
             },
             file_braid.clone(),
