@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import * as d3 from 'd3';
-import { Loader, WifiOff, AlertCircle } from 'lucide-react';
+import { Loader, WifiOff } from 'lucide-react';
+import ContextualError from '../common/ContextualError';
 import {
   GraphData,
   GraphNode,
@@ -73,6 +74,7 @@ const GraphVisualization: React.FC = () => {
   const [graphData, setGraphData] = useState<GraphData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [errorDetails, setErrorDetails] = useState<unknown>(null);
   const [connectionStatus, setConnectionStatus] = useState<
     'connecting' | 'connected' | 'disconnected' | 'error'
   >('connecting');
@@ -100,6 +102,9 @@ const GraphVisualization: React.FC = () => {
 
     function rpc(method: string, params: unknown[] = []): Promise<unknown> {
       return new Promise((resolve, reject) => {
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+          return reject(new Error('WebSocket is not connected'));
+        }
         const id = ++reqId;
         const timer = setTimeout(() => {
           pending.delete(id);
@@ -117,6 +122,9 @@ const GraphVisualization: React.FC = () => {
     }
 
     async function loadDAG() {
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        return;
+      }
       const myGen = ++fetchGen;
       const sel = selectedCohortsRef.current;
       try {
@@ -202,11 +210,19 @@ const GraphVisualization: React.FC = () => {
         });
         setLoading(false);
         setError(null);
+        setErrorDetails(null);
         hasLoaded = true;
       } catch (err) {
         if (!mounted || fetchGen !== myGen) return;
         console.error('[BraidPoolDAG] loadDAG failed:', err);
-        setError(`Failed to load DAG data from node: ${err}`);
+        setError('Failed to load DAG data from node');
+        setErrorDetails({
+          component: 'BraidPoolDAG',
+          action: 'loadDAG',
+          endpoint: WEBSOCKET_URLS.NODE_RPC_WS,
+          error: err instanceof Error ? err.message : String(err),
+          hint: `Make sure the node is running at ${WEBSOCKET_URLS.NODE_RPC_WS}`,
+        });
         setLoading(false);
       }
     }
@@ -288,7 +304,14 @@ const GraphVisualization: React.FC = () => {
         pending.clear();
         if (!hasLoaded) {
           setLoading(false);
-          setError(`Cannot reach node at ${WEBSOCKET_URLS.NODE_RPC_WS}. `);
+          setError(`Cannot reach node at ${WEBSOCKET_URLS.NODE_RPC_WS}.`);
+          setErrorDetails({
+            component: 'BraidPoolDAG',
+            action: 'WebSocket connection',
+            endpoint: WEBSOCKET_URLS.NODE_RPC_WS,
+            closeCode: e.code,
+            hint: `Make sure the node is running at ${WEBSOCKET_URLS.NODE_RPC_WS}`,
+          });
         }
         setTimeout(connect, reconnectDelay);
         reconnectDelay = Math.min(reconnectDelay * 2, 30_000);
@@ -900,12 +923,7 @@ const GraphVisualization: React.FC = () => {
   if (error && !graphData) {
     return (
       <div className="flex flex-col items-center justify-center h-screen gap-3">
-        <AlertCircle className="h-10 w-10 text-red-500" />
-        <div className="text-red-400 text-sm max-w-sm text-center">{error}</div>
-        <p className="text-xs text-gray-500">
-          Make sure the node is running at{' '}
-          <code className="font-mono">{WEBSOCKET_URLS.NODE_RPC_WS}</code>
-        </p>
+        <ContextualError message={error} details={errorDetails} />
       </div>
     );
   }

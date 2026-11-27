@@ -43,30 +43,6 @@ export interface LatencyHistoryEntry {
   label: string;
 }
 
-//Hashrate
-export interface HashrateWebSocketMessage {
-  type: 'hashrate_data';
-  data: {
-    hashrate: number;
-    timestamp: string | number;
-    networkDifficulty: number;
-  };
-}
-
-export interface HashrateHistoryEntry {
-  value: number;
-  timestamp: number;
-  date: string;
-  label: string;
-}
-
-export interface HashrateData {
-  history: { value: number; date: string; label: string; timestamp: number }[];
-  current: string;
-  peak: string;
-  networkDifficulty: number;
-}
-
 //Transactions
 export type TransactionDataItem = {
   value: number;

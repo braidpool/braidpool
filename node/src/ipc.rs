@@ -274,6 +274,7 @@ pub async fn ipc_block_listener(
                                             template_id = %template_id,
                                             block_hash = %block_hash,
                                             reason = %result.reason,
+                                            debug = %result.debug,
                                             "Block REJECTED by Bitcoin Core"
                                         );
                                     }
@@ -432,7 +433,7 @@ async fn get_template(
     const MIN_TRANSACTION_COUNT: u64 = 1;
     const NONCE: u32 = 0;
 
-    let config = CoinbaseConfig::from_network(network);
+    let config = CoinbaseConfig::from_network(network)?;
 
     let components = client
         .get_block_template_components(None, Some(priority))

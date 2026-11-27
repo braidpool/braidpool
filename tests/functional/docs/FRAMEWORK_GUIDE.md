@@ -5,15 +5,22 @@ Use this guide to write, run, and debug executable functional tests under
 and miner processes; assigns isolated ports; collects logs and timing; and
 always attempts cleanup.
 
-If you are in a hurry, read **Quick start**, **Running tests**, and **Things to
-keep in mind**. Use the other sections as reference while writing a test.
+Functional tests use Bitcoin's `regtest` network by default and should be run
+with `--network=regtest` unless a test explicitly documents another network.
+This provides an isolated local blockchain and avoids connecting to a public
+Bitcoin network.
+
+If you are in a hurry, read **Quick start**, **Binaries and discovery**,
+**Running tests**, and **Things to keep in mind**. Use the other sections as
+reference while writing a test.
 
 ## Quick start
 
 1. Create `tests/functional/feature_<name>.py`.
 2. Subclass `BraidpoolTestFramework`.
 3. Implement `set_test_params()` and `run_test()`.
-4. Run the file through `test_runner.py`.
+4. Export the required binary paths.
+5. Run the file through `test_runner.py`.
 
 ```python
 #!/usr/bin/env python3
@@ -313,6 +320,40 @@ class FeatureNoBinaries(BraidpoolTestFramework):
 See [`feature_framework_lifecycle.py`](../feature_framework_lifecycle.py) for a
 complete example with custom options, polling, logging, and cleanup callbacks.
 
+Before running a test that starts a Bitcoin node, Braidpool nodes, or a CPU
+miner, export the paths to the corresponding executables. Build the Braidpool
+node first, and use the path to the Bitcoin build that includes the IPC
+support required by Braidpool:
+
+```bash
+cd /path/to/braidpool
+cargo build --bin node
+
+export BRAIDPOOL_BIN_PATH="$PWD/target/debug/node"
+export BITCOIN_NODE_PATH="$PWD/bitcoin/build/bin/bitcoin-node"
+export MINERD_PATH="$PWD/cpuminer/minerd"
+
+```
+`MINERD_PATH` is required only by tests whose configuration sets `num_cpu_miners` 
+above zero. The framework reports a test as skipped when a required executable
+cannot be found. You can verify each configured path before running a test. 
+This check prints the result for every binary and exits with an error if any 
+required binary is missing or not executable:
+
+```bash
+for path in "$BRAIDPOOL_BIN_PATH" "$BITCOIN_NODE_PATH" "$MINERD_PATH"; do
+    if [ -x "$path" ]; then
+        echo "OK: $path"
+    else
+        echo "Missing or not executable: $path"
+    fi
+done
+```
+
+If your binaries are installed on `PATH`, the exports are optional. Explicit
+environment variables are recommended because they avoid accidentally using a
+different build.
+
 ## Binaries and discovery
 
 A normal network test needs `bitcoin-node`; tests with Braidpool nodes also need
@@ -357,8 +398,9 @@ All commands below assume the repository root.
 python3 tests/functional/feature_example.py
 ```
 
-Direct execution is useful for `--pdbonfailure`. If direct tests run in
-parallel, give each one a unique `--portseed`.
+Direct execution is useful for `--pdbonfailure`. When `--portseed` is omitted,
+the framework selects the first available port band; use an explicit seed only
+when a deterministic band is required.
 
 ### Test runner
 
@@ -412,7 +454,7 @@ applicable options to each child script:
 | `--nocleanup` | Preserve artifacts after pass or skip. |
 | `--loglevel=LEVEL` | Override the configured log level. |
 | `--tracerpc` | Add RPC request tracing to the framework log. |
-| `--portseed=N` | Select the deterministic port band; must be non-negative. |
+| `--portseed=N` | Select the deterministic port band; when omitted, the first available band is selected automatically. |
 | `--randomseed=N` | Override `NetworkConfig.random_seed`. |
 | `--timeout-factor=N` | Multiply framework timeouts; must be positive. |
 | `--pdbonfailure` | Enter post-mortem debugging after a test exception. |

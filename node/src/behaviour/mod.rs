@@ -43,6 +43,11 @@ pub struct BraidPoolBehaviour {
     pub bead_sync: request_response::Behaviour<BeadCodec>,
     pub bead_announce: floodsub::Floodsub,
 }
+/// A bead sync reply could not be sent because the peer's response channel was
+/// already closed by a timeout or a disconnect.
+#[derive(Debug)]
+pub struct ResponseChannelClosed;
+
 impl BraidPoolBehaviour {
     pub fn new(local_key: &Keypair) -> Result<BraidPoolBehaviour, Box<dyn Error>> {
         //initializing the store for kademlia based DHT
@@ -103,34 +108,49 @@ impl BraidPoolBehaviour {
         self.bead_sync.send_request(&peer, BeadRequest::GetGenesis)
     }
 
-    // Respond to a bead request
-    pub fn respond_with_beads(&mut self, channel: ResponseChannel<BeadResponse>, beads: Vec<Bead>) {
+    /// Sends a bead sync response, reporting instead of panicking if the peer
+    /// is already gone.
+    ///
+    /// `send_response` only fails when the response channel has been closed by
+    /// a timeout or a disconnect, which a remote peer can cause at will, so it
+    /// must not take the swarm task down. The failed response is not carried
+    /// back out: it can be a full batch of beads.
+    fn send_bead_response(
+        &mut self,
+        channel: ResponseChannel<BeadResponse>,
+        response: BeadResponse,
+    ) -> Result<(), ResponseChannelClosed> {
         self.bead_sync
-            .send_response(channel, BeadResponse::Beads(crate::bead::Beads(beads)))
-            .expect("Failed to send response");
+            .send_response(channel, response)
+            .map_err(|_| ResponseChannelClosed)
+    }
+
+    // Respond to a bead request
+    pub fn respond_with_beads(
+        &mut self,
+        channel: ResponseChannel<BeadResponse>,
+        beads: Vec<Bead>,
+    ) -> Result<(), ResponseChannelClosed> {
+        self.send_bead_response(channel, BeadResponse::Beads(crate::bead::Beads(beads)))
     }
     //Respond with `GetBeadsAfter` beadhashes request
     pub fn respond_with_beadhashes(
         &mut self,
         channel: ResponseChannel<BeadResponse>,
         bead_hashes: Vec<BeadHash>,
-    ) {
-        self.bead_sync
-            .send_response(
-                channel,
-                BeadResponse::GetBeadsAfter(BeadHashes(bead_hashes)),
-            )
-            .expect("Failed to send response");
+    ) -> Result<(), ResponseChannelClosed> {
+        self.send_bead_response(
+            channel,
+            BeadResponse::GetBeadsAfter(BeadHashes(bead_hashes)),
+        )
     }
     // Respond to a tips request
     pub fn respond_with_tips(
         &mut self,
         channel: ResponseChannel<BeadResponse>,
         tips: Vec<BeadHash>,
-    ) {
-        self.bead_sync
-            .send_response(channel, BeadResponse::Tips(BeadHashes(tips)))
-            .expect("Failed to send response");
+    ) -> Result<(), ResponseChannelClosed> {
+        self.send_bead_response(channel, BeadResponse::Tips(BeadHashes(tips)))
     }
 
     // Respond to a genesis request
@@ -138,10 +158,8 @@ impl BraidPoolBehaviour {
         &mut self,
         channel: ResponseChannel<BeadResponse>,
         genesis: Vec<BeadHash>,
-    ) {
-        self.bead_sync
-            .send_response(channel, BeadResponse::Genesis(BeadHashes(genesis)))
-            .expect("Failed to send response");
+    ) -> Result<(), ResponseChannelClosed> {
+        self.send_bead_response(channel, BeadResponse::Genesis(BeadHashes(genesis)))
     }
 
     // Respond with an error
@@ -149,10 +167,8 @@ impl BraidPoolBehaviour {
         &mut self,
         channel: ResponseChannel<BeadResponse>,
         error: BeadSyncError,
-    ) {
-        self.bead_sync
-            .send_response(channel, BeadResponse::Error(error))
-            .expect("Failed to send response");
+    ) -> Result<(), ResponseChannelClosed> {
+        self.send_bead_response(channel, BeadResponse::Error(error))
     }
 }
 

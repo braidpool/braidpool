@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import ContextualError from '../../common/ContextualError';
 import AdvancedChart from '../AdvancedChart';
 import AnimatedStatCard from '../AnimatedStatCard';
 import {
@@ -21,6 +22,7 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorDetails, setErrorDetails] = useState<unknown>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -34,12 +36,20 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
       setIsConnected(true);
       setIsLoading(false);
       setError(null);
+      setErrorDetails(null);
     };
 
     ws.onerror = (error) => {
       setIsConnected(false);
       setIsLoading(false);
       setError('WebSocket connection error');
+      setErrorDetails({
+        component: 'TransactionsTab',
+        endpoint: WEBSOCKET_URLS.MAIN_WEBSOCKET,
+        eventType: error.type,
+        readyState: ws.readyState,
+        timeRange,
+      });
       console.error('[TransactionsTab] WebSocket error:', error);
     };
 
@@ -50,6 +60,11 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
 
         if (parsed.type === 'error') {
           setError(parsed.data?.message || 'Unknown error');
+          setErrorDetails({
+            component: 'TransactionsTab',
+            endpoint: WEBSOCKET_URLS.MAIN_WEBSOCKET,
+            payload: parsed,
+          });
           return;
         }
 
@@ -90,10 +105,17 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
             averagingWindow: parsed.data.averagingWindow || 0,
           });
           setError(null);
+          setErrorDetails(null);
         }
       } catch (e) {
         setIsLoading(false);
         setError('Failed to parse data');
+        setErrorDetails({
+          component: 'TransactionsTab',
+          endpoint: WEBSOCKET_URLS.MAIN_WEBSOCKET,
+          error: e instanceof Error ? e.message : String(e),
+          rawPayload: event.data,
+        });
         console.error('[TransactionsTab] WebSocket message parse error:', e);
       }
     };
@@ -121,6 +143,7 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
 
   return (
     <div className="space-y-4 ">
+      {error && <ContextualError message={error} details={errorDetails} />}
       <div>
         <AdvancedChart
           data={chartData.slice(-10)}
@@ -131,9 +154,6 @@ export default function TransactionsTab({ timeRange }: TransactionTabProps) {
           description={
             <>
               Real-time transaction statistics
-              {error && (
-                <div className="text-sm text-red-400 mt-1">Error: {error}</div>
-              )}
               {!isConnected && !error && (
                 <div className="text-sm text-yellow-400 mt-1">Disconnected</div>
               )}
