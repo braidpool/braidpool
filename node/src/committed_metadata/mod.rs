@@ -140,7 +140,6 @@ impl CommittedMetadata {
     }
 }
 
-
 impl Encodable for CommittedMetadata {
     fn consensus_encode<W: Write + ?Sized>(&self, w: &mut W) -> Result<usize, io::Error> {
         let mut len = self.transaction_ids.consensus_encode(w)?;
