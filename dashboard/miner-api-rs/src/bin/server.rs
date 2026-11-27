@@ -23,7 +23,8 @@ async fn main() -> anyhow::Result<()> {
     let port = config.port;
 
     // Start CPU miner background poller before anything else that needs the pool.
-    miner_api_rs::cpu_miner::CpuMinerService::new(pool.clone()).start();
+    miner_api_rs::cpu_miner::CpuMinerService::new(pool.clone(), config.cpu_miner_ports.clone())
+        .start();
     let refresh_secs = config.refresh_interval_secs;
     let scan_secs = config.scan_interval_secs;
     let timeout_secs = config.miner_timeout_secs;

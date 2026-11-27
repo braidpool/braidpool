@@ -8,9 +8,6 @@ use crate::db::service;
 
 const POLL_INTERVAL: Duration = Duration::from_secs(5);
 const STATS_TIMEOUT: Duration = Duration::from_secs(4);
-// Ports probed automatically on startup for CPU miners running locally.
-const DEFAULT_PORTS: &[u16] = &[8080, 8081, 8082];
-
 /// Normalizes an api_url so `localhost` and `127.0.0.1` compare as equal.
 pub fn normalize_api_url(url: &str) -> String {
     url.trim_end_matches('/').replace("localhost", "127.0.0.1")
@@ -26,6 +23,9 @@ pub fn validate_api_url(url: &str) -> Result<(), &'static str> {
     }
     if parsed.query().is_some() || parsed.fragment().is_some() {
         return Err("api_url must not contain a query or fragment");
+    }
+    if parsed.path() != "/" && !parsed.path().is_empty() {
+        return Err("api_url must not contain a path");
     }
 
     match parsed.host_str() {
@@ -69,15 +69,16 @@ fn is_valid_stats(body: &str) -> bool {
 pub struct CpuMinerService {
     pool: SqlitePool,
     http: reqwest::Client,
+    ports: Vec<u16>,
 }
 
 impl CpuMinerService {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: SqlitePool, ports: Vec<u16>) -> Self {
         let http = reqwest::Client::builder()
             .timeout(STATS_TIMEOUT)
             .build()
             .expect("reqwest client");
-        Self { pool, http }
+        Self { pool, http, ports }
     }
 
     pub fn start(self) -> tokio::task::JoinHandle<()> {
@@ -96,9 +97,9 @@ impl CpuMinerService {
         }
     }
 
-    /// Probe well-known localhost ports and register any live CPU miners not yet in the DB.
+    /// Probe configured localhost ports and register any live CPU miners not yet in the DB.
     async fn auto_discover(&self) {
-        for &port in DEFAULT_PORTS {
+        for &port in &self.ports {
             let url = format!("http://127.0.0.1:{}/api/v1/health", port);
             if self
                 .http

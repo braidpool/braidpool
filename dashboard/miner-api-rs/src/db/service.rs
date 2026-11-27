@@ -479,13 +479,16 @@ pub async fn cpu_miner_update_stats(
     last_stats: Option<&str>,
 ) -> Result<()> {
     let now = MinerDevice::now_iso();
-    let last_seen = if is_online { Some(now.as_str()) } else { None };
     sqlx::query(
-        "UPDATE cpu_miners SET is_online=?, last_stats=?, last_seen=?, updated_at=? WHERE id=?",
+        "UPDATE cpu_miners \
+         SET is_online=?, last_stats=?, \
+         last_seen=CASE WHEN ? THEN ? ELSE last_seen END, \
+         updated_at=? WHERE id=?",
     )
     .bind(is_online)
     .bind(last_stats)
-    .bind(last_seen)
+    .bind(is_online)
+    .bind(now.as_str())
     .bind(&now)
     .bind(id)
     .execute(pool)
