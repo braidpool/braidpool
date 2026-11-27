@@ -304,6 +304,9 @@ impl Braid {
         }
     }
     /// utility function for GetBeadsAfter request
+    ///
+    /// Beads are returned with parents before children. The IBD code in `main.rs`
+    /// stops reading the reply at the last tip, so it relies on this order.
     pub fn get_beads_after(&self, old_tips: Vec<BeadHash>) -> Option<Vec<Bead>> {
         let old_tips: HashSet<BeadHash> = old_tips.into_iter().collect();
         tracing::warn!(
@@ -349,8 +352,12 @@ impl Braid {
         );
         while smallest_cohort_index < self.cohorts.len() {
             let cohort = &self.cohorts[smallest_cohort_index];
-            for bead_index in &cohort.0 {
-                let curr_bead = self.beads[*bead_index].clone();
+            // A cohort is a HashSet, so its iteration order is random. `extend` only
+            // adds a bead after all its parents, so sorting by index puts parents first.
+            let mut bead_indices: Vec<usize> = cohort.0.iter().copied().collect();
+            bead_indices.sort_unstable();
+            for bead_index in bead_indices {
+                let curr_bead = self.beads[bead_index].clone();
                 //Not including the beads that are already present in old_tips
                 if !old_tips.contains(&self.compute_bead_hash(&curr_bead)) {
                     response_beads.push(curr_bead);

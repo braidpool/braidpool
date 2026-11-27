@@ -2463,3 +2463,61 @@ fn test_extend_promotes_transitive_orphan_chain() {
         "all transitively-connectable orphans should be drained"
     );
 }
+
+#[test]
+fn test_get_beads_after_returns_parents_before_children() {
+    // Braid from issue #678:
+    //   G(0) -> A(1); A -> B(2); A -> C(3); B -> D(4)
+    // Cohorts are {G}, {A}, {B, C, D} and the tips are C and D.
+    // A node that already has G and A asks for the beads after A. If D comes
+    // before its parent B in the reply, the requester can stop reading after
+    // the last tip and never ask for B.
+    //
+    // HashSet order changes between runs, so build a fresh braid many times.
+    let parent_relationships: [&[usize]; 5] = [&[], &[0], &[1], &[1], &[2]];
+
+    for _run in 0..50 {
+        let mut beads: Vec<Bead> = (0..5).map(|_| emit_bead()).collect();
+        let hashes: Vec<BlockHash> = beads
+            .iter()
+            .map(|b| compute_block_hash(&b.block_header, PoolNetwork::Cpunet))
+            .collect();
+        for (index, parents) in parent_relationships.iter().enumerate() {
+            for &parent in parents.iter() {
+                beads[index].committed_metadata.parents.push(hashes[parent]);
+            }
+        }
+
+        let mut test_braid = Braid::new(vec![beads[0].clone()], PoolNetwork::Cpunet);
+        for bead in &beads[1..] {
+            assert!(matches!(
+                test_braid.extend(bead),
+                AddBeadStatus::BeadAdded { .. }
+            ));
+        }
+
+        let returned: Vec<BlockHash> = test_braid
+            .get_beads_after(vec![hashes[1]])
+            .expect("beads after A should exist")
+            .iter()
+            .map(|b| compute_block_hash(&b.block_header, PoolNetwork::Cpunet))
+            .collect();
+
+        let expected: HashSet<BlockHash> = HashSet::from([hashes[2], hashes[3], hashes[4]]);
+        assert_eq!(returned.len(), expected.len());
+        assert_eq!(returned.iter().copied().collect::<HashSet<_>>(), expected);
+
+        // Every parent must be either known to the requester (G, A) or listed earlier.
+        let mut seen: HashSet<BlockHash> = HashSet::from([hashes[0], hashes[1]]);
+        for hash in &returned {
+            let index = hashes.iter().position(|h| h == hash).unwrap();
+            for &parent in parent_relationships[index].iter() {
+                assert!(
+                    seen.contains(&hashes[parent]),
+                    "bead {index} was returned before its parent {parent}"
+                );
+            }
+            seen.insert(*hash);
+        }
+    }
+}
