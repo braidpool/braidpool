@@ -16,6 +16,7 @@ use crate::braid::consensus_functions::updating_ancestors;
 use crate::braid::Cohort;
 use crate::config::PoolNetwork;
 use crate::utils::compute_block_hash;
+use crate::utils::create_test_bead;
 use crate::utils::test_utils::test_utility_functions::loading_braid_from_file;
 use crate::utils::test_utils::test_utility_functions::*;
 use bitcoin::BlockHash;
@@ -41,6 +42,7 @@ pub fn test_extend_functionality() {
             0,
         )]),
         network: PoolNetwork::Cpunet,
+        children: Vec::new(),
     };
     assert_eq!(
         test_braid.cohorts,
@@ -300,6 +302,7 @@ pub fn test_orphan_beads_functinality() {
             0,
         )]),
         network: PoolNetwork::Cpunet,
+        children: Vec::new(),
     };
     assert_eq!(
         test_braid.cohorts,
@@ -409,6 +412,7 @@ pub fn test_genesis1() {
             ),
         ]),
         network: PoolNetwork::Cpunet,
+        children: Vec::new(),
     };
 
     //mapping of the indices with set of indices representing its parents
@@ -472,6 +476,7 @@ pub fn test_genesis2() {
             ),
         ]),
         network: PoolNetwork::Cpunet,
+        children: Vec::new(),
     };
     //mapping of the indices with set of indices representing its parents
     //where the key represents the ith indexed bead from self.beads which contains all the beads
@@ -547,6 +552,7 @@ pub fn test_genesis3() {
             ),
         ]),
         network: PoolNetwork::Cpunet,
+        children: Vec::new(),
     };
     //mapping of the indices with set of indices representing its parents
     //where the key represents the ith indexed bead from self.beads which contains all the beads
@@ -656,6 +662,7 @@ pub fn test_tips1() {
             ),
         ]),
         network: PoolNetwork::Cpunet,
+        children: Vec::new(),
     };
 
     //mapping of the indices with set of indices representing its parents
@@ -734,6 +741,7 @@ pub fn test_tips2() {
             ),
         ]),
         network: PoolNetwork::Cpunet,
+        children: Vec::new(),
     };
 
     //mapping of the indices with set of indices representing its parents
@@ -866,6 +874,7 @@ pub fn test_tips3() {
             ),
         ]),
         network: PoolNetwork::Cpunet,
+        children: Vec::new(),
     };
     //mapping of the indices with set of indices representing its parents
     //where the key represents the ith indexed bead from self.beads which contains all the beads
@@ -1000,6 +1009,7 @@ pub fn test_reverse() {
             ),
         ]),
         network: PoolNetwork::Cpunet,
+        children: Vec::new(),
     };
     //mapping of the indices with set of indices representing its parents
     //where the key represents the ith indexed bead from self.beads which contains all the beads
@@ -1131,6 +1141,7 @@ pub fn test_cohorts_parents_1() {
             ),
         ]),
         network: PoolNetwork::Cpunet,
+        children: Vec::new(),
     };
 
     //mapping of the indices with set of indices representing its parents
@@ -1297,6 +1308,7 @@ pub fn test_highest_work_path_1() {
             ),
         ]),
         network: PoolNetwork::Cpunet,
+        children: Vec::new(),
     };
 
     //mapping of the indices with set of indices representing its parents
@@ -1396,6 +1408,7 @@ pub fn test_diamond_path_highest_work() {
             ),
         ]),
         network: PoolNetwork::Cpunet,
+        children: Vec::new(),
     };
     //mapping of the indices with set of indices representing its parents
     //where the key represents the ith indexed bead from self.beads which contains all the beads
@@ -1767,6 +1780,7 @@ fn test_extend_function() {
             genesis_beads: genesis_set,
             bead_index_mapping,
             network: PoolNetwork::Cpunet,
+            children: Vec::new(),
         };
 
         // Extend braid with remaining beads in order of index
@@ -1862,6 +1876,7 @@ fn test_get_beads_after() {
         genesis_beads: genesis_set,
         bead_index_mapping,
         network: PoolNetwork::Cpunet,
+        children: Vec::new(),
     };
 
     // Extend braid with remaining beads
@@ -1987,6 +2002,7 @@ fn test_get_beads_after_diamond_structure() {
         genesis_beads: genesis_set,
         bead_index_mapping,
         network: PoolNetwork::Cpunet,
+        children: Vec::new(),
     };
 
     // Extend braid with remaining beads
@@ -2103,6 +2119,7 @@ fn test_get_beads_after_complex_braid() {
         genesis_beads: genesis_set,
         bead_index_mapping,
         network: PoolNetwork::Cpunet,
+        children: Vec::new(),
     };
 
     // Extend braid with remaining beads
@@ -2200,6 +2217,7 @@ fn test_get_beads_after_edge_cases() {
         genesis_beads: genesis_set,
         bead_index_mapping,
         network: PoolNetwork::Cpunet,
+        children: Vec::new(),
     };
 
     test_braid.extend(&beads[1]);
@@ -2308,6 +2326,7 @@ fn test_get_beads_after_multiple_tips() {
         genesis_beads: genesis_set,
         bead_index_mapping,
         network: PoolNetwork::Cpunet,
+        children: Vec::new(),
     };
 
     for i in 1..6 {
@@ -2462,4 +2481,80 @@ fn test_extend_promotes_transitive_orphan_chain() {
         braid.orphan_beads.is_empty(),
         "all transitively-connectable orphans should be drained"
     );
+}
+
+fn work_test_bead(nonce: u32, parents: &[BlockHash]) -> Bead {
+    let mut parents = parents.to_vec();
+    parents.sort();
+    let mut bead = create_test_bead(nonce, parents.first().copied());
+    bead.committed_metadata.parents = parents;
+    bead
+}
+
+fn work_test_hash(bead: &Bead) -> BlockHash {
+    compute_block_hash(&bead.block_header, PoolNetwork::Cpunet)
+}
+
+#[test]
+fn test_get_work_by_bead_counts_shared_descendants_once() {
+    let genesis = work_test_bead(1, &[]);
+    let left = work_test_bead(2, &[work_test_hash(&genesis)]);
+    let right = work_test_bead(3, &[work_test_hash(&genesis)]);
+    let merge = work_test_bead(4, &[work_test_hash(&left), work_test_hash(&right)]);
+    let tip = work_test_bead(5, &[work_test_hash(&merge)]);
+
+    let mut braid = Braid::new(vec![genesis.clone()], PoolNetwork::Cpunet);
+    for bead in [&left, &right, &merge, &tip] {
+        assert!(matches!(
+            braid.extend(bead),
+            AddBeadStatus::BeadAdded { .. }
+        ));
+    }
+
+    let work = genesis.block_header.work();
+    let genesis_info = braid.get_work_by_bead(&work_test_hash(&genesis)).unwrap();
+    assert_eq!(genesis_info.own_work, work);
+    assert_eq!(genesis_info.work, work + work + work + work + work);
+    assert_eq!(genesis_info.descendant_count, 4);
+
+    for branch in [&left, &right] {
+        let branch_info = braid.get_work_by_bead(&work_test_hash(branch)).unwrap();
+        assert_eq!(branch_info.work, work + work + work);
+        assert_eq!(branch_info.descendant_count, 2);
+    }
+
+    let merge_info = braid.get_work_by_bead(&work_test_hash(&merge)).unwrap();
+    assert_eq!(merge_info.work, work + work);
+    assert_eq!(merge_info.descendant_count, 1);
+
+    let tip_info = braid.get_work_by_bead(&work_test_hash(&tip)).unwrap();
+    assert_eq!(tip_info.work, work);
+    assert_eq!(tip_info.descendant_count, 0);
+}
+
+#[test]
+fn test_get_work_by_bead_after_orphan_promotion() {
+    let genesis = work_test_bead(11, &[]);
+    let left = work_test_bead(12, &[work_test_hash(&genesis)]);
+    let right = work_test_bead(13, &[work_test_hash(&genesis)]);
+    let merge = work_test_bead(14, &[work_test_hash(&left), work_test_hash(&right)]);
+    let tip = work_test_bead(15, &[work_test_hash(&merge)]);
+
+    let mut braid = Braid::new(vec![genesis.clone()], PoolNetwork::Cpunet);
+    assert!(matches!(
+        braid.extend(&tip),
+        AddBeadStatus::ParentsNotYetReceived
+    ));
+    braid.extend(&left);
+    braid.extend(&right);
+    braid.extend(&merge);
+
+    let work = genesis.block_header.work();
+    let genesis_info = braid.get_work_by_bead(&work_test_hash(&genesis)).unwrap();
+    assert_eq!(genesis_info.work, work + work + work + work + work);
+    assert_eq!(genesis_info.descendant_count, 4);
+
+    let merge_info = braid.get_work_by_bead(&work_test_hash(&merge)).unwrap();
+    assert_eq!(merge_info.work, work + work);
+    assert_eq!(merge_info.descendant_count, 1);
 }

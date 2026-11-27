@@ -116,6 +116,7 @@ pub mod test_utility_functions {
             current_bead_cohorots.push(Cohort(current_cohort_indices));
         }
         //constructing actual braid object from file-braid object
+        let children = Braid::build_children(&beads_vector, &test_braid_vector_bead_mapping);
         (
             Braid {
                 beads: beads_vector,
@@ -125,6 +126,7 @@ pub mod test_utility_functions {
                 cohorts: current_bead_cohorots,
                 cohort_tips: vec![HashSet::new()], // Cohorts tips are only used in extend(), so we can skip them here.
                 orphan_beads: Vec::new(),
+                children,
                 network: PoolNetwork::Cpunet,
             },
             file_braid.clone(),

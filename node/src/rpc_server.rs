@@ -87,6 +87,9 @@ pub trait Rpc {
     #[method(name = "getchildren")]
     async fn get_children(&self, bead_hash: String) -> Result<Vec<String>, ErrorObjectOwned>;
 
+    #[method(name = "getworkbybead")]
+    async fn get_work_by_bead(&self, bead_hash: String) -> Result<Value, ErrorObjectOwned>;
+
     #[method(name = "gethighestworkpathbycount")]
     async fn get_highest_work_path_by_count(
         &self,
@@ -161,6 +164,14 @@ struct NodeInfo {
     miner_ip: String,
     payout_address: String,
     minimum_target: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+struct WorkByBeadInfo {
+    bead_hash: String,
+    own_work: String,
+    work: String,
+    descendant_count: usize,
 }
 
 /// Per-tx entry returned by stagedtransactions. Includes txid so callers can pass it to unstagetransactions.
@@ -722,6 +733,36 @@ impl RpcServer for RpcServerImpl {
         Ok(children_hashes)
     }
 
+    async fn get_work_by_bead(&self, bead_hash: String) -> Result<Value, ErrorObjectOwned> {
+        info!(bead = %bead_hash, "Get work by bead request received");
+
+        let hash = bead_hash
+            .parse::<BeadHash>()
+            .map_err(|_| ErrorObjectOwned::owned(1, "Invalid bead hash format", None::<()>))?;
+
+        let braid_data = self.braid_arc.read().await;
+        let work_info = braid_data.get_work_by_bead(&hash).ok_or_else(|| {
+            ErrorObjectOwned::owned(
+                3,
+                format!(
+                    "Bead not found. No bead with hash '{}' exists in the braid.",
+                    bead_hash
+                ),
+                None::<()>,
+            )
+        })?;
+
+        let response = WorkByBeadInfo {
+            bead_hash: work_info.bead_hash.to_string(),
+            own_work: work_info.own_work.to_string(),
+            work: work_info.work.to_string(),
+            descendant_count: work_info.descendant_count,
+        };
+
+        serde_json::to_value(response)
+            .map_err(|e| ErrorObjectOwned::owned(2, format!("Internal Error: {}", e), None::<()>))
+    }
+
     async fn get_highest_work_path_by_count(
         &self,
         limit: u64,
@@ -1225,6 +1266,21 @@ fn test_db_tx() -> mpsc::Sender<BraidpoolDBTypes> {
     tokio::spawn(async move { while rx.recv().await.is_some() {} });
     tx
 }
+
+#[cfg(test)]
+fn work_test_bead(nonce: u32, parents: &[BeadHash]) -> Bead {
+    let mut parents = parents.to_vec();
+    parents.sort();
+    let mut bead = create_test_bead(nonce, parents.first().copied());
+    bead.committed_metadata.parents = parents;
+    bead
+}
+
+#[cfg(test)]
+fn work_test_hash(bead: &Bead) -> BeadHash {
+    compute_block_hash(&bead.block_header, PoolNetwork::Cpunet)
+}
+
 #[tokio::test]
 pub async fn test_extend_rpc() {
     let test_bead1 = create_test_bead(1, None);
@@ -2588,5 +2644,119 @@ pub async fn test_subscribe_bead_rpc() {
         None => {
             panic!("Notification not received !");
         }
+    }
+}
+
+#[tokio::test]
+pub async fn test_get_work_by_bead_rpc() {
+    let genesis = work_test_bead(21, &[]);
+    let left = work_test_bead(22, &[work_test_hash(&genesis)]);
+    let right = work_test_bead(23, &[work_test_hash(&genesis)]);
+    let merge = work_test_bead(24, &[work_test_hash(&left), work_test_hash(&right)]);
+    let tip = work_test_bead(25, &[work_test_hash(&merge)]);
+
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(
+        vec![genesis.clone()],
+        PoolNetwork::Cpunet,
+    )));
+    {
+        let mut braid_guard = braid.write().await;
+        for bead in [&left, &right, &merge, &tip] {
+            assert!(matches!(
+                braid_guard.extend(bead),
+                braid::AddBeadStatus::BeadAdded { .. }
+            ));
+        }
+    }
+
+    let (proxy_tx, _) = mpsc::unbounded_channel();
+    let (server_addr, _) = run_rpc_server(
+        Arc::clone(&braid),
+        "127.0.0.1:0",
+        Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
+        Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
+        Arc::new(Mutex::new(stratum::BlockTemplate::default())),
+        proxy_tx,
+        None,
+        test_db_tx(),
+    )
+    .await
+    .unwrap();
+    let client: HttpClient = HttpClient::builder()
+        .build(format!("http://{}", server_addr))
+        .unwrap();
+
+    let work = genesis.block_header.work();
+
+    let mut params = ArrayParams::new();
+    params.insert(work_test_hash(&genesis).to_string()).unwrap();
+    let response: Value = client.request("getworkbybead", params).await.unwrap();
+    let info: WorkByBeadInfo = serde_json::from_value(response).unwrap();
+    assert_eq!(info.bead_hash, work_test_hash(&genesis).to_string());
+    assert_eq!(info.own_work, work.to_string());
+    assert_eq!(info.work, (work + work + work + work + work).to_string());
+    assert_eq!(info.descendant_count, 4);
+
+    let mut params = ArrayParams::new();
+    params.insert(work_test_hash(&merge).to_string()).unwrap();
+    let response: Value = client.request("getworkbybead", params).await.unwrap();
+    let info: WorkByBeadInfo = serde_json::from_value(response).unwrap();
+    assert_eq!(info.work, (work + work).to_string());
+    assert_eq!(info.descendant_count, 1);
+
+    let mut params = ArrayParams::new();
+    params.insert(work_test_hash(&tip).to_string()).unwrap();
+    let response: Value = client.request("getworkbybead", params).await.unwrap();
+    let info: WorkByBeadInfo = serde_json::from_value(response).unwrap();
+    assert_eq!(info.work, work.to_string());
+    assert_eq!(info.descendant_count, 0);
+}
+
+#[tokio::test]
+pub async fn test_get_work_by_bead_rpc_rejects_bad_hashes() {
+    let genesis = work_test_bead(31, &[]);
+    let braid: Arc<RwLock<braid::Braid>> = Arc::new(RwLock::new(braid::Braid::new(
+        vec![genesis],
+        PoolNetwork::Cpunet,
+    )));
+
+    let (proxy_tx, _) = mpsc::unbounded_channel();
+    let (server_addr, _) = run_rpc_server(
+        Arc::clone(&braid),
+        "127.0.0.1:0",
+        Arc::new(tokio::sync::RwLock::new(PeerManager::new(8))),
+        Arc::new(tokio::sync::RwLock::new(stratum::ConnectionMapping::new())),
+        Arc::new(Mutex::new(stratum::BlockTemplate::default())),
+        proxy_tx,
+        None,
+        test_db_tx(),
+    )
+    .await
+    .unwrap();
+    let client: HttpClient = HttpClient::builder()
+        .build(format!("http://{}", server_addr))
+        .unwrap();
+
+    let mut params = ArrayParams::new();
+    params.insert("not-a-hash").unwrap();
+    let response: Result<Value, jsonrpsee::core::ClientError> =
+        client.request("getworkbybead", params).await;
+    match response.unwrap_err() {
+        jsonrpsee::core::ClientError::Call(error) => {
+            assert_eq!(error.code(), 1);
+            assert_eq!(error.message(), "Invalid bead hash format");
+        }
+        other => panic!("expected Call error, got {:?}", other),
+    }
+
+    let mut params = ArrayParams::new();
+    params
+        .insert("0000000000000000000000000000000000000000000000000000000000000001")
+        .unwrap();
+    let response: Result<Value, jsonrpsee::core::ClientError> =
+        client.request("getworkbybead", params).await;
+    match response.unwrap_err() {
+        jsonrpsee::core::ClientError::Call(error) => assert_eq!(error.code(), 3),
+        other => panic!("expected Call error, got {:?}", other),
     }
 }
