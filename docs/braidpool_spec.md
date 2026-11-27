@@ -748,17 +748,40 @@ and without consuming too much bandwidth or computation. However if $n$ is too
 small, a large miner with multiple Sybil nodes might accidentally win $t$ of the
 most recent blocks, giving him full control of the aggregated funds.
 
-The probability of this happening is given by the Poisson distribution:
+The probability of this happening is given by the binomial distribution. Each
+of the $n$ most recent blocks is won by the attacking miner independently with
+probability $f$, so the number $K$ of those blocks he wins is
 
 $$
-\sum_{k=2n/3+1}^n P(f n, k)
+K \sim {\rm Binomial}(n, f)
 \qquad {\rm where}
-\qquad P(\lambda, k) = \frac{\lambda^k e^{-\lambda}}{k!}
+\qquad P(K = k) = \binom{n}{k} f^k (1-f)^{n-k}
+$$
+
+He controls the signature once he holds a quorum of
+$t = \lfloor 2n/3 \rfloor + 1$ of them, which happens with probability
+
+$$
+P(K \ge t) = \sum_{k=t}^n \binom{n}{k} f^k (1-f)^{n-k}
 $$
 
 where $n$ is the number of miners participating in the signing process and $f$
 is the fraction of the pools hashrate controlled by the attacking miner. For
-$n=50$ and $f=20\%$ this is about 7e-8, rising quickly as $f$ increases.
+$n=50$, so $t=34$, this is about $2.7 \times 10^{-13}$ at $f=20\%$, rising
+quickly as $f$ increases:
+
+| $f$ | $P(K \ge t)$ |
+| --- | --- |
+| $20\%$ | $2.7 \times 10^{-13}$ |
+| $25\%$ | $2.0 \times 10^{-10}$ |
+| $33\%$ | $4.4 \times 10^{-7}$ |
+
+A Poisson distribution with $\lambda = f n$ is sometimes used in place of the
+binomial, but it is the wrong model here: the number of trials is fixed at $n$,
+whereas Poisson is unbounded and assigns probability to the attacker winning
+more than $n$ of the $n$ blocks. Its variance $f n$ also exceeds the true
+$n f (1-f)$, and at $n=50$, $f=20\%$ it overstates this tail by about four
+orders of magnitude.
 
 This is a standard 51\% attack, which we fundamentally can't prevent and if any
 miner gains too much hashrate. We can mitigate it somewhat by requiring the
