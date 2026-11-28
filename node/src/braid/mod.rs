@@ -2,6 +2,7 @@ use crate::bead::Bead;
 use crate::config::PoolNetwork;
 use crate::error::BraidError;
 use crate::utils::{compute_block_hash, BeadHash};
+use bitcoin::Work;
 use num::BigUint;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -26,6 +27,19 @@ pub enum GenesisCheckStatus {
     GenesisBeadsCountMismatch,
 }
 
+/// Work metrics for a single bead in the braid.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct BeadWorkInfo {
+    /// Hash of the queried bead.
+    pub bead_hash: BeadHash,
+    /// Work contributed by the bead itself.
+    pub own_work: Work,
+    /// Own work plus the work of all unique descendants.
+    pub work: Work,
+    /// Number of unique descendants included in `work`.
+    pub descendant_count: usize,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 
 pub struct Braid {
@@ -36,6 +50,9 @@ pub struct Braid {
     pub orphan_beads: Vec<Bead>,
     pub genesis_beads: HashSet<usize>,
     pub bead_index_mapping: HashMap<BeadHash, usize>,
+    /// Index of direct children by bead index. Kept in sync by `new` and `extend`.
+    #[serde(default)]
+    pub children: Vec<Vec<usize>>,
     //For computing block_hash accordingly
     pub network: PoolNetwork,
 }
@@ -52,6 +69,7 @@ impl Braid {
             bead_indices.insert(index);
             bead_index_mapping.insert(compute_block_hash(&bead.block_header, network), index);
         }
+        let children = Self::build_children(&beads, &bead_index_mapping);
         let mut genesis_cohort: Vec<Cohort> = Vec::new();
         if bead_indices.len() != 0 {
             genesis_cohort.push(Cohort(HashSet::from(bead_indices.clone())));
@@ -64,8 +82,60 @@ impl Braid {
             orphan_beads: Vec::new(),
             genesis_beads: bead_indices,
             bead_index_mapping,
+            children,
             network,
         }
+    }
+
+    /// Builds the direct-child index from a set of beads without rehashing them.
+    pub fn build_children(
+        beads: &[Bead],
+        bead_index_mapping: &HashMap<BeadHash, usize>,
+    ) -> Vec<Vec<usize>> {
+        let mut children = vec![Vec::new(); beads.len()];
+        for (index, bead) in beads.iter().enumerate() {
+            for parent_hash in &bead.committed_metadata.parents {
+                if let Some(&parent_index) = bead_index_mapping.get(parent_hash) {
+                    if !children[parent_index].contains(&index) {
+                        children[parent_index].push(index);
+                    }
+                }
+            }
+        }
+        children
+    }
+
+    /// Returns a bead's own work plus the work of every unique descendant.
+    pub fn get_work_by_bead(&self, bead_hash: &BeadHash) -> Option<BeadWorkInfo> {
+        let &index = self.bead_index_mapping.get(bead_hash)?;
+        let own_work = self.beads[index].block_header.work();
+        let mut work = own_work;
+        let mut descendant_count = 0;
+        let mut visited = HashSet::new();
+        let mut stack = Vec::new();
+
+        for &child in self.children.get(index).into_iter().flatten() {
+            if visited.insert(child) {
+                stack.push(child);
+            }
+        }
+
+        while let Some(current) = stack.pop() {
+            work = work + self.beads[current].block_header.work();
+            descendant_count += 1;
+            for &child in self.children.get(current).into_iter().flatten() {
+                if visited.insert(child) {
+                    stack.push(child);
+                }
+            }
+        }
+
+        Some(BeadWorkInfo {
+            bead_hash: *bead_hash,
+            own_work,
+            work,
+            descendant_count,
+        })
     }
 
     /// Computes the block hash for a bead using this braid's network configuration
@@ -81,6 +151,7 @@ impl Braid {
         self.orphan_beads.clear();
         self.genesis_beads.clear();
         self.bead_index_mapping.clear();
+        self.children.clear();
     }
 }
 #[allow(unused)]
@@ -132,6 +203,17 @@ impl Braid {
         self.beads.push(bead.clone());
         let new_bead_index = self.beads.len() - 1;
         self.bead_index_mapping.insert(bead_hash, new_bead_index);
+
+        if self.children.len() < self.beads.len() {
+            self.children.resize(self.beads.len(), Vec::new());
+        }
+        for parent_hash in &bead.committed_metadata.parents {
+            if let Some(&parent_index) = self.bead_index_mapping.get(parent_hash) {
+                if !self.children[parent_index].contains(&new_bead_index) {
+                    self.children[parent_index].push(new_bead_index);
+                }
+            }
+        }
 
         // Find earliest parent of bead in cohorts and nuke all cohorts after that
         let mut found_parent_indices = HashSet::new();
@@ -300,6 +382,17 @@ impl Braid {
                 let new_index = self.beads.len() - 1;
                 self.bead_index_mapping.insert(bead_hash, new_index);
                 self.genesis_beads.insert(new_index);
+
+                if self.children.len() < self.beads.len() {
+                    self.children.resize(self.beads.len(), Vec::new());
+                }
+                for parent_hash in &bead.committed_metadata.parents {
+                    if let Some(&parent_index) = self.bead_index_mapping.get(parent_hash) {
+                        if !self.children[parent_index].contains(&new_index) {
+                            self.children[parent_index].push(new_index);
+                        }
+                    }
+                }
             }
         }
     }

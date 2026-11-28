@@ -88,6 +88,13 @@ enum Commands {
         bead_hash: String,
     },
 
+    /// Get own and cumulative work for a bead by bead hash
+    #[command(name = "getworkbybead")]
+    GetWorkByBead {
+        /// The bead hash (as a hex string)
+        bead_hash: String,
+    },
+
     /// Get the list of beads in the highest work path, limited by count
     #[command(name = "gethighestworkpathbycount")]
     GetHighestWorkPathByCount {
@@ -311,6 +318,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Commands::GetParents { bead_hash } => ("getparents", json!([bead_hash])),
         Commands::GetChildren { bead_hash } => ("getchildren", json!([bead_hash])),
+        Commands::GetWorkByBead { bead_hash } => ("getworkbybead", json!([bead_hash])),
         Commands::GetHighestWorkPathByCount { limit } => {
             ("gethighestworkpathbycount", json!([limit]))
         }
