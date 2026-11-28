@@ -382,6 +382,17 @@ impl Braid {
                 let new_index = self.beads.len() - 1;
                 self.bead_index_mapping.insert(bead_hash, new_index);
                 self.genesis_beads.insert(new_index);
+
+                if self.children.len() < self.beads.len() {
+                    self.children.resize(self.beads.len(), Vec::new());
+                }
+                for parent_hash in &bead.committed_metadata.parents {
+                    if let Some(&parent_index) = self.bead_index_mapping.get(parent_hash) {
+                        if !self.children[parent_index].contains(&new_index) {
+                            self.children[parent_index].push(new_index);
+                        }
+                    }
+                }
             }
         }
     }

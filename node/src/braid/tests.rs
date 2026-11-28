@@ -2558,3 +2558,19 @@ fn test_get_work_by_bead_after_orphan_promotion() {
     assert_eq!(merge_info.work, work + work);
     assert_eq!(merge_info.descendant_count, 1);
 }
+
+#[test]
+fn test_insert_genesis_beads_keeps_child_index_in_sync() {
+    let genesis = work_test_bead(41, &[]);
+    let extra_genesis = work_test_bead(42, &[]);
+    let mut braid = Braid::new(vec![genesis], PoolNetwork::Cpunet);
+
+    braid.insert_genesis_beads(vec![extra_genesis.clone()]);
+
+    assert_eq!(braid.children.len(), braid.beads.len());
+    let info = braid
+        .get_work_by_bead(&work_test_hash(&extra_genesis))
+        .unwrap();
+    assert_eq!(info.work, extra_genesis.block_header.work());
+    assert_eq!(info.descendant_count, 0);
+}
